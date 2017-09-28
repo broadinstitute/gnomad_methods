@@ -36,7 +36,7 @@ gsutil cp gs://hail-common/builds/${HAIL_VERSION}/jars/${HAIL_JAR} gs://hail-com
 EOT
 chmod +x /redownload_hail.sh
 
-cd /home/hail
+cd /home/hail/gnomad_hail
 export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
 python -m unittest discover &> tests.log
 

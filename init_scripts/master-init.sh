@@ -6,11 +6,15 @@ if [[ "${ROLE}" == 'Master' ]]; then
 
     easy_install pip
     pip install decorator
-    gsutil cp gs://gnomad-public/tools/inits/gnomad-init.sh .
-    chmod +x gnomad-init.sh
-    ./gnomad-init.sh > gnomad_startup.log 2>&1 &
 
-    gsutil cp gs://gnomad-public/tools/inits/sparklyr-init.sh .
-    chmod +x sparklyr-init.sh
-    ./sparklyr-init.sh > sparklyr_startup.log 2>&1 &
+    mkdir -p /home/hail/
+
+    git clone git@github.com:macarthur-lab/gnomad_hail.git /home/hail/
+    cd /home/hail/gnomad_hail
+    chmod +x ./init_scripts/gnomad-init.sh ./init_scripts/sparklyr-init.sh
+    ./init_scripts/gnomad-init.sh > ./init_scripts/gnomad_startup.log 2>&1 &
+    ./init_scripts/sparklyr-init.sh > ./init_scripts/sparklyr_startup.log 2>&1 &
+
+    python -m unittest discover &> tests.log
+
 fi

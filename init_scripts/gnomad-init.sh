@@ -36,9 +36,5 @@ gsutil cp gs://hail-common/builds/${HAIL_VERSION}/jars/${HAIL_JAR} gs://hail-com
 EOT
 chmod +x /redownload_hail.sh
 
-git clone git@github.com:macarthur-lab/gnomad_hail.git /
-cd /gnomad_hail
-python -m unittest discover &> /tests.log
-
 # curl http://www.freefontspro.com/d/14454/arial.zip > /home/anaconda2/lib/python2.7/site-packages/matplotlib/mpl-data/fonts/ttf/arial.zip
 # unzip /home/anaconda2/lib/python2.7/site-packages/matplotlib/mpl-data/fonts/ttf/arial.zip

@@ -103,3 +103,6 @@ ENV/
 *.gz
 *.bgz
 *.tsv
+
+# tokens
+slack_creds.py

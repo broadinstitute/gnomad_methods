@@ -27,7 +27,7 @@ export HAIL_HASH=${HAIL_HASH}
 export HAIL_JAR=${HAIL_JAR}
 export HAIL_PYTHON_ZIP=${HAIL_PYTHON_ZIP}
 export _JAVA_OPTIONS='-Xmx8096m'
-export PYTHONPATH=${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
+export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
 export SPARK_CLASSPATH=${HAIL_HOME}/${HAIL_JAR}
 EOT
 cat <<EOT >> /redownload_hail.sh
@@ -35,6 +35,10 @@ mkdir -p $HAIL_HOME
 gsutil cp gs://hail-common/builds/${HAIL_VERSION}/jars/${HAIL_JAR} gs://hail-common/builds/${HAIL_VERSION}/python/${HAIL_PYTHON_ZIP} $HAIL_HOME
 EOT
 chmod +x /redownload_hail.sh
+
+cd /home/hail
+export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
+python -m unittest discover &> tests.log
 
 # curl http://www.freefontspro.com/d/14454/arial.zip > /home/anaconda2/lib/python2.7/site-packages/matplotlib/mpl-data/fonts/ttf/arial.zip
 # unzip /home/anaconda2/lib/python2.7/site-packages/matplotlib/mpl-data/fonts/ttf/arial.zip

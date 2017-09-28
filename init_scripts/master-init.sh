@@ -8,5 +8,9 @@ if [[ "${ROLE}" == 'Master' ]]; then
     pip install decorator
     gsutil cp gs://gnomad-public/tools/inits/gnomad-init.sh .
     chmod +x gnomad-init.sh
-    ./gnomad-init.sh > startup.log 2>&1 &
+    ./gnomad-init.sh > gnomad_startup.log 2>&1 &
+
+    gsutil cp gs://gnomad-public/tools/inits/sparklyr-init.sh .
+    chmod +x sparklyr-init.sh
+    ./sparklyr-init.sh > sparklyr_startup.log 2>&1 &
 fi

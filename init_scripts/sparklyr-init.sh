@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+cat <<EOT >> /config.yaml
+default:
+  spark.kryoserializer.buffer.max: 1g
+  spark.yarn.executor.memoryOverhead: 1861
+  spark.executor.memory: 18619m
+  spark.yarn.am.memoryOverhead: 1861
+  spark.driver.memory: 45g
+  spark.executor.cores: 4
+  spark.yarn.am.memory: 18619m
+  spark.driver.maxResultSize: 30g
+  spark.task.maxFailures: 20
+EOT
+
 apt-get install -y gdebi-core libcurl4-openssl-dev libssl-dev libxml2-dev
 export RSTUDIO_DEB=rstudio-server-1.0.143-amd64.deb
 wget https://download2.rstudio.org/${RSTUDIO_DEB}

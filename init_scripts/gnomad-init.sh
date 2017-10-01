@@ -35,6 +35,7 @@ chmod +x /redownload_hail.sh
 
 cd /home/hail/gnomad_hail
 export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
+export SPARK_CLASSPATH=${HAIL_HOME}/${HAIL_JAR}
 python -m unittest discover &> tests.log
 
 # curl http://www.freefontspro.com/d/14454/arial.zip > /home/anaconda2/lib/python2.7/site-packages/matplotlib/mpl-data/fonts/ttf/arial.zip

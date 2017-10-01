@@ -811,7 +811,7 @@ def set_site_filters(vds, site_filters_dict, as_filters_root):
     return vds.annotate_variants_expr(annotate_expr)
 
 
-def split_vds_and_annotations(vds, hard_filters, as_filters_root, extra_ann_expr=None):
+def split_vds_and_annotations(vds, hard_filters, as_filters_root, extra_ann_expr=None, vep_root='va.vep'):
     """
      Split VDS and its associated va annotations properly
 
@@ -826,7 +826,7 @@ def split_vds_and_annotations(vds, hard_filters, as_filters_root, extra_ann_expr
 
     vds = vds.split_multi()
     vds = vds.annotate_variants_expr(
-        index_into_arrays(a_based_annotations=["va.info." + a.name for a in a_annotations], vep_root='va.vep'))
+        index_into_arrays(a_based_annotations=["va.info." + a.name for a in a_annotations], vep_root=vep_root))
     vds = set_site_filters(vds,
                            { f: 'va.filters.contains("{}")'.format(f) for f in hard_filters },
                            as_filters_root)

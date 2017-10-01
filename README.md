@@ -28,3 +28,17 @@ Submission script for Hail. Notable differences from [cloudtools](http://github.
 
 * Inline scripts (`--inline "print hc.read('gs://bucket/my.vds').count()"`)
 * Add helper scripts designated in `HAIL_SCRIPTS` environment variable
+
+### init_scripts
+
+Google Cloud initialization scripts.
+Cluster should be started up with `--init gs://gnomad-public/tools/inits/master-init.sh`, which is tracked here, deployed to cloud for usage.
+`gnomad-init.sh` and `sparklyr-init.sh` are pulled from this repo and called by `master-init.sh`.
+
+### tests
+
+Tests are run automatically on creation of each cluster (in `gnomad-init.sh`) and can be triggered manually using: 
+```bash
+cd /path/to/gnomad_hail
+PYTHONPATH=.:$PYTHONPATH python -m unittest discover
+```

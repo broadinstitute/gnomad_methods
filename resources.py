@@ -1,9 +1,9 @@
 #Evaluation data
-truth_dir = 'gs://gnomad-public/truth-sets/hail-0.2'
+truth_dir = 'gs://gnomad-public/truth-sets/hail-0.1'
 omni_vds_path = "%s/1000G_omni2.5.b37.vds" % truth_dir
 mills_vds_path = "%s/Mills_and_1000G_gold_standard.indels.b37.vds" % truth_dir
 hapmap_vds_path = "%s/hapmap_3.3.b37.vds" % truth_dir
-dbsnp_vcf_path = "%s/vcf/All_20160601.vcf.bgz" % truth_dir
+dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20160601.vcf.bgz"
 kgp_high_conf_snvs_vds_path = "%s/1000G_phase1.snps.high_confidence.b37.vds" % truth_dir
 NA12878_vds_path = "%s/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.vds" % truth_dir
 NA12878_high_conf_regions_bed_path = "%s/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.bed" % truth_dir
@@ -37,7 +37,7 @@ vep_config = "/vep/vep-gcloud.properties"
 
 # Full VDSs
 full_exac_v1_vds_path = 'gs://gnomad-exomes-raw/exacv1/exac.all.vds'
-full_exome_vds_path = 'gs://gnomad-exomes-raw/full/gnomad.exomes.all.vds'
+full_exome_vds_path = 'gs://gnomad-exomes-raw-hail01/full/gnomad.exomes.all.old.vds'
 full_exome_hardcalls_vds_path = 'gs://gnomad-exomes-raw/hardcalls/gnomad.exomes.raw_hardcalls.vds'
 full_exome_hardcalls_split_vds_path = 'gs://gnomad-exomes-raw/hardcalls/gnomad.exomes.raw_hardcalls.split.vds'
 full_genome_vds_path = 'gs://gnomad-genomes-raw/full/gnomad.genomes.all.vds'
@@ -51,7 +51,7 @@ full_exome_hardcalls_adj_vds_path = 'gs://gnomad-exomes-raw/hardcalls/gnomad.exo
 full_genome_hardcalls_adj_vds_path = 'gs://gnomad-genomes-raw/hardcalls/gnomad.adj_hardcalls.vds'
 
 #Filtering VDSs
-vqsr_vds_path = 'gs://gnomad-exomes/variantqc/gnomad.exomes.vqsr.unsplit.vds'
+vqsr_vds_path = 'gs://gnomad-exomes-hail01/variantqc/gnomad.exomes.vqsr.unsplit.vds'
 genomes_rf_vds_path = "gs://gnomad-genomes/variantqc/RF/gnomad.sites.RF.newStats24.vds"
 exomes_rf_vds_path = "gs://gnomad-exomes/variantqc/gnomad.exomes.rf.vds"
 

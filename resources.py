@@ -14,6 +14,45 @@ def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
     return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 
 
+def get_gnomad_data(data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION):
+    """
+    Wrapper function to get gnomAD data
+
+    :param data_type: One of `exomes` or `genomes`
+    :param str hardcalls: One of `adj` or `raw` if hardcalls are desired (leave as None for raw data)
+    :param bool split: Whether the dataset should be split (only applies to hardcalls)
+    :param str hail_version: One of the HAIL_VERSIONs
+    :return: Path to chosen VDS
+    :rtype: str
+    """
+    if data_type == 'exomes':
+        if not hardcalls:
+            return raw_exomes_vds_path(hail_version)
+        else:
+            return hardcalls_exomes_vds_path(split, hardcalls == 'adj', hail_version)
+    elif data_type == 'genomes':
+        if not hardcalls:
+            return raw_genomes_vds_path(hail_version)
+        else:
+            return hardcalls_genomes_vds_path(split, hardcalls == 'adj', hail_version)
+    return None
+
+
+def get_gnomad_meta(data_type):
+    """
+    Wrapper function to get gnomAD metadata
+
+    :param data_type: One of `exomes` or `genomes`
+    :return: Path to chosen metadata file
+    :rtype: str
+    """
+    if data_type == 'exomes':
+        return metadata_exomes_tsv_path()
+    elif data_type == 'genomes':
+        return metadata_genomes_tsv_path()
+    return None
+
+
 def vqsr_exomes_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vqsr.sites.vds'.format(hail_version)
 

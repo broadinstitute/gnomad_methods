@@ -99,7 +99,7 @@ purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list
 # Exome intervals
 exomes_high_conf_regions_intervals_path = "gs://gnomad-public/intervals/exomes_high_coverage.auto.interval_list"
 exome_calling_intervals_path = 'gs://gnomad-public/intervals/exome_calling_regions.v1.interval_list'
-evaluation_intervals_path = 'gs://gnomad-public/intervals/exome_evaluation_regions.v1.intervals'
+evaluation_intervals_path = 'gs://gnomad-public/intervals/exome_evaluation_regions.v1.noheader.interval_list'
 high_coverage_intervals_path = 'gs://gnomad-public/intervals/high_coverage.auto.interval_list'
 
 vep_config = "/vep/vep-gcloud.properties"

@@ -1,9 +1,9 @@
-CURRENT_HAIL_VERSION="0.1"
-CURRENT_RELEASE="2.0.2"
-CURRENT_GENOME_META="06-02-2017"
-CURRENT_EXOME_META="06-02-2017"
+CURRENT_HAIL_VERSION = "0.1"
+CURRENT_RELEASE = "2.0.2"
+CURRENT_GENOME_META = "06-02-2017"
+CURRENT_EXOME_META = "06-02-2017"
 
-RELEASES = ["2.0.1","2.0.2"]
+RELEASES = ["2.0.1", "2.0.2"]
 
 
 def public_exomes_vds_path(split=False, version=CURRENT_RELEASE):
@@ -32,14 +32,14 @@ def raw_exac_vds_path(hail_version=CURRENT_HAIL_VERSION):
 
 def hardcalls_exomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/hardcalls/hail-{0}/vds/exomes/gnomad.exomes.{1}{2}.vds'.format(hail_version,
-                                                                                  "adj" if adj else "raw",
-                                                                                  ".split" if split else "")
+                                                                                       "adj" if adj else "raw",
+                                                                                       ".split" if split else "")
 
 
 def hardcalls_genomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/hardcalls/hail-{0}/vds/genomes/gnomad.genomes.{1}{2}.vds'.format(hail_version,
-                                                                                    "adj" if adj else "raw",
-                                                                                    ".split" if split else "")
+                                                                                         "adj" if adj else "raw",
+                                                                                         ".split" if split else "")
 
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
 
@@ -54,9 +54,10 @@ def metadata_exomes_tsv_path(version=CURRENT_EXOME_META):
 
 genomes_fam_path = "gs://gnomad/metadata/genomes/gnomad.genomes.fam"
 exomes_fam_path = "gs://gnomad/metadata/exomes/gnomad.exomes.fam"
-#Exome/genome duplicate samples
+# Exome/genome duplicate samples
 exomes_to_combined_IDs_tsv_path = "gs://gnomad/metadata/exomes/exomes_to_combined.IDs.txt"
 genomes_to_combined_IDs_tsv_path = "gs://gnomad/metadata/genomes/genomes_to_combined.IDs.txt"
+
 
 def omni_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.b37.vds'.format(hail_version)
@@ -90,12 +91,12 @@ syndip_high_conf_regions_bed_path = "gs://gnomad-public/truth-sets/source/hybrid
 clinvar_tsv_path = "gs://gnomad-resources/annotations/clinvar_alleles.single.b37.tsv.gz"
 clinvar_vds_path = "gs://gnomad-resources/annotations/clinvar_alleles.single.b37.vds"
 
-#Useful intervals
+# Useful intervals
 lcr_intervals_path = "gs://gnomad-public/intervals/LCR.interval_list"
 decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
 purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list"
 
-#Exome intervals
+# Exome intervals
 exomes_high_conf_regions_intervals_path = "gs://gnomad-public/intervals/exomes_high_coverage.auto.interval_list"
 exome_calling_intervals_path = 'gs://gnomad-public/intervals/exome_calling_regions.v1.interval_list'
 evaluation_intervals_path = 'gs://gnomad-public/intervals/exome_evaluation_regions.v1.intervals'

@@ -25,6 +25,7 @@ class FilteringTests(unittest.TestCase):
     @staticmethod
     def create_filter_test_vds():
         """
+        Generate VDS with various filtering combinations
 
         :return: VDS with some filters
         :rtype: VariantDataset
@@ -88,7 +89,7 @@ class KeyTableTests(unittest.TestCase):
     @staticmethod
     def create_frequency_kt():
         """
-        KeyTable with some frequency data
+        Generate KeyTable with some frequency data
 
         :return: keytable with frequency data
         :rtype: KeyTable
@@ -128,30 +129,77 @@ class KeyTableTests(unittest.TestCase):
 class VEPTests(unittest.TestCase):
 
     @staticmethod
-    def generate_stress_test_vds():
+    def generate_loftee_stress_test_vds():
+        """
+        Generate VDS with VEP and LOFTEE tests
+
+        :return: VDS with VEP and LOFTEE tests
+        :rtype: VariantDataset
+        """
         rows = [
-            {'v': Variant.parse('1:69270:A:G'),       'test_transcript': 'ENST00000335137', 'expected_lof': '',   'expected_lof_filter': '',                    'expected_lof_flags': ''},
-            {'v': Variant.parse('1:69869:T:A'),       'test_transcript': 'ENST00000335137', 'expected_lof': 'HC', 'expected_lof_filter': '',                    'expected_lof_flags': 'SINGLE_EXON'},
-            {'v': Variant.parse('1:739130:T:TA'),     'test_transcript': 'ENST00000599533', 'expected_lof': 'LC', 'expected_lof_filter': 'NON_CAN_SPLICE_SURR', 'expected_lof_flags': 'PHYLOCSF_WEAK'},
-            {'v': Variant.parse('1:861301:G:A'),      'test_transcript': 'ENST00000342066', 'expected_lof': 'HC', 'expected_lof_filter': '',                    'expected_lof_flags': ''},
-            {'v': Variant.parse('1:896934:C:T'),      'test_transcript': 'ENST00000338591', 'expected_lof': 'LC', 'expected_lof_filter': 'NON_CAN_SPLICE',      'expected_lof_flags': ''},
-            {'v': Variant.parse('1:900341:A:C'),      'test_transcript': 'ENST00000338591', 'expected_lof': 'HC', 'expected_lof_filter': '',                    'expected_lof_flags': 'NAGNAG_SITE'},
-            {'v': Variant.parse('1:915034:C:T'),      'test_transcript': 'ENST00000433179', 'expected_lof': 'HC', 'expected_lof_filter': '',                    'expected_lof_flags': 'PHYLOCSF_WEAK'},
-            {'v': Variant.parse('1:1018307:G:T'),     'test_transcript': 'ENST00000434641', 'expected_lof': 'LC', 'expected_lof_filter': 'END_TRUNC',           'expected_lof_flags': 'PHYLOCSF_UNLIKELY_ORF'},
-            {'v': Variant.parse('1:1226966:GC:G'),    'test_transcript': 'ENST00000379116', 'expected_lof': 'LC', 'expected_lof_filter': 'END_TRUNC',           'expected_lof_flags': ''},  # should fail 50_BP_RULE
-            {'v': Variant.parse('1:1341007:G:T'),     'test_transcript': 'ENST00000482352', 'expected_lof': 'LC', 'expected_lof_filter': 'END_TRUNC',           'expected_lof_flags': ''},  # should fail 50bp filter
-            {'v': Variant.parse('1:1653047:G:C'),     'test_transcript': 'ENST00000378638', 'expected_lof': 'LC', 'expected_lof_filter': 'ANC_ALLELE',          'expected_lof_flags': ''},
-            {'v': Variant.parse('1:3647537:C:T'),     'test_transcript': 'ENST00000378280', 'expected_lof': 'HC', 'expected_lof_filter': '',                    'expected_lof_flags': 'PHYLOCSF_UNLIKELY_ORF'},  # Should pass 50 bp filter (in 2nd to last exon, but past 50 bp)
-            {'v': Variant.parse('1:9656068:G:GGTGT'), 'test_transcript': 'ENST00000340305', 'expected_lof': 'LC', 'expected_lof_filter': 'EXON_INTRON_UNDEF',   'expected_lof_flags': ''},
+            {'v': Variant.parse('1:69270:A:G'),       'test_transcript': 'ENST00000335137', 'exp_lof': None, 'exp_lof_filter': None,                  'exp_lof_flags': None},
+            {'v': Variant.parse('1:69869:T:A'),       'test_transcript': 'ENST00000335137', 'exp_lof': 'HC', 'exp_lof_filter': '',                    'exp_lof_flags': 'SINGLE_EXON'},
+            {'v': Variant.parse('1:739130:T:TA'),     'test_transcript': 'ENST00000599533', 'exp_lof': 'LC', 'exp_lof_filter': 'NON_CAN_SPLICE_SURR', 'exp_lof_flags': 'PHYLOCSF_WEAK'},
+            {'v': Variant.parse('1:861301:G:A'),      'test_transcript': 'ENST00000342066', 'exp_lof': 'LC', 'exp_lof_filter': '5UTR_SPLICE',         'exp_lof_flags': ''},
+            {'v': Variant.parse('1:896934:C:T'),      'test_transcript': 'ENST00000338591', 'exp_lof': 'LC', 'exp_lof_filter': 'NON_CAN_SPLICE',      'exp_lof_flags': ''},
+            {'v': Variant.parse('1:900341:A:C'),      'test_transcript': 'ENST00000338591', 'exp_lof': 'HC', 'exp_lof_filter': '',                    'exp_lof_flags': 'NAGNAG_SITE'},
+            {'v': Variant.parse('1:915034:C:T'),      'test_transcript': 'ENST00000433179', 'exp_lof': 'HC', 'exp_lof_filter': '',                    'exp_lof_flags': 'PHYLOCSF_WEAK'},
+            {'v': Variant.parse('1:1018307:G:T'),     'test_transcript': 'ENST00000434641', 'exp_lof': 'LC', 'exp_lof_filter': 'END_TRUNC',           'exp_lof_flags': 'PHYLOCSF_UNLIKELY_ORF'},
+            {'v': Variant.parse('1:1226966:GC:G'),    'test_transcript': 'ENST00000379116', 'exp_lof': 'LC', 'exp_lof_filter': 'END_TRUNC',           'exp_lof_flags': ''},  # should fail 50_BP_RULE
+            {'v': Variant.parse('1:1341007:G:T'),     'test_transcript': 'ENST00000482352', 'exp_lof': 'LC', 'exp_lof_filter': 'END_TRUNC',           'exp_lof_flags': ''},  # should fail 50bp filter
+            {'v': Variant.parse('1:1653047:G:C'),     'test_transcript': 'ENST00000378638', 'exp_lof': 'LC', 'exp_lof_filter': 'ANC_ALLELE',          'exp_lof_flags': ''},
+            {'v': Variant.parse('1:3647537:C:T'),     'test_transcript': 'ENST00000378280', 'exp_lof': 'HC', 'exp_lof_filter': '',                    'exp_lof_flags': 'PHYLOCSF_UNLIKELY_ORF'},  # Should pass 50 bp filter (in 2nd to last exon, but past 50 bp)
+            {'v': Variant.parse('1:9656068:G:GGTGT'), 'test_transcript': 'ENST00000340305', 'exp_lof': 'LC', 'exp_lof_filter': 'EXON_INTRON_UNDEF',   'exp_lof_flags': ''},
         ]
+        schema = ['v', 'test_transcript', 'exp_lof', 'exp_lof_filter', 'exp_lof_flags']
+        types = [TVariant(), TString(), TString(), TString(), TString()]
+        return VariantDataset.from_table(KeyTable.from_py(hc, rows, TStruct(schema, types), key_names=['v']))
 
     @classmethod
     def setUpClass(cls):
-        cls.vds = hc.read('{}/{}'.format(test_resources_dir, 'vep_test.vds'))
+        # cls.vds = hc.read('{}/{}'.format(test_resources_dir, 'vep_test.vds'))
+        cls.vds = cls.generate_loftee_stress_test_vds()
+        try:
+            cls.vds = cls.vds.vep(vep_config)
+        except:
+            raise unittest.SkipTest()
 
-    def process_consequences_test(self):
-        proc_vds = process_consequences(self.vds)
+    def test_loftee(self):
+        result_vds = self.vds.annotate_variants_expr(
+            ['va.lof_correct        = va.vep.transcript_consequences.filter(x => x.transcript_id == va.test_transcript && ((isMissing(x.lof) && isMissing(va.exp_lof)) || x.lof == va.exp_lof)).length()',
+             'va.lof_filter_correct = va.vep.transcript_consequences.filter(x => x.transcript_id == va.test_transcript && ((isMissing(x.lof_filter) && isMissing(va.exp_lof_filter)) || x.lof_filter == va.exp_lof_filter)).length()',
+             'va.lof_flags_correct  = va.vep.transcript_consequences.filter(x => x.transcript_id == va.test_transcript && ((isMissing(x.lof_flags) && isMissing(va.exp_lof_flags)) || x.lof_flags == va.exp_lof_flags)).length()'])
+        if verbose:
+            (result_vds.annotate_variants_expr('va.vep = select(va.vep, transcript_consequences)')
+             .annotate_variants_expr('va.vep.transcript_consequences = va.vep.transcript_consequences.filter(x => x.transcript_id == va.test_transcript).map(x => select(x, transcript_id, consequence_terms, lof, lof_filter, lof_flags, lof_info))')
+             .variants_table().flatten().explode('va.vep.transcript_consequences').flatten().rename({
+                 'va.vep.transcript_consequences.lof': 'lof',
+                 'va.vep.transcript_consequences.lof_filter': 'lof_filter',
+                 'va.vep.transcript_consequences.lof_flags': 'lof_flags',
+                 'va.vep.transcript_consequences.lof_info': 'lof_info',
+                 'va.vep.transcript_consequences.transcript_id': 'transcript',
+            }).show(50))
+        results = result_vds.query_variants('variants.map(v => va.lof_correct).counter()')
+        self.assertEqual(results[1], sum(results.values()))
+
+
+    # def test_process_consequences(self):
+    #     proc_vds = process_consequences(self.vds)
+
+
+class SlackResult(unittest.TestResult):
+    def addError(self, test, err):
+        super(SlackResult, self).addError(test, err)
+        err_desc = self._exc_info_to_string(err, test)
+        send_message('#gnomad_paper_code', 'Warning! Error in test: ```{}```'.format(err_desc))
+
+    def addFailure(self, test, err):
+        super(SlackResult, self).addFailure(test, err)
+        err_desc = self._exc_info_to_string(err, test)
+        send_message('#gnomad_paper_code', 'Warning! Test failed: ```{}```'.format(err_desc))
 
 
 if __name__ == '__main__':
-    unittest.main()
+    suite = unittest.TestLoader().discover('.')
+    results = SlackResult()
+    suite.run(results)

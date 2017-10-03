@@ -9,12 +9,15 @@ if [[ "${ROLE}" == 'Master' ]]; then
 
     mkdir -p /home/hail/
 
-    git clone git@github.com:macarthur-lab/gnomad_hail.git /home/hail/
-    cd /home/hail/gnomad_hail
-    chmod +x ./init_scripts/gnomad-init.sh ./init_scripts/sparklyr-init.sh
-    ./init_scripts/gnomad-init.sh > ./init_scripts/gnomad_startup.log 2>&1 &
-    ./init_scripts/sparklyr-init.sh > ./init_scripts/sparklyr_startup.log 2>&1 &
+    cd /home/hail
+    git clone https://github.com/macarthur-lab/gnomad_hail.git
+    cd gnomad_hail/init_scripts
+    chmod +x gnomad-init.sh sparklyr-init.sh
 
-    python -m unittest discover &> tests.log
+    # This is here so as not have 2 apt-get processes fighting for a lock
+    apt-get install -y ipython tmux
+
+    ./gnomad-init.sh > gnomad_startup.log 2>&1 &
+    ./sparklyr-init.sh > sparklyr_startup.log 2>&1 &
 
 fi

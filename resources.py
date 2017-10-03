@@ -70,10 +70,6 @@ def hapmap_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/hapmap_3.3.b37.vds'.format(hail_version)
 
 
-def dbsnp_vcf_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.b37.vds'.format(hail_version)
-
-
 def kgp_high_conf_snvs_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.b37.vds'.format(hail_version)
 

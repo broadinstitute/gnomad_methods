@@ -448,42 +448,6 @@ def rename_samples(vds, input_file, filter_to_samples_in_file=False):
     return vds.rename_samples(names)
 
 
-def add_genomes_sa(vds):
-    """
-    Adds the genomes sample metadata to the VDS.
-
-    :param VariantDataset vds: VDS to annotate
-    :return: Annotated VDS.
-    :rtype: VariantDataset
-    """
-    hc = vds.hc
-    vds = vds.annotate_samples_table(KeyTable.import_fam(genomes_fam_path), root='sa.fam')
-    vds = vds.annotate_samples_table(hc.import_table(genomes_meta_tsv_path, impute=True).key_by('Sample'), root='sa.meta')
-    vds = vds.annotate_samples_table(
-        hc.import_table(genomes_to_combined_IDs_tsv_path, impute=True, no_header=True).key_by('f0').select(['f0']),
-        root='sa.in_exomes')
-    vds = vds.annotate_samples_table(hc.import_table(genomes_qc_pass_samples_list_path, impute=True).key_by('sample'), root='sa.qc_pass')
-    return vds
-
-
-def add_exomes_sa(vds):
-    """
-    Adds the exomes sample metadata to the VDS.
-
-    :param VariantDataset vds: VDS to annotate 
-    :return: Annotated VDS.
-    :rtype: VariantDataset
-    """
-    hc = vds.hc
-    vds = vds.annotate_samples_table(KeyTable.import_fam(exomes_fam_path), root='sa.fam')
-    vds = vds.annotate_samples_table(hc.import_table(exomes_meta_tsv_path, impute=True).key_by('sample'), root='sa.meta')
-    vds = vds.annotate_samples_table(
-        hc.import_table(exomes_to_combined_IDs_tsv_path, impute=True, no_header=True).key_by('f0').select(['f0']),
-        root='sa.in_genomes')
-    vds = vds.annotate_samples_table(hc.import_table(exomes_qc_pass_samples_list_path, impute=True).key_by('sample'), root='sa.qc_pass')
-    return vds
-
-
 def filter_low_conf_regions(vds, filter_lcr=True, filter_decoy=True, high_conf_regions=None):
     """
     Filters low-confidence regions

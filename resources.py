@@ -1,9 +1,15 @@
+from hail import *
+
 CURRENT_HAIL_VERSION = "0.1"
 CURRENT_RELEASE = "2.0.2"
 CURRENT_GENOME_META = "2017-06-02"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2017-06-02"
 
 RELEASES = ["2.0.1", "2.0.2"]
+
+GENOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH']
+EXOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH', 'SAS']
+EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
 
 def public_exomes_vds_path(split=False, version=CURRENT_RELEASE):
@@ -15,7 +21,7 @@ def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
 
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='sa.meta'):
+                    meta_version=None, meta_root='sa.meta', vqsr=True):
     """
     Wrapper function to get gnomAD data as VDS
 
@@ -26,12 +32,23 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param str hail_version: One of the HAIL_VERSIONs
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata
+    :param str vqsr: Whether to add VQSR information for exomes (goes into va.info)
     :return: Chosen VDS
     :rtype: VariantDataset
     """
     data_path = get_gnomad_data_path(data_type, hardcalls=hardcalls, split=split, hail_version=hail_version)
+
     vds = hc.read(data_path)
     vds = vds.annotate_samples_table(get_gnomad_meta(hc, data_type, meta_version), root=meta_root)
+
+    pops = EXOME_POPS if data_type == 'exomes' else GENOME_POPS
+    vds = vds.annotate_global('global.pops', map(lambda x: x.lower(), pops), TArray(TString()))
+
+    if data_type == 'exomes' and vqsr:
+        vqsr_vds = hc.read(vqsr_exomes_sites_vds_path())
+        annotations = ['culprit', 'POSITIVE_TRAIN_SITE', 'NEGATIVE_TRAIN_SITE', 'VQSLOD']
+        vds = vds.annotate_variants_vds(vqsr_vds, expr=', '.join(['va.info.%s = vds.info.%s' % (a, a) for a in annotations]))
+
     return vds
 
 

@@ -32,7 +32,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param str hail_version: One of the HAIL_VERSIONs
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata
-    :param str vqsr: Whether to add VQSR information for exomes (goes into va.info)
+    :param bool vqsr: Whether to add VQSR information for exomes (goes into va.info)
     :return: Chosen VDS
     :rtype: VariantDataset
     """

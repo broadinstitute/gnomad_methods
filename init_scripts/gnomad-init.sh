@@ -36,7 +36,7 @@ cd /home/hail/gnomad_hail
 export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
 export SPARK_CLASSPATH=${HAIL_HOME}/${HAIL_JAR}
 
-python PYTHONPATH=.:$PYTHONPATH tests/test_utils.py
+PYTHONPATH=.:$PYTHONPATH python tests/test_utils.py
 # Use this instead to turn off Slack messages
 # python -m unittest discover &> tests.log
 

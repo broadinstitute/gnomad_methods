@@ -21,7 +21,8 @@ def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
 
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None):
+                    meta_version=None, meta_root='sa.meta', sample_filtering=None,
+                    duplicate_mapping_root=None, fam_root='sa.fam', vqsr=True):
     """
     Wrapper function to get gnomAD data as VDS.
 
@@ -32,9 +33,10 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param str hail_version: One of the HAIL_VERSIONs
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata. Set to None if no metadata is desired.
-    :param bool vqsr: Whether to add VQSR information for exomes (goes into va.info)
-    :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
+    :param str sample_filtering: Whether to filter samples - can be one of: None (all samples), release, qc, or a custom sa.meta.X == "Y" expression.
     :param str duplicate_mapping_root: Where to put the duplicate genome/exome samples ID mapping (default is None -- do not annotate)
+    :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
+    :param bool vqsr: Whether to add VQSR information for exomes (goes into va.info)
     :return: Chosen VDS
     :rtype: VariantDataset
     """
@@ -42,6 +44,14 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
 
     if meta_root:
         vds = vds.annotate_samples_table(get_gnomad_meta(hc, data_type, meta_version), root=meta_root)
+
+    if sample_filtering:
+        if sample_filtering == 'release':
+            vds = vds.filter_samples_expr('sa.meta.keep')
+        elif sample_filtering == 'qc':
+            vds = vds.filter_samples_expr('sa.meta.qc_sample')
+        else:
+            vds = vds.filter_samples_expr(sample_filtering)
 
     if duplicate_mapping_root:
         vds = vds.annotate_samples_table(

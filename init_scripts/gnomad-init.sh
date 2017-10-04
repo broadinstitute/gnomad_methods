@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 PACKAGES="slackclient sklearn tabulate pandas scipy statsmodels"
-/home/anaconda2/bin/pip install $PACKAGES
 pip install $PACKAGES
 
 export HAIL_VERSION=0.1

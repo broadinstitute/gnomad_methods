@@ -21,7 +21,7 @@ def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
 
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', dupicate_mapping_root=None):
+                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None):
     """
     Wrapper function to get gnomAD data as VDS.
 
@@ -33,7 +33,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata. Set to None if no metadata is desired.
     :param bool vqsr: Whether to add VQSR information for exomes (goes into va.info)
-    :param str fam: Where to put the pedigree information. Set to None if no pedigree information is desired.
+    :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
     :param str duplicate_mapping_root: Where to put the duplicate genome/exome samples ID mapping (default is None -- do not annotate)
     :return: Chosen VDS
     :rtype: VariantDataset
@@ -43,19 +43,18 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     if meta_root:
         vds = vds.annotate_samples_table(get_gnomad_meta(hc, data_type, meta_version), root=meta_root)
 
-    if dupicate_mapping_root:
+    if duplicate_mapping_root:
         vds = vds.annotate_samples_table(
             hc.import_table(genomes_exomes_duplicate_ids_tsv_path,
                             impute=True,
                             key='exome_id' if data_type == "exomes" else 'genome_id'),
-            root=dupicate_mapping_root)
+            root=duplicate_mapping_root)
 
     if fam_root:
         vds = vds.annotate_samples_table(
             KeyTable.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path),
             root=fam_root
         )
-
 
     pops = EXOME_POPS if data_type == 'exomes' else GENOME_POPS
     vds = vds.annotate_global('global.pops', map(lambda x: x.lower(), pops), TArray(TString()))
@@ -80,8 +79,8 @@ def get_gnomad_meta(hc, data_type, version=None):
     """
     return (
         hc
-            .import_table(get_gnomad_meta_path(data_type, version), impute=True)
-            .key_by("sample" if data_type == "exomes" else "Sample")
+        .import_table(get_gnomad_meta_path(data_type, version), impute=True)
+        .key_by("sample" if data_type == "exomes" else "Sample")
     )
 
 

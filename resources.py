@@ -14,11 +14,41 @@ def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
     return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 
 
-def get_gnomad_data(data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION):
+def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
+                    meta_version=None, meta_root='sa.meta'):
     """
-    Wrapper function to get gnomAD data
+    Wrapper function to get gnomAD data as VDS
 
-    :param data_type: One of `exomes` or `genomes`
+    :param HailContext hc: HailContext
+    :param str data_type: One of `exomes` or `genomes`
+    :param str hardcalls: One of `adj` or `raw` if hardcalls are desired (leave as None for raw data)
+    :param bool split: Whether the dataset should be split (only applies to hardcalls)
+    :param str hail_version: One of the HAIL_VERSIONs
+    :return: Path to chosen VDS
+    :rtype: str
+    """
+    data_path = get_gnomad_data_path(data_type, hardcalls=hardcalls, split=split, hail_version=hail_version)
+    vds = hc.read(data_path)
+    vds = vds.annotate_samples_table(get_gnomad_meta(hc, data_type, meta_version), root=meta_root)
+    return vds
+
+
+def get_gnomad_meta(hc, data_type, version=None):
+    """
+    Wrapper function to get gnomAD metadata as keytable
+
+    :param HailContext hc: HailContext
+    :param str data_type: One of `exomes` or `genomes`
+    :return:
+    """
+    return hc.import_table(get_gnomad_meta_path(data_type, version), impute=True)
+
+
+def get_gnomad_data_path(data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION):
+    """
+    Wrapper function to get paths to gnomAD data
+
+    :param str data_type: One of `exomes` or `genomes`
     :param str hardcalls: One of `adj` or `raw` if hardcalls are desired (leave as None for raw data)
     :param bool split: Whether the dataset should be split (only applies to hardcalls)
     :param str hail_version: One of the HAIL_VERSIONs
@@ -38,17 +68,22 @@ def get_gnomad_data(data_type, hardcalls=None, split=False, hail_version=CURRENT
     return None
 
 
-def get_gnomad_meta(data_type):
+def get_gnomad_meta_path(data_type, version=None):
     """
-    Wrapper function to get gnomAD metadata
+    Wrapper function to get paths to gnomAD metadata
 
-    :param data_type: One of `exomes` or `genomes`
+    :param str data_type: One of `exomes` or `genomes`
+    :param str version: String with version (date) for metadata
     :return: Path to chosen metadata file
     :rtype: str
     """
     if data_type == 'exomes':
+        if version:
+            return metadata_exomes_tsv_path(version)
         return metadata_exomes_tsv_path()
     elif data_type == 'genomes':
+        if version:
+            return metadata_genomes_tsv_path(version)
         return metadata_genomes_tsv_path()
     return None
 

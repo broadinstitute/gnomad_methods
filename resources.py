@@ -59,6 +59,8 @@ def get_gnomad_data_path(data_type, hardcalls=None, split=False, hail_version=CU
     :return: Path to chosen VDS
     :rtype: str
     """
+    if hardcalls is not None and hardcalls not in ('adj', 'raw'):
+        return DataException("Select hardcalls of 'adj', 'raw', or None")
     if data_type == 'exomes':
         if not hardcalls:
             return raw_exomes_vds_path(hail_version)
@@ -69,7 +71,7 @@ def get_gnomad_data_path(data_type, hardcalls=None, split=False, hail_version=CU
             return raw_genomes_vds_path(hail_version)
         else:
             return hardcalls_genomes_vds_path(split, hardcalls == 'adj', hail_version)
-    return None
+    return DataException("Select data_type of 'genomes' or 'exomes'")
 
 
 def get_gnomad_meta_path(data_type, version=None):
@@ -89,7 +91,7 @@ def get_gnomad_meta_path(data_type, version=None):
         if version:
             return metadata_genomes_tsv_path(version)
         return metadata_genomes_tsv_path()
-    return None
+    return DataException("Select data_type of 'genomes' or 'exomes'")
 
 
 def vqsr_exomes_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
@@ -184,3 +186,8 @@ vep_config = "/vep/vep-gcloud.properties"
 
 # Annotations
 methylation_kt_path = "gs://gnomad-resources/methylation.kt"
+
+
+class DataException(Exception):
+    pass
+

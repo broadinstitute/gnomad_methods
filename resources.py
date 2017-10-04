@@ -24,8 +24,10 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param str hardcalls: One of `adj` or `raw` if hardcalls are desired (leave as None for raw data)
     :param bool split: Whether the dataset should be split (only applies to hardcalls)
     :param str hail_version: One of the HAIL_VERSIONs
-    :return: Path to chosen VDS
-    :rtype: str
+    :param str meta_version: Version of metadata (None for current)
+    :param str meta_root: Where to put metadata
+    :return: Chosen VDS
+    :rtype: VariantDataset
     """
     data_path = get_gnomad_data_path(data_type, hardcalls=hardcalls, split=split, hail_version=hail_version)
     vds = hc.read(data_path)
@@ -39,7 +41,9 @@ def get_gnomad_meta(hc, data_type, version=None):
 
     :param HailContext hc: HailContext
     :param str data_type: One of `exomes` or `genomes`
-    :return:
+    :param str version: Metadata version (None for current)
+    :return: Metadata KeyTable
+    :rtype: KeyTable
     """
     return hc.import_table(get_gnomad_meta_path(data_type, version), impute=True)
 

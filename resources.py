@@ -21,7 +21,8 @@ def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
 
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None):
+                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None,
+                    release_samples=False):
     """
     Wrapper function to get gnomAD data as VDS.
 
@@ -35,6 +36,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param bool vqsr: Whether to add VQSR information for exomes (goes into va.info)
     :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
     :param str duplicate_mapping_root: Where to put the duplicate genome/exome samples ID mapping (default is None -- do not annotate)
+    :param bool release_samples: When set, filters the data to release samples only
     :return: Chosen VDS
     :rtype: VariantDataset
     """
@@ -64,6 +66,9 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
         annotations = ['culprit', 'POSITIVE_TRAIN_SITE', 'NEGATIVE_TRAIN_SITE', 'VQSLOD']
         vds = vds.annotate_variants_vds(vqsr_vds, expr=', '.join(['va.info.%s = vds.info.%s' % (a, a) for a in annotations]))
 
+    if release_samples:
+        vds = vds.filter_samples_expr('sa.meta.release')
+
     return vds
 
 
@@ -81,6 +86,8 @@ def get_gnomad_meta(hc, data_type, version=None):
         hc
         .import_table(get_gnomad_meta_path(data_type, version), impute=True)
         .key_by("sample" if data_type == "exomes" else "Sample")
+        .annotate(['release = ' + ('drop_status == "keep"' if data_type == "exomes" else 'keep'), #This is version dependent -- will need fixing when new metadata arrives
+                   'population = ' + ('population' if data_type == "exomes" else 'if(final_pop == "sas") "oth" else final_pop')])
     )
 
 

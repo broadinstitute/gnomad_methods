@@ -19,6 +19,19 @@ def public_exomes_vds_path(split=False, version=CURRENT_RELEASE):
 def public_genomes_vds_path(split=False, version=CURRENT_RELEASE):
     return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 
+def get_gnomad_public_data(hc, data_type, split=False, version=CURRENT_RELEASE):
+    """
+    Wrapper function to get gnomAD data as VDS.
+
+    :param HailContext hc: HailContext
+    :param str data_type: One of `exomes` or `genomes`
+    :param bool split: Whether the dataset should be split (only applies to hardcalls)
+    :param str hail_version: One of the RELEASES
+    :return: Chosen VDS
+    :rtype: VariantDataset
+    """
+    return hc.read(get_gnomad_public_data_path(data_type, split=split, version=version))
+
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
                     meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None,
@@ -86,9 +99,29 @@ def get_gnomad_meta(hc, data_type, version=None):
         hc
         .import_table(get_gnomad_meta_path(data_type, version), impute=True)
         .key_by("sample" if data_type == "exomes" else "Sample")
-        .annotate(['release = ' + ('drop_status == "keep"' if data_type == "exomes" else 'keep'), #This is version dependent -- will need fixing when new metadata arrives
-                   'population = ' + ('population' if data_type == "exomes" else 'if(final_pop == "sas") "oth" else final_pop')])
+        .annotate(['release = {}'.format('drop_status == "keep"' if data_type == "exomes" else 'keep'), # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
+                   'population = {}'.format('population' if data_type == "exomes" else 'if(final_pop == "sas") "oth" else final_pop')])
     )
+
+
+def get_gnomad_public_data_path(data_type, split=False, version=CURRENT_RELEASE):
+    """
+    Wrapper function to get paths to gnomAD data
+
+    :param str data_type: One of `exomes` or `genomes`
+    :param bool split: Whether the dataset should be split (only applies to hardcalls)
+    :param str version: One of the RELEASES
+    :return: Path to chosen VDS
+    :rtype: str
+    """
+    if version not in RELEASES:
+        return DataException("Select data_type of 'genomes' or 'exomes'")
+
+    if data_type == 'exomes':
+        return public_exomes_vds_path(split, version)
+    elif data_type == 'genomes':
+        return public_genomes_vds_path(split, version)
+    return DataException("Select data_type of 'genomes' or 'exomes'")
 
 
 def get_gnomad_data_path(data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION):

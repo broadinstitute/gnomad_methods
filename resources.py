@@ -220,6 +220,7 @@ vep_config = "/vep/vep-gcloud.properties"
 
 # Annotations
 methylation_kt_path = "gs://gnomad-resources/methylation.kt"
+context_vds_path = 'gs://gnomad-resources/constraint/context_processed.vds'
 
 
 class DataException(Exception):

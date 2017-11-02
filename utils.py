@@ -7,7 +7,9 @@ import os
 
 from resources import *
 from hail import *
+from slack_utils import *
 from collections import defaultdict
+from pprint import pprint, pformat
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")
@@ -161,7 +163,7 @@ def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annota
 def flatten_struct(struct, root='', leaf_only=True):
     result = {}
     for f in struct.fields:
-        path = '%s.%s' % (root, f.name)
+        path = '{}.{}'.format(root, f.name)
         if isinstance(f.typ, TStruct):
             result.update(flatten_struct(f.typ, path, leaf_only))
             if not leaf_only:
@@ -347,36 +349,56 @@ def print_attributes(vds, path=None):
             print "%s attributes: %s" % (ann, f.attributes)
 
 
-def get_numbered_annotations(schema, root='va.info', recursive = False):
+def get_numbered_annotations(schema , root='va', recursive = False):
     """
-    Get numbered annotations from a VDS variant schema based on their `Number` va attributes.
+        Get numbered annotations from a VDS variant schema based on their `Number` va attributes.
     The numbered annotations are returned as a dict with the Number as the key and a list of tuples (field_path, field) as values.
     All annotations that do not have a Number attribute are returned under the key `None`
     :param TStruct schema: Input variant schema
-    :param str root: Place to find annotations (defaults to va.info)
+    :param str root: Root path to get annotations (defaults to va)
+    :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
+    :return: Dictionary containing annotations
+    :rtype: dict of tuple(str, Field)
+    """
+    annotations = group_annotations_by_attribute(schema, 'Number', root, recursive)
+    logger.info("Found the following fields:")
+    for k, v in annotations.iteritems():
+        if k is not None:
+            logger.info("{}-based annotations: {}".format(k, ",".join([fields[0] for fields in v])))
+        else:
+            logger.info("Annotations with no number: {}".format(",".join([fields[0] for fields in v])))
+
+    return annotations
+
+def group_annotations_by_attribute(schema, grouping_key , root, recursive = False):
+    """
+    Groups annotations in a dictionnary by the given attribute key.
+    All annotations that do not have a Number attribute are returned under the key `None`
+
+    :param TStruct schema: Input schema
+    :param str root: Root path to get annotations
     :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
     :return: Dictionary containing annotations
     :rtype: dict of tuple(str, Field)
     """
     annotations = defaultdict(list)
 
-    release_info = get_ann_type(root, schema)
-    for field in release_info.fields:
+    if '.' in root:
+        fields = get_ann_type(root, schema)
+    else:
+        fields = schema
+
+    for field in fields.fields:
         path = '{}.{}'.format(root, field.name)
         if isinstance(field.typ, TArray):
-            if 'Number' in field.attributes:
-                annotations[field.attributes['Number']].append((path, field))
+            if grouping_key in field.attributes:
+                annotations[field.attributes[grouping_key]].append((path, field))
         elif recursive and isinstance(field.typ, TStruct):
-            f_annotations = get_numbered_annotations(schema, path)
+            f_annotations = group_annotations_by_attribute(schema, grouping_key, path, recursive)
             for k,v in f_annotations.iteritems():
                 annotations[k].extend(v)
         else:
             annotations[None].append((path, field))
-
-    logger.info("Found the following fields:")
-    for k,v in annotations.iteritems():
-        if k is not None:
-            logger.info("{}-based annotations: {}".format(k, ",".join([fields[0] for fields in v])))
 
     return annotations
 

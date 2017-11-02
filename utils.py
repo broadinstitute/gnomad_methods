@@ -1,18 +1,13 @@
 
 import re
 import sys
-import json
-import copy
 import logging
 import gzip
 import os
-import random
 
 from resources import *
 from hail import *
-from slack_utils import *
-from pyspark.sql.functions import bround
-from pprint import pprint, pformat
+from collections import defaultdict
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")
@@ -168,7 +163,7 @@ def flatten_struct(struct, root='', leaf_only=True):
     for f in struct.fields:
         path = '%s.%s' % (root, f.name)
         if isinstance(f.typ, TStruct):
-            result.update(flatten_struct(f.typ, path))
+            result.update(flatten_struct(f.typ, path, leaf_only))
             if not leaf_only:
                 result[path] = f
         else:
@@ -352,40 +347,38 @@ def print_attributes(vds, path=None):
             print "%s attributes: %s" % (ann, f.attributes)
 
 
-def get_numbered_annotations(vds, root='va.info'):
+def get_numbered_annotations(schema, root='va.info', recursive = False):
     """
-    Get all 1-, A-, G- numbered annotations from a VDS based on the Number va attributes.
-    In addition returns arrays with no Number or Number=. va attribute separately
-    :param vds: Input VDS
-    :param root: Place to find annotations (defaults to va.info)
-    :return: annotations, a_annotations, g_annotations, dot_annotations as list[Field]
+    Get numbered annotations from a VDS variant schema based on their `Number` va attributes.
+    The numbered annotations are returned as a dict with the Number as the key and a list of tuples (field_path, field) as values.
+    All annotations that do not have a Number attribute are returned under the key `None`
+    :param TStruct schema: Input variant schema
+    :param str root: Place to find annotations (defaults to va.info)
+    :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
+    :return: Dictionary containing annotations
+    :rtype: dict of tuple(str, Field)
     """
-    a_annotations = []
-    g_annotations = []
-    dot_annotations = []
-    annotations = []
+    annotations = defaultdict(list)
 
-    release_info = get_ann_type(root, vds.variant_schema)
+    release_info = get_ann_type(root, schema)
     for field in release_info.fields:
+        path = '{}.{}'.format(root, field.name)
         if isinstance(field.typ, TArray):
             if 'Number' in field.attributes:
-                number = field.attributes['Number']
-                if number == "A":
-                    a_annotations.append(field)
-                elif number == "G":
-                    g_annotations.append(field)
-                else:
-                    dot_annotations.append(field)
+                annotations[field.attributes['Number']].append((path, field))
+        elif recursive and isinstance(field.typ, TStruct):
+            f_annotations = get_numbered_annotations(schema, path)
+            for k,v in f_annotations.iteritems():
+                annotations[k].extend(v)
         else:
-            annotations.append(field)
+            annotations[None].append((path, field))
 
     logger.info("Found the following fields:")
-    logger.info("1-based annotations: " + ",".join([x.name for x in annotations]))
-    logger.info("A-based annotations: " + ",".join([x.name for x in a_annotations]))
-    logger.info("G-based annotations: " + ",".join([x.name for x in g_annotations]))
-    logger.info("dot annotations: " + ",".join([x.name for x in dot_annotations]))
+    for k,v in annotations.iteritems():
+        if k is not None:
+            logger.info("{}-based annotations: {}".format(k, ",".join([fields[0] for fields in v])))
 
-    return annotations, a_annotations, g_annotations, dot_annotations
+    return annotations
 
 
 def filter_annotations_regex(annotation_fields, ignore_list):
@@ -783,15 +776,15 @@ def split_vds_and_annotations(vds, hard_filters, as_filters_root, extra_ann_expr
      :return: Split VDS with properly split va fields
      :rtype: VariantDataset
      """
-    annotations, a_annotations, g_annotations, dot_annotations = get_numbered_annotations(vds, "va.info")
+    numbered_annotations = get_numbered_annotations(vds.variant_schema, "va.info")
 
     vds = vds.split_multi()
     vds = vds.annotate_variants_expr(
-        index_into_arrays(a_based_annotations=["va.info." + a.name for a in a_annotations], vep_root=vep_root))
+        index_into_arrays(a_based_annotations=[a[0] for a in numbered_annotations["A"]], vep_root=vep_root))
     vds = set_site_filters(vds,
                            { f: 'va.filters.contains("{}")'.format(f) for f in hard_filters },
                            as_filters_root)
-    ann_expr = ['va.info = drop(va.info, {0})'.format(",".join([a.name for a in g_annotations]))]
+    ann_expr = ['va.info = drop(va.info, {0})'.format(",".join([a[1].name for a in numbered_annotations["G"]]))]
     if extra_ann_expr:
         ann_expr.extend(extra_ann_expr)
     vds = vds.annotate_variants_expr(ann_expr)

@@ -1,17 +1,14 @@
 
 import re
 import sys
-import json
-import copy
 import logging
 import gzip
 import os
-import random
 
 from resources import *
 from hail import *
 from slack_utils import *
-from pyspark.sql.functions import bround
+from collections import defaultdict, namedtuple
 from pprint import pprint, pformat
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -163,12 +160,44 @@ def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annota
     return vds.filter_alleles('v.altAlleles[aIndex - 1].alt == "*"', annotation=annotation, keep=False)
 
 
-def flatten_struct(struct, root='', leaf_only=True):
+def flatten_struct(struct, root='va', leaf_only=True):
+    """
+    Given a TStruct and its root path, creates a dict of each path -> Field by flattening the TStruct tree.
+    The following TStruct at root 'va', for example
+    Struct{
+     rsid: String,
+     qual: Double,
+     filters: Set[String],
+     info: Struct{
+         AC: Array[Int],
+         AF: Array[Double],
+         AN: Int
+         }
+    }
+
+    Would give the following dict:
+    {
+        'va.rsid': Field(rsid),
+        'va.qual': Field(qual),
+        'va.filters': Field(filters),
+        'va.info.AC': Field(AC),
+        'va.info.AF': Field(AF),
+        'va.info.AN': Field(AN)
+    }
+
+    Note that if `leaf_only` is set to `False`, an additional entry `'va.info': Field(info)` would be added.
+
+    :param TStruct struct: The struct to flatten
+    :param str root: The root path of the struct to flatten (added at the beginning of all dict keys)
+    :param bool leaf_only: When set to true, only leaf nodes in the tree are output in the output
+    :return: Dictionary of path : Field
+    :rtype: dict of str:Field
+    """
     result = {}
     for f in struct.fields:
-        path = '%s.%s' % (root, f.name)
+        path = '{}.{}'.format(root, f.name)
         if isinstance(f.typ, TStruct):
-            result.update(flatten_struct(f.typ, path))
+            result.update(flatten_struct(f.typ, path, leaf_only))
             if not leaf_only:
                 result[path] = f
         else:
@@ -177,11 +206,29 @@ def flatten_struct(struct, root='', leaf_only=True):
 
 
 def ann_exists(annotation, schema, root='va'):
+    """
+    Tests whether an annotation (given by its full path) exists in a given schema and its root.
+
+    :param str annotation: The annotation to find (given by its full path in the schema tree)
+    :param TStruct schema: The schema to find the annotation in
+    :param str root: The root of the schema (or struct)
+    :return: Whether the annotation was found
+    :rtype: bool
+    """
     anns = flatten_struct(schema, root, leaf_only=False)
     return annotation in anns
 
 
 def get_ann_field(annotation, schema, root='va'):
+    """
+    Given an annotation path and a schema, return that annotation field.
+
+    :param str annotation: annotation path to fetch
+    :param TStruct schema: schema (or struct) in which to search
+    :param str root: root of the schema (or struct)
+    :return: The Field corresponding to the input annotation
+    :rtype: Field
+    """
     anns = flatten_struct(schema, root, leaf_only=False)
     if not annotation in anns:
         logger.error("%s missing from schema.", annotation)
@@ -190,14 +237,46 @@ def get_ann_field(annotation, schema, root='va'):
 
 
 def get_ann_type(annotation, schema, root='va'):
+    """
+     Given an annotation path and a schema, return the type of the annotation.
+
+    :param str annotation: annotation path to fetch
+    :param TStruct schema: schema (or struct) in which to search
+    :param str root: root of the schema (or struct)
+    :return: The type of the input annotation
+    :rtype: Type
+    """
     return get_ann_field(annotation, schema, root).typ
 
 
 def annotation_type_is_numeric(t):
+    """
+    Given an annotation type, returns whether it is a numerical type or not.
+
+    :param Type t: Type to test
+    :return: If the input type is numeric
+    :rtype: bool
+    """
     return (isinstance(t, TInt) or
             isinstance(t, TLong) or
             isinstance(t, TFloat) or
             isinstance(t, TDouble)
+            )
+
+def annotation_type_in_vcf_info(t):
+    """
+    Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
+    Note types that aren't natively exportable to VCF will be converted to String on export.
+
+    :param Type t: Type to test
+    :return: If the input type can be exported to VCF
+    :rtype: bool
+    """
+    return (annotation_type_is_numeric(t) or
+            isinstance(t, TString) or
+            isinstance(t, TArray) or
+            isinstance(t, TSet) or
+            isinstance(t, TBoolean)
             )
 
 
@@ -352,40 +431,74 @@ def print_attributes(vds, path=None):
             print "%s attributes: %s" % (ann, f.attributes)
 
 
-def get_numbered_annotations(vds, root='va.info'):
+def get_numbered_annotations(schema , root='va', recursive = False, default_when_missing = True):
     """
-    Get all 1-, A-, G- numbered annotations from a VDS based on the Number va attributes.
-    In addition returns arrays with no Number or Number=. va attribute separately
-    :param vds: Input VDS
-    :param root: Place to find annotations (defaults to va.info)
-    :return: annotations, a_annotations, g_annotations, dot_annotations as list[Field]
+        Get numbered annotations from a VDS variant schema based on their `Number` va attributes.
+    The numbered annotations are returned as a dict with the Number as the key and a list of tuples (field_path, field) as values.
+    All annotations that do not have a Number attribute are returned under the key `None`
+    :param TStruct schema: Input variant schema
+    :param str root: Root path to get annotations (defaults to va)
+    :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
+    :param bool default_when_missing: When set to `True`, groups all types that can be natively exported to VCF under their default dimension (e.g. `TBoolean` -> `0`, `TInt` -> `1`, `TArray` -> `.`, etc.). When set to `False`, all fields with missing `Number` attribute are grouped under the `None` key.
+    :return: Dictionary containing annotations grouped by their `Number` attribute
+    :rtype: dict of namedtuple(str path, Field field)
     """
-    a_annotations = []
-    g_annotations = []
-    dot_annotations = []
-    annotations = []
 
-    release_info = get_ann_type(root, vds.variant_schema)
-    for field in release_info.fields:
-        if isinstance(field.typ, TArray):
-            if 'Number' in field.attributes:
-                number = field.attributes['Number']
-                if number == "A":
-                    a_annotations.append(field)
-                elif number == "G":
-                    g_annotations.append(field)
-                else:
-                    dot_annotations.append(field)
-        else:
-            annotations.append(field)
+    def default_values(field):
+        if isinstance(field.typ, TArray) or isinstance(field.typ, TSet):
+            return '.'
+        elif isinstance(field.typ, TBoolean):
+            return '0'
+        elif annotation_type_in_vcf_info(field.typ):
+            return '1'
+        return None
 
+    annotations = group_annotations_by_attribute(schema, 'Number', root, recursive, default_values if default_when_missing else None)
     logger.info("Found the following fields:")
-    logger.info("1-based annotations: " + ",".join([x.name for x in annotations]))
-    logger.info("A-based annotations: " + ",".join([x.name for x in a_annotations]))
-    logger.info("G-based annotations: " + ",".join([x.name for x in g_annotations]))
-    logger.info("dot annotations: " + ",".join([x.name for x in dot_annotations]))
+    for k, v in annotations.iteritems():
+        if k is not None:
+            logger.info("{}-based annotations: {}".format(k, ",".join([fields[0] for fields in v])))
+        else:
+            logger.info("Annotations with no number: {}".format(",".join([fields[0] for fields in v])))
 
-    return annotations, a_annotations, g_annotations, dot_annotations
+    return annotations
+
+
+def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = False, default_func = None):
+    """
+    Groups annotations in a dictionnary by the given attribute key.
+    All annotations that do not have a Number attribute are returned under the key `None`
+
+    :param TStruct schema: Input schema
+    :param str root: Root path to get annotations
+    :param bool recursive: Whether to go recursively to look for annotations in TStruct fields
+    :param function(Field) default_func: A function that returns the grouping key as a function of the Field. This function is applied to get the grouping key when the grouping key is not found in the Field attributes.
+    :return: Dictionary containing annotations
+    :rtype: dict of namedtuple(str path, Field field)
+    """
+    annotations = defaultdict(list)
+    PathAndField = namedtuple('PathAndField', ['path','field'])
+
+    if '.' in root:
+        fields = get_ann_type(root, schema)
+    else:
+        fields = schema
+
+    for field in fields.fields:
+        path = '{}.{}'.format(root, field.name)
+        if isinstance(field.typ, TArray):
+            if grouping_key in field.attributes:
+                annotations[field.attributes[grouping_key]].append(PathAndField(path, field))
+        elif recursive and isinstance(field.typ, TStruct):
+            f_annotations = group_annotations_by_attribute(schema, grouping_key, path, recursive, default_func)
+            for k,v in f_annotations.iteritems():
+                annotations[k].extend(v)
+        elif default_func is not None:
+            annotations[default_func(field)].append(PathAndField(path, field))
+        else:
+            annotations[None].append(PathAndField(path, field))
+
+    return annotations
 
 
 def filter_annotations_regex(annotation_fields, ignore_list):
@@ -783,15 +896,15 @@ def split_vds_and_annotations(vds, hard_filters, as_filters_root, extra_ann_expr
      :return: Split VDS with properly split va fields
      :rtype: VariantDataset
      """
-    annotations, a_annotations, g_annotations, dot_annotations = get_numbered_annotations(vds, "va.info")
+    numbered_annotations = get_numbered_annotations(vds.variant_schema, "va.info")
 
     vds = vds.split_multi()
     vds = vds.annotate_variants_expr(
-        index_into_arrays(a_based_annotations=["va.info." + a.name for a in a_annotations], vep_root=vep_root))
+        index_into_arrays(a_based_annotations=[a.path for a in numbered_annotations["A"]], vep_root=vep_root))
     vds = set_site_filters(vds,
                            { f: 'va.filters.contains("{}")'.format(f) for f in hard_filters },
                            as_filters_root)
-    ann_expr = ['va.info = drop(va.info, {0})'.format(",".join([a.name for a in g_annotations]))]
+    ann_expr = ['va.info = drop(va.info, {0})'.format(",".join([a.field.name for a in numbered_annotations["G"]]))]
     if extra_ann_expr:
         ann_expr.extend(extra_ann_expr)
     vds = vds.annotate_variants_expr(ann_expr)

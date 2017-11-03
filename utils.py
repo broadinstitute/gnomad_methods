@@ -472,7 +472,7 @@ def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = 
     :param TStruct schema: Input schema
     :param str root: Root path to get annotations
     :param bool recursive: Whether to go recursively to look for annotations in TStruct fields
-    :param function(Field) default_func: A function that returns the grouping key as a function of the Field. This function is applied to get the grouping key when the grouping key is not foud in the Field attributes.
+    :param function(Field) default_func: A function that returns the grouping key as a function of the Field. This function is applied to get the grouping key when the grouping key is not found in the Field attributes.
     :return: Dictionary containing annotations
     :rtype: dict of namedtuple(str path, Field field)
     """

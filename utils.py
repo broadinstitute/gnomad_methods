@@ -8,7 +8,7 @@ import os
 from resources import *
 from hail import *
 from slack_utils import *
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from pprint import pprint, pformat
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -358,7 +358,7 @@ def get_numbered_annotations(schema , root='va', recursive = False):
     :param str root: Root path to get annotations (defaults to va)
     :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
     :return: Dictionary containing annotations
-    :rtype: dict of tuple(str, Field)
+    :rtype: dict of namedtuple(str path, Field field)
     """
     annotations = group_annotations_by_attribute(schema, 'Number', root, recursive)
     logger.info("Found the following fields:")
@@ -370,18 +370,20 @@ def get_numbered_annotations(schema , root='va', recursive = False):
 
     return annotations
 
-def group_annotations_by_attribute(schema, grouping_key , root, recursive = False):
+
+def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = False):
     """
     Groups annotations in a dictionnary by the given attribute key.
     All annotations that do not have a Number attribute are returned under the key `None`
 
     :param TStruct schema: Input schema
     :param str root: Root path to get annotations
-    :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
+    :param bool recursive: Whether to go recursively to look for annotations in TStruct fields
     :return: Dictionary containing annotations
-    :rtype: dict of tuple(str, Field)
+    :rtype: dict of namedtuple(str path, Field field)
     """
     annotations = defaultdict(list)
+    PathAndField = namedtuple('PathAndField', ['path','field'])
 
     if '.' in root:
         fields = get_ann_type(root, schema)
@@ -392,13 +394,13 @@ def group_annotations_by_attribute(schema, grouping_key , root, recursive = Fals
         path = '{}.{}'.format(root, field.name)
         if isinstance(field.typ, TArray):
             if grouping_key in field.attributes:
-                annotations[field.attributes[grouping_key]].append((path, field))
+                annotations[field.attributes[grouping_key]].append(PathAndField(path, field))
         elif recursive and isinstance(field.typ, TStruct):
             f_annotations = group_annotations_by_attribute(schema, grouping_key, path, recursive)
             for k,v in f_annotations.iteritems():
                 annotations[k].extend(v)
         else:
-            annotations[None].append((path, field))
+            annotations[None].append(PathAndField(path, field))
 
     return annotations
 
@@ -802,11 +804,11 @@ def split_vds_and_annotations(vds, hard_filters, as_filters_root, extra_ann_expr
 
     vds = vds.split_multi()
     vds = vds.annotate_variants_expr(
-        index_into_arrays(a_based_annotations=[a[0] for a in numbered_annotations["A"]], vep_root=vep_root))
+        index_into_arrays(a_based_annotations=[a.path for a in numbered_annotations["A"]], vep_root=vep_root))
     vds = set_site_filters(vds,
                            { f: 'va.filters.contains("{}")'.format(f) for f in hard_filters },
                            as_filters_root)
-    ann_expr = ['va.info = drop(va.info, {0})'.format(",".join([a[1].name for a in numbered_annotations["G"]]))]
+    ann_expr = ['va.info = drop(va.info, {0})'.format(",".join([a.field.name for a in numbered_annotations["G"]]))]
     if extra_ann_expr:
         ann_expr.extend(extra_ann_expr)
     vds = vds.annotate_variants_expr(ann_expr)

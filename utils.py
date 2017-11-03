@@ -244,7 +244,7 @@ def get_ann_type(annotation, schema, root='va'):
     :param TStruct schema: schema (or struct) in which to search
     :param str root: root of the schema (or struct)
     :return: The type of the input annotation
-    :rtype: TType
+    :rtype: Type
     """
     return get_ann_field(annotation, schema, root).typ
 
@@ -253,7 +253,7 @@ def annotation_type_is_numeric(t):
     """
     Given an annotation type, returns whether it is a numerical type or not.
 
-    :param TType t: Type to test
+    :param Type t: Type to test
     :return: If the input type is numeric
     :rtype: bool
     """
@@ -261,6 +261,22 @@ def annotation_type_is_numeric(t):
             isinstance(t, TLong) or
             isinstance(t, TFloat) or
             isinstance(t, TDouble)
+            )
+
+def annotation_type_in_vcf_info(t):
+    """
+    Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
+    Note types that aren't natively exportable to VCF will be converted to String on export.
+
+    :param Type t: Type to test
+    :return: If the input type can be exported to VCF
+    :rtype: bool
+    """
+    return (annotation_type_is_numeric(t) or
+            isinstance(t, TString) or
+            isinstance(t, TArray) or
+            isinstance(t, TSet) or
+            isinstance(t, TBoolean)
             )
 
 
@@ -415,7 +431,7 @@ def print_attributes(vds, path=None):
             print "%s attributes: %s" % (ann, f.attributes)
 
 
-def get_numbered_annotations(schema , root='va', recursive = False):
+def get_numbered_annotations(schema , root='va', recursive = False, default_when_missing = True):
     """
         Get numbered annotations from a VDS variant schema based on their `Number` va attributes.
     The numbered annotations are returned as a dict with the Number as the key and a list of tuples (field_path, field) as values.
@@ -423,10 +439,21 @@ def get_numbered_annotations(schema , root='va', recursive = False):
     :param TStruct schema: Input variant schema
     :param str root: Root path to get annotations (defaults to va)
     :param bool recursive: Whether to go recursively to look for Numbered annotations in TStruct fields
-    :return: Dictionary containing annotations
+    :param bool default_when_missing: When set to `True`, groups all types that can be natively exported to VCF under their default dimension (e.g. `TBoolean` -> `0`, `TInt` -> `1`, `TArray` -> `.`, etc.). When set to `False`, all fields with missing `Number` attribute are grouped under the `None` key.
+    :return: Dictionary containing annotations grouped by their `Number` attribute
     :rtype: dict of namedtuple(str path, Field field)
     """
-    annotations = group_annotations_by_attribute(schema, 'Number', root, recursive)
+
+    def default_values(field):
+        if isinstance(field.typ, TArray) or isinstance(field.typ, TSet):
+            return '.'
+        elif isinstance(field.typ, TBoolean):
+            return '0'
+        elif annotation_type_in_vcf_info(field.typ):
+            return '1'
+        return None
+
+    annotations = group_annotations_by_attribute(schema, 'Number', root, recursive, default_values if default_when_missing else None)
     logger.info("Found the following fields:")
     for k, v in annotations.iteritems():
         if k is not None:
@@ -437,7 +464,7 @@ def get_numbered_annotations(schema , root='va', recursive = False):
     return annotations
 
 
-def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = False):
+def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = False, default_func = None):
     """
     Groups annotations in a dictionnary by the given attribute key.
     All annotations that do not have a Number attribute are returned under the key `None`
@@ -445,6 +472,7 @@ def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = 
     :param TStruct schema: Input schema
     :param str root: Root path to get annotations
     :param bool recursive: Whether to go recursively to look for annotations in TStruct fields
+    :param function(Field) default_func: A function that returns the grouping key as a function of the Field. This function is applied to get the grouping key when the grouping key is not foud in the Field attributes.
     :return: Dictionary containing annotations
     :rtype: dict of namedtuple(str path, Field field)
     """
@@ -462,9 +490,11 @@ def group_annotations_by_attribute(schema, grouping_key, root='va', recursive = 
             if grouping_key in field.attributes:
                 annotations[field.attributes[grouping_key]].append(PathAndField(path, field))
         elif recursive and isinstance(field.typ, TStruct):
-            f_annotations = group_annotations_by_attribute(schema, grouping_key, path, recursive)
+            f_annotations = group_annotations_by_attribute(schema, grouping_key, path, recursive, default_func)
             for k,v in f_annotations.iteritems():
                 annotations[k].extend(v)
+        elif default_func is not None:
+            annotations[default_func(field)].append(PathAndField(path, field))
         else:
             annotations[None].append(PathAndField(path, field))
 

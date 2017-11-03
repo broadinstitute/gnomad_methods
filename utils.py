@@ -160,7 +160,39 @@ def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annota
     return vds.filter_alleles('v.altAlleles[aIndex - 1].alt == "*"', annotation=annotation, keep=False)
 
 
-def flatten_struct(struct, root='', leaf_only=True):
+def flatten_struct(struct, root='va', leaf_only=True):
+    """
+    Given a TStruct and its root path, creates a dict of each path -> Field by flattening the TStruct tree.
+    The following TStruct at root 'va', for example
+    Struct{
+     rsid: String,
+     qual: Double,
+     filters: Set[String],
+     info: Struct{
+         AC: Array[Int],
+         AF: Array[Double],
+         AN: Int
+         }
+    }
+
+    Would give the following dict:
+    {
+        'va.rsid': Field(rsid),
+        'va.qual': Field(qual),
+        'va.filters': Field(filters),
+        'va.info.AC': Field(AC),
+        'va.info.AF': Field(AF),
+        'va.info.AN': Field(AN)
+    }
+
+    Note that if `leaf_only` is set to `False`, an additional entry `'va.info': Field(info)` would be added.
+
+    :param TStruct struct: The struct to flatten
+    :param str root: The root path of the struct to flatten (added at the beginning of all dict keys)
+    :param bool leaf_only: When set to true, only leaf nodes in the tree are output in the output
+    :return: Dictionary of path : Field
+    :rtype: dict of str:Field
+    """
     result = {}
     for f in struct.fields:
         path = '{}.{}'.format(root, f.name)
@@ -174,11 +206,29 @@ def flatten_struct(struct, root='', leaf_only=True):
 
 
 def ann_exists(annotation, schema, root='va'):
+    """
+    Tests whether an annotation (given by its full path) exists in a given schema and its root.
+
+    :param str annotation: The annotation to find (given by its full path in the schema tree)
+    :param TStruct schema: The schema to find the annotation in
+    :param str root: The root of the schema (or struct)
+    :return: Whether the annotation was found
+    :rtype: bool
+    """
     anns = flatten_struct(schema, root, leaf_only=False)
     return annotation in anns
 
 
 def get_ann_field(annotation, schema, root='va'):
+    """
+    Given an annotation path and a schema, return that annotation field.
+
+    :param str annotation: annotation path to fetch
+    :param TStruct schema: schema (or struct) in which to search
+    :param str root: root of the schema (or struct)
+    :return: The Field corresponding to the input annotation
+    :rtype: Field
+    """
     anns = flatten_struct(schema, root, leaf_only=False)
     if not annotation in anns:
         logger.error("%s missing from schema.", annotation)
@@ -187,10 +237,26 @@ def get_ann_field(annotation, schema, root='va'):
 
 
 def get_ann_type(annotation, schema, root='va'):
+    """
+     Given an annotation path and a schema, return the type of the annotation.
+
+    :param str annotation: annotation path to fetch
+    :param TStruct schema: schema (or struct) in which to search
+    :param str root: root of the schema (or struct)
+    :return: The type of the input annotation
+    :rtype: TType
+    """
     return get_ann_field(annotation, schema, root).typ
 
 
 def annotation_type_is_numeric(t):
+    """
+    Given an annotation type, returns whether it is a numerical type or not.
+
+    :param TType t: Type to test
+    :return: If the input type is numeric
+    :rtype: bool
+    """
     return (isinstance(t, TInt) or
             isinstance(t, TLong) or
             isinstance(t, TFloat) or

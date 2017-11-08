@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-PACKAGES="slackclient sklearn tabulate pandas scipy statsmodels"
+pip uninstall numpy
+PACKAGES="slackclient sklearn tabulate numpy pandas scipy statsmodels"
 pip install $PACKAGES
 
 export HAIL_VERSION=0.1

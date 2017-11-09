@@ -4,9 +4,6 @@
 ROLE=$(/usr/share/google/get_metadata_value attributes/dataproc-role)
 if [[ "${ROLE}" == 'Master' ]]; then
 
-    easy_install pip
-    pip install decorator
-
     mkdir -p /home/hail/
 
     cd /home/hail

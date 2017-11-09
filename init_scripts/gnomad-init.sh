@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 PACKAGES="slackclient sklearn tabulate pandas scipy statsmodels"
-pip install $PACKAGES
+pip install --upgrade $PACKAGES
 
 export HAIL_VERSION=0.1
 export SPARK_VERSION=2.0.2

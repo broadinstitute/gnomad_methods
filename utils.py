@@ -35,10 +35,10 @@ ADJ_GQ = 20
 ADJ_DP = 10
 ADJ_AB = 0.2
 
-ADJ_CRITERIA = 'g.gq >= %(gq)s && g.dp >= %(dp)s && (' \
-               '!g.isHet || ' \
-               '(g.gtj == 0 && g.ad[g.gtk]/g.dp >= %(ab)s) || ' \
-               '(g.gtj > 0 && g.ad[g.gtj]/g.dp >= %(ab)s && g.ad[g.gtk]/g.dp >= %(ab)s)' \
+ADJ_CRITERIA = 'g.GQ >= %(gq)s && g.DP >= %(dp)s && (' \
+               '!g.GT.isHet || ' \
+               '(g.GT.gtj == 0 && g.AD[g.GT.gtk]/g.DP >= %(ab)s) || ' \
+               '(g.GT.gtj > 0 && g.AD[g.GT.gtj]/g.DP >= %(ab)s && g.AD[g.GT.gtk]/g.DP >= %(ab)s)' \
                ')' % {'gq': ADJ_GQ, 'dp': ADJ_DP, 'ab': ADJ_AB}
 
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
@@ -157,7 +157,7 @@ def filter_to_adj(vds):
 def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annotations=None):
     annotation = unfurl_filter_alleles_annotation(a_based=a_based, r_based=r_based, g_based=g_based,
                                                   additional_annotations=additional_annotations)
-    return vds.filter_alleles('v.altAlleles[aIndex - 1].alt == "*"', annotation=annotation, keep=False)
+    return vds.filter_alleles('v.altAlleles[aIndex - 1].alt == "*"', annotation=annotation, keep=False, minrepped=True)
 
 
 def flatten_struct(struct, root='va', leaf_only=True):
@@ -312,24 +312,26 @@ def get_allele_stats_expr(root="va.stats", medians=False, samples_filter_expr=''
     if samples_filter_expr:
         samples_filter_expr = "&& " + samples_filter_expr
 
-    stats = ['%s.gq = gs.filter(g => g.isCalledNonRef %s).map(g => g.gq).stats()',
-             '%s.dp = gs.filter(g => g.isCalledNonRef %s).map(g => g.dp).stats()',
-             '%s.nrq = gs.filter(g => g.isCalledNonRef %s).map(g => -log10(g.gp[0])).stats()',
-             '%s.ab = gs.filter(g => g.isHet %s).map(g => g.ad[1]/g.dp).stats()',
-             '%s.best_ab = gs.filter(g => g.isHet %s).map(g => abs((g.ad[1]/g.dp) - 0.5)).min()',
-             '%s.pab = gs.filter(g => g.isHet %s).map(g => g.pAB()).stats()',
-             '%s.nrdp = gs.filter(g => g.isCalledNonRef %s).map(g => g.dp).sum()',
-             '%s.qual = -10*gs.filter(g => g.isCalledNonRef %s).map(g => if(g.pl[0] > 3000) -300 else log10(g.gp[0])).sum()',
-             '%s.combined_pAB = let hetSamples = gs.filter(g => g.isHet %s).map(g => log(g.pAB())).collect() in orMissing(!hetSamples.isEmpty, -10*log10(pchisqtail(-2*hetSamples.sum(),2*hetSamples.length)))']
+    pab = 'binomTest(g.AD[1], g.AD.sum(), 0.5, "two.sided")'
+    gp = 'let gp = let lin = g.PL.map(x => pow(10, -x/10.0)) in lin.map(x => x/lin.sum()) in gp[0]'
+    stats = ['{}.gq = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.GQ).stats()',
+             '{}.dp = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.DP).stats()',
+             '{}.nrq = gs.filter(g => g.GT.isCalledNonRef {}).map(g => -log10(%s)).stats()' % gp,
+             '{}.ab = gs.filter(g => g.GT.isHet {}).map(g => g.AD[1]/g.DP).stats()',
+             '{}.best_ab = gs.filter(g => g.GT.isHet {}).map(g => abs((g.AD[1]/g.DP) - 0.5)).min()',
+             '{}.pab = gs.filter(g => g.GT.isHet {}).map(g => %s).stats()' % pab,
+             '{}.nrdp = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.DP).sum()',
+             '{}.qual = -10*gs.filter(g => g.GT.isCalledNonRef {}).map(g => if(g.PL[0] > 3000) -300 else log10(%s)).sum()' % gp,
+             '{}.combined_pAB = let hetSamples = gs.filter(g => g.GT.isHet {}).map(g => log(%s)).collect() in orMissing(!hetSamples.isEmpty, -10*log10(pchisqtail(-2*hetSamples.sum(),2*hetSamples.length)))' % pab]
 
     if medians:
-        stats.extend(['%s.gq_median = gs.filter(g => g.isCalledNonRef %s).map(g => g.gq).collect().median',
-                    '%s.dp_median = gs.filter(g => g.isCalledNonRef %s).map(g => g.dp).collect().median',
-                    '%s.nrq_median = gs.filter(g => g.isCalledNonRef %s).map(g => -log10(g.gp[0])).collect().median',
-                    '%s.ab_median = gs.filter(g => g.isHet %s).map(g => g.ad[1]/g.dp).collect().median',
-                    '%s.pab_median = gs.filter(g => g.isHet %s).map(g => g.pAB()).collect().median'])
+        stats.extend(['{}.gq_median = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.GQ).collect().median',
+                      '{}.dp_median = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.DP).collect().median',
+                      '{}.nrq_median = gs.filter(g => g.GT.isCalledNonRef {}).map(g => -log10(%s)).collect().median' % gp,
+                      '{}.ab_median = gs.filter(g => g.GT.isHet {}).map(g => g.AD[1]/g.DP).collect().median',
+                      '{}.pab_median = gs.filter(g => g.GT.isHet {}).map(g => %s).collect().median' % pab])
 
-    stats_expr = [x % (root, samples_filter_expr) for x in stats]
+    stats_expr = [x.format(root, samples_filter_expr) for x in stats]
 
     return stats_expr
 
@@ -533,7 +535,7 @@ def pc_project(vds, pc_vds, pca_loadings_root='va.pca_loadings'):
     n_variants = vds.query_variants(['variants.count()'])[0]
 
     return(vds
-           .annotate_samples_expr('sa.pca = gs.filter(g => g.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
+           .annotate_samples_expr('sa.pca = gs.filter(g => g.GT.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.GT.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
            .annotate_samples_expr('sa.pca = {%s}' % arr_to_struct_expr)
     )
 

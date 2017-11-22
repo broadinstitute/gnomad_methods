@@ -163,8 +163,9 @@ def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annota
 
 def flatten_struct(struct, root='va', leaf_only=True, recursive=True):
     """
-    Given a TStruct and its root path, creates an OrderedDict of each path -> Field by flattening the TStruct tree.
-    The order of the fields is the same as the input `struct` fields.
+    Given a `TStruct` and its `root` path, creates an `OrderedDict` of each path -> Field by flattening the `TStruct` tree.
+    The order of the fields is the same as the input `Struct` fields, using a depth-first approach.
+    When `leaf_only=False`, `Struct`s roots are printed as they are traversed (i.e. before their leaves).
     The following TStruct at root 'va', for example
     Struct{
      rsid: String,
@@ -187,12 +188,10 @@ def flatten_struct(struct, root='va', leaf_only=True, recursive=True):
         'va.info.AN': Field(AN)
     }
 
-    Note that if `leaf_only` is set to `False`, an additional entry `'va.info': Field(info)` would be added.
-
     :param TStruct struct: The struct to flatten
     :param str root: The root path of the struct to flatten (added at the beginning of all dict keys)
-    :param bool leaf_only: When set to true, only leaf nodes in the tree are output in the output
-    :param bool recursive: When set to false, returns a dict of field_name: field_type
+    :param bool leaf_only: When set to `True`, only leaf nodes in the tree are output in the output
+    :param bool recursive: When set to `True`, internal `Struct`s are flatten
     :return: Dictionary of path : Field
     :rtype: OrderedDict of str:Field
     """
@@ -934,16 +933,20 @@ def merge_TStructs(s):
 
     Merges multiple TStructs together and outputs a new TStruct with the union of the fields.
     Notes:
-    - If a leaf field is found in multiple input TStructs, its type has to be the same
-    - Attributes are merged. If the same attribute is found in different TStructs it should have the same value.
+    - In case of conflicting field name/type, an error is raised.
+    - In case of conflicting attribute key/value, a warning is reported and the first value is kept (in order of VDSes passed).
 
-    :param list s: List of Structs to merge
+    :param list of TStruct s: List of Structs to merge
     :return: Merged Struct
     :rtype: TStruct
 
     """
 
+    if not s:
+        raise ValueError("`merge_TStructs` called on an empty list.")
+
     if len(s) < 2:
+        logger.warn("Called `merge_TStructs` on a list with a single `TStruct` -- returning that `TStruct`.")
         return s.pop()
 
     fields = OrderedDict()
@@ -958,7 +961,7 @@ def merge_TStructs(s):
 
                 for f2 in f_overlap:
                     if not isinstance(f2.typ, type(f.typ)):
-                        sys.exit("ERROR: Cannot merge structs with type {} and {}".format(f.typ, f2.typ))
+                        raise TypeError("Cannot merge structs with type {} and {}".format(f.typ, f2.typ))
                     for k,v in f2.attributes.iteritems():
                         if k in attributes:
                             if v != attributes[k]:
@@ -980,7 +983,8 @@ def replace_vds_variant_schema(vds, new_schema):
     """
 
     Replaces the input VDS va with the new schema. Values for all fields present in the old variant schema
-    that have the same type are kept. All other fields are filled with `NA`
+    that have the same type are kept (field with same name, different types are replaced).
+    All other fields are filled with `NA`.
 
     :param VariantDataset vds: input VDS
     :param TStruct new_schema: new schema
@@ -996,20 +1000,26 @@ def replace_vds_variant_schema(vds, new_schema):
             path = '{}.{}'.format(root, f.name)
             if not path in old_schema_fields.keys():
                 field_expr.append('{}: NA:{}'.format(f.name, f.typ))
+            elif not isinstance(old_schema_fields[path].typ, f.typ):
+                logger.warn("Field {} found with different types in old ({}) and new ({}) schemas. Overriding with new schema -- all schema values will be lost).".format(
+                    path,
+                    old_schema_fields[path].typ,
+                    f.typ
+                ))
+                field_expr.append('{}: NA:{}'.format(f.name, f.typ))
             elif isinstance(f.typ, TStruct):
                 field_expr.append('{}: {}'.format(f.name, get_schema_expr(f.typ, path, old_schema_fields)))
             else:
-                field_expr.append('{0}: {1}'.format(f.name, path))
+                field_expr.append('{}: {}'.format(f.name, path))
 
-        print '{{{}}}'.format(",".join(field_expr))
         return '{{{}}}'.format(",".join(field_expr))
+
+    vds = vds.annotate_variants_expr('va = {}'.format(
+        get_schema_expr(new_schema, 'va', flatten_struct(vds.variant_schema, root='va', leaf_only=False))))
 
     for path, field in flatten_struct(new_schema, root='va').iteritems():
         if field.attributes:
             vds = vds.set_va_attributes(path, field.attributes)
-
-    vds = vds.annotate_variants_expr('va = {}'.format(
-        get_schema_expr(new_schema, 'va', flatten_struct(vds.variant_schema, root='va', leaf_only=False))))
 
     return vds
 
@@ -1019,11 +1029,12 @@ def unify_vds_schemas(vdses):
 
     Given a list of VDSes, unifies their schema. Fields with the same name and type are assumed to be the same.
     Field attributes are merged.
-    In case of conflicting field name/type, an error is thrown.
-    In case of conflicting attribute key/value, a warning is reported and the first value is kept (in order of VDSes passed).
+    Notes:
+    - In case of conflicting field name/type, an error is raised.
+    - In case of conflicting attribute key/value, a warning is reported and the first value is kept (in order of VDSes passed).
 
     :param list of VariantDataset vdses: The VDSes to unify
-    :return: VDSes wiht unified schemas
+    :return: VDSes with unified schemas
     :rtype: list of VariantDataset
     """
 

@@ -199,7 +199,17 @@ def hardcalls_genomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL
                                                                                          ".split" if split else "")
 
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
-gnomad_public_pca_vds_path = "gs://gnomad-public/release/2.0.2/pca/gnomad_pca_loadings.vds"
+
+
+def gnomad_public_pca_vds_path(version=CURRENT_RELEASE):
+    """
+    Returns the path for the public gnomAD VDS containing sites and loadings from the PCA
+
+    :param str version: One of the RELEASEs
+    :return: path to gnomAD public PCA VDS
+    :rtype: str
+    """
+    return "gs://gnomad-public/release/{}/pca/gnomad_pca_loadings.vds".format(version)
 
 
 def metadata_genomes_tsv_path(version=CURRENT_GENOME_META):

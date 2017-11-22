@@ -99,7 +99,7 @@ def cut_allele_from_g_array(target, destination=None):
             '.map(i => %s[i])' % (destination, target, target))
 
 
-def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_root=None, drop_ref_ann = False):
+def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_root=None, drop_ref_ann=False, aIndex='va.aIndex'):
     """
 
     Creates annotation expressions to get the correct values when splitting multi-allelics
@@ -114,14 +114,14 @@ def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_ro
     annotations = []
     if a_based_annotations:
         for ann in a_based_annotations:
-            annotations.append('{0} = {0}[va.aIndex - 1]'.format(ann))
+            annotations.append('{0} = {0}[{1} - 1]'.format(ann, aIndex))
     if r_based_annotations:
-        expr = '{0} = {0}[va.aIndex]' if drop_ref_ann else '{0} = [{0}[0], {0}[va.aIndex]]'
+        expr = '{0} = {0}[{1}]' if drop_ref_ann else '{0} = [{0}[0], {0}[{1}]]'
         for ann in r_based_annotations:
-            annotations.append(expr.format(ann))
+            annotations.append(expr.format(ann, aIndex))
     if vep_root:
         sub_fields = ['transcript_consequences', 'intergenic_consequences', 'motif_feature_consequences', 'regulatory_feature_consequences']
-        annotations.extend(['{0}.{1} = {0}.{1}.filter(x => x.allele_num == va.aIndex)'.format(vep_root, sub_field) for sub_field in sub_fields])
+        annotations.extend(['{0}.{1} = {0}.{1}.filter(x => x.allele_num == {2})'.format(vep_root, sub_field, aIndex) for sub_field in sub_fields])
 
     return annotations
 

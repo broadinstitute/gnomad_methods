@@ -126,6 +126,13 @@ def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_ro
     return annotations
 
 
+def split_and_index_into_va(vds, genotype_expr, keep_star_alleles=False, left_aligned=False,
+                            a_based_annotations=None, r_based_annotations=None, vep_root=None, drop_ref_ann=False):
+    var_expr = ['va.aIndex = aIndex', 'va.wasSplit = wasSplit'] + index_into_arrays(a_based_annotations, r_based_annotations, vep_root, drop_ref_ann, aIndex='aIndex')
+
+    return vds.split_multi_generic(','.join(var_expr), genotype_expr, keep_star_alleles, left_aligned)
+
+
 def unfurl_filter_alleles_annotation(a_based=None, r_based=None, g_based=None, additional_annotations=None):
 
     annotations = []

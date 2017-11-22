@@ -993,6 +993,18 @@ def replace_vds_variant_schema(vds, new_schema):
     """
 
     def get_schema_expr(struct, root, old_schema_fields):
+        """
+
+        Returns a variant annotation expression of the input `TStruct` with its fields equal to:
+        - themselves (e.g. `va.test` : `va.test`) if present in `old_schema_fields` with the same type
+        - `NA` otherwise
+
+        :param TStruct struct: TStruct to get the schema expression from
+        :param str root: Root of that `TStruct`
+        :param dict of str:Field old_schema_fields: Dict containing the mapping between the paths and Fields in the old schema
+        :return: Variant annotation expression
+        :rtype: str
+        """
 
         field_expr = []
 

@@ -6,7 +6,7 @@ import gzip
 import os
 
 from resources import *
-from hail import *
+from hail2 import *
 from slack_utils import *
 from collections import defaultdict, namedtuple
 from pprint import pprint, pformat

@@ -91,6 +91,32 @@ CSQ_NON_CODING = [
 
 CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
 
+# downcode_text = '''g = let
+# newgt = downcode(g.GT, aIndex) and
+# newad = if (isDefined(g.AD))
+#     let sum = g.AD.sum() and adi = g.AD[aIndex] in [sum - adi, adi]
+#   else
+#     NA: Array[Int] and
+# newpl = if (isDefined(g.PL))
+#     range(3).map(i => range(g.PL.length).filter(j => downcode(Call(j), aIndex) == Call(i)).map(j => g.PL[j]).min())
+#   else
+#     NA: Array[Int] and
+# newgq = gqFromPL(newpl)
+# in { GT: newgt, AD: newad, DP: g.DP, GQ: newgq, PL: newpl }'''
+
+downcode_text = '''g = if (v.isBiallelic) { AD: g.AD, DP: g.DP, GQ: g.GQ, GT: g.GT, PL: g.PL } else let
+newgt = downcode(g.GT, aIndex) and
+newad = if (isDefined(g.AD))
+    let sum = g.AD.sum() and adi = g.AD[aIndex] in [sum - adi, adi]
+  else
+    NA: Array[Int32] and
+newpl = if (isDefined(g.PL))
+    range(3).map(i => range(g.PL.length).filter(j => downcode(Call(j), aIndex) == Call(i)).map(j => g.PL[j]).min())
+  else
+    NA: Array[Int32] and
+newgq = gqFromPL(newpl)
+in { AD: newad, DP: g.DP, GQ: newgq, GT: newgt, PL: newpl }'''
+
 
 def cut_allele_from_g_array(target, destination=None):
     if destination is None: destination = target

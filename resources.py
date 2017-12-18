@@ -77,7 +77,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
         vqsr_vds = hc.read(vqsr_exomes_sites_vds_path())
         annotations = ['culprit', 'POSITIVE_TRAIN_SITE', 'NEGATIVE_TRAIN_SITE', 'VQSLOD']
         # vds = vds.annotate_variants_vds(vqsr_vds, expr=', '.join(['va.info.%s = vds.info.%s' % (a, a) for a in annotations]))
-        vds = vds.annotate_cols(**{
+        vds = vds.annotate_rows(**{
             'va.info.{}'.format(ann): vqsr_vds.info.ann for ann in annotations
         })
 

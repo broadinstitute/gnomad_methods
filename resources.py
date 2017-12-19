@@ -85,7 +85,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
 
     if release_annotations:
         sites_vds = get_gnomad_public_data(hc, data_type, split, release_annotations)
-        vds = vds.annotate_variants_vds(sites_vds, root='va')
+        vds = vds.select_rows(**sites_vds[vds.v, :])
 
     return vds
 

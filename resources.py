@@ -37,7 +37,7 @@ def get_gnomad_public_data(hc, data_type, split=False, version=CURRENT_RELEASE):
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
                     meta_version=None, meta_root='meta', vqsr=True, fam_root='fam', duplicate_mapping_root=None,
-                    release_samples=False):
+                    release_samples=False, release_annotations=None):
     """
     Wrapper function to get gnomAD data as VDS.
 
@@ -52,6 +52,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
     :param str duplicate_mapping_root: Where to put the duplicate genome/exome samples ID mapping (default is None -- do not annotate)
     :param bool release_samples: When set, filters the data to release samples only
+    :param str release_annotations: One of the RELEASES to add variant annotations (into va), or None for no data
     :return: Chosen VDS
     :rtype: MatrixTable
     """
@@ -81,6 +82,10 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
 
     if release_samples:
         vds = vds.filter_cols(vds.meta.release)
+
+    if release_annotations:
+        sites_vds = get_gnomad_public_data(hc, data_type, split, release_annotations)
+        vds = vds.annotate_variants_vds(sites_vds, root='va')
 
     return vds
 

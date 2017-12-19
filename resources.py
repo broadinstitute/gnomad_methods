@@ -36,7 +36,7 @@ def get_gnomad_public_data(hc, data_type, split=False, version=CURRENT_RELEASE):
 
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None,
+                    meta_version=None, meta_root='meta', vqsr=True, fam_root='fam', duplicate_mapping_root=None,
                     release_samples=False):
     """
     Wrapper function to get gnomAD data as VDS.
@@ -76,10 +76,8 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     if data_type == 'exomes' and vqsr:
         vqsr_vds = hc.read(vqsr_exomes_sites_vds_path())
         annotations = ['culprit', 'POSITIVE_TRAIN_SITE', 'NEGATIVE_TRAIN_SITE', 'VQSLOD']
-        # vds = vds.annotate_variants_vds(vqsr_vds, expr=', '.join(['va.info.%s = vds.info.%s' % (a, a) for a in annotations]))
-        vds = vds.annotate_rows(**{
-            'va.info.{}'.format(ann): vqsr_vds.info.ann for ann in annotations
-        })
+        vqsr_vds = vqsr_vds.annotate_rows(data=Struct(**{ann: vqsr_vds.info[ann] for ann in annotations}))
+        vds = vds.annotate_rows(info=f.merge(vds.info, vqsr_vds[vds.v, :].data))
 
     if release_samples:
         vds = vds.filter_cols(vds.meta.release)

@@ -643,7 +643,10 @@ def process_consequences(vds, vep_root='va.vep', genes_to_string=True):
         '               if (%(vep)s.transcript_consequences.filter(x => x.polyphen_prediction == "possibly_damaging").length > 0)'
         '                   csq + "-possibly_damaging"'
         '               else'
-        '                   csq' % {'vep': vep_root}
+        '                   if (%(vep)s.transcript_consequences.filter(x => x.polyphen_prediction == "benign").length > 0)'
+        '                       csq + "-benign"'
+        '                   else'
+        '                       csq' % {'vep': vep_root}
     ).annotate_variants_expr(
         '{vep}.lof = "-HC" ~ {vep}.worst_csq_suffix, '
         '{vep}.worst_csq_genes = {vep}.transcript_consequences'

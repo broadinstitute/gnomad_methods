@@ -313,25 +313,26 @@ def annotation_type_in_vcf_info(t):
             )
 
 
-def get_variant_type_expr(root="va.variantType"):
-    return '''%s =
-    let non_star = v.altAlleles.filter(a => a.alt != "*") in
-        if (non_star.forall(a => a.isSNP))
-            if (non_star.length > 1)
-                "multi-snv"
-            else
-                "snv"
-        else if (non_star.forall(a => a.isIndel))
-            if (non_star.length > 1)
-                "multi-indel"
-            else
-                "indel"
-        else
-            "mixed"''' % root
-
-
-def get_allele_stats_expr(root="va.stats", medians=False, samples_filter_expr=''):
+def add_variant_type(vds):
     """
+
+    :param MatrixTable vds: Input VDS
+    :return: VDS with variant type in `variant_type` and number of non-star alt alleles in n_alt_alleles
+    :rtype: MatrixTable
+    """
+    non_star_alleles = vds.v.alt_alleles.filter(lambda v: ~v.is_star())  # TODO: bind/let here
+    return vds.annotate_rows(variant_type=
+                             f.cond(
+                                 non_star_alleles.forall(lambda v: v.is_snp()),
+                                 f.cond(
+                                     non_star_alleles.length() > 1, "multi-snv", "snv"),
+                                 f.cond(
+                                     non_star_alleles.forall(lambda v: v.is_indel()),
+                                     f.cond(
+                                         non_star_alleles.length() > 1, "multi-indel", "indel"),
+                                     "mixed")
+                             ),
+                             n_alt_alleles=non_star_alleles.length())
 
     Gets allele-specific stats expression: GQ, DP, NRQ, AB, Best AB, p(AB), NRDP, QUAL, combined p(AB)
 

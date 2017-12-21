@@ -31,16 +31,6 @@ SEXES = {
     'Female': 'Female'
 }
 
-ADJ_GQ = 20
-ADJ_DP = 10
-ADJ_AB = 0.2
-
-ADJ_CRITERIA = 'g.GQ >= %(gq)s && g.DP >= %(dp)s && (' \
-               '!g.GT.isHet || ' \
-               '(g.GT.gtj == 0 && g.AD[g.GT.gtk]/g.DP >= %(ab)s) || ' \
-               '(g.GT.gtj > 0 && g.AD[g.GT.gtj]/g.DP >= %(ab)s && g.AD[g.GT.gtk]/g.DP >= %(ab)s)' \
-               ')' % {'gq': ADJ_GQ, 'dp': ADJ_DP, 'ab': ADJ_AB}
-
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = ["transcript_ablation",
 "splice_acceptor_variant",
@@ -184,7 +174,17 @@ def unfurl_filter_alleles_annotation(a_based=None, r_based=None, g_based=None, a
 
 
 def filter_to_adj(vds):
-    return vds.filter_genotypes(ADJ_CRITERIA)
+    adj_gq = 20
+    adj_dp = 10
+    adj_ab = 0.2
+
+    return vds.filter_entries(
+        (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
+            ~vds.GT.is_het() |
+            ((vds.GT.gtj == 0) & (vds.AD[vds.GT.gtk] / vds.DP >= adj_ab)) |
+            ((vds.GT.gtj > 0) & (vds.AD[vds.GT.gtj] / vds.DP >= adj_ab) & (vds.AD[vds.GT.gtk]/vds.DP >= adj_ab))
+        )
+    )
 
 
 def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annotations=None):

@@ -179,6 +179,10 @@ def vqsr_exomes_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vqsr.sites.vds'.format(hail_version)
 
 
+def temp_vep_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/raw/hail-{0}/vds/{1}/gnomad.{1}.vep.{2}split.sites.vds'.format(hail_version, data_type, '' if split else 'un')
+
+
 def raw_exomes_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
 

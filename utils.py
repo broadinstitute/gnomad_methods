@@ -334,6 +334,9 @@ def add_variant_type(vds):
                              ),
                              n_alt_alleles=non_star_alleles.length())
 
+
+def get_allele_stats_expr(root="va.stats", medians=False, samples_filter_expr=''):
+    """
     Gets allele-specific stats expression: GQ, DP, NRQ, AB, Best AB, p(AB), NRDP, QUAL, combined p(AB)
 
     :param str root: annotations root

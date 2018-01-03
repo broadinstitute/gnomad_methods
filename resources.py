@@ -1,4 +1,4 @@
-from hail2 import *
+from hail import *
 import hail
 
 CURRENT_HAIL_VERSION = "0.2"
@@ -78,7 +78,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
         vqsr_vds = hc.read(vqsr_exomes_sites_vds_path())
         annotations = ['culprit', 'POSITIVE_TRAIN_SITE', 'NEGATIVE_TRAIN_SITE', 'VQSLOD']
         vqsr_vds = vqsr_vds.annotate_rows(data=Struct(**{ann: vqsr_vds.info[ann] for ann in annotations}))
-        vds = vds.annotate_rows(info=f.merge(vds.info, vqsr_vds[vds.v, :].data))
+        vds = vds.annotate_rows(info=functions.merge(vds.info, vqsr_vds[vds.v, :].data))
 
     if release_samples:
         vds = vds.filter_cols(vds.meta.release)

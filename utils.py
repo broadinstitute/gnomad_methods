@@ -322,13 +322,13 @@ def add_variant_type(vds):
     """
     non_star_alleles = vds.v.alt_alleles.filter(lambda v: ~v.is_star())  # TODO: bind/let here
     return vds.annotate_rows(variant_type=
-                             f.cond(
+                             functions.cond(
                                  non_star_alleles.forall(lambda v: v.is_snp()),
-                                 f.cond(
+                                 functions.cond(
                                      non_star_alleles.length() > 1, "multi-snv", "snv"),
-                                 f.cond(
+                                 functions.cond(
                                      non_star_alleles.forall(lambda v: v.is_indel()),
-                                     f.cond(
+                                     functions.cond(
                                          non_star_alleles.length() > 1, "multi-indel", "indel"),
                                      "mixed")
                              ),

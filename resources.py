@@ -195,16 +195,18 @@ def raw_exac_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/vds/exac/exac.vds'.format(hail_version)
 
 
-def hardcalls_exomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/hardcalls/hail-{0}/vds/exomes/gnomad.exomes.{1}{2}.vds'.format(hail_version,
-                                                                                       "adj" if adj else "raw",
-                                                                                       ".split" if split else "")
+def hardcalls_exomes_vds_path(split=False, adj=False, unannotated=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/hardcalls/hail-{}/vds/exomes/gnomad.exomes.{}{}{}.vds'.format(hail_version,
+                                                                                      "unannotated" if unannotated else "",
+                                                                                      ".adj" if adj else "raw",
+                                                                                      ".split" if split else "")
 
 
-def hardcalls_genomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/hardcalls/hail-{0}/vds/genomes/gnomad.genomes.{1}{2}.vds'.format(hail_version,
-                                                                                         "adj" if adj else "raw",
-                                                                                         ".split" if split else "")
+def hardcalls_genomes_vds_path(split=False, adj=False, unannotated=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/hardcalls/hail-{}/vds/genomes/gnomad.genomes.{}{}{}.vds'.format(hail_version,
+                                                                                        "unannotated" if unannotated else "",
+                                                                                        ".adj" if adj else "raw",
+                                                                                        ".split" if split else "")
 
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
 

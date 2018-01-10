@@ -77,7 +77,7 @@ def main(args, pass_through_args):
         zipf = zipfile.ZipFile(tfile, 'w', zipfile.ZIP_DEFLATED)
         for hail_script_entry in pyfiles:
             if hail_script_entry.endswith('.py'):
-                zipf.write(pyfile, arcname=os.path.basename(pyfile))
+                zipf.write(hail_script_entry, arcname=os.path.basename(hail_script_entry))
             else:
                 for root, _, files in os.walk(hail_script_entry):
                     for pyfile in files:

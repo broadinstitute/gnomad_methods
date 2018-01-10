@@ -181,8 +181,8 @@ def filter_to_adj(vds):
     return vds.filter_entries(
         (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
             ~vds.GT.is_het() |
-            ((vds.GT.gtj == 0) & (vds.AD[vds.GT.gtk] / vds.DP >= adj_ab)) |
-            ((vds.GT.gtj > 0) & (vds.AD[vds.GT.gtj] / vds.DP >= adj_ab) & (vds.AD[vds.GT.gtk]/vds.DP >= adj_ab))
+            ((vds.GT.gtj() == 0) & (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab)) |
+            ((vds.GT.gtj() > 0) & (vds.AD[vds.GT.gtj()] / vds.DP >= adj_ab) & (vds.AD[vds.GT.gtk()]/vds.DP >= adj_ab))
         )
     )
 

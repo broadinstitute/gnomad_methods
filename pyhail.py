@@ -75,8 +75,16 @@ def main(args, pass_through_args):
         tfile = tempfile.mkstemp(suffix='.zip', prefix='pyscripts_')[1]
         print(tfile)
         zipf = zipfile.ZipFile(tfile, 'w', zipfile.ZIP_DEFLATED)
-        for pyfile in pyfiles:
-            zipf.write(pyfile, arcname=os.path.basename(pyfile))
+        for hail_script_entry in pyfiles:
+            if hail_script_entry.endswith('.py'):
+                zipf.write(hail_script_entry, arcname=os.path.basename(hail_script_entry))
+            else:
+                for root, _, files in os.walk(hail_script_entry):
+                    for pyfile in files:
+                        if pyfile.endswith('.py'):
+                            zipf.write(os.path.join(root, pyfile),
+                                       os.path.relpath(os.path.join(root, pyfile),
+                                                       os.path.join(hail_script_entry, '..')))
         zipf.close()
         all_pyfiles.append(tfile)
 

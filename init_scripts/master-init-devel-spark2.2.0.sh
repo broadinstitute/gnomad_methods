@@ -14,7 +14,7 @@ if [[ "${ROLE}" == 'Master' ]]; then
     # This is here so as not have 2 apt-get processes fighting for a lock
     apt-get install -y ipython tmux
 
-    ./gnomad-init-devel.sh > gnomad_startup.log 2>&1 &
+    ./gnomad-init-devel-spark2.2.0.sh > gnomad_startup.log 2>&1 &
     ./sparklyr-init.sh > sparklyr_startup.log 2>&1 &
 
 fi

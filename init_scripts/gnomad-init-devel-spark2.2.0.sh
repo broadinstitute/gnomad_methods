@@ -15,7 +15,7 @@ gsutil cp gs://hail-common/builds/${HAIL_VERSION}/jars/${HAIL_JAR} gs://hail-com
 
 mkdir -p /home/hail/conf-ipython
 cp /etc/spark/conf/spark-defaults.conf /etc/spark/conf/spark-env.sh /home/hail/conf-ipython/
-cat <<EOT >> /etc/spark/conf/spark-defaults.conf
+cat <<EOT >> /home/hail/conf-ipython/spark-defaults.conf
 spark.files=${HAIL_HOME}/${HAIL_JAR}
 spark.submit.pyFiles=${HAIL_HOME}/${HAIL_PYTHON_ZIP}
 spark.driver.extraClassPath=${HAIL_HOME}/${HAIL_JAR}

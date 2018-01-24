@@ -266,6 +266,7 @@ clinvar_vds_path = "gs://gnomad-resources/annotations/clinvar_alleles.single.b37
 lcr_intervals_path = "gs://gnomad-public/intervals/LCR.interval_list"
 decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
 purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list"
+segdup_intervals_path = "gs://gnomad-public/intervals/hg19_self_chain_split_both.bed.gz"
 
 # Exome intervals
 exomes_high_conf_regions_intervals_path = "gs://gnomad-public/intervals/exomes_high_coverage.auto.interval_list"

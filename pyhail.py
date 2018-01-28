@@ -64,7 +64,7 @@ def main(args, pass_through_args):
         jar_file = 'hail-{}-{}-Spark-{}.jar'.format(args.hail_version, hash_string, spark_version)
         jar = 'gs://hail-common/builds/{}/jars/{}'.format(args.hail_version, jar_file)
 
-    all_pyfiles = [args.pyhail if args.pyhail is not None else 'gs://hail-common/builds/{0}/python/hail-{0}-{1}.zip'.format(args.hail_version, hash_string)]
+    all_pyfiles = [args.zip if args.zip is not None else 'gs://hail-common/builds/{0}/python/hail-{0}-{1}.zip'.format(args.hail_version, hash_string)]
 
     pyfiles = []
     if args.add_scripts:
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     hail_script_options = parser.add_argument_group('Additional hail script options')
     hail_script_options.add_argument('--hail_version', help='Hail version (0.1 or devel)', default='0.1')
     hail_script_options.add_argument('--jar', help='Jar file to use')
-    hail_script_options.add_argument('--pyhail', help='Pyhail zip file to use')
+    hail_script_options.add_argument('--zip', help='Hail zip file to use')
     hail_script_options.add_argument('--add_scripts', help='Comma-separated list of additional python scripts to add.')
     hail_script_options.add_argument('--spark_conf', help='Comma-separated list of additional spark configurations to pass.')
     args, pass_through_args = parser.parse_known_args()

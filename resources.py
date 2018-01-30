@@ -1,4 +1,4 @@
-from hail import *
+from hail2 import *
 import hail
 
 CURRENT_HAIL_VERSION = "0.2"

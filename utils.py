@@ -174,16 +174,39 @@ def unfurl_filter_alleles_annotation(a_based=None, r_based=None, g_based=None, a
 
 
 def filter_to_adj(vds):
+    """
+    Filter genotypes to adj criteria
+
+    :param MatrixTable vds:
+    :return: MT
+    :rtype: MatrixTable
+    """
+    try:
+        return vds.filter_entries(vds.adj)
+    except AttributeError:
+        vds = annotate_adj(vds)
+        return vds.filter_entries(vds.adj)
+
+
+def annotate_adj(vds):
+    """
+    Annotate genotypes with adj criteria
+
+    :param MatrixTable vds: MT
+    :return: MT
+    :rtype: MatrixTable
+    """
     adj_gq = 20
     adj_dp = 10
     adj_ab = 0.2
 
-    return vds.filter_entries(
-        (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
-            ~vds.GT.is_het() |
-            ((vds.GT.gtj() == 0) & (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab)) |
-            ((vds.GT.gtj() > 0) & (vds.AD[vds.GT.gtj()] / vds.DP >= adj_ab) & (vds.AD[vds.GT.gtk()]/vds.DP >= adj_ab))
-        )
+    return vds.annotate_entries(adj=
+                                (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
+                                    ~vds.GT.is_het() |
+                                    ((vds.GT.gtj() == 0) & (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab)) |
+                                    ((vds.GT.gtj() > 0) & (vds.AD[vds.GT.gtj()] / vds.DP >= adj_ab) &
+                                     (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab))
+                                )
     )
 
 

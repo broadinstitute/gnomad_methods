@@ -107,6 +107,14 @@ newpl = if (isDefined(g.PL))
 newgq = gqFromPL(newpl)
 in { AD: newad, DP: g.DP, GQ: newgq, GT: newgt, PL: newpl }'''
 
+hardcall_downcode_text = '''g = if (v.isBiallelic) { GT: g.GT } else
+let newgt = downcode(g.GT, aIndex) in
+{ GT: newgt }'''
+
+hardcall_adj_downcode_text = '''g = if (v.isBiallelic) { GT: g.GT, adj: g.adj } else
+let newgt = downcode(g.GT, aIndex) in
+{ GT: newgt, adj: g.adj }'''
+
 
 def cut_allele_from_g_array(target, destination=None):
     if destination is None: destination = target

@@ -147,7 +147,10 @@ def get_gnomad_data_path(data_type, hardcalls=False, split=False, hail_version=C
     """
     if data_type not in ('exomes', 'genomes'):
         raise DataException("Select data_type as one of 'genomes' or 'exomes'")
-    return hardcalls_vds_path(data_type, split, hail_version) if hardcalls else raw_exomes_vds_path(hail_version)
+    if hardcalls:
+        return hardcalls_vds_path(data_type, split, hail_version)
+    else:
+        return raw_exomes_vds_path(hail_version) if data_type == 'exomes' else raw_genomes_vds_path(hail_version)
 
 
 def get_gnomad_meta_path(data_type, version=None):

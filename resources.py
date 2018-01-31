@@ -211,6 +211,17 @@ def annotations_vep_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_V
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
 
 
+def gnomad_public_pca_vds_path(version=CURRENT_RELEASE):
+    """
+    Returns the path for the public gnomAD VDS containing sites and loadings from the PCA
+
+    :param str version: One of the RELEASEs
+    :return: path to gnomAD public PCA VDS
+    :rtype: str
+    """
+    return "gs://gnomad-public/release/{}/pca/gnomad_pca_loadings.vds".format(version)
+
+
 def metadata_genomes_tsv_path(version=CURRENT_GENOME_META):
     return 'gs://gnomad/metadata/genomes/gnomad.genomes.metadata.{0}.tsv.bgz'.format(version)
 
@@ -264,6 +275,7 @@ clinvar_vds_path = "gs://gnomad-resources/annotations/clinvar_alleles.single.b37
 lcr_intervals_path = "gs://gnomad-public/intervals/LCR.interval_list"
 decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
 purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list"
+segdup_intervals_path = "gs://gnomad-public/intervals/hg19_self_chain_split_both.bed.gz"
 
 # Exome intervals
 exomes_high_conf_regions_intervals_path = "gs://gnomad-public/intervals/exomes_high_coverage.auto.interval_list"

@@ -6,12 +6,8 @@ import gzip
 import os
 
 from resources import *
-<<<<<<< HEAD
 from hail2 import *
-=======
-from hail import *
 from hail.expr import Field
->>>>>>> master
 from slack_utils import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat

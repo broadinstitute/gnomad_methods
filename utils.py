@@ -11,6 +11,7 @@ from hail.expr import Field
 from slack_utils import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
+import argparse
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")

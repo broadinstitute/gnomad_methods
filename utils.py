@@ -1437,34 +1437,59 @@ def unify_vds_schemas(vdses):
     return [replace_vds_variant_schema(vds, unified_schema) for vds in vdses]
 
 
-def index_into_arrays_hail2(vds, annotations, a_index_expression='a_index'):
+def index_into_arrays_hail2(vds, a_based=None, r_based=None, vep_root='vep', a_index_expression='a_index'):
     """
     Creates annotation expressions to get the correct values when splitting multi-allelics
 
     :param MatrixTable or Table vds: VDS
-    :param list of lists of str annotations: A-based for now (expects [['calldata', 'AFR', 'Female', 'AC'], ...])
+    :param list of lists of str a_based: Location of A-indexed expressions (expects [['calldata', 'AFR', 'Female', 'AC'], ...])
+    :param list of lists of str r_based: Location of R-indexed expressions (expects [['calldata', 'AFR', 'Female', 'AC'], ...])
     :param str a_index_expression: Expression for where to find the allele index (usually `a_index` or `aIndex`)
     :return: VDS
     :rtype: MatrixTable or Table
     """
-    for annotation in annotations:
-        vds_loc = vds
-        for loc in annotation[:-1]:
-            vds_loc = vds_loc[loc]
-        if isinstance(vds_loc, StructExpression):
-            vds_loc = vds_loc.annotate(**{annotation[-1]: vds_loc[annotation[-1]][vds[a_index_expression] - 1]})
-            if len(annotation) > 2:
-                vds_loc2 = vds
-                for i in range(1, len(annotation))[::-1]:
-                    for j in range(i - 1):
-                        vds_loc2 = vds_loc2[annotation[j]]
-                    vds_loc2 = vds_loc2.annotate(**{annotation[i - 1]: vds_loc})
+    if a_based:
+        for annotation in a_based:
+            vds_loc = vds
+            for loc in annotation[:-1]:
+                vds_loc = vds_loc[loc]
+            if isinstance(vds_loc, StructExpression):
+                vds_loc = vds_loc.annotate(**{annotation[-1]: vds_loc[annotation[-1]][vds[a_index_expression] - 1]})
+                if len(annotation) > 2:
+                    vds_loc2 = vds
+                    for i in range(1, len(annotation))[::-1]:
+                        for j in range(i - 1):
+                            vds_loc2 = vds_loc2[annotation[j]]
+                        vds_loc2 = vds_loc2.annotate(**{annotation[i - 1]: vds_loc})
+                else:
+                    vds_loc2 = vds_loc
+                final_annotation = {annotation[0]: vds_loc2}
             else:
-                vds_loc2 = vds_loc
-            final_annotation = {annotation[0]: vds_loc2}
-        else:
-            final_annotation = {annotation[0]: vds[annotation[0]][vds[a_index_expression] - 1]}
-        vds = vds.annotate_rows(**final_annotation) if isinstance(vds, MatrixTable) else vds.annotate(**final_annotation)
+                final_annotation = {annotation[0]: vds[annotation[0]][vds[a_index_expression] - 1]}
+            vds = vds.annotate_rows(**final_annotation) if isinstance(vds, MatrixTable) else vds.annotate(**final_annotation)
+    if r_based:
+        for annotation in a_based:
+            vds_loc = vds
+            for loc in annotation[:-1]:
+                vds_loc = vds_loc[loc]
+            if isinstance(vds_loc, StructExpression):
+                vds_loc = vds_loc.annotate(**{annotation[-1]: vds_loc[annotation[-1]][vds[a_index_expression - 1] - 1]})
+                if len(annotation) > 2:
+                    vds_loc2 = vds
+                    for i in range(1, len(annotation))[::-1]:
+                        for j in range(i - 1):
+                            vds_loc2 = vds_loc2[annotation[j]]
+                        vds_loc2 = vds_loc2.annotate(**{annotation[i - 1]: vds_loc})
+                else:
+                    vds_loc2 = vds_loc
+                final_annotation = {annotation[0]: vds_loc2}
+            else:
+                final_annotation = {annotation[0]: vds[annotation[0]][vds[a_index_expression - 1] - 1]}
+            vds = vds.annotate_rows(**final_annotation) if isinstance(vds, MatrixTable) else vds.annotate(**final_annotation)
+    if vep_root:
+        vep_data = vds[vep_root]
+        vep_data = vep_data.annotate(**{subfield: vep_data[subfield].filter(lambda x: x.allele_num == vds[a_index_expression]) for subfield in ['transcript_consequences', 'intergenic_consequences', 'motif_feature_consequences', 'regulatory_feature_consequences']})
+        vds = vds.annotate_rows(vep_root=vep_data)
     return vds
 
 
@@ -1482,14 +1507,14 @@ def get_nested_field(ds, l):
     return ds
 
 
-def find_a_based_annotations(vds, n=1000):
+def find_allele_based_annotations(vds, n=1000):
     """
-    Impute A-numbered annotations
+    Impute A-numbered, R-numbered, G-numbered, and 1-numbered annotations
 
     :param MatrixTable vds: VDS
     :param int n: Number of records to sample
-    :return: List of A-based annotations
-    :rtype: list of str
+    :return: List of A-based, R-based, G-based, and 1-based annotations
+    :rtype: list of str, list of str, list of str, list of str
     """
     kt = vds.rows_table().head(n)
     fields = flatten_struct(vds.row_schema)
@@ -1508,13 +1533,14 @@ def find_a_based_annotations(vds, n=1000):
     # Going up to quad-allelic
     length_dict = OrderedDict([(i, raw_length_dict[i]) for i in range(1, 5) if i in raw_length_dict])
     ainds = [{x} for x in length_dict]
-    # ones = [{1} for _ in length_dict]
-    # rinds = [{x + 1} for x in length_dict]
-    # ginds = [{x * (x + 1) / 2} for x in length_dict]
+    ones = [{1} for _ in length_dict]
+    rinds = [{x + 1} for x in length_dict]
+    ginds = [{x * (x + 1) / 2} for x in length_dict]
 
     a_output = []
-    # r_output = []
-    # g_output = []
+    r_output = []
+    g_output = []
+    one_output = []
     if set(length_dict.keys()) == {1}:
         logger.warn('VDS is bi-allelic so no need to impute A-based annotations')
         return []
@@ -1523,8 +1549,10 @@ def find_a_based_annotations(vds, n=1000):
             alleles = [set(x[kt_key].keys()) for x in length_dict.values()]
             if alleles == ainds:
                 a_output.append(field)
-            # elif alleles == rinds:
-            #     r_output.append(field)
-            # elif alleles == ginds:
-            #     g_output.append(field)
-    return a_output
+            elif alleles == rinds:
+                r_output.append(field)
+            elif alleles == ones:
+                one_output.append(field)
+            elif alleles == ginds:
+                g_output.append(field)
+    return a_output, r_output, g_output, one_output

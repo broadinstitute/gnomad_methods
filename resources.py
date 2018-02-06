@@ -274,10 +274,10 @@ exome_calling_intervals_path = 'gs://gnomad-public/intervals/exome_calling_regio
 evaluation_intervals_path = 'gs://gnomad-public/intervals/exome_evaluation_regions.v1.noheader.interval_list'
 high_coverage_intervals_path = 'gs://gnomad-public/intervals/high_coverage.auto.interval_list'
 
-#genome intervals
-genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list" #this is the GP “we believe that these regions should be good” intervals
-genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list" #for hg38
-#more can be found at gs://broad-references/hg19
+# Genome intervals
+genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list"  # from Broad GP
+genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list"
+# More can be found at gs://broad-references/hg19
 
 vep_config = "/vep/vep-gcloud.properties"
 

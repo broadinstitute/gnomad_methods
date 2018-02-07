@@ -173,8 +173,9 @@ def get_gnomad_meta_path(data_type, version=None):
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
-def vqsr_exomes_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vqsr.sites.vds'.format(hail_version)
+def vqsr_exomes_sites_vds_path(split=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vqsr.sites{1}.vds'.format(hail_version,
+                                                                                        ".split" if split else "")
 
 
 def raw_exomes_vds_path(hail_version=CURRENT_HAIL_VERSION):
@@ -205,7 +206,7 @@ def annotations_qc_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_VE
 
 def annotations_vep_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/annotations/hail-{0}/vds/{1}/gnomad.{1}.vep{2}.vds'.format(hail_version, data_type,
-                                                                                   "split" if split else "")
+                                                                                   ".split" if split else "")
 
 
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"

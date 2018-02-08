@@ -49,7 +49,7 @@ def main(args, pass_through_args):
     except Exception:
         pass
 
-    spark_version = '2.1.0' if args.preview else '2.0.2'
+    spark_version = '2.2.0' if args.spark22 else '2.0.2'
     if not hash_string:
         hash_string = subprocess.check_output(['gsutil', 'cat', 'gs://hail-common/builds/{}/latest-hash-spark-{}.txt'.format(args.hail_version, spark_version)]).rstrip()
 
@@ -117,7 +117,7 @@ if __name__ == '__main__':
     parser.add_argument('--script', '--input', '-i', help='Script to run')
     parser.add_argument('--inline', help='Inline script to run')
     parser.add_argument('--cluster', help='Which cluster to run on', required=True)
-    parser.add_argument('--preview', help='Use Spark2.1 hail JAR', action = 'store_true')
+    parser.add_argument('--spark22', help='Use Spark2.2 hail JAR', action='store_true')
 
     hail_script_options = parser.add_argument_group('Additional hail script options')
     hail_script_options.add_argument('--hail_version', help='Hail version (0.1 or devel)', default='0.1')

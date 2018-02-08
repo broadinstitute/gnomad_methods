@@ -6,8 +6,9 @@ import gzip
 import os
 
 from resources import *
-from hail import *
+from hail2 import *
 from hail.expr import Field
+from hail.expr.expression import *
 from slack_utils import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
@@ -32,16 +33,6 @@ SEXES = {
     'Male': 'Male',
     'Female': 'Female'
 }
-
-ADJ_GQ = 20
-ADJ_DP = 10
-ADJ_AB = 0.2
-
-ADJ_CRITERIA = 'g.gq >= %(gq)s && g.dp >= %(dp)s && (' \
-               '!g.isHet || ' \
-               '(g.gtj == 0 && g.ad[g.gtk]/g.dp >= %(ab)s) || ' \
-               '(g.gtj > 0 && g.ad[g.gtj]/g.dp >= %(ab)s && g.ad[g.gtk]/g.dp >= %(ab)s)' \
-               ')' % {'gq': ADJ_GQ, 'dp': ADJ_DP, 'ab': ADJ_AB}
 
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = ["transcript_ablation",
@@ -93,6 +84,40 @@ CSQ_NON_CODING = [
 
 CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
 
+# downcode_text = '''g = let
+# newgt = downcode(g.GT, aIndex) and
+# newad = if (isDefined(g.AD))
+#     let sum = g.AD.sum() and adi = g.AD[aIndex] in [sum - adi, adi]
+#   else
+#     NA: Array[Int] and
+# newpl = if (isDefined(g.PL))
+#     range(3).map(i => range(g.PL.length).filter(j => downcode(Call(j), aIndex) == Call(i)).map(j => g.PL[j]).min())
+#   else
+#     NA: Array[Int] and
+# newgq = gqFromPL(newpl)
+# in { GT: newgt, AD: newad, DP: g.DP, GQ: newgq, PL: newpl }'''
+
+downcode_text = '''g = if (v.isBiallelic) { AD: g.AD, DP: g.DP, GQ: g.GQ, GT: g.GT, PL: g.PL } else let
+newgt = downcode(g.GT, aIndex) and
+newad = if (isDefined(g.AD))
+    let sum = g.AD.sum() and adi = g.AD[aIndex] in [sum - adi, adi]
+  else
+    NA: Array[Int32] and
+newpl = if (isDefined(g.PL))
+    range(3).map(i => range(g.PL.length).filter(j => downcode(Call(j), aIndex) == Call(i)).map(j => g.PL[j]).min())
+  else
+    NA: Array[Int32] and
+newgq = gqFromPL(newpl)
+in { AD: newad, DP: g.DP, GQ: newgq, GT: newgt, PL: newpl }'''
+
+hardcall_downcode_text = '''g = if (v.isBiallelic) { GT: g.GT } else
+let newgt = downcode(g.GT, aIndex) in
+{ GT: newgt }'''
+
+hardcall_adj_downcode_text = '''g = if (v.isBiallelic) { GT: g.GT, adj: g.adj } else
+let newgt = downcode(g.GT, aIndex) in
+{ GT: newgt, adj: g.adj }'''
+
 
 def cut_allele_from_g_array(target, destination=None):
     if destination is None: destination = target
@@ -101,7 +126,7 @@ def cut_allele_from_g_array(target, destination=None):
             '.map(i => %s[i])' % (destination, target, target))
 
 
-def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_root=None, drop_ref_ann = False):
+def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_root=None, drop_ref_ann=False, aIndex='va.aIndex'):
     """
 
     Creates annotation expressions to get the correct values when splitting multi-allelics
@@ -116,16 +141,23 @@ def index_into_arrays(a_based_annotations=None, r_based_annotations=None, vep_ro
     annotations = []
     if a_based_annotations:
         for ann in a_based_annotations:
-            annotations.append('{0} = {0}[va.aIndex - 1]'.format(ann))
+            annotations.append('{0} = {0}[{1} - 1]'.format(ann, aIndex))
     if r_based_annotations:
-        expr = '{0} = {0}[va.aIndex]' if drop_ref_ann else '{0} = [{0}[0], {0}[va.aIndex]]'
+        expr = '{0} = {0}[{1}]' if drop_ref_ann else '{0} = [{0}[0], {0}[{1}]]'
         for ann in r_based_annotations:
-            annotations.append(expr.format(ann))
+            annotations.append(expr.format(ann, aIndex))
     if vep_root:
         sub_fields = ['transcript_consequences', 'intergenic_consequences', 'motif_feature_consequences', 'regulatory_feature_consequences']
-        annotations.extend(['{0}.{1} = {0}.{1}.filter(x => x.allele_num == va.aIndex)'.format(vep_root, sub_field) for sub_field in sub_fields])
+        annotations.extend(['{0}.{1} = {0}.{1}.filter(x => x.allele_num == {2})'.format(vep_root, sub_field, aIndex) for sub_field in sub_fields])
 
     return annotations
+
+
+def split_and_index_into_va(vds, genotype_expr, keep_star_alleles=False, left_aligned=False,
+                            a_based_annotations=None, r_based_annotations=None, vep_root=None, drop_ref_ann=False):
+    var_expr = ['va.aIndex = aIndex', 'va.wasSplit = wasSplit'] + index_into_arrays(a_based_annotations, r_based_annotations, vep_root, drop_ref_ann, aIndex='aIndex')
+
+    return vds.split_multi_generic(','.join(var_expr), genotype_expr, keep_star_alleles, left_aligned)
 
 
 def unfurl_filter_alleles_annotation(a_based=None, r_based=None, g_based=None, additional_annotations=None):
@@ -153,13 +185,46 @@ def unfurl_filter_alleles_annotation(a_based=None, r_based=None, g_based=None, a
 
 
 def filter_to_adj(vds):
-    return vds.filter_genotypes(ADJ_CRITERIA)
+    """
+    Filter genotypes to adj criteria
+
+    :param MatrixTable vds:
+    :return: MT
+    :rtype: MatrixTable
+    """
+    try:
+        return vds.filter_entries(vds.adj)
+    except AttributeError:
+        vds = annotate_adj(vds)
+        return vds.filter_entries(vds.adj)
+
+
+def annotate_adj(vds):
+    """
+    Annotate genotypes with adj criteria
+
+    :param MatrixTable vds: MT
+    :return: MT
+    :rtype: MatrixTable
+    """
+    adj_gq = 20
+    adj_dp = 10
+    adj_ab = 0.2
+
+    return vds.annotate_entries(adj=
+                                (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
+                                    ~vds.GT.is_het() |
+                                    ((vds.GT.gtj() == 0) & (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab)) |
+                                    ((vds.GT.gtj() > 0) & (vds.AD[vds.GT.gtj()] / vds.DP >= adj_ab) &
+                                     (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab))
+                                )
+    )
 
 
 def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annotations=None):
     annotation = unfurl_filter_alleles_annotation(a_based=a_based, r_based=r_based, g_based=g_based,
                                                   additional_annotations=additional_annotations)
-    return vds.filter_alleles('v.altAlleles[aIndex - 1].alt == "*"', annotation=annotation, keep=False)
+    return vds.filter_alleles('v.altAlleles[aIndex - 1].alt == "*"', annotation=annotation, keep=False, minrepped=True)
 
 
 def flatten_struct(struct, root='va', leaf_only=True, recursive=True):
@@ -283,26 +348,30 @@ def annotation_type_in_vcf_info(t):
             )
 
 
-def get_variant_type_expr(root="va.variantType"):
-    return '''%s =
-    let non_star = v.altAlleles.filter(a => a.alt != "*") in
-        if (non_star.forall(a => a.isSNP))
-            if (non_star.length > 1)
-                "multi-snv"
-            else
-                "snv"
-        else if (non_star.forall(a => a.isIndel))
-            if (non_star.length > 1)
-                "multi-indel"
-            else
-                "indel"
-        else
-            "mixed"''' % root
+def add_variant_type(vds):
+    """
+
+    :param MatrixTable vds: Input VDS
+    :return: VDS with variant type in `variant_type` and number of non-star alt alleles in n_alt_alleles
+    :rtype: MatrixTable
+    """
+    non_star_alleles = vds.v.alt_alleles.filter(lambda v: ~v.is_star())  # TODO: bind/let here
+    return vds.annotate_rows(variant_type=
+                             functions.cond(
+                                 non_star_alleles.forall(lambda v: v.is_snp()),
+                                 functions.cond(
+                                     non_star_alleles.length() > 1, "multi-snv", "snv"),
+                                 functions.cond(
+                                     non_star_alleles.forall(lambda v: v.is_indel()),
+                                     functions.cond(
+                                         non_star_alleles.length() > 1, "multi-indel", "indel"),
+                                     "mixed")
+                             ),
+                             n_alt_alleles=non_star_alleles.length())
 
 
 def get_allele_stats_expr(root="va.stats", medians=False, samples_filter_expr=''):
     """
-
     Gets allele-specific stats expression: GQ, DP, NRQ, AB, Best AB, p(AB), NRDP, QUAL, combined p(AB)
 
     :param str root: annotations root
@@ -315,24 +384,26 @@ def get_allele_stats_expr(root="va.stats", medians=False, samples_filter_expr=''
     if samples_filter_expr:
         samples_filter_expr = "&& " + samples_filter_expr
 
-    stats = ['%s.gq = gs.filter(g => g.isCalledNonRef %s).map(g => g.gq).stats()',
-             '%s.dp = gs.filter(g => g.isCalledNonRef %s).map(g => g.dp).stats()',
-             '%s.nrq = gs.filter(g => g.isCalledNonRef %s).map(g => -log10(g.gp[0])).stats()',
-             '%s.ab = gs.filter(g => g.isHet %s).map(g => g.ad[1]/g.dp).stats()',
-             '%s.best_ab = gs.filter(g => g.isHet %s).map(g => abs((g.ad[1]/g.dp) - 0.5)).min()',
-             '%s.pab = gs.filter(g => g.isHet %s).map(g => g.pAB()).stats()',
-             '%s.nrdp = gs.filter(g => g.isCalledNonRef %s).map(g => g.dp).sum()',
-             '%s.qual = -10*gs.filter(g => g.isCalledNonRef %s).map(g => if(g.pl[0] > 3000) -300 else log10(g.gp[0])).sum()',
-             '%s.combined_pAB = let hetSamples = gs.filter(g => g.isHet %s).map(g => log(g.pAB())).collect() in orMissing(!hetSamples.isEmpty, -10*log10(pchisqtail(-2*hetSamples.sum(),2*hetSamples.length)))']
+    pab = 'binomTest(g.AD[1], g.AD.sum(), 0.5, "two.sided")'
+    gp = 'let gp = let lin = g.PL.map(x => pow(10, -x/10.0)) in lin.map(x => x/lin.sum()) in gp[0]'
+    stats = ['{}.gq = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.GQ).stats()',
+             '{}.dp = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.DP).stats()',
+             '{}.nrq = gs.filter(g => g.GT.isCalledNonRef {}).map(g => -log10(%s)).stats()' % gp,
+             '{}.ab = gs.filter(g => g.GT.isHet {}).map(g => g.AD[1]/g.DP).stats()',
+             '{}.best_ab = gs.filter(g => g.GT.isHet {}).map(g => abs((g.AD[1]/g.DP) - 0.5)).min()',
+             '{}.pab = gs.filter(g => g.GT.isHet {}).map(g => %s).stats()' % pab,
+             '{}.nrdp = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.DP).sum()',
+             '{}.qual = -10*gs.filter(g => g.GT.isCalledNonRef {}).map(g => if(g.PL[0] > 3000) -300 else log10(%s)).sum()' % gp,
+             '{}.combined_pAB = let hetSamples = gs.filter(g => g.GT.isHet {}).map(g => log(%s)).collect() in orMissing(!hetSamples.isEmpty, -10*log10(pchisqtail(-2*hetSamples.sum(),2*hetSamples.length)))' % pab]
 
     if medians:
-        stats.extend(['%s.gq_median = gs.filter(g => g.isCalledNonRef %s).map(g => g.gq).collect().median',
-                    '%s.dp_median = gs.filter(g => g.isCalledNonRef %s).map(g => g.dp).collect().median',
-                    '%s.nrq_median = gs.filter(g => g.isCalledNonRef %s).map(g => -log10(g.gp[0])).collect().median',
-                    '%s.ab_median = gs.filter(g => g.isHet %s).map(g => g.ad[1]/g.dp).collect().median',
-                    '%s.pab_median = gs.filter(g => g.isHet %s).map(g => g.pAB()).collect().median'])
+        stats.extend(['{}.gq_median = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.GQ).collect().median',
+                      '{}.dp_median = gs.filter(g => g.GT.isCalledNonRef {}).map(g => g.DP).collect().median',
+                      '{}.nrq_median = gs.filter(g => g.GT.isCalledNonRef {}).map(g => -log10(%s)).collect().median' % gp,
+                      '{}.ab_median = gs.filter(g => g.GT.isHet {}).map(g => g.AD[1]/g.DP).collect().median',
+                      '{}.pab_median = gs.filter(g => g.GT.isHet {}).map(g => %s).collect().median' % pab])
 
-    stats_expr = [x % (root, samples_filter_expr) for x in stats]
+    stats_expr = [x.format(root, samples_filter_expr) for x in stats]
 
     return stats_expr
 
@@ -536,7 +607,7 @@ def pc_project(vds, pc_vds, pca_loadings_root='va.pca_loadings'):
     n_variants = vds.query_variants(['variants.count()'])[0]
 
     return(vds
-           .annotate_samples_expr('sa.pca = gs.filter(g => g.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
+           .annotate_samples_expr('sa.pca = gs.filter(g => g.GT.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.GT.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
            .annotate_samples_expr('sa.pca = {%s}' % arr_to_struct_expr)
     )
 
@@ -897,6 +968,349 @@ def quote_field_name(f):
 
     return '`{}`'.format(f) if re.search('^\d|\.', f) else f
 
+# Bootleg:
+
+from hail.expr.expression import unify_types, ExpressionException
+
+class ConditionalBuilder(object):
+    def __init__(self):
+        self._ret_type = None
+        self._cases = []
+
+    def _unify_type(self, t):
+        if self._ret_type is None:
+            self._ret_type = t
+        else:
+            r = unify_types(self._ret_type, t)
+            if not r:
+                raise TypeError("'then' expressions must have same type, found '{}' and '{}'".format(
+                    self._ret_type, t
+                ))
+
+class SwitchBuilder(ConditionalBuilder):
+    """Class for generating conditional trees based on value of an expression.
+
+    Examples
+    --------
+    .. doctest::
+
+        >>> csq = functions.capture('loss of function')
+        >>> expr = (functions.switch(csq)
+        ...                  .when('synonymous', 1)
+        ...                  .when('SYN', 1)
+        ...                  .when('missense', 2)
+        ...                  .when('MIS', 2)
+        ...                  .when('loss of function', 3)
+        ...                  .when('LOF', 3)
+        ...                  .or_missing())
+        >>> eval_expr(expr)
+        3
+
+    Notes
+    -----
+    All expressions appearing as the `then` parameters to
+    :meth:`~.SwitchBuilder.when` or :meth:`~.SwitchBuilder.default` method
+    calls must be the same type.
+
+    See Also
+    --------
+    :func:`.switch`
+
+    Parameters
+    ----------
+    expr : :class:`.Expression`
+        Value to match against.
+    """
+    def __init__(self, base):
+        self._base = functions.to_expr(base)
+        self._has_missing_branch = False
+        super(SwitchBuilder, self).__init__()
+
+    def _finish(self, default):
+        assert len(self._cases) > 0
+
+        from hail.expr.functions import cond, bind
+
+        def f(base):
+            # build cond chain bottom-up
+            expr = default
+            for condition, then in self._cases[::-1]:
+                expr = cond(condition, then, expr)
+            return expr
+
+        return bind(self._base, f)
+
+    def when(self, value, then):
+        """Add a value test. If the `base` expression is equal to `value`, then
+         returns `then`.
+
+        Warning
+        -------
+        Missingness always compares to missing. Both ``NA == NA`` and
+        ``NA != NA`` return ``NA``. Use :meth:`~SwitchBuilder.when_missing`
+        to test missingness.
+
+        Parameters
+        ----------
+        value : :class:`.Expression`
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.SwitchBuilder`
+            Mutates and returns `self`.
+        """
+        value = functions.to_expr(value)
+        then = functions.to_expr(then)
+        can_compare = unify_types(self._base.dtype, value.dtype)
+        if not can_compare:
+            raise TypeError("cannot compare expressions of type '{}' and '{}'".format(
+                self._base.dtype, value.dtype))
+
+        self._unify_type(then.dtype)
+        self._cases.append((self._base == value, then))
+        return self
+
+    def when_missing(self, then):
+        """Add a test for missingness. If the `base` expression is missing,
+        returns `then`.
+
+        Parameters
+        ----------
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.SwitchBuilder`
+            Mutates and returns `self`.
+        """
+        then = functions.to_expr(then)
+        if self._has_missing_branch:
+            raise ExpressionException("'when_missing' can only be called once")
+        self._unify_type(then.dtype)
+
+        from hail.expr.functions import is_missing
+        # need to insert at 0, because upstream missingness would propagate
+        self._cases.insert(0, (is_missing(self._base), then))
+        return self
+
+    def default(self, then):
+        """Finish the switch statement by adding a default case.
+
+        Notes
+        -----
+        If no value from a :meth:`~.SwitchBuilder.when` call is matched, then
+        `then` is returned.
+
+        Parameters
+        ----------
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.Expression`
+        """
+        then = functions.to_expr(then)
+        if len(self._cases) == 0:
+            return then
+        self._unify_type(then.dtype)
+        return self._finish(then)
+
+    def or_missing(self):
+        """Finish the switch statement by returning missing.
+
+        Notes
+        -----
+        If no value from a :meth:`~.SwitchBuilder.when` call is matched, then
+        the result is missing.
+
+        Parameters
+        ----------
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.Expression`
+        """
+        if len(self._cases) == 0:
+            raise ExpressionException("'or_missing' cannot be called without at least one 'when' call")
+        from hail.expr.functions import null
+        return self._finish(null(self._ret_type))
+
+
+
+class CaseBuilder(ConditionalBuilder):
+    """Class for chaining multiple if-else statements.
+
+
+    Examples
+    --------
+    .. doctest::
+
+        >>> x = functions.capture('foo bar baz')
+        >>> expr = (functions.case()
+        ...                  .when(x[:3] == 'FOO', 1)
+        ...                  .when(x.length() == 11, 2)
+        ...                  .when(x == 'secret phrase', 3)
+        ...                  .default(0))
+        >>> eval_expr(expr)
+        2
+
+    Notes
+    -----
+    All expressions appearing as the `then` parameters to
+    :meth:`~.CaseBuilder.when` or :meth:`~.CaseBuilder.default` method calls
+    must be the same type.
+
+    See Also
+    --------
+    :func:`.case`
+    """
+    def __init__(self):
+        super(CaseBuilder, self).__init__()
+
+    def _finish(self, default):
+        assert len(self._cases) > 0
+
+        from hail.expr.functions import cond
+
+        expr = default
+        for conditional, then in self._cases[::-1]:
+            expr = cond(conditional, then, expr)
+        return expr
+
+    def when(self, condition, then):
+        """Add a branch. If `condition` is ``True``, then returns `then`.
+
+        Warning
+        -------
+        Missingness is treated similarly to :func:`.cond`. Missingness is
+        **not** treated as ``False``. A `condition` that evaluates to missing
+        will return a missing result, not proceed to the next
+        :meth:`~.CaseBuilder.when` or :meth:`~.CaseBuilder.default`. Always
+        test missingness first in a :class:`.CaseBuilder`.
+
+        Parameters
+        ----------
+        condition: :class:`.BooleanExpression`
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.CaseBuilder`
+            Mutates and returns `self`.
+        """
+        condition = functions.to_expr(condition)
+        then = functions.to_expr(then)
+        self._unify_type(then.dtype)
+        self._cases.append((condition, then))
+        return self
+
+    def default(self, then):
+        """Finish the case statement by adding a default case.
+
+        Notes
+        -----
+        If no condition from a :meth:`~.CaseBuilder.when` call is ``True``,
+        then `then` is returned.
+
+        Parameters
+        ----------
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.Expression`
+        """
+        then = functions.to_expr(then)
+        if len(self._cases) == 0:
+            return then
+        self._unify_type(then.dtype)
+        return self._finish(then)
+
+    def or_missing(self):
+        """Finish the case statement by returning missing.
+
+        Notes
+        -----
+        If no condition from a :meth:`.CaseBuilder.when` call is ``True``, then
+        the result is missing.
+
+        Parameters
+        ----------
+        then : :class:`.Expression`
+
+        Returns
+        -------
+        :class:`.Expression`
+        """
+        if len(self._cases) == 0:
+            raise ExpressionException("'or_missing' cannot be called without at least one 'when' call")
+        from hail.expr.functions import null
+        return self._finish(null(self._ret_type))
+
+
+def case():
+    """Chain multiple if-else statements with a :class:`.CaseBuilder`.
+
+    Examples
+    --------
+    .. doctest::
+
+        >>> x = functions.capture('foo bar baz')
+        >>> expr = (functions.case()
+        ...                  .when(x[:3] == 'FOO', 1)
+        ...                  .when(x.length() == 11, 2)
+        ...                  .when(x == 'secret phrase', 3)
+        ...                  .default(0))
+        >>> eval_expr(expr)
+        2
+
+    See Also
+    --------
+    :class:`.CaseBuilder`
+
+    Returns
+    -------
+    :class:`.CaseBuilder`.
+    """
+    return CaseBuilder()
+
+
+def switch(expr):
+    """Build a conditional tree on the value of an expression.
+
+    Examples
+    --------
+    .. doctest::
+
+        >>> csq = functions.capture('loss of function')
+        >>> expr = (functions.switch(csq)
+        ...                  .when('synonymous', 1)
+        ...                  .when('SYN', 1)
+        ...                  .when('missense', 2)
+        ...                  .when('MIS', 2)
+        ...                  .when('loss of function', 3)
+        ...                  .when('LOF', 3)
+        ...                  .or_missing())
+        >>> eval_expr(expr)
+        3
+
+    See Also
+    --------
+    :class:`.SwitchBuilder`
+
+    Parameters
+    ----------
+    expr : :class:`.Expression`
+        Value to match against.
+
+    Returns
+    -------
+    :class:`.SwitchBuilder`
+    """
+    return SwitchBuilder(functions.to_expr(expr))
+
 
 def merge_TStructs(s):
     """
@@ -1022,3 +1436,124 @@ def unify_vds_schemas(vdses):
 
     unified_schema = merge_TStructs([vds.variant_schema for vds in vdses])
     return [replace_vds_variant_schema(vds, unified_schema) for vds in vdses]
+
+
+def index_into_arrays_hail2(vds, a_based=None, r_based=None, vep_root='vep', a_index_expression='a_index'):
+    """
+    Creates annotation expressions to get the correct values when splitting multi-allelics
+
+    :param MatrixTable or Table vds: VDS
+    :param list of lists of str a_based: Location of A-indexed expressions (expects [['calldata', 'AFR', 'Female', 'AC'], ...])
+    :param list of lists of str r_based: Location of R-indexed expressions (expects [['calldata', 'AFR', 'Female', 'AC'], ...])
+    :param str a_index_expression: Expression for where to find the allele index (usually `a_index` or `aIndex`)
+    :return: VDS
+    :rtype: MatrixTable or Table
+    """
+    if a_based:
+        for annotation in a_based:
+            vds_loc = vds
+            for loc in annotation[:-1]:
+                vds_loc = vds_loc[loc]
+            if isinstance(vds_loc, StructExpression):
+                vds_loc = vds_loc.annotate(**{annotation[-1]: vds_loc[annotation[-1]][vds[a_index_expression] - 1]})
+                if len(annotation) > 2:
+                    vds_loc2 = vds
+                    for i in range(1, len(annotation))[::-1]:
+                        for j in range(i - 1):
+                            vds_loc2 = vds_loc2[annotation[j]]
+                        vds_loc2 = vds_loc2.annotate(**{annotation[i - 1]: vds_loc})
+                else:
+                    vds_loc2 = vds_loc
+                final_annotation = {annotation[0]: vds_loc2}
+            else:
+                final_annotation = {annotation[0]: vds[annotation[0]][vds[a_index_expression] - 1]}
+            vds = vds.annotate_rows(**final_annotation) if isinstance(vds, MatrixTable) else vds.annotate(**final_annotation)
+    if r_based:
+        for annotation in a_based:
+            vds_loc = vds
+            for loc in annotation[:-1]:
+                vds_loc = vds_loc[loc]
+            if isinstance(vds_loc, StructExpression):
+                vds_loc = vds_loc.annotate(**{annotation[-1]: vds_loc[annotation[-1]][vds[a_index_expression - 1] - 1]})
+                if len(annotation) > 2:
+                    vds_loc2 = vds
+                    for i in range(1, len(annotation))[::-1]:
+                        for j in range(i - 1):
+                            vds_loc2 = vds_loc2[annotation[j]]
+                        vds_loc2 = vds_loc2.annotate(**{annotation[i - 1]: vds_loc})
+                else:
+                    vds_loc2 = vds_loc
+                final_annotation = {annotation[0]: vds_loc2}
+            else:
+                final_annotation = {annotation[0]: vds[annotation[0]][vds[a_index_expression - 1] - 1]}
+            vds = vds.annotate_rows(**final_annotation) if isinstance(vds, MatrixTable) else vds.annotate(**final_annotation)
+    if vep_root:
+        vep_data = vds[vep_root]
+        vep_data = vep_data.annotate(**{subfield: vep_data[subfield].filter(lambda x: x.allele_num == vds[a_index_expression]) for subfield in ['transcript_consequences', 'intergenic_consequences', 'motif_feature_consequences', 'regulatory_feature_consequences']})
+        vds = vds.annotate_rows(vep_root=vep_data)
+    return vds
+
+
+def get_nested_field(ds, l):
+    """
+    Get nested field from dataset and list of nested fields
+
+    :param MatrixTable or Table or Expression ds: Input dataset or expression
+    :param list of str l: List of nested fields to go into (e.g. ['calldata', 'AFR', 'AC']
+    :return: Expression in nested field
+    :rtype: Expression
+    """
+    for entry in l:
+        ds = ds[entry]
+    return ds
+
+
+def find_allele_based_annotations(vds, n=1000):
+    """
+    Impute A-numbered, R-numbered, G-numbered, and 1-numbered annotations
+
+    :param MatrixTable vds: VDS
+    :param int n: Number of records to sample
+    :return: List of A-based, R-based, G-based, and 1-based annotations
+    :rtype: list of str, list of str, list of str, list of str
+    """
+    kt = vds.rows_table().head(n)
+    fields = flatten_struct(vds.row_schema)
+    annotations = {}
+    array_fields = {}
+    for field in fields:
+        field = field.split('.', 1)[1]
+        expr = get_nested_field(kt, field)
+        if isinstance(expr, CollectionExpression):
+            kt_key = field.replace('.', '_')  # Can remove this once breaking
+            array_fields[field] = kt_key
+            annotations[kt_key] = agg.counter(expr.length())
+    length_data = kt.group_by(length=kt.v.alt_alleles.length()).aggregate(**annotations).collect()
+    raw_length_dict = {entry['length']: dict(entry) for entry in length_data}
+
+    # Going up to quad-allelic
+    length_dict = OrderedDict([(i, raw_length_dict[i]) for i in range(1, 5) if i in raw_length_dict])
+    ainds = [{x} for x in length_dict]
+    ones = [{1} for _ in length_dict]
+    rinds = [{x + 1} for x in length_dict]
+    ginds = [{x * (x + 1) / 2} for x in length_dict]
+
+    a_output = []
+    r_output = []
+    g_output = []
+    one_output = []
+    if set(length_dict.keys()) == {1}:
+        logger.warn('VDS is bi-allelic so no need to impute A-based annotations')
+        return []
+    else:
+        for field, kt_key in array_fields.items():
+            alleles = [set(x[kt_key].keys()) for x in length_dict.values()]
+            if alleles == ainds:
+                a_output.append(field)
+            elif alleles == rinds:
+                r_output.append(field)
+            elif alleles == ones:
+                one_output.append(field)
+            elif alleles == ginds:
+                g_output.append(field)
+    return a_output, r_output, g_output, one_output

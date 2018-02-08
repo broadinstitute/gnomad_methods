@@ -8,7 +8,9 @@ if [[ "${ROLE}" == 'Master' ]]; then
 
     cd /home/hail
     git clone https://github.com/macarthur-lab/gnomad_hail.git
-    cd gnomad_hail/init_scripts
+    cd gnomad_hail
+    git checkout hail-0.2-python
+    cd init_scripts
     chmod +x gnomad-init-devel.sh sparklyr-init.sh
 
     # This is here so as not have 2 apt-get processes fighting for a lock

@@ -1,6 +1,7 @@
-from hail import *
+from hail2 import *
+import hail
 
-CURRENT_HAIL_VERSION = "0.1"
+CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
 CURRENT_GENOME_META = "2017-06-02"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2017-06-02"
@@ -29,13 +30,13 @@ def get_gnomad_public_data(hc, data_type, split=False, version=CURRENT_RELEASE):
     :param bool split: Whether the dataset should be split
     :param str version: One of the RELEASEs
     :return: Chosen VDS
-    :rtype: VariantDataset
+    :rtype: MatrixTable
     """
     return hc.read(get_gnomad_public_data_path(data_type, split=split, version=version))
 
 
 def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='sa.meta', vqsr=True, fam_root='sa.fam', duplicate_mapping_root=None,
+                    meta_version=None, meta_root='meta', vqsr=True, fam_root='fam', duplicate_mapping_root=None,
                     release_samples=False, release_annotations=None):
     """
     Wrapper function to get gnomAD data as VDS.
@@ -53,40 +54,43 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :param bool release_samples: When set, filters the data to release samples only
     :param str release_annotations: One of the RELEASES to add variant annotations (into va), or None for no data
     :return: Chosen VDS
-    :rtype: VariantDataset
+    :rtype: MatrixTable
     """
-    vds = hc.read(get_gnomad_data_path(data_type, hardcalls=hardcalls, split=split, hail_version=hail_version))
+    if hardcalls and hardcalls not in ('adj', 'raw'):
+        return DataException("Select hardcalls as one of 'adj', 'raw', or False")
+
+    vds = hc.read(get_gnomad_data_path(data_type, hardcalls=hardcalls is not None, split=split, hail_version=hail_version))
+    if hardcalls == 'adj':
+        vds = vds.filter_entries(vds.adj)
 
     if meta_root:
-        vds = vds.annotate_samples_table(get_gnomad_meta(hc, data_type, meta_version), root=meta_root)
+        meta_kt = get_gnomad_meta(hc, data_type, meta_version)
+        vds = vds.annotate_cols(**{meta_root: meta_kt[vds.s]})
 
     if duplicate_mapping_root:
-        vds = vds.annotate_samples_table(
-            hc.import_table(genomes_exomes_duplicate_ids_tsv_path,
-                            impute=True,
-                            key='exome_id' if data_type == "exomes" else 'genome_id'),
-            root=duplicate_mapping_root)
+        dup_kt = hc.import_table(genomes_exomes_duplicate_ids_tsv_path, impute=True,
+                                 key='exome_id' if data_type == "exomes" else 'genome_id')
+        vds = vds.annotate_cols(**{duplicate_mapping_root: dup_kt[vds.s]})
 
     if fam_root:
-        vds = vds.annotate_samples_table(
-            KeyTable.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path),
-            root=fam_root
-        )
+        fam_kt = hail.KeyTable.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path).to_hail2()
+        vds = vds.annotate_cols(**{fam_root: fam_kt[vds.s]})
 
     pops = EXOME_POPS if data_type == 'exomes' else GENOME_POPS
-    vds = vds.annotate_global('global.pops', map(lambda x: x.lower(), pops), TArray(TString()))
+    vds = vds.annotate_globals(pops=map(lambda x: x.lower(), pops))
 
     if data_type == 'exomes' and vqsr:
         vqsr_vds = hc.read(vqsr_exomes_sites_vds_path())
         annotations = ['culprit', 'POSITIVE_TRAIN_SITE', 'NEGATIVE_TRAIN_SITE', 'VQSLOD']
-        vds = vds.annotate_variants_vds(vqsr_vds, expr=', '.join(['va.info.%s = vds.info.%s' % (a, a) for a in annotations]))
+        vqsr_vds = vqsr_vds.annotate_rows(data=Struct(**{ann: vqsr_vds.info[ann] for ann in annotations}))
+        vds = vds.annotate_rows(info=functions.merge(vds.info, vqsr_vds[vds.v, :].data))
 
     if release_samples:
-        vds = vds.filter_samples_expr('sa.meta.release')
+        vds = vds.filter_cols(vds.meta.release)
 
     if release_annotations:
         sites_vds = get_gnomad_public_data(hc, data_type, split, release_annotations)
-        vds = vds.annotate_variants_vds(sites_vds, root='va')
+        vds = vds.select_rows(**sites_vds[vds.v, :])
 
     return vds
 
@@ -98,15 +102,15 @@ def get_gnomad_meta(hc, data_type, version=None):
     :param HailContext hc: HailContext
     :param str data_type: One of `exomes` or `genomes`
     :param str version: Metadata version (None for current)
-    :return: Metadata KeyTable
-    :rtype: KeyTable
+    :return: Metadata Table
+    :rtype: Table
     """
-    return (
-        hc
-        .import_table(get_gnomad_meta_path(data_type, version), impute=True)
-        .key_by("sample" if data_type == "exomes" else "Sample")
-        .annotate(['release = {}'.format('drop_status == "keep"' if data_type == "exomes" else 'keep'), # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
-                   'population = {}'.format('population' if data_type == "exomes" else 'if(final_pop == "sas") "oth" else final_pop')])
+    meta_kt = hc.import_table(get_gnomad_meta_path(data_type, version), impute=True,
+                              key="sample" if data_type == "exomes" else "Sample")
+
+    return meta_kt.annotate(
+        release=meta_kt.drop_status == "keep" if data_type == 'exomes' else meta_kt.keep,  # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
+        population=meta_kt.population if data_type == 'exomes' else f.cond(meta_kt.final_pop == 'sas', 'oth', meta_kt.final_pop)
     )
 
 
@@ -130,30 +134,23 @@ def get_gnomad_public_data_path(data_type, split=False, version=CURRENT_RELEASE)
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
-def get_gnomad_data_path(data_type, hardcalls=None, split=False, hail_version=CURRENT_HAIL_VERSION):
+def get_gnomad_data_path(data_type, hardcalls=False, split=False, hail_version=CURRENT_HAIL_VERSION):
     """
     Wrapper function to get paths to gnomAD data
 
     :param str data_type: One of `exomes` or `genomes`
-    :param str hardcalls: One of `adj` or `raw` if hardcalls are desired (leave as None for raw data)
+    :param bool hardcalls: Whether hardcalls should be returned
     :param bool split: Whether the dataset should be split (only applies to hardcalls)
     :param str hail_version: One of the HAIL_VERSIONs
     :return: Path to chosen VDS
     :rtype: str
     """
-    if hardcalls is not None and hardcalls not in ('adj', 'raw'):
-        return DataException("Select hardcalls as one of 'adj', 'raw', or None")
-    if data_type == 'exomes':
-        if not hardcalls:
-            return raw_exomes_vds_path(hail_version)
-        else:
-            return hardcalls_exomes_vds_path(split, hardcalls == 'adj', hail_version)
-    elif data_type == 'genomes':
-        if not hardcalls:
-            return raw_genomes_vds_path(hail_version)
-        else:
-            return hardcalls_genomes_vds_path(split, hardcalls == 'adj', hail_version)
-    return DataException("Select data_type as one of 'genomes' or 'exomes'")
+    if data_type not in ('exomes', 'genomes'):
+        raise DataException("Select data_type as one of 'genomes' or 'exomes'")
+    if hardcalls:
+        return hardcalls_vds_path(data_type, split, hail_version)
+    else:
+        return raw_exomes_vds_path(hail_version) if data_type == 'exomes' else raw_genomes_vds_path(hail_version)
 
 
 def get_gnomad_meta_path(data_type, version=None):
@@ -176,8 +173,9 @@ def get_gnomad_meta_path(data_type, version=None):
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
-def vqsr_exomes_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vqsr.sites.vds'.format(hail_version)
+def vqsr_exomes_sites_vds_path(split=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vqsr.sites{1}.vds'.format(hail_version,
+                                                                                        ".split" if split else "")
 
 
 def raw_exomes_vds_path(hail_version=CURRENT_HAIL_VERSION):
@@ -192,16 +190,24 @@ def raw_exac_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/vds/exac/exac.vds'.format(hail_version)
 
 
-def hardcalls_exomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/hardcalls/hail-{0}/vds/exomes/gnomad.exomes.{1}{2}.vds'.format(hail_version,
-                                                                                       "adj" if adj else "raw",
-                                                                                       ".split" if split else "")
+def exac_release_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/raw/hail-{}/vds/exac/exac.r1.sites.vep.vds'.format(hail_version)
 
 
-def hardcalls_genomes_vds_path(split=False, adj=False, hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/hardcalls/hail-{0}/vds/genomes/gnomad.genomes.{1}{2}.vds'.format(hail_version,
-                                                                                         "adj" if adj else "raw",
-                                                                                         ".split" if split else "")
+def hardcalls_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/hardcalls/hail-{0}/vds/{1}/gnomad.{1}{2}.vds'.format(hail_version, data_type,
+                                                                             ".split" if split else "")
+
+
+def annotations_qc_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/annotations/hail-{0}/vds/{1}/gnomad.{1}.qc_annotations{2}.vds'.format(hail_version, data_type,
+                                                                                              ".split" if split else "")
+
+
+def annotations_vep_vds_path(data_type, split=False, hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/annotations/hail-{0}/vds/{1}/gnomad.{1}.vep{2}.vds'.format(hail_version, data_type,
+                                                                                   ".split" if split else "")
+
 
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
 
@@ -252,6 +258,10 @@ def NA12878_vds_path(hail_version=CURRENT_HAIL_VERSION):
 
 def syndip_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/hybrid.m37m.vds'.format(hail_version)
+
+
+def cpg_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad-public/resources/hail-{}/cpg.vds'.format(hail_version)
 
 
 dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20160601.vcf.bgz"

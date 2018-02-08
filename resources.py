@@ -73,7 +73,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
         vds = vds.annotate_cols(**{duplicate_mapping_root: dup_kt[vds.s]})
 
     if fam_root:
-        fam_kt = hail.KeyTable.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path).to_hail2()
+        fam_kt = methods.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
         vds = vds.annotate_cols(**{fam_root: fam_kt[vds.s]})
 
     pops = EXOME_POPS if data_type == 'exomes' else GENOME_POPS
@@ -90,14 +90,14 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
 
     if release_annotations:
         sites_vds = get_gnomad_public_data(hc, data_type, split, release_annotations)
-        vds = vds.select_rows(**sites_vds[vds.v, :])
+        vds = vds.select_rows(functions.is_defined(sites_vds[vds.v, :]))
 
     return vds
 
 
 def get_gnomad_meta(hc, data_type, version=None):
     """
-    Wrapper function to get gnomAD metadata as keytable
+    Wrapper function to get gnomAD metadata as Table
 
     :param HailContext hc: HailContext
     :param str data_type: One of `exomes` or `genomes`
@@ -110,7 +110,7 @@ def get_gnomad_meta(hc, data_type, version=None):
 
     return meta_kt.annotate(
         release=meta_kt.drop_status == "keep" if data_type == 'exomes' else meta_kt.keep,  # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
-        population=meta_kt.population if data_type == 'exomes' else f.cond(meta_kt.final_pop == 'sas', 'oth', meta_kt.final_pop)
+        population=meta_kt.population if data_type == 'exomes' else functions.cond(meta_kt.final_pop == 'sas', 'oth', meta_kt.final_pop)
     )
 
 

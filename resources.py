@@ -56,7 +56,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :return: Chosen VDS
     :rtype: MatrixTable
     """
-    if hardcalls and hardcalls not in ('adj', 'raw'):
+    if hardcalls is not None and hardcalls not in ('adj', 'raw'):
         return DataException("Select hardcalls as one of 'adj', 'raw', or False")
 
     vds = hc.read(get_gnomad_data_path(data_type, hardcalls=hardcalls is not None, split=split, hail_version=hail_version))
@@ -90,7 +90,7 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
 
     if release_annotations:
         sites_vds = get_gnomad_public_data(hc, data_type, split, release_annotations)
-        vds = vds.select_rows(functions.is_defined(sites_vds[vds.v, :]))
+        vds = vds.select_rows(release=sites_vds[vds.v, :])  # TODO: replace with ** to nuke old annotations
 
     return vds
 

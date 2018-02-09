@@ -56,8 +56,8 @@ def get_gnomad_data(hc, data_type, hardcalls=None, split=False, hail_version=CUR
     :return: Chosen VDS
     :rtype: MatrixTable
     """
-    if hardcalls is not None and hardcalls not in ('adj', 'raw'):
-        return DataException("Select hardcalls as one of 'adj', 'raw', or False")
+    if hardcalls and hardcalls not in ('adj', 'raw'):
+        return DataException("Select hardcalls as one of 'adj', 'raw', or None")
 
     vds = hc.read(get_gnomad_data_path(data_type, hardcalls=hardcalls is not None, split=split, hail_version=hail_version))
     if hardcalls == 'adj':

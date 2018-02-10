@@ -6,8 +6,9 @@ import gzip
 import os
 
 from resources import *
-from hail import *
+from hail2 import *
 from hail.expr import Field
+from hail.expr.expression import *
 from slack_utils import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
@@ -32,16 +33,6 @@ SEXES = {
     'Male': 'Male',
     'Female': 'Female'
 }
-
-ADJ_GQ = 20
-ADJ_DP = 10
-ADJ_AB = 0.2
-
-ADJ_CRITERIA = 'g.gq >= %(gq)s && g.dp >= %(dp)s && (' \
-               '!g.isHet || ' \
-               '(g.gtj == 0 && g.ad[g.gtk]/g.dp >= %(ab)s) || ' \
-               '(g.gtj > 0 && g.ad[g.gtj]/g.dp >= %(ab)s && g.ad[g.gtk]/g.dp >= %(ab)s)' \
-               ')' % {'gq': ADJ_GQ, 'dp': ADJ_DP, 'ab': ADJ_AB}
 
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = ["transcript_ablation",
@@ -153,7 +144,41 @@ def unfurl_filter_alleles_annotation(a_based=None, r_based=None, g_based=None, a
 
 
 def filter_to_adj(vds):
-    return vds.filter_genotypes(ADJ_CRITERIA)
+    """
+    Filter genotypes to adj criteria
+
+    :param MatrixTable vds: VDS
+    :return: MT
+    :rtype: MatrixTable
+    """
+    try:
+        vds = vds.filter_entries(vds.adj)
+    except AttributeError:
+        vds = annotate_adj(vds)
+        vds = vds.filter_entries(vds.adj)
+    return vds.drop(vds.adj)
+
+
+def annotate_adj(vds):
+    """
+    Annotate genotypes with adj criteria
+
+    :param MatrixTable vds: MT
+    :return: MT
+    :rtype: MatrixTable
+    """
+    adj_gq = 20
+    adj_dp = 10
+    adj_ab = 0.2
+
+    return vds.annotate_entries(adj=
+                                (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
+                                    ~vds.GT.is_het() |
+                                    ((vds.GT.gtj() == 0) & (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab)) |
+                                    ((vds.GT.gtj() > 0) & (vds.AD[vds.GT.gtj()] / vds.DP >= adj_ab) &
+                                     (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab))
+                                )
+    )
 
 
 def filter_star(vds, a_based=None, r_based=None, g_based=None, additional_annotations=None):

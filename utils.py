@@ -123,6 +123,29 @@ def annotate_adj(vds):
     )
 
 
+def add_variant_type(alt_alleles):
+    """
+    Get Struct of variant_type and n_alt_alleles from ArrayExpression of AltAlleles
+
+    :param ArrayExpression alt_alleles: Input ArrayExpression of AltAlleles
+    :return: Struct with variant_type and n_alt_alleles
+    :rtype: Struct
+    """
+    non_star_alleles = hl.functions.bind(alt_alleles.filter(lambda a: ~a.is_star()))
+    return Struct(variant_type=
+                  hl.functions.cond(
+                      non_star_alleles.forall(lambda a: a.is_snp()),
+                      hl.functions.cond(
+                          non_star_alleles.length() > 1, "multi-snv", "snv"),
+                      hl.functions.cond(
+                          non_star_alleles.forall(lambda a: a.is_indel()),
+                          hl.functions.cond(
+                              non_star_alleles.length() > 1, "multi-indel", "indel"),
+                          "mixed")
+                  ),
+                  n_alt_alleles=non_star_alleles.length())
+
+
 def split_multi_sites(vds):
     sm = hl.methods.SplitMulti(vds)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())

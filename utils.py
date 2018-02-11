@@ -474,113 +474,88 @@ def filter_low_conf_regions(vds, filter_lcr=True, filter_decoy=True, filter_segd
     return vds
 
 
-def process_consequences(vds, vep_root='va.vep', genes_to_string=True):
+def process_consequences(vds, vep_root='vep'):
     """
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
-    and worst_csq and worst_csq_suffix (worst consequence across transcripts) into [vep_root]
+    and worst_csq_by_gene, canonical_csq_by_gene, any_lof into [vep_root]
 
-    :param VariantDataset vds: Input VDS
-    :param str vep_root: Root for vep annotation (probably va.vep)
+    :param MatrixTable vds: Input VDS
+    :param str vep_root: Root for vep annotation (probably vep)
     :return: VDS with better formatted consequences
-    :rtype: VariantDataset
+    :rtype: MatrixTable
     """
-    if vep_root + '.worst_csq' in flatten_struct(vds.variant_schema, root='va'):
-        vds = (vds.annotate_variants_expr('%(vep)s.transcript_consequences = '
-                                          ' %(vep)s.transcript_consequences.map('
-                                          '     csq => drop(csq, most_severe_consequence)'
-                                          ')' % {'vep': vep_root}))
-    vds = (vds.annotate_global('global.csqs', CSQ_ORDER, TArray(TString()))
-           .annotate_variants_expr(
-        '%(vep)s.transcript_consequences = '
-        '   %(vep)s.transcript_consequences.map(csq => '
-        '   let worst_csq = global.csqs.find(c => csq.consequence_terms.toSet().contains(c)) in'
-        # '   let worst_csq_suffix = if (csq.filter(x => x.lof == "HC").length > 0)'
-        # '       worst_csq + "-HC" '
-        # '   else '
-        # '       if (csq.filter(x => x.lof == "LC").length > 0)'
-        # '           worst_csq + "-LC" '
-        # '       else '
-        # '           if (csq.filter(x => x.polyphen_prediction == "probably_damaging").length > 0)'
-        # '               worst_csq + "-probably_damaging"'
-        # '           else'
-        # '               if (csq.filter(x => x.polyphen_prediction == "possibly_damaging").length > 0)'
-        # '                   worst_csq + "-possibly_damaging"'
-        # '               else'
-        # '                   worst_csq in'
-        '   merge(csq, {most_severe_consequence: worst_csq'
-        # ', most_severe_consequence_suffix: worst_csq_suffix'
-        '})'
-        ')' % {'vep': vep_root}
-    ).annotate_variants_expr(
-        '%(vep)s.worst_csq = global.csqs.find(c => %(vep)s.transcript_consequences.map(x => x.most_severe_consequence).toSet().contains(c)),'
-        '%(vep)s.worst_csq_suffix = '
-        'let csq = global.csqs.find(c => %(vep)s.transcript_consequences.map(x => x.most_severe_consequence).toSet().contains(c)) in '
-        'if (%(vep)s.transcript_consequences.filter(x => x.lof == "HC" && x.lof_flags == "").length > 0)'
-        '   csq + "-HC" '
-        'else '
-        '   if (%(vep)s.transcript_consequences.filter(x => x.lof == "HC").length > 0)'
-        '       csq + "-HC-flag" '
-        '   else '
-        '       if (%(vep)s.transcript_consequences.filter(x => x.lof == "LC").length > 0)'
-        '           csq + "-LC" '
-        '       else '
-        '           if (%(vep)s.transcript_consequences.filter(x => x.polyphen_prediction == "probably_damaging").length > 0)'
-        '               csq + "-probably_damaging"'
-        '           else'
-        '               if (%(vep)s.transcript_consequences.filter(x => x.polyphen_prediction == "possibly_damaging").length > 0)'
-        '                   csq + "-possibly_damaging"'
-        '               else'
-        '                   if (%(vep)s.transcript_consequences.filter(x => x.polyphen_prediction == "benign").length > 0)'
-        '                       csq + "-benign"'
-        '                   else'
-        '                       csq' % {'vep': vep_root}
-    ).annotate_variants_expr(
-        '{vep}.lof = "-HC" ~ {vep}.worst_csq_suffix, '
-        '{vep}.worst_csq_genes = {vep}.transcript_consequences'
-        '.filter(x => x.most_severe_consequence == {vep}.worst_csq).map(x => x.gene_symbol).toSet(){genes_to_string}'.format(
-            vep=vep_root, genes_to_string='.mkString("|")' if genes_to_string else '')
-    ))
-    return vds
+    csqs = hl.functions.capture(CSQ_ORDER)
+    csq_dict = hl.functions.capture(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
 
+    def add_most_severe_consequence(tc):
+        """
+        Add most_severe_consequence annotation to transcript consequences
+        This is for a given transcript, as there are often multiple annotations for a single transcript:
+        e.g. splice_region_variant&intron_variant -> splice_region_variant
 
-def filter_vep_to_canonical_transcripts(vds, vep_root='va.vep'):
-    return vds.annotate_variants_expr(
-        '{vep}.transcript_consequences = '
-        '   {vep}.transcript_consequences.filter(csq => csq.canonical == 1)'.format(vep=vep_root))
+        :param StructExpression tc: Transcript consequences expression
+        :return: Transcript consequences expression with most_severe_consequence
+        :rtype StructExpression
+        """
+        return hl.functions.merge(tc, Struct(
+            most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
+        ))
 
+    def find_worst_transcript_consequence(tcl):
+        """
+        Gets worst transcript_consequence from an array of em
 
+        :param ArrayStructExpression tcl: Array of Structs, one for each consequence
+        :return: Worst transcript consequence among an array
+        :rtype: StructExpression
+        """
+        if tcl.length() == 0: return tcl
+        csq_score = lambda tc: csq_dict[csqs.find(tc)]
+        tcl = tcl.map(lambda tc: hl.functions.merge(tc, Struct(
+            csq_score=hl.functions.case()
+            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - 1000)
+            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - 500)
+            .when(tc.lof == 'LC', csq_score(tc) - 10)
+            .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
+            .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
+            .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
+            .default(csq_score(tc))
+        )))
+        return tcl.sort_by(lambda x: x.csq_score)[0]
 
+    transcript_csqs = vds[vep_root].transcript_consequences.map(add_most_severe_consequence)
 
-def filter_vep(vds, vep_root='va.vep', canonical=False, synonymous=False):
-    """
-    Fairly specific function, but used by multiple scripts
+    gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
+    worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)
+    canonical_csq_gene = gene_dict.map_values(lambda tcl: tcl.filter(lambda tc: tc.canonical == 1)[0])
+    worst_csq = csqs.find(lambda c: transcript_csqs.map(lambda tc: tc.most_severe_consequence).contains(c))
 
+    vep_data = vds[vep_root].annotate(transcript_consequences=transcript_csqs,
+                                      worst_csq_by_gene=worst_csq_gene,
+                                      canonical_csq_by_gene=canonical_csq_gene,
+                                      any_lof=worst_csq_gene.values().exists(lambda x: x.lof == 'HC'),
+                                      worst_csq_overall=worst_csq)
 
-    """
-    if canonical: vds = filter_vep_to_canonical_transcripts(vds, vep_root=vep_root)
-    vds = process_consequences(vds)
-    if synonymous: vds = filter_vep_to_synonymous_variants(vds, vep_root=vep_root)
-
-    return (vds.filter_variants_expr('!{}.transcript_consequences.isEmpty'.format(vep_root))
-            .annotate_variants_expr('{0} = select({0}, transcript_consequences)'.format(vep_root)))
-
-
-def filter_vep_to_synonymous_variants(vds, vep_root='va.vep'):
-    return vds.annotate_variants_expr(
-        '{vep}.transcript_consequences = '
-        '   {vep}.transcript_consequences.filter(csq => csq.most_severe_consequence == "synonymous_variant")'.format(vep=vep_root))
+    return vds.annotate_rows(**{vep_root: vep_data})
 
 
 def filter_vep_to_canonical_transcripts(vds, vep_root='vep'):
     """
 
-    :param VariantDataset vds: Input VDS (assumed split, but AS_FilterStatus unsplit)
-    :return: vds with only RF variants removed
-    :rtype: VariantDataset
+    :param MatrixTable vds: VDS
+    :param vep_root: root
+    :return: MT
+    :rtype: MatrixTable
     """
-    return (vds
-            .annotate_variants_expr(index_into_arrays(['va.info.AS_FilterStatus']))
-            .filter_variants_expr('va.info.AS_FilterStatus.toArray() != ["RF"]'))
+    canonical = vds[vep_root].transcript_consequences.filter(lambda csq: csq.canonical == 1)
+    vep_data = vds[vep_root].annotate(transcript_consequences=canonical)
+    return vds.annotate_rows(**{vep_root: vep_data})
+
+
+def filter_vep_to_synonymous_variants(vds, vep_root='vep'):
+    canonical = vds[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
+    vep_data = vds[vep_root].annotate(transcript_consequences=canonical)
+    return vds.annotate_rows(**{vep_root: vep_data})
 
 
 def toSSQL(s):

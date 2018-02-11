@@ -191,7 +191,7 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     :param sep: Separator to use (tab usually fine)
     :param delim: Delimiter to use (pipe usually fine)
     :return: Sample data
-    :rtype: list of str
+    :rtype: list of list of str
     """
     field_expr = fields[0]
     for field in fields[1:]:

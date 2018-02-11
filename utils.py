@@ -6,7 +6,7 @@ import gzip
 import os
 
 from resources import *
-from hail2 import *
+import hail as hl
 from hail.expr import Field
 from hail.expr.expression import *
 from slack_utils import *
@@ -124,15 +124,15 @@ def annotate_adj(vds):
 
 
 def split_multi_sites(vds):
-    sm = hl.SplitMulti(vds)
+    sm = hl.methods.SplitMulti(vds)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
     return sm.result()
 
 
 def split_multi_hardcalls(vds):
-    sm = hl.SplitMulti(vds)
+    sm = hl.methods.SplitMulti(vds)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
-    sm.update_entries(functions.downcode(vds.GT))
+    sm.update_entries(hl.functions.downcode(vds.GT))
     return sm.result()
 
 
@@ -151,9 +151,9 @@ def adjust_sex_ploidy(vds, sex_expr):
     y_par = vds.v.in_y_par
     y_nonpar = vds.v.in_y_nonpar
     return vds.annotate_entries(
-        GT=case()  # TODO: switch to methods.case
-        .when(female & (y_par | y_nonpar), functions.null(TCall()))
-        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), functions.null(TCall()))
+        GT=hl.functions.case()
+        .when(female & (y_par | y_nonpar), hl.functions.null(TCall()))
+        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.functions.null(TCall()))
         .when(male & (x_nonpar | y_nonpar), Call([vds.GT.alleles[0]]))
         .default(vds.GT)
     )
@@ -173,7 +173,7 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     field_expr = fields[0]
     for field in fields[1:]:
         field_expr = field_expr + '|' + field
-    return [x.split(delim) for x in vds.aggregate_cols(x=agg.collect(field_expr).mkstring(sep)).x.split(sep) if x != 'null']
+    return [x.split(delim) for x in vds.aggregate_cols(x=hl.agg.collect(field_expr).mkstring(sep)).x.split(sep) if x != 'null']
 
 
 def get_popmax_expr(freq):
@@ -206,8 +206,8 @@ def get_projectmax(vds, loc):
     :return: Frequency data with annotated project_max
     :rtype: MatrixTable
     """
-    agg_vds = vds.group_cols_by(loc).aggregate(AC=agg.sum(vds.GT.num_alt_alleles()),
-                                               AN=2 * agg.count_where(functions.is_defined(vds.GT)))
+    agg_vds = vds.group_cols_by(loc).aggregate(AC=hl.agg.sum(vds.GT.num_alt_alleles()),
+                                               AN=2 * hl.agg.count_where(hl.functions.is_defined(vds.GT)))
     agg_vds = agg_vds.annotate_entries(AF=agg_vds.AC / agg_vds.AN)
     return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.s, AC=agg_vds.AC,
                                                                 AF=agg_vds.AF, AN=agg_vds.AN), 5, -agg_vds.AF))
@@ -417,8 +417,8 @@ def pc_project(vds, pc_vds, pca_loadings_root='va.pca_loadings'):
 
 def read_list_data(input_file):
     if input_file.startswith('gs://'):
-        hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])
-        f = gzip.open("/" + os.path.basename(input_file)) if input_file.endswith('gz') else open( "/" + os.path.basename(input_file))
+        hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])
+        f = gzip.open("/" + os.path.basename(input_file)) if input_file.endswith('gz') else open("/" + os.path.basename(input_file))
     else:
         f = gzip.open(input_file) if input_file.endswith('gz') else open(input_file)
     output = []

@@ -177,7 +177,7 @@ def adjust_sex_ploidy(vds, sex_expr):
         GT=hl.functions.case()
         .when(female & (y_par | y_nonpar), hl.functions.null(TCall()))
         .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.functions.null(TCall()))
-        .when(male & (x_nonpar | y_nonpar), Call([vds.GT.alleles[0]]))
+        .when(male & (x_nonpar | y_nonpar), hl.functions.call(False, vds.GT.alleles[0]))
         .default(vds.GT)
     )
 
@@ -199,7 +199,7 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     return [x.split(delim) for x in vds.aggregate_cols(x=hl.agg.collect(field_expr).mkstring(sep)).x.split(sep) if x != 'null']
 
 
-def get_popmax_expr(freq):
+def add_popmax_expr(freq):
     """
     First pass of popmax (add an additional entry into freq with popmax: pop)
     TODO: update dict instead?

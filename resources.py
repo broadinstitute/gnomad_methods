@@ -167,7 +167,8 @@ def raw_exomes_vds_path(hail_version=CURRENT_HAIL_VERSION):
     """
     Warning: unsplit and no special consideration on sex chromosomes
     """
-    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
+    return 'gs://konradk/tmp/gnomad_temp.vds'
+    # return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
 
 
 def raw_genomes_vds_path(hail_version=CURRENT_HAIL_VERSION):

@@ -116,9 +116,9 @@ def annotate_adj(vds):
     return vds.annotate_entries(adj=
                                 (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
                                     ~vds.GT.is_het() |
-                                    ((vds.GT.gtj() == 0) & (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab)) |
-                                    ((vds.GT.gtj() > 0) & (vds.AD[vds.GT.gtj()] / vds.DP >= adj_ab) &
-                                     (vds.AD[vds.GT.gtk()] / vds.DP >= adj_ab))
+                                    ((vds.GT[0] == 0) & (vds.AD[vds.GT[1]] / vds.DP >= adj_ab)) |
+                                    ((vds.GT[0] > 0) & (vds.AD[vds.GT[0]] / vds.DP >= adj_ab) &
+                                     (vds.AD[vds.GT[1]] / vds.DP >= adj_ab))
                                 )
     )
 
@@ -131,15 +131,15 @@ def add_variant_type(alt_alleles):
     :return: Struct with variant_type and n_alt_alleles
     :rtype: Struct
     """
-    non_star_alleles = hl.functions.bind(alt_alleles.filter(lambda a: ~a.is_star()))
+    non_star_alleles = hl.bind(alt_alleles.filter(lambda a: ~a.is_star()))
     return Struct(variant_type=
-                  hl.functions.cond(
+                  hl.cond(
                       non_star_alleles.forall(lambda a: a.is_snp()),
-                      hl.functions.cond(
+                      hl.cond(
                           non_star_alleles.length() > 1, "multi-snv", "snv"),
-                      hl.functions.cond(
+                      hl.cond(
                           non_star_alleles.forall(lambda a: a.is_indel()),
-                          hl.functions.cond(
+                          hl.cond(
                               non_star_alleles.length() > 1, "multi-indel", "indel"),
                           "mixed")
                   ),
@@ -211,14 +211,14 @@ def adjust_sex_ploidy(vds, sex_expr):
     """
     male = sex_expr == 'male'
     female = sex_expr == 'female'
-    x_nonpar = vds.v.in_x_nonpar
-    y_par = vds.v.in_y_par
-    y_nonpar = vds.v.in_y_nonpar
+    x_nonpar = vds.locus.in_x_nonpar()
+    y_par = vds.locus.in_y_par()
+    y_nonpar = vds.locus.in_y_nonpar()
     return vds.annotate_entries(
-        GT=hl.functions.case()
-        .when(female & (y_par | y_nonpar), hl.functions.null(TCall()))
-        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.functions.null(TCall()))
-        .when(male & (x_nonpar | y_nonpar), hl.functions.call(False, vds.GT.alleles[0]))
+        GT=hl.case()
+        .when(female & (y_par | y_nonpar), hl.null(TCall()))
+        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.null(TCall()))
+        .when(male & (x_nonpar | y_nonpar), hl.call(False, vds.GT[0]))
         .default(vds.GT)
     )
 
@@ -271,7 +271,7 @@ def get_projectmax(vds, loc):
     :rtype: MatrixTable
     """
     agg_vds = vds.group_cols_by(loc).aggregate(AC=hl.agg.sum(vds.GT.num_alt_alleles()),
-                                               AN=2 * hl.agg.count_where(hl.functions.is_defined(vds.GT)))
+                                               AN=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
     agg_vds = agg_vds.annotate_entries(AF=agg_vds.AC / agg_vds.AN)
     return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.s, AC=agg_vds.AC,
                                                                 AF=agg_vds.AF, AN=agg_vds.AN), 5, -agg_vds.AF))
@@ -519,20 +519,20 @@ def filter_low_conf_regions(vds, filter_lcr=True, filter_decoy=True, filter_segd
     """
 
     if filter_lcr:
-        lcr = hl.methods.import_interval_list(lcr_intervals_path)
+        lcr = hl.import_interval_list(lcr_intervals_path)
         vds = vds.filter_rows(lcr[vds.v], keep=False)
 
     if filter_decoy:
-        decoy = hl.methods.import_interval_list(decoy_intervals_path)
+        decoy = hl.import_interval_list(decoy_intervals_path)
         vds = vds.filter_rows(decoy[vds.v], keep=False)
 
     if filter_segdup:
-        segdup = hl.methods.import_interval_list(segdup_intervals_path)
+        segdup = hl.import_interval_list(segdup_intervals_path)
         vds = vds.filter_rows(segdup[vds.v], keep=False)
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
-            region = hl.methods.import_interval_list(region)
+            region = hl.import_interval_list(region)
             vds = vds.filter_rows(region, keep=True)
 
     return vds
@@ -548,8 +548,8 @@ def process_consequences(vds, vep_root='vep'):
     :return: VDS with better formatted consequences
     :rtype: MatrixTable
     """
-    csqs = hl.functions.capture(CSQ_ORDER)
-    csq_dict = hl.functions.capture(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
+    csqs = hl.capture(CSQ_ORDER)
+    csq_dict = hl.capture(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
 
     def add_most_severe_consequence(tc):
         """
@@ -561,7 +561,7 @@ def process_consequences(vds, vep_root='vep'):
         :return: Transcript consequences expression with most_severe_consequence
         :rtype StructExpression
         """
-        return hl.functions.merge(tc, Struct(
+        return hl.merge(tc, Struct(
             most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
         ))
 
@@ -575,8 +575,8 @@ def process_consequences(vds, vep_root='vep'):
         """
         if tcl.length() == 0: return tcl
         csq_score = lambda tc: csq_dict[csqs.find(tc)]
-        tcl = tcl.map(lambda tc: hl.functions.merge(tc, Struct(
-            csq_score=hl.functions.case()
+        tcl = tcl.map(lambda tc: hl.merge(tc, Struct(
+            csq_score=hl.case()
             .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - 1000)
             .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - 500)
             .when(tc.lof == 'LC', csq_score(tc) - 10)

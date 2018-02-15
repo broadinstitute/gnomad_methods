@@ -103,7 +103,7 @@ def filter_to_adj(vds):
 
 def annotate_adj(vds):
     """
-    Annotate genotypes with adj criteria
+    Annotate genotypes with adj criteria (assumes diploid)
 
     :param MatrixTable vds: MT
     :return: MT
@@ -127,23 +127,23 @@ def add_variant_type(alt_alleles):
     """
     Get Struct of variant_type and n_alt_alleles from ArrayExpression of AltAlleles
 
-    :param ArrayExpression alt_alleles: Input ArrayExpression of AltAlleles
+    :param ArrayExpression alt_alleles: Input ArrayExpression of Strings
     :return: Struct with variant_type and n_alt_alleles
     :rtype: Struct
     """
-    non_star_alleles = hl.bind(alt_alleles.filter(lambda a: ~a.is_star()))
+    ref = alt_alleles[0]
+    alts = alt_alleles[1:]
+    non_star_alleles = hl.filter(lambda a: a != '*', alts)
     return Struct(variant_type=
                   hl.cond(
-                      non_star_alleles.forall(lambda a: a.is_snp()),
+                      hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
+                      hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
                       hl.cond(
-                          non_star_alleles.length() > 1, "multi-snv", "snv"),
-                      hl.cond(
-                          non_star_alleles.forall(lambda a: a.is_indel()),
-                          hl.cond(
-                              non_star_alleles.length() > 1, "multi-indel", "indel"),
+                          hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
+                          hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
                           "mixed")
                   ),
-                  n_alt_alleles=non_star_alleles.length())
+                  n_alt_alleles=hl.len(non_star_alleles))
 
 
 def split_multi_dynamic(vds, keep_star=False):
@@ -266,15 +266,16 @@ def get_projectmax(vds, loc):
     """
     First pass of projectmax (returns aggregated VDS with project_max field)
 
-    :param MatrixTable vds: Array of StructExpression with ['AC', 'AN', 'Hom', 'meta']
+    :param MatrixTable vds: Array of StructExpression with ['ac', 'an', 'hom', 'meta']
     :return: Frequency data with annotated project_max
     :rtype: MatrixTable
     """
-    agg_vds = vds.group_cols_by(loc).aggregate(AC=hl.agg.sum(vds.GT.num_alt_alleles()),
-                                               AN=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
-    agg_vds = agg_vds.annotate_entries(AF=agg_vds.AC / agg_vds.AN)
-    return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.s, AC=agg_vds.AC,
-                                                                AF=agg_vds.AF, AN=agg_vds.AN), 5, -agg_vds.AF))
+    # TODO: add hom count
+    agg_vds = vds.group_cols_by(loc).aggregate(ac=hl.agg.sum(vds.GT.num_alt_alleles()),
+                                               an=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
+    agg_vds = agg_vds.annotate_entries(af=agg_vds.ac / agg_vds.an)
+    return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.s, ac=agg_vds.ac,
+                                                                af=agg_vds.ac, an=agg_vds.an), 5, -agg_vds.af))
 
 
 def flatten_struct(struct, root='va', leaf_only=True, recursive=True):
@@ -520,20 +521,20 @@ def filter_low_conf_regions(vds, filter_lcr=True, filter_decoy=True, filter_segd
 
     if filter_lcr:
         lcr = hl.import_interval_list(lcr_intervals_path)
-        vds = vds.filter_rows(lcr[vds.v], keep=False)
+        vds = vds.filter_rows(lcr[vds.locus], keep=False)
 
     if filter_decoy:
         decoy = hl.import_interval_list(decoy_intervals_path)
-        vds = vds.filter_rows(decoy[vds.v], keep=False)
+        vds = vds.filter_rows(decoy[vds.locus], keep=False)
 
     if filter_segdup:
         segdup = hl.import_interval_list(segdup_intervals_path)
-        vds = vds.filter_rows(segdup[vds.v], keep=False)
+        vds = vds.filter_rows(segdup[vds.locus], keep=False)
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
             region = hl.import_interval_list(region)
-            vds = vds.filter_rows(region, keep=True)
+            vds = vds.filter_rows(region[vds.locus], keep=True)
 
     return vds
 

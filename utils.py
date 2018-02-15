@@ -146,7 +146,7 @@ def add_variant_type(alt_alleles):
                   n_alt_alleles=non_star_alleles.length())
 
 
-def split_multi_dynamic(vds):
+def split_multi_dynamic(vds, keep_star=False):
     """
     Splits MatrixTable based on entry fields found. Downcodes whatever it can. Supported so far:
     GT, DP, AD, PL, GQ
@@ -158,7 +158,7 @@ def split_multi_dynamic(vds):
     :rtype: MatrixTable
     """
     fields = set(map(lambda x: x.name, vds.entry_schema.fields))
-    sm = hl.SplitMulti(vds)
+    sm = hl.SplitMulti(vds, keep_star=keep_star)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
     expression = {}
 

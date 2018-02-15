@@ -1,5 +1,4 @@
 import hail as hl
-from utils import filter_to_adj
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
@@ -270,6 +269,10 @@ def cpg_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/resources/hail-{}/cpg.vds'.format(hail_version)
 
 
+def methylation_sites_vds_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad-resources/methylation/hail-{}/methylation.kt'.format(hail_version)
+
+
 dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20160601.vcf.bgz"
 
 NA12878_high_conf_regions_bed_path = "gs://gnomad-public/truth-sets/source/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.bed"
@@ -298,7 +301,6 @@ genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wg
 vep_config = "/vep/vep-gcloud.properties"
 
 # Annotations
-methylation_kt_path = "gs://gnomad-resources/methylation.kt"
 context_vds_path = 'gs://gnomad-resources/constraint/context_processed.vds'
 
 

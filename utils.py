@@ -237,7 +237,7 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     field_expr = fields[0]
     for field in fields[1:]:
         field_expr = field_expr + '|' + field
-    return [x.split(delim) for x in vds.aggregate_cols(x=hl.agg.collect(field_expr).mkstring(sep)).x.split(sep) if x != 'null']
+    return [x.split(delim) for x in vds.aggregate_cols(hl.delimit(hl.agg.collect(field_expr))).split(sep) if x != 'null']
 
 
 def add_popmax_expr(freq):

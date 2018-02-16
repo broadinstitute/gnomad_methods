@@ -245,7 +245,7 @@ def add_popmax_expr(freq):
     First pass of popmax (add an additional entry into freq with popmax: pop)
     TODO: update dict instead?
 
-    :param ArrayStructExpression freq: Array of StructExpression with ['AC', 'AN', 'Hom', 'meta']
+    :param ArrayStructExpression freq: Array of StructExpression with ['ac', 'an', 'hom', 'meta']
     :return: Frequency data with annotated popmax
     :rtype: ArrayStructExpression
     """
@@ -265,15 +265,17 @@ def get_projectmax(vds, loc):
     """
     First pass of projectmax (returns aggregated VDS with project_max field)
 
-    :param MatrixTable vds: Array of StructExpression with ['ac', 'an', 'hom', 'meta']
+    :param MatrixTable vds: Input VDS
+    :param StringExpression loc: Column expression location of project ID (e.g. vds.meta.pid)
     :return: Frequency data with annotated project_max
     :rtype: MatrixTable
     """
     # TODO: add hom count
-    agg_vds = vds.group_cols_by(loc).aggregate(ac=hl.agg.sum(vds.GT.num_alt_alleles()),
-                                               an=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
+    vds = vds.annotate_cols(project=loc)
+    agg_vds = vds.group_cols_by(vds.project).aggregate(ac=hl.agg.sum(vds.GT.num_alt_alleles()),
+                                                       an=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
     agg_vds = agg_vds.annotate_entries(af=agg_vds.ac / agg_vds.an)
-    return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.s, ac=agg_vds.ac,
+    return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.project, ac=agg_vds.ac,
                                                                 af=agg_vds.ac, an=agg_vds.an), 5, -agg_vds.af))
 
 

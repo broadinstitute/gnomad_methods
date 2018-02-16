@@ -249,16 +249,15 @@ def add_popmax_expr(freq):
     :return: Frequency data with annotated popmax
     :rtype: ArrayStructExpression
     """
-    popmax_entry = (freq
-                    .filter(lambda x: ((x.meta.keys() == ['population']) & (x.meta['population'] != 'oth')))
-                    .sort_by(lambda x: x.AC / x.AN, ascending=False)[0])
+    freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['population']) & (x.meta['population'] != 'oth'), freq)
+    popmax_entry = hl.sorted(freq_filtered, key=lambda x: x.ac / x.an, reverse=True)[0]  # TODO: check for missing
     # return freq.map(lambda x: Struct(AC=x.AC, AN=x.AN, Hom=x.Hom,
     #                                  meta=functions.cond(
     #                                      x.meta == popmax_entry.meta,
     #                                      functions.Dict(x.meta.keys().append('popmax'), x.meta.values().append('True')),  # TODO: update dict
     #                                      x.meta
     #                                  )))
-    return freq.append(Struct(AC=popmax_entry.AC, AN=popmax_entry.AN, Hom=popmax_entry.Hom,
+    return freq.append(Struct(ac=popmax_entry.ac, an=popmax_entry.an, hom=popmax_entry.hom,
                               meta={'popmax': popmax_entry.meta['population']}))
 
 

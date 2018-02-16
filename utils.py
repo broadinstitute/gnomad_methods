@@ -276,7 +276,7 @@ def get_projectmax(vds, loc):
                                                        an=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
     agg_vds = agg_vds.annotate_entries(af=agg_vds.ac / agg_vds.an)
     return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.project, ac=agg_vds.ac,
-                                                                af=agg_vds.ac, an=agg_vds.an), 5, -agg_vds.af))
+                                                                af=agg_vds.af, an=agg_vds.an), 5, -agg_vds.af))
 
 
 def flatten_struct(struct, root='va', leaf_only=True, recursive=True):

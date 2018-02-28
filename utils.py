@@ -225,7 +225,7 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     """
     Hail devs hate this one simple py4j trick to speed up sample queries
 
-    :param MatrixTable vds: MT
+    :param MatrixTable or Table vds: MT
     :param list of StringExpression fields: fields
     :param sep: Separator to use (tab usually fine)
     :param delim: Delimiter to use (pipe usually fine)
@@ -235,7 +235,11 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     field_expr = fields[0]
     for field in fields[1:]:
         field_expr = field_expr + '|' + field
-    return [x.split(delim) for x in vds.aggregate_cols(hl.delimit(hl.agg.collect(field_expr), delim)).split(sep) if x != 'null']
+    if isinstance(vds, hl.MatrixTable):
+        vds_agg = vds.aggregate_cols
+    else:
+        vds_agg = vds.aggregate
+    return [x.split(delim) for x in vds_agg(hl.delimit(hl.agg.collect(field_expr), sep)).split(sep) if x != 'null']
 
 
 def add_popmax_expr(freq):

@@ -30,7 +30,7 @@ def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
     :return: Chosen VDS
     :rtype: MatrixTable
     """
-    return hl.methods.read_matrix_table(get_gnomad_public_data_path(data_type, split=split, version=version))
+    return hl.read_matrix_table(get_gnomad_public_data_path(data_type, split=split, version=version))
 
 
 def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CURRENT_HAIL_VERSION,
@@ -58,7 +58,7 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
     if raw and split:
         raise DataException('No split raw data. Use of hardcalls is recommended.')
 
-    vds = hl.methods.read_matrix_table(get_gnomad_data_path(data_type, hardcalls=not raw, split=split, hail_version=hail_version))
+    vds = hl.read_matrix_table(get_gnomad_data_path(data_type, hardcalls=not raw, split=split, hail_version=hail_version))
     if adj:
         vds = filter_to_adj(vds)
 
@@ -67,12 +67,12 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
         vds = vds.annotate_cols(**{meta_root: meta_kt[vds.s]})
 
     if duplicate_mapping_root:
-        dup_kt = hl.methods.import_table(genomes_exomes_duplicate_ids_tsv_path, impute=True,
-                                         key='exome_id' if data_type == "exomes" else 'genome_id')
+        dup_kt = hl.import_table(genomes_exomes_duplicate_ids_tsv_path, impute=True,
+                                 key='exome_id' if data_type == "exomes" else 'genome_id')
         vds = vds.annotate_cols(**{duplicate_mapping_root: dup_kt[vds.s]})
 
     if fam_root:
-        fam_kt = hl.methods.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
+        fam_kt = hl.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
         vds = vds.annotate_cols(**{fam_root: fam_kt[vds.s]})
 
     if release_samples:
@@ -94,12 +94,12 @@ def get_gnomad_meta(data_type, version=None):
     :return: Metadata Table
     :rtype: Table
     """
-    meta_kt = hl.methods.import_table(get_gnomad_meta_path(data_type, version), impute=True,
-                                      key="sample" if data_type == "exomes" else "Sample")
+    meta_kt = hl.import_table(get_gnomad_meta_path(data_type, version), impute=True,
+                              key="sample" if data_type == "exomes" else "Sample")
 
     return meta_kt.annotate(
         release=meta_kt.drop_status == "keep" if data_type == 'exomes' else meta_kt.keep,  # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
-        population=meta_kt.population if data_type == 'exomes' else hl.functions.cond(meta_kt.final_pop == 'sas', 'oth', meta_kt.final_pop)
+        population=meta_kt.population if data_type == 'exomes' else hl.cond(meta_kt.final_pop == 'sas', 'oth', meta_kt.final_pop)
     )
 
 

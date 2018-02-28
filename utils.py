@@ -5,11 +5,9 @@ import logging
 import gzip
 import os
 
-from resources import *
 import hail as hl
 from hail.expr import Field
 from hail.expr.expression import *
-from slack_utils import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
@@ -519,6 +517,7 @@ def filter_low_conf_regions(vds, filter_lcr=True, filter_decoy=True, filter_segd
     :return: VDS with low confidence regions removed
     :rtype: MatrixTable
     """
+    from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path
 
     if filter_lcr:
         lcr = hl.import_interval_list(lcr_intervals_path)

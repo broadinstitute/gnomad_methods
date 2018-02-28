@@ -53,6 +53,8 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
     :return: gnomAD hardcalls dataset with chosen annotations
     :rtype: MatrixTable
     """
+    from gnomad_hail.utils import filter_to_adj
+
     if raw and split:
         raise DataException('No split raw data. Use of hardcalls is recommended.')
 

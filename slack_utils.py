@@ -5,7 +5,7 @@ def get_slack_info():
     from slackclient import SlackClient
     # import os
     try:
-        from slack_creds import slack_token
+        from gnomad_hail.slack_creds import slack_token
     except Exception:
         return None
 

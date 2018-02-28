@@ -75,9 +75,6 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
         fam_kt = hl.methods.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
         vds = vds.annotate_cols(**{fam_root: fam_kt[vds.s]})
 
-    pops = EXOME_POPS if data_type == 'exomes' else GENOME_POPS
-    vds = vds.annotate_globals(pops=map(lambda x: x.lower(), pops))
-
     if release_samples:
         vds = vds.filter_cols(vds.meta.release)
 
@@ -169,8 +166,7 @@ def raw_exomes_vds_path(hail_version=CURRENT_HAIL_VERSION):
     """
     Warning: unsplit and no special consideration on sex chromosomes
     """
-    return 'gs://konradk/tmp/gnomad_temp.vds'
-    # return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
+    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
 
 
 def raw_genomes_vds_path(hail_version=CURRENT_HAIL_VERSION):

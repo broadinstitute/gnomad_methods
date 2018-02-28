@@ -214,9 +214,9 @@ def adjust_sex_ploidy(vds, sex_expr):
     y_nonpar = vds.locus.in_y_nonpar()
     return vds.annotate_entries(
         GT=hl.case()
-        .when(female & (y_par | y_nonpar), hl.null(TCall()))
-        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.null(TCall()))
-        .when(male & (x_nonpar | y_nonpar), hl.call(False, vds.GT[0]))
+        .when(female & (y_par | y_nonpar), hl.null(hl.TCall()))
+        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.null(hl.TCall()))
+        .when(male & (x_nonpar | y_nonpar), hl.call(vds.GT[0], phased=False))
         .default(vds.GT)
     )
 

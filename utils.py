@@ -556,8 +556,8 @@ def process_consequences(vds, vep_root='vep'):
     :return: VDS with better formatted consequences
     :rtype: MatrixTable
     """
-    csqs = hl.capture(CSQ_ORDER)
-    csq_dict = hl.capture(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
+    csqs = hl.literal(CSQ_ORDER)
+    csq_dict = hl.literal(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
 
     def add_most_severe_consequence(tc):
         """
@@ -569,9 +569,9 @@ def process_consequences(vds, vep_root='vep'):
         :return: Transcript consequences expression with most_severe_consequence
         :rtype StructExpression
         """
-        return hl.merge(tc, Struct(
+        return tc.annotate(
             most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
-        ))
+        )
 
     def find_worst_transcript_consequence(tcl):
         """
@@ -583,8 +583,7 @@ def process_consequences(vds, vep_root='vep'):
         """
         if tcl.length() == 0: return tcl
         csq_score = lambda tc: csq_dict[csqs.find(tc)]
-        tcl = tcl.map(lambda tc: hl.merge(tc, Struct(
-            csq_score=hl.case()
+        tcl = tcl.map(lambda tc: tc.annotate(csq_score=hl.case()
             .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - 1000)
             .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - 500)
             .when(tc.lof == 'LC', csq_score(tc) - 10)
@@ -592,7 +591,7 @@ def process_consequences(vds, vep_root='vep'):
             .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
             .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
             .default(csq_score(tc))
-        )))
+        ))
         return tcl.sort_by(lambda x: x.csq_score)[0]
 
     transcript_csqs = vds[vep_root].transcript_consequences.map(add_most_severe_consequence)

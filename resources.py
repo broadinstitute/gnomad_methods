@@ -202,6 +202,20 @@ def annotations_vds_path(data_type, annotation_type, hail_version=CURRENT_HAIL_V
     return 'gs://gnomad/annotations/hail-{0}/vds/{1}/gnomad.{1}.{2}.vds'.format(hail_version, data_type,
                                                                                 annotation_type)
 
+
+def sample_annotations_table_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
+    """
+    Get samples-level annotations
+
+    :param str data_type: One of "exomes" or "genomes"
+    :param str annotation_type: One of "family_stats", "downsampling"
+    :param str hail_version: One of the HAIL_VERSIONs
+    :return: Path to annotations VDS
+    :rtype: str
+    """
+    return 'gs://gnomad/annotations/hail-{0}/sample_tables/{1}/gnomad.{1}.{2}.vds'.format(hail_version, data_type,
+                                                                                          annotation_type)
+
 gnomad_pca_vds_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
 
 

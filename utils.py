@@ -11,6 +11,7 @@ from hail.expr.expression import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
+from typing import Dict, Tuple, List
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")

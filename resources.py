@@ -13,11 +13,11 @@ EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
 
 def public_exomes_mt_path(split=True, version=CURRENT_RELEASE):
-    return 'gs://gnomad-public/release/{0}/vds/exomes/gnomad.exomes.r{0}.sites{1}.vds'.format(version, "" if split else ".unsplit")
+    return 'gs://gnomad-public/release/{0}/mt/exomes/gnomad.exomes.r{0}.sites{1}.mt'.format(version, "" if split else ".unsplit")
 
 
 def public_genomes_mt_path(split=True, version=CURRENT_RELEASE):
-    return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, "" if split else ".unsplit")
+    return 'gs://gnomad-public/release/{0}/mt/genomes/gnomad.genomes.r{0}.sites{1}.mt'.format(version, "" if split else ".unsplit")
 
 
 def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
@@ -166,7 +166,7 @@ def raw_exomes_mt_path(hail_version=CURRENT_HAIL_VERSION):
     """
     Warning: unsplit and no special consideration on sex chromosomes
     """
-    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.mt'.format(hail_version)
+    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
 
 
 def raw_genomes_mt_path(hail_version=CURRENT_HAIL_VERSION):
@@ -199,7 +199,7 @@ def annotations_mt_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VE
     :return: Path to annotations VDS
     :rtype: str
     """
-    return 'gs://gnomad/annotations/hail-{0}/vds/{1}/gnomad.{1}.{2}.vds'.format(hail_version, data_type,
+    return 'gs://gnomad/annotations/hail-{0}/mt/{1}/gnomad.{1}.{2}.mt'.format(hail_version, data_type,
                                                                                 annotation_type)
 
 
@@ -213,10 +213,10 @@ def sample_annotations_table_path(data_type, annotation_type, hail_version=CURRE
     :return: Path to annotations VDS
     :rtype: str
     """
-    return 'gs://gnomad/annotations/hail-{0}/sample_tables/{1}/gnomad.{1}.{2}.vds'.format(hail_version, data_type,
+    return 'gs://gnomad/annotations/hail-{0}/sample_tables/{1}/gnomad.{1}.{2}.ht'.format(hail_version, data_type,
                                                                                           annotation_type)
 
-gnomad_pca_mt_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.vds"
+gnomad_pca_mt_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.mt"
 
 
 def gnomad_public_pca_mt_path(version=CURRENT_RELEASE):
@@ -227,7 +227,7 @@ def gnomad_public_pca_mt_path(version=CURRENT_RELEASE):
     :return: path to gnomAD public PCA VDS
     :rtype: str
     """
-    return "gs://gnomad-public/release/{}/pca/gnomad_pca_loadings.vds".format(version)
+    return "gs://gnomad-public/release/{}/pca/gnomad_pca_loadings.mt".format(version)
 
 
 def metadata_genomes_tsv_path(version=CURRENT_GENOME_META):
@@ -303,7 +303,7 @@ genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wg
 vep_config = "/vep/vep-gcloud.properties"
 
 # Annotations
-context_mt_path = 'gs://gnomad-resources/constraint/context_processed.vds'
+context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'
 
 
 class DataException(Exception):

@@ -63,17 +63,17 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
         mt = filter_to_adj(mt)
 
     if meta_root:
-        meta_kt = get_gnomad_meta(data_type, meta_version)
-        mt = mt.annotate_cols(**{meta_root: meta_kt[mt.s]})
+        meta_ht = get_gnomad_meta(data_type, meta_version)
+        mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
 
     if duplicate_mapping_root:
-        dup_kt = hl.import_table(genomes_exomes_duplicate_ids_tsv_path, impute=True,
+        dup_ht = hl.import_table(genomes_exomes_duplicate_ids_tsv_path, impute=True,
                                  key='exome_id' if data_type == "exomes" else 'genome_id')
-        mt = mt.annotate_cols(**{duplicate_mapping_root: dup_kt[mt.s]})
+        mt = mt.annotate_cols(**{duplicate_mapping_root: dup_ht[mt.s]})
 
     if fam_root:
-        fam_kt = hl.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
-        mt = mt.annotate_cols(**{fam_root: fam_kt[mt.s]})
+        fam_ht = hl.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
+        mt = mt.annotate_cols(**{fam_root: fam_ht[mt.s]})
 
     if release_samples:
         mt = mt.filter_cols(mt.meta.release)
@@ -94,12 +94,12 @@ def get_gnomad_meta(data_type, version=None):
     :return: Metadata Table
     :rtype: Table
     """
-    meta_kt = hl.import_table(get_gnomad_meta_path(data_type, version), impute=True,
+    meta_ht = hl.import_table(get_gnomad_meta_path(data_type, version), impute=True,
                               key="sample" if data_type == "exomes" else "Sample")
 
-    return meta_kt.annotate(
-        release=meta_kt.drop_status == "keep" if data_type == 'exomes' else meta_kt.keep,  # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
-        population=meta_kt.population if data_type == 'exomes' else hl.cond(meta_kt.final_pop == 'sas', 'oth', meta_kt.final_pop)
+    return meta_ht.annotate(
+        release=meta_ht.drop_status == "keep" if data_type == 'exomes' else meta_ht.keep,  # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
+        population=meta_ht.population if data_type == 'exomes' else hl.cond(meta_ht.final_pop == 'sas', 'oth', meta_ht.final_pop)
     )
 
 

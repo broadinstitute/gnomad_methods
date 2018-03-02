@@ -84,27 +84,27 @@ CSQ_NON_CODING = [
 CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
 
 
-def filter_to_adj(vds):
+def filter_to_adj(mt):
     """
     Filter genotypes to adj criteria
 
-    :param MatrixTable vds: VDS
+    :param MatrixTable mt: MT
     :return: MT
     :rtype: MatrixTable
     """
     try:
-        vds = vds.filter_entries(vds.adj)
+        mt = mt.filter_entries(mt.adj)
     except AttributeError:
-        vds = annotate_adj(vds)
-        vds = vds.filter_entries(vds.adj)
-    return vds.drop(vds.adj)
+        mt = annotate_adj(mt)
+        mt = mt.filter_entries(mt.adj)
+    return mt.drop(mt.adj)
 
 
-def annotate_adj(vds):
+def annotate_adj(mt):
     """
     Annotate genotypes with adj criteria (assumes diploid)
 
-    :param MatrixTable vds: MT
+    :param MatrixTable mt: MT
     :return: MT
     :rtype: MatrixTable
     """
@@ -112,12 +112,12 @@ def annotate_adj(vds):
     adj_dp = 10
     adj_ab = 0.2
 
-    return vds.annotate_entries(adj=
-                                (vds.GQ >= adj_gq) & (vds.DP >= adj_dp) & (
-                                    ~vds.GT.is_het() |
-                                    ((vds.GT[0] == 0) & (vds.AD[vds.GT[1]] / vds.DP >= adj_ab)) |
-                                    ((vds.GT[0] > 0) & (vds.AD[vds.GT[0]] / vds.DP >= adj_ab) &
-                                     (vds.AD[vds.GT[1]] / vds.DP >= adj_ab))
+    return mt.annotate_entries(adj=
+                                (mt.GQ >= adj_gq) & (mt.DP >= adj_dp) & (
+                                    ~mt.GT.is_het() |
+                                    ((mt.GT[0] == 0) & (mt.AD[mt.GT[1]] / mt.DP >= adj_ab)) |
+                                    ((mt.GT[0] > 0) & (mt.AD[mt.GT[0]] / mt.DP >= adj_ab) &
+                                     (mt.AD[mt.GT[1]] / mt.DP >= adj_ab))
                                 )
     )
 
@@ -145,88 +145,88 @@ def add_variant_type(alt_alleles):
                   n_alt_alleles=hl.len(non_star_alleles))
 
 
-def split_multi_dynamic(vds, keep_star=False, left_aligned=True):
+def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
     """
     Splits MatrixTable based on entry fields found. Downcodes whatever it can. Supported so far:
     GT, DP, AD, PL, GQ
     PGT, PID
     ADALL
 
-    :param MatrixTable vds: Input MatrixTable
+    :param MatrixTable mt: Input MatrixTable
     :return: Split MatrixTable
     :rtype: MatrixTable
     """
-    fields = set(map(lambda x: x.name, vds.entry_schema.fields))
-    sm = hl.SplitMulti(vds, keep_star=keep_star, left_aligned=left_aligned)
+    fields = set(map(lambda x: x.name, mt.entry_schema.fields))
+    sm = hl.SplitMulti(mt, keep_star=keep_star, left_aligned=left_aligned)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
     expression = {}
 
     # HTS/standard
     if 'GT' in fields:
-        expression['GT'] = hl.downcode(vds.GT, sm.a_index())
+        expression['GT'] = hl.downcode(mt.GT, sm.a_index())
     if 'DP' in fields:
-        expression['DP'] = vds.DP
+        expression['DP'] = mt.DP
     if 'AD' in fields:
-        expression['AD'] = hl.or_missing(hl.is_defined(vds.AD),
-                                         [hl.sum(vds.AD) - vds.AD[sm.a_index()], vds.AD[sm.a_index()]])
+        expression['AD'] = hl.or_missing(hl.is_defined(mt.AD),
+                                         [hl.sum(mt.AD) - mt.AD[sm.a_index()], mt.AD[sm.a_index()]])
     if 'PL' in fields:
         pl = hl.or_missing(
-            hl.is_defined(vds.PL),
+            hl.is_defined(mt.PL),
             (hl.range(0, 3).map(lambda i:
-                                hl.min((hl.range(0, hl.triangle(vds.alleles.length()))
+                                hl.min((hl.range(0, hl.triangle(mt.alleles.length()))
                                         .filter(lambda j: hl.downcode(hl.unphased_diploid_gt_index_call(j),
                                                                       sm.a_index()) == hl.unphased_diploid_gt_index_call(i)
-                                ).map(lambda j: vds.PL[j]))))))
+                                ).map(lambda j: mt.PL[j]))))))
         expression['PL'] = pl
         if 'GQ' in fields:
             expression['GQ'] = hl.gq_from_pl(pl)
     else:
         if 'GQ' in fields:
-            expression['GQ'] = vds.GQ
+            expression['GQ'] = mt.GQ
 
     # Phased data
     if 'PGT' in fields:
-        expression['PGT'] = hl.downcode(vds.PGT, sm.a_index())
+        expression['PGT'] = hl.downcode(mt.PGT, sm.a_index())
     if 'PID' in fields:
-        expression['PGT'] = vds.PID
+        expression['PGT'] = mt.PID
 
     # Custom data
     if 'ADALL' in fields:  # found in NA12878
-        expression['ADALL'] = hl.or_missing(hl.is_defined(vds.ADALL),
-                                            [hl.sum(vds.ADALL) - vds.ADALL[sm.a_index()], vds.ADALL[sm.a_index()]])
+        expression['ADALL'] = hl.or_missing(hl.is_defined(mt.ADALL),
+                                            [hl.sum(mt.ADALL) - mt.ADALL[sm.a_index()], mt.ADALL[sm.a_index()]])
 
     sm.update_entries(**expression)
     return sm.result()
 
 
-def adjust_sex_ploidy(vds, sex_expr):
+def adjust_sex_ploidy(mt, sex_expr):
     """
     Converts males to haploid on non-PAR X/Y, sets females to missing on Y
 
-    :param MatrixTable vds: VDS
-    :param StringExpression sex_expr: Expression pointing to sex in VDS (must be "male" and "female", otherwise no change)
+    :param MatrixTable mt: MT
+    :param StringExpression sex_expr: Expression pointing to sex in MT (must be "male" and "female", otherwise no change)
     :return: MatrixTable with fixed ploidy for sex chromosomes
     :rtype: MatrixTable
     """
     male = sex_expr == 'male'
     female = sex_expr == 'female'
-    x_nonpar = vds.locus.in_x_nonpar()
-    y_par = vds.locus.in_y_par()
-    y_nonpar = vds.locus.in_y_nonpar()
-    return vds.annotate_entries(
+    x_nonpar = mt.locus.in_x_nonpar()
+    y_par = mt.locus.in_y_par()
+    y_nonpar = mt.locus.in_y_nonpar()
+    return mt.annotate_entries(
         GT=hl.case()
         .when(female & (y_par | y_nonpar), hl.null(hl.TCall()))
-        .when(male & (x_nonpar | y_nonpar) & vds.GT.is_het(), hl.null(hl.TCall()))
-        .when(male & (x_nonpar | y_nonpar), hl.call(vds.GT[0], phased=False))
-        .default(vds.GT)
+        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.TCall()))
+        .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
+        .default(mt.GT)
     )
 
 
-def get_sample_data(vds, fields, sep='\t', delim='|'):
+def get_sample_data(mt, fields, sep='\t', delim='|'):
     """
     Hail devs hate this one simple py4j trick to speed up sample queries
 
-    :param MatrixTable or Table vds: MT
+    :param MatrixTable or Table mt: MT
     :param list of StringExpression fields: fields
     :param sep: Separator to use (tab usually fine)
     :param delim: Delimiter to use (pipe usually fine)
@@ -236,11 +236,11 @@ def get_sample_data(vds, fields, sep='\t', delim='|'):
     field_expr = fields[0]
     for field in fields[1:]:
         field_expr = field_expr + '|' + field
-    if isinstance(vds, hl.MatrixTable):
-        vds_agg = vds.aggregate_cols
+    if isinstance(mt, hl.MatrixTable):
+        mt_agg = mt.aggregate_cols
     else:
-        vds_agg = vds.aggregate
-    return [x.split(delim) for x in vds_agg(hl.delimit(hl.agg.collect(field_expr), sep)).split(sep) if x != 'null']
+        mt_agg = mt.aggregate
+    return [x.split(delim) for x in mt_agg(hl.delimit(hl.agg.collect(field_expr), sep)).split(sep) if x != 'null']
 
 
 def add_popmax_expr(freq):
@@ -258,22 +258,22 @@ def add_popmax_expr(freq):
                               meta={'popmax': popmax_entry.meta['population']}))
 
 
-def get_projectmax(vds, loc):
+def get_projectmax(mt, loc):
     """
-    First pass of projectmax (returns aggregated VDS with project_max field)
+    First pass of projectmax (returns aggregated MT with project_max field)
 
-    :param MatrixTable vds: Input VDS
-    :param StringExpression loc: Column expression location of project ID (e.g. vds.meta.pid)
+    :param MatrixTable mt: Input MT
+    :param StringExpression loc: Column expression location of project ID (e.g. mt.meta.pid)
     :return: Frequency data with annotated project_max
     :rtype: MatrixTable
     """
     # TODO: add hom count
-    vds = vds.annotate_cols(project=loc)
-    agg_vds = vds.group_cols_by(vds.project).aggregate(ac=hl.agg.sum(vds.GT.num_alt_alleles()),
-                                                       an=2 * hl.agg.count_where(hl.is_defined(vds.GT)))
-    agg_vds = agg_vds.annotate_entries(af=agg_vds.ac / agg_vds.an)
-    return agg_vds.annotate_rows(project_max=hl.agg.take(Struct(project=agg_vds.project, ac=agg_vds.ac,
-                                                                af=agg_vds.af, an=agg_vds.an), 5, -agg_vds.af))
+    mt = mt.annotate_cols(project=loc)
+    agg_mt = mt.group_cols_by(mt.project).aggregate(ac=hl.agg.sum(mt.GT.num_alt_alleles()),
+                                                       an=2 * hl.agg.count_where(hl.is_defined(mt.GT)))
+    agg_mt = agg_mt.annotate_entries(af=agg_mt.ac / agg_mt.an)
+    return agg_mt.annotate_rows(project_max=hl.agg.take(Struct(project=agg_mt.project, ac=agg_mt.ac,
+                                                                af=agg_mt.af, an=agg_mt.an), 5, -agg_mt.af))
 
 
 def flatten_struct(struct, root='va', leaf_only=True, recursive=True):
@@ -398,7 +398,7 @@ def annotation_type_in_vcf_info(t):
             )
 
 
-def run_samples_sanity_checks(vds, reference_vds, n_samples=10, verbose=True):
+def run_samples_sanity_checks(mt, reference_mt, n_samples=10, verbose=True):
     """
     logger.info("Running samples sanity checks on %d samples" % n_samples)
 
@@ -412,17 +412,17 @@ def run_samples_sanity_checks(vds, reference_vds, n_samples=10, verbose=True):
                           'nHet'
                           ]
 
-    samples = vds.sample_ids[:n_samples]
+    samples = mt.sample_ids[:n_samples]
 
-    def get_samples_metrics(vds, samples):
-        metrics = (vds.filter_samples_expr('["%s"].toSet.contains(s)' % '","'.join(samples))
+    def get_samples_metrics(mt, samples):
+        metrics = (mt.filter_samples_expr('["%s"].toSet.contains(s)' % '","'.join(samples))
                    .sample_qc()
                    .query_samples('samples.map(s => {sample: s, metrics: sa.qc }).collect()')
                    )
         return {x.sample: x.metrics for x in metrics}
 
-    test_metrics = get_samples_metrics(vds, samples)
-    ref_metrics = get_samples_metrics(reference_vds, samples)
+    test_metrics = get_samples_metrics(mt, samples)
+    ref_metrics = get_samples_metrics(reference_mt, samples)
 
     output = ''
 
@@ -453,27 +453,27 @@ def filter_annotations_regex(annotation_fields, ignore_list):
     return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
 
 
-def pc_project(vds, pc_vds, pca_loadings_root='va.pca_loadings'):
+def pc_project(mt, pc_mt, pca_loadings_root='va.pca_loadings'):
     """
-    Projects samples in `vds` on PCs computed in `pc_vds`
-    :param vds: VDS containing the samples to project
-    :param pc_vds: VDS containing the PC loadings for the variants
+    Projects samples in `mt` on PCs computed in `pc_mt`
+    :param mt: MT containing the samples to project
+    :param pc_mt: MT containing the PC loadings for the variants
     :param pca_loadings_root: Annotation root for the loadings. Can be either an Array[Double] or a Struct{ PC1: Double, PC2: Double, ...}
-    :return: VDS with
+    :return: MT with
 
-    pc_vds = pc_vds.annotate_variants_expr('va.pca.calldata = gs.callStats(g => v)')
+    pc_mt = pc_mt.annotate_variants_expr('va.pca.calldata = gs.callStats(g => v)')
 
-    pcs_struct_to_array = ",".join(['vds.pca_loadings.PC%d' % x for x in range(1, 21)])
+    pcs_struct_to_array = ",".join(['mt.pca_loadings.PC%d' % x for x in range(1, 21)])
     arr_to_struct_expr = ",".join(['PC%d: sa.pca[%d - 1]' % (x, x) for x in range(1, 21)])
 
-    vds = (vds.filter_multi()
-           .annotate_variants_vds(pc_vds, expr = 'va.pca_loadings = [%s], va.pca_af = vds.pca.calldata.AF[1]' % pcs_struct_to_array)
+    mt = (mt.filter_multi()
+           .annotate_variants_mt(pc_mt, expr = 'va.pca_loadings = [%s], va.pca_af = mt.pca.calldata.AF[1]' % pcs_struct_to_array)
            .filter_variants_expr('!isMissing(va.pca_loadings) && !isMissing(va.pca_af)')
      )
 
-    n_variants = vds.query_variants(['variants.count()'])[0]
+    n_variants = mt.query_variants(['variants.count()'])[0]
 
-    return(vds
+    return(mt
            .annotate_samples_expr('sa.pca = gs.filter(g => g.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
            .annotate_samples_expr('sa.pca = {%s}' % arr_to_struct_expr)
     )
@@ -494,61 +494,61 @@ def read_list_data(input_file):
     return output
 
 
-def rename_samples(vds, input_file, filter_to_samples_in_file=False):
+def rename_samples(mt, input_file, filter_to_samples_in_file=False):
     """
     names = {old: new for old, new in [x.split("\t") for x in read_list_data(input_file)]}
     logger.info("Found %d samples for renaming in input file %s." % (len(names.keys()), input_file))
-    logger.info("Renaming %d samples found in VDS" % len(set(names.keys()).intersection(set(vds.sample_ids)) ))
+    logger.info("Renaming %d samples found in MT" % len(set(names.keys()).intersection(set(mt.sample_ids)) ))
 
     if filter_to_samples_in_file:
-        vds = vds.filter_samples_list(names.keys())
-    return vds.rename_samples(names)
+        mt = mt.filter_samples_list(names.keys())
+    return mt.rename_samples(names)
     """
     raise NotImplementedError
 
 
-def filter_low_conf_regions(vds, filter_lcr=True, filter_decoy=True, filter_segdup=True, high_conf_regions=None):
+def filter_low_conf_regions(mt, filter_lcr=True, filter_decoy=True, filter_segdup=True, high_conf_regions=None):
     """
     Filters low-confidence regions
 
-    :param MatrixTable vds: VDS to filter
+    :param MatrixTable mt: MT to filter
     :param bool filter_lcr: Whether to filter LCR regions
     :param bool filter_decoy: Whether to filter decoy regions
     :param bool filter_segdup: Whether to filter Segdup regions
     :param list of str high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
-    :return: VDS with low confidence regions removed
+    :return: MT with low confidence regions removed
     :rtype: MatrixTable
     """
     from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path
 
     if filter_lcr:
         lcr = hl.import_interval_list(lcr_intervals_path)
-        vds = vds.filter_rows(lcr[vds.locus], keep=False)
+        mt = mt.filter_rows(lcr[mt.locus], keep=False)
 
     if filter_decoy:
         decoy = hl.import_interval_list(decoy_intervals_path)
-        vds = vds.filter_rows(decoy[vds.locus], keep=False)
+        mt = mt.filter_rows(decoy[mt.locus], keep=False)
 
     if filter_segdup:
         segdup = hl.import_interval_list(segdup_intervals_path)
-        vds = vds.filter_rows(segdup[vds.locus], keep=False)
+        mt = mt.filter_rows(segdup[mt.locus], keep=False)
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
             region = hl.import_interval_list(region)
-            vds = vds.filter_rows(region[vds.locus], keep=True)
+            mt = mt.filter_rows(region[mt.locus], keep=True)
 
-    return vds
+    return mt
 
 
-def process_consequences(vds, vep_root='vep'):
+def process_consequences(mt, vep_root='vep'):
     """
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
     and worst_csq_by_gene, canonical_csq_by_gene, any_lof into [vep_root]
 
-    :param MatrixTable vds: Input VDS
+    :param MatrixTable mt: Input MT
     :param str vep_root: Root for vep annotation (probably vep)
-    :return: VDS with better formatted consequences
+    :return: MT with better formatted consequences
     :rtype: MatrixTable
     """
     csqs = hl.literal(CSQ_ORDER)
@@ -589,46 +589,46 @@ def process_consequences(vds, vep_root='vep'):
         ))
         return tcl.sort_by(lambda x: x.csq_score)[0]
 
-    transcript_csqs = vds[vep_root].transcript_consequences.map(add_most_severe_consequence)
+    transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence)
 
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)
     canonical_csq_gene = gene_dict.map_values(lambda tcl: tcl.filter(lambda tc: tc.canonical == 1)[0])
     worst_csq = csqs.find(lambda c: transcript_csqs.map(lambda tc: tc.most_severe_consequence).contains(c))
 
-    vep_data = vds[vep_root].annotate(transcript_consequences=transcript_csqs,
+    vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                       worst_csq_by_gene=worst_csq_gene,
                                       canonical_csq_by_gene=canonical_csq_gene,
                                       any_lof=worst_csq_gene.values().exists(lambda x: x.lof == 'HC'),
                                       worst_csq_overall=worst_csq)
 
-    return vds.annotate_rows(**{vep_root: vep_data})
+    return mt.annotate_rows(**{vep_root: vep_data})
 
 
-def filter_vep_to_canonical_transcripts(vds, vep_root='vep'):
+def filter_vep_to_canonical_transcripts(mt, vep_root='vep'):
     """
 
-    :param MatrixTable vds: VDS
+    :param MatrixTable mt: MT
     :param str vep_root: Location of VEP data
     :return: MT
     :rtype: MatrixTable
     """
-    canonical = vds[vep_root].transcript_consequences.filter(lambda csq: csq.canonical == 1)
-    vep_data = vds[vep_root].annotate(transcript_consequences=canonical)
-    return vds.annotate_rows(**{vep_root: vep_data})
+    canonical = mt[vep_root].transcript_consequences.filter(lambda csq: csq.canonical == 1)
+    vep_data = mt[vep_root].annotate(transcript_consequences=canonical)
+    return mt.annotate_rows(**{vep_root: vep_data})
 
 
-def filter_vep_to_synonymous_variants(vds, vep_root='vep'):
+def filter_vep_to_synonymous_variants(mt, vep_root='vep'):
     """
 
-    :param MatrixTable vds: Input VDS
+    :param MatrixTable mt: Input MT
     :param str vep_root: Location of VEP data
     :return: MT
     :rtype: MatrixTable
     """
-    synonymous = vds[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
-    vep_data = vds[vep_root].annotate(transcript_consequences=synonymous)
-    return vds.annotate_rows(**{vep_root: vep_data})
+    synonymous = mt[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
+    vep_data = mt[vep_root].annotate(transcript_consequences=synonymous)
+    return mt.annotate_rows(**{vep_root: vep_data})
 
 
 def toSSQL(s):

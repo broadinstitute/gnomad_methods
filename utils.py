@@ -153,6 +153,8 @@ def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
     ADALL
 
     :param MatrixTable mt: Input MatrixTable
+    :param bool keep_star: whether to keep star alleles (passed to SplitMulti)
+    :param bool left_aligned: whether matrix table is already left_aligned (passed to SplitMulti)
     :return: Split MatrixTable
     :rtype: MatrixTable
     """

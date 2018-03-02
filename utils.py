@@ -404,6 +404,7 @@ def annotation_type_in_vcf_info(t):
 
 
 def run_samples_sanity_checks(vds, reference_vds, n_samples=10, verbose=True):
+    """
     logger.info("Running samples sanity checks on %d samples" % n_samples)
 
     comparison_metrics = ['nHomVar',
@@ -445,6 +446,8 @@ def run_samples_sanity_checks(vds, reference_vds, n_samples=10, verbose=True):
 
     logger.info(output)
     return output
+    """
+    raise NotImplementedError
 
 
 def filter_annotations_regex(annotation_fields, ignore_list):
@@ -612,7 +615,7 @@ def filter_vep_to_canonical_transcripts(vds, vep_root='vep'):
     """
 
     :param MatrixTable vds: VDS
-    :param vep_root: root
+    :param str vep_root: Location of VEP data
     :return: MT
     :rtype: MatrixTable
     """
@@ -622,8 +625,15 @@ def filter_vep_to_canonical_transcripts(vds, vep_root='vep'):
 
 
 def filter_vep_to_synonymous_variants(vds, vep_root='vep'):
-    canonical = vds[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
-    vep_data = vds[vep_root].annotate(transcript_consequences=canonical)
+    """
+
+    :param MatrixTable vds: Input VDS
+    :param str vep_root: Location of VEP data
+    :return: MT
+    :rtype: MatrixTable
+    """
+    synonymous = vds[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
+    vep_data = vds[vep_root].annotate(transcript_consequences=synonymous)
     return vds.annotate_rows(**{vep_root: vep_data})
 
 
@@ -757,144 +767,3 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
             .drop('comb'))
     """
     raise NotImplementedError
-
-
-def quote_field_name(f):
-    """
-    Given a field name, returns the name quote if necessary for Hail columns access.
-    E.g.
-    - The name contains a `.`
-    - The name starts with a numeric
-
-    :param str f: The field name
-    :return: Quoted (or not) field name
-    :rtype: str
-    """
-
-    return '`{}`'.format(f) if re.search('^\d|\.', f) else f
-
-
-def merge_TStructs(s):
-    """
-
-    Merges multiple TStructs together and outputs a new TStruct with the union of the fields.
-    Notes:
-    - In case of conflicting field name/type, an error is raised.
-    - In case of conflicting attribute key/value, a warning is reported and the first value is kept (in order of VDSes passed).
-
-    :param list of TStruct s: List of Structs to merge
-    :return: Merged Struct
-    :rtype: TStruct
-
-    """
-
-    if not s:
-        raise ValueError("`merge_TStructs` called on an empty list.")
-
-    if len(s) < 2:
-        logger.warn("Called `merge_TStructs` on a list with a single `TStruct` -- returning that `TStruct`.")
-        return s.pop()
-
-    fields = OrderedDict()
-    s_fields = [flatten_struct(x, root='', recursive=False) for x in s]
-
-    while len(s_fields) > 0:
-        s_current = s_fields.pop(0)
-        for name, f in s_current.iteritems():
-            if name not in fields:
-                attributes = f.attributes
-                f_overlap = [x[name] for x in s_fields if name in x]
-
-                for f2 in f_overlap:
-                    if not isinstance(f2.typ, type(f.typ)):
-                        raise TypeError("Cannot merge structs with type {} and {}".format(f.typ, f2.typ))
-                    for k,v in f2.attributes.iteritems():
-                        if k in attributes:
-                            if v != attributes[k]:
-                                logger.warn("Found different values for attribute {} for field {} while merging structs:{}, {}".format(k,name,attributes[k],v))
-                        else:
-                            attributes[k] = v
-
-                if isinstance(f.typ, TStruct) and f_overlap:
-                    fields[name] = Field(name, merge_TStructs([f.typ] + [f2.typ for f2 in f_overlap]))
-                else:
-                    fields[name] = f
-
-                fields[name].attributes = attributes
-
-    return TStruct.from_fields(fields.values())
-
-
-def replace_vds_variant_schema(vds, new_schema):
-    """
-
-    Replaces the input VDS va with the new schema. Values for all fields present in the old variant schema
-    that have the same type are kept (field with same name, different types are replaced).
-    All other fields are filled with `NA`.
-
-    :param VariantDataset vds: input VDS
-    :param TStruct new_schema: new schema
-    :return: VDS with new schema
-    :rtype: VariantDataset
-    """
-
-    def get_schema_expr(struct, root, old_schema_fields):
-        """
-
-        Returns a variant annotation expression of the input `TStruct` with its fields equal to:
-        - themselves (e.g. `va.test` : `va.test`) if present in `old_schema_fields` with the same type
-        - `NA` otherwise
-
-        :param TStruct struct: TStruct to get the schema expression from
-        :param str root: Root of that `TStruct`
-        :param dict of str:Field old_schema_fields: Dict containing the mapping between the paths and Fields in the old schema
-        :return: Variant annotation expression
-        :rtype: str
-        """
-
-        field_expr = []
-
-        for f in struct.fields:
-            path = '{}.{}'.format(root, f.name)
-            if not path in old_schema_fields.keys():
-                field_expr.append('{}: NA:{}'.format(f.name, f.typ))
-            elif not isinstance(old_schema_fields[path].typ, f.typ):
-                logger.warn("Field {} found with different types in old ({}) and new ({}) schemas. Overriding with new schema -- all schema values will be lost).".format(
-                    path,
-                    old_schema_fields[path].typ,
-                    f.typ
-                ))
-                field_expr.append('{}: NA:{}'.format(f.name, f.typ))
-            elif isinstance(f.typ, TStruct):
-                field_expr.append('{}: {}'.format(f.name, get_schema_expr(f.typ, path, old_schema_fields)))
-            else:
-                field_expr.append('{}: {}'.format(f.name, path))
-
-        return '{{{}}}'.format(",".join(field_expr))
-
-    vds = vds.annotate_variants_expr('va = {}'.format(
-        get_schema_expr(new_schema, 'va', flatten_struct(vds.variant_schema, root='va', leaf_only=False))))
-
-    for path, field in flatten_struct(new_schema, root='va').iteritems():
-        if field.attributes:
-            vds = vds.set_va_attributes(path, field.attributes)
-
-    return vds
-
-
-def unify_vds_schemas(vdses):
-    """
-
-    Given a list of VDSes, unifies their schema. Fields with the same name and type are assumed to be the same.
-    Field attributes are merged.
-    Notes:
-    - In case of conflicting field name/type, an error is raised.
-    - In case of conflicting attribute key/value, a warning is reported and the first value is kept (in order of VDSes passed).
-
-    :param list of VariantDataset vdses: The VDSes to unify
-    :return: VDSes with unified schemas
-    :rtype: list of VariantDataset
-    """
-
-    unified_schema = merge_TStructs([vds.variant_schema for vds in vdses])
-    return [replace_vds_variant_schema(vds, unified_schema) for vds in vdses]

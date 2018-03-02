@@ -5,7 +5,7 @@ def get_slack_info():
     from slackclient import SlackClient
     # import os
     try:
-        from slack_creds import slack_token
+        from gnomad_hail.slack_creds import slack_token
     except Exception:
         return None
 
@@ -63,8 +63,8 @@ def send_snippet(channels=None, content='', filename='data.txt'):
                                content=content,
                                filename=filename)
         except Exception:
-            print 'Slack connection fail. Was going to send:'
-            print content
+            print('Slack connection fail. Was going to send:')
+            print(content)
 
 
 def try_slack(target, func, *args):
@@ -79,11 +79,11 @@ def try_slack(target, func, *args):
     except Exception as e:
         try:
             emoji = ':white_frowning_face:'
-            if len(e.message) > 4000:  # Slack message length limit (from https://api.slack.com/methods/chat.postMessage)
+            if len(str(e)) > 4000:  # Slack message length limit (from https://api.slack.com/methods/chat.postMessage)
                 filename = 'error_{}_{}.txt'.format(process, time.strftime("%Y-%m-%d_%H:%M"))
                 snippet = send_snippet(target, traceback.format_exc(), filename=filename)
                 if 'file' in snippet:
-                    if 'SparkContext was shut down' in e.message or 'connect to the Java server' in e.message:
+                    if 'SparkContext was shut down' in e or 'connect to the Java server' in e:
                         send_message(target, 'Job ({}) cancelled - see {} for error log'.format(process, snippet['file']['url_private']), ':beaker:')
                     else:
                         send_message(target, 'Job ({}) failed :white_frowning_face: - see {} for error log'.format(process, snippet['file']['url_private']), emoji)
@@ -93,5 +93,5 @@ def try_slack(target, func, *args):
                 send_message(target, 'Job ({}) failed :white_frowning_face:\n```{}```'.format(process, traceback.format_exc()), emoji)
             raise e
         except ImportError as f:
-            print "ERROR: missing slackclient. But here's the original error:"
+            print("ERROR: missing slackclient. But here's the original error:")
             raise e

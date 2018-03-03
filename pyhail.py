@@ -49,7 +49,7 @@ def main(args, pass_through_args):
     except Exception:
         pass
 
-    spark_version = '2.2.0' if args.spark22 else '2.0.2'
+    spark_version = '2.2.0' if args.hail_version == 'devel' else '2.0.2'
     if not hash_string:
         hash_string = subprocess.check_output(['gsutil', 'cat', 'gs://hail-common/builds/{}/latest-hash-spark-{}.txt'.format(args.hail_version, spark_version)]).rstrip()
 
@@ -117,10 +117,9 @@ if __name__ == '__main__':
     parser.add_argument('--script', '--input', '-i', help='Script to run')
     parser.add_argument('--inline', help='Inline script to run')
     parser.add_argument('--cluster', help='Which cluster to run on', required=True)
-    parser.add_argument('--spark22', help='Use Spark2.2 hail JAR', action='store_true')
 
     hail_script_options = parser.add_argument_group('Additional hail script options')
-    hail_script_options.add_argument('--hail_version', help='Hail version (0.1 or devel)', default='0.1')
+    hail_script_options.add_argument('--hail_version', help='Hail version (0.1 or devel)', default='devel')
     hail_script_options.add_argument('--jar', help='Jar file to use')
     hail_script_options.add_argument('--zip', help='Hail zip file to use')
     hail_script_options.add_argument('--add_scripts', help='Comma-separated list of additional python scripts to add.')

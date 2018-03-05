@@ -6,7 +6,6 @@ import gzip
 import os
 
 import hail as hl
-from hail.expr import Field
 from hail.expr.expression import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
@@ -158,7 +157,7 @@ def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
     :return: Split MatrixTable
     :rtype: MatrixTable
     """
-    fields = set(map(lambda x: x.name, mt.entry_schema.fields))
+    fields = mt.entry_schema.fields
     sm = hl.SplitMulti(mt, keep_star=keep_star, left_aligned=left_aligned)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
     expression = {}

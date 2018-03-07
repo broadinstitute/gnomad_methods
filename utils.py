@@ -6,11 +6,11 @@ import gzip
 import os
 
 import hail as hl
-from hail.expr.expression import *
+from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
-from typing import Dict, Tuple, List
+from typing import *
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")

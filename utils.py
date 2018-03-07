@@ -132,16 +132,16 @@ def add_variant_type(alt_alleles):
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != '*', alts)
-    return Struct(variant_type=
-                  hl.cond(
-                      hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
-                      hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
-                      hl.cond(
-                          hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
-                          hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
-                          "mixed")
-                  ),
-                  n_alt_alleles=hl.len(non_star_alleles))
+    return hl.struct(variant_type=
+                     hl.cond(
+                         hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
+                         hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
+                         hl.cond(
+                             hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
+                             hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
+                             "mixed")
+                     ),
+                     n_alt_alleles=hl.len(non_star_alleles))
 
 
 def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
@@ -216,8 +216,8 @@ def adjust_sex_ploidy(mt, sex_expr):
     y_nonpar = mt.locus.in_y_nonpar()
     return mt.annotate_entries(
         GT=hl.case()
-        .when(female & (y_par | y_nonpar), hl.null(hl.TCall()))
-        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.TCall()))
+        .when(female & (y_par | y_nonpar), hl.null(hl.tcall()))
+        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall()))
         .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
         .default(mt.GT)
     )
@@ -244,7 +244,7 @@ def get_sample_data(mt, fields, sep='\t', delim='|'):
     return [x.split(delim) for x in mt_agg(hl.delimit(hl.agg.collect(field_expr), sep)).split(sep) if x != 'null']
 
 
-def add_popmax_expr(freq):
+def add_popmax_expr(freq: ArrayExpression) -> ArrayExpression:
     """
     First pass of popmax (add an additional entry into freq with popmax: pop)
     TODO: update dict instead?
@@ -254,9 +254,10 @@ def add_popmax_expr(freq):
     :rtype: ArrayStructExpression
     """
     freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['population']) & (x.meta['population'] != 'oth'), freq)
-    popmax_entry = hl.sorted(freq_filtered, key=lambda x: x.ac / x.an, reverse=True)[0]  # TODO: check for missing
-    return freq.append(Struct(ac=popmax_entry.ac, an=popmax_entry.an, hom=popmax_entry.hom,
-                              meta={'popmax': popmax_entry.meta['population']}))
+    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.ac / x.an, reverse=True)
+    return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
+        hl.struct(ac=sorted_freqs[0].ac, an=sorted_freqs[0].an, hom=sorted_freqs[0].hom,
+                  meta={'popmax': sorted_freqs[0].meta['population']})), freq)
 
 
 def get_projectmax(mt, loc):
@@ -270,11 +271,13 @@ def get_projectmax(mt, loc):
     """
     # TODO: add hom count
     mt = mt.annotate_cols(project=loc)
-    agg_mt = mt.group_cols_by(mt.project).aggregate(ac=hl.agg.sum(mt.GT.num_alt_alleles()),
-                                                       an=2 * hl.agg.count_where(hl.is_defined(mt.GT)))
+    agg_mt = mt.group_cols_by(mt.project).aggregate(ac=hl.agg.sum(mt.GT.n_alt_alleles()),
+                                                    an=2 * hl.agg.count_where(hl.is_defined(mt.GT)),
+                                                    hom=hl.agg.count_where(mt.GT.n_alt_alleles() == 2))
     agg_mt = agg_mt.annotate_entries(af=agg_mt.ac / agg_mt.an)
-    return agg_mt.annotate_rows(project_max=hl.agg.take(Struct(project=agg_mt.project, ac=agg_mt.ac,
-                                                                af=agg_mt.af, an=agg_mt.an), 5, -agg_mt.af))
+    return agg_mt.annotate_rows(project_max=hl.agg.take(hl.struct(project=agg_mt.project, ac=agg_mt.ac,
+                                                                  af=agg_mt.af, an=agg_mt.an, hom=agg_mt.hom),
+                                                        5, -agg_mt.af))
 
 
 def flatten_struct(struct, root='va', leaf_only=True, recursive=True):

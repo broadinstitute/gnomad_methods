@@ -157,7 +157,7 @@ def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
     :return: Split MatrixTable
     :rtype: MatrixTable
     """
-    fields = mt.entry_schema.fields
+    fields = list(mt.entry)
     sm = hl.SplitMulti(mt, keep_star=keep_star, left_aligned=left_aligned)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
     expression = {}

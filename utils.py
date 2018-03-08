@@ -598,7 +598,7 @@ def process_consequences(mt, vep_root='vep'):
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                      worst_csq_by_gene=worst_csq_gene,
                                      canonical_csq_by_gene=canonical_csq_gene,
-                                     any_lof=worst_csq_gene.values().exists(lambda x: x.lof == 'HC'),
+                                     any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene.values()),
                                      worst_csq_overall=worst_csq)
 
     return mt.annotate_rows(**{vep_root: vep_data})

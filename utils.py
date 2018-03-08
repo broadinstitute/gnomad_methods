@@ -592,7 +592,7 @@ def process_consequences(mt, vep_root='vep'):
             .default(csq_score(tc))
         ))
         return (hl.case()
-                .when(hl.len(tcl) > 0, tcl.sort_by(lambda x: x.csq_score)[0])
+                .when(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
                 .or_missing()
         )
 

@@ -558,27 +558,19 @@ def process_consequences(mt, vep_root='vep'):
     csqs = hl.literal(CSQ_ORDER)
     csq_dict = hl.literal(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
 
-    def add_most_severe_consequence(tc):
+    def add_most_severe_consequence(tc: StructExpression) -> StructExpression:
         """
         Add most_severe_consequence annotation to transcript consequences
         This is for a given transcript, as there are often multiple annotations for a single transcript:
         e.g. splice_region_variant&intron_variant -> splice_region_variant
-
-        :param StructExpression tc: Transcript consequences expression
-        :return: Transcript consequences expression with most_severe_consequence
-        :rtype StructExpression
         """
         return tc.annotate(
             most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
         )
 
-    def find_worst_transcript_consequence(tcl):
+    def find_worst_transcript_consequence(tcl: ArrayExpression) -> StructExpression:
         """
         Gets worst transcript_consequence from an array of em
-
-        :param ArrayStructExpression tcl: Array of Structs, one for each consequence
-        :return: Worst transcript consequence among an array
-        :rtype: StructExpression
         """
         csq_score = lambda tc: csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
         tcl = tcl.map(lambda tc: tc.annotate(

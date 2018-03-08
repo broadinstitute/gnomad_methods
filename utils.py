@@ -580,7 +580,7 @@ def process_consequences(mt, vep_root='vep'):
         :return: Worst transcript consequence among an array
         :rtype: StructExpression
         """
-        csq_score = lambda tc: csq_dict[csqs.find(tc)]
+        csq_score = lambda tc: csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
         tcl = tcl.map(lambda tc: tc.annotate(
             csq_score=hl.case()
             .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - 1000)
@@ -591,7 +591,10 @@ def process_consequences(mt, vep_root='vep'):
             .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
             .default(csq_score(tc))
         ))
-        return hl.cond(hl.len(tcl) > 0, tcl.sort_by(lambda x: x.csq_score)[0], tcl)
+        return (hl.case()
+                .when(hl.len(tcl) > 0, tcl.sort_by(lambda x: x.csq_score)[0])
+                .or_missing()
+        )
 
     transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence)
 

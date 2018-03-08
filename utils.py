@@ -580,9 +580,9 @@ def process_consequences(mt, vep_root='vep'):
         :return: Worst transcript consequence among an array
         :rtype: StructExpression
         """
-        if tcl.length() == 0: return tcl
         csq_score = lambda tc: csq_dict[csqs.find(tc)]
-        tcl = tcl.map(lambda tc: tc.annotate(csq_score=hl.case()
+        tcl = tcl.map(lambda tc: tc.annotate(
+            csq_score=hl.case()
             .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - 1000)
             .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - 500)
             .when(tc.lof == 'LC', csq_score(tc) - 10)
@@ -591,7 +591,7 @@ def process_consequences(mt, vep_root='vep'):
             .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
             .default(csq_score(tc))
         ))
-        return tcl.sort_by(lambda x: x.csq_score)[0]
+        return hl.cond(hl.len(tcl) > 0, tcl.sort_by(lambda x: x.csq_score)[0], tcl)
 
     transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence)
 
@@ -601,10 +601,10 @@ def process_consequences(mt, vep_root='vep'):
     worst_csq = csqs.find(lambda c: transcript_csqs.map(lambda tc: tc.most_severe_consequence).contains(c))
 
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
-                                      worst_csq_by_gene=worst_csq_gene,
-                                      canonical_csq_by_gene=canonical_csq_gene,
-                                      any_lof=worst_csq_gene.values().exists(lambda x: x.lof == 'HC'),
-                                      worst_csq_overall=worst_csq)
+                                     worst_csq_by_gene=worst_csq_gene,
+                                     canonical_csq_by_gene=canonical_csq_gene,
+                                     any_lof=worst_csq_gene.values().exists(lambda x: x.lof == 'HC'),
+                                     worst_csq_overall=worst_csq)
 
     return mt.annotate_rows(**{vep_root: vep_data})
 

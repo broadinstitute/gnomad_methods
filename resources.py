@@ -166,27 +166,27 @@ def raw_exomes_mt_path(hail_version=CURRENT_HAIL_VERSION):
     """
     Warning: unsplit and no special consideration on sex chromosomes
     """
-    return 'gs://gnomad/raw/hail-{0}/vds/exomes/gnomad.exomes.vds'.format(hail_version)
+    return 'gs://gnomad/raw/hail-{0}/mt/exomes/gnomad.exomes.mt'.format(hail_version)
 
 
 def raw_genomes_mt_path(hail_version=CURRENT_HAIL_VERSION):
     """
     Warning: unsplit and no special consideration on sex chromosomes
     """
-    return 'gs://gnomad/raw/hail-{0}/vds/genomes/gnomad.genomes.vds'.format(hail_version)
+    return 'gs://gnomad/raw/hail-{0}/mt/genomes/gnomad.genomes.mt'.format(hail_version)
 
 
 def raw_exac_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/raw/hail-{0}/vds/exac/exac.vds'.format(hail_version)
+    return 'gs://gnomad/raw/hail-{0}/mt/exac/exac.mt'.format(hail_version)
 
 
 def exac_release_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/raw/hail-{}/vds/exac/exac.r1.sites.vep.vds'.format(hail_version)
+    return 'gs://gnomad/raw/hail-{}/mt/exac/exac.r1.sites.vep.mt'.format(hail_version)
 
 
 def hardcalls_mt_path(data_type, split=True, hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/hardcalls/hail-{0}/vds/{1}/gnomad.{1}{2}.vds'.format(hail_version, data_type,
-                                                                             "" if split else ".unsplit")
+    return 'gs://gnomad/hardcalls/hail-{0}/mt/{1}/gnomad.{1}{2}.mt'.format(hail_version, data_type,
+                                                                           "" if split else ".unsplit")
 
 
 def annotations_mt_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
@@ -244,35 +244,35 @@ genomes_exomes_duplicate_ids_tsv_path = "gs://gnomad/metadata/genomes_exomes_dup
 
 
 def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.b37.vds'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.b37.mt'.format(hail_version)
 
 
 def mills_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/Mills_and_1000G_gold_standard.indels.b37.vds'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/Mills_and_1000G_gold_standard.indels.b37.mt'.format(hail_version)
 
 
 def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/hapmap_3.3.b37.vds'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/hapmap_3.3.b37.mt'.format(hail_version)
 
 
 def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.b37.vds'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.b37.mt'.format(hail_version)
 
 
 def NA12878_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.vds'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt'.format(hail_version)
 
 
 def syndip_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/hybrid.m37m.vds'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/hybrid.m37m.mt'.format(hail_version)
 
 
 def cpg_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/resources/hail-{}/cpg.vds'.format(hail_version)
+    return 'gs://gnomad-public/resources/hail-{}/cpg.mt'.format(hail_version)
 
 
 def methylation_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-resources/methylation/hail-{}/methylation.kt'.format(hail_version)
+    return 'gs://gnomad-resources/methylation/hail-{}/methylation.ht'.format(hail_version)
 
 
 dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20160601.vcf.bgz"

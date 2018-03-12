@@ -477,6 +477,10 @@ def pc_project(mt: hl.MatrixTable, pc_mt: hl.MatrixTable, pc_loadings: hl.Table)
     return mt.annotate_cols(scores=hl.agg.array_sum(mt.loadings * gt_norm))
 
 
+def filter_to_autosomes(mt: hl.MatrixTable) -> hl.MatrixTable:
+    return hl.filter_intervals(mt, [hl.parse_locus_interval('1-22')])
+
+
 def read_list_data(input_file):
     if input_file.startswith('gs://'):
         hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])

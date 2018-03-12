@@ -589,12 +589,10 @@ def process_consequences(mt, vep_root='vep'):
 
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)
-    canonical_csq_gene = gene_dict.map_values(lambda tcl: tcl.filter(lambda tc: tc.canonical == 1)[0])
     worst_csq = csqs.find(lambda c: transcript_csqs.map(lambda tc: tc.most_severe_consequence).contains(c))
 
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                      worst_csq_by_gene=worst_csq_gene,
-                                     canonical_csq_by_gene=canonical_csq_gene,
                                      any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene.values()),
                                      worst_csq_overall=worst_csq)
 

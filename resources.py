@@ -213,13 +213,14 @@ def rf_path(data_type: str,
 
     Gets the path to the desired RF data.
     Data can take the following values:
-        - ht: path to Hail Table with columns needed to train the RF model
-        - model: path to pyspark pipeline RF model
-        - mt (default): path to MT containing result of RF filtering
-    Run_name is needed to return the path to RF output data (model, mt).
+        - 'pre-rf': path to Hail Table with columns needed to train the RF model
+        - 'training': path to the training data for a given run
+        - 'model': path to pyspark pipeline RF model
+        - 'rf_result' (default): path to MT containing result of RF filtering
+    Run_name is needed to return the path for run-specific data: 'training', 'model', 'rf_result'
 
     :param str data_type: One of 'exomes' or 'genomes'
-    :param str data: One of 'rf_result', 'pre_rf', 'training' or 'model'
+    :param str data: One of 'pre_rf', 'training', 'model' or 'rf_result' (default)
     :param bool adj: If set, gets RF trained on adj, otherwise trained on raw (default)
     :param str hail_version: One of the HAIL_VERSIONs
     :return:

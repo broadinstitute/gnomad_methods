@@ -545,7 +545,7 @@ def filter_low_conf_regions(mt, filter_lcr=True, filter_decoy=True, filter_segdu
     return mt
 
 
-def process_consequences(mt, vep_root='vep'):
+def process_consequences(mt, vep_root='vep', penalize_flags=True):
     """
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
     and worst_csq_by_gene, canonical_csq_by_gene, any_lof into [vep_root]
@@ -572,11 +572,13 @@ def process_consequences(mt, vep_root='vep'):
         """
         Gets worst transcript_consequence from an array of em
         """
+        flag_score = 500
+        no_flag_score = flag_score * (1 + penalize_flags)
         csq_score = lambda tc: csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
         tcl = tcl.map(lambda tc: tc.annotate(
             csq_score=hl.case()
-            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - 1000)
-            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - 500)
+            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
+            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
             .when(tc.lof == 'LC', csq_score(tc) - 10)
             .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
             .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
@@ -589,12 +591,14 @@ def process_consequences(mt, vep_root='vep'):
 
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)
-    worst_csq = csqs.find(lambda c: transcript_csqs.map(lambda tc: tc.most_severe_consequence).contains(c))
+    sorted_scores = hl.sorted(worst_csq_gene.values(), key=lambda tc: tc.csq_score)
+    lowest_score = hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0])
+    gene_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_symbol)
 
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                      worst_csq_by_gene=worst_csq_gene,
                                      any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene.values()),
-                                     worst_csq_overall=worst_csq)
+                                     gene_with_most_severe_csq=gene_with_worst_csq)
 
     return mt.annotate_rows(**{vep_root: vep_data})
 

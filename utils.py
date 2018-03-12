@@ -594,11 +594,13 @@ def process_consequences(mt, vep_root='vep', penalize_flags=True):
     sorted_scores = hl.sorted(worst_csq_gene.values(), key=lambda tc: tc.csq_score)
     lowest_score = hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0].csq_score)
     gene_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_symbol)
+    ensg_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_id)
 
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                      worst_csq_by_gene=worst_csq_gene,
                                      any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene.values()),
-                                     gene_with_most_severe_csq=gene_with_worst_csq)
+                                     gene_with_most_severe_csq=gene_with_worst_csq,
+                                     ensg_with_most_severe_csq = ensg_with_worst_csq)
 
     return mt.annotate_rows(**{vep_root: vep_data})
 

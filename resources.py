@@ -203,6 +203,37 @@ def annotations_mt_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VE
                                                                                 annotation_type)
 
 
+def rf_path(data_type: str,
+            data: str = 'rf_result',
+            adj: bool = False,
+            run_name: str = None,
+            hail_version: str = CURRENT_HAIL_VERSION
+            ) -> str:
+    """
+
+    Gets the path to the desired RF data.
+    Data can take the following values:
+        - 'pre-rf': path to Hail Table with columns needed to train the RF model
+        - 'training': path to the training data for a given run
+        - 'model': path to pyspark pipeline RF model
+        - 'rf_result' (default): path to MT containing result of RF filtering
+    Run_name is needed to return the path for run-specific data: 'training', 'model', 'rf_result'
+
+    :param str data_type: One of 'exomes' or 'genomes'
+    :param str data: One of 'pre_rf', 'training', 'model' or 'rf_result' (default)
+    :param bool adj: If set, gets RF trained on adj, otherwise trained on raw (default)
+    :param str hail_version: One of the HAIL_VERSIONs
+    :return:
+    """
+    adj_text = 'adj' if adj else 'raw'
+
+    if data == 'pre_rf':
+        return 'gs://gnomad/annotations/hail-{0}/mt/{1}/rf/gnomad.{1}.{2}.ht'.format(hail_version, data_type, adj_text)
+    else:
+        extension = 'mt' if data == 'rf_result' else 'ht' if data == 'training' else 'model'
+        return 'gs://gnomad/annotations/hail-{0}/mt/{1}/rf/{2}/gnomad.{1}.{3}.{4}.{5}'.format(hail_version, data_type, run_name, adj_text, data, extension)
+
+
 def sample_annotations_table_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
     """
     Get samples-level annotations

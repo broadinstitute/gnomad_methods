@@ -457,32 +457,24 @@ def filter_annotations_regex(annotation_fields, ignore_list):
     return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
 
 
-def pc_project(mt, pc_mt, pca_loadings_root='va.pca_loadings'):
+def pc_project(mt: hl.MatrixTable, pc_mt: hl.MatrixTable, pc_loadings: hl.Table):
     """
     Projects samples in `mt` on PCs computed in `pc_mt`
-    :param mt: MT containing the samples to project
-    :param pc_mt: MT containing the PC loadings for the variants
-    :param pca_loadings_root: Annotation root for the loadings. Can be either an Array[Double] or a Struct{ PC1: Double, PC2: Double, ...}
-    :return: MT with
-
-    pc_mt = pc_mt.annotate_variants_expr('va.pca.calldata = gs.callStats(g => v)')
-
-    pcs_struct_to_array = ",".join(['mt.pca_loadings.PC%d' % x for x in range(1, 21)])
-    arr_to_struct_expr = ",".join(['PC%d: sa.pca[%d - 1]' % (x, x) for x in range(1, 21)])
-
-    mt = (mt.filter_multi()
-           .annotate_variants_mt(pc_mt, expr = 'va.pca_loadings = [%s], va.pca_af = mt.pca.calldata.AF[1]' % pcs_struct_to_array)
-           .filter_variants_expr('!isMissing(va.pca_loadings) && !isMissing(va.pca_af)')
-     )
-
-    n_variants = mt.query_variants(['variants.count()'])[0]
-
-    return(mt
-           .annotate_samples_expr('sa.pca = gs.filter(g => g.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
-           .annotate_samples_expr('sa.pca = {%s}' % arr_to_struct_expr)
-    )
+    :param MatrixTable mt: MT containing the samples to project
+    :param MatrixTable pc_mt: MT containing the original data (for calculating allele frequency)
+    :param Table pc_loadings: MT containing the PC loadings for the variants
+    :return: MT with scores calculated from loadings
     """
-    raise NotImplementedError
+    n_variants = mt.count_rows()
+
+    pc_mt = pc_mt.annotate_rows(af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2)
+
+    mt = mt.annotate_rows(loadings=pc_loadings[(mt.locus, mt.alleles)].loadings,
+                          af=pc_mt[(mt.locus, mt.alleles)].af)
+    mt = mt.filter_rows(hl.is_defined(mt.loadings) & hl.is_defined(mt.af) & (mt.af > 0) & (mt.af < 1))
+
+    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt.af) / hl.sqrt(n_variants * 2 * mt.af * (1 - mt. af))
+    return mt.annotate_cols(scores=hl.agg.array_sum(mt.loadings * gt_norm))
 
 
 def read_list_data(input_file):

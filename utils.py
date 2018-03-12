@@ -457,23 +457,19 @@ def filter_annotations_regex(annotation_fields, ignore_list):
     return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
 
 
-def pc_project(mt: hl.MatrixTable, pc_mt: hl.MatrixTable, pc_loadings: hl.Table):
+def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table):
     """
     Projects samples in `mt` on PCs computed in `pc_mt`
-    :param MatrixTable mt: MT containing the samples to project
-    :param MatrixTable pc_mt: MT containing the original data (for calculating allele frequency)
+    :param MatrixTable mt: MT containing the samples to project (assumes data in `loadings` and `pca_af`)
     :param Table pc_loadings: MT containing the PC loadings for the variants
     :return: MT with scores calculated from loadings
     """
     n_variants = mt.count_rows()
 
-    pc_mt = pc_mt.annotate_rows(af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2)
+    mt = mt.annotate_rows(**pc_loadings[mt.locus, mt.alleles])
+    mt = mt.filter_rows(hl.is_defined(mt.loadings) & hl.is_defined(mt.pca_af) & (mt.pca_af > 0) & (mt.pca_af < 1))
 
-    mt = mt.annotate_rows(loadings=pc_loadings[(mt.locus, mt.alleles)].loadings,
-                          af=pc_mt[(mt.locus, mt.alleles)].af)
-    mt = mt.filter_rows(hl.is_defined(mt.loadings) & hl.is_defined(mt.af) & (mt.af > 0) & (mt.af < 1))
-
-    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt.af) / hl.sqrt(n_variants * 2 * mt.af * (1 - mt. af))
+    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt.pca_af) / hl.sqrt(n_variants * 2 * mt.pca_af * (1 - mt.pca_af))
     return mt.annotate_cols(scores=hl.agg.array_sum(mt.loadings * gt_norm))
 
 

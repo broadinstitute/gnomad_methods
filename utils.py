@@ -457,11 +457,14 @@ def filter_annotations_regex(annotation_fields, ignore_list):
     return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
 
 
-def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table, loading_location: str = "loading", af_location: str = "pca_af"):
+def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
+               loading_location: str = "loading", af_location: str = "pca_af") -> hl.MatrixTable:
     """
     Projects samples in `mt` on PCs computed in `pc_mt`
     :param MatrixTable mt: MT containing the samples to project
     :param Table pc_loadings: MT containing the PC loadings for the variants
+    :param str loading_location: Location of expression for loadings in `pc_loadings`
+    :param str af_location: Location of expression for allele frequency in `pc_loadings`
     :return: MT with scores calculated from loadings
     """
     n_variants = mt.count_rows()

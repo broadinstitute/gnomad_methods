@@ -457,32 +457,28 @@ def filter_annotations_regex(annotation_fields, ignore_list):
     return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
 
 
-def pc_project(mt, pc_mt, pca_loadings_root='va.pca_loadings'):
+def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
+               loading_location: str = "loading", af_location: str = "pca_af") -> hl.MatrixTable:
     """
     Projects samples in `mt` on PCs computed in `pc_mt`
-    :param mt: MT containing the samples to project
-    :param pc_mt: MT containing the PC loadings for the variants
-    :param pca_loadings_root: Annotation root for the loadings. Can be either an Array[Double] or a Struct{ PC1: Double, PC2: Double, ...}
-    :return: MT with
-
-    pc_mt = pc_mt.annotate_variants_expr('va.pca.calldata = gs.callStats(g => v)')
-
-    pcs_struct_to_array = ",".join(['mt.pca_loadings.PC%d' % x for x in range(1, 21)])
-    arr_to_struct_expr = ",".join(['PC%d: sa.pca[%d - 1]' % (x, x) for x in range(1, 21)])
-
-    mt = (mt.filter_multi()
-           .annotate_variants_mt(pc_mt, expr = 'va.pca_loadings = [%s], va.pca_af = mt.pca.calldata.AF[1]' % pcs_struct_to_array)
-           .filter_variants_expr('!isMissing(va.pca_loadings) && !isMissing(va.pca_af)')
-     )
-
-    n_variants = mt.query_variants(['variants.count()'])[0]
-
-    return(mt
-           .annotate_samples_expr('sa.pca = gs.filter(g => g.isCalled && va.pca_af > 0.0 && va.pca_af < 1.0).map(g => let p = va.pca_af in (g.gt - 2 * p) / sqrt(%d * 2 * p * (1 - p)) * va.pca_loadings).sum()' % n_variants)
-           .annotate_samples_expr('sa.pca = {%s}' % arr_to_struct_expr)
-    )
+    :param MatrixTable mt: MT containing the samples to project
+    :param Table pc_loadings: MT containing the PC loadings for the variants
+    :param str loading_location: Location of expression for loadings in `pc_loadings`
+    :param str af_location: Location of expression for allele frequency in `pc_loadings`
+    :return: MT with scores calculated from loadings
     """
-    raise NotImplementedError
+    n_variants = mt.count_rows()
+
+    mt = mt.annotate_rows(**pc_loadings[mt.locus, mt.alleles])
+    mt = mt.filter_rows(hl.is_defined(mt[loading_location]) & hl.is_defined(mt[af_location]) &
+                        (mt[af_location] > 0) & (mt[af_location] < 1))
+
+    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
+    return mt.annotate_cols(scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
+
+
+def filter_to_autosomes(mt: hl.MatrixTable) -> hl.MatrixTable:
+    return hl.filter_intervals(mt, [hl.parse_locus_interval('1-22')])
 
 
 def read_list_data(input_file):

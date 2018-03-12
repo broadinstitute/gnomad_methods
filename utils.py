@@ -592,7 +592,7 @@ def process_consequences(mt, vep_root='vep', penalize_flags=True):
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)
     sorted_scores = hl.sorted(worst_csq_gene.values(), key=lambda tc: tc.csq_score)
-    lowest_score = hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0])
+    lowest_score = hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0].csq_score)
     gene_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_symbol)
 
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,

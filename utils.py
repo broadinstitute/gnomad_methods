@@ -457,20 +457,21 @@ def filter_annotations_regex(annotation_fields, ignore_list):
     return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
 
 
-def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table):
+def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table, loading_location: str = "loading", af_location: str = "pca_af"):
     """
     Projects samples in `mt` on PCs computed in `pc_mt`
-    :param MatrixTable mt: MT containing the samples to project (assumes data in `loadings` and `pca_af`)
+    :param MatrixTable mt: MT containing the samples to project
     :param Table pc_loadings: MT containing the PC loadings for the variants
     :return: MT with scores calculated from loadings
     """
     n_variants = mt.count_rows()
 
     mt = mt.annotate_rows(**pc_loadings[mt.locus, mt.alleles])
-    mt = mt.filter_rows(hl.is_defined(mt.loadings) & hl.is_defined(mt.pca_af) & (mt.pca_af > 0) & (mt.pca_af < 1))
+    mt = mt.filter_rows(hl.is_defined(mt[loading_location]) & hl.is_defined(mt[af_location]) &
+                        (mt[af_location] > 0) & (mt[af_location] < 1))
 
-    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt.pca_af) / hl.sqrt(n_variants * 2 * mt.pca_af * (1 - mt.pca_af))
-    return mt.annotate_cols(scores=hl.agg.array_sum(mt.loadings * gt_norm))
+    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
+    return mt.annotate_cols(scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
 
 
 def filter_to_autosomes(mt: hl.MatrixTable) -> hl.MatrixTable:

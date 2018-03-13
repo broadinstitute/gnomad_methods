@@ -560,3 +560,98 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
             .drop('comb'))
     """
     raise NotImplementedError
+
+
+def infer_families(kin_ht,
+                   sex_ht,
+                   i_col='i',
+                   j_col='j',
+                   kin_col='kin',
+                   k2_col='k2',
+                   sex_s_col='s',
+                   sex_sex_col='sex',
+                   first_degree_threshold=(0.23, 0.27),  # TODO: Look at distribution
+                   duplicate_threshold=0.04,  # TODO: Look at distribution
+                   k2_parent_offspring_threshold=0.1  # TODO: Look at distribution
+                   ):
+
+
+    def get_samples_relatives(sample_pairs):
+        samples_rel = defaultdict(set)
+        for row in sample_pairs:
+            samples_rel[row[i_col]].add(row[j_col])
+            samples_rel[row[j_col]].add(row[i_col])
+        return samples_rel
+
+
+    def prune_relatives(relatives):
+        pruned = set()
+        for s, s_rel in relatives:
+            if s not in pruned:
+                pruned.update(s_rel)
+
+        return pruned, {s: s_rel for s, s_rel in relatives.items() if s not in pruned}
+
+
+    def get_fam_samples(s, fam, samples_rel):
+        fam.add(s)
+        for s2 in samples_rel[s]:
+            if s2 not in fam:
+                get_fam_samples(s2, fam, samples_rel)
+        return fam
+
+
+    def get_parents(parents, sex):
+        if sex.get(parents[0]) == 'male' and sex.get(parents[1]) == 'female':
+            return parents[0], parents[1]
+        elif sex.get(parents[0]) == 'female' and sex.get(parents[1]) == 'male':
+            return parents[1], parents[0]
+        else:
+            return None, None
+
+
+    first_degree_pairs = kin_ht.filter(kin_ht[kin_col] > first_degree_threshold[0]).collect()
+
+    # Get the list of duplicates
+    dups, dups_mapping = prune_relatives(
+        get_samples_relatives([x for x in first_degree_pairs if x[kin_col] > duplicate_threshold])
+    )
+
+    # Get the list of siblings
+    sibs, sibs_mapping = prune_relatives(
+        get_samples_relatives([x for x in first_degree_pairs if
+                               x[i_col] not in dups and x[j_col] not in dups and
+                               x[kin_col] < first_degree_threshold[1] and
+                               x[k2_col] >= k2_parent_offspring_threshold])
+    )
+
+    # Get parent/offspring
+    parent_offspring = get_samples_relatives([x for x in first_degree_pairs if
+                                              x[i_col] not in dups and x[j_col] not in dups and
+                                              x[i_col] not in sibs and x[j_col] not in sibs and
+                                              x[kin_col] < first_degree_threshold[1] and
+                                              x[k2_col] < k2_parent_offspring_threshold])
+
+    # Keep offspring with 2 parents only (complete trios)
+    complete_trios = {s: (s_rel, s_rel) for s, s_rel in parent_offspring if len(s_rel) == 2}
+
+    #Get sex for all non-duplicated samples
+    samples_bc = hl.literal(list(sibs) + list(parent_offspring))
+    sex = {x[sex_s_col]: x[sex_sex_col] for x in sex_ht.filter(samples_bc.contains(sex_ht[sex_s_col])).select(sex_ht[sex_s_col, sex_sex_col]).collect() }
+
+    # Combine samples into families
+    trios = []
+    famID = 0
+    while (len(complete_trios) > 0):
+        fam_samples = list(get_fam_samples(list(complete_trios)[0], set(), parent_offspring))
+        for s in fam_samples:
+            if s in complete_trios:
+                father, mother = get_parents(complete_trios.pop(s), sex)
+                if father and mother:
+                    trio_samples = [s] if s not in sibs_mapping else [s] + list(sibs_mapping[s])
+                    for ts in trio_samples:
+                        trios.append(hl.Trio(ts, str(famID), father, mother, sex.get(ts)))
+
+        famID += 1
+
+    return hl.Pedigree(trios)

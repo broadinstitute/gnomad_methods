@@ -83,13 +83,9 @@ CSQ_NON_CODING = [
 CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
 
 
-def filter_to_adj(mt):
+def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Filter genotypes to adj criteria
-
-    :param MatrixTable mt: MT
-    :return: MT
-    :rtype: MatrixTable
     """
     if 'adj' not in list(mt.entry):
         mt = annotate_adj(mt)
@@ -97,13 +93,9 @@ def filter_to_adj(mt):
     return mt.drop(mt.adj)
 
 
-def annotate_adj(mt):
+def annotate_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid)
-
-    :param MatrixTable mt: MT
-    :return: MT
-    :rtype: MatrixTable
     """
     adj_gq = 20
     adj_dp = 10
@@ -119,13 +111,9 @@ def annotate_adj(mt):
     )
 
 
-def add_variant_type(alt_alleles):
+def add_variant_type(alt_alleles: hl.ArrayExpression) -> hl.StructExpression:
     """
-    Get Struct of variant_type and n_alt_alleles from ArrayExpression of AltAlleles
-
-    :param ArrayExpression alt_alleles: Input ArrayExpression of Strings
-    :return: Struct with variant_type and n_alt_alleles
-    :rtype: Struct
+    Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)
     """
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
@@ -142,7 +130,7 @@ def add_variant_type(alt_alleles):
                      n_alt_alleles=hl.len(non_star_alleles))
 
 
-def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
+def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligned: bool = True) -> hl.MatrixTable:
     """
     Splits MatrixTable based on entry fields found. Downcodes whatever it can. Supported so far:
     GT, DP, AD, PL, GQ
@@ -198,22 +186,25 @@ def split_multi_dynamic(mt, keep_star=False, left_aligned=True):
     return sm.result()
 
 
-def adjust_sex_ploidy(mt, sex_expr):
+def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.StringExpression,
+                      male_str: str = 'male', female_str: str = 'female') -> hl.MatrixTable:
     """
     Converts males to haploid on non-PAR X/Y, sets females to missing on Y
 
-    :param MatrixTable mt: MT
-    :param StringExpression sex_expr: Expression pointing to sex in MT (must be "male" and "female", otherwise no change)
+    :param MatrixTable mt: Input MatrixTable
+    :param StringExpression sex_expr: Expression pointing to sex in MT (if not male_str or female_str, no change)
+    :param str male_str: String for males (default 'male')
+    :param str female_str: String for females (default 'female')
     :return: MatrixTable with fixed ploidy for sex chromosomes
     :rtype: MatrixTable
     """
-    male = sex_expr == 'male'
-    female = sex_expr == 'female'
+    male = sex_expr == male_str
+    female = sex_expr == female_str
     x_nonpar = mt.locus.in_x_nonpar()
     y_par = mt.locus.in_y_par()
     y_nonpar = mt.locus.in_y_nonpar()
     return mt.annotate_entries(
-        GT=hl.case()
+        GT=hl.case(missing_false=True)
         .when(female & (y_par | y_nonpar), hl.null(hl.tcall()))
         .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall()))
         .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
@@ -221,7 +212,7 @@ def adjust_sex_ploidy(mt, sex_expr):
     )
 
 
-def get_sample_data(mt, fields, sep='\t', delim='|'):
+def get_sample_data(mt: hl.MatrixTable, fields: List[hl.StringExpression], sep: str = '\t', delim: str = '|'):
     """
     Hail devs hate this one simple py4j trick to speed up sample queries
 
@@ -242,14 +233,13 @@ def get_sample_data(mt, fields, sep='\t', delim='|'):
     return [x.split(delim) for x in mt_agg(hl.delimit(hl.agg.collect(field_expr), sep)).split(sep) if x != 'null']
 
 
-def add_popmax_expr(freq: ArrayExpression) -> ArrayExpression:
+def add_popmax_expr(freq: hl.ArrayExpression) -> hl.ArrayExpression:
     """
-    First pass of popmax (add an additional entry into freq with popmax: pop)
-    TODO: update dict instead?
+    Calculates popmax (add an additional entry into freq with popmax: pop)
 
-    :param ArrayStructExpression freq: Array of StructExpression with ['ac', 'an', 'hom', 'meta']
+    :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom', 'meta']
     :return: Frequency data with annotated popmax
-    :rtype: ArrayStructExpression
+    :rtype: ArrayExpression
     """
     freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['population']) & (x.meta['population'] != 'oth'), freq)
     sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.ac / x.an, reverse=True)
@@ -258,7 +248,7 @@ def add_popmax_expr(freq: ArrayExpression) -> ArrayExpression:
                   meta={'popmax': sorted_freqs[0].meta['population']})), freq)
 
 
-def get_projectmax(mt, loc):
+def get_projectmax(mt: hl.MatrixTable, loc: hl.StringExpression) -> hl.MatrixTable:
     """
     First pass of projectmax (returns aggregated MT with project_max field)
 
@@ -278,97 +268,7 @@ def get_projectmax(mt, loc):
                                                         5, -agg_mt.af))
 
 
-def flatten_struct(struct, root='va', leaf_only=True, recursive=True):
-    """
-    Given a `TStruct` and its `root` path, creates an `OrderedDict` of each path -> Field by flattening the `TStruct` tree.
-    The order of the fields is the same as the input `Struct` fields, using a depth-first approach.
-    When `leaf_only=False`, `Struct`s roots are printed as they are traversed (i.e. before their leaves).
-    The following TStruct at root 'va', for example
-    Struct{
-     rsid: String,
-     qual: Double,
-     filters: Set[String],
-     info: Struct{
-         AC: Array[Int],
-         AF: Array[Double],
-         AN: Int
-         }
-    }
-
-    Would give the following dict:
-    {
-        'va.rsid': Field(rsid),
-        'va.qual': Field(qual),
-        'va.filters': Field(filters),
-        'va.info.AC': Field(AC),
-        'va.info.AF': Field(AF),
-        'va.info.AN': Field(AN)
-    }
-
-    :param TStruct struct: The struct to flatten
-    :param str root: The root path of the struct to flatten (added at the beginning of all dict keys)
-    :param bool leaf_only: When set to `True`, only leaf nodes in the tree are output in the output
-    :param bool recursive: When set to `True`, internal `Struct`s are flatten
-    :return: Dictionary of path : Field
-    :rtype: OrderedDict of str:Field
-    """
-    result = OrderedDict()
-    for f in struct.fields:
-        path = '{}.{}'.format(root, f.name) if root else f.name
-        if isinstance(f.typ, TStruct) and recursive:
-            if not leaf_only:
-                result[path] = f
-            result.update(flatten_struct(f.typ, path, leaf_only))
-        else:
-            result[path] = f
-    return result
-
-
-def ann_exists(annotation, schema, root='va'):
-    """
-    Tests whether an annotation (given by its full path) exists in a given schema and its root.
-
-    :param str annotation: The annotation to find (given by its full path in the schema tree)
-    :param TStruct schema: The schema to find the annotation in
-    :param str root: The root of the schema (or struct)
-    :return: Whether the annotation was found
-    :rtype: bool
-    """
-    anns = flatten_struct(schema, root, leaf_only=False)
-    return annotation in anns
-
-
-def get_ann_field(annotation, schema, root='va'):
-    """
-    Given an annotation path and a schema, return that annotation field.
-
-    :param str annotation: annotation path to fetch
-    :param TStruct schema: schema (or struct) in which to search
-    :param str root: root of the schema (or struct)
-    :return: The Field corresponding to the input annotation
-    :rtype: Field
-    """
-    anns = flatten_struct(schema, root, leaf_only=False)
-    if not annotation in anns:
-        logger.error("%s missing from schema.", annotation)
-        sys.exit(1)
-    return anns[annotation]
-
-
-def get_ann_type(annotation, schema, root='va'):
-    """
-     Given an annotation path and a schema, return the type of the annotation.
-
-    :param str annotation: annotation path to fetch
-    :param TStruct schema: schema (or struct) in which to search
-    :param str root: root of the schema (or struct)
-    :return: The type of the input annotation
-    :rtype: Type
-    """
-    return get_ann_field(annotation, schema, root).typ
-
-
-def annotation_type_is_numeric(t):
+def annotation_type_is_numeric(t: Any) -> bool:
     """
     Given an annotation type, returns whether it is a numerical type or not.
 
@@ -376,14 +276,14 @@ def annotation_type_is_numeric(t):
     :return: If the input type is numeric
     :rtype: bool
     """
-    return (isinstance(t, TInt32) or
-            isinstance(t, TInt64) or
-            isinstance(t, TFloat32) or
-            isinstance(t, TFloat64)
+    return (isinstance(t, hl.tint32) or
+            isinstance(t, hl.tint64) or
+            isinstance(t, hl.tfloat32) or
+            isinstance(t, hl.tfloat64)
             )
 
 
-def annotation_type_in_vcf_info(t):
+def annotation_type_in_vcf_info(t: Any) -> bool:
     """
     Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
     Note types that aren't natively exportable to VCF will be converted to String on export.
@@ -393,10 +293,10 @@ def annotation_type_in_vcf_info(t):
     :rtype: bool
     """
     return (annotation_type_is_numeric(t) or
-            isinstance(t, TString) or
-            isinstance(t, TArray) or
-            isinstance(t, TSet) or
-            isinstance(t, TBoolean)
+            isinstance(t, hl.tstr) or
+            isinstance(t, hl.tarray) or
+            isinstance(t, hl.tset) or
+            isinstance(t, hl.tbool)
             )
 
 
@@ -447,14 +347,6 @@ def run_samples_sanity_checks(mt, reference_mt, n_samples=10, verbose=True):
     raise NotImplementedError
 
 
-def filter_annotations_regex(annotation_fields, ignore_list):
-    def ann_in(name, lst):
-        # `list` is a list of regexes to ignore
-        return any([x for x in lst if re.search('^%s$' % x, name)])
-
-    return [x for x in annotation_fields if not ann_in(x.name, ignore_list)]
-
-
 def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
                loading_location: str = "loading", af_location: str = "pca_af") -> hl.MatrixTable:
     """
@@ -479,7 +371,7 @@ def filter_to_autosomes(mt: hl.MatrixTable) -> hl.MatrixTable:
     return hl.filter_intervals(mt, [hl.parse_locus_interval('1-22')])
 
 
-def read_list_data(input_file):
+def read_list_data(input_file: str) -> List[str]:
     if input_file.startswith('gs://'):
         hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])
         f = gzip.open("/" + os.path.basename(input_file)) if input_file.endswith('gz') else open("/" + os.path.basename(input_file))
@@ -492,20 +384,8 @@ def read_list_data(input_file):
     return output
 
 
-def rename_samples(mt, input_file, filter_to_samples_in_file=False):
-    """
-    names = {old: new for old, new in [x.split("\t") for x in read_list_data(input_file)]}
-    logger.info("Found %d samples for renaming in input file %s." % (len(names.keys()), input_file))
-    logger.info("Renaming %d samples found in MT" % len(set(names.keys()).intersection(set(mt.sample_ids)) ))
-
-    if filter_to_samples_in_file:
-        mt = mt.filter_samples_list(names.keys())
-    return mt.rename_samples(names)
-    """
-    raise NotImplementedError
-
-
-def filter_low_conf_regions(mt, filter_lcr=True, filter_decoy=True, filter_segdup=True, high_conf_regions=None):
+def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_decoy: bool = True,
+                            filter_segdup: bool = True, high_conf_regions: Optional[List[str]] = None) -> hl.MatrixTable:
     """
     Filters low-confidence regions
 
@@ -539,13 +419,14 @@ def filter_low_conf_regions(mt, filter_lcr=True, filter_decoy=True, filter_segdu
     return mt
 
 
-def process_consequences(mt, vep_root='vep', penalize_flags=True):
+def process_consequences(mt: hl.MatrixTable, vep_root: str = 'vep', penalize_flags: bool = True) -> hl.MatrixTable:
     """
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
-    and worst_csq_by_gene, canonical_csq_by_gene, any_lof into [vep_root]
+    and worst_csq_by_gene, any_lof into [vep_root]
 
     :param MatrixTable mt: Input MT
     :param str vep_root: Root for vep annotation (probably vep)
+    :param bool penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them as equal to HC
     :return: MT with better formatted consequences
     :rtype: MatrixTable
     """
@@ -599,27 +480,13 @@ def process_consequences(mt, vep_root='vep', penalize_flags=True):
     return mt.annotate_rows(**{vep_root: vep_data})
 
 
-def filter_vep_to_canonical_transcripts(mt, vep_root='vep'):
-    """
-
-    :param MatrixTable mt: MT
-    :param str vep_root: Location of VEP data
-    :return: MT
-    :rtype: MatrixTable
-    """
+def filter_vep_to_canonical_transcripts(mt: hl.MatrixTable, vep_root: str = 'vep') -> hl.MatrixTable:
     canonical = mt[vep_root].transcript_consequences.filter(lambda csq: csq.canonical == 1)
     vep_data = mt[vep_root].annotate(transcript_consequences=canonical)
     return mt.annotate_rows(**{vep_root: vep_data})
 
 
-def filter_vep_to_synonymous_variants(mt, vep_root='vep'):
-    """
-
-    :param MatrixTable mt: Input MT
-    :param str vep_root: Location of VEP data
-    :return: MT
-    :rtype: MatrixTable
-    """
+def filter_vep_to_synonymous_variants(mt: hl.MatrixTable, vep_root: str = 'vep') -> hl.MatrixTable:
     synonymous = mt[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
     vep_data = mt[vep_root].annotate(transcript_consequences=synonymous)
     return mt.annotate_rows(**{vep_root: vep_data})

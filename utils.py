@@ -522,20 +522,20 @@ def filter_low_conf_regions(mt, filter_lcr=True, filter_decoy=True, filter_segdu
     from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path
 
     if filter_lcr:
-        lcr = hl.import_interval_list(lcr_intervals_path)
+        lcr = hl.import_locus_intervals(lcr_intervals_path)
         mt = mt.filter_rows(lcr[mt.locus], keep=False)
 
     if filter_decoy:
-        decoy = hl.import_interval_list(decoy_intervals_path)
+        decoy = hl.import_locus_intervals(decoy_intervals_path)
         mt = mt.filter_rows(decoy[mt.locus], keep=False)
 
     if filter_segdup:
-        segdup = hl.import_interval_list(segdup_intervals_path)
+        segdup = hl.import_locus_intervals(segdup_intervals_path)
         mt = mt.filter_rows(segdup[mt.locus], keep=False)
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
-            region = hl.import_interval_list(region)
+            region = hl.import_locus_intervals(region)
             mt = mt.filter_rows(region[mt.locus], keep=True)
 
     return mt
@@ -596,7 +596,7 @@ def process_consequences(mt, vep_root='vep', penalize_flags=True):
                                      worst_csq_by_gene=worst_csq_gene,
                                      any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene.values()),
                                      gene_with_most_severe_csq=gene_with_worst_csq,
-                                     ensg_with_most_severe_csq = ensg_with_worst_csq)
+                                     ensg_with_most_severe_csq=ensg_with_worst_csq)
 
     return mt.annotate_rows(**{vep_root: vep_data})
 

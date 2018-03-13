@@ -111,7 +111,7 @@ def annotate_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     )
 
 
-def add_variant_type(alt_alleles: hl.ArrayExpression) -> hl.StructExpression:
+def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
     """
     Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)
     """
@@ -186,7 +186,7 @@ def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligne
     return sm.result()
 
 
-def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.StringExpression,
+def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
                       male_str: str = 'male', female_str: str = 'female') -> hl.MatrixTable:
     """
     Converts males to haploid on non-PAR X/Y, sets females to missing on Y
@@ -212,7 +212,7 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.StringExpression,
     )
 
 
-def get_sample_data(mt: hl.MatrixTable, fields: List[hl.StringExpression], sep: str = '\t', delim: str = '|'):
+def get_sample_data(mt: hl.MatrixTable, fields: List[hl.expr.StringExpression], sep: str = '\t', delim: str = '|'):
     """
     Hail devs hate this one simple py4j trick to speed up sample queries
 
@@ -233,7 +233,7 @@ def get_sample_data(mt: hl.MatrixTable, fields: List[hl.StringExpression], sep: 
     return [x.split(delim) for x in mt_agg(hl.delimit(hl.agg.collect(field_expr), sep)).split(sep) if x != 'null']
 
 
-def add_popmax_expr(freq: hl.ArrayExpression) -> hl.ArrayExpression:
+def add_popmax_expr(freq: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
     """
     Calculates popmax (add an additional entry into freq with popmax: pop)
 
@@ -248,7 +248,7 @@ def add_popmax_expr(freq: hl.ArrayExpression) -> hl.ArrayExpression:
                   meta={'popmax': sorted_freqs[0].meta['population']})), freq)
 
 
-def get_projectmax(mt: hl.MatrixTable, loc: hl.StringExpression) -> hl.MatrixTable:
+def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.MatrixTable:
     """
     First pass of projectmax (returns aggregated MT with project_max field)
 
@@ -433,7 +433,7 @@ def process_consequences(mt: hl.MatrixTable, vep_root: str = 'vep', penalize_fla
     csqs = hl.literal(CSQ_ORDER)
     csq_dict = hl.literal(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
 
-    def add_most_severe_consequence(tc: StructExpression) -> StructExpression:
+    def add_most_severe_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
         """
         Add most_severe_consequence annotation to transcript consequences
         This is for a given transcript, as there are often multiple annotations for a single transcript:
@@ -443,7 +443,7 @@ def process_consequences(mt: hl.MatrixTable, vep_root: str = 'vep', penalize_fla
             most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
         )
 
-    def find_worst_transcript_consequence(tcl: ArrayExpression) -> StructExpression:
+    def find_worst_transcript_consequence(tcl: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
         """
         Gets worst transcript_consequence from an array of em
         """

@@ -52,7 +52,7 @@ CSQ_CODING_MEDIUM_IMPACT = [
 ]
 
 CSQ_CODING_LOW_IMPACT = [
-    "incomplete_terminal_codon_variant",
+"incomplete_terminal_codon_variant",
 "stop_retained_variant",
 "synonymous_variant",
 "coding_sequence_variant"]
@@ -110,12 +110,12 @@ def annotate_adj(mt):
     adj_ab = 0.2
 
     return mt.annotate_entries(adj=
-                                (mt.GQ >= adj_gq) & (mt.DP >= adj_dp) & (
-                                    ~mt.GT.is_het() |
-                                    ((mt.GT[0] == 0) & (mt.AD[mt.GT[1]] / mt.DP >= adj_ab)) |
-                                    ((mt.GT[0] > 0) & (mt.AD[mt.GT[0]] / mt.DP >= adj_ab) &
-                                     (mt.AD[mt.GT[1]] / mt.DP >= adj_ab))
-                                )
+                               (mt.GQ >= adj_gq) & (mt.DP >= adj_dp) & (
+                                   ~mt.GT.is_het() |
+                                   ((mt.GT[0] == 0) & (mt.AD[mt.GT[1]] / mt.DP >= adj_ab)) |
+                                   ((mt.GT[0] > 0) & (mt.AD[mt.GT[0]] / mt.DP >= adj_ab) &
+                                    (mt.AD[mt.GT[1]] / mt.DP >= adj_ab))
+                               )
     )
 
 
@@ -623,28 +623,6 @@ def filter_vep_to_synonymous_variants(mt, vep_root='vep'):
     synonymous = mt[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
     vep_data = mt[vep_root].annotate(transcript_consequences=synonymous)
     return mt.annotate_rows(**{vep_root: vep_data})
-
-
-def toSSQL(s):
-    """
-        Replaces `.` with `___`, since Spark ML doesn't support column names with `.`
-
-    :param str s: The string in which the replacement should be done
-    :return: string with `___`
-    :rtype: str
-    """
-    return s.replace('.', '___')
-
-
-def fromSSQL(s):
-    """
-        Replaces `___` with `.`, to go back from SSQL to hail annotations
-
-    :param str s: The string in which the replacement should be done
-    :return: string with `.`
-    :rtype: str
-    """
-    return s.replace('___', '.')
 
 
 def melt_kt(kt, columns_to_melt, key_column_name='variable', value_column_name='value'):

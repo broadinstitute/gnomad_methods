@@ -91,11 +91,9 @@ def filter_to_adj(mt):
     :return: MT
     :rtype: MatrixTable
     """
-    try:
-        mt = mt.filter_entries(mt.adj)
-    except AttributeError:
+    if 'adj' not in list(mt.entry):
         mt = annotate_adj(mt)
-        mt = mt.filter_entries(mt.adj)
+    mt = mt.filter_entries(mt.adj)
     return mt.drop(mt.adj)
 
 

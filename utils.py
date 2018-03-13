@@ -572,7 +572,7 @@ def process_consequences(mt, vep_root='vep', penalize_flags=True):
         no_flag_score = flag_score * (1 + penalize_flags)
         csq_score = lambda tc: csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
         tcl = tcl.map(lambda tc: tc.annotate(
-            csq_score=hl.case()
+            csq_score=hl.case(missing_false=True)
             .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
             .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
             .when(tc.lof == 'LC', csq_score(tc) - 10)

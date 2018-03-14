@@ -300,53 +300,6 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
             )
 
 
-def run_samples_sanity_checks(mt, reference_mt, n_samples=10, verbose=True):
-    """
-    logger.info("Running samples sanity checks on %d samples" % n_samples)
-
-    comparison_metrics = ['nHomVar',
-                          'nSNP',
-                          'nTransition',
-                          'nTransversion',
-                          'nInsertion',
-                          'nDeletion',
-                          'nNonRef',
-                          'nHet'
-                          ]
-
-    samples = mt.sample_ids[:n_samples]
-
-    def get_samples_metrics(mt, samples):
-        metrics = (mt.filter_samples_expr('["%s"].toSet.contains(s)' % '","'.join(samples))
-                   .sample_qc()
-                   .query_samples('samples.map(s => {sample: s, metrics: sa.qc }).collect()')
-                   )
-        return {x.sample: x.metrics for x in metrics}
-
-    test_metrics = get_samples_metrics(mt, samples)
-    ref_metrics = get_samples_metrics(reference_mt, samples)
-
-    output = ''
-
-    for s, m in test_metrics.iteritems():
-        if s not in ref_metrics:
-            output += "WARN: Sample %s not found in reference data.\n" % s
-        else:
-            rm = ref_metrics[s]
-            for metric in comparison_metrics:
-                if m[metric] == rm[metric]:
-                    if verbose:
-                        output += "SUCCESS: Sample %s %s matches (N = %d).\n" % (s, metric, m[metric])
-                else:
-                    output += "FAILURE: Sample %s, %s differs: Data: %s, Reference: %s.\n" % (
-                        s, metric, m[metric], rm[metric])
-
-    logger.info(output)
-    return output
-    """
-    raise NotImplementedError
-
-
 def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
                loading_location: str = "loading", af_location: str = "pca_af") -> hl.MatrixTable:
     """

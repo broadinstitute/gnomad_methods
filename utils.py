@@ -301,7 +301,7 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
 
 
 def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
-               loading_location: str = "loading", af_location: str = "pca_af") -> hl.MatrixTable:
+               loading_location: str = "loadings", af_location: str = "pca_af") -> hl.MatrixTable:
     """
     Projects samples in `mt` on PCs computed in `pc_mt`
     :param MatrixTable mt: MT containing the samples to project

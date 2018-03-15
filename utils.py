@@ -562,96 +562,210 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
     raise NotImplementedError
 
 
-def infer_families(kin_ht,
-                   sex_ht,
-                   i_col='i',
-                   j_col='j',
-                   kin_col='kin',
-                   k2_col='k2',
-                   sex_s_col='s',
-                   sex_sex_col='sex',
-                   first_degree_threshold=(0.23, 0.27),  # TODO: Look at distribution
-                   duplicate_threshold=0.04,  # TODO: Look at distribution
-                   k2_parent_offspring_threshold=0.1  # TODO: Look at distribution
-                   ):
+def get_duplicated_samples(
+        kin_ht: hl.Table,
+        i_col: str = 'i',
+        j_col: str = 'j',
+        kin_col: str = 'kin',
+        duplicate_threshold: float = 0.4 # TODO: Look at distribution to pick a value
+) -> Dict[str, Set[str]]: #TODO: Is this the most intuitive format? Otherwise could be List[Set[str]] where each set is a set of duplicated samples.
+    """
+    Given a pc_relate output Table, extract the list of duplicate samples. Returns a dict where the keys are the
+    samples that have one or more duplicates and the values are the set duplicates for each sample.
 
 
-    def get_samples_relatives(sample_pairs):
-        samples_rel = defaultdict(set)
-        for row in sample_pairs:
-            samples_rel[row[i_col]].add(row[j_col])
-            samples_rel[row[j_col]].add(row[i_col])
-        return samples_rel
+    :param Table kin_ht: pc_relate output table
+    :param str i_col: Column containing the 1st sample
+    :param str j_col: Column containing the 2nd sample
+    :param str kin_col: Column containing the kinship value
+    :param float duplicate_threshold: Kinship threshold to consider two samples duplicated
+    :return: Dict of samples that have are duplicated and their duplicated IDs
+    :rtype: dict of str: set of str
+    """
+
+    dups = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
+
+    duplicated_samples = defaultdict(set)
+    for row in dups:
+        if row[kin_col] > duplicate_threshold:
+            duplicated_samples[row[i_col]].add(row[j_col])
+            duplicated_samples[row[j_col]].add(row[i_col])
+
+    return duplicated_samples
 
 
-    def prune_relatives(relatives):
-        pruned = set()
-        for s, s_rel in relatives:
-            if s not in pruned:
-                pruned.update(s_rel)
+def infer_families(kin_ht: hl.Table,
+                   sex_ht: hl.Table,
+                   duplicated_samples: Set[str],
+                   i_col: str = 'i',
+                   j_col: str = 'j',
+                   kin_col: str = 'kin',
+                   k2_col: str = 'k2',
+                   sex_s_col: str = 's',
+                   sex_sex_col: str = 'sex',
+                   first_degree_threshold: Tuple[float, float] = (0.23, 0.27),  # TODO: Look at distribution
+                   second_degree_threshold: Tuple[float, float] = (0.12, 0.13),  # TODO: Look at distribution
+                   k2_parent_offspring_threshold: float = 0.1  # TODO: Look at distribution
+                   ) -> hl.Pedigree:
+    """
 
-        return pruned, {s: s_rel for s, s_rel in relatives.items() if s not in pruned}
+    Infers familial relationships from the results of pc_relate and sex information.
+    Note that both kinship and k2 are needed in the pc_relate output.
 
+    This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
+    trios if one or more members of the trios are related (e.g. sibs, multi-generational family).
 
-    def get_fam_samples(s, fam, samples_rel):
-        fam.add(s)
-        for s2 in samples_rel[s]:
+    Note that this function only returns complete trios defined as:
+    one child, one father and one mother (sex is required for both parents)
+
+    :param Table kin_ht: pc_relate output table
+    :param Table sex_ht: A table containing sex for each sample
+    :param set of str duplicated_samples: Duplicated samples to remove (If not provided, this function won't work as it assumes that each child has exactly two parents)
+    :param str i_col: Column containing the 1st sample id in the pc_relate table
+    :param str j_col: Column containing the 1st sample id in the pc_relate table
+    :param str kin_col: Column containing the kinship in the pc_relate table
+    :param str k2_col: Column containing kin2 in the pc_relate table
+    :param str sex_s_col: Column containing the sample id in the sex table
+    :param str sex_sex_col: Column containing the sample sex in the sex table
+    :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
+    :param (float, float) second_degree_threshold: Lower/upper bounds for kin for 2nd degree relatives
+    :param float k2_parent_offspring_threshold: Upper bound on kin2 for a parent/offspring
+    :return: Pedigree containing all trios in the data
+    :rtype: Pedigree
+    """
+
+    def get_fam_samples(sample: str,
+                        fam: Set[str],
+                        samples_rel: Dict[str, Set[str]],
+                        ) -> Set[str]:
+        """
+        Given a sample, its known family and a dict that links samples with their relatives, outputs the set of
+        samples that constitute this sample family.
+
+        :param str sample: sample
+        :param dict of str -> set of str samples_rel: dict(sample -> set(sample_relatives))
+        :param set of str fam: sample known family
+        :return: Family including the sample
+        :rtype: set of str
+        """
+        fam.add(sample)
+        for s2 in samples_rel[sample]:
             if s2 not in fam:
-                get_fam_samples(s2, fam, samples_rel)
+                return get_fam_samples(s2, fam, samples_rel)
         return fam
 
+    def get_sorted_s(
+            s1: str,
+            s2: str
+    ) -> Tuple[str, str]:
+        """
+        Given two sample names, returns them in lexical order
 
-    def get_parents(parents, sex):
-        if sex.get(parents[0]) == 'male' and sex.get(parents[1]) == 'female':
-            return parents[0], parents[1]
-        elif sex.get(parents[0]) == 'female' and sex.get(parents[1]) == 'male':
-            return parents[1], parents[0]
+        :param str s1: 1st sample name
+        :param str s2: 2nd sample name
+        :return: Ordered sample names
+        :rtype: (str, str)
+        """
+        if s1 > s2:
+            return (s1, s2)
         else:
-            return None, None
+            return (s2, s1)
 
+    def get_indexed_kinship(
+            pc_relate_rows: hl.Struct
+    ) -> Dict[Tuple[str, str], Tuple[float, float]]:
+        """
+        Given rows from a pc_relate table, creates a dict with:
+        keys: Pairs of individuals, lexically ordered
+        values: (kinship, k2)
 
-    first_degree_pairs = kin_ht.filter(kin_ht[kin_col] > first_degree_threshold[0]).collect()
+        :param hl.Struct pc_relate_rows: Rows from a pc_relate table
+        :return: Dict of lexically ordered pairs of individuals -> kinship
+        :rtype: dict of (str, str) -> (float, float)
+        """
+        kinship = dict()
+        for row in pc_relate_rows:
+            kinship[get_sorted_s(row[i_col], row[j_col])] = (row[kin_col], row[k2_col])
+        return kinship
 
-    # Get the list of duplicates
-    dups, dups_mapping = prune_relatives(
-        get_samples_relatives([x for x in first_degree_pairs if x[kin_col] > duplicate_threshold])
+    def get_parents(
+            possible_parents: List[str],
+            indexed_kinship: Dict[Tuple[str, str], Tuple[float, float]],
+            sex: Dict[str, str]
+    ) -> Tuple[str, str]:
+        """
+        Given a list of possible parents for a sample (first degree relatives with low k2),
+        looks for a single pair of samples that are unrelated with sex 'male' and 'female'.
+        If a single pair is found, return the pair (father, mother)
+
+        :param list of str possible_parents: Possible parents
+        :param dict of (str, str) -> (float, float)) indexed_kinship: Dict mapping pairs of individuals to their kinship and k2 coefficients
+        :param dict of str -> str sex: Dict mapping samples to their sex (male, female should be coded 'male', 'female' resp.)
+        :return: (father, mother)
+        :rtype: (str, str)
+        """
+
+        parents = []
+        while len(possible_parents) > 1:
+            p1 = possible_parents.pop()
+            for p2 in possible_parents:
+                if get_sorted_s(p1,p2) not in indexed_kinship:
+                    if sex[p1] == 'male' and sex[p2] == 'female':
+                        parents.append((p1,p2))
+                    elif sex[p1] == 'female' and sex[p2] == 'male':
+                        parents.append((p2,p1))
+
+        if len(parents) == 1:
+            return parents[0]
+
+        return None
+
+    # Get first degree relatives - exclude duplicate samples
+    dups = hl.literal(duplicated_samples)
+    first_degree_pairs = kin_ht.filter(
+        (kin_ht[kin_col] > first_degree_threshold[0]) &
+        (kin_ht[kin_col] < first_degree_threshold[1]) &
+        ~dups.contains(kin_ht[i_col]) &
+        ~dups.conatins(kin_ht[j_col])
+    ).collect()
+    first_degree_relatives = defaultdict(set)
+    for row in first_degree_pairs:
+        first_degree_relatives[row[i_col]].add(row[j_col])
+        first_degree_relatives[row[j_col]].add(row[i_col])
+
+    #Add second degree relatives for those samples
+    #This is needed to distinguish grandparent - child - parent from child - mother, father down the line
+    first_degree_samples = hl.literal(set(first_degree_relatives.keys()))
+    sample_pairs = kin_ht.filter(
+        (first_degree_samples.contains(kin_ht[i_col]) | first_degree_samples.contains(kin_ht[j_col])) &
+        (kin_ht[kin_col] > second_degree_threshold[0]) &
+        (kin_ht[kin_col] < first_degree_threshold[1])
     )
 
-    # Get the list of siblings
-    sibs, sibs_mapping = prune_relatives(
-        get_samples_relatives([x for x in first_degree_pairs if
-                               x[i_col] not in dups and x[j_col] not in dups and
-                               x[kin_col] < first_degree_threshold[1] and
-                               x[k2_col] >= k2_parent_offspring_threshold])
-    )
+    # Get sex for all first degree relatives
+    sex = {x[sex_s_col]: x[sex_sex_col] for x in
+           sex_ht.filter(first_degree_samples.contains(sex_ht[sex_s_col])).select(sex_s_col, sex_sex_col).collect()}
 
-    # Get parent/offspring
-    parent_offspring = get_samples_relatives([x for x in first_degree_pairs if
-                                              x[i_col] not in dups and x[j_col] not in dups and
-                                              x[i_col] not in sibs and x[j_col] not in sibs and
-                                              x[kin_col] < first_degree_threshold[1] and
-                                              x[k2_col] < k2_parent_offspring_threshold])
+    kinship = get_indexed_kinship(sample_pairs),
 
-    # Keep offspring with 2 parents only (complete trios)
-    complete_trios = {s: (s_rel, s_rel) for s, s_rel in parent_offspring if len(s_rel) == 2}
-
-    #Get sex for all non-duplicated samples
-    samples_bc = hl.literal(list(sibs) + list(parent_offspring))
-    sex = {x[sex_s_col]: x[sex_sex_col] for x in sex_ht.filter(samples_bc.contains(sex_ht[sex_s_col])).select(sex_ht[sex_s_col, sex_sex_col]).collect() }
-
-    # Combine samples into families
+    fam_id = 0
     trios = []
-    famID = 0
-    while (len(complete_trios) > 0):
-        fam_samples = list(get_fam_samples(list(complete_trios)[0], set(), parent_offspring))
-        for s in fam_samples:
-            if s in complete_trios:
-                father, mother = get_parents(complete_trios.pop(s), sex)
-                if father and mother:
-                    trio_samples = [s] if s not in sibs_mapping else [s] + list(sibs_mapping[s])
-                    for ts in trio_samples:
-                        trios.append(hl.Trio(ts, str(famID), father, mother, sex.get(ts)))
+    while len(first_degree_relatives) > 0:
+        s_fam = get_fam_samples(list(first_degree_relatives)[0], {},
+                                first_degree_relatives)
+        for s in s_fam:
+            s_rel = first_degree_relatives.pop(s)
+            possible_parents = []
+            for rel in s_rel:
+                kin, kin2 = kinship[get_sorted_s(s, rel)]
+                if kin > first_degree_threshold and kin2 < k2_parent_offspring_threshold:
+                    possible_parents.append(rel)
 
-        famID += 1
+            parents = get_parents(possible_parents, kinship, sex)
+
+            if parents is not None:
+                trios.append(hl.Trio(s, str(fam_id), parents[0], parents[1], sex.get(s)))
+
+        fam_id += 1
 
     return hl.Pedigree(trios)

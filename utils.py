@@ -317,7 +317,7 @@ def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
                         (mt[af_location] > 0) & (mt[af_location] < 1))
 
     gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
-    return mt.annotate_cols(scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
+    return mt.annotate_cols(pca_scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
 
 
 def filter_to_autosomes(mt: hl.MatrixTable) -> hl.MatrixTable:

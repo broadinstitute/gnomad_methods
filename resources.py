@@ -346,7 +346,7 @@ def qc_ht_path(data_type: str):
     return 'gs://gnomad/sample_qc/ht/gnomad.{}.high_callrate_common_biallelic_snps.ht'.format(data_type)
 
 
-def qc_temp_data_path(data_type: str):
+def qc_temp_data_prefix(data_type: str):
     return 'gs://gnomad/sample_qc/temp/{0}/gnomad.{0}'.format(data_type)
 
 

@@ -568,7 +568,7 @@ def get_duplicated_samples(
         j_col: str = 'j',
         kin_col: str = 'kin',
         duplicate_threshold: float = 0.4 # TODO: Look at distribution to pick a value
-) -> Dict[str, Set[str]]: #TODO: Is this the most intuitive format? Otherwise could be List[Set[str]] where each set is a set of duplicated samples.
+) -> List[Set[str]]:
     """
     Given a pc_relate output Table, extract the list of duplicate samples. Returns a dict where the keys are the
     samples that have one or more duplicates and the values are the set duplicates for each sample.
@@ -580,16 +580,23 @@ def get_duplicated_samples(
     :param str kin_col: Column containing the kinship value
     :param float duplicate_threshold: Kinship threshold to consider two samples duplicated
     :return: Dict of samples that have are duplicated and their duplicated IDs
-    :rtype: dict of str: set of str
+    :rtype: list of set of str
     """
 
     dups = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
 
-    duplicated_samples = defaultdict(set)
+    samples_duplicates = defaultdict(set)
     for row in dups:
-        if row[kin_col] > duplicate_threshold:
-            duplicated_samples[row[i_col]].add(row[j_col])
-            duplicated_samples[row[j_col]].add(row[i_col])
+        samples_duplicates[row[i_col]].add(row[j_col])
+        samples_duplicates[row[j_col]].add(row[i_col])
+
+    duplicated_samples = []
+    while len(samples_duplicates) > 0:
+        s, dups = samples_duplicates.popitem()
+        for dup in dups:
+            del samples_duplicates[dup]
+        dups.add(s)
+        duplicated_samples.append(dups)
 
     return duplicated_samples
 
@@ -622,7 +629,7 @@ def infer_families(kin_ht: hl.Table,
     :param Table sex_ht: A table containing sex for each sample
     :param set of str duplicated_samples: Duplicated samples to remove (If not provided, this function won't work as it assumes that each child has exactly two parents)
     :param str i_col: Column containing the 1st sample id in the pc_relate table
-    :param str j_col: Column containing the 1st sample id in the pc_relate table
+    :param str j_col: Column containing the 2nd sample id in the pc_relate table
     :param str kin_col: Column containing the kinship in the pc_relate table
     :param str k2_col: Column containing kin2 in the pc_relate table
     :param str sex_s_col: Column containing the sample id in the sex table
@@ -651,41 +658,25 @@ def infer_families(kin_ht: hl.Table,
         fam.add(sample)
         for s2 in samples_rel[sample]:
             if s2 not in fam:
-                return get_fam_samples(s2, fam, samples_rel)
+                fam = get_fam_samples(s2, fam, samples_rel)
         return fam
 
-    def get_sorted_s(
-            s1: str,
-            s2: str
-    ) -> Tuple[str, str]:
-        """
-        Given two sample names, returns them in lexical order
-
-        :param str s1: 1st sample name
-        :param str s2: 2nd sample name
-        :return: Ordered sample names
-        :rtype: (str, str)
-        """
-        if s1 > s2:
-            return (s1, s2)
-        else:
-            return (s2, s1)
 
     def get_indexed_kinship(
-            pc_relate_rows: hl.Struct
+            pc_relate_rows: List[hl.Struct]
     ) -> Dict[Tuple[str, str], Tuple[float, float]]:
         """
         Given rows from a pc_relate table, creates a dict with:
         keys: Pairs of individuals, lexically ordered
         values: (kinship, k2)
 
-        :param hl.Struct pc_relate_rows: Rows from a pc_relate table
+        :param list of hl.Struct pc_relate_rows: Rows from a pc_relate table
         :return: Dict of lexically ordered pairs of individuals -> kinship
         :rtype: dict of (str, str) -> (float, float)
         """
         kinship = dict()
         for row in pc_relate_rows:
-            kinship[get_sorted_s(row[i_col], row[j_col])] = (row[kin_col], row[k2_col])
+            kinship[sorted(row[i_col], row[j_col])] = (row[kin_col], row[k2_col])
         return kinship
 
     def get_parents(
@@ -709,7 +700,7 @@ def infer_families(kin_ht: hl.Table,
         while len(possible_parents) > 1:
             p1 = possible_parents.pop()
             for p2 in possible_parents:
-                if get_sorted_s(p1,p2) not in indexed_kinship:
+                if sorted(p1,p2) not in indexed_kinship:
                     if sex[p1] == 'male' and sex[p2] == 'female':
                         parents.append((p1,p2))
                     elif sex[p1] == 'female' and sex[p2] == 'male':
@@ -757,7 +748,7 @@ def infer_families(kin_ht: hl.Table,
             s_rel = first_degree_relatives.pop(s)
             possible_parents = []
             for rel in s_rel:
-                kin, kin2 = kinship[get_sorted_s(s, rel)]
+                kin, kin2 = kinship[sorted(s, rel)]
                 if kin > first_degree_threshold and kin2 < k2_parent_offspring_threshold:
                     possible_parents.append(rel)
 

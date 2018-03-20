@@ -337,5 +337,27 @@ vep_config = "/vep/vep-gcloud.properties"
 context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'
 
 
+# Sample QC files
+def qc_mt_path(data_type: str):
+    return 'gs://gnomad/sample_qc/mt/gnomad.{}.high_callrate_common_biallelic_snps.mt'.format(data_type)
+
+
+def qc_ht_path(data_type: str):
+    return 'gs://gnomad/sample_qc/ht/gnomad.{}.high_callrate_common_biallelic_snps.ht'.format(data_type)
+
+
+def qc_temp_data_prefix(data_type: str):
+    return 'gs://gnomad/sample_qc/temp/{0}/gnomad.{0}'.format(data_type)
+
+
+def qc_meta_path(data_type: str):
+    if data_type == 'exomes':
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.metadata.2018-01-31.reformatted_colnames.tsv.txt.gz'
+    else:
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.metadata.2018-01-31.reformatted_colnames.tsv.txt.gz'
+
+exome_extra_meta_path = 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.metadata_import_table.2018-01-31.one_hot_encoded.txt'
+
+
 class DataException(Exception):
     pass

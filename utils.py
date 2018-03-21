@@ -205,8 +205,8 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     y_nonpar = mt.locus.in_y_nonpar()
     return mt.annotate_entries(
         GT=hl.case(missing_false=True)
-        .when(female & (y_par | y_nonpar), hl.null(hl.tcall()))
-        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall()))
+        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
+        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall))
         .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
         .default(mt.GT)
     )

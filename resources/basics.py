@@ -356,7 +356,6 @@ def qc_meta_path(data_type: str):
     else:
         return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-03-21.txt.bgz'
 
-exome_extra_meta_path = 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.metadata_import_table.2018-01-31.one_hot_encoded.txt'
 
 
 class DataException(Exception):

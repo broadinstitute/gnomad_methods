@@ -32,4 +32,5 @@ callrate_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.exomes.callrate_pca_s
 
 exome_callrate_mt_path = 'gs://gnomad/sample_qc/mt/gnomad.exomes.callrate.mt'
 
-estonian_batches = 'gs://gnomad/projects/unify_sample_qc/gnomad.genomes.estonian_samples.txt'
+known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_annots.txt'
+estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_samples.txt'

@@ -3,7 +3,7 @@
 # Sample QC files
 def qc_mt_path(data_type: str, pruned: bool = False):
     # can be joint, pruned only for joint
-    return 'gs://gnomad/sample_qc/mt/gnomad.{}.high_callrate_common_biallelic_snps.{}mt'.format(data_type,
+    return 'gs://gnomad/sample_qc/mt/gnomad.{}.high_callrate_common_biallelic_snps{}.mt'.format(data_type,
                                                                                                 '.pruned' if pruned else '')
 
 

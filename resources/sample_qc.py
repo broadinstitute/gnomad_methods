@@ -10,8 +10,8 @@ def qc_mt_path(data_type: str, ld_pruned: bool = False) -> str:
         raise DataException("Select data_type as one of 'genomes' or 'exomes' or 'joint'")
     if ld_pruned and data_type != 'joint':
         raise DataException("ld_pruned = True is only available for 'joint'")
-    return 'gs://gnomad/sample_qc/mt/gnomad.{}.high_callrate_common_biallelic_snps{}.mt'.format(data_type,
-                                                                                                '.pruned' if ld_pruned else '')
+    ld_pruned = '.pruned' if ld_pruned else ''
+    return f'gs://gnomad/sample_qc/mt/gnomad.{data_type}.high_callrate_common_biallelic_snps{ld_pruned}.mt'
 
 
 def qc_ht_path(data_type: str, part: str) -> str:
@@ -28,7 +28,7 @@ def qc_ht_path(data_type: str, part: str) -> str:
         raise DataException("Select part as one of 'hard_filters', 'platforms', or 'pop_platform'")
     if data_type == 'genomes' and part == 'platforms':
         raise DataException("'platforms' only available for 'genomes'")
-    return 'gs://gnomad/sample_qc/ht/gnomad.{}.{}.ht'.format(data_type, part)
+    return f'gs://gnomad/sample_qc/ht/gnomad.{data_type}.{part}.ht'
 
 
 def rank_annotations_path(data_type: str) -> str:
@@ -37,7 +37,7 @@ def rank_annotations_path(data_type: str) -> str:
     """
     if data_type not in ('exomes', 'genomes', 'joint'):
         raise DataException("Select data_type as one of 'genomes' or 'exomes' or 'joint'")
-    return 'gs://gnomad/sample_qc/tsv/gnomad.{0}.rank_list_annotations.txt.bgz'.format(data_type)
+    return f'gs://gnomad/sample_qc/tsv/gnomad.{data_type}.rank_list_annotations.txt.bgz'
 
 
 def qc_temp_data_prefix(data_type: str) -> str:
@@ -46,7 +46,7 @@ def qc_temp_data_prefix(data_type: str) -> str:
     """
     if data_type not in ('exomes', 'genomes', 'joint'):
         raise DataException("Select data_type as one of 'genomes' or 'exomes' or 'joint'")
-    return 'gs://gnomad/sample_qc/temp/{0}/gnomad.{0}'.format(data_type)
+    return f'gs://gnomad/sample_qc/temp/{data_type}/gnomad.{data_type}'
 
 
 def qc_meta_path(data_type: str) -> str:

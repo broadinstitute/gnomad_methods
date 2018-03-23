@@ -269,6 +269,14 @@ def metadata_exomes_tsv_path(version=CURRENT_EXOME_META):
     return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.tsv.bgz'.format(version)
 
 
+def metadata_genomes_ht_path(version=CURRENT_GENOME_META):
+    return 'gs://gnomad/metadata/genomes/gnomad.genomes.metadata.{0}.ht'.format(version)
+
+
+def metadata_exomes_ht_path(version=CURRENT_EXOME_META):
+    return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.ht'.format(version)
+
+
 genomes_fam_path = "gs://gnomad/metadata/genomes/gnomad.genomes.fam"
 exomes_fam_path = "gs://gnomad/metadata/exomes/gnomad.exomes.fam"
 genomes_exomes_duplicate_ids_tsv_path = "gs://gnomad/metadata/genomes_exomes_duplicate_ids.tsv"

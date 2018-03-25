@@ -60,9 +60,14 @@ def qc_meta_path(data_type: str) -> str:
     else:
         raise DataException("Select data_type as one of 'genomes' or 'exomes'")
 
-callrate_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.exomes.callrate_pca_scores.ht'
 
+exome_callrate_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.exomes.callrate_pca_scores.ht'
 exome_callrate_mt_path = 'gs://gnomad/sample_qc/mt/gnomad.exomes.callrate.mt'
+
+relatedness_ht = 'gs://gnomad/sample_qc/ht/gnomad.joint.relatedness.ht'
+
+ancestry_pca_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_scores.ht'
+ancestry_pca_loadings_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_loadings.ht'
 
 known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_annots.txt'
 estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_samples.txt'

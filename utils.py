@@ -173,7 +173,7 @@ def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligne
     if 'PGT' in fields:
         expression['PGT'] = hl.downcode(mt.PGT, sm.a_index())
     if 'PID' in fields:
-        expression['PGT'] = mt.PID
+        expression['PID'] = mt.PID
 
     # Custom data
     if 'ADALL' in fields:  # found in NA12878

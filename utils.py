@@ -602,14 +602,12 @@ def get_duplicated_samples(
 
 
 def infer_families(kin_ht: hl.Table,
-                   sex_ht: hl.Table,
+                   sex: Dict[str, bool],
                    duplicated_samples: Set[str],
                    i_col: str = 'i',
                    j_col: str = 'j',
                    kin_col: str = 'kin',
                    k2_col: str = 'k2',
-                   sex_s_col: str = 's',
-                   sex_sex_col: str = 'sex',
                    first_degree_threshold: Tuple[float, float] = (0.2, 0.3),  # TODO: Look at distribution
                    second_degree_threshold: Tuple[float, float] = (0.1, 0.16),  # TODO: Look at distribution
                    k2_parent_offspring_threshold: float = 0.2  # TODO: Look at distribution
@@ -620,20 +618,18 @@ def infer_families(kin_ht: hl.Table,
     Note that both kinship and k2 are needed in the pc_relate output.
 
     This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
-    trios if one or more members of the trios are related (e.g. sibs, multi-generational family).
+    trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
 
     Note that this function only returns complete trios defined as:
     one child, one father and one mother (sex is required for both parents)
 
     :param Table kin_ht: pc_relate output table
-    :param Table sex_ht: A table containing sex for each sample
+    :param dict of str -> bool sex: A dict containing the sex for each sample. True = female, False = male, None = unknown
     :param set of str duplicated_samples: Duplicated samples to remove (If not provided, this function won't work as it assumes that each child has exactly two parents)
     :param str i_col: Column containing the 1st sample id in the pc_relate table
     :param str j_col: Column containing the 2nd sample id in the pc_relate table
     :param str kin_col: Column containing the kinship in the pc_relate table
     :param str k2_col: Column containing kin2 in the pc_relate table
-    :param str sex_s_col: Column containing the sample id in the sex table
-    :param str sex_sex_col: Column containing the sample sex in the sex table
     :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
     :param (float, float) second_degree_threshold: Lower/upper bounds for kin for 2nd degree relatives
     :param float k2_parent_offspring_threshold: Upper bound on kin2 for a parent/offspring
@@ -661,37 +657,36 @@ def infer_families(kin_ht: hl.Table,
                 fam = get_fam_samples(s2, fam, samples_rel)
         return fam
 
-
-    def get_indexed_kinship(
+    def get_indexed_k2(
             pc_relate_rows: List[hl.Struct]
-    ) -> Dict[Tuple[str, str], Tuple[float, float]]:
+    ) -> Dict[Tuple[str, str], float]:
         """
         Given rows from a pc_relate table, creates a dict with:
         keys: Pairs of individuals, lexically ordered
-        values: (kinship, k2)
+        values: k2
 
         :param list of hl.Struct pc_relate_rows: Rows from a pc_relate table
         :return: Dict of lexically ordered pairs of individuals -> kinship
-        :rtype: dict of (str, str) -> (float, float)
+        :rtype: dict of (str, str) -> float
         """
-        kinship = dict()
+        k2 = dict()
         for row in pc_relate_rows:
-            kinship[sorted(row[i_col], row[j_col])] = (row[kin_col], row[k2_col])
-        return kinship
+            k2[tuple(sorted((row[i_col], row[j_col])))] = row[k2_col]
+        return k2
 
     def get_parents(
             possible_parents: List[str],
             indexed_kinship: Dict[Tuple[str, str], Tuple[float, float]],
-            sex: Dict[str, str]
+            sex: Dict[str, bool]
     ) -> Tuple[str, str]:
         """
         Given a list of possible parents for a sample (first degree relatives with low k2),
-        looks for a single pair of samples that are unrelated with sex 'male' and 'female'.
+        looks for a single pair of samples that are unrelated with different sexes.
         If a single pair is found, return the pair (father, mother)
 
         :param list of str possible_parents: Possible parents
         :param dict of (str, str) -> (float, float)) indexed_kinship: Dict mapping pairs of individuals to their kinship and k2 coefficients
-        :param dict of str -> str sex: Dict mapping samples to their sex (male, female should be coded 'male', 'female' resp.)
+        :param dict of str -> bool sex: Dict mapping samples to their sex (True = female, False = male, None or missing = unknown)
         :return: (father, mother)
         :rtype: (str, str)
         """
@@ -700,10 +695,10 @@ def infer_families(kin_ht: hl.Table,
         while len(possible_parents) > 1:
             p1 = possible_parents.pop()
             for p2 in possible_parents:
-                if sorted(p1,p2) not in indexed_kinship:
-                    if sex[p1] == 'male' and sex[p2] == 'female':
+                if tuple(sorted((p1,p2))) not in indexed_kinship:
+                    if sex.get(p1) is False and sex.get(p2):
                         parents.append((p1,p2))
-                    elif sex[p1] == 'female' and sex[p2] == 'male':
+                    elif sex.get(p1) and sex.get(p2) is False:
                         parents.append((p2,p1))
 
         if len(parents) == 1:
@@ -717,7 +712,7 @@ def infer_families(kin_ht: hl.Table,
         (kin_ht[kin_col] > first_degree_threshold[0]) &
         (kin_ht[kin_col] < first_degree_threshold[1]) &
         ~dups.contains(kin_ht[i_col]) &
-        ~dups.conatins(kin_ht[j_col])
+        ~dups.contains(kin_ht[j_col])
     ).collect()
     first_degree_relatives = defaultdict(set)
     for row in first_degree_pairs:
@@ -727,35 +722,34 @@ def infer_families(kin_ht: hl.Table,
     #Add second degree relatives for those samples
     #This is needed to distinguish grandparent - child - parent from child - mother, father down the line
     first_degree_samples = hl.literal(set(first_degree_relatives.keys()))
-    sample_pairs = kin_ht.filter(
+    second_degree_samples = kin_ht.filter(
         (first_degree_samples.contains(kin_ht[i_col]) | first_degree_samples.contains(kin_ht[j_col])) &
         (kin_ht[kin_col] > second_degree_threshold[0]) &
         (kin_ht[kin_col] < first_degree_threshold[1])
-    )
+    ).collect()
 
-    # Get sex for all first degree relatives
-    sex = {x[sex_s_col]: x[sex_sex_col] for x in
-           sex_ht.filter(first_degree_samples.contains(sex_ht[sex_s_col])).select(sex_s_col, sex_sex_col).collect()}
-
-    kinship = get_indexed_kinship(sample_pairs),
+    k2 = get_indexed_k2(second_degree_samples)
 
     fam_id = 0
     trios = []
     while len(first_degree_relatives) > 0:
-        s_fam = get_fam_samples(list(first_degree_relatives)[0], {},
+        s_fam = get_fam_samples(list(first_degree_relatives)[0], set(),
                                 first_degree_relatives)
         for s in s_fam:
             s_rel = first_degree_relatives.pop(s)
             possible_parents = []
             for rel in s_rel:
-                kin, kin2 = kinship[sorted(s, rel)]
-                if kin > first_degree_threshold and kin2 < k2_parent_offspring_threshold:
+                if k2[tuple(sorted((s, rel)))] < k2_parent_offspring_threshold:
                     possible_parents.append(rel)
 
-            parents = get_parents(possible_parents, kinship, sex)
+            parents = get_parents(possible_parents, k2, sex)
 
             if parents is not None:
-                trios.append(hl.Trio(s, str(fam_id), parents[0], parents[1], sex.get(s)))
+                trios.append(hl.Trio(s=s,
+                                     fam_id=str(fam_id),
+                                     pat_id=parents[0],
+                                     mat_id=parents[1],
+                                     is_female=sex.get(s)))
 
         fam_id += 1
 

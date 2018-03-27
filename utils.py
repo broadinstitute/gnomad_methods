@@ -111,6 +111,13 @@ def annotate_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
                                ))
 
 
+def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
+    """
+    Generate unphased version of MatrixTable (assumes call is in mt.GT)
+    """
+    return mt.annotate_entries(GT=hl.call(mt.GT[0], mt.GT[1], phased=False))
+
+
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
     """
     Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)

@@ -17,15 +17,16 @@ logger = logging.getLogger("utils")
 logger.setLevel(logging.INFO)
 
 
-POP_NAMES = {'AFR': "African/African American",
-             'AMR': "Admixed American",
-             'ASJ': "Ashkenazi Jewish",
-             'EAS': "East Asian",
-             'FIN': "Finnish",
-             'NFE': "Non-Finnish European",
-             'OTH': "Other (population not assigned)",
-             'SAS': "South Asian"
-             }
+POP_NAMES = {
+    'AFR': "African/African American",
+    'AMR': "Admixed American",
+    'ASJ': "Ashkenazi Jewish",
+    'EAS': "East Asian",
+    'FIN': "Finnish",
+    'NFE': "Non-Finnish European",
+    'OTH': "Other (population not assigned)",
+    'SAS': "South Asian"
+}
 
 SEXES = {
     'Male': 'Male',
@@ -33,51 +34,52 @@ SEXES = {
 }
 
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
-CSQ_CODING_HIGH_IMPACT = ["transcript_ablation",
-"splice_acceptor_variant",
-"splice_donor_variant",
-"stop_gained",
-"frameshift_variant",
-"stop_lost"]
+CSQ_CODING_HIGH_IMPACT = [
+    "transcript_ablation",
+    "splice_acceptor_variant",
+    "splice_donor_variant",
+    "stop_gained",
+    "frameshift_variant",
+    "stop_lost"]
 
 CSQ_CODING_MEDIUM_IMPACT = [
-"start_lost",  # new in v81
-"initiator_codon_variant",  # deprecated
-"transcript_amplification",
-"inframe_insertion",
-"inframe_deletion",
-"missense_variant",
-"protein_altering_variant",  # new in v79
-"splice_region_variant"
+    "start_lost",  # new in v81
+    "initiator_codon_variant",  # deprecated
+    "transcript_amplification",
+    "inframe_insertion",
+    "inframe_deletion",
+    "missense_variant",
+    "protein_altering_variant",  # new in v79
+    "splice_region_variant"
 ]
 
 CSQ_CODING_LOW_IMPACT = [
-"incomplete_terminal_codon_variant",
-"stop_retained_variant",
-"synonymous_variant",
-"coding_sequence_variant"]
+    "incomplete_terminal_codon_variant",
+    "stop_retained_variant",
+    "synonymous_variant",
+    "coding_sequence_variant"]
 
 CSQ_NON_CODING = [
-"mature_miRNA_variant",
-"5_prime_UTR_variant",
-"3_prime_UTR_variant",
-"non_coding_transcript_exon_variant",
-"non_coding_exon_variant",  # deprecated
-"intron_variant",
-"NMD_transcript_variant",
-"non_coding_transcript_variant",
-"nc_transcript_variant",  # deprecated
-"upstream_gene_variant",
-"downstream_gene_variant",
-"TFBS_ablation",
-"TFBS_amplification",
-"TF_binding_site_variant",
-"regulatory_region_ablation",
-"regulatory_region_amplification",
-"feature_elongation",
-"regulatory_region_variant",
-"feature_truncation",
-"intergenic_variant"
+    "mature_miRNA_variant",
+    "5_prime_UTR_variant",
+    "3_prime_UTR_variant",
+    "non_coding_transcript_exon_variant",
+    "non_coding_exon_variant",  # deprecated
+    "intron_variant",
+    "NMD_transcript_variant",
+    "non_coding_transcript_variant",
+    "nc_transcript_variant",  # deprecated
+    "upstream_gene_variant",
+    "downstream_gene_variant",
+    "TFBS_ablation",
+    "TFBS_amplification",
+    "TF_binding_site_variant",
+    "regulatory_region_ablation",
+    "regulatory_region_amplification",
+    "feature_elongation",
+    "regulatory_region_variant",
+    "feature_truncation",
+    "intergenic_variant"
 ]
 
 CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
@@ -101,14 +103,12 @@ def annotate_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     adj_dp = 10
     adj_ab = 0.2
 
-    return mt.annotate_entries(adj=
-                               (mt.GQ >= adj_gq) & (mt.DP >= adj_dp) & (
+    return mt.annotate_entries(adj=(mt.GQ >= adj_gq) & (mt.DP >= adj_dp) & (
                                    ~mt.GT.is_het() |
                                    ((mt.GT[0] == 0) & (mt.AD[mt.GT[1]] / mt.DP >= adj_ab)) |
                                    ((mt.GT[0] > 0) & (mt.AD[mt.GT[0]] / mt.DP >= adj_ab) &
                                     (mt.AD[mt.GT[1]] / mt.DP >= adj_ab))
-                               )
-    )
+                               ))
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
@@ -118,16 +118,14 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != '*', alts)
-    return hl.struct(variant_type=
-                     hl.cond(
-                         hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
-                         hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
-                         hl.cond(
-                             hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
-                             hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
-                             "mixed")
-                     ),
-                     n_alt_alleles=hl.len(non_star_alleles))
+    return hl.struct(variant_type=hl.cond(
+        hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
+        hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
+        hl.cond(
+            hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
+            hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
+            "mixed")
+    ), n_alt_alleles=hl.len(non_star_alleles))
 
 
 def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligned: bool = True) -> hl.MatrixTable:
@@ -163,7 +161,7 @@ def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligne
                                 hl.min((hl.range(0, hl.triangle(mt.alleles.length()))
                                         .filter(lambda j: hl.downcode(hl.unphased_diploid_gt_index_call(j),
                                                                       sm.a_index()) == hl.unphased_diploid_gt_index_call(i)
-                                ).map(lambda j: mt.PL[j]))))))
+                                                ).map(lambda j: mt.PL[j]))))))
         expression['PL'] = pl
         if 'GQ' in fields:
             expression['GQ'] = hl.gq_from_pl(pl)
@@ -175,7 +173,7 @@ def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligne
     if 'PGT' in fields:
         expression['PGT'] = hl.downcode(mt.PGT, sm.a_index())
     if 'PID' in fields:
-        expression['PGT'] = mt.PID
+        expression['PID'] = mt.PID
 
     # Custom data
     if 'ADALL' in fields:  # found in NA12878
@@ -402,7 +400,9 @@ def process_consequences(mt: hl.MatrixTable, vep_root: str = 'vep', penalize_fla
         """
         flag_score = 500
         no_flag_score = flag_score * (1 + penalize_flags)
-        csq_score = lambda tc: csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
+
+        def csq_score(tc):
+            return csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
         tcl = tcl.map(lambda tc: tc.annotate(
             csq_score=hl.case(missing_false=True)
             .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)

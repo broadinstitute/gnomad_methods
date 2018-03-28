@@ -359,20 +359,20 @@ def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_
 
     if filter_lcr:
         lcr = hl.import_locus_intervals(lcr_intervals_path)
-        mt = mt.filter_rows(lcr[mt.locus], keep=False)
+        mt = mt.filter_rows(hl.is_defined(lcr[mt.locus]), keep=False)
 
     if filter_decoy:
         decoy = hl.import_locus_intervals(decoy_intervals_path)
-        mt = mt.filter_rows(decoy[mt.locus], keep=False)
+        mt = mt.filter_rows(hl.is_defined(decoy[mt.locus]), keep=False)
 
     if filter_segdup:
         segdup = hl.import_locus_intervals(segdup_intervals_path)
-        mt = mt.filter_rows(segdup[mt.locus], keep=False)
+        mt = mt.filter_rows(hl.is_defined(segdup[mt.locus]), keep=False)
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
             region = hl.import_locus_intervals(region)
-            mt = mt.filter_rows(region[mt.locus], keep=True)
+            mt = mt.filter_rows(hl.is_defined(region[mt.locus]), keep=True)
 
     return mt
 

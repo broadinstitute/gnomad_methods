@@ -54,9 +54,9 @@ def qc_meta_path(data_type: str) -> str:
     Input metadata file for sample QC
     """
     if data_type == 'exomes':
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-03-21.txt.bgz'
-    elif data_type == 'genomes':
         return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-03-21.txt.bgz'
+    elif data_type == 'genomes':
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-03-21.txt.bgz'
     else:
         raise DataException("Select data_type as one of 'genomes' or 'exomes'")
 

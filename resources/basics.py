@@ -277,6 +277,17 @@ def metadata_exomes_ht_path(version=CURRENT_EXOME_META):
     return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.ht'.format(version)
 
 
+def coverage_mt_path(data_type) -> str:
+    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/mt/gnomad.{data_type}.coverage.mt'
+
+
+def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool = False) -> str:
+    if by_population and by_population:
+        raise DataException('Cannot assess coverage by both population and platform... yet...')
+    by = '.population' if by_population else '.platform' if by_platform else ''
+    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
+
+
 genomes_fam_path = "gs://gnomad/metadata/genomes/gnomad.genomes.fam"
 exomes_fam_path = "gs://gnomad/metadata/exomes/gnomad.exomes.fam"
 genomes_exomes_duplicate_ids_tsv_path = "gs://gnomad/metadata/genomes_exomes_duplicate_ids.tsv"

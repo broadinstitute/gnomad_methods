@@ -606,15 +606,15 @@ def infer_families(kin_ht: hl.Table,
                    i_col: str = 'i',
                    j_col: str = 'j',
                    kin_col: str = 'kin',
-                   k2_col: str = 'k2',
+                   ibd2_col: str = 'ibd2',
                    first_degree_threshold: Tuple[float, float] = (0.2, 0.4),
                    second_degree_threshold: Tuple[float, float] = (0.05, 0.16),
-                   k2_parent_offspring_threshold: float = 0.2
+                   ibd2_parent_offspring_threshold: float = 0.2
                    ) -> hl.Pedigree:
     """
 
     Infers familial relationships from the results of pc_relate and sex information.
-    Note that both kinship and k2 are needed in the pc_relate output.
+    Note that both kinship and ibd2 are needed in the pc_relate output.
 
     This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
     trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
@@ -628,10 +628,10 @@ def infer_families(kin_ht: hl.Table,
     :param str i_col: Column containing the 1st sample id in the pc_relate table
     :param str j_col: Column containing the 2nd sample id in the pc_relate table
     :param str kin_col: Column containing the kinship in the pc_relate table
-    :param str k2_col: Column containing kin2 in the pc_relate table
+    :param str ibd2_col: Column containing kin2 in the pc_relate table
     :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
     :param (float, float) second_degree_threshold: Lower/upper bounds for kin for 2nd degree relatives
-    :param float k2_parent_offspring_threshold: Upper bound on kin2 for a parent/offspring
+    :param float ibd2_parent_offspring_threshold: Upper bound on kin2 for a parent/offspring
     :return: Pedigree containing all trios in the data
     :rtype: Pedigree
     """
@@ -656,22 +656,22 @@ def infer_families(kin_ht: hl.Table,
                 fam = get_fam_samples(s2, fam, samples_rel)
         return fam
 
-    def get_indexed_k2(
+    def get_indexed_ibd2(
             pc_relate_rows: List[hl.Struct]
     ) -> Dict[Tuple[str, str], float]:
         """
         Given rows from a pc_relate table, creates a dict with:
         keys: Pairs of individuals, lexically ordered
-        values: k2
+        values: ibd2
 
         :param list of hl.Struct pc_relate_rows: Rows from a pc_relate table
         :return: Dict of lexically ordered pairs of individuals -> kinship
         :rtype: dict of (str, str) -> float
         """
-        k2 = dict()
+        ibd2 = dict()
         for row in pc_relate_rows:
-            k2[tuple(sorted((row[i_col], row[j_col])))] = row[k2_col]
-        return k2
+            ibd2[tuple(sorted((row[i_col], row[j_col])))] = row[ibd2_col]
+        return ibd2
 
     def get_parents(
             possible_parents: List[str],
@@ -679,12 +679,12 @@ def infer_families(kin_ht: hl.Table,
             sex: Dict[str, bool]
     ) -> Tuple[str, str]:
         """
-        Given a list of possible parents for a sample (first degree relatives with low k2),
+        Given a list of possible parents for a sample (first degree relatives with low ibd2),
         looks for a single pair of samples that are unrelated with different sexes.
         If a single pair is found, return the pair (father, mother)
 
         :param list of str possible_parents: Possible parents
-        :param dict of (str, str) -> (float, float)) indexed_kinship: Dict mapping pairs of individuals to their kinship and k2 coefficients
+        :param dict of (str, str) -> (float, float)) indexed_kinship: Dict mapping pairs of individuals to their kinship and ibd2 coefficients
         :param dict of str -> bool sex: Dict mapping samples to their sex (True = female, False = male, None or missing = unknown)
         :return: (father, mother)
         :rtype: (str, str)
@@ -727,7 +727,7 @@ def infer_families(kin_ht: hl.Table,
         (kin_ht[kin_col] < first_degree_threshold[1])
     ).collect()
 
-    k2 = get_indexed_k2(second_degree_samples)
+    ibd2 = get_indexed_ibd2(second_degree_samples)
 
     fam_id = 1
     trios = []
@@ -738,10 +738,10 @@ def infer_families(kin_ht: hl.Table,
             s_rel = first_degree_relatives.pop(s)
             possible_parents = []
             for rel in s_rel:
-                if k2[tuple(sorted((s, rel)))] < k2_parent_offspring_threshold:
+                if ibd2[tuple(sorted((s, rel)))] < ibd2_parent_offspring_threshold:
                     possible_parents.append(rel)
 
-            parents = get_parents(possible_parents, k2, sex)
+            parents = get_parents(possible_parents, ibd2, sex)
 
             if parents is not None:
                 trios.append(hl.Trio(s=s,

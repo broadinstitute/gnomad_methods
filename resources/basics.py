@@ -334,8 +334,8 @@ clinvar_tsv_path = "gs://gnomad-resources/clinvar/source/clinvar_alleles.single.
 clinvar_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single.b37.mt"
 
 # Useful intervals
-lcr_intervals_path = "gs://gnomad-public/intervals/LCR.GRCh37_compliant.interval_list" #"gs://gnomad-public/intervals/LCR.interval_list"
-decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.GRCh37_compliant.bed.gz" #"gs://gnomad-public/intervals/mm-2-merged.bed.gz"
+lcr_intervals_path = "gs://gnomad-public/intervals/LCR.GRCh37_compliant.interval_list"  # "gs://gnomad-public/intervals/LCR.interval_list"
+decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.GRCh37_compliant.bed.gz"  # "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
 purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list"
 segdup_intervals_path = "gs://gnomad-public/intervals/hg19_self_chain_split_both.bed.gz"
 
@@ -354,27 +354,6 @@ vep_config = "/vep/vep-gcloud.properties"
 
 # Annotations
 context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'
-
-
-# Sample QC files
-def qc_mt_path(data_type: str):
-    return 'gs://gnomad/sample_qc/mt/gnomad.{}.high_callrate_common_biallelic_snps.mt'.format(data_type)
-
-
-def qc_ht_path(data_type: str):
-    return 'gs://gnomad/sample_qc/ht/gnomad.{}.high_callrate_common_biallelic_snps.ht'.format(data_type)
-
-
-def qc_temp_data_prefix(data_type: str):
-    return 'gs://gnomad/sample_qc/temp/{0}/gnomad.{0}'.format(data_type)
-
-
-def qc_meta_path(data_type: str):
-    if data_type == 'exomes':
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-03-21.txt.bgz'
-    else:
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-03-21.txt.bgz'
-
 
 
 class DataException(Exception):

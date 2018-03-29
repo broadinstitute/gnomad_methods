@@ -334,8 +334,8 @@ clinvar_tsv_path = "gs://gnomad-resources/clinvar/source/clinvar_alleles.single.
 clinvar_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single.b37.mt"
 
 # Useful intervals
-lcr_intervals_path = "gs://gnomad-public/intervals/LCR.interval_list"
-decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
+lcr_intervals_path = "gs://gnomad-public/intervals/LCR.GRCh37_compliant.interval_list" #"gs://gnomad-public/intervals/LCR.interval_list"
+decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.GRCh37_compliant.bed.gz" #"gs://gnomad-public/intervals/mm-2-merged.bed.gz"
 purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list"
 segdup_intervals_path = "gs://gnomad-public/intervals/hg19_self_chain_split_both.bed.gz"
 

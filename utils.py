@@ -608,8 +608,8 @@ def infer_families(kin_ht: hl.Table,
                    j_col: str = 'j',
                    kin_col: str = 'kin',
                    k2_col: str = 'k2',
-                   first_degree_threshold: Tuple[float, float] = (0.2, 0.3),  # TODO: Look at distribution
-                   second_degree_threshold: Tuple[float, float] = (0.1, 0.16),  # TODO: Look at distribution
+                   first_degree_threshold: Tuple[float, float] = (0.2, 0.4),  # TODO: Look at distribution
+                   second_degree_threshold: Tuple[float, float] = (0.05, 0.16),  # TODO: Look at distribution
                    k2_parent_offspring_threshold: float = 0.2  # TODO: Look at distribution
                    ) -> hl.Pedigree:
     """

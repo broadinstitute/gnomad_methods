@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-PACKAGES="slackclient sklearn tabulate scipy statsmodels"
+PACKAGES="slackclient sklearn tabulate scipy statsmodels ggplot hdbscan"
 /opt/conda/bin/pip install --upgrade $PACKAGES
 
 export HAIL_VERSION=devel

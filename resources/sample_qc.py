@@ -64,7 +64,7 @@ def qc_meta_path(data_type: str) -> str:
 exome_callrate_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.exomes.callrate_pca_scores.ht'
 exome_callrate_mt_path = 'gs://gnomad/sample_qc/mt/gnomad.exomes.callrate.mt'
 
-relatedness_ht = 'gs://gnomad/sample_qc/ht/gnomad.joint.relatedness.ht'
+relatedness_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.relatedness.ht'
 
 ancestry_pca_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_scores.ht'
 ancestry_pca_loadings_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_loadings.ht'

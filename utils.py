@@ -730,7 +730,7 @@ def infer_families(kin_ht: hl.Table,
 
     k2 = get_indexed_k2(second_degree_samples)
 
-    fam_id = 0
+    fam_id = 1
     trios = []
     while len(first_degree_relatives) > 0:
         s_fam = get_fam_samples(list(first_degree_relatives)[0], set(),

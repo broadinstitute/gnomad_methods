@@ -71,3 +71,26 @@ ancestry_pca_loadings_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated
 
 known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_annots.txt'
 estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_samples.txt'
+
+# Resources for pedigree inference
+def raw_fam_path(data_type: str, fake: bool = False):
+    fake_str = 'fake' if fake else ''
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_{fake_str}raw.fam'
+
+def sample_qc_mendel_path(data_type: str, part: str) -> str:
+    """
+    Returns the path to mendel_errors results computed as part of the pedigree inference
+
+    part should be one of:
+    - all_errors
+    - per_fam
+    - per_sample
+
+    :param data_type:
+    :param part:
+    :return:
+    """
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_{part}_mendel.mt'
+
+
+

@@ -4,6 +4,7 @@ CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
 CURRENT_GENOME_META = "2017-06-02"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2017-06-02"
+CURRENT_FAM = '2017-10-03'
 
 RELEASES = ["2.0.1", "2.0.2"]
 
@@ -34,7 +35,7 @@ def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
 
 
 def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='meta', fam_root='fam', duplicate_mapping_root=None,
+                    meta_version=None, meta_root='meta', fam_version=CURRENT_FAM, fam_root='fam', duplicate_mapping_root=None,
                     release_samples=False, release_annotations=None):
     """
     Wrapper function to get gnomAD data as VDS.
@@ -46,6 +47,7 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
     :param str hail_version: One of the HAIL_VERSIONs
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata. Set to None if no metadata is desired.
+    :param str fam_version: Version of metadata (default to current)
     :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
     :param str duplicate_mapping_root: Where to put the duplicate genome/exome samples ID mapping (default is None -- do not annotate)
     :param bool release_samples: When set, filters the data to release samples only
@@ -72,7 +74,7 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
         mt = mt.annotate_cols(**{duplicate_mapping_root: dup_ht[mt.s]})
 
     if fam_root:
-        fam_ht = hl.import_fam(exomes_fam_path if data_type == "exomes" else genomes_fam_path)
+        fam_ht = hl.import_fam(fam_path(data_type, fam_version))
         mt = mt.annotate_cols(**{fam_root: fam_ht[mt.s]})
 
     if release_samples:
@@ -288,8 +290,10 @@ def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool =
     return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
 
 
-genomes_fam_path = "gs://gnomad/metadata/genomes/gnomad.genomes.fam"
-exomes_fam_path = "gs://gnomad/metadata/exomes/gnomad.exomes.fam"
+def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
+    return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
+
+
 genomes_exomes_duplicate_ids_tsv_path = "gs://gnomad/metadata/genomes_exomes_duplicate_ids.tsv"
 
 

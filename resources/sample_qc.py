@@ -73,11 +73,13 @@ known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_anno
 estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_samples.txt'
 
 # Resources for pedigree inference
-def raw_fam_path(data_type: str, fake: bool = False):
-    fake_str = 'fake' if fake else ''
-    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_{fake_str}raw.fam'
 
-def sample_qc_mendel_path(data_type: str, part: str) -> str:
+def raw_fam_path(data_type: str, fake: bool = False) -> str:
+    fake_str = 'fake' if fake else ''
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_{fake_str}_raw.fam'
+
+
+def sample_qc_mendel_ht_path(data_type: str, part: str) -> str:
     """
     Returns the path to mendel_errors results computed as part of the pedigree inference
 
@@ -93,4 +95,6 @@ def sample_qc_mendel_path(data_type: str, part: str) -> str:
     return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_{part}_mendel.mt'
 
 
+def merged_pedigrees_ht_path(data_type: str) -> str:
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_merged_ped.mt'
 

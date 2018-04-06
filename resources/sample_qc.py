@@ -75,8 +75,8 @@ estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_sam
 # Resources for pedigree inference
 
 def raw_fam_path(data_type: str, fake: bool = False) -> str:
-    fake_str = 'fake' if fake else ''
-    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_{fake_str}_raw.fam'
+    fake_str = '_fake' if fake else ''
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}{fake_str}_raw.fam'
 
 
 def sample_qc_mendel_ht_path(data_type: str, part: str) -> str:

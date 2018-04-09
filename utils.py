@@ -567,11 +567,10 @@ def get_duplicated_samples(
         i_col: str = 'i',
         j_col: str = 'j',
         kin_col: str = 'kin',
-        duplicate_threshold: float = 0.4 # TODO: Look at distribution to pick a value
+        duplicate_threshold: float = 0.4
 ) -> List[Set[str]]:
     """
-    Given a pc_relate output Table, extract the list of duplicate samples. Returns a dict where the keys are the
-    samples that have one or more duplicates and the values are the set duplicates for each sample.
+    Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
 
 
     :param Table kin_ht: pc_relate output table
@@ -579,7 +578,7 @@ def get_duplicated_samples(
     :param str j_col: Column containing the 2nd sample
     :param str kin_col: Column containing the kinship value
     :param float duplicate_threshold: Kinship threshold to consider two samples duplicated
-    :return: Dict of samples that have are duplicated and their duplicated IDs
+    :return: List of samples that are duplicates
     :rtype: list of set of str
     """
 
@@ -608,9 +607,9 @@ def infer_families(kin_ht: hl.Table,
                    j_col: str = 'j',
                    kin_col: str = 'kin',
                    k2_col: str = 'k2',
-                   first_degree_threshold: Tuple[float, float] = (0.2, 0.4),  # TODO: Look at distribution
-                   second_degree_threshold: Tuple[float, float] = (0.05, 0.16),  # TODO: Look at distribution
-                   k2_parent_offspring_threshold: float = 0.2  # TODO: Look at distribution
+                   first_degree_threshold: Tuple[float, float] = (0.2, 0.4),
+                   second_degree_threshold: Tuple[float, float] = (0.05, 0.16),
+                   k2_parent_offspring_threshold: float = 0.2
                    ) -> hl.Pedigree:
     """
 

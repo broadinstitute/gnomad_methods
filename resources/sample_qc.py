@@ -66,8 +66,20 @@ exome_callrate_mt_path = 'gs://gnomad/sample_qc/mt/gnomad.exomes.callrate.mt'
 
 relatedness_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.relatedness.ht'
 
-ancestry_pca_scores_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_scores.ht'
-ancestry_pca_loadings_ht_path = 'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_loadings.ht'
+
+def ancestry_pca_scores_ht_path(population: str = None) -> str:
+    pop = f'.{population}' if population else ''
+    return f'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_scores{pop}.ht'
+
+
+def ancestry_pca_loadings_ht_path (population: str = None) -> str:
+    pop = f'.{population}' if population else ''
+    return f'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.pca_loadings{pop}.ht'
+
+
+def subpop_ht_path(population: str) -> str:
+    return f'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.subpop_assignments.{population}.ht'
+
 
 known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_annots.txt'
 estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_samples.txt'

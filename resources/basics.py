@@ -1,10 +1,11 @@
 import hail as hl
+from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
-CURRENT_GENOME_META = "2017-06-02"  # YYYY-MM-DD
-CURRENT_EXOME_META = "2017-06-02"
-CURRENT_FAM = '2017-10-03'
+CURRENT_GENOME_META = "2018-04-19"  # YYYY-MM-DD
+CURRENT_EXOME_META = "2018-04-19"
+CURRENT_FAM = '2018-04-12'
 
 RELEASES = ["2.0.1", "2.0.2"]
 
@@ -34,16 +35,19 @@ def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
     return hl.read_matrix_table(get_gnomad_public_data_path(data_type, split=split, version=version))
 
 
-def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CURRENT_HAIL_VERSION,
-                    meta_version=None, meta_root='meta', fam_version=CURRENT_FAM, fam_root='fam', duplicate_mapping_root=None,
-                    release_samples=False, release_annotations=None):
+def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: bool = False,
+                    non_refs_only: bool = False, hail_version: str = CURRENT_HAIL_VERSION,
+                    meta_version: str = None, meta_root: Optional[str] = 'meta',
+                    fam_version: str = CURRENT_FAM, fam_root: str = None, duplicate_mapping_root: str = None,
+                    release_samples: bool = False, release_annotations: bool = None) -> hl.MatrixTable:
     """
-    Wrapper function to get gnomAD data as VDS.
+    Wrapper function to get gnomAD data as VDS. By default, returns split hardcalls (with adj annotated but not filtered)
 
     :param str data_type: One of `exomes` or `genomes`
     :param bool adj: Whether the returned data should be filtered to adj genotypes
     :param bool split: Whether the dataset should be split (only applies to raw=False)
     :param bool raw: Whether to return the raw (10T+) data (not recommended: unsplit, and no special consideration on sex chromosomes)
+    :param bool non_refs_only: Whether to return the non-ref-genotype only MT (warning: no special consideration on sex chromosomes)
     :param str hail_version: One of the HAIL_VERSIONs
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata. Set to None if no metadata is desired.
@@ -60,7 +64,11 @@ def get_gnomad_data(data_type, adj=False, split=True, raw=False, hail_version=CU
     if raw and split:
         raise DataException('No split raw data. Use of hardcalls is recommended.')
 
-    mt = hl.read_matrix_table(get_gnomad_data_path(data_type, hardcalls=not raw, split=split, hail_version=hail_version))
+    if non_refs_only:
+        mt = hl.read_matrix_table(get_gnomad_data_path(data_type, split=split, non_refs_only=non_refs_only, hail_version=hail_version))
+    else:
+        mt = hl.read_matrix_table(get_gnomad_data_path(data_type, hardcalls=not raw, split=split, hail_version=hail_version))
+
     if adj:
         mt = filter_to_adj(mt)
 
@@ -96,13 +104,7 @@ def get_gnomad_meta(data_type, version=None):
     :return: Metadata Table
     :rtype: Table
     """
-    meta_ht = hl.import_table(get_gnomad_meta_path(data_type, version), impute=True,
-                              key="sample" if data_type == "exomes" else "Sample")
-
-    return meta_ht.annotate(
-        release=meta_ht.drop_status == "keep" if data_type == 'exomes' else meta_ht.keep,  # unify_sample_qc: this is version dependent will need fixing when new metadata arrives
-        population=meta_ht.population if data_type == 'exomes' else hl.cond(meta_ht.final_pop == 'sas', 'oth', meta_ht.final_pop)
-    )
+    return hl.read_table(get_gnomad_meta_path(data_type, version)).key_by('s')
 
 
 def get_gnomad_public_data_path(data_type, split=True, version=CURRENT_RELEASE):
@@ -125,21 +127,26 @@ def get_gnomad_public_data_path(data_type, split=True, version=CURRENT_RELEASE):
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
-def get_gnomad_data_path(data_type, hardcalls=False, split=True, hail_version=CURRENT_HAIL_VERSION):
+def get_gnomad_data_path(data_type, hardcalls=False, split=True, non_refs_only=False, hail_version=CURRENT_HAIL_VERSION):
     """
     Wrapper function to get paths to gnomAD data
 
     :param str data_type: One of `exomes` or `genomes`
     :param bool hardcalls: Whether hardcalls should be returned
-    :param bool split: Whether the dataset should be split (only applies to hardcalls)
+    :param bool split: Whether the dataset should be split (applies to hardcalls and non_refs_only)
+    :param bool non_refs_only: Whether non-ref-genotype only MT should be returned
     :param str hail_version: One of the HAIL_VERSIONs
     :return: Path to chosen VDS
     :rtype: str
     """
+    if hardcalls and non_refs_only:
+        raise DataException('No dataset with hardcalls and non_refs_only')
     if data_type not in ('exomes', 'genomes'):
         raise DataException("Select data_type as one of 'genomes' or 'exomes'")
     if hardcalls:
         return hardcalls_mt_path(data_type, split, hail_version)
+    elif non_refs_only:
+        return non_refs_only_mt_path(data_type, split)
     else:
         return raw_exomes_mt_path(hail_version) if data_type == 'exomes' else raw_genomes_mt_path(hail_version)
 
@@ -155,12 +162,12 @@ def get_gnomad_meta_path(data_type, version=None):
     """
     if data_type == 'exomes':
         if version:
-            return metadata_exomes_tsv_path(version)
-        return metadata_exomes_tsv_path()
+            return metadata_exomes_ht_path(version)
+        return metadata_exomes_ht_path()
     elif data_type == 'genomes':
         if version:
-            return metadata_genomes_tsv_path(version)
-        return metadata_genomes_tsv_path()
+            return metadata_genomes_ht_path(version)
+        return metadata_genomes_ht_path()
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
@@ -189,6 +196,10 @@ def exac_release_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
 def hardcalls_mt_path(data_type, split=True, hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/hardcalls/hail-{0}/mt/{1}/gnomad.{1}{2}.mt'.format(hail_version, data_type,
                                                                            "" if split else ".unsplit")
+
+
+def non_refs_only_mt_path(data_type, split=True):
+    return f'gs://gnomad/non_refs_only/hail-0.2/mt/{data_type}/gnomad.{data_type}{"" if split else ".unsplit"}.mt'
 
 
 def annotations_mt_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
@@ -339,9 +350,9 @@ clinvar_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single
 
 # Useful intervals
 lcr_intervals_path = "gs://gnomad-public/intervals/LCR.GRCh37_compliant.interval_list"  # "gs://gnomad-public/intervals/LCR.interval_list"
-decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.GRCh37_compliant.bed.gz"  # "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
+decoy_intervals_path = "gs://gnomad-public/intervals/mm-2-merged.GRCh37_compliant.bed"  # "gs://gnomad-public/intervals/mm-2-merged.bed.gz"
 purcell5k_intervals_path = "gs://gnomad-public/intervals/purcell5k.interval_list"
-segdup_intervals_path = "gs://gnomad-public/intervals/hg19_self_chain_split_both.bed.gz"
+segdup_intervals_path = "gs://gnomad-public/intervals/hg19_self_chain_split_both.bed"
 
 # Exome intervals
 exomes_high_conf_regions_intervals_path = "gs://gnomad-public/intervals/exomes_high_coverage.auto.interval_list"

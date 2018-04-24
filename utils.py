@@ -628,10 +628,10 @@ def infer_families(kin_ht: hl.Table,
     :param str i_col: Column containing the 1st sample id in the pc_relate table
     :param str j_col: Column containing the 2nd sample id in the pc_relate table
     :param str kin_col: Column containing the kinship in the pc_relate table
-    :param str ibd2_col: Column containing kin2 in the pc_relate table
+    :param str ibd2_col: Column containing ibd2 in the pc_relate table
     :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
     :param (float, float) second_degree_threshold: Lower/upper bounds for kin for 2nd degree relatives
-    :param float ibd2_parent_offspring_threshold: Upper bound on kin2 for a parent/offspring
+    :param float ibd2_parent_offspring_threshold: Upper bound on ibd2 for a parent/offspring
     :return: Pedigree containing all trios in the data
     :rtype: Pedigree
     """

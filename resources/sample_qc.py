@@ -84,23 +84,25 @@ def subpop_ht_path(population: str) -> str:
 known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_annots.txt'
 estonian_batches = 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.estonian_samples.txt'
 
+
 # Resources for pedigree inference
 
 
-def raw_fam_path(data_type: str, all_dups: bool = False) -> str:
+def dup_pedigree_tsv_path(data_type: str):
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_dup_pedigree.tsv.bgz'
+
+
+def raw_fam_path(data_type: str) -> str:
     """
 
     Returns the path for the raw pedigree path.
     By default each trio in the pedigree is unique, with samples picked amongst duplicates in order to maximize the number of samples within a family belonging to the same project.
-    If `all_dups` is set, then the pedigree contains duplicated trios for all combination of duplicated samples in the data.
 
     :param str data_type: One of 'exomes' or 'genomes'
-    :param bool all_dups: Whether to return all duplicated trios or not
     :return: Path to pedigree file
     :rtype: str
     """
-    all_dups_str = '_all_dups' if all_dups else ''
-    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}{all_dups_str}_raw.fam'
+    return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_raw.fam'
 
 
 def fake_fam_path(data_type: str) -> str:

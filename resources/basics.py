@@ -37,7 +37,7 @@ def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
 
 def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: bool = False,
                     non_refs_only: bool = False, hail_version: str = CURRENT_HAIL_VERSION,
-                    meta_version: str = None, meta_root: Optional[str] = 'meta',
+                    meta_version: str = None, meta_root: Optional[str] = 'meta', full_meta: bool = False,
                     fam_version: str = CURRENT_FAM, fam_root: str = None, duplicate_mapping_root: str = None,
                     release_samples: bool = False, release_annotations: bool = None) -> hl.MatrixTable:
     """
@@ -51,6 +51,7 @@ def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: 
     :param str hail_version: One of the HAIL_VERSIONs
     :param str meta_version: Version of metadata (None for current)
     :param str meta_root: Where to put metadata. Set to None if no metadata is desired.
+    :param str full_meta: Whether to add all metadata (warning: large)
     :param str fam_version: Version of metadata (default to current)
     :param str fam_root: Where to put the pedigree information. Set to None if no pedigree information is desired.
     :param str duplicate_mapping_root: Where to put the duplicate genome/exome samples ID mapping (default is None -- do not annotate)
@@ -73,7 +74,7 @@ def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: 
         mt = filter_to_adj(mt)
 
     if meta_root:
-        meta_ht = get_gnomad_meta(data_type, meta_version)
+        meta_ht = get_gnomad_meta(data_type, meta_version, full_meta=full_meta)
         mt = mt.annotate_cols(**{meta_root: meta_ht[mt.s]})
 
     if duplicate_mapping_root:
@@ -95,16 +96,31 @@ def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: 
     return mt
 
 
-def get_gnomad_meta(data_type, version=None):
+def get_gnomad_meta(data_type: str, version: str = None, full_meta: bool = False) -> hl.Table:
     """
     Wrapper function to get gnomAD metadata as Table
 
     :param str data_type: One of `exomes` or `genomes`
     :param str version: Metadata version (None for current)
+    :param bool full_meta: Whether to annotate full metadata (rather than just summarized version)
     :return: Metadata Table
     :rtype: Table
     """
-    return hl.read_table(get_gnomad_meta_path(data_type, version)).key_by('s')
+    ht = hl.read_table(get_gnomad_meta_path(data_type, version)).key_by('s')
+    if not full_meta:
+        columns = ['s', 'age', 'sex',
+                   'hard_filters', 'perm_filters', 'pop_platform_filters', 'related',
+                   'data_type', 'product', 'product_simplified', 'qc_platform',
+                   'project_id', 'project_description', 'internal', 'investigator',
+                   'known_pop', 'known_subpop', 'pop', 'subpop',
+                   'release_2_0_2', 'neuro', 'control',
+                   'high_quality', 'release']
+        if data_type == 'genomes':
+            columns.extend(['pcr_free', 'project_name'])
+        else:
+            columns.extend(['diabetes', 'exac_joint'])
+        ht = ht.select(*columns)
+    return ht
 
 
 def get_gnomad_public_data_path(data_type, split=True, version=CURRENT_RELEASE):

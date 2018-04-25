@@ -5,6 +5,7 @@ CURRENT_RELEASE = "2.0.2"
 CURRENT_GENOME_META = "2017-06-02"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2017-06-02"
 CURRENT_FAM = '2017-10-03'
+CURRENT_DUPS = '2017-10-04'
 
 RELEASES = ["2.0.1", "2.0.2"]
 
@@ -294,7 +295,8 @@ def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
     return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
 
 
-genomes_exomes_duplicate_ids_tsv_path = "gs://gnomad/metadata/genomes_exomes_duplicate_ids.tsv"
+def genomes_exomes_duplicate_ids_tsv_path(version: str) -> str:
+    return f"gs://gnomad/metadata/join/gnomad.genomes_exomes.{version}.duplicate_ids.tsv"
 
 
 def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):

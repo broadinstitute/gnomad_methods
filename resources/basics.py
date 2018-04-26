@@ -295,7 +295,7 @@ def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
     return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
 
 
-def genomes_exomes_duplicate_ids_tsv_path(version: str) -> str:
+def genomes_exomes_duplicate_ids_tsv_path(version: str = CURRENT_DUPS) -> str:
     return f"gs://gnomad/metadata/join/gnomad.genomes_exomes.{version}.duplicate_ids.tsv"
 
 

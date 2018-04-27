@@ -621,8 +621,8 @@ def get_duplicated_samples(
 
 
 def infer_families(kin_ht: hl.Table,
-                   sex: Dict[str, bool],
                    duplicated_samples: Set[str],
+                   sex: Dict[str, bool] = None,
                    i_col: str = 'i',
                    j_col: str = 'j',
                    kin_col: str = 'kin',
@@ -640,7 +640,11 @@ def infer_families(kin_ht: hl.Table,
     trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
 
     Note that this function only returns complete trios defined as:
-    one child, one father and one mother (sex is required for both parents)
+    one child, one father and one mother
+
+    Note about sex:
+    If sex is provided, both parents are required to have sex information and mother/father are determined based on sex
+    NOT RECOMMENDED: If sex is not provided, all children are be labeled as females and father/mother status is random between the two parents.
 
     :param Table kin_ht: pc_relate output table
     :param dict of str -> bool sex: A dict containing the sex for each sample. True = female, False = male, None = unknown
@@ -715,7 +719,9 @@ def infer_families(kin_ht: hl.Table,
             p1 = possible_parents.pop()
             for p2 in possible_parents:
                 if tuple(sorted((p1,p2))) not in indexed_kinship:
-                    if sex.get(p1) is False and sex.get(p2):
+                    if sex is None:
+                        parents.append((p1, p2))
+                    elif sex.get(p1) is False and sex.get(p2):
                         parents.append((p1,p2))
                     elif sex.get(p1) and sex.get(p2) is False:
                         parents.append((p2,p1))
@@ -724,6 +730,10 @@ def infer_families(kin_ht: hl.Table,
             return parents[0]
 
         return None
+
+    #Warn if sex is None
+    if sex is None:
+        logger.warning('When sex is None, the trios infer may be incorrect (father/mother swaps and all children are labeled as female). If you have chrom X data, infer sex!')
 
     # Get first degree relatives - exclude duplicate samples
     dups = hl.literal(duplicated_samples)
@@ -768,7 +778,7 @@ def infer_families(kin_ht: hl.Table,
                                      fam_id=str(fam_id),
                                      pat_id=parents[0],
                                      mat_id=parents[1],
-                                     is_female=sex.get(s)))
+                                     is_female=sex.get(s) if sex is not None else True))
 
         fam_id += 1
 

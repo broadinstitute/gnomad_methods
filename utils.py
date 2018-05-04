@@ -582,20 +582,25 @@ def get_duplicated_samples(
     :rtype: list of set of str
     """
 
-    dups = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
+    def get_all_dups(s, dups, samples_duplicates):
+        if s in samples_duplicates:
+            dups.add(s)
+            s_dups = samples_duplicates.pop(s)
+            for s_dup in s_dups:
+                if s_dup not in dups:
+                    dups = get_all_dups(s_dup, dups, samples_duplicates)
+        return dups
+
+    dup_rows = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
 
     samples_duplicates = defaultdict(set)
-    for row in dups:
+    for row in dup_rows:
         samples_duplicates[row[i_col]].add(row[j_col])
         samples_duplicates[row[j_col]].add(row[i_col])
 
     duplicated_samples = []
     while len(samples_duplicates) > 0:
-        s, dups = samples_duplicates.popitem()
-        for dup in dups:
-            del samples_duplicates[dup]
-        dups.add(s)
-        duplicated_samples.append(dups)
+        duplicated_samples.append(get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates))
 
     return duplicated_samples
 

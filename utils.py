@@ -139,7 +139,8 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     ), n_alt_alleles=hl.len(non_star_alleles))
 
 
-def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligned: bool = True) -> hl.MatrixTable:
+def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = False,
+                        left_aligned: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
     Splits MatrixTable based on entry fields found. Downcodes whatever it can. Supported so far:
     GT, DP, AD, PL, GQ
@@ -152,44 +153,47 @@ def split_multi_dynamic(mt: hl.MatrixTable, keep_star: bool = False, left_aligne
     :return: Split MatrixTable
     :rtype: MatrixTable
     """
-    fields = list(mt.entry)
-    sm = hl.SplitMulti(mt, keep_star=keep_star, left_aligned=left_aligned)
+    if isinstance(t, hl.Table):
+        t = t.annotate(a_index=hl.range(0, hl.len(t.alleles) - 1)).explode('a_index')
+        return t.annotate(alleles=[t.alleles[0], t.alleles[t.a_index]])  # Note: does not minrep at the moment
+    fields = list(t.entry)
+    sm = hl.SplitMulti(t, keep_star=keep_star, left_aligned=left_aligned)
     sm.update_rows(a_index=sm.a_index(), was_split=sm.was_split())
     expression = {}
 
     # HTS/standard
     if 'GT' in fields:
-        expression['GT'] = hl.downcode(mt.GT, sm.a_index())
+        expression['GT'] = hl.downcode(t.GT, sm.a_index())
     if 'DP' in fields:
-        expression['DP'] = mt.DP
+        expression['DP'] = t.DP
     if 'AD' in fields:
-        expression['AD'] = hl.or_missing(hl.is_defined(mt.AD),
-                                         [hl.sum(mt.AD) - mt.AD[sm.a_index()], mt.AD[sm.a_index()]])
+        expression['AD'] = hl.or_missing(hl.is_defined(t.AD),
+                                         [hl.sum(t.AD) - t.AD[sm.a_index()], t.AD[sm.a_index()]])
     if 'PL' in fields:
         pl = hl.or_missing(
-            hl.is_defined(mt.PL),
+            hl.is_defined(t.PL),
             (hl.range(0, 3).map(lambda i:
-                                hl.min((hl.range(0, hl.triangle(mt.alleles.length()))
+                                hl.min((hl.range(0, hl.triangle(t.alleles.length()))
                                         .filter(lambda j: hl.downcode(hl.unphased_diploid_gt_index_call(j),
                                                                       sm.a_index()) == hl.unphased_diploid_gt_index_call(i)
-                                                ).map(lambda j: mt.PL[j]))))))
+                                                ).map(lambda j: t.PL[j]))))))
         expression['PL'] = pl
         if 'GQ' in fields:
             expression['GQ'] = hl.gq_from_pl(pl)
     else:
         if 'GQ' in fields:
-            expression['GQ'] = mt.GQ
+            expression['GQ'] = t.GQ
 
     # Phased data
     if 'PGT' in fields:
-        expression['PGT'] = hl.downcode(mt.PGT, sm.a_index())
+        expression['PGT'] = hl.downcode(t.PGT, sm.a_index())
     if 'PID' in fields:
-        expression['PID'] = mt.PID
+        expression['PID'] = t.PID
 
     # Custom data
     if 'ADALL' in fields:  # found in NA12878
-        expression['ADALL'] = hl.or_missing(hl.is_defined(mt.ADALL),
-                                            [hl.sum(mt.ADALL) - mt.ADALL[sm.a_index()], mt.ADALL[sm.a_index()]])
+        expression['ADALL'] = hl.or_missing(hl.is_defined(t.ADALL),
+                                            [hl.sum(t.ADALL) - t.ADALL[sm.a_index()], t.ADALL[sm.a_index()]])
 
     sm.update_entries(**expression)
     return sm.result()

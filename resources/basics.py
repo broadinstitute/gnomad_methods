@@ -219,18 +219,18 @@ def non_refs_only_mt_path(data_type, split=True):
     return f'gs://gnomad/non_refs_only/hail-0.2/mt/{data_type}/gnomad.{data_type}{"" if split else ".unsplit"}.mt'
 
 
-def annotations_mt_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
+def annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
     """
     Get sites-level annotations
 
     :param str data_type: One of "exomes" or "genomes"
     :param str annotation_type: One of "vep", "qc_stats", "frequencies", "rf", "concordance"
     :param str hail_version: One of the HAIL_VERSIONs
-    :return: Path to annotations VDS
+    :return: Path to annotations Table
     :rtype: str
     """
-    return 'gs://gnomad/annotations/hail-{0}/mt/{1}/gnomad.{1}.{2}.mt'.format(hail_version, data_type,
-                                                                                annotation_type)
+    return 'gs://gnomad/annotations/hail-{0}/ht/{1}/gnomad.{1}.{2}.ht'.format(hail_version, data_type,
+                                                                              annotation_type)
 
 
 def rf_path(data_type: str,

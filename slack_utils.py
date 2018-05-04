@@ -83,7 +83,7 @@ def try_slack(target, func, *args):
                 filename = 'error_{}_{}.txt'.format(process, time.strftime("%Y-%m-%d_%H:%M"))
                 snippet = send_snippet(target, traceback.format_exc(), filename=filename)
                 if 'file' in snippet:
-                    if 'SparkContext was shut down' in e or 'connect to the Java server' in e:
+                    if 'SparkContext was shut down' in e or 'connect to the Java server' in str(e):
                         send_message(target, 'Job ({}) cancelled - see {} for error log'.format(process, snippet['file']['url_private']), ':beaker:')
                     else:
                         send_message(target, 'Job ({}) failed :white_frowning_face: - see {} for error log'.format(process, snippet['file']['url_private']), emoji)

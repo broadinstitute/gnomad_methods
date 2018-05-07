@@ -78,7 +78,7 @@ def ancestry_pca_loadings_ht_path (population: str = None) -> str:
 
 
 def subpop_ht_path(population: str) -> str:
-    return f'gs://gnomad/sample_qc/ht/gnomad.joint.unrelated.subpop_assignments.{population}.ht'
+    return f'gs://gnomad/sample_qc/ht/gnomad.joint.subpop_assignments.{population}.ht'
 
 
 known_population_annotations = 'gs://gnomad/sample_qc/input_meta/gnomad.pop_annots.txt'

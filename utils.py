@@ -273,6 +273,13 @@ def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.Matr
                                                         5, -agg_mt.af))
 
 
+def write_temp_gcs(t: Union[hl.MatrixTable, hl.Table], gcs_path: str,
+                   overwrite: bool = False, temp_path: str = '/tmp.h') -> None:
+    t.write(temp_path, overwrite=True)
+    t = hl.read_matrix_table(temp_path) if isinstance(t, hl.MatrixTable) else hl.read_table(temp_path)
+    t.write(gcs_path, overwrite=overwrite)
+
+
 def annotation_type_is_numeric(t: Any) -> bool:
     """
     Given an annotation type, returns whether it is a numerical type or not.

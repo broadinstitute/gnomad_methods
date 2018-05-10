@@ -109,7 +109,7 @@ def get_gnomad_meta(data_type: str, version: str = None, full_meta: bool = False
     """
     ht = hl.read_table(get_gnomad_meta_path(data_type, version)).key_by('s')
     if not full_meta:
-        columns = ['s', 'age', 'sex',
+        columns = ['age', 'sex',
                    'hard_filters', 'perm_filters', 'pop_platform_filters', 'related',
                    'data_type', 'product', 'product_simplified', 'qc_platform',
                    'project_id', 'project_description', 'internal', 'investigator',
@@ -319,7 +319,7 @@ def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool =
 
 
 def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
-    return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
+        return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
 
 
 def genomes_exomes_duplicate_ids_tsv_path(version: str = CURRENT_DUPS) -> str:

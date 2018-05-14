@@ -644,7 +644,7 @@ def infer_families(kin_ht: hl.Table,
 
     Note about sex:
     If sex is provided, both parents are required to have sex information and mother/father are determined based on sex
-    NOT RECOMMENDED: If sex is not provided, all children are be labeled as females and father/mother status is random between the two parents.
+    NOT RECOMMENDED: If sex is not provided, all children are be labeled as females and father/mother status is arbitrary between the two parents.
 
     :param Table kin_ht: pc_relate output table
     :param dict of str -> bool sex: A dict containing the sex for each sample. True = female, False = male, None = unknown

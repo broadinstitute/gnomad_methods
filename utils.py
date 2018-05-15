@@ -274,7 +274,7 @@ def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.Matr
     mt = mt.annotate_cols(project=loc)
     agg_mt = mt.group_cols_by(mt.project).aggregate(ac=hl.agg.sum(mt.GT.n_alt_alleles()),
                                                     an=2 * hl.agg.count_where(hl.is_defined(mt.GT)),
-                                                    hom=hl.agg.count_where(mt.GT.n_alt_alleles() == 2))
+                                                    hom=hl.agg.count_where(mt.GT.is_hom_var()))
     agg_mt = agg_mt.annotate_entries(af=agg_mt.ac / agg_mt.an)
     return agg_mt.annotate_rows(project_max=hl.agg.take(hl.struct(project=agg_mt.project, ac=agg_mt.ac,
                                                                   af=agg_mt.af, an=agg_mt.an, hom=agg_mt.hom),

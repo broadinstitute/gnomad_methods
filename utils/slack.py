@@ -1,3 +1,4 @@
+import io
 
 
 def get_slack_info():
@@ -67,6 +68,22 @@ def send_snippet(channels=None, content='', filename='data.txt'):
             print(content)
 
 
+def send_file(p, channel, filename='plot.png', tfile_name='/home/hail/plot.png'):
+    sc, default_channel = get_slack_info()
+    if channel.startswith('@'):
+        channel_id = get_slack_user_id(sc, channel.lstrip('@'))
+    else:
+        channel_id = get_slack_channel_id(sc, channel.lstrip('#'))
+
+    export_png(p, filename=tfile_name)
+    with open(tfile_name, 'rb') as f:
+        sc.api_call("files.upload",
+                    channels=channel_id,
+                    file=io.BytesIO(f.read()),
+                    filename=filename
+                    )
+
+
 def try_slack(target, func, *args):
     import sys
     import os
@@ -79,11 +96,11 @@ def try_slack(target, func, *args):
     except Exception as e:
         try:
             emoji = ':white_frowning_face:'
-            if len(str(e)) > 4000:  # Slack message length limit (from https://api.slack.com/methods/chat.postMessage)
+            if len(str(e)) > 3500:  # Slack message length limit (from https://api.slack.com/methods/chat.postMessage)
                 filename = 'error_{}_{}.txt'.format(process, time.strftime("%Y-%m-%d_%H:%M"))
                 snippet = send_snippet(target, traceback.format_exc(), filename=filename)
                 if 'file' in snippet:
-                    if 'SparkContext was shut down' in e or 'connect to the Java server' in str(e):
+                    if 'SparkContext was shut down' in str(e) or 'connect to the Java server' in str(e):
                         send_message(target, 'Job ({}) cancelled - see {} for error log'.format(process, snippet['file']['url_private']), ':beaker:')
                     else:
                         send_message(target, 'Job ({}) failed :white_frowning_face: - see {} for error log'.format(process, snippet['file']['url_private']), emoji)

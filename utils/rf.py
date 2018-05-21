@@ -10,7 +10,7 @@ import pandas as pd
 
 def run_rf_test(
         mt: hl.MatrixTable,
-        output: str = '/Users/laurent/tmp'
+        output: str = '/tmp'
 ) -> Tuple[pyspark.ml.PipelineModel, hl.MatrixTable]:
     """
     Runs a dummy test RF on a given MT:
@@ -48,7 +48,7 @@ def run_rf_test(
     quantiles = get_columns_quantiles(ht, features_to_impute, [0.5])
     quantiles = {k: v[0] for k, v in quantiles.items()}
 
-    print(quantiles)
+    logger.info('Features median:\n{}'.format(f'{k}: {v}\n' for k,v in quantiles.items()))
     ht = ht.annotate(
         **{f: hl.or_else(ht[f], quantiles[f]) for f in features_to_impute}
     )
@@ -58,7 +58,7 @@ def run_rf_test(
     logger.info('Feature3 defined values after imputation: {}'.format(f3_after_imputation.n))
     logger.info('Feature3 median: {}'.format(f3_after_imputation.med))
 
-    ht = ht.select('locus', 'alleles', 'label', 'feature1', 'feature2', 'feature3')
+    ht = ht.select('label', 'feature1', 'feature2', 'feature3')
 
     label = 'label'
     features = ['feature1', 'feature2', 'feature3']
@@ -234,18 +234,22 @@ def apply_rf_model(
 
     logger.info("Applying RF model.")
 
-    has_idx = 'idx' in ht.row
-    if not has_idx:
-        ht = ht.add_index()
+    index_name = 'rf_idx'
+    while index_name in ht.row:
+        index_name += '_tmp'
+    ht = ht.add_index(name=index_name)
 
-    df = ht_to_rf_df(ht, features, label, 'idx')
+    ht_keys = ht.key
+    ht = ht.key_by(index_name)
+
+    df = ht_to_rf_df(ht, features, label, index_name)
 
     rf_df = rf_model.transform(df)
 
     rf_ht = hl.Table.from_spark(
         rf_df.rdd.map(
             lambda row:
-            Row(idx=row['idx'],
+            Row(idx=row[index_name],
                 probability=row["probability"].toArray().tolist(),
                 predictedLabel=row["predictedLabel"])
         ).toDF()
@@ -255,13 +259,13 @@ def apply_rf_model(
 
     ht = ht.annotate(
         **{
-            probability_col_name: {label: rf_ht[ht['idx']]["probability"][i] for i, label in enumerate(get_labels(rf_model))},
-            prediction_col_name: rf_ht[ht['idx']]["predictedLabel"]
+            probability_col_name: {label: rf_ht[ht[index_name]]["probability"][i] for i, label in enumerate(get_labels(rf_model))},
+            prediction_col_name: rf_ht[ht[index_name]]["predictedLabel"]
         }
     )
 
-    if not has_idx:
-        ht = ht.drop('idx')
+    ht = ht.key_by(*ht_keys)
+    ht = ht.drop(index_name)
 
     return ht
 

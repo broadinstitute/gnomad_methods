@@ -69,6 +69,7 @@ def send_snippet(channels=None, content='', filename='data.txt'):
 
 
 def send_file(p, channel, filename='plot.png', tfile_name='/home/hail/plot.png'):
+    from bokeh.io import export_png
     sc, default_channel = get_slack_info()
     if channel.startswith('@'):
         channel_id = get_slack_user_id(sc, channel.lstrip('@'))

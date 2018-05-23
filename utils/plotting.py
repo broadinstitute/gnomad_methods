@@ -1,7 +1,6 @@
 
 import hail as hl
 import numpy as np
-from typing import *
 from ipywidgets import interact
 import math
 
@@ -12,6 +11,7 @@ from bokeh.io import output_notebook, push_notebook, export_png
 from bokeh.models.widgets import Tabs, Panel
 from bokeh.palettes import *
 from bokeh.models import *
+from typing import *
 from bokeh.plotting.helpers import stack
 
 TOOLS = "hover,save,pan,box_zoom,reset,wheel_zoom"

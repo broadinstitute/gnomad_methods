@@ -67,7 +67,8 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
 
     if isinstance(t, hl.Table):
         t = t.annotate(a_index=hl.range(0, hl.len(t.alleles) - 1)).explode('a_index')
-        update_rows_expr = {'alleles': [t.alleles[0], t.alleles[t.a_index]]}
+        update_rows_expr = {'alleles': [t.alleles[0], t.alleles[t.a_index+1]],
+                            'was_split': hl.len(t.alleles) > 2}
         if vep_root in rows:
             update_rows_expr[vep_root] = t[vep_root].annotate(
                 intergenic_consequences=t[vep_root].intergenic_consequences.filter(

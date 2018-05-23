@@ -174,7 +174,7 @@ def test_model(
         features: List[str],
         label: str,
         prediction_col_name: str = 'rf_prediction'
-) -> List(hl.tstruct):
+) -> List[hl.tstruct]:
     """
     A wrapper to test a model on a set of examples with known labels:
     1) Runs the model on the data

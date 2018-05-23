@@ -16,8 +16,12 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
     )
 
 
-def filter_to_autosomes(mt: hl.MatrixTable) -> hl.MatrixTable:
-    return hl.filter_intervals(mt, [hl.parse_locus_interval('1-22')])
+def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
+    autosomes = hl.parse_locus_interval('1-22')
+    if isinstance(t, hl.MatrixTable):
+        return hl.filter_intervals(t, [autosomes])
+    else:
+        return t.filter(autosomes.contains(t.locus))
 
 
 def write_temp_gcs(t: Union[hl.MatrixTable, hl.Table], gcs_path: str,
@@ -153,6 +157,22 @@ def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
 
     gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
     return mt.annotate_cols(pca_scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
+
+
+def sample_pcs_uniformly(scores_table: hl.Table, num_pcs: int = 5, num_bins: int = 10, num_per_bin: int = 20) -> hl.Table:
+    """
+    Assumes your scores are in scores_table.scores (and sample stored in `s`)
+    """
+    ranges = scores_table.aggregate([hl.agg.stats(scores_table.scores[i]) for i in range(num_pcs)])
+    ranges = [x.annotate(r=x.max - x.min) for x in ranges]
+    ranges = hl.literal([x.annotate(step=x.r / num_bins) for x in ranges])
+
+    scores_table = scores_table.annotate(
+        scores_bin=hl.range(0, num_pcs).map(lambda i:
+                                            hl.int((scores_table.scores[i] - ranges[i].min) / ranges[i].step))
+    )
+    per_bin = scores_table.group_by(scores_table.scores_bin).aggregate(s=hl.agg.take(scores_table.s, num_per_bin))
+    return per_bin.explode(per_bin.s)
 
 
 def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_decoy: bool = True,

@@ -69,14 +69,14 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
         t = t.annotate(a_index=hl.range(1, hl.len(t.alleles)), was_split=hl.len(t.alleles) > 2)
         t = t.explode('a_index')
 
+        new_locus_alleles = hl.min_rep(t.locus, hl.array([t.alleles[0], t.alleles[t.a_index]]))
         if 'alleles' in t.key:
             new_keys = {}
-            new_locus_alleles = hl.min_rep(t.locus, hl.array([t.alleles[0], t.alleles[t.a_index]]))
             for k in t.key:
                 new_keys[k] = new_locus_alleles[1] if k == 'alleles' else new_locus_alleles[0] if k == 'locus' else t[k]
             t = t.key_by(**new_keys)
         else:
-            t = t.annotate(alleles=[t.alleles[0], t.alleles[t.a_index]])
+            t = t.annotate(locus=new_locus_alleles[0], alleles=new_locus_alleles[1])
 
         if vep_root in rows:
             t = t.annotate(**{vep_root: t[vep_root].annotate(

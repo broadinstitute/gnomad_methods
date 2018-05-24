@@ -66,11 +66,19 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
     rows = list(t.row)
 
     if isinstance(t, hl.Table):
-        t = t.annotate(a_index=hl.range(1, hl.len(t.alleles))).explode('a_index')
-        update_rows_expr = {'alleles': [t.alleles[0], t.alleles[t.a_index]],
-                            'was_split': hl.len(t.alleles) > 2}
+        t = t.annotate(a_index=hl.range(1, hl.len(t.alleles)), was_split=hl.len(t.alleles) > 2)
+        t = t.explode('a_index')
+
+        if 'alleles' in t.key:
+            new_keys = {}
+            for k in t.key:
+                new_keys[k] = hl.array([t.alleles[0], t.alleles[t.a_index]]) if k == 'alleles' else t[k]
+            t = t.key_by(**new_keys)
+        else:
+            t = t.annotate(alleles=[t.alleles[0], t.alleles[t.a_index]])
+
         if vep_root in rows:
-            update_rows_expr[vep_root] = t[vep_root].annotate(
+            t = t.annotate(**{vep_root : t[vep_root].annotate(
                 intergenic_consequences=t[vep_root].intergenic_consequences.filter(
                     lambda csq: csq.allele_num == t.a_index),
                 motif_feature_consequences=t[vep_root].motif_feature_consequences.filter(
@@ -78,8 +86,10 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
                 regulatory_feature_consequences=t[vep_root].motif_feature_consequences.filter(
                     lambda csq: csq.allele_num == t.a_index),
                 transcript_consequences=t[vep_root].transcript_consequences.filter(
-                    lambda csq: csq.allele_num == t.a_index))
-        return t.annotate(**update_rows_expr)  # Note: does not minrep at the moment
+                    lambda csq: csq.allele_num == t.a_index)
+            )})
+
+        return t  # Note: does not minrep at the moment
 
     fields = list(t.entry)
     sm = hl.SplitMulti(t, keep_star=keep_star, left_aligned=left_aligned)

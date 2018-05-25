@@ -357,6 +357,133 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
             )
 
 
+def phase_by_transmission(call: hl.expr.CallExpression, ped: hl.Pedigree, phased_genotype_field: str = 'PBT_GT') -> hl.MatrixTable:
+    """
+
+    Phase a MatrixTable by trio-based allele transmission. Currently uses a Call (hardcall) to phase.
+
+    :param CallExpression call: Call to use for phasing
+    :param Pedigree ped: Pedigree to use to get the trios for phasing
+    :param str phased_genotype_field: name of the new phased genotype field to add
+    :return:
+    """
+
+    def phase_trio_genotypes(proband_gt: hl.expr.CallExpression,
+                             father_gt: hl.expr.CallExpression,
+                             mother_gt: hl.expr.CallExpression,
+                             n_alleles: int) -> hl.expr.ArrayExpression:
+        """
+        Given a trio genotype and the number of alleles at the site, phases the genotypes based on allele transmission in the trio.
+
+        :param CallExpression proband_gt: proband genotype
+        :param CallExpression father_gt: father genotype
+        :param CallExpression mother_gt: mother genotype
+        :param int n_alleles: Number of alleles at the site
+        :return: Array of genotypes (proband, father, mother)
+        :rtype: ArrayExpression
+        """
+
+        def gt_to_vectors(gt: hl.expr.CallExpression, n_alleles: int) -> hl.expr.ArrayExpression:
+            """
+            Get the set of all allele-vectors in a genotype.
+            It is returned as an ordered array where the first vector corresponds to the first allele,
+            and the second vector (only present if het) the second allele.
+
+            :param CallExpression gt: genotype
+            :param int n_alleles: number of alleles at the site
+            :return:
+            """
+            return hl.cond(
+                gt.is_het(),
+                hl.array([
+                    allele_to_vector(gt, 0, n_alleles),
+                    allele_to_vector(gt, 1, n_alleles)
+                ]),
+                hl.array([allele_to_vector(gt, 0, n_alleles)])
+            )
+
+        def allele_to_vector(gt: hl.expr.CallExpression, allele_index: int, n_alleles: int) -> hl.expr.ArrayExpression:
+            """
+            Converts an allele from a genotype into a one-hot-encoded vector of n_alleles length.
+            E.g. gt = 0/1
+            => allele_to_vector(gt, 0, 3) => [1, 0, 0]
+            => allele_to_vector(gt, 1, 3) => [0, 1, 0]
+
+            :param CallExpression gt: Genotype
+            :param int allele_index: Allele index
+            :param int n_alleles: Number of alleles at the site
+            :return: One-hot-encoded genotype-allele array
+            :rtype: ArrayExpression
+            """
+            return hl.range(0,n_alleles).map(lambda i: hl.cond(gt[allele_index]==i, 1, 0))
+
+        def get_phased_parent_gt(gt: hl.expr.CallExpression, transmitted_allele_index: int):
+            """
+            Given a genotype and which allele was transmitted to the offspring, returns the parent phased genotype.
+
+            :param CallExpression gt: Parent genotype
+            :param int transmitted_allele_index: index of transmitted allele (0 or 1)
+            :return: Phased parent genotype
+            :rtype: CallExpression
+            """
+            return hl.call(
+                gt[transmitted_allele_index],
+                hl.cond(
+                    transmitted_allele_index == 0,
+                    gt[1],
+                    gt[0]
+                ),
+                phased=True
+            )
+
+        proband_v = allele_to_vector(proband_gt, 0, n_alleles) + allele_to_vector(proband_gt, 1, n_alleles)
+        father_v = gt_to_vectors(father_gt, n_alleles)
+        mother_v = gt_to_vectors(mother_gt, n_alleles)
+
+        combinations = hl.flatmap(lambda f: hl.zip_with_index(mother_v).filter(lambda m: m[1] + f[1] == proband_v).map(lambda m: hl.struct(m=m[0],f=f[0])), hl.zip_with_index(father_v))
+
+        return hl.cond(hl.len(combinations) == 1,
+                       hl.array([
+                           hl.call(father_gt[combinations[0].f], mother_gt[combinations[0].m], phased=True),
+                           get_phased_parent_gt(father_gt, combinations[0].f),
+                           get_phased_parent_gt(mother_gt, combinations[0].m)
+                       ]),
+                       hl.array([proband_gt, father_gt, mother_gt])
+                       )
+
+    source_mt = call._indices.source
+    source_mt = source_mt.annotate_entries(**{'__GT': call})
+    tm = hl.trio_matrix(source_mt, ped, complete_trios=True)
+    tm = tm.select_entries(
+        __phased_GT=phase_trio_genotypes(
+            tm.proband_entry['__GT'],
+            tm.father_entry['__GT'],
+            tm.mother_entry['__GT'],
+            hl.len(tm.alleles)
+        ),
+        __trio_entries=hl.array([tm.proband_entry, tm.father_entry, tm.mother_entry])
+    )
+
+    tm = tm.select_cols(
+        __trio_members=hl.zip_with_index(hl.array([tm.proband, tm.father, tm.mother]))
+    )
+    mt = tm.explode_cols(tm.__trio_members)
+
+    mt = mt.select_entries(
+        **{phased_genotype_field: mt.__phased_GT[mt.__trio_members[0]]},
+        **mt.__trio_entries[mt.__trio_members[0]]
+    )
+    mt = mt.select_entries(*[e for e in mt.entry if e != '__GT'])
+
+    mt = mt.key_cols_by()
+    mt = mt.select_cols(**mt.__trio_members[1]).key_cols_by(*source_mt.col_key)
+
+    return mt
+
+
+
+
+
 def get_duplicated_samples(
         kin_ht: hl.Table,
         i_col: str = 'i',

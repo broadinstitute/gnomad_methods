@@ -161,6 +161,11 @@ def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
 
 def sample_pcs_uniformly(scores_table: hl.Table, num_pcs: int = 5, num_bins: int = 10, num_per_bin: int = 20) -> hl.Table:
     """
+    Sample somewhat uniformly in num_pcs-dimensional PC space, by:
+    1. Binning each PC axis into num_bins bins, creating an array of num_pcs with num_bins possible values (total of num_bins ^ num_pcs sectors)
+    2. For each k-dimensional sector, take up to num_per_bin samples
+    Max number of samples return is num_per_bin * num_bins ^ num_pcs, but in practice, typically much fewer (corners of PC space are sparse)
+
     Assumes your scores are in scores_table.scores (and sample stored in `s`)
     """
     ranges = scores_table.aggregate([hl.agg.stats(scores_table.scores[i]) for i in range(num_pcs)])

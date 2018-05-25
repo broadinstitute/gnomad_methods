@@ -1,4 +1,4 @@
-from resources.basics import *
+from .basics import *
 
 
 def rf_run_hash_path(data_type: str, hail_version: str = CURRENT_HAIL_VERSION):

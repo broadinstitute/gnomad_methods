@@ -148,29 +148,36 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
     return sm.result()
 
 
-def pc_project(mt: hl.MatrixTable, loading_location: str = "loadings", af_location: str = "pca_af") -> hl.Table:
+def pc_project(
+        mt: hl.MatrixTable,
+        loadings_ht: hl.Table,
+        loading_location: str = "loadings",
+        af_location: str = "pca_af"
+) -> hl.Table:
     """
-    Projects samples in `mt` on pre-computed PCs
-
-    The input MatrixTable should have a column with the pca loadings and another with the allele frequencies
-    used for the PCA.
+    Projects samples in `mt` on pre-computed PCs.
 
     :param MatrixTable mt: MT containing the samples to project
-    :param str loading_location: Location of expression for loadings in `mt`
-    :param str af_location: Location of expression for allele frequency in `mt`
+    :param Table loadings_ht: HT containing the PCA loadings and allele frequencies used for the PCA
+    :param str loading_location: Location of expression for loadings in `loadings_ht`
+    :param str af_location: Location of expression for allele frequency in `loadings_ht`
     :return: Table with scores calculated from loadings in column `scores`
     :rtype: Table
     """
-    mt = mt.filter_rows(hl.is_defined(mt[loading_location]) & hl.is_defined(mt[af_location]) &
-                        (mt[af_location] > 0) & (mt[af_location] < 1))
 
-    mt = mt.persist()
+    n_variants = loadings_ht.count()
 
-    n_variants = mt.count_rows()
+    mt = mt.annotate_rows(
+        pca_loadings=loadings_ht[mt.row_key][loading_location],
+        pca_af=loadings_ht[mt.row_key][af_location]
+    )
 
-    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
+    mt = mt.filter_rows(hl.is_defined(mt.pca_loadings) & hl.is_defined(mt.pca_af) &
+                        (mt.pca_af > 0) & (mt.pca_af < 1))
 
-    mt = mt.annotate_cols(scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
+    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt.pca_af) / hl.sqrt(n_variants * 2 * mt.pca_af * (1 - mt.pca_af))
+
+    mt = mt.annotate_cols(scores=hl.agg.array_sum(mt.pca_loadings * gt_norm))
 
     return mt.cols().select('scores')
 
@@ -438,26 +445,26 @@ def infer_families(kin_ht: hl.Table,
 
     def get_parents(
             possible_parents: List[str],
-            indexed_kinship: Dict[Tuple[str, str], Tuple[float, float]],
+            relative_pairs: List[Tuple[str, str]],
             sex: Dict[str, bool]
-    ) -> Tuple[str, str]:
+    ) -> Union[Tuple[str, str], None]:
         """
         Given a list of possible parents for a sample (first degree relatives with low ibd2),
         looks for a single pair of samples that are unrelated with different sexes.
         If a single pair is found, return the pair (father, mother)
 
         :param list of str possible_parents: Possible parents
-        :param dict of (str, str) -> (float, float)) indexed_kinship: Dict mapping pairs of individuals to their kinship and ibd2 coefficients
+        :param list of (str, str) relative_pairs: Pairs of relatives, used to check that parents aren't related with each other
         :param dict of str -> bool sex: Dict mapping samples to their sex (True = female, False = male, None or missing = unknown)
-        :return: (father, mother)
-        :rtype: (str, str)
+        :return: (father, mother) if found, `None` otherwise
+        :rtype: (str, str) or None
         """
 
         parents = []
         while len(possible_parents) > 1:
             p1 = possible_parents.pop()
             for p2 in possible_parents:
-                if tuple(sorted((p1,p2))) not in indexed_kinship:
+                if tuple(sorted((p1,p2))) not in relative_pairs:
                     if sex.get(p1) is False and sex.get(p2):
                         parents.append((p1,p2))
                     elif sex.get(p1) and sex.get(p2) is False:
@@ -504,7 +511,7 @@ def infer_families(kin_ht: hl.Table,
                 if ibd2[tuple(sorted((s, rel)))] < ibd2_parent_offspring_threshold:
                     possible_parents.append(rel)
 
-            parents = get_parents(possible_parents, ibd2, sex)
+            parents = get_parents(possible_parents, list(ibd2.keys()), sex)
 
             if parents is not None:
                 trios.append(hl.Trio(s=s,
@@ -527,7 +534,7 @@ def expand_pd_array_col(
     """
     Expands a Dataframe column containing an array into multiple columns.
 
-    :param df DataFrame: input dataframe
+    :param DataFrame df: input dataframe
     :param str array_col: Column containing the array
     :param int num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
                              If <1, the number of output columns is equal to the length of the shortest array in `array_col`

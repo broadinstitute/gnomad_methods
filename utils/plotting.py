@@ -4,6 +4,7 @@ import numpy as np
 from typing import *
 from ipywidgets import interact
 import math
+import pandas as pd
 
 import bokeh
 from bokeh.layouts import gridplot
@@ -179,3 +180,76 @@ def linear_and_log_tabs(plot_func: Callable, df: Any) -> Tabs:
         panels.append(panel)
 
     return Tabs(tabs=panels)
+
+
+def pair_plot(
+        data: pd.DataFrame,
+        label_col: str = None,
+        colors_dict: Dict[str, str] = None,
+        tools: str = "save,pan,box_zoom,reset,wheel_zoom,box_select,lasso_select,help"
+) -> Column:
+    """
+
+    Plots each column of `data` against each other and returns a grid of plots.
+    The diagonal contains a histogram of each column, or a density plot if labels are provided.
+    The lower diagonal contains scatter plots of each column against each other.
+    The upper diagonal is empty.
+    All columns should be numerical with the exception of the `label_col` if provided.
+    If a color dict containing provided mapping labels to specific colors can be specified using `color_dict`
+
+    :param DataFrame data: Dataframe to plot
+    :param str label_col: Column of the DataFrame containing the labels
+    :param dict of str -> str colors_dict: Mapping of label to colors
+    :param str tools: Tools for the resulting plots
+    :return: Grid of plots (column of rows)
+    :rtype: Column
+    """
+
+    if label_col is None and colors_dict is not None:
+        logger.warn('`colors_dict` ignored since no `label_col` specified')
+
+    colors_col = '__pair_plot_color'
+
+    if label_col is None:
+        data[colors_col] = ['#1f77b4'] * len(data)
+    else:
+        if colors_dict is None:
+            from bokeh.palettes import Spectral6
+            colors_dict = {l: Spectral6[i] for i,l in enumerate(set(data[label_col]))}
+        data[colors_col] = [colors_dict.get(l, 'gray') for l in data[label_col]]
+
+    data_cols = [c for c in data.columns if c not in [colors_col, label_col]]
+    data_ranges = [DataRange1d(start=rmin - (abs(rmin - rmax) * 0.05), end=rmax + (abs(rmin - rmax) * 0.05)) for rmin, rmax in zip(data[data_cols].min(axis=0), data[data_cols].max(axis=0))]
+    data_source = ColumnDataSource(data={c: data[c] for c in data.columns})
+
+    n_cols = len(data_cols)
+
+    plot_grid = []
+    for i in range(n_cols):
+        row = [None] * n_cols
+        for j in range(i + 1):
+            p = figure(
+                x_axis_label=data_cols[j] if i == n_cols - 1 else '',
+                y_axis_label=data_cols[i] if j == 0 else '',
+                tools=tools
+            )
+            p.x_range = data_ranges[j]
+            if i == j:
+                if label_col is None:
+                    hist, edges = np.histogram(data[data_cols[i]], density=False, bins=50)
+                    p.quad(top=hist, bottom=0, left=edges[:-1], right=edges[1:])
+                else:
+                    density_data = data[[colors_col, data_cols[i]]].groupby(colors_col).apply(lambda df: np.histogram(df[data_cols[i]], density=True, bins=20))
+                    for color, (hist, edges) in density_data.iteritems():
+                        p.line(edges[:-1], hist, color=color)
+            else:
+                p.y_range = data_ranges[i]
+                if label_col is not None:
+                    p.circle(data.columns[j], data.columns[i], source=data_source, color=colors_col, legend=label_col)
+                else:
+                    p.circle(data.columns[j], data.columns[i], source=data_source, color=colors_col)
+
+            row[j] = p
+        plot_grid.append(row)
+
+    return gridplot(plot_grid)

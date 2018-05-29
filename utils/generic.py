@@ -153,8 +153,7 @@ def pc_project(mt: hl.MatrixTable, loading_location: str = "loadings", af_locati
     Projects samples in `mt` on pre-computed PCs
 
     The input MatrixTable should have a column with the pca loadings and another with the allele frequencies
-    used for the PCA. Note that if HWE normalized PCA was run, the allele frequencies also need to be normalized
-    (e.g. `hl.agg.mean(pca_mt.GT.n_alt_alleles()) / 2)`)
+    used for the PCA.
 
     :param MatrixTable mt: MT containing the samples to project
     :param str loading_location: Location of expression for loadings in `mt`
@@ -162,10 +161,12 @@ def pc_project(mt: hl.MatrixTable, loading_location: str = "loadings", af_locati
     :return: Table with scores calculated from loadings in column `scores`
     :rtype: Table
     """
-    n_variants = mt.count_rows()
-
     mt = mt.filter_rows(hl.is_defined(mt[loading_location]) & hl.is_defined(mt[af_location]) &
                         (mt[af_location] > 0) & (mt[af_location] < 1))
+
+    mt = mt.persist()
+
+    n_variants = mt.count_rows()
 
     gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
 
@@ -549,17 +550,21 @@ def expand_pd_array_col(
 
 def assign_population_pcs(
         pop_pc_pd: pd.DataFrame,
-        known_col: str = 'known_pop',
+        num_pcs: int,
         pcs_col: str = 'scores',
+        known_col: str = 'known_pop',
         fit: RandomForestClassifier = None,
-        num_pcs: int = 6,
         seed: int = 42,
         prop_train: float = 0.8,
-        n_estimators: int = 100
+        n_estimators: int = 100,
+        min_prob: float = 0.9,
+        output_col: str = 'pop',
+        missing_label: str = 'oth'
 ) -> Tuple[pd.DataFrame, RandomForestClassifier]:
     """
 
     This function uses a random forest model to assign population labels based on the results of PCA.
+    Default values for model and assignment parameters are those used in gnomAD.
 
     :param Table pop_pc_pd: Pandas dataframe containing population PCs as well as a column with population labels
     :param str known_col: Column storing the known population labels
@@ -569,14 +574,17 @@ def assign_population_pcs(
     :param int seed: Random seed
     :param float prop_train: Proportion of known data used for training
     :param int n_estimators: Number of trees to use in the RF model
+    :param float min_prob: Minimum probability of belonging to a given population for the population to be set (otherwise set to `None`)
+    :param str output_col: Output column storing the assigned population
+    :param str missing_label: Label for samples for which the assignment probability is smaller than `min_prob`
     :return: Dataframe containing sample IDs and imputed population labels, trained random forest model
     :rtype: DataFrame, RandomForestClassifier
     """
 
-    #Expand PC column
+    # Expand PC column
     pop_pc_pd = expand_pd_array_col(pop_pc_pd, pcs_col, num_pcs, 'PC')
-    cols = ['PC{}'.format(i + 1) for i in range(num_pcs)]
-    pop_pc_pd[cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(range(num_pcs))]
+    pc_cols = ['PC{}'.format(i + 1) for i in range(num_pcs)]
+    pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(range(num_pcs))]
     train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
 
     N = len(train_data)
@@ -591,8 +599,8 @@ def assign_population_pcs(
 
         # Train RF
         training_set_known_labels = train_fit[known_col].as_matrix()
-        training_set_pcs = train_fit[cols].as_matrix()
-        evaluation_set_pcs = evaluate_fit[cols].as_matrix()
+        training_set_pcs = train_fit[pc_cols].as_matrix()
+        evaluation_set_pcs = evaluate_fit[pc_cols].as_matrix()
 
         pop_clf = RandomForestClassifier(n_estimators=n_estimators, random_state=seed)
         pop_clf.fit(training_set_pcs, training_set_known_labels)
@@ -606,10 +614,12 @@ def assign_population_pcs(
         pop_clf = fit
 
     # Classify data
-    pop_pc_pd['pop'] = pop_clf.predict(pop_pc_pd[cols].as_matrix())
-    probs = pop_clf.predict_proba(pop_pc_pd[cols].as_matrix())
-    probs = pd.DataFrame(probs)
+    pop_pc_pd[output_col] = pop_clf.predict(pop_pc_pd[pc_cols].as_matrix())
+    probs = pop_clf.predict_proba(pop_pc_pd[pc_cols].as_matrix())
+    probs = pd.DataFrame(probs, columns=[f'prob_{p}' for p in pop_clf.classes_])
+    pop_pc_pd = pd.concat([pop_pc_pd, probs], axis=1)
     probs['max'] = probs.max(axis=1)
-    pop_pc_pd.loc[probs['max'] < 0.9, 'pop'] = 'oth'
+    pop_pc_pd.loc[probs['max'] < min_prob, output_col] = missing_label
+    pop_pc_pd = pop_pc_pd.drop(pc_cols, axis='columns')
 
     return pop_pc_pd, pop_clf

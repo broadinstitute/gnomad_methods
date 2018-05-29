@@ -223,7 +223,8 @@ def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_
     return mt
 
 
-def process_consequences(mt: hl.MatrixTable, vep_root: str = 'vep', penalize_flags: bool = True) -> hl.MatrixTable:
+def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'vep',
+                         penalize_flags: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
     and worst_csq_by_gene, any_lof into [vep_root]
@@ -286,19 +287,21 @@ def process_consequences(mt: hl.MatrixTable, vep_root: str = 'vep', penalize_fla
                                      gene_with_most_severe_csq=gene_with_worst_csq,
                                      ensg_with_most_severe_csq=ensg_with_worst_csq)
 
-    return mt.annotate_rows(**{vep_root: vep_data})
+    return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
 
 
-def filter_vep_to_canonical_transcripts(mt: hl.MatrixTable, vep_root: str = 'vep') -> hl.MatrixTable:
+def filter_vep_to_canonical_transcripts(mt: Union[hl.MatrixTable, hl.Table],
+                                        vep_root: str = 'vep') -> Union[hl.MatrixTable, hl.Table]:
     canonical = mt[vep_root].transcript_consequences.filter(lambda csq: csq.canonical == 1)
     vep_data = mt[vep_root].annotate(transcript_consequences=canonical)
-    return mt.annotate_rows(**{vep_root: vep_data})
+    return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
 
 
-def filter_vep_to_synonymous_variants(mt: hl.MatrixTable, vep_root: str = 'vep') -> hl.MatrixTable:
+def filter_vep_to_synonymous_variants(mt: Union[hl.MatrixTable, hl.Table],
+                                      vep_root: str = 'vep') -> Union[hl.MatrixTable, hl.Table]:
     synonymous = mt[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
     vep_data = mt[vep_root].annotate(transcript_consequences=synonymous)
-    return mt.annotate_rows(**{vep_root: vep_data})
+    return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
 
 
 def annotation_type_is_numeric(t: Any) -> bool:

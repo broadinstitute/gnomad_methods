@@ -36,6 +36,7 @@ CSQ_CODING_MEDIUM_IMPACT = [
 
 CSQ_CODING_LOW_IMPACT = [
     "incomplete_terminal_codon_variant",
+    "start_retained_variant",  # new in v92
     "stop_retained_variant",
     "synonymous_variant",
     "coding_sequence_variant"]

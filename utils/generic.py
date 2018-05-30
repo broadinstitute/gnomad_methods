@@ -73,7 +73,11 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
         if {'locus', 'alleles'} != set(t.key):
             raise Exception('Table not keyed by locus and alleles - cannot split_multi')
 
-        t = t.annotate(a_index=hl.range(1, hl.len(t.alleles)), was_split=hl.len(t.alleles) > 2)
+        a_index_expr = hl.range(1, hl.len(t.alleles))
+        if not keep_star:
+            a_index_expr = a_index_expr.filter(lambda i: t.alleles[i] != '*')
+
+        t = t.annotate(a_index=a_index_expr, was_split=hl.len(t.alleles) > 2)
         t = t.explode('a_index')
 
         new_locus_alleles = hl.min_rep(t.locus, hl.array([t.alleles[0], t.alleles[t.a_index]]))

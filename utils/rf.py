@@ -26,9 +26,9 @@ def run_rf_test(
     """
 
     mt = mt.annotate_rows(
-                          feature1 = hl.rand_bool(0.1),
-                          feature2 = hl.rand_norm(0.0, 1.0),
-                          feature3 = hl.or_missing(hl.rand_bool(0.5), hl.rand_norm(0.0, 1.0)))
+        feature1=hl.rand_bool(0.1),
+        feature2=hl.rand_norm(0.0, 1.0),
+        feature3=hl.or_missing(hl.rand_bool(0.5), hl.rand_norm(0.0, 1.0)))
 
     mt = mt.annotate_rows(label=hl.cond(mt['feature1'] & (mt['feature2'] > 0), "TP", "FP"))
     ht = mt.rows()
@@ -48,11 +48,11 @@ def run_rf_test(
     quantiles = get_columns_quantiles(ht, features_to_impute, [0.5])
     quantiles = {k: v[0] for k, v in quantiles.items()}
 
-    logger.info('Features median:\n{}'.format(f'{k}: {v}\n' for k,v in quantiles.items()))
+    logger.info('Features median:\n{}'.format(f'{k}: {v}\n' for k, v in quantiles.items()))
     ht = ht.annotate(
         **{f: hl.or_else(ht[f], quantiles[f]) for f in features_to_impute}
     )
-    ht = ht.annotate_globals(medians= quantiles)
+    ht = ht.annotate_globals(medians=quantiles)
 
     f3_after_imputation = f3stats(ht)
     logger.info('Feature3 defined values after imputation: {}'.format(f3_after_imputation.n))
@@ -69,29 +69,58 @@ def run_rf_test(
 
     return rf_model, apply_rf_model(ht, rf_model, features, label)
 
+
+def check_ht_fields_for_spark(ht: hl.Table, fields: List[str]) -> None:
+    """
+    Checks specified fields of a hail table for Spark DataFrame conversion (type and name)
+
+    :param Table ht: input Table
+    :param list of str fields: Fields to test
+    :return: None
+    :rtype: None
+    """
+
+    allowed_types = [hl.tfloat, hl.tfloat32, hl.tfloat64, hl.tint, hl.tint32, hl.tint64, hl.tstr, hl.tbool]
+
+    bad_field_names = [c for c in fields if '.' in c]
+
+    bad_types = [c[0] for c in ht.key_by().select(*fields).row.items() if c[1].dtype not in allowed_types]
+
+    if bad_field_names or bad_types:
+        raise ValueError('Only basic type fields can be converted from Hail to Spark. In addition, `.` are not allowed in field names in Spark.\n' +
+                         'Offending fields (non basic type): {}'.format(bad_types) +
+                         'Offending fields (bad field name): {}\n'.format(','.join(bad_field_names))
+                         )
+
+    return
+
+
 def get_columns_quantiles(
         ht: hl.Table,
-        columns: List[str],
+        fields: List[str],
         quantiles: List[float],
         relative_error: int = 0.001
 ) -> Dict[str, List[float]]:
     """
-    Computes approximate quantiles of specified numeric columns from non-missing values.
+    Computes approximate quantiles of specified numeric fields from non-missing values.
     Non-numeric fields are ignored.
     This function returns a Dict of column name -> list of quantiles in the same order specified.
     If a column only has NAs, None is returned.
 
     :param Table ht: input HT
-    :param list of str features: list of features to impute. If none given, all numerical features with missing data are imputed
+    :param list of str fields: list of features to impute. If none given, all numerical features with missing data are imputed
+    :param list of float quantiles: list of quantiles to return (e.g. [0.5] would return the median)
     :param float relative_error: The relative error on the quantile approximation
     :return: Dict of column -> quantiles
     :rtype: dict of str -> list of float
     """
 
-    df = ht.key_by().select(*columns).to_spark()
+    check_ht_fields_for_spark(ht, fields)
+
+    df = ht.key_by().select(*fields).to_spark()
 
     res = {}
-    for f in columns:
+    for f in fields:
         logger.info("Computing median for column: {}".format(f))
         col_no_na = df.select(f).dropna()
         if col_no_na.first() is not None:
@@ -150,9 +179,8 @@ def get_features_importance(
 
     feature_names = [x[:-len("_indexed")] if x.endswith("_indexed") else x for x in
                      rf_pipeline.stages[assembler_index].getInputCols()]
-    feature_importance = {fromSSQL(new_name): importance for
-                          (new_name, importance) in zip(feature_names, rf_pipeline.stages[rf_index].featureImportances)}
-    return feature_importance
+
+    return dict(zip(feature_names, rf_pipeline.stages[rf_index].featureImportances))
 
 
 def get_labels(
@@ -198,7 +226,7 @@ def test_model(
 
     test_results = ht.group_by(ht[prediction_col_name], ht[label]).aggregate(n=hl.agg.count()).collect()
 
-    #Print results
+    # Print results
     df = pd.DataFrame(test_results)
     df = df.pivot(index=label, columns=prediction_col_name, values='n')
     logger.info("Testing results:\n{}".format(pformat(df)))
@@ -208,7 +236,6 @@ def test_model(
     ))
 
     return test_results
-
 
 
 def apply_rf_model(
@@ -233,6 +260,8 @@ def apply_rf_model(
     """
 
     logger.info("Applying RF model.")
+
+    check_ht_fields_for_spark(ht, features + [label])
 
     index_name = 'rf_idx'
     while index_name in ht.row:
@@ -331,6 +360,8 @@ def train_rf(
                 "max_depth: {}".format(",".join(features),
                                        label, num_trees, max_depth))
 
+    check_ht_fields_for_spark(ht, features + [label])
+
     df = ht_to_rf_df(ht, features, label)
 
     label_indexer = StringIndexer(inputCol=label, outputCol=label + "_indexed").fit(df)
@@ -344,7 +375,7 @@ def train_rf(
                                 for x in string_features]
 
     assembler = VectorAssembler(inputCols=[x[0] + "_indexed" if x[1] == 'string' else x[0]
-                                           for x in df.dtypes if x[0] != label ],
+                                           for x in df.dtypes if x[0] != label],
                                 outputCol="features")
 
     rf = RandomForestClassifier(labelCol=label + "_indexed", featuresCol="features",
@@ -355,7 +386,7 @@ def train_rf(
     pipeline = Pipeline(stages=[label_indexer] + string_features_indexers +
                                [assembler, rf, label_converter])
 
-    #Train model
+    # Train model
     logger.info("Training RF model")
     rf_model = pipeline.fit(df)
 

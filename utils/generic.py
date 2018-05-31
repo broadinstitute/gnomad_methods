@@ -3,6 +3,9 @@ import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict
 from typing import *
+from sklearn.ensemble import RandomForestClassifier
+import pandas as pd
+import random
 
 
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
@@ -73,7 +76,11 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
         if {'locus', 'alleles'} != set(t.key):
             raise Exception('Table not keyed by locus and alleles - cannot split_multi')
 
-        t = t.annotate(a_index=hl.range(1, hl.len(t.alleles)), was_split=hl.len(t.alleles) > 2)
+        a_index_expr = hl.range(1, hl.len(t.alleles))
+        if not keep_star:
+            a_index_expr = a_index_expr.filter(lambda i: t.alleles[i] != '*')
+
+        t = t.annotate(a_index=a_index_expr, was_split=hl.len(t.alleles) > 2)
         t = t.explode('a_index')
 
         new_locus_alleles = hl.min_rep(t.locus, hl.array([t.alleles[0], t.alleles[t.a_index]]))
@@ -147,24 +154,38 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
     return sm.result()
 
 
-def pc_project(mt: hl.MatrixTable, pc_loadings: hl.Table,
-               loading_location: str = "loadings", af_location: str = "pca_af") -> hl.MatrixTable:
+def pc_project(
+        mt: hl.MatrixTable,
+        loadings_ht: hl.Table,
+        loading_location: str = "loadings",
+        af_location: str = "pca_af"
+) -> hl.Table:
     """
-    Projects samples in `mt` on PCs computed in `pc_mt`
+    Projects samples in `mt` on pre-computed PCs.
+
     :param MatrixTable mt: MT containing the samples to project
-    :param Table pc_loadings: MT containing the PC loadings for the variants
-    :param str loading_location: Location of expression for loadings in `pc_loadings`
-    :param str af_location: Location of expression for allele frequency in `pc_loadings`
-    :return: MT with scores calculated from loadings
+    :param Table loadings_ht: HT containing the PCA loadings and allele frequencies used for the PCA
+    :param str loading_location: Location of expression for loadings in `loadings_ht`
+    :param str af_location: Location of expression for allele frequency in `loadings_ht`
+    :return: Table with scores calculated from loadings in column `scores`
+    :rtype: Table
     """
-    n_variants = mt.count_rows()
 
-    mt = mt.annotate_rows(**pc_loadings[mt.locus, mt.alleles])
-    mt = mt.filter_rows(hl.is_defined(mt[loading_location]) & hl.is_defined(mt[af_location]) &
-                        (mt[af_location] > 0) & (mt[af_location] < 1))
+    n_variants = loadings_ht.count()
 
-    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt[af_location]) / hl.sqrt(n_variants * 2 * mt[af_location] * (1 - mt[af_location]))
-    return mt.annotate_cols(pca_scores=hl.agg.array_sum(mt[loading_location] * gt_norm))
+    mt = mt.annotate_rows(
+        pca_loadings=loadings_ht[mt.row_key][loading_location],
+        pca_af=loadings_ht[mt.row_key][af_location]
+    )
+
+    mt = mt.filter_rows(hl.is_defined(mt.pca_loadings) & hl.is_defined(mt.pca_af) &
+                        (mt.pca_af > 0) & (mt.pca_af < 1))
+
+    gt_norm = (mt.GT.n_alt_alleles() - 2 * mt.pca_af) / hl.sqrt(n_variants * 2 * mt.pca_af * (1 - mt.pca_af))
+
+    mt = mt.annotate_cols(scores=hl.agg.array_sum(mt.pca_loadings * gt_norm))
+
+    return mt.cols().select('scores')
 
 
 def sample_pcs_uniformly(scores_table: hl.Table, num_pcs: int = 5, num_bins: int = 10, num_per_bin: int = 20) -> hl.Table:
@@ -334,3 +355,308 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
             isinstance(t, hl.tset) or
             isinstance(t, hl.tbool)
             )
+
+
+def get_duplicated_samples(
+        kin_ht: hl.Table,
+        i_col: str = 'i',
+        j_col: str = 'j',
+        kin_col: str = 'kin',
+        duplicate_threshold: float = 0.4
+) -> List[Set[str]]:
+    """
+    Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
+
+
+    :param Table kin_ht: pc_relate output table
+    :param str i_col: Column containing the 1st sample
+    :param str j_col: Column containing the 2nd sample
+    :param str kin_col: Column containing the kinship value
+    :param float duplicate_threshold: Kinship threshold to consider two samples duplicated
+    :return: List of samples that are duplicates
+    :rtype: list of set of str
+    """
+
+    def get_all_dups(s, dups, samples_duplicates):
+        if s in samples_duplicates:
+            dups.add(s)
+            s_dups = samples_duplicates.pop(s)
+            for s_dup in s_dups:
+                if s_dup not in dups:
+                    dups = get_all_dups(s_dup, dups, samples_duplicates)
+        return dups
+
+    dup_rows = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
+
+    samples_duplicates = defaultdict(set)
+    for row in dup_rows:
+        samples_duplicates[row[i_col]].add(row[j_col])
+        samples_duplicates[row[j_col]].add(row[i_col])
+
+    duplicated_samples = []
+    while len(samples_duplicates) > 0:
+        duplicated_samples.append(get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates))
+
+    return duplicated_samples
+
+
+def infer_families(kin_ht: hl.Table,
+                   sex: Dict[str, bool],
+                   duplicated_samples: Set[str],
+                   i_col: str = 'i',
+                   j_col: str = 'j',
+                   kin_col: str = 'kin',
+                   ibd2_col: str = 'ibd2',
+                   first_degree_threshold: Tuple[float, float] = (0.2, 0.4),
+                   second_degree_threshold: Tuple[float, float] = (0.05, 0.16),
+                   ibd2_parent_offspring_threshold: float = 0.2
+                   ) -> hl.Pedigree:
+    """
+
+    Infers familial relationships from the results of pc_relate and sex information.
+    Note that both kinship and ibd2 are needed in the pc_relate output.
+
+    This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
+    trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
+
+    Note that this function only returns complete trios defined as:
+    one child, one father and one mother (sex is required for both parents)
+
+    :param Table kin_ht: pc_relate output table
+    :param dict of str -> bool sex: A dict containing the sex for each sample. True = female, False = male, None = unknown
+    :param set of str duplicated_samples: Duplicated samples to remove (If not provided, this function won't work as it assumes that each child has exactly two parents)
+    :param str i_col: Column containing the 1st sample id in the pc_relate table
+    :param str j_col: Column containing the 2nd sample id in the pc_relate table
+    :param str kin_col: Column containing the kinship in the pc_relate table
+    :param str ibd2_col: Column containing ibd2 in the pc_relate table
+    :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
+    :param (float, float) second_degree_threshold: Lower/upper bounds for kin for 2nd degree relatives
+    :param float ibd2_parent_offspring_threshold: Upper bound on ibd2 for a parent/offspring
+    :return: Pedigree containing all trios in the data
+    :rtype: Pedigree
+    """
+
+    def get_fam_samples(sample: str,
+                        fam: Set[str],
+                        samples_rel: Dict[str, Set[str]],
+                        ) -> Set[str]:
+        """
+        Given a sample, its known family and a dict that links samples with their relatives, outputs the set of
+        samples that constitute this sample family.
+
+        :param str sample: sample
+        :param dict of str -> set of str samples_rel: dict(sample -> set(sample_relatives))
+        :param set of str fam: sample known family
+        :return: Family including the sample
+        :rtype: set of str
+        """
+        fam.add(sample)
+        for s2 in samples_rel[sample]:
+            if s2 not in fam:
+                fam = get_fam_samples(s2, fam, samples_rel)
+        return fam
+
+    def get_indexed_ibd2(
+            pc_relate_rows: List[hl.Struct]
+    ) -> Dict[Tuple[str, str], float]:
+        """
+        Given rows from a pc_relate table, creates a dict with:
+        keys: Pairs of individuals, lexically ordered
+        values: ibd2
+
+        :param list of hl.Struct pc_relate_rows: Rows from a pc_relate table
+        :return: Dict of lexically ordered pairs of individuals -> kinship
+        :rtype: dict of (str, str) -> float
+        """
+        ibd2 = dict()
+        for row in pc_relate_rows:
+            ibd2[tuple(sorted((row[i_col], row[j_col])))] = row[ibd2_col]
+        return ibd2
+
+    def get_parents(
+            possible_parents: List[str],
+            relative_pairs: List[Tuple[str, str]],
+            sex: Dict[str, bool]
+    ) -> Union[Tuple[str, str], None]:
+        """
+        Given a list of possible parents for a sample (first degree relatives with low ibd2),
+        looks for a single pair of samples that are unrelated with different sexes.
+        If a single pair is found, return the pair (father, mother)
+
+        :param list of str possible_parents: Possible parents
+        :param list of (str, str) relative_pairs: Pairs of relatives, used to check that parents aren't related with each other
+        :param dict of str -> bool sex: Dict mapping samples to their sex (True = female, False = male, None or missing = unknown)
+        :return: (father, mother) if found, `None` otherwise
+        :rtype: (str, str) or None
+        """
+
+        parents = []
+        while len(possible_parents) > 1:
+            p1 = possible_parents.pop()
+            for p2 in possible_parents:
+                if tuple(sorted((p1,p2))) not in relative_pairs:
+                    if sex.get(p1) is False and sex.get(p2):
+                        parents.append((p1,p2))
+                    elif sex.get(p1) and sex.get(p2) is False:
+                        parents.append((p2,p1))
+
+        if len(parents) == 1:
+            return parents[0]
+
+        return None
+
+    # Get first degree relatives - exclude duplicate samples
+    dups = hl.literal(duplicated_samples)
+    first_degree_pairs = kin_ht.filter(
+        (kin_ht[kin_col] > first_degree_threshold[0]) &
+        (kin_ht[kin_col] < first_degree_threshold[1]) &
+        ~dups.contains(kin_ht[i_col]) &
+        ~dups.contains(kin_ht[j_col])
+    ).collect()
+    first_degree_relatives = defaultdict(set)
+    for row in first_degree_pairs:
+        first_degree_relatives[row[i_col]].add(row[j_col])
+        first_degree_relatives[row[j_col]].add(row[i_col])
+
+    # Add second degree relatives for those samples
+    # This is needed to distinguish grandparent - child - parent from child - mother, father down the line
+    first_degree_samples = hl.literal(set(first_degree_relatives.keys()))
+    second_degree_samples = kin_ht.filter(
+        (first_degree_samples.contains(kin_ht[i_col]) | first_degree_samples.contains(kin_ht[j_col])) &
+        (kin_ht[kin_col] > second_degree_threshold[0]) &
+        (kin_ht[kin_col] < first_degree_threshold[1])
+    ).collect()
+
+    ibd2 = get_indexed_ibd2(second_degree_samples)
+
+    fam_id = 1
+    trios = []
+    while len(first_degree_relatives) > 0:
+        s_fam = get_fam_samples(list(first_degree_relatives)[0], set(),
+                                first_degree_relatives)
+        for s in s_fam:
+            s_rel = first_degree_relatives.pop(s)
+            possible_parents = []
+            for rel in s_rel:
+                if ibd2[tuple(sorted((s, rel)))] < ibd2_parent_offspring_threshold:
+                    possible_parents.append(rel)
+
+            parents = get_parents(possible_parents, list(ibd2.keys()), sex)
+
+            if parents is not None:
+                trios.append(hl.Trio(s=s,
+                                     fam_id=str(fam_id),
+                                     pat_id=parents[0],
+                                     mat_id=parents[1],
+                                     is_female=sex.get(s)))
+
+        fam_id += 1
+
+    return hl.Pedigree(trios)
+
+
+def expand_pd_array_col(
+        df: pd.DataFrame,
+        array_col: str,
+        num_out_cols: int = 0,
+        out_cols_prefix=None
+) -> pd.DataFrame:
+    """
+    Expands a Dataframe column containing an array into multiple columns.
+
+    :param DataFrame df: input dataframe
+    :param str array_col: Column containing the array
+    :param int num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
+                             If <1, the number of output columns is equal to the length of the shortest array in `array_col`
+    :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)
+    :return: dataframe with expanded columns
+    :rtype: DataFrame
+    """
+
+    if out_cols_prefix is None:
+        out_cols_prefix = array_col
+
+    if num_out_cols < 1:
+        num_out_cols = min([len(x) for x in df[array_col].values.tolist()])
+
+    cols = ['{}{}'.format(out_cols_prefix, i + 1) for i in range(num_out_cols)]
+    df[cols] = pd.DataFrame(df[array_col].values.tolist())[list(range(num_out_cols))]
+
+    return df
+
+
+def assign_population_pcs(
+        pop_pc_pd: pd.DataFrame,
+        num_pcs: int,
+        pcs_col: str = 'scores',
+        known_col: str = 'known_pop',
+        fit: RandomForestClassifier = None,
+        seed: int = 42,
+        prop_train: float = 0.8,
+        n_estimators: int = 100,
+        min_prob: float = 0.9,
+        output_col: str = 'pop',
+        missing_label: str = 'oth'
+) -> Tuple[pd.DataFrame, RandomForestClassifier]:
+    """
+
+    This function uses a random forest model to assign population labels based on the results of PCA.
+    Default values for model and assignment parameters are those used in gnomAD.
+
+    :param Table pop_pc_pd: Pandas dataframe containing population PCs as well as a column with population labels
+    :param str known_col: Column storing the known population labels
+    :param str pcs_col: Columns storing the PCs
+    :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
+    :param int num_pcs: number of population PCs on which to train the model
+    :param int seed: Random seed
+    :param float prop_train: Proportion of known data used for training
+    :param int n_estimators: Number of trees to use in the RF model
+    :param float min_prob: Minimum probability of belonging to a given population for the population to be set (otherwise set to `None`)
+    :param str output_col: Output column storing the assigned population
+    :param str missing_label: Label for samples for which the assignment probability is smaller than `min_prob`
+    :return: Dataframe containing sample IDs and imputed population labels, trained random forest model
+    :rtype: DataFrame, RandomForestClassifier
+    """
+
+    # Expand PC column
+    pop_pc_pd = expand_pd_array_col(pop_pc_pd, pcs_col, num_pcs, 'PC')
+    pc_cols = ['PC{}'.format(i + 1) for i in range(num_pcs)]
+    pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(range(num_pcs))]
+    train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
+
+    N = len(train_data)
+
+    # Split training data into subsamples for fitting and evaluating
+    if not fit:
+        random.seed(seed)
+        train_subsample_ridx = random.sample(list(range(0, N)), int(N * prop_train))
+        train_fit = train_data.iloc[train_subsample_ridx]
+        fit_samples = [x for x in train_fit['s']]
+        evaluate_fit = train_data.loc[~train_data['s'].isin(fit_samples)]
+
+        # Train RF
+        training_set_known_labels = train_fit[known_col].as_matrix()
+        training_set_pcs = train_fit[pc_cols].as_matrix()
+        evaluation_set_pcs = evaluate_fit[pc_cols].as_matrix()
+
+        pop_clf = RandomForestClassifier(n_estimators=n_estimators, random_state=seed)
+        pop_clf.fit(training_set_pcs, training_set_known_labels)
+        print('Random forest feature importances are as follows: {}'.format(pop_clf.feature_importances_))
+
+        # Evaluate RF
+        predictions = pop_clf.predict(evaluation_set_pcs)
+        error_rate = 1 - sum(evaluate_fit[known_col] == predictions) / float(len(predictions))
+        print('Estimated error rate for RF model is {}'.format(error_rate))
+    else:
+        pop_clf = fit
+
+    # Classify data
+    pop_pc_pd[output_col] = pop_clf.predict(pop_pc_pd[pc_cols].as_matrix())
+    probs = pop_clf.predict_proba(pop_pc_pd[pc_cols].as_matrix())
+    probs = pd.DataFrame(probs, columns=[f'prob_{p}' for p in pop_clf.classes_])
+    pop_pc_pd = pd.concat([pop_pc_pd, probs], axis=1)
+    probs['max'] = probs.max(axis=1)
+    pop_pc_pd.loc[probs['max'] < min_prob, output_col] = missing_label
+    pop_pc_pd = pop_pc_pd.drop(pc_cols, axis='columns')
+
+    return pop_pc_pd, pop_clf

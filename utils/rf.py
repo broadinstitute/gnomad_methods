@@ -88,7 +88,7 @@ def get_columns_quantiles(
     :rtype: dict of str -> list of float
     """
 
-    df = ht.select(*columns).to_spark()
+    df = ht.key_by().select(*columns).to_spark()
 
     res = {}
     for f in columns:
@@ -127,7 +127,7 @@ def ht_to_rf_df(
     if index:
         cols_to_keep.append(index)
 
-    df = ht.select(*cols_to_keep).to_spark()
+    df = ht.key_by().select(*cols_to_keep).to_spark()
     df = df.dropna(subset=features).fillna('NA', subset=label)
 
     return df
@@ -323,33 +323,31 @@ def train_rf(
     :return: Random Forest pipeline model
     :rtype: PipelineModel
     """
-    label_name = list(ht.select(label).row)[0]
-    feature_names = ht.select(*features).columns
 
     logger.info("Training RF model using:\n"
                 "features: {}\n"
                 "labels: {}\n"
                 "num_trees: {}\n"
-                "max_depth: {}".format(",".join(feature_names),
-                                   label_name, num_trees, max_depth))
+                "max_depth: {}".format(",".join(features),
+                                       label, num_trees, max_depth))
 
     df = ht_to_rf_df(ht, features, label)
 
-    label_indexer = StringIndexer(inputCol=label_name, outputCol=label_name + "_indexed").fit(df)
+    label_indexer = StringIndexer(inputCol=label, outputCol=label + "_indexed").fit(df)
     labels = label_indexer.labels
     logger.info("Found labels: {}".format(labels))
 
-    string_features = [x[0] for x in df.dtypes if x[0] != label_name and x[1] == 'string']
+    string_features = [x[0] for x in df.dtypes if x[0] != label and x[1] == 'string']
     if string_features:
         logger.info("Indexing string features: {}".format(",".join(string_features)))
     string_features_indexers = [StringIndexer(inputCol=x, outputCol=x + "_indexed").fit(df)
                                 for x in string_features]
 
     assembler = VectorAssembler(inputCols=[x[0] + "_indexed" if x[1] == 'string' else x[0]
-                                           for x in df.dtypes if x[0] != label_name ],
+                                           for x in df.dtypes if x[0] != label ],
                                 outputCol="features")
 
-    rf = RandomForestClassifier(labelCol=label_name + "_indexed", featuresCol="features",
+    rf = RandomForestClassifier(labelCol=label + "_indexed", featuresCol="features",
                                 maxDepth=max_depth, numTrees=num_trees)
 
     label_converter = IndexToString(inputCol='prediction', outputCol='predictedLabel', labels=labels)

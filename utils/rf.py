@@ -3,10 +3,10 @@ import pyspark.sql
 from pyspark.ml.feature import *
 from pyspark.ml.classification import *
 from pyspark.ml import *
-from pyspark.sql import Row
 import hail as hl
 import pandas as pd
-
+from pyspark.sql.functions import udf, col
+from pyspark.sql.types import ArrayType, DoubleType
 
 def run_rf_test(
         mt: hl.MatrixTable,
@@ -275,16 +275,18 @@ def apply_rf_model(
 
     rf_df = rf_model.transform(df)
 
+    def to_array(col):
+        def to_array_(v):
+            return v.toArray().tolist()
+
+        return udf(to_array_, ArrayType(DoubleType()))(col)
+
     rf_ht = hl.Table.from_spark(
-        rf_df.rdd.map(
-            lambda row:
-            Row(idx=row[index_name],
-                probability=row["probability"].toArray().tolist(),
-                predictedLabel=row["predictedLabel"])
-        ).toDF()
+        rf_df.withColumn("probability", to_array(col("probability")))
+            .select([index_name,'probability','predictedLabel'])
     ).persist()
 
-    rf_ht = rf_ht.key_by('idx')
+    rf_ht = rf_ht.key_by(index_name)
 
     ht = ht.annotate(
         **{

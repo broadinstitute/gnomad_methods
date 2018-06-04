@@ -24,12 +24,15 @@ ACG = '#422efe'
 CCG = '#2e73fe'
 GCG = '#2ec3fe'
 TCG = '#2efef7'
+COLOR_METHYLATED_CPG = '#2E37FE'
 
 variant_type_colors = {
     'CpG': COLOR_CPG,
+    'non-CpG': COLOR_TI,
     'non-CpG transition': COLOR_TI,
     'transversion': COLOR_TV,
-    'ACG': ACG, 'CCG': CCG, 'GCG': GCG, 'TCG': TCG
+    'ACG': ACG, 'CCG': CCG, 'GCG': GCG, 'TCG': TCG,
+    'methylated CpG': COLOR_METHYLATED_CPG
 }
 
 COLOR_SYN = '#AAAAAA'
@@ -172,10 +175,10 @@ def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True
     return gridplot([[p1, p2]])
 
 
-def linear_and_log_tabs(plot_func: Callable, df: Any) -> Tabs:
+def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
     panels = []
     for axis_type in ["linear", "log"]:
-        fig = plot_func(df, axis_type)
+        fig = plot_func(**kwargs, axis_type=axis_type)
         panel = Panel(child=fig, title=axis_type)
         panels.append(panel)
 

@@ -357,14 +357,19 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
             )
 
 
-def phase_by_transmission(
-        trio_matrix: hl.MatrixTable,
-        genotype_field: str = 'GT',
-        phased_genotype_field: str = 'PBT_GT'
-) -> hl.MatrixTable:
+def phase_by_transmission(tm_entry: hl.expr.StructExpression,
+                          alleles: hl.expr.ArrayExpression,
+                          call_field: str = 'GT',
+                          phased_call_field: str = 'PBT_GT'
+                          ) -> Dict[str, hl.expr.StructExpression]:
     """
+    Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
+    Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
 
-    Phase a trio MatrixTable by trio-based allele transmission. Currently uses a hardcalls to phase and only phases when all 3 members of the trio are present and have a genotype.
+    In the phased genotypes, the order is as follows:
+    * Proband: father_allele | mother_allele
+    * Parents: transmitted_allele | untransmitted_allele
+
     Genotypes that cannot be phased are set to `NA`.
     The following genotype combinations cannot be phased by transmission:
     1. One of the genotypes in the trio is missing
@@ -373,104 +378,88 @@ def phase_by_transmission(
 
     Typical usage:
     ```
-        tm = hl.trio_matrix(mt, ped)
-        phased_tm = phase_by_transmission(tm, 'GT')
+        trio_matrix = hl.trio_matrix(mt, ped)
+        phased_trio_matrix = trio_matrix.select_entries(
+            **phase_by_transmission(trio_matrix.entry, genotype_field, phased_genotype_field, trio_matrix.alleles)
+        )
     ```
 
-
-    :param MatrixTable trio_matrix: Input trio MatrixTable
-    :param str genotype_field: Field containing the genotype to phase in the `proband_entry`, `father_entry` and `mother_entry` of the trio matrix
-    :param str phased_genotype_field: name of the new phased genotype field to add
-    :return:
+    :param StructExpression tm_entry: trio MatrixTable entry Struct (assumes that `proband_entry`, `mother_entry` and `father_entry` are present)
+    :param ArrayExpression alleles: Alleles at variant site
+    :param str call_field: genotype field name to phase
+    :param str phased_call_field: name for the phased genotype field
+    :return: trio MatrixTable entry with additional phased genotype field for each individual
+    :rtype: dict of str -> StructExpression
     """
 
-    def phase_trio_genotypes(tm_entry: hl.expr.StructExpression,
-                             genotype_field: str,
-                             phased_genotype_field: str,
-                             alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
+    def gt_to_vectors(gt: hl.expr.CallExpression, alleles: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
         """
-        Given a trio genotype and the number of alleles at the site, phases the genotypes based on allele transmission in the trio.
+        Get the set of all allele-vectors in a genotype.
+        It is returned as an ordered array where the first vector corresponds to the first allele,
+        and the second vector (only present if het) the second allele.
 
-        :param StructExpression tm_entry: trio MatrixTable entry struct
-        :param str genotype_field: genotype field name to phase
-        :param str phased_genotype_field: name for the phased genotype field
-        :param ArrayExpression alleles: Alleles at variant site
-        :return: trio MatrixTable entry with additional phased genotype field for each individual
-        :rtype: StructExpression
+        :param CallExpression gt: genotype
+        :param ArrayExpression alleles: Alleles at the site
+        :return:
         """
-
-        def gt_to_vectors(gt: hl.expr.CallExpression, alleles: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
-            """
-            Get the set of all allele-vectors in a genotype.
-            It is returned as an ordered array where the first vector corresponds to the first allele,
-            and the second vector (only present if het) the second allele.
-
-            :param CallExpression gt: genotype
-            :param ArrayExpression alleles: Alleles at the site
-            :return:
-            """
-            return hl.cond(
-                gt.is_het(),
-                hl.array([
-                    hl.call(gt[0]).one_hot_alleles(alleles),
-                    hl.call(gt[1]).one_hot_alleles(alleles),
-                ]),
-                hl.array([hl.call(gt[0]).one_hot_alleles(alleles)])
-            )
-
-        def get_phased_parent_gt(gt: hl.expr.CallExpression, transmitted_allele_index: int):
-            """
-            Given a genotype and which allele was transmitted to the offspring, returns the parent phased genotype.
-
-            :param CallExpression gt: Parent genotype
-            :param int transmitted_allele_index: index of transmitted allele (0 or 1)
-            :return: Phased parent genotype
-            :rtype: CallExpression
-            """
-            return hl.call(
-                gt[transmitted_allele_index],
-                gt[hl.int(transmitted_allele_index == 0)],
-                phased=True
-            )
-
-        proband_gt = tm_entry.proband_entry[genotype_field]
-        father_gt = tm_entry.father_entry[genotype_field]
-        mother_gt = tm_entry.mother_entry[genotype_field]
-
-        proband_v = proband_gt.one_hot_alleles(alleles)
-        father_v = gt_to_vectors(father_gt, alleles)
-        mother_v = gt_to_vectors(mother_gt, alleles)
-
-        combinations = hl.flatmap(
-            lambda f:
-            hl.zip_with_index(mother_v)
-                .filter(lambda m: m[1] + f[1] == proband_v)
-                .map(lambda m: hl.struct(m=m[0], f=f[0])),
-            hl.zip_with_index(father_v)
+        return hl.cond(
+            gt.is_het(),
+            hl.array([
+                hl.call(gt[0]).one_hot_alleles(alleles),
+                hl.call(gt[1]).one_hot_alleles(alleles),
+            ]),
+            hl.array([hl.call(gt[0]).one_hot_alleles(alleles)])
         )
 
-        tm_entries = dict(tm_entry)
-        tm_entries['proband_entry'] = hl.struct(
-                **tm_entry.proband_entry,
-                **{
-                phased_genotype_field: hl.or_missing(hl.len(combinations) == 1, hl.call(father_gt[combinations[0].f], mother_gt[combinations[0].m], phased=True))
-            })
-        tm_entries['father_entry'] = hl.struct(
-                **tm_entry.father_entry,
-                **{
-                phased_genotype_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(father_gt, combinations[0].f))
-            })
-        tm_entries['mother_entry'] = hl.struct(
-                **tm_entry.mother_entry,
-                **{
-                phased_genotype_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(mother_gt, combinations[0].m))
-            })
+    def get_phased_parent_gt(gt: hl.expr.CallExpression, transmitted_allele_index: int):
+        """
+        Given a genotype and which allele was transmitted to the offspring, returns the parent phased genotype.
 
-        return tm_entries
+        :param CallExpression gt: Parent genotype
+        :param int transmitted_allele_index: index of transmitted allele (0 or 1)
+        :return: Phased parent genotype
+        :rtype: CallExpression
+        """
+        return hl.call(
+            gt[transmitted_allele_index],
+            gt[hl.int(transmitted_allele_index == 0)],
+            phased=True
+        )
 
-    return trio_matrix.select_entries(
-        **phase_trio_genotypes(trio_matrix.entry, genotype_field, phased_genotype_field, trio_matrix.alleles)
+    proband_gt = tm_entry.proband_entry[call_field]
+    father_gt = tm_entry.father_entry[call_field]
+    mother_gt = tm_entry.mother_entry[call_field]
+
+    proband_v = proband_gt.one_hot_alleles(alleles)
+    father_v = gt_to_vectors(father_gt, alleles)
+    mother_v = gt_to_vectors(mother_gt, alleles)
+
+    combinations = hl.flatmap(
+        lambda f:
+        hl.zip_with_index(mother_v)
+            .filter(lambda m: m[1] + f[1] == proband_v)
+            .map(lambda m: hl.struct(m=m[0], f=f[0])),
+        hl.zip_with_index(father_v)
     )
+
+    tm_entries = dict(tm_entry)
+    tm_entries['proband_entry'] = hl.struct(
+        **tm_entry.proband_entry,
+        **{
+            phased_call_field: hl.or_missing(hl.len(combinations) == 1, hl.call(father_gt[combinations[0].f], mother_gt[combinations[0].m], phased=True))
+        })
+    tm_entries['father_entry'] = hl.struct(
+        **tm_entry.father_entry,
+        **{
+            phased_call_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(father_gt, combinations[0].f))
+        })
+    tm_entries['mother_entry'] = hl.struct(
+        **tm_entry.mother_entry,
+        **{
+            phased_call_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(mother_gt, combinations[0].m))
+        })
+
+    return tm_entries
 
 
 def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.MatrixTable:

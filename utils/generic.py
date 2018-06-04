@@ -495,9 +495,6 @@ def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.M
     return mt
 
 
-
-
-
 def get_duplicated_samples(
         kin_ht: hl.Table,
         i_col: str = 'i',

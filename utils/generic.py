@@ -58,9 +58,10 @@ def get_sample_data(mt: hl.MatrixTable, fields: List[hl.expr.StringExpression], 
 def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = False,
                         left_aligned: bool = True, vep_root: str = 'vep') -> Union[hl.MatrixTable, hl.Table]:
     """
-    Splits MatrixTable based on entry fields found. Downcodes whatever it can. Supported so far:
-    GT, DP, AD, PL, GQ
-    PGT, PID
+    Splits MatrixTable based on entry fields found. All `Call` fields (e.g. `GT`, `PGT`) are downcoded whatever it can.
+    In addition to all `Call` fields, the following entry fields are split correctly:
+    DP, AD, PL, GQ
+    PID
     ADALL
 
     :param MatrixTable t: Input MatrixTable
@@ -100,7 +101,9 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
 
         return t
 
-    fields = list(t.entry)
+    call_fields = [f[0] for f in t.entry.items() if f[1].dtype == hl.tcall]
+    non_call_fields = [f for f in list(t.entry) if f not in call_fields]
+
     sm = hl.SplitMulti(t, keep_star=keep_star, left_aligned=left_aligned)
     update_rows_expr = {'a_index': sm.a_index(), 'was_split': sm.was_split()}
     if vep_root in rows:
@@ -116,15 +119,17 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
     sm.update_rows(**update_rows_expr)
     expression = {}
 
+    # Split all Call fields
+    for f in call_fields:
+        expression[f] = hl.downcode(t[f], sm.a_index())
+
     # HTS/standard
-    if 'GT' in fields:
-        expression['GT'] = hl.downcode(t.GT, sm.a_index())
-    if 'DP' in fields:
+    if 'DP' in non_call_fields:
         expression['DP'] = t.DP
-    if 'AD' in fields:
+    if 'AD' in non_call_fields:
         expression['AD'] = hl.or_missing(hl.is_defined(t.AD),
                                          [hl.sum(t.AD) - t.AD[sm.a_index()], t.AD[sm.a_index()]])
-    if 'PL' in fields:
+    if 'PL' in non_call_fields:
         pl = hl.or_missing(
             hl.is_defined(t.PL),
             (hl.range(0, 3).map(lambda i:
@@ -133,20 +138,18 @@ def split_multi_dynamic(t: Union[hl.MatrixTable, hl.Table], keep_star: bool = Fa
                                                                       sm.a_index()) == hl.unphased_diploid_gt_index_call(i)
                                                 ).map(lambda j: t.PL[j]))))))
         expression['PL'] = pl
-        if 'GQ' in fields:
+        if 'GQ' in non_call_fields:
             expression['GQ'] = hl.gq_from_pl(pl)
     else:
-        if 'GQ' in fields:
+        if 'GQ' in non_call_fields:
             expression['GQ'] = t.GQ
 
     # Phased data
-    if 'PGT' in fields:
-        expression['PGT'] = hl.downcode(t.PGT, sm.a_index())
-    if 'PID' in fields:
+    if 'PID' in non_call_fields:
         expression['PID'] = t.PID
 
     # Custom data
-    if 'ADALL' in fields:  # found in NA12878
+    if 'ADALL' in non_call_fields:  # found in NA12878
         expression['ADALL'] = hl.or_missing(hl.is_defined(t.ADALL),
                                             [hl.sum(t.ADALL) - t.ADALL[sm.a_index()], t.ADALL[sm.a_index()]])
 

@@ -231,7 +231,7 @@ def test_model(
     df = df.pivot(index=label, columns=prediction_col_name, values='n')
     logger.info("Testing results:\n{}".format(pformat(df)))
     logger.info("Accuracy: {}".format(
-        sum([x.n for x in test_results if x[label] == x['rf_prediction']]) /
+        sum([x.n for x in test_results if x[label] == x[prediction_col_name]]) /
         sum([x.n for x in test_results])
     ))
 

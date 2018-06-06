@@ -86,15 +86,17 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     )
 
 
-def add_popmax_expr(freq: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
+def add_popmax_expr(freq: hl.expr.ArrayExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
     """
     Calculates popmax (add an additional entry into freq with popmax: pop)
 
     :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom', 'meta']
+    :param set of str populations: Set of populations over which to calculate popmax
     :return: Frequency data with annotated popmax
     :rtype: ArrayExpression
     """
-    freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['population']) & (x.meta['population'] != 'oth'), freq)
+    pops_to_use = hl.literal(populations)
+    freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['population']) & pops_to_use.contains(x.meta['population']), freq)
     sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AC[1] / x.AN, reverse=True)
     return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
         hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,

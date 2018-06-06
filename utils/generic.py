@@ -360,11 +360,13 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
             )
 
 
-def phase_by_transmission(tm_entry: hl.expr.StructExpression,
-                          alleles: hl.expr.ArrayExpression,
-                          call_field: str = 'GT',
-                          phased_call_field: str = 'PBT_GT'
-                          ) -> Dict[str, hl.expr.StructExpression]:
+def phase_by_transmission(
+        locus: hl.expr.LocusExpression,
+        alleles: hl.expr.ArrayExpression,
+        tm_entry: hl.expr.StructExpression,
+        call_field: str = 'GT',
+        phased_call_field: str = 'PBT_GT'
+) -> Dict[str, hl.expr.StructExpression]:
     """
     Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
     Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
@@ -372,6 +374,10 @@ def phase_by_transmission(tm_entry: hl.expr.StructExpression,
     In the phased genotypes, the order is as follows:
     * Proband: father_allele | mother_allele
     * Parents: transmitted_allele | untransmitted_allele
+
+    Phasing of sex chromosomes:
+    Sex chromosomes of male individuals should be haploid to be phased correctly.
+    If a proband is diploid on non-par regions of the sex chromosomes, it is assumed to be female.
 
     Genotypes that cannot be phased are set to `NA`.
     The following genotype combinations cannot be phased by transmission:
@@ -383,12 +389,13 @@ def phase_by_transmission(tm_entry: hl.expr.StructExpression,
     ```
         trio_matrix = hl.trio_matrix(mt, ped)
         phased_trio_matrix = trio_matrix.select_entries(
-            **phase_by_transmission(trio_matrix.entry, genotype_field, phased_genotype_field, trio_matrix.alleles)
+            **phase_by_transmission(trio_matrix.locus, trio_matrix.alleles, trio_matrix.entry, genotype_field, phased_genotype_field)
         )
     ```
 
+    :param LocusExpression locus: Locus in the trio MatrixTable
+    :param ArrayExpression alleles: Alleles in the trio MatrixTable
     :param StructExpression tm_entry: trio MatrixTable entry Struct (assumes that `proband_entry`, `mother_entry` and `father_entry` are present)
-    :param ArrayExpression alleles: Alleles at variant site
     :param str call_field: genotype field name to phase
     :param str phased_call_field: name for the phased genotype field
     :return: trio MatrixTable entry with additional phased genotype field for each individual
@@ -429,40 +436,133 @@ def phase_by_transmission(tm_entry: hl.expr.StructExpression,
             phased=True
         )
 
+    def add_phase_to_entries(
+            proband_phased_call: hl.expr.CallExpression,
+            father_phased_call: hl.expr.CallExpression,
+            mother_phased_call: hl.expr.CallExpression
+    ) -> Dict[str, hl.expr.StructExpression]:
+        """
+
+        Adds phasing to the trio MatrixTable entry Struct
+
+        :return: Dict with fields of the trio MatrixTable entry and their values, including the given phased call for each trio member
+        :rtype: Dict of str -> StructExpression
+        """
+        tm_entries = dict(tm_entry)
+        tm_entries['proband_entry'] = hl.struct(
+            **tm_entry.proband_entry,
+            **{
+                phased_call_field: proband_phased_call
+            })
+        tm_entries['father_entry'] = hl.struct(
+            **tm_entry.father_entry,
+            **{
+                phased_call_field: father_phased_call
+            })
+        tm_entries['mother_entry'] = hl.struct(
+            **tm_entry.mother_entry,
+            **{
+                phased_call_field: mother_phased_call
+            })
+        return tm_entries
+
+    def add_missing_phase_to_entries() -> Dict[str, hl.expr.StructExpression]:
+        """
+        Adds missing phase to all trio members to a trio MatrixTable entry
+
+        :return: Dict with fields of the trio MatrixTable entry and their values, including the missing phase for each trio member
+        :rtype: Dict of str -> StructExpression
+        """
+        return add_phase_to_entries(hl.null(hl.tcall), hl.null(hl.tcall), hl.null(hl.tcall))
+
+    def phase_diploid_proband(
+            sex_non_par: hl.expr.BooleanExpression
+    ) -> Dict[str, hl.expr.StructExpression]:
+        """
+        Adds the phase to a trio MatrixTable entry in the case of a diploid proband:
+        either autosomes, PAR regions of sex chromosomes or non-PAR regions of a female proband.
+
+        :param BooleanExpression sex_non_par: Whether this region is a non-PAR region of a sex chromsome (assumes male is haploid in those regions)
+        :return: Dict with fields of the trio MatrixTable entry and their values, including the phased call for each trio member
+        :rtype: Dict of str -> StructExpression
+        """
+
+        proband_v = proband_gt.one_hot_alleles(alleles)
+        father_v = hl.cond(
+            sex_non_par,
+            hl.or_missing(father_gt.is_haploid(), hl.array([father_gt.one_hot_alleles(alleles)])),
+            gt_to_vectors(father_gt, alleles)
+        )
+        mother_v = gt_to_vectors(mother_gt, alleles)
+
+        combinations = hl.flatmap(
+            lambda f:
+            hl.zip_with_index(mother_v)
+                .filter(lambda m: m[1] + f[1] == proband_v)
+                .map(lambda m: hl.struct(m=m[0], f=f[0])),
+            hl.zip_with_index(father_v)
+        )
+
+        return (
+            hl.cond(
+                hl.is_defined(combinations) & (hl.len(combinations) == 1),
+                add_phase_to_entries(
+                                     hl.call(father_gt[combinations[0].f], mother_gt[combinations[0].m], phased=True),
+                                     hl.cond(father_gt.is_haploid(), hl.call(father_gt[0], phased=True), get_phased_parent_gt(father_gt, combinations[0].f)),
+                                     get_phased_parent_gt(mother_gt, combinations[0].m)
+                                     ),
+                add_missing_phase_to_entries()
+            )
+        )
+
+    def phase_haploid_proband_x_nonpar() -> hl.expr.ArrayExpression:
+        """
+        Adds the phase to a trio MatrixTable entry in the case of a haploid proband in the non-PAR region of X
+
+        :return: Dict with fields of the trio MatrixTable entry and their values, including the phased call for each trio member
+        :rtype: Dict of str -> StructExpression
+        """
+
+        transmitted_allele = hl.zip_with_index(hl.array([mother_gt[0], mother_gt[1]])).find(lambda m: m[1] == proband_gt[0])
+        return hl.cond(
+            hl.is_defined(transmitted_allele),
+            add_phase_to_entries(
+                                 hl.call(proband_gt[0], phased=True),
+                                 hl.or_missing(father_gt.is_haploid(), hl.call(father_gt[0], phased=True)),
+                                 get_phased_parent_gt(mother_gt, transmitted_allele[0])
+                                 ),
+            add_missing_phase_to_entries()
+        )
+
+    def phase_haploid_proband_y_nonpar() -> hl.expr.ArrayExpression:
+        """
+        Adds the phase to a trio MatrixTable entry in the case of a haploid proband in the non-PAR region of Y
+
+        :return: Dict with fields of the trio MatrixTable entry and their values, including the phased call for each trio member
+        :rtype: Dict of str -> StructExpression
+        """
+        return hl.cond(
+            father_gt.is_haploid() & (father_gt[0] == proband_gt[0]),
+            add_phase_to_entries(
+                                 hl.call(proband_gt[0], phased=True),
+                                 hl.call(father_gt[0], phased=True),
+                                 hl.null(hl.tcall)
+                                 ),
+            add_missing_phase_to_entries()
+        )
+
     proband_gt = tm_entry.proband_entry[call_field]
     father_gt = tm_entry.father_entry[call_field]
     mother_gt = tm_entry.mother_entry[call_field]
 
-    proband_v = proband_gt.one_hot_alleles(alleles)
-    father_v = gt_to_vectors(father_gt, alleles)
-    mother_v = gt_to_vectors(mother_gt, alleles)
-
-    combinations = hl.flatmap(
-        lambda f:
-        hl.zip_with_index(mother_v)
-            .filter(lambda m: m[1] + f[1] == proband_v)
-            .map(lambda m: hl.struct(m=m[0], f=f[0])),
-        hl.zip_with_index(father_v)
+    return hl.cond(
+        proband_gt.is_haploid(),
+        hl.case()
+            .when(locus.in_x_nonpar(), phase_haploid_proband_x_nonpar())
+            .when(locus.in_y_nonpar(), phase_haploid_proband_y_nonpar())
+            .default(add_missing_phase_to_entries()),
+        phase_diploid_proband(locus.in_x_nonpar() | locus.in_y_nonpar())
     )
-
-    tm_entries = dict(tm_entry)
-    tm_entries['proband_entry'] = hl.struct(
-        **tm_entry.proband_entry,
-        **{
-            phased_call_field: hl.or_missing(hl.len(combinations) == 1, hl.call(father_gt[combinations[0].f], mother_gt[combinations[0].m], phased=True))
-        })
-    tm_entries['father_entry'] = hl.struct(
-        **tm_entry.father_entry,
-        **{
-            phased_call_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(father_gt, combinations[0].f))
-        })
-    tm_entries['mother_entry'] = hl.struct(
-        **tm_entry.mother_entry,
-        **{
-            phased_call_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(mother_gt, combinations[0].m))
-        })
-
-    return tm_entries
 
 
 def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.MatrixTable:

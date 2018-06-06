@@ -15,6 +15,7 @@ from bokeh.palettes import *
 from bokeh.models import *
 from typing import *
 from bokeh.plotting.helpers import stack
+from bokeh.transform import factor_cmap
 
 # Setting some defaults for Table.show
 if 'old_show' not in dir():

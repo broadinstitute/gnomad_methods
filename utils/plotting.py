@@ -4,9 +4,10 @@ import numpy as np
 from ipywidgets import interact
 import math
 import pandas as pd
+from collections import OrderedDict
 
 import bokeh
-from bokeh.layouts import gridplot
+from bokeh.layouts import gridplot, row, widgetbox
 from bokeh.plotting import figure, show, output_file
 from bokeh.io import output_notebook, push_notebook, export_png
 from bokeh.models.widgets import Tabs, Panel
@@ -14,6 +15,14 @@ from bokeh.palettes import *
 from bokeh.models import *
 from typing import *
 from bokeh.plotting.helpers import stack
+
+# Setting some defaults for Table.show
+if 'old_show' not in dir():
+    old_show = hl.Table.show
+
+    def new_show(t, n=10, width=170, truncate=40, types=True):
+        old_show(t, n, width, truncate, types)
+    hl.Table.show = new_show
 
 TOOLS = "hover,save,pan,box_zoom,reset,wheel_zoom"
 
@@ -98,7 +107,8 @@ pop_colors = {'afr': COLOR_AFR,
               'hk': '#C60C30',
               'sg': 'darkred',
               'tw': '#009246',
-              'unk': COLOR_OTH}
+              'unk': COLOR_OTH,
+              '': COLOR_OTH}
 pop_names = {'oth': 'Other',
              'afr': 'African',
              'amr': 'Latino',
@@ -168,11 +178,22 @@ def plot_hail_hist_cumulative(hist_data: hl.Struct, title: str = 'Plot', normali
     return p
 
 
-def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True,
-                        line_color: str = "#036564", line_width: int = 3):
-    p1 = plot_hail_hist(hist_data, title)
-    p2 = plot_hail_hist_cumulative(hist_data, f'{title} (Cumulative)', normalize, line_color, line_width)
-    return gridplot([[p1, p2]])
+def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True, log: bool = False):
+    p1 = plot_hail_hist(hist_data, title, log)
+    p2 = plot_hail_hist_cumulative(hist_data, f'{title} (Cumulative)', normalize, log=log)
+    return Tabs(tabs=[Panel(child=p1, title='Raw'), Panel(child=p2, title='Cumulative')])
+
+
+def set_font_size(p, font_size: str = "12pt"):
+    p.title.text_font_size = font_size
+    p.legend.label_text_font_size = font_size
+    p.xaxis.axis_label_text_font_size = font_size
+    p.yaxis.axis_label_text_font_size = font_size
+    p.xaxis.major_label_text_font_size = font_size
+    p.yaxis.major_label_text_font_size = font_size
+    if hasattr(p.xaxis, 'group_text_font_size'):
+        p.xaxis.group_text_font_size = font_size
+    return p
 
 
 def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:

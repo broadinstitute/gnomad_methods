@@ -6,6 +6,7 @@ from typing import *
 from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import random
+import warnings
 
 
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
@@ -728,7 +729,8 @@ def expand_pd_array_col(
 
 def assign_population_pcs(
         pop_pc_pd: pd.DataFrame,
-        num_pcs: int,
+        num_pcs: Optional[int] = None,
+        pcs: Optional[List[int]] = None,
         pcs_col: str = 'scores',
         known_col: str = 'known_pop',
         fit: RandomForestClassifier = None,
@@ -746,9 +748,10 @@ def assign_population_pcs(
 
     :param Table pop_pc_pd: Pandas dataframe containing population PCs as well as a column with population labels
     :param str known_col: Column storing the known population labels
+    :param int num_pcs: number of population PCs on which to train the model
+    :param list of int pcs: alternatively, which specific PCs to use (note: should be 0-indexed, such that 0 corresponds to PC1)
     :param str pcs_col: Columns storing the PCs
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
-    :param int num_pcs: number of population PCs on which to train the model
     :param int seed: Random seed
     :param float prop_train: Proportion of known data used for training
     :param int n_estimators: Number of trees to use in the RF model
@@ -758,11 +761,20 @@ def assign_population_pcs(
     :return: Dataframe containing sample IDs and imputed population labels, trained random forest model
     :rtype: DataFrame, RandomForestClassifier
     """
+    if not num_pcs and not pcs:
+        raise Exception('assign_population_pcs needs at least one of num_pcs or pcs')
+    if num_pcs and pcs:
+        raise Exception('assign_population_pcs needs only one of num_pcs or pcs')
 
     # Expand PC column
-    pop_pc_pd = expand_pd_array_col(pop_pc_pd, pcs_col, num_pcs, 'PC')
-    pc_cols = ['PC{}'.format(i + 1) for i in range(num_pcs)]
-    pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(range(num_pcs))]
+    if num_pcs:
+        pcs = range(num_pcs)
+    if 0 not in pcs:
+        warnings.warn('0 (PC1) not found in PCs to be used - PCs should be 0-indexed')
+
+    pop_pc_pd = expand_pd_array_col(pop_pc_pd, pcs_col, max(pcs), 'PC')
+    pc_cols = ['PC{}'.format(i + 1) for i in pcs]
+    pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(pcs)]
     train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
 
     N = len(train_data)

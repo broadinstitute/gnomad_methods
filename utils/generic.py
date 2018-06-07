@@ -709,7 +709,6 @@ def expand_pd_array_col(
 
     :param DataFrame df: input dataframe
     :param str array_col: Column containing the array
-    :param int out_start_index:
     :param int num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
                              If <1, the number of output columns is equal to the length of the shortest array in `array_col`
     :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)

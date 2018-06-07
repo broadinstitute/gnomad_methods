@@ -96,7 +96,7 @@ def add_popmax_expr(freq: hl.expr.ArrayExpression, populations: Set[str]) -> hl.
     :rtype: ArrayExpression
     """
     pops_to_use = hl.literal(populations)
-    freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['population']) & pops_to_use.contains(x.meta['population']), freq)
+    freq_filtered = hl.filter(lambda x: (x.meta.keys() == ['pop']) & pops_to_use.contains(x.meta['pop']), freq)
     sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AC[1] / x.AN, reverse=True)
     return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
         hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,

@@ -383,8 +383,8 @@ def phase_by_transmission(
     1. One of the calls in the trio is missing
     2. The proband genotype cannot be obtained from the parents alleles (Mendelian violation)
     3. All individuals of the trio are heterozygous for the same two alleles
-    4. Father is diploid on PAR region of a sex chromosome, or on non-PAR region of X for a female proband
-    5. Either proband or father is diploid on non-PAR region of Y
+    4. Father is diploid on non-PAR region of X or Y
+    5. Proband is diploid on non-PAR region of Y
 
     In addition, individual phased genotype calls are returned as missing in the following situations:
     1. All mother genotype calls non-PAR region of Y
@@ -557,8 +557,8 @@ def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT'
         1. One of the calls in the trio is missing
         2. The proband genotype cannot be obtained from the parents alleles (Mendelian violation)
         3. All individuals of the trio are heterozygous for the same two alleles
-        4. Father is diploid on PAR region of a sex chromosome, or on non-PAR region of X for a female proband
-        5. Either proband or father is diploid on non-PAR region of Y
+        4. Father is diploid on non-PAR region of X or Y
+        5. Proband is diploid on non-PAR region of Y
 
         In addition, individual phased genotype calls are returned as missing in the following situations:
         1. All mother genotype calls non-PAR region of Y

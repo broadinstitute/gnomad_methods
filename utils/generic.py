@@ -6,6 +6,7 @@ from typing import *
 from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import random
+import warnings
 
 
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
@@ -839,7 +840,8 @@ def expand_pd_array_col(
         df: pd.DataFrame,
         array_col: str,
         num_out_cols: int = 0,
-        out_cols_prefix=None
+        out_cols_prefix=None,
+        out_1based_indexing: bool = True
 ) -> pd.DataFrame:
     """
     Expands a Dataframe column containing an array into multiple columns.
@@ -849,6 +851,7 @@ def expand_pd_array_col(
     :param int num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
                              If <1, the number of output columns is equal to the length of the shortest array in `array_col`
     :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)
+    :param bool out_1based_indexing: If set, the output column names indexes start at 1. Otherwise they start at 0.
     :return: dataframe with expanded columns
     :rtype: DataFrame
     """
@@ -859,7 +862,7 @@ def expand_pd_array_col(
     if num_out_cols < 1:
         num_out_cols = min([len(x) for x in df[array_col].values.tolist()])
 
-    cols = ['{}{}'.format(out_cols_prefix, i + 1) for i in range(num_out_cols)]
+    cols = ['{}{}'.format(out_cols_prefix, i + out_1based_indexing) for i in range(num_out_cols)]
     df[cols] = pd.DataFrame(df[array_col].values.tolist())[list(range(num_out_cols))]
 
     return df
@@ -867,8 +870,7 @@ def expand_pd_array_col(
 
 def assign_population_pcs(
         pop_pc_pd: pd.DataFrame,
-        num_pcs: int,
-        pcs_col: str = 'scores',
+        pc_cols: List[str],
         known_col: str = 'known_pop',
         fit: RandomForestClassifier = None,
         seed: int = 42,
@@ -883,11 +885,25 @@ def assign_population_pcs(
     This function uses a random forest model to assign population labels based on the results of PCA.
     Default values for model and assignment parameters are those used in gnomAD.
 
+    Note that if PCs come from Hail, they will be stored in a single column named `scores` by default.
+    The `expand_pd_array_col` can be used to expand this `scores` column into multiple `PC` columns:
+
+    ```
+        data = pca_ht.to_pandas() #Load PCA results
+        data = expand_pd_array_col(data, 'scores', 10 , 'PC') # Expand `scores` column for 10 PCs into columns `PC1` ... `PC10`
+        results, rf_model = assign_population_pcs(
+            data,
+            ['PC{}'.format(i + 1) for i in range(10)]),
+            ...
+        )
+
+    ```
+
+
     :param Table pop_pc_pd: Pandas dataframe containing population PCs as well as a column with population labels
+    :param list of str pc_cols: Columns storing the PCs to use
     :param str known_col: Column storing the known population labels
-    :param str pcs_col: Columns storing the PCs
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
-    :param int num_pcs: number of population PCs on which to train the model
     :param int seed: Random seed
     :param float prop_train: Proportion of known data used for training
     :param int n_estimators: Number of trees to use in the RF model
@@ -898,10 +914,6 @@ def assign_population_pcs(
     :rtype: DataFrame, RandomForestClassifier
     """
 
-    # Expand PC column
-    pop_pc_pd = expand_pd_array_col(pop_pc_pd, pcs_col, num_pcs, 'PC')
-    pc_cols = ['PC{}'.format(i + 1) for i in range(num_pcs)]
-    pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(range(num_pcs))]
     train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
 
     N = len(train_data)

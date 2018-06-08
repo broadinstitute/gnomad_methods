@@ -373,7 +373,7 @@ def qc_temp_data_prefix(data_type: str):
 
 def qc_meta_path(data_type: str):
     if data_type == 'exomes':
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-03-21.txt.bgz'
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-05-11.txt.bgz'
     else:
         return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-03-21.txt.bgz'
 

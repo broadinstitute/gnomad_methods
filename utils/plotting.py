@@ -213,11 +213,15 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
     return Tabs(tabs=panels)
 
 
-def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
+def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
     Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively
+    Or if an unordered Table is provided, a Figure with file sizes is output
     If metadata file or rows directory is missing, returns None
     """
+    panel_size = 600
+    subpanel_size = 150
+
     files = hl.hadoop_ls(t_path)
     rows_file = [x['path'] for x in files if x['path'].endswith('rows')]
     entries_file = [x['path'] for x in files if x['path'].endswith('entries')]
@@ -248,6 +252,15 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
 
     total_file_size, row_file_sizes, row_scale = scale_file_sizes(row_file_sizes)
 
+    if not row_partition_bounds:
+        warnings.warn('Table is not partitioned. Only plotting file sizes')
+        row_file_sizes_hist, row_file_sizes_edges = np.histogram(row_file_sizes, bins=50)
+        p_file_size = figure(plot_width=panel_size, plot_height=panel_size)
+        p_file_size.quad(right=row_file_sizes_hist, left=0, bottom=row_file_sizes_edges[:-1],
+                         top=row_file_sizes_edges[1:], fill_color="#036564", line_color="#033649")
+        p_file_size.yaxis.axis_label = f'File size ({row_scale}B)'
+        return p_file_size
+
     all_data = {
         'partition_widths': [x if x > 0 else -1 for x in row_partition_widths],
         'partition_bounds': row_partition_bounds,
@@ -274,8 +287,6 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
         msg += f"_SUCCESS file present<br/>{success_file[0]}"
 
     source = ColumnDataSource(pd.DataFrame(all_data))
-    panel_size = 600
-    subpanel_size = 150
     p = figure(tools=TOOLS, plot_width=panel_size, plot_height=panel_size)
     p.title.text = title
     p.xaxis.axis_label = 'Number of rows'

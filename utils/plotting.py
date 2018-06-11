@@ -280,7 +280,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
             all_data['entry_file_sizes'] = entry_file_sizes
             all_data['entry_file_sizes_human'] = [f'{x:.1f} {entry_scale}B' for x in row_file_sizes]
 
-    title = f'Statistics for {data_type}: {t_path}'
+    title = f'{data_type}: {t_path}'
 
     msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size}<br/>"
     if success_file[0]:

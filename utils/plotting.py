@@ -285,7 +285,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
     p.scatter('rows_per_partition', 'row_file_sizes', color=color_map, legend='spans_chromosome', source=source)
     p.legend.location = 'bottom_right'
     p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in
-                                        ('rows_per_partition', 'row_file_sizes_human', 'spans_chromosome')]
+                                        ('rows_per_partition', 'row_file_sizes_human', 'partition_bounds')]
 
     p_stats = Div(text=msg)
     p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)
@@ -318,7 +318,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
         color_map = factor_cmap('spans_chromosome', palette=Spectral8, factors=list(set(all_data['spans_chromosome'])))
         p.scatter('rows_per_partition', 'entry_file_sizes', color=color_map, legend='spans_chromosome', source=source)
         p.legend.location = 'bottom_right'
-        p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'spans_chromosome')]
+        p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'partition_bounds')]
 
         p_stats = Div(text=msg)
         p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)

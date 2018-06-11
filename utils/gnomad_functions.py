@@ -102,7 +102,7 @@ def add_popmax_expr(freq: hl.expr.ArrayExpression, populations: Set[str]) -> hl.
     return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
         hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
                   homozygote_count=sorted_freqs[0].homozygote_count,
-                  meta={'popmax': sorted_freqs[0].meta['population']})), freq)
+                  meta={'popmax': sorted_freqs[0].meta['pop']})), freq)
 
 
 def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.MatrixTable:

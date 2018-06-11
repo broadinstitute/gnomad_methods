@@ -269,7 +269,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
 
     title = f'Statistics for {data_type}: {t_path}'
 
-    msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size:.1f}<br/>"
+    msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size}<br/>"
     if success_file[0]:
         msg += f"_SUCCESS file present<br/>{success_file[0]}"
 
@@ -322,6 +322,9 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
 
         p_stats = Div(text=msg)
         p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)
+        p_rows_per_partition.quad(top=rows_per_partition_hist, bottom=0, left=rows_per_partition_edges[:-1],
+                                  right=rows_per_partition_edges[1:],
+                                  fill_color="#036564", line_color="#033649")
         p_file_size = figure(y_range=p.y_range, plot_width=subpanel_size, plot_height=panel_size)
 
         row_file_sizes_hist, row_file_sizes_edges = np.histogram(all_data['entry_file_sizes'], bins=50)

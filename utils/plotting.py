@@ -213,7 +213,10 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
     return Tabs(tabs=panels)
 
 
-def plot_hail_file_metadata(t_path: str):
+def plot_hail_file_metadata(t_path: str) -> Union[Grid, Tabs]:
+    """
+    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively
+    """
     files = hl.hadoop_ls(t_path)
     rows_file = [x['path'] for x in files if x['path'].endswith('rows')]
     entries_file = [x['path'] for x in files if x['path'].endswith('entries')]

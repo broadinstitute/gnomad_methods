@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import random
 import warnings
+import uuid
 
 
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
@@ -29,7 +30,9 @@ def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTa
 
 
 def write_temp_gcs(t: Union[hl.MatrixTable, hl.Table], gcs_path: str,
-                   overwrite: bool = False, temp_path: str = '/tmp.h') -> None:
+                   overwrite: bool = False, temp_path: Optional[str] = None) -> None:
+    if not temp_path:
+        temp_path = f'/tmp_{uuid.uuid4()}.h'
     t.write(temp_path, overwrite=True)
     t = hl.read_matrix_table(temp_path) if isinstance(t, hl.MatrixTable) else hl.read_table(temp_path)
     t.write(gcs_path, overwrite=overwrite)

@@ -213,9 +213,10 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
     return Tabs(tabs=panels)
 
 
-def plot_hail_file_metadata(t_path: str) -> Union[Grid, Tabs]:
+def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
     """
     Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively
+    If metadata file or rows directory is missing, returns None
     """
     files = hl.hadoop_ls(t_path)
     rows_file = [x['path'] for x in files if x['path'].endswith('rows')]
@@ -282,7 +283,7 @@ def plot_hail_file_metadata(t_path: str) -> Union[Grid, Tabs]:
     color_map = factor_cmap('spans_chromosome', palette=Spectral8,
                             factors=list(set(all_data['spans_chromosome'])))
     p.scatter('rows_per_partition', 'row_file_sizes', color=color_map, legend='spans_chromosome', source=source)
-    p.legend.location = 'top_left'
+    p.legend.location = 'bottom_right'
     p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in
                                         ('rows_per_partition', 'row_file_sizes_human', 'spans_chromosome')]
 
@@ -316,7 +317,7 @@ def plot_hail_file_metadata(t_path: str) -> Union[Grid, Tabs]:
         p.yaxis.axis_label = f'File size ({entry_scale}B)'
         color_map = factor_cmap('spans_chromosome', palette=Spectral8, factors=list(set(all_data['spans_chromosome'])))
         p.scatter('rows_per_partition', 'entry_file_sizes', color=color_map, legend='spans_chromosome', source=source)
-        p.legend.location = 'top_left'
+        p.legend.location = 'bottom_right'
         p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'spans_chromosome')]
 
         p_stats = Div(text=msg)

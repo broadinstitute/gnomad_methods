@@ -133,6 +133,77 @@ def read_list_data(input_file: str) -> List[str]:
     return output
 
 
+def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], frequency: float = None, allele_count: int = None,
+                        population: str = None, subpop: str = None, downsampling: int = None,
+                        direction: str = 'equal', keep: bool = True, adj: bool = True) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
+    (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
+    At least one of frequency or allele_count is required.
+    Subpop can be specified without a population if desired.
+
+    :param MatrixTable t: Input MatrixTable or Table
+    :param float frequency: Frequency to filter by
+    :param int allele_count: Allele count to filter by
+    :param str population:
+    :param str subpop:
+    :param int downsampling:
+    :param str direction: One of "above", "below", and "equal" (how to apply the filter, default equal)
+    :param bool keep: Whether to keep rows passing this frequency (passed to filter_rows)
+    :param bool adj: Whether to use adj frequency
+    :return: Filtered MatrixTable or Table
+    :rtype: MatrixTable or Table
+    """
+    if frequency is None and allele_count is None:
+        raise ValueError('At least one of frequency or allele_count must be specified')
+    if direction not in ('above', 'below', 'equal'):
+        raise ValueError('direction needs to be one of "above", "below", or "equal"')
+    group = 'adj' if adj else 'raw'
+    criteria = [lambda f: f.meta.get('group') == group]
+    if frequency is not None:
+        if direction == 'above':
+            criteria.append(lambda f: f.AF[1] > frequency)
+        elif direction == 'below':
+            criteria.append(lambda f: f.AF[1] < frequency)
+        else:
+            criteria.append(lambda f: f.AF[1] == frequency)
+    if allele_count is not None:
+        if direction == 'above':
+            criteria.append(lambda f: f.AC[1] > allele_count)
+        elif direction == 'below':
+            criteria.append(lambda f: f.AC[1] < allele_count)
+        else:
+            criteria.append(lambda f: f.AC[1] == allele_count)
+    size = 1
+    if population:
+        criteria.append(lambda f: f.meta.get('pop') == population)
+        size += 1
+    if subpop:
+        criteria.append(lambda f: f.meta.get('subpop') == subpop)
+        size += 1
+        # If one supplies a subpop but not a population, this will ensure this gets it right
+        if not population: size += 1
+    if downsampling:
+        criteria.append(lambda f: f.meta.get('downsampling') == str(downsampling))
+        size += 1
+        if not population:
+            size += 1
+            criteria.append(lambda f: f.meta.get('pop') == 'global')
+        if subpop:
+            raise Exception('No downsampling data for subpopulations implemented')
+    criteria.append(lambda f: f.meta.size() == size)
+
+    def combine_functions(func_list, x):
+        cond = func_list[0](x)
+        for c in func_list[1:]:
+            cond &= c(x)
+        return cond
+
+    filt = lambda x: combine_functions(criteria, x)
+    criteria = hl.any(filt, t.freq)
+    return t.filter_rows(criteria, keep=keep) if isinstance(t, hl.MatrixTable) else t.filter(criteria, keep=keep)
+
+
 def melt_kt(kt, columns_to_melt, key_column_name='variable', value_column_name='value'):
     """
     Go from wide to long, or from:

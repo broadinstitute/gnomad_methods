@@ -268,6 +268,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
         'row_file_sizes': row_file_sizes,
         'row_file_sizes_human': [f'{x:.1f} {row_scale}B' for x in row_file_sizes],
         'rows_per_partition': rows_per_partition,
+        'index': list(range(len(rows_per_partition)))
     }
 
     if entries_file:
@@ -296,7 +297,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
     p.scatter('rows_per_partition', 'row_file_sizes', color=color_map, legend='spans_chromosome', source=source)
     p.legend.location = 'bottom_right'
     p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in
-                                        ('rows_per_partition', 'row_file_sizes_human', 'partition_bounds')]
+                                        ('rows_per_partition', 'row_file_sizes_human', 'partition_bounds', 'index')]
 
     p_stats = Div(text=msg)
     p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)
@@ -329,7 +330,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
         color_map = factor_cmap('spans_chromosome', palette=Spectral8, factors=list(set(all_data['spans_chromosome'])))
         p.scatter('rows_per_partition', 'entry_file_sizes', color=color_map, legend='spans_chromosome', source=source)
         p.legend.location = 'bottom_right'
-        p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'partition_bounds')]
+        p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'partition_bounds', 'index')]
 
         p_stats = Div(text=msg)
         p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)

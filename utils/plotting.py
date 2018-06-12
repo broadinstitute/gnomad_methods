@@ -213,11 +213,15 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
     return Tabs(tabs=panels)
 
 
-def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
+def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
     Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively
+    Or if an unordered Table is provided, a Figure with file sizes is output
     If metadata file or rows directory is missing, returns None
     """
+    panel_size = 600
+    subpanel_size = 150
+
     files = hl.hadoop_ls(t_path)
     rows_file = [x['path'] for x in files if x['path'].endswith('rows')]
     entries_file = [x['path'] for x in files if x['path'].endswith('entries')]
@@ -244,17 +248,27 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
         data_type = 'MatrixTable'
         rows_file = [x['path'] for x in rows_files if x['path'].endswith('rows')]
         rows_files = hl.hadoop_ls(rows_file[0])
-    row_partition_bounds, row_partition_widths, row_file_sizes = get_rows_data(rows_files)
+    row_partition_bounds, row_file_sizes = get_rows_data(rows_files)
 
     total_file_size, row_file_sizes, row_scale = scale_file_sizes(row_file_sizes)
 
+    if not row_partition_bounds:
+        warnings.warn('Table is not partitioned. Only plotting file sizes')
+        row_file_sizes_hist, row_file_sizes_edges = np.histogram(row_file_sizes, bins=50)
+        p_file_size = figure(plot_width=panel_size, plot_height=panel_size)
+        p_file_size.quad(right=row_file_sizes_hist, left=0, bottom=row_file_sizes_edges[:-1],
+                         top=row_file_sizes_edges[1:], fill_color="#036564", line_color="#033649")
+        p_file_size.yaxis.axis_label = f'File size ({row_scale}B)'
+        return p_file_size
+
     all_data = {
-        'partition_widths': [x if x > 0 else -1 for x in row_partition_widths],
-        'partition_bounds': row_partition_bounds,
-        'spans_chromosome': ['Spans chromosomes' if x < 0 else 'Within chromosome' for x in row_partition_widths],
+        'partition_widths': [-1 if x[0] != x[2] else x[3] - x[1] for x in row_partition_bounds],
+        'partition_bounds': [f'{x[0]}:{x[1]}-{x[2]}:{x[3]}' for x in row_partition_bounds],
+        'spans_chromosome': ['Spans chromosomes' if x[0] != x[2] else 'Within chromosome' for x in row_partition_bounds],
         'row_file_sizes': row_file_sizes,
         'row_file_sizes_human': [f'{x:.1f} {row_scale}B' for x in row_file_sizes],
         'rows_per_partition': rows_per_partition,
+        'index': list(range(len(rows_per_partition)))
     }
 
     if entries_file:
@@ -262,20 +276,18 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
         entries_rows_file = [x['path'] for x in entries_rows_files if x['path'].endswith('rows')]
         if entries_rows_file:
             entries_files = hl.hadoop_ls(entries_rows_file[0])
-            entry_partition_bounds, entry_partition_widths, entry_file_sizes = get_rows_data(entries_files)
+            entry_partition_bounds, entry_file_sizes = get_rows_data(entries_files)
             total_entry_file_size, entry_file_sizes, entry_scale = scale_file_sizes(entry_file_sizes)
             all_data['entry_file_sizes'] = entry_file_sizes
             all_data['entry_file_sizes_human'] = [f'{x:.1f} {entry_scale}B' for x in row_file_sizes]
 
-    title = f'Statistics for {data_type}: {t_path}'
+    title = f'{data_type}: {t_path}'
 
     msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size}<br/>"
     if success_file[0]:
-        msg += f"_SUCCESS file present<br/>{success_file[0]}"
+        msg += {success_file[0]}
 
     source = ColumnDataSource(pd.DataFrame(all_data))
-    panel_size = 600
-    subpanel_size = 150
     p = figure(tools=TOOLS, plot_width=panel_size, plot_height=panel_size)
     p.title.text = title
     p.xaxis.axis_label = 'Number of rows'
@@ -285,7 +297,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
     p.scatter('rows_per_partition', 'row_file_sizes', color=color_map, legend='spans_chromosome', source=source)
     p.legend.location = 'bottom_right'
     p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in
-                                        ('rows_per_partition', 'row_file_sizes_human', 'partition_bounds')]
+                                        ('rows_per_partition', 'row_file_sizes_human', 'partition_bounds', 'index')]
 
     p_stats = Div(text=msg)
     p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)
@@ -318,7 +330,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs]]:
         color_map = factor_cmap('spans_chromosome', palette=Spectral8, factors=list(set(all_data['spans_chromosome'])))
         p.scatter('rows_per_partition', 'entry_file_sizes', color=color_map, legend='spans_chromosome', source=source)
         p.legend.location = 'bottom_right'
-        p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'partition_bounds')]
+        p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in ('rows_per_partition', 'entry_file_sizes_human', 'partition_bounds', 'index')]
 
         p_stats = Div(text=msg)
         p_rows_per_partition = figure(x_range=p.x_range, plot_width=panel_size, plot_height=subpanel_size)
@@ -362,7 +374,6 @@ def scale_file_sizes(file_sizes):
 def get_rows_data(rows_files):
     file_sizes = []
     partition_bounds = []
-    partition_widths = []
     parts_file = [x['path'] for x in rows_files if x['path'].endswith('parts')]
     if parts_file:
         parts = hl.hadoop_ls(parts_file[0])
@@ -378,14 +389,13 @@ def get_rows_data(rows_files):
         with hl.hadoop_open(metadata_file[0], 'rb') as f:
             rows_meta = json.loads(f.read())
             try:
-                partition_widths = [x['end']['locus']['position'] - x['start']['locus']['position'] for x in
-                                    rows_meta['jRangeBounds']]
                 partition_bounds = [
-                    f"{x['start']['locus']['contig']}:{x['start']['locus']['position']}-{x['end']['locus']['contig']}:{x['end']['locus']['position']}"
+                    (x['start']['locus']['contig'], x['start']['locus']['position'],
+                     x['end']['locus']['contig'], x['end']['locus']['position'])
                     for x in rows_meta['jRangeBounds']]
             except KeyError:
                 pass
-    return partition_bounds, partition_widths, file_sizes
+    return partition_bounds, file_sizes
 
 
 def pair_plot(

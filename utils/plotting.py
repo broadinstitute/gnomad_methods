@@ -285,7 +285,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
 
     msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size}<br/>"
     if success_file[0]:
-        msg += {success_file[0]}
+        msg += success_file[0]
 
     source = ColumnDataSource(pd.DataFrame(all_data))
     p = figure(tools=TOOLS, plot_width=panel_size, plot_height=panel_size)
@@ -318,7 +318,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
 
         msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_entry_file_size}<br/>"
         if success_file[0]:
-            msg += f"_SUCCESS file present<br/>{success_file[0]}"
+            msg += success_file[0]
 
         source = ColumnDataSource(pd.DataFrame(all_data))
         panel_size = 600

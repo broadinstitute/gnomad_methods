@@ -133,22 +133,23 @@ def read_list_data(input_file: str) -> List[str]:
     return output
 
 
-def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], frequency: float = None, allele_count: int = None,
+def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
+                        frequency: float = None, allele_count: int = None,
                         population: str = None, subpop: str = None, downsampling: int = None,
-                        direction: str = 'equal', keep: bool = True, adj: bool = True) -> Union[hl.MatrixTable, hl.Table]:
+                        keep: bool = True, adj: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
     (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
     At least one of frequency or allele_count is required.
     Subpop can be specified without a population if desired.
 
-    :param MatrixTable t: Input MatrixTable or Table
-    :param float frequency: Frequency to filter by
-    :param int allele_count: Allele count to filter by
-    :param str population:
-    :param str subpop:
-    :param int downsampling:
-    :param str direction: One of "above", "below", and "equal" (how to apply the filter, default equal)
+    :param MatrixTable or Table t: Input MatrixTable or Table
+    :param str direction: One of "above", "below", and "equal" (how to apply the filter)
+    :param float frequency: Frequency to filter by (one of frequency or allele_count is required)
+    :param int allele_count: Allele count to filter by (one of frequency or allele_count is required)
+    :param str population: Population in which to filter frequency
+    :param str subpop: Sub-population in which to filter frequency
+    :param int downsampling: Downsampling in which to filter frequency
     :param bool keep: Whether to keep rows passing this frequency (passed to filter_rows)
     :param bool adj: Whether to use adj frequency
     :return: Filtered MatrixTable or Table

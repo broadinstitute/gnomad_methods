@@ -245,6 +245,15 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
 
 
 def get_rf_runs(data_type: str) -> Dict:
+    """
+
+    Loads RF run data from JSON file.
+
+    :param str data_type: One of 'exomes' or 'genomes'
+    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
+    :rtype: dict
+    """
+    
     from gnomad_hail.resources.variant_qc import rf_run_hash_path
 
     json_file = rf_run_hash_path(data_type)
@@ -256,7 +265,17 @@ def get_rf_runs(data_type: str) -> Dict:
         return {}
 
 
-def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_name: str = 'rf_prediction'):
+def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_name: str = 'rf_prediction') -> None:
+    """
+    Prints the information for the RF runs loaded from the json file storing the RF run hashes -> info
+
+    :param dict runs: Dictionary containing JSON input loaded from RF run file
+    :param str label_col: Name of the RF label column
+    :param str prediction_col_name: Name of the RF prediction column
+    :return: Nothing -- only prints information
+    :rtype: None
+    """
+
     for run_hash, run_data in runs.items():
         print(f"\n=== {run_hash} ===")
         testing_results = run_data.pop('test_results') if 'test_results' in run_data else None

@@ -952,3 +952,98 @@ def assign_population_pcs(
     pop_pc_pd = pop_pc_pd.drop(pc_cols, axis='columns')
 
     return pop_pc_pd, pop_clf
+
+
+def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorphic: bool = True) -> hl.Table:
+
+    def get_non_refs_table(mt: hl.MatrixTable, common_samples: hl.expr.DictExpression, filter_monomorphic: bool) -> hl.Table:
+        """
+        Creates a rows table with a unique annotation:
+        nr: A dict of sample_num -> genotype index in concordance table for all non-ref samples
+
+        :param mt:
+        :param common_samples:
+        :return:
+        """
+        ht = mt.select_rows(
+            nr=hl.dict(
+                hl.agg.collect(
+                    hl.agg.filter(common_samples.contains(mt.s) & hl.or_else(mt.GT.is_non_ref(), True), hl.tuple([common_samples[mt.s], hl.or_else(mt.GT.n_alt_alleles() + 2, 1)]))
+                )
+            )
+        ).rows()
+
+        if filter_monomorphic:
+            ht = ht.filter(hl.len(ht.nr) > 0)
+
+        return ht
+
+    def site_concordance(n_samples, left, right):
+        """
+
+        Computes the sites concordance 5x5 matrix from the `nr` annotations in the left and right columns
+
+        :param n_samples:
+        :param left:
+        :param right:
+        :return:
+        """
+        conc_coords = (
+            hl.range(0, n_samples)
+                .map(lambda s: hl.tuple([left.get(s, 2), right.get(s, 2)]))
+                .group_by(lambda x: x)
+                .map_values(lambda x: hl.len(x))
+        )
+
+        return hl.range(0,5).map(lambda left: hl.range(0,5).map(lambda right: conc_coords.get(hl.tuple([left, right]), 0)))
+
+    def one_missing_concordance(right, n_samples, missing_left):
+        """
+
+        Computes the concordance matrix when one of the two nr annotations is missing
+
+        :param right:
+        :param n_samples:
+        :param missing_left:
+        :return:
+        """
+
+        n_hom_ref = n_samples - hl.len(right)
+        miss_values = right.values().group_by(lambda x: x).map_values(lambda x: hl.len(x))
+        if missing_left:
+            return hl.array([
+                hl.array([0, miss_values.get(1,0), n_hom_ref, miss_values.get(3,0), miss_values.get(4,0)]),
+                hl.array([0, 0, 0, 0, 0]),
+                hl.array([0, 0, 0, 0, 0]),
+                hl.array([0, 0, 0, 0, 0]),
+                hl.array([0, 0, 0, 0, 0])
+                ])
+        else:
+            return hl.array([
+                hl.array([0, 0, 0, 0, 0]),
+                hl.array([miss_values.get(1,0), 0, 0, 0, 0]),
+                hl.array([n_hom_ref, 0, 0, 0, 0]),
+                hl.array([miss_values.get(3,0), 0, 0, 0, 0]),
+                hl.array([miss_values.get(4,0), 0, 0, 0, 0])
+            ])
+
+
+    s1 = mt1.aggregate_cols(hl.agg.collect_as_set(mt1.s))
+    s2 = mt2.aggregate_cols(hl.agg.collect_as_set(mt2.s))
+
+    common_samples = {x: i for i,x in enumerate(s1.intersection(s2))}
+    n_samples = len(common_samples)
+    hl_common_samples = hl.literal(common_samples)
+
+    ht1 = get_non_refs_table(mt1, hl_common_samples).rename({'nr': 'nr_left'})
+    ht2 = get_non_refs_table(mt2, hl_common_samples).rename({'nr': 'nr_right'})
+
+    ht = ht1.join(ht2, how='outer')
+    return ht.select(
+        concordance=(
+            hl.case()
+            .when(hl.is_missing(ht.nr_left), one_missing_concordance(ht.nr_right, n_samples, missing_left=True))
+            .when(hl.is_missing(ht.nr_right), one_missing_concordance(ht.nr_left, n_samples, missing_left=False))
+            .default(site_concordance(n_samples, ht.nr_left, ht.nr_right))
+        )
+    )

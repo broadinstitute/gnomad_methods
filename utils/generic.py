@@ -1033,10 +1033,15 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
 
     common_samples = {x: i for i,x in enumerate(s1.intersection(s2))}
     n_samples = len(common_samples)
-    hl_common_samples = hl.literal(common_samples)
+    if n_samples == 0:
+        print(f"Sites concordance: No common samples found, returning None.")
+        return None
+    else:
+        print(f"Sites concordance: Found {n_samples} common sample(s).")
 
-    ht1 = get_non_refs_table(mt1, hl_common_samples).rename({'nr': 'nr_left'})
-    ht2 = get_non_refs_table(mt2, hl_common_samples).rename({'nr': 'nr_right'})
+    hl_common_samples = hl.literal(common_samples)
+    ht1 = get_non_refs_table(mt1, hl_common_samples, filter_monomorphic).rename({'nr': 'nr_left'}).persist()
+    ht2 = get_non_refs_table(mt2, hl_common_samples, filter_monomorphic).rename({'nr': 'nr_right'}).persist()
 
     ht = ht1.join(ht2, how='outer')
     return ht.select(

@@ -3,8 +3,8 @@ from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
-CURRENT_GENOME_META = "2018-04-25"  # YYYY-MM-DD
-CURRENT_EXOME_META = "2018-04-25"
+CURRENT_GENOME_META = "2018-06-10"  # YYYY-MM-DD
+CURRENT_EXOME_META = "2018-06-10"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
@@ -287,8 +287,11 @@ def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool =
     return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
 
 
-def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
+def fam_path(data_type: str, version: str = CURRENT_FAM, true_trios: bool = False) -> str:
+    if not true_trios:
         return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
+    else:
+        return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.true_trios.fam"
 
 
 def genomes_exomes_duplicate_ids_tsv_path(version: str = CURRENT_DUPS) -> str:

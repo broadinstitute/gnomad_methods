@@ -3,8 +3,8 @@ from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
-CURRENT_GENOME_META = "2018-04-25"  # YYYY-MM-DD
-CURRENT_EXOME_META = "2018-04-25"
+CURRENT_GENOME_META = "2018-06-10"  # YYYY-MM-DD
+CURRENT_EXOME_META = "2018-06-10"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
@@ -224,7 +224,7 @@ def annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VE
     Get sites-level annotations
 
     :param str data_type: One of "exomes" or "genomes"
-    :param str annotation_type: One of "vep", "qc_stats", "frequencies", "rf", "concordance"
+    :param str annotation_type: One of "vep", "qc_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
     :param str hail_version: One of the HAIL_VERSIONs
     :return: Path to annotations Table
     :rtype: str
@@ -238,7 +238,7 @@ def sample_annotations_table_path(data_type, annotation_type, hail_version=CURRE
     Get samples-level annotations
 
     :param str data_type: One of "exomes" or "genomes"
-    :param str annotation_type: One of "family_stats", "downsampling"
+    :param str annotation_type: One of "family_stats", "downsampling", "omes_concordance", "NA12878_concordance", "syndip_concordance"
     :param str hail_version: One of the HAIL_VERSIONs
     :return: Path to annotations VDS
     :rtype: str
@@ -287,8 +287,11 @@ def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool =
     return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
 
 
-def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
+def fam_path(data_type: str, version: str = CURRENT_FAM, true_trios: bool = False) -> str:
+    if not true_trios:
         return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
+    else:
+        return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.true_trios.fam"
 
 
 def genomes_exomes_duplicate_ids_tsv_path(version: str = CURRENT_DUPS) -> str:

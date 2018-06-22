@@ -6,6 +6,8 @@ from typing import *
 from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import random
+import warnings
+import uuid
 
 
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
@@ -28,7 +30,9 @@ def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTa
 
 
 def write_temp_gcs(t: Union[hl.MatrixTable, hl.Table], gcs_path: str,
-                   overwrite: bool = False, temp_path: str = '/tmp.h') -> None:
+                   overwrite: bool = False, temp_path: Optional[str] = None) -> None:
+    if not temp_path:
+        temp_path = f'/tmp_{uuid.uuid4()}.h'
     t.write(temp_path, overwrite=True)
     t = hl.read_matrix_table(temp_path) if isinstance(t, hl.MatrixTable) else hl.read_table(temp_path)
     t.write(gcs_path, overwrite=overwrite)
@@ -360,109 +364,248 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
             )
 
 
-def phase_by_transmission(tm_entry: hl.expr.StructExpression,
-                          alleles: hl.expr.ArrayExpression,
-                          call_field: str = 'GT',
-                          phased_call_field: str = 'PBT_GT'
-                          ) -> Dict[str, hl.expr.StructExpression]:
+def phase_by_transmission(
+        locus: hl.expr.LocusExpression,
+        alleles: hl.expr.ArrayExpression,
+        proband_call: hl.expr.CallExpression,
+        father_call: hl.expr.CallExpression,
+        mother_call: hl.expr.CallExpression
+) -> hl.expr.ArrayExpression:
     """
-    Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
-    Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
+    Phases genotype calls in a trio based allele transmission.
 
-    In the phased genotypes, the order is as follows:
+    In the phased calls returned, the order is as follows:
     * Proband: father_allele | mother_allele
     * Parents: transmitted_allele | untransmitted_allele
 
-    Genotypes that cannot be phased are set to `NA`.
-    The following genotype combinations cannot be phased by transmission:
-    1. One of the genotypes in the trio is missing
+    Phasing of sex chromosomes:
+    Sex chromosomes of male individuals should be haploid to be phased correctly.
+    If `proband_call` is diploid on non-par regions of the sex chromosomes, it is assumed to be female.
+
+    Returns `NA` when genotype calls cannot be phased.
+    The following genotype calls combinations cannot be phased by transmission:
+    1. One of the calls in the trio is missing
     2. The proband genotype cannot be obtained from the parents alleles (Mendelian violation)
     3. All individuals of the trio are heterozygous for the same two alleles
+    4. Father is diploid on non-PAR region of X or Y
+    5. Proband is diploid on non-PAR region of Y
 
-    Typical usage:
-    ```
-        trio_matrix = hl.trio_matrix(mt, ped)
-        phased_trio_matrix = trio_matrix.select_entries(
-            **phase_by_transmission(trio_matrix.entry, genotype_field, phased_genotype_field, trio_matrix.alleles)
-        )
-    ```
+    In addition, individual phased genotype calls are returned as missing in the following situations:
+    1. All mother genotype calls non-PAR region of Y
+    2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
 
-    :param StructExpression tm_entry: trio MatrixTable entry Struct (assumes that `proband_entry`, `mother_entry` and `father_entry` are present)
-    :param ArrayExpression alleles: Alleles at variant site
-    :param str call_field: genotype field name to phase
-    :param str phased_call_field: name for the phased genotype field
-    :return: trio MatrixTable entry with additional phased genotype field for each individual
-    :rtype: dict of str -> StructExpression
+    :param LocusExpression locus: Locus in the trio MatrixTable
+    :param ArrayExpression alleles: Alleles in the trio MatrixTable
+    :param CallExpression proband_call: Input proband genotype call
+    :param CallExpression father_call: Input father genotype call
+    :param CallExpression mother_call: Input mother genotype call
+    :return: Array containing: phased proband call, phased father call, phased mother call
+    :rtype: ArrayExpression
     """
 
-    def gt_to_vectors(gt: hl.expr.CallExpression, alleles: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
+    def call_to_one_hot_alleles_array(call: hl.expr.CallExpression, alleles: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
         """
-        Get the set of all allele-vectors in a genotype.
+        Get the set of all different one-hot-encoded allele-vectors in a genotype call.
         It is returned as an ordered array where the first vector corresponds to the first allele,
         and the second vector (only present if het) the second allele.
 
-        :param CallExpression gt: genotype
+        :param CallExpression call: genotype
         :param ArrayExpression alleles: Alleles at the site
-        :return:
+        :return: Array of one-hot-encoded alleles
+        :rtype: ArrayExpression
         """
         return hl.cond(
-            gt.is_het(),
+            call.is_het(),
             hl.array([
-                hl.call(gt[0]).one_hot_alleles(alleles),
-                hl.call(gt[1]).one_hot_alleles(alleles),
+                hl.call(call[0]).one_hot_alleles(alleles),
+                hl.call(call[1]).one_hot_alleles(alleles),
             ]),
-            hl.array([hl.call(gt[0]).one_hot_alleles(alleles)])
+            hl.array([hl.call(call[0]).one_hot_alleles(alleles)])
         )
 
-    def get_phased_parent_gt(gt: hl.expr.CallExpression, transmitted_allele_index: int):
+    def phase_parent_call(call: hl.expr.CallExpression, transmitted_allele_index: int):
         """
         Given a genotype and which allele was transmitted to the offspring, returns the parent phased genotype.
 
-        :param CallExpression gt: Parent genotype
+        :param CallExpression call: Parent genotype
         :param int transmitted_allele_index: index of transmitted allele (0 or 1)
         :return: Phased parent genotype
         :rtype: CallExpression
         """
         return hl.call(
-            gt[transmitted_allele_index],
-            gt[hl.int(transmitted_allele_index == 0)],
+            call[transmitted_allele_index],
+            call[hl.int(transmitted_allele_index == 0)],
             phased=True
         )
 
-    proband_gt = tm_entry.proband_entry[call_field]
-    father_gt = tm_entry.father_entry[call_field]
-    mother_gt = tm_entry.mother_entry[call_field]
+    def phase_diploid_proband(
+            locus: hl.expr.LocusExpression,
+            alleles: hl.expr.ArrayExpression,
+            proband_call: hl.expr.CallExpression,
+            father_call: hl.expr.CallExpression,
+            mother_call: hl.expr.CallExpression
+    ) -> hl.expr.ArrayExpression:
+        """
+        Returns phased genotype calls in the case of a diploid proband
+        (autosomes, PAR regions of sex chromosomes or non-PAR regions of a female proband)
 
-    proband_v = proband_gt.one_hot_alleles(alleles)
-    father_v = gt_to_vectors(father_gt, alleles)
-    mother_v = gt_to_vectors(mother_gt, alleles)
+        :param LocusExpression locus: Locus in the trio MatrixTable
+        :param ArrayExpression alleles: Alleles in the trio MatrixTable
+        :param CallExpression proband_call: Input proband genotype call
+        :param CallExpression father_call: Input father genotype call
+        :param CallExpression mother_call: Input mother genotype call
+        :return: Array containing: phased proband call, phased father call, phased mother call
+        :rtype: ArrayExpression
+        """
 
-    combinations = hl.flatmap(
-        lambda f:
-        hl.zip_with_index(mother_v)
-            .filter(lambda m: m[1] + f[1] == proband_v)
-            .map(lambda m: hl.struct(m=m[0], f=f[0])),
-        hl.zip_with_index(father_v)
+        proband_v = proband_call.one_hot_alleles(alleles)
+        father_v = hl.cond(
+            locus.in_x_nonpar() | locus.in_y_nonpar(),
+            hl.or_missing(father_call.is_haploid(), hl.array([father_call.one_hot_alleles(alleles)])),
+            call_to_one_hot_alleles_array(father_call, alleles)
+        )
+        mother_v = call_to_one_hot_alleles_array(mother_call, alleles)
+
+        combinations = hl.flatmap(
+            lambda f:
+            hl.zip_with_index(mother_v)
+                .filter(lambda m: m[1] + f[1] == proband_v)
+                .map(lambda m: hl.struct(m=m[0], f=f[0])),
+            hl.zip_with_index(father_v)
+        )
+
+        return (
+            hl.cond(
+                hl.is_defined(combinations) & (hl.len(combinations) == 1),
+                hl.array([
+                    hl.call(father_call[combinations[0].f], mother_call[combinations[0].m], phased=True),
+                    hl.cond(father_call.is_haploid(), hl.call(father_call[0], phased=True), phase_parent_call(father_call, combinations[0].f)),
+                    phase_parent_call(mother_call, combinations[0].m)
+                ]),
+                hl.null(hl.tarray(hl.tcall))
+            )
+        )
+
+    def phase_haploid_proband_x_nonpar(
+            proband_call: hl.expr.CallExpression,
+            father_call: hl.expr.CallExpression,
+            mother_call: hl.expr.CallExpression
+    ) -> hl.expr.ArrayExpression:
+        """
+        Returns phased genotype calls in the case of a haploid proband in the non-PAR region of X
+
+        :param CallExpression proband_call: Input proband genotype call
+        :param CallExpression father_call: Input father genotype call
+        :param CallExpression mother_call: Input mother genotype call
+        :return: Array containing: phased proband call, phased father call, phased mother call
+        :rtype: ArrayExpression
+        """
+
+        transmitted_allele = hl.zip_with_index(hl.array([mother_call[0], mother_call[1]])).find(lambda m: m[1] == proband_call[0])
+        return hl.cond(
+            hl.is_defined(transmitted_allele),
+            hl.array([
+                hl.call(proband_call[0], phased=True),
+                hl.or_missing(father_call.is_haploid(), hl.call(father_call[0], phased=True)),
+                phase_parent_call(mother_call, transmitted_allele[0])
+            ]),
+            hl.null(hl.tarray(hl.tcall))
+        )
+
+    def phase_y_nonpar(
+            proband_call: hl.expr.CallExpression,
+            father_call: hl.expr.CallExpression,
+    ) -> hl.expr.ArrayExpression:
+        """
+        Returns phased genotype calls in the non-PAR region of Y (requires both father and proband to be haploid to return phase)
+
+        :param CallExpression proband_call: Input proband genotype call
+        :param CallExpression father_call: Input father genotype call
+        :return: Array containing: phased proband call, phased father call, phased mother call
+        :rtype: ArrayExpression
+        """
+        return hl.cond(
+            proband_call.is_haploid() & father_call.is_haploid() & (father_call[0] == proband_call[0]),
+            hl.array([
+                hl.call(proband_call[0], phased=True),
+                hl.call(father_call[0], phased=True),
+                hl.null(hl.tcall)
+            ]),
+            hl.null(hl.tarray(hl.tcall))
+        )
+
+    return (
+        hl.case()
+            .when(locus.in_x_nonpar() & proband_call.is_haploid(), phase_haploid_proband_x_nonpar(proband_call, father_call, mother_call))
+            .when(locus.in_y_nonpar(), phase_y_nonpar(proband_call, father_call))
+            .when(proband_call.is_diploid(), phase_diploid_proband(locus, alleles, proband_call, father_call, mother_call))
+            .default(hl.null(hl.tarray(hl.tcall)))
     )
 
-    tm_entries = dict(tm_entry)
-    tm_entries['proband_entry'] = hl.struct(
-        **tm_entry.proband_entry,
-        **{
-            phased_call_field: hl.or_missing(hl.len(combinations) == 1, hl.call(father_gt[combinations[0].f], mother_gt[combinations[0].m], phased=True))
-        })
-    tm_entries['father_entry'] = hl.struct(
-        **tm_entry.father_entry,
-        **{
-            phased_call_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(father_gt, combinations[0].f))
-        })
-    tm_entries['mother_entry'] = hl.struct(
-        **tm_entry.mother_entry,
-        **{
-            phased_call_field: hl.or_missing(hl.len(combinations) == 1, get_phased_parent_gt(mother_gt, combinations[0].m))
-        })
 
-    return tm_entries
+def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT' ,phased_call_field: str = 'PBT_GT') -> hl.MatrixTable:
+    """
+        Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
+        Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
+
+        In the phased genotypes, the order is as follows:
+        * Proband: father_allele | mother_allele
+        * Parents: transmitted_allele | untransmitted_allele
+
+        Phasing of sex chromosomes:
+        Sex chromosomes of male individuals should be haploid to be phased correctly.
+        If a proband is diploid on non-par regions of the sex chromosomes, it is assumed to be female.
+
+        Genotypes that cannot be phased are set to `NA`.
+        The following genotype calls combinations cannot be phased by transmission (all trio members phased calls set to missing):
+        1. One of the calls in the trio is missing
+        2. The proband genotype cannot be obtained from the parents alleles (Mendelian violation)
+        3. All individuals of the trio are heterozygous for the same two alleles
+        4. Father is diploid on non-PAR region of X or Y
+        5. Proband is diploid on non-PAR region of Y
+
+        In addition, individual phased genotype calls are returned as missing in the following situations:
+        1. All mother genotype calls non-PAR region of Y
+        2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
+
+
+        Typical usage:
+        ```
+            trio_matrix = hl.trio_matrix(mt, ped)
+            phased_trio_matrix = phase_trio_matrix_by_transmission(trio_matrix)
+        ```
+
+        :param MatrixTable tm: Trio MatrixTable (entries should be a Struct with `proband_entry`, `mother_entry` and `father_entry` present)
+        :param str call_field: genotype field name to phase
+        :param str phased_call_field: name for the phased genotype field
+        :return: trio MatrixTable entry with additional phased genotype field for each individual
+        :rtype: MatrixTable
+        """
+
+    tm = tm.annotate_entries(
+        __phased_GT=phase_by_transmission(
+            tm.locus,
+            tm.alleles,
+            tm.proband_entry[call_field],
+            tm.father_entry[call_field],
+            tm.mother_entry[call_field]
+        )
+    )
+
+    return tm.select_entries(
+        proband_entry=hl.struct(
+            **tm.proband_entry,
+            **{phased_call_field: tm.__phased_GT[0]}
+        ),
+        father_entry=hl.struct(
+            **tm.father_entry,
+            **{phased_call_field: tm.__phased_GT[1]}
+        ),
+        mother_entry=hl.struct(
+            **tm.mother_entry,
+            **{phased_call_field: tm.__phased_GT[2]}
+        )
+    )
 
 
 def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.MatrixTable:
@@ -700,7 +843,8 @@ def expand_pd_array_col(
         df: pd.DataFrame,
         array_col: str,
         num_out_cols: int = 0,
-        out_cols_prefix=None
+        out_cols_prefix=None,
+        out_1based_indexing: bool = True
 ) -> pd.DataFrame:
     """
     Expands a Dataframe column containing an array into multiple columns.
@@ -710,6 +854,7 @@ def expand_pd_array_col(
     :param int num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
                              If <1, the number of output columns is equal to the length of the shortest array in `array_col`
     :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)
+    :param bool out_1based_indexing: If set, the output column names indexes start at 1. Otherwise they start at 0.
     :return: dataframe with expanded columns
     :rtype: DataFrame
     """
@@ -720,7 +865,7 @@ def expand_pd_array_col(
     if num_out_cols < 1:
         num_out_cols = min([len(x) for x in df[array_col].values.tolist()])
 
-    cols = ['{}{}'.format(out_cols_prefix, i + 1) for i in range(num_out_cols)]
+    cols = ['{}{}'.format(out_cols_prefix, i + out_1based_indexing) for i in range(num_out_cols)]
     df[cols] = pd.DataFrame(df[array_col].values.tolist())[list(range(num_out_cols))]
 
     return df
@@ -728,8 +873,7 @@ def expand_pd_array_col(
 
 def assign_population_pcs(
         pop_pc_pd: pd.DataFrame,
-        num_pcs: int,
-        pcs_col: str = 'scores',
+        pc_cols: List[str],
         known_col: str = 'known_pop',
         fit: RandomForestClassifier = None,
         seed: int = 42,
@@ -744,11 +888,25 @@ def assign_population_pcs(
     This function uses a random forest model to assign population labels based on the results of PCA.
     Default values for model and assignment parameters are those used in gnomAD.
 
+    Note that if PCs come from Hail, they will be stored in a single column named `scores` by default.
+    The `expand_pd_array_col` can be used to expand this `scores` column into multiple `PC` columns:
+
+    ```
+        data = pca_ht.to_pandas() #Load PCA results
+        data = expand_pd_array_col(data, 'scores', 10 , 'PC') # Expand `scores` column for 10 PCs into columns `PC1` ... `PC10`
+        results, rf_model = assign_population_pcs(
+            data,
+            ['PC{}'.format(i + 1) for i in range(10)]),
+            ...
+        )
+
+    ```
+
+
     :param Table pop_pc_pd: Pandas dataframe containing population PCs as well as a column with population labels
+    :param list of str pc_cols: Columns storing the PCs to use
     :param str known_col: Column storing the known population labels
-    :param str pcs_col: Columns storing the PCs
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
-    :param int num_pcs: number of population PCs on which to train the model
     :param int seed: Random seed
     :param float prop_train: Proportion of known data used for training
     :param int n_estimators: Number of trees to use in the RF model
@@ -759,10 +917,6 @@ def assign_population_pcs(
     :rtype: DataFrame, RandomForestClassifier
     """
 
-    # Expand PC column
-    pop_pc_pd = expand_pd_array_col(pop_pc_pd, pcs_col, num_pcs, 'PC')
-    pc_cols = ['PC{}'.format(i + 1) for i in range(num_pcs)]
-    pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd[pcs_col].values.tolist())[list(range(num_pcs))]
     train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
 
     N = len(train_data)

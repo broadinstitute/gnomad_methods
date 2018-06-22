@@ -287,8 +287,11 @@ def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool =
     return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
 
 
-def fam_path(data_type: str, version: str = CURRENT_FAM) -> str:
+def fam_path(data_type: str, version: str = CURRENT_FAM, true_trios: bool = False) -> str:
+    if not true_trios:
         return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.fam"
+    else:
+        return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.{version}.true_trios.fam"
 
 
 def genomes_exomes_duplicate_ids_tsv_path(version: str = CURRENT_DUPS) -> str:

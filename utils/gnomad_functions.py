@@ -327,17 +327,17 @@ def add_full_rankings(ht: hl.Table) -> hl.Table:
     # Rank all bi-allelics
     biallelic_ht = ht.filter(ht.was_split, keep=False)
     biallelic_ht = add_rank(biallelic_ht)
-    ht = ht.annotate(biallelic_rank=biallelic_ht[ht.key].rank)
 
     # Rank all singletons
     singleton_ht = ht.filter(ht.info.AC[ht.a_index - 1] == 1)
     singleton_ht = add_rank(singleton_ht)
-    ht = ht.annotate(singleton_rank=singleton_ht[ht.key].rank)
 
     # Rank all bi-allelic singletons
     biallelic_singleton_ht = biallelic_ht.filter(biallelic_ht.info.AC[biallelic_ht.a_index-1] == 1)  # NOTE: we are filtering to singletons across the entire callset, not just in high-quality samples
     biallelic_singleton_ht = add_rank(biallelic_singleton_ht)
-    ht = ht.annotate(biallelic_singleton_rank=biallelic_singleton_ht[ht.key].rank)
+
+    # Annotate and print sanity-check counts
+    ht = ht.annotate(biallelic_rank=biallelic_ht[ht.key].rank, singleton_rank=singleton_ht[ht.key].rank, biallelic_singleton_rank=biallelic_singleton_ht[ht.key].rank)
     print(ht.aggregate(hl.struct(was_split=hl.agg.counter(ht.was_split),
                                  has_biallelic_rank=hl.agg.counter(hl.is_defined(ht.biallelic_rank)),
                                  was_singleton=hl.agg.counter(ht.info.AC[ht.a_index - 1] == 1),

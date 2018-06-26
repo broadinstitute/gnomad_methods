@@ -103,7 +103,7 @@ def add_popmax_expr(freq: hl.expr.ArrayExpression, populations: Set[str]) -> hl.
     return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
         hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
                   homozygote_count=sorted_freqs[0].homozygote_count,
-                  meta={'popmax': sorted_freqs[0].meta['population']})), freq)
+                  meta={'popmax': sorted_freqs[0].meta['pop']})), freq)
 
 
 def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.MatrixTable:
@@ -132,6 +132,78 @@ def read_list_data(input_file: str) -> List[str]:
         output.append(line.strip())
     f.close()
     return output
+
+
+def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
+                        frequency: float = None, allele_count: int = None,
+                        population: str = None, subpop: str = None, downsampling: int = None,
+                        keep: bool = True, adj: bool = True) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
+    (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
+    At least one of frequency or allele_count is required.
+    Subpop can be specified without a population if desired.
+
+    :param MatrixTable or Table t: Input MatrixTable or Table
+    :param str direction: One of "above", "below", and "equal" (how to apply the filter)
+    :param float frequency: Frequency to filter by (one of frequency or allele_count is required)
+    :param int allele_count: Allele count to filter by (one of frequency or allele_count is required)
+    :param str population: Population in which to filter frequency
+    :param str subpop: Sub-population in which to filter frequency
+    :param int downsampling: Downsampling in which to filter frequency
+    :param bool keep: Whether to keep rows passing this frequency (passed to filter_rows)
+    :param bool adj: Whether to use adj frequency
+    :return: Filtered MatrixTable or Table
+    :rtype: MatrixTable or Table
+    """
+    if frequency is None and allele_count is None:
+        raise ValueError('At least one of frequency or allele_count must be specified')
+    if direction not in ('above', 'below', 'equal'):
+        raise ValueError('direction needs to be one of "above", "below", or "equal"')
+    group = 'adj' if adj else 'raw'
+    criteria = [lambda f: f.meta.get('group') == group]
+    if frequency is not None:
+        if direction == 'above':
+            criteria.append(lambda f: f.AF[1] > frequency)
+        elif direction == 'below':
+            criteria.append(lambda f: f.AF[1] < frequency)
+        else:
+            criteria.append(lambda f: f.AF[1] == frequency)
+    if allele_count is not None:
+        if direction == 'above':
+            criteria.append(lambda f: f.AC[1] > allele_count)
+        elif direction == 'below':
+            criteria.append(lambda f: f.AC[1] < allele_count)
+        else:
+            criteria.append(lambda f: f.AC[1] == allele_count)
+    size = 1
+    if population:
+        criteria.append(lambda f: f.meta.get('pop') == population)
+        size += 1
+    if subpop:
+        criteria.append(lambda f: f.meta.get('subpop') == subpop)
+        size += 1
+        # If one supplies a subpop but not a population, this will ensure this gets it right
+        if not population: size += 1
+    if downsampling:
+        criteria.append(lambda f: f.meta.get('downsampling') == str(downsampling))
+        size += 1
+        if not population:
+            size += 1
+            criteria.append(lambda f: f.meta.get('pop') == 'global')
+        if subpop:
+            raise Exception('No downsampling data for subpopulations implemented')
+    criteria.append(lambda f: f.meta.size() == size)
+
+    def combine_functions(func_list, x):
+        cond = func_list[0](x)
+        for c in func_list[1:]:
+            cond &= c(x)
+        return cond
+
+    filt = lambda x: combine_functions(criteria, x)
+    criteria = hl.any(filt, t.freq)
+    return t.filter_rows(criteria, keep=keep) if isinstance(t, hl.MatrixTable) else t.filter(criteria, keep=keep)
 
 
 def melt_kt(kt, columns_to_melt, key_column_name='variable', value_column_name='value'):
@@ -286,3 +358,55 @@ def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_na
             res_pd = pd.DataFrame(testing_results)
             res_pd = res_pd.pivot(index=label_col, columns=prediction_col_name, values='n')
             logger.info("Testing results:\n{}".format(pformat(res_pd)))
+
+            
+def add_full_rankings(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
+    """
+    Add bi-allelic-only, singleton-only, and bi-allelic singleton-only variant QC rankings to a Hail Table
+    containing variant annotations `was_split`, `info.AC`, and `a_index`
+
+    :param Table ht: input Hail Table containing variants (with QC annotations) to be ranked
+    :param NumericExpression score_field: the Table annotation by which ranking should be scored
+    :return: Table with biallelic_rank, singleton_rank, and biallelic_singleton_rank added
+    :rtype: Table
+    """
+    ht = ht.annotate(_score=score_field)
+
+    # Rank all bi-allelics
+    biallelic_ht = ht.filter(ht.was_split, keep=False)
+    biallelic_ht = add_rank(biallelic_ht, biallelic_ht._score)
+
+    # Rank all singletons
+    singleton_ht = ht.filter(ht.info.AC[ht.a_index - 1] == 1)
+    singleton_ht = add_rank(singleton_ht, singleton_ht._score)
+
+    # Rank all bi-allelic singletons
+    biallelic_singleton_ht = ht.filter((ht.info.AC[ht.a_index-1] == 1) & ~ht.was_split)  # NOTE: we are filtering to singletons across the entire callset, not just in high-quality samples
+    biallelic_singleton_ht = add_rank(biallelic_singleton_ht, biallelic_singleton_ht._score)
+
+    # Annotate and print sanity-check counts
+    ht = ht.annotate(biallelic_rank=biallelic_ht[ht.key].rank, singleton_rank=singleton_ht[ht.key].rank, biallelic_singleton_rank=biallelic_singleton_ht[ht.key].rank)
+    print(ht.aggregate(hl.struct(was_split=hl.agg.counter(ht.was_split),
+                                 has_biallelic_rank=hl.agg.counter(hl.is_defined(ht.biallelic_rank)),
+                                 was_singleton=hl.agg.counter(ht.info.AC[ht.a_index - 1] == 1),
+                                 has_singleton_rank=hl.agg.counter(hl.is_defined(ht.singleton_rank)),
+                                 was_split_singleton=hl.agg.counter((ht.info.AC[ht.a_index-1] == 1) & ~ht.was_split),
+                                 has_biallelic_singleton_rank=hl.agg.counter(hl.is_defined(ht.biallelic_singleton_rank)))))
+    return ht
+
+def add_rank(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
+    """
+    Adds an `rf_rank` row annotation based on its RF probability score.
+    SNVs and Indels are ranked separately (both starting at 0)
+    :param Table ht: Input RF results Hail Table
+    :param NumericExpression score_field: the Table annotation by which ranking should be scored
+    :return: Annotated Table
+    :rtype: Table
+    """
+    ht = ht.annotate(_score=score_field).persist()
+    rank_ht = ht.select(is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]), score=ht._score)
+    n_snvs = rank_ht.aggregate(hl.agg.count_where(~rank_ht.is_indel))
+    rank_ht = rank_ht.order_by(rank_ht.is_indel, hl.desc(rank_ht.score))
+    rank_ht = rank_ht.add_index()
+    rank_ht = rank_ht.annotate(idx=hl.cond(rank_ht.is_indel, rank_ht.idx - n_snvs, rank_ht.idx))
+    return ht.annotate(rank=rank_ht[ht.key].idx).drop('_score')

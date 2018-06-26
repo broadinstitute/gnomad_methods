@@ -361,6 +361,5 @@ vep_config = "/vep/vep-gcloud.properties"
 context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'
 
 
-
 class DataException(Exception):
     pass

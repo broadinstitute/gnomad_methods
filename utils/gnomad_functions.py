@@ -11,6 +11,7 @@ from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
 from typing import *
+import json
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")
@@ -315,6 +316,50 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
     raise NotImplementedError
 
 
+def get_rf_runs(data_type: str) -> Dict:
+    """
+
+    Loads RF run data from JSON file.
+
+    :param str data_type: One of 'exomes' or 'genomes'
+    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
+    :rtype: dict
+    """
+    
+    from gnomad_hail.resources.variant_qc import rf_run_hash_path
+
+    json_file = rf_run_hash_path(data_type)
+    if hl.utils.hadoop_exists(json_file):
+        with hl.hadoop_open(rf_run_hash_path(data_type)) as f:
+            return json.load(f)
+    else:
+        logger.warning("File {json_file} could not be found. Returning empty RF run hash dict.")
+        return {}
+
+
+def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_name: str = 'rf_prediction') -> None:
+    """
+    Prints the information for the RF runs loaded from the json file storing the RF run hashes -> info
+
+    :param dict runs: Dictionary containing JSON input loaded from RF run file
+    :param str label_col: Name of the RF label column
+    :param str prediction_col_name: Name of the RF prediction column
+    :return: Nothing -- only prints information
+    :rtype: None
+    """
+
+    for run_hash, run_data in runs.items():
+        print(f"\n=== {run_hash} ===")
+        testing_results = run_data.pop('test_results') if 'test_results' in run_data else None
+        # print(testing_results)
+        print(json.dumps(run_data, sort_keys=True, indent=4, separators=(',', ': ')))
+        if testing_results is not None:
+            # Print results
+            res_pd = pd.DataFrame(testing_results)
+            res_pd = res_pd.pivot(index=label_col, columns=prediction_col_name, values='n')
+            logger.info("Testing results:\n{}".format(pformat(res_pd)))
+
+            
 def add_full_rankings(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
     """
     Add bi-allelic-only, singleton-only, and bi-allelic singleton-only variant QC rankings to a Hail Table

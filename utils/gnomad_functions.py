@@ -161,7 +161,7 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     if direction not in ('above', 'below', 'equal'):
         raise ValueError('direction needs to be one of "above", "below", or "equal"')
     group = 'adj' if adj else 'raw'
-    criteria = [lambda f: f.meta.get('group') == group]
+    criteria = [lambda f: f.meta.get('group', '') == group]
     if frequency is not None:
         if direction == 'above':
             criteria.append(lambda f: f.AF[1] > frequency)
@@ -178,19 +178,19 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
             criteria.append(lambda f: f.AC[1] == allele_count)
     size = 1
     if population:
-        criteria.append(lambda f: f.meta.get('pop') == population)
+        criteria.append(lambda f: f.meta.get('pop', '') == population)
         size += 1
     if subpop:
-        criteria.append(lambda f: f.meta.get('subpop') == subpop)
+        criteria.append(lambda f: f.meta.get('subpop', '') == subpop)
         size += 1
         # If one supplies a subpop but not a population, this will ensure this gets it right
         if not population: size += 1
     if downsampling:
-        criteria.append(lambda f: f.meta.get('downsampling') == str(downsampling))
+        criteria.append(lambda f: f.meta.get('downsampling', '') == str(downsampling))
         size += 1
         if not population:
             size += 1
-            criteria.append(lambda f: f.meta.get('pop') == 'global')
+            criteria.append(lambda f: f.meta.get('pop', '') == 'global')
         if subpop:
             raise Exception('No downsampling data for subpopulations implemented')
     criteria.append(lambda f: f.meta.size() == size)

@@ -955,15 +955,27 @@ def assign_population_pcs(
 
 
 def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorphic: bool = True) -> hl.Table:
+    """
+
+    Computes sites concordance between two matrix tables. The result is identical to the sites concordance produced by hl.concordance
+    but computation is much faster.
+
+    :param MatrixTable mt1: left MT
+    :param MatrixTable mt2: right MT
+    :param bool filter_monomorphic: whether to filter or return monomorphic sites
+    :return: concordance table
+    :rtype: Table
+    """
 
     def get_non_refs_table(mt: hl.MatrixTable, common_samples: hl.expr.DictExpression, filter_monomorphic: bool) -> hl.Table:
         """
         Creates a rows table with a unique annotation:
-        nr: A dict of sample_num -> genotype index in concordance table for all non-ref samples
+        `nr`: A dict of sample_num -> genotype index in concordance table for all non-ref samples
 
-        :param mt:
-        :param common_samples:
-        :return:
+        :param MatrixTable mt: input MT
+        :param DictExpression common_samples: Hail expression containing a dict mapping samples to integer indices
+        :return: Table with non-ref samples annotation
+        :rtype: Table
         """
         ht = mt.select_rows(
             nr=hl.dict(
@@ -978,15 +990,16 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
 
         return ht
 
-    def site_concordance(n_samples, left, right):
+    def site_concordance(n_samples: int, left: hl.expr.DictExpression, right: hl.expr.DictExpression) -> hl.expr.ArrayExpression:
         """
 
-        Computes the sites concordance 5x5 matrix from the `nr` annotations in the left and right columns
+        Computes the sites concordance 5x5 matrix from the `nr` annotations in the left and right expressions
 
-        :param n_samples:
-        :param left:
-        :param right:
-        :return:
+        :param int n_samples: Total number of common samples for concordance
+        :param DictExpression left: Dictionary mapping sample index -> genotype for the left dataset
+        :param DictExpression right: Dictionary mapping sample index -> genotype for the right dataset
+        :return: 5x5 concordance matrix expression
+        :rtype: ArrayExpression
         """
         conc_coords = (
             hl.range(0, n_samples)
@@ -997,19 +1010,20 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
 
         return hl.range(0,5).map(lambda left: hl.range(0,5).map(lambda right: conc_coords.get(hl.tuple([left, right]), 0)))
 
-    def one_missing_concordance(right, n_samples, missing_left):
+    def one_missing_concordance(nr: hl.expr.DictExpression, n_samples: int, missing_left: bool) -> hl.expr.ArrayExpression:
         """
 
-        Computes the concordance matrix when one of the two nr annotations is missing
+        Fast compute the concordance matrix when one of the two `nr` annotations is missing
 
-        :param right:
-        :param n_samples:
-        :param missing_left:
-        :return:
+        :param DictExpression nr: Dictionary mapping sample index -> genotype for the non-missing dataset.
+        :param int n_samples: Total number of samples for concordance
+        :param bool missing_left: Whether the missing dataset is the left one
+        :return: 5x5 concordance table
+        :rtype: ArrayExpression
         """
 
-        n_hom_ref = n_samples - hl.len(right)
-        miss_values = right.values().group_by(lambda x: x).map_values(lambda x: hl.len(x))
+        n_hom_ref = n_samples - hl.len(nr)
+        miss_values = nr.values().group_by(lambda x: x).map_values(lambda x: hl.len(x))
         if missing_left:
             return hl.array([
                 hl.array([0, miss_values.get(1,0), n_hom_ref, miss_values.get(3,0), miss_values.get(4,0)]),
@@ -1026,7 +1040,6 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
                 hl.array([miss_values.get(3,0), 0, 0, 0, 0]),
                 hl.array([miss_values.get(4,0), 0, 0, 0, 0])
             ])
-
 
     s1 = mt1.aggregate_cols(hl.agg.collect_as_set(mt1.s))
     s2 = mt2.aggregate_cols(hl.agg.collect_as_set(mt2.s))

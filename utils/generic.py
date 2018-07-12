@@ -980,7 +980,8 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
         ht = mt.select_rows(
             nr=hl.dict(
                 hl.agg.collect(
-                    hl.agg.filter(common_samples.contains(mt.s) & hl.or_else(mt.GT.is_non_ref(), True), hl.tuple([common_samples[mt.s], hl.or_else(mt.GT.n_alt_alleles() + 2, 1)]))
+                    hl.agg.filter(common_samples.contains(mt.s) & hl.or_else(mt.GT.is_non_ref(), True),
+                                  hl.tuple([common_samples[mt.s], hl.or_else(mt.GT.n_alt_alleles() + 2, 1)]))
                 )
             )
         ).rows()
@@ -990,25 +991,26 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
 
         return ht
 
-    def site_concordance(n_samples: int, left: hl.expr.DictExpression, right: hl.expr.DictExpression) -> hl.expr.ArrayExpression:
+    def site_concordance(n_ref_samples: hl.expr.Int32Expression, nr_conc: hl.expr.DictExpression) -> hl.expr.ArrayExpression:
         """
 
         Computes the sites concordance 5x5 matrix from the `nr` annotations in the left and right expressions
 
-        :param int n_samples: Total number of common samples for concordance
-        :param DictExpression left: Dictionary mapping sample index -> genotype for the left dataset
-        :param DictExpression right: Dictionary mapping sample index -> genotype for the right dataset
+        :param Int32Expression n_ref_samples: Number of reference samples in both datasets at the site
+        :param DictExpression nr_conc: Dictionary mapping [left, right] -> n
         :return: 5x5 concordance matrix expression
         :rtype: ArrayExpression
         """
-        conc_coords = (
-            hl.range(0, n_samples)
-                .map(lambda s: hl.tuple([left.get(s, 2), right.get(s, 2)]))
-                .group_by(lambda x: x)
-                .map_values(lambda x: hl.len(x))
-        )
 
-        return hl.range(0,5).map(lambda left: hl.range(0,5).map(lambda right: conc_coords.get(hl.tuple([left, right]), 0)))
+        return (
+            hl.range(0, 5).map(
+                lambda left: hl.range(0, 5).map(
+                    lambda right: nr_conc.get(hl.tuple([left, right]),
+                                              hl.cond((left == 0) & (right == 0), n_ref_samples, 0)
+                                              )
+                )
+            )
+        )
 
     def one_missing_concordance(nr: hl.expr.DictExpression, n_samples: int, missing_left: bool) -> hl.expr.ArrayExpression:
         """
@@ -1057,11 +1059,22 @@ def sites_concordance(mt1: hl.MatrixTable, mt2: hl.MatrixTable, filter_monomorph
     ht2 = get_non_refs_table(mt2, hl_common_samples, filter_monomorphic).rename({'nr': 'nr_right'}).persist()
 
     ht = ht1.join(ht2, how='outer')
+    ht = ht.annotate(
+        n_ref_samples=n_samples - hl.len(ht.nr_left.key_set().union(ht.nr_right.key_set())),
+        nr_conc=hl.or_missing(
+            hl.is_defined(ht.nr_left) &  hl.is_defined(ht.nr_right),
+            ht.nr_left.key_set().union(ht.nr_right.key_set())
+                .map(lambda s: hl.tuple([ht.nr_left.get(s, 2), ht.nr_right.get(s, 2)]))
+                .group_by(lambda x: x)
+                .map_values(lambda x: hl.len(x))
+        )
+    )
+
     return ht.select(
         concordance=(
             hl.case()
             .when(hl.is_missing(ht.nr_left), one_missing_concordance(ht.nr_right, n_samples, missing_left=True))
             .when(hl.is_missing(ht.nr_right), one_missing_concordance(ht.nr_left, n_samples, missing_left=False))
-            .default(site_concordance(n_samples, ht.nr_left, ht.nr_right))
+            .default(site_concordance(ht.n_ref_samples, ht.nr_conc))
         )
     )

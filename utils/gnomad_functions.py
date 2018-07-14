@@ -98,8 +98,8 @@ def add_popmax_expr(freq: hl.expr.ArrayExpression, populations: Set[str]) -> hl.
     """
     pops_to_use = hl.literal(populations)
     freq_filtered = hl.filter(lambda f: (f.meta.size() == 2) & (f.meta.get('group') == 'adj') &
-                                        pops_to_use.contains(f.meta.get('pop')), freq)
-    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AC[1] / x.AN, reverse=True)
+                                        pops_to_use.contains(f.meta.get('pop')) & (f.AC[1] > 0), freq)
+    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF[1], reverse=True)
     return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
         hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
                   homozygote_count=sorted_freqs[0].homozygote_count,

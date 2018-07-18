@@ -47,7 +47,7 @@ export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/
 export SPARK_CLASSPATH=${HAIL_HOME}/${HAIL_JAR}
 
 /opt/conda/bin/conda install -c damianavila82 rise
-/opt/conda/bin/conda install selenium phantomjs pillow -c conda-forge
+/opt/conda/bin/conda install selenium phantomjs pillow scikit-learn -c conda-forge
 
 PYTHONPATH=.:$PYTHONPATH python tests/test_utils.py
 # Use this instead to turn off Slack messages

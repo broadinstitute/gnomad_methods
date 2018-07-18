@@ -273,7 +273,7 @@ def metadata_genomes_ht_path(version=CURRENT_GENOME_META):
 
 
 def metadata_exomes_ht_path(version=CURRENT_EXOME_META):
-    return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.ht'.format(version)
+    return 'C'.format(version)
 
 
 def coverage_mt_path(data_type) -> str:
@@ -330,7 +330,7 @@ def methylation_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-resources/methylation/hail-{}/methylation.ht'.format(hail_version)
 
 
-dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20160601.vcf.bgz"
+dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20180423.vcf.bgz"
 
 NA12878_high_conf_regions_bed_path = "gs://gnomad-public/truth-sets/source/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.bed"
 NA12878_high_conf_exome_regions_bed_path = "gs://gnomad-public/truth-sets/source/union13callableMQonlymerged_addcert_nouncert_excludesimplerep_excludesegdups_excludedecoy_excludeRepSeqSTRs_noCNVs_v2.18_2mindatasets_5minYesNoRatio.bed"

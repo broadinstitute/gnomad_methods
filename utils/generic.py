@@ -251,6 +251,22 @@ def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_
     return mt
 
 
+def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
+
+    """
+    Add most_severe_consequence annotation to transcript consequences
+    This is for a given transcript, as there are often multiple annotations for a single transcript:
+    e.g. splice_region_variant&intron_variant -> splice_region_variant
+    """
+    from .constants import CSQ_ORDER
+
+    csqs = hl.literal(CSQ_ORDER)
+
+    return tc.annotate(
+        most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
+    )
+
+
 def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'vep',
                          penalize_flags: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
@@ -267,16 +283,6 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
 
     csqs = hl.literal(CSQ_ORDER)
     csq_dict = hl.literal(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
-
-    def add_most_severe_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
-        """
-        Add most_severe_consequence annotation to transcript consequences
-        This is for a given transcript, as there are often multiple annotations for a single transcript:
-        e.g. splice_region_variant&intron_variant -> splice_region_variant
-        """
-        return tc.annotate(
-            most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
-        )
 
     def find_worst_transcript_consequence(tcl: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
         """
@@ -299,7 +305,7 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
         ))
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 
-    transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence)
+    transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence_to_consequence)
 
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)

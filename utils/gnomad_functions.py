@@ -11,6 +11,7 @@ from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
 from typing import *
+import json
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger("utils")
@@ -97,8 +98,8 @@ def add_popmax_expr(freq: hl.expr.ArrayExpression, populations: Set[str]) -> hl.
     """
     pops_to_use = hl.literal(populations)
     freq_filtered = hl.filter(lambda f: (f.meta.size() == 2) & (f.meta.get('group') == 'adj') &
-                                        pops_to_use.contains(f.meta.get('pop')), freq)
-    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AC[1] / x.AN, reverse=True)
+                                        pops_to_use.contains(f.meta.get('pop')) & (f.AC[1] > 0), freq)
+    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF[1], reverse=True)
     return hl.cond(hl.len(sorted_freqs) > 0, freq.append(
         hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
                   homozygote_count=sorted_freqs[0].homozygote_count,
@@ -160,7 +161,7 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     if direction not in ('above', 'below', 'equal'):
         raise ValueError('direction needs to be one of "above", "below", or "equal"')
     group = 'adj' if adj else 'raw'
-    criteria = [lambda f: f.meta.get('group') == group]
+    criteria = [lambda f: f.meta.get('group', '') == group]
     if frequency is not None:
         if direction == 'above':
             criteria.append(lambda f: f.AF[1] > frequency)
@@ -177,19 +178,19 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
             criteria.append(lambda f: f.AC[1] == allele_count)
     size = 1
     if population:
-        criteria.append(lambda f: f.meta.get('pop') == population)
+        criteria.append(lambda f: f.meta.get('pop', '') == population)
         size += 1
     if subpop:
-        criteria.append(lambda f: f.meta.get('subpop') == subpop)
+        criteria.append(lambda f: f.meta.get('subpop', '') == subpop)
         size += 1
         # If one supplies a subpop but not a population, this will ensure this gets it right
         if not population: size += 1
     if downsampling:
-        criteria.append(lambda f: f.meta.get('downsampling') == str(downsampling))
+        criteria.append(lambda f: f.meta.get('downsampling', '') == str(downsampling))
         size += 1
         if not population:
             size += 1
-            criteria.append(lambda f: f.meta.get('pop') == 'global')
+            criteria.append(lambda f: f.meta.get('pop', '') == 'global')
         if subpop:
             raise Exception('No downsampling data for subpopulations implemented')
     criteria.append(lambda f: f.meta.size() == size)
@@ -313,3 +314,99 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
             .drop('comb'))
     """
     raise NotImplementedError
+
+
+def get_rf_runs(data_type: str) -> Dict:
+    """
+
+    Loads RF run data from JSON file.
+
+    :param str data_type: One of 'exomes' or 'genomes'
+    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
+    :rtype: dict
+    """
+    
+    from gnomad_hail.resources.variant_qc import rf_run_hash_path
+
+    json_file = rf_run_hash_path(data_type)
+    if hl.utils.hadoop_exists(json_file):
+        with hl.hadoop_open(rf_run_hash_path(data_type)) as f:
+            return json.load(f)
+    else:
+        logger.warning("File {json_file} could not be found. Returning empty RF run hash dict.")
+        return {}
+
+
+def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_name: str = 'rf_prediction') -> None:
+    """
+    Prints the information for the RF runs loaded from the json file storing the RF run hashes -> info
+
+    :param dict runs: Dictionary containing JSON input loaded from RF run file
+    :param str label_col: Name of the RF label column
+    :param str prediction_col_name: Name of the RF prediction column
+    :return: Nothing -- only prints information
+    :rtype: None
+    """
+
+    for run_hash, run_data in runs.items():
+        print(f"\n=== {run_hash} ===")
+        testing_results = run_data.pop('test_results') if 'test_results' in run_data else None
+        # print(testing_results)
+        print(json.dumps(run_data, sort_keys=True, indent=4, separators=(',', ': ')))
+        if testing_results is not None:
+            # Print results
+            res_pd = pd.DataFrame(testing_results)
+            res_pd = res_pd.pivot(index=label_col, columns=prediction_col_name, values='n')
+            logger.info("Testing results:\n{}".format(pformat(res_pd)))
+
+            
+def add_full_rankings(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
+    """
+    Add bi-allelic-only, singleton-only, and bi-allelic singleton-only variant QC rankings to a Hail Table
+    containing variant annotations `was_split`, `info.AC`, and `a_index`
+
+    :param Table ht: input Hail Table containing variants (with QC annotations) to be ranked
+    :param NumericExpression score_field: the Table annotation by which ranking should be scored
+    :return: Table with biallelic_rank, singleton_rank, and biallelic_singleton_rank added
+    :rtype: Table
+    """
+    ht = ht.annotate(_score=score_field)
+
+    # Rank all bi-allelics
+    biallelic_ht = ht.filter(ht.was_split, keep=False)
+    biallelic_ht = add_rank(biallelic_ht, biallelic_ht._score)
+
+    # Rank all singletons
+    singleton_ht = ht.filter(ht.info.AC[ht.a_index - 1] == 1)
+    singleton_ht = add_rank(singleton_ht, singleton_ht._score)
+
+    # Rank all bi-allelic singletons
+    biallelic_singleton_ht = ht.filter((ht.info.AC[ht.a_index-1] == 1) & ~ht.was_split)  # NOTE: we are filtering to singletons across the entire callset, not just in high-quality samples
+    biallelic_singleton_ht = add_rank(biallelic_singleton_ht, biallelic_singleton_ht._score)
+
+    # Annotate and print sanity-check counts
+    ht = ht.annotate(biallelic_rank=biallelic_ht[ht.key].rank, singleton_rank=singleton_ht[ht.key].rank, biallelic_singleton_rank=biallelic_singleton_ht[ht.key].rank)
+    print(ht.aggregate(hl.struct(was_split=hl.agg.counter(ht.was_split),
+                                 has_biallelic_rank=hl.agg.counter(hl.is_defined(ht.biallelic_rank)),
+                                 was_singleton=hl.agg.counter(ht.info.AC[ht.a_index - 1] == 1),
+                                 has_singleton_rank=hl.agg.counter(hl.is_defined(ht.singleton_rank)),
+                                 was_split_singleton=hl.agg.counter((ht.info.AC[ht.a_index-1] == 1) & ~ht.was_split),
+                                 has_biallelic_singleton_rank=hl.agg.counter(hl.is_defined(ht.biallelic_singleton_rank)))))
+    return ht
+
+def add_rank(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
+    """
+    Adds an `rf_rank` row annotation based on its RF probability score.
+    SNVs and Indels are ranked separately (both starting at 0)
+    :param Table ht: Input RF results Hail Table
+    :param NumericExpression score_field: the Table annotation by which ranking should be scored
+    :return: Annotated Table
+    :rtype: Table
+    """
+    ht = ht.annotate(_score=score_field).persist()
+    rank_ht = ht.select(is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]), score=ht._score)
+    n_snvs = rank_ht.aggregate(hl.agg.count_where(~rank_ht.is_indel))
+    rank_ht = rank_ht.order_by(rank_ht.is_indel, hl.desc(rank_ht.score))
+    rank_ht = rank_ht.add_index()
+    rank_ht = rank_ht.annotate(idx=hl.cond(rank_ht.is_indel, rank_ht.idx - n_snvs, rank_ht.idx))
+    return ht.annotate(rank=rank_ht[ht.key].idx).drop('_score')

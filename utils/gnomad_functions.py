@@ -397,7 +397,7 @@ def add_full_rankings(ht: hl.Table, score_field: hl.expr.NumericExpression) -> h
 
 def add_rank(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
     """
-    Adds an `rf_rank` row annotation based on its RF probability score.
+    Adds a `rank` row annotation based on the score_field expression sorted in ascending order
     SNVs and Indels are ranked separately (both starting at 0)
     :param Table ht: Input RF results Hail Table
     :param NumericExpression score_field: the Table annotation by which ranking should be scored
@@ -405,11 +405,11 @@ def add_rank(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
     :rtype: Table
     """
     key = ht.key
-    ht = ht.annotate(_score=score_field).persist()
-    rank_ht = ht.select(is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]), score=ht._score)
+    rank_ht = ht.select(is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]), score=score_field)
+    ht = ht.persist()
     n_snvs = rank_ht.aggregate(hl.agg.count_where(~rank_ht.is_indel))
-    rank_ht = rank_ht.order_by(rank_ht.is_indel, hl.desc(rank_ht.score)).key_by('is_indel', 'score')
+    rank_ht = rank_ht.key_by('is_indel', 'score')
     rank_ht = rank_ht.add_index()
     rank_ht = rank_ht.key_by(*key)
     rank_ht = rank_ht.annotate(idx=hl.cond(rank_ht.is_indel, rank_ht.idx - n_snvs, rank_ht.idx))
-    return ht.annotate(rank=rank_ht[ht.key].idx).drop('_score')
+    return ht.annotate(rank=rank_ht[ht.key].idx)

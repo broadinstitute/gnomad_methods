@@ -119,7 +119,7 @@ def get_gnomad_meta(data_type: str, version: str = None, full_meta: bool = False
         if data_type == 'genomes':
             columns.extend(['pcr_free', 'project_name', 'release_2_0_2'])
         else:
-            columns.extend(['diabetes', 'exac_joint'])
+            columns.extend(['diabetes', 'exac_joint', 'tcga'])
         ht = ht.select(*columns)
     return ht
 

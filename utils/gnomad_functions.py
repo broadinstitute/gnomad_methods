@@ -10,6 +10,7 @@ from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
+import pandas as pd
 from typing import *
 import json
 
@@ -403,10 +404,12 @@ def add_rank(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
     :return: Annotated Table
     :rtype: Table
     """
+    key = ht.key
     ht = ht.annotate(_score=score_field).persist()
     rank_ht = ht.select(is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]), score=ht._score)
     n_snvs = rank_ht.aggregate(hl.agg.count_where(~rank_ht.is_indel))
-    rank_ht = rank_ht.order_by(rank_ht.is_indel, hl.desc(rank_ht.score))
+    rank_ht = rank_ht.order_by(rank_ht.is_indel, hl.desc(rank_ht.score)).key_by('is_indel', 'score')
     rank_ht = rank_ht.add_index()
+    rank_ht = rank_ht.key_by(*key)
     rank_ht = rank_ht.annotate(idx=hl.cond(rank_ht.is_indel, rank_ht.idx - n_snvs, rank_ht.idx))
     return ht.annotate(rank=rank_ht[ht.key].idx).drop('_score')

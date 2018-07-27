@@ -16,7 +16,7 @@ def get_2_0_2_rf_path(data_type: str, beta: bool):
     """
 
     if data_type == 'exomes':
-        return 'gs://gnomad/annotations/hail-0.2/ht/exomes/score_rankings/'.format('gnomad_exomes.rf.170620_new.txt.bgz' if beta else 'gnomad.exomes.variantqc.txt.bgz')
+        return 'gs://gnomad/annotations/hail-0.2/ht/exomes/score_rankings/{}'.format('gnomad_exomes.rf.170620_new.txt.bgz' if beta else 'gnomad.exomes.variantqc.txt.bgz')
     else:
         return 'gs://gnomad/annotations/hail-0.2/ht/genomes/score_rankings/{}'.format('rf_as_qd_max_pab.rf.txt.bgz' if beta else 'gnomad.sites.RF.newStats24.txt.bgz')
 

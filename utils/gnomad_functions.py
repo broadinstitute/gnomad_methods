@@ -378,32 +378,21 @@ def add_rank(ht: hl.Table,
     """
 
     key = ht.key
-    temp_expr = {'_score': score_expr}
-    if subrank_expr is not None:
-        temp_expr.update({f'_{name}': expr for name, expr in subrank_expr.items()})
+    if subrank_expr is None:
+        subrank_expr = {}
 
+    temp_expr = {'_score': score_expr}
+    temp_expr.update({f'_{name}': expr for name, expr in subrank_expr.items()})
     rank_ht = ht.select(**temp_expr, is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]))
 
-    count_expr = {'rank': hl.agg.counter(hl.cond(rank_ht.is_indel, 'indel', 'snv'))}
-    if subrank_expr is not None:
-        count_expr.update({name: hl.agg.counter(hl.agg.filter(rank_ht[f'_{name}'], hl.cond(rank_ht.is_indel, 'indel', 'snv'))) for name in subrank_expr})
-    variant_counts = rank_ht.aggregate(hl.Struct(**count_expr))
-    rank_ht = rank_ht.key_by('is_indel', '_score')
-    rank_ht = rank_ht.add_index()
-    rank_ht = rank_ht.transmute(rank=hl.cond(rank_ht.is_indel, rank_ht.idx - variant_counts.rank['snv'], rank_ht.idx))
-    rank_ht = rank_ht.persist()
+    rank_ht = rank_ht.key_by('is_indel', '_score').persist()
+    scan_expr = {'rank': hl.cond(rank_ht.is_indel, hl.scan.count_where(rank_ht.is_indel), hl.scan.count_where(~rank_ht.is_indel))}
+    scan_expr.update({name: hl.or_missing(rank_ht[f'_{name}'], hl.cond(rank_ht.is_indel, hl.scan.count_where(rank_ht.is_indel & rank_ht[f'_{name}']),
+                                      hl.scan.count_where(~rank_ht.is_indel & rank_ht[f'_{name}']))) for name in subrank_expr})
+    rank_ht = rank_ht.annotate(**scan_expr)
 
-    for name in subrank_expr:
-        subrank_ht = rank_ht.filter(rank_ht[f'_{name}']).add_index()
-        subrank_ht = subrank_ht.select(**{name: hl.cond(subrank_ht.is_indel, subrank_ht.idx - variant_counts[name]['snv'], subrank_ht.idx)})
-        rank_ht = rank_ht.annotate(**subrank_ht[rank_ht.key])
+    rank_ht = rank_ht.key_by(*key).persist()
+    rank_ht = rank_ht.select(*scan_expr.keys())
 
-    rank_ht = rank_ht.key_by(*key)
-    rank_ht.describe()
-
-    rank_expr = {'rank': rank_ht[key].rank}
-    if subrank_expr is not None:
-        rank_expr.update({name: rank_ht[key][name] for name in subrank_expr})
-
-    ht = ht.annotate(**rank_expr)
-    return ht.annotate_globals(rank_variant_counts=variant_counts)
+    ht = ht.annotate(**rank_ht[key])
+    return ht

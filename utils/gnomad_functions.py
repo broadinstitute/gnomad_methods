@@ -10,6 +10,7 @@ from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict
 from pprint import pprint, pformat
 import argparse
+import pandas as pd
 from typing import *
 import json
 
@@ -359,54 +360,42 @@ def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_na
             res_pd = res_pd.pivot(index=label_col, columns=prediction_col_name, values='n')
             logger.info("Testing results:\n{}".format(pformat(res_pd)))
 
-            
-def add_full_rankings(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
+
+def add_rank(ht: hl.Table,
+             score_expr: hl.expr.NumericExpression,
+             subrank_expr: Optional[Dict[str, hl.expr.BooleanExpression]] = None) -> hl.Table:
     """
-    Add bi-allelic-only, singleton-only, and bi-allelic singleton-only variant QC rankings to a Hail Table
-    containing variant annotations `was_split`, `info.AC`, and `a_index`
+    Adds rank based on the `score_expr`. Rank is added for snvs and indels separately.
+    If one or more `subrank_expr` are provided, then subrank is added based on all sites for which the boolean expression is true.
+
+    In addition, variant counts (snv, indel separately) is added as a global (`rank_variant_counts`).
 
     :param Table ht: input Hail Table containing variants (with QC annotations) to be ranked
-    :param NumericExpression score_field: the Table annotation by which ranking should be scored
-    :return: Table with biallelic_rank, singleton_rank, and biallelic_singleton_rank added
+    :param NumericExpression score_expr: the Table annotation by which ranking should be scored
+    :param dict str -> BooleanExpression subrank_expr: Any subranking to be added in the form name_of_subrank: subrank_filtering_expr
+    :return: Table with rankings added
     :rtype: Table
     """
-    ht = ht.annotate(_score=score_field)
 
-    # Rank all bi-allelics
-    biallelic_ht = ht.filter(ht.was_split, keep=False)
-    biallelic_ht = add_rank(biallelic_ht, biallelic_ht._score)
+    key = ht.key
+    if subrank_expr is None:
+        subrank_expr = {}
 
-    # Rank all singletons
-    singleton_ht = ht.filter(ht.info.AC[ht.a_index - 1] == 1)
-    singleton_ht = add_rank(singleton_ht, singleton_ht._score)
+    temp_expr = {'_score': score_expr}
+    temp_expr.update({f'_{name}': expr for name, expr in subrank_expr.items()})
+    rank_ht = ht.select(**temp_expr, is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]))
 
-    # Rank all bi-allelic singletons
-    biallelic_singleton_ht = ht.filter((ht.info.AC[ht.a_index-1] == 1) & ~ht.was_split)  # NOTE: we are filtering to singletons across the entire callset, not just in high-quality samples
-    biallelic_singleton_ht = add_rank(biallelic_singleton_ht, biallelic_singleton_ht._score)
+    rank_ht = rank_ht.key_by('is_indel', '_score').persist()
+    scan_expr = {'rank': hl.cond(rank_ht.is_indel, hl.scan.count_where(rank_ht.is_indel), hl.scan.count_where(~rank_ht.is_indel))}
+    scan_expr.update({name: hl.or_missing(rank_ht[f'_{name}'],
+                                          hl.cond(rank_ht.is_indel,
+                                                  hl.scan.count_where(rank_ht.is_indel & rank_ht[f'_{name}']),
+                                                  hl.scan.count_where(~rank_ht.is_indel & rank_ht[f'_{name}'])))
+                      for name in subrank_expr})
+    rank_ht = rank_ht.annotate(**scan_expr)
 
-    # Annotate and print sanity-check counts
-    ht = ht.annotate(biallelic_rank=biallelic_ht[ht.key].rank, singleton_rank=singleton_ht[ht.key].rank, biallelic_singleton_rank=biallelic_singleton_ht[ht.key].rank)
-    print(ht.aggregate(hl.struct(was_split=hl.agg.counter(ht.was_split),
-                                 has_biallelic_rank=hl.agg.counter(hl.is_defined(ht.biallelic_rank)),
-                                 was_singleton=hl.agg.counter(ht.info.AC[ht.a_index - 1] == 1),
-                                 has_singleton_rank=hl.agg.counter(hl.is_defined(ht.singleton_rank)),
-                                 was_split_singleton=hl.agg.counter((ht.info.AC[ht.a_index-1] == 1) & ~ht.was_split),
-                                 has_biallelic_singleton_rank=hl.agg.counter(hl.is_defined(ht.biallelic_singleton_rank)))))
+    rank_ht = rank_ht.key_by(*key).persist()
+    rank_ht = rank_ht.select(*scan_expr.keys())
+
+    ht = ht.annotate(**rank_ht[key])
     return ht
-
-def add_rank(ht: hl.Table, score_field: hl.expr.NumericExpression) -> hl.Table:
-    """
-    Adds an `rf_rank` row annotation based on its RF probability score.
-    SNVs and Indels are ranked separately (both starting at 0)
-    :param Table ht: Input RF results Hail Table
-    :param NumericExpression score_field: the Table annotation by which ranking should be scored
-    :return: Annotated Table
-    :rtype: Table
-    """
-    ht = ht.annotate(_score=score_field).persist()
-    rank_ht = ht.select(is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]), score=ht._score)
-    n_snvs = rank_ht.aggregate(hl.agg.count_where(~rank_ht.is_indel))
-    rank_ht = rank_ht.order_by(rank_ht.is_indel, hl.desc(rank_ht.score))
-    rank_ht = rank_ht.add_index()
-    rank_ht = rank_ht.annotate(idx=hl.cond(rank_ht.is_indel, rank_ht.idx - n_snvs, rank_ht.idx))
-    return ht.annotate(rank=rank_ht[ht.key].idx).drop('_score')

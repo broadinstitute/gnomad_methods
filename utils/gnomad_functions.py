@@ -387,8 +387,11 @@ def add_rank(ht: hl.Table,
 
     rank_ht = rank_ht.key_by('is_indel', '_score').persist()
     scan_expr = {'rank': hl.cond(rank_ht.is_indel, hl.scan.count_where(rank_ht.is_indel), hl.scan.count_where(~rank_ht.is_indel))}
-    scan_expr.update({name: hl.or_missing(rank_ht[f'_{name}'], hl.cond(rank_ht.is_indel, hl.scan.count_where(rank_ht.is_indel & rank_ht[f'_{name}']),
-                                      hl.scan.count_where(~rank_ht.is_indel & rank_ht[f'_{name}']))) for name in subrank_expr})
+    scan_expr.update({name: hl.or_missing(rank_ht[f'_{name}'],
+                                          hl.cond(rank_ht.is_indel,
+                                                  hl.scan.count_where(rank_ht.is_indel & rank_ht[f'_{name}']),
+                                                  hl.scan.count_where(~rank_ht.is_indel & rank_ht[f'_{name}'])))
+                      for name in subrank_expr})
     rank_ht = rank_ht.annotate(**scan_expr)
 
     rank_ht = rank_ht.key_by(*key).persist()

@@ -219,6 +219,10 @@ def non_refs_only_mt_path(data_type, split=True):
     return f'gs://gnomad/non_refs_only/hail-0.2/mt/{data_type}/gnomad.{data_type}{"" if split else ".unsplit"}.mt'
 
 
+def pbt_phased_trios_mt_path(data_type: str, split: bool = True, hail_version : str = CURRENT_HAIL_VERSION):
+    return "gs://gnomad/hardcalls/hail-{0}/mt/{1}/gnomad.{1}.trios.pbt_phased{2}.mt".format(hail_version, data_type,
+                                                                           "" if split else ".unsplit")
+
 def annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
     """
     Get sites-level annotations

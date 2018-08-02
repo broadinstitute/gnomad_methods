@@ -363,7 +363,7 @@ def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_na
 
 def add_rank(ht: hl.Table,
              score_expr: hl.expr.NumericExpression,
-             subrank_expr: Dict[str, hl.expr.BooleanExpression] = None) -> hl.Table:
+             subrank_expr: Optional[Dict[str, hl.expr.BooleanExpression]] = None) -> hl.Table:
     """
     Adds rank based on the `score_expr`. Rank is added for snvs and indels separately.
     If one or more `subrank_expr` are provided, then subrank is added based on all sites for which the boolean expression is true.

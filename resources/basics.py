@@ -318,17 +318,18 @@ def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.b37.mt'.format(hail_version)
 
 
-def kgp_phase3_genotypes_mt_path(hail_version=CURRENT_HAIL_VERSION) -> str:
+def kgp_phase3_genotypes_mt_path(split: bool = True, hail_version=CURRENT_HAIL_VERSION) -> str:
     """
     1000 Genomes Phase 3 with genotypes (b37)
     Imported from: gs://genomics-public-data/1000-genomes-phase-3/vcf-20150220/ALL.chr*.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf
     Samples populations from: gs://gnomad-public/truth-sets/hail-0.2/1000G.GRCh38.20130502.phase3.sequence.index
 
-    :param str hail_version:
+    :param bool split: Whether to load to split or non-split version
+    :param str hail_version: Hail version
     :return: Path to 1000 Genomes MT
     :rtype: str
     """
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.mt'.format(hail_version)
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes{}.mt'.format(hail_version, '.split' if split else '')
 
 
 def NA12878_mt_path(hail_version=CURRENT_HAIL_VERSION):

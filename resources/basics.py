@@ -329,7 +329,7 @@ def kgp_phase3_genotypes_mt_path(split: bool = True, hail_version=CURRENT_HAIL_V
     :return: Path to 1000 Genomes MT
     :rtype: str
     """
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes{}.mt'.format(hail_version, '.split' if split else '')
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes{1}.mt'.format(hail_version, '.split' if split else '')
 
 
 def NA12878_mt_path(hail_version=CURRENT_HAIL_VERSION):

@@ -401,8 +401,9 @@ def get_rows_data(rows_files):
 def pair_plot(
         data: pd.DataFrame,
         label_col: str = None,
-        colors_dict: Dict[str, str] = None,
-        tools: str = "save,pan,box_zoom,reset,wheel_zoom,box_select,lasso_select,help"
+        colors: Union[List[str], Dict[str, str]] = None,
+        tools: str = "save,pan,box_zoom,reset,wheel_zoom,box_select,lasso_select,help",
+        tooltip_cols: List[str] = None
 ) -> Column:
     """
 
@@ -415,26 +416,38 @@ def pair_plot(
 
     :param DataFrame data: Dataframe to plot
     :param str label_col: Column of the DataFrame containing the labels
-    :param dict of str -> str colors_dict: Mapping of label to colors
+    :param list of str or dict of str -> str colors: RGB hex colors. If a dict is provided, it should contain the mapping of label to colors.
     :param str tools: Tools for the resulting plots
+    :param list of str tooltip_cols: Additional columns that should be displayed in tooltip
     :return: Grid of plots (column of rows)
     :rtype: Column
     """
+    from bokeh.palettes import viridis
 
-    if label_col is None and colors_dict is not None:
+    if tooltip_cols is None:
+        tooltip_cols = [] if label_col is None else [label_col]
+    elif label_col not in tooltip_cols:
+        tooltip_cols.append(label_col)
+
+    if label_col is None and colors is not None:
         logger.warn('`colors_dict` ignored since no `label_col` specified')
 
     colors_col = '__pair_plot_color'
 
+    colors_dict = {}
     if label_col is None:
-        data[colors_col] = ['#1f77b4'] * len(data)
+        data[colors_col] = viridis(1) * len(data)
     else:
-        if colors_dict is None:
-            from bokeh.palettes import Spectral6
-            colors_dict = {l: Spectral6[i] for i,l in enumerate(set(data[label_col]))}
+        if not isinstance(colors, dict):
+            labels = set(data[label_col])
+            color_palette = viridis(len(labels)) if colors is None else colors
+            colors_dict = {l: color_palette[i] for i, l in enumerate(labels)}
+        else:
+            colors_dict = colors
         data[colors_col] = [colors_dict.get(l, 'gray') for l in data[label_col]]
+        tools = 'hover,' + tools
 
-    data_cols = [c for c in data.columns if c not in [colors_col, label_col]]
+    data_cols = [c for c in data.columns if c not in [colors_col, label_col] + tooltip_cols]
     data_ranges = [DataRange1d(start=rmin - (abs(rmin - rmax) * 0.05), end=rmax + (abs(rmin - rmax) * 0.05)) for rmin, rmax in zip(data[data_cols].min(axis=0), data[data_cols].max(axis=0))]
     data_source = ColumnDataSource(data={c: data[c] for c in data.columns})
 
@@ -450,22 +463,27 @@ def pair_plot(
                 tools=tools
             )
             p.x_range = data_ranges[j]
+
             if i == j:
                 if label_col is None:
                     hist, edges = np.histogram(data[data_cols[i]], density=False, bins=50)
                     p.quad(top=hist, bottom=0, left=edges[:-1], right=edges[1:])
                 else:
-                    density_data = data[[colors_col, data_cols[i]]].groupby(colors_col).apply(lambda df: np.histogram(df[data_cols[i]], density=True, bins=20))
-                    for color, (hist, edges) in density_data.iteritems():
-                        p.line(edges[:-1], hist, color=color)
+                    density_data = data[[label_col, data_cols[i]]].groupby(label_col).apply(lambda df: np.histogram(df[data_cols[i]], density=True, bins=20))
+                    for label, (hist, edges) in density_data.iteritems():
+                        line_source = ColumnDataSource({'edges': edges[:-1], 'hist': hist, label_col: [label] * len(hist)})
+                        p.line('edges', 'hist', color=colors_dict[label], legend=label_col, source=line_source)
+                        p.select_one(HoverTool).tooltips = [(label_col, f'@{label_col}')]
             else:
                 p.y_range = data_ranges[i]
                 if label_col is not None:
-                    p.circle(data.columns[j], data.columns[i], source=data_source, color=colors_col, legend=label_col)
+                    p.circle(data_cols[j], data_cols[i], source=data_source, color=colors_col, legend=label_col)
                 else:
-                    p.circle(data.columns[j], data.columns[i], source=data_source, color=colors_col)
+                    p.circle(data_cols[j], data_cols[i], source=data_source, color=colors_col)
+                if tooltip_cols:
+                    p.select_one(HoverTool).tooltips = [(x, f'@{x}') for x in tooltip_cols]
 
             row[j] = p
         plot_grid.append(row)
 
-    return gridplot(plot_grid)
+    return gridplot(plot_grid, toolbar_location='left')

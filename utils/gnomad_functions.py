@@ -385,14 +385,14 @@ def add_rank(ht: hl.Table,
 
     temp_expr = {'_score': score_expr}
     temp_expr.update({f'_{name}': expr for name, expr in subrank_expr.items()})
-    rank_ht = ht.select(**temp_expr, is_indel=hl.is_indel(ht.alleles[0], ht.alleles[1]))
+    rank_ht = ht.select(**temp_expr, is_snv=hl.is_snp(ht.alleles[0], ht.alleles[1]))
 
-    rank_ht = rank_ht.key_by('is_indel', '_score').persist()
-    scan_expr = {'rank': hl.cond(rank_ht.is_indel, hl.scan.count_where(rank_ht.is_indel), hl.scan.count_where(~rank_ht.is_indel))}
+    rank_ht = rank_ht.key_by('_score').persist()
+    scan_expr = {'rank': hl.cond(rank_ht.is_snv, hl.scan.count_where(rank_ht.is_snv), hl.scan.count_where(~rank_ht.is_snv))}
     scan_expr.update({name: hl.or_missing(rank_ht[f'_{name}'],
-                                          hl.cond(rank_ht.is_indel,
-                                                  hl.scan.count_where(rank_ht.is_indel & rank_ht[f'_{name}']),
-                                                  hl.scan.count_where(~rank_ht.is_indel & rank_ht[f'_{name}'])))
+                                          hl.cond(rank_ht.is_snv,
+                                                  hl.scan.count_where(rank_ht.is_snv & rank_ht[f'_{name}']),
+                                                  hl.scan.count_where(~rank_ht.is_snv & rank_ht[f'_{name}'])))
                       for name in subrank_expr})
     rank_ht = rank_ht.annotate(**scan_expr)
 

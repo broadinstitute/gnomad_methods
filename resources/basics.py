@@ -3,8 +3,8 @@ from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
-CURRENT_GENOME_META = "2018-06-10"  # YYYY-MM-DD
-CURRENT_EXOME_META = "2018-06-10"
+CURRENT_GENOME_META = "2018-08-04"  # YYYY-MM-DD
+CURRENT_EXOME_META = "2018-08-04"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
@@ -373,7 +373,7 @@ genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_eva
 genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list"
 # More can be found at gs://broad-references/hg19
 
-vep_config = "/vep/vep-gcloud.properties"
+vep_config = 'gs://hail-common/vep/vep/vep85-gcloud.json'
 
 # Annotations
 context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'

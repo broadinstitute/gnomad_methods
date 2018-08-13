@@ -3,8 +3,8 @@ from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.0.2"
-CURRENT_GENOME_META = "2018-06-10"  # YYYY-MM-DD
-CURRENT_EXOME_META = "2018-06-10"
+CURRENT_GENOME_META = "2018-08-04"  # YYYY-MM-DD
+CURRENT_EXOME_META = "2018-08-04"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
@@ -119,7 +119,7 @@ def get_gnomad_meta(data_type: str, version: str = None, full_meta: bool = False
         if data_type == 'genomes':
             columns.extend(['pcr_free', 'project_name', 'release_2_0_2'])
         else:
-            columns.extend(['diabetes', 'exac_joint'])
+            columns.extend(['diabetes', 'exac_joint', 'tcga'])
         ht = ht.select(*columns)
     return ht
 
@@ -219,6 +219,10 @@ def non_refs_only_mt_path(data_type, split=True):
     return f'gs://gnomad/non_refs_only/hail-0.2/mt/{data_type}/gnomad.{data_type}{"" if split else ".unsplit"}.mt'
 
 
+def pbt_phased_trios_mt_path(data_type: str, split: bool = True, hail_version : str = CURRENT_HAIL_VERSION):
+    return "gs://gnomad/hardcalls/hail-{0}/mt/{1}/gnomad.{1}.trios.pbt_phased{2}.mt".format(hail_version, data_type,
+                                                                           "" if split else ".unsplit")
+
 def annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
     """
     Get sites-level annotations
@@ -314,6 +318,20 @@ def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.b37.mt'.format(hail_version)
 
 
+def kgp_phase3_genotypes_mt_path(split: bool = True, hail_version=CURRENT_HAIL_VERSION) -> str:
+    """
+    1000 Genomes Phase 3 with genotypes (b37)
+    Imported from: gs://genomics-public-data/1000-genomes-phase-3/vcf-20150220/ALL.chr*.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf
+    Samples populations from: gs://gnomad-public/truth-sets/hail-0.2/1000G.GRCh38.20130502.phase3.sequence.index
+
+    :param bool split: Whether to load to split or non-split version
+    :param str hail_version: Hail version
+    :return: Path to 1000 Genomes MT
+    :rtype: str
+    """
+    return 'gs://gnomad-public/truth-sets/hail-{0}/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes{1}.mt'.format(hail_version, '.split' if split else '')
+
+
 def NA12878_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt'.format(hail_version)
 
@@ -355,7 +373,7 @@ genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_eva
 genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list"
 # More can be found at gs://broad-references/hg19
 
-vep_config = "/vep/vep-gcloud.properties"
+vep_config = 'gs://hail-common/vep/vep/vep85-gcloud.json'
 
 # Annotations
 context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'

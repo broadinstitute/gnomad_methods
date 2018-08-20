@@ -277,7 +277,7 @@ def metadata_genomes_ht_path(version=CURRENT_GENOME_META):
 
 
 def metadata_exomes_ht_path(version=CURRENT_EXOME_META):
-    return 'C'.format(version)
+    return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.ht'.format(version)
 
 
 def coverage_mt_path(data_type) -> str:

@@ -6,6 +6,7 @@ import math
 import pandas as pd
 from collections import OrderedDict
 import json
+from .constants import *
 
 import bokeh
 from bokeh.layouts import gridplot, row, widgetbox
@@ -50,14 +51,18 @@ COLOR_SYN = '#AAAAAA'
 COLOR_MIS = '#FF6103'
 COLOR_LOF = '#9D1309'
 
-variant_annotation_colors = {
-    'synonymous_variant': COLOR_SYN,
-    'missense_variant': COLOR_MIS,
-    'stop_gained': COLOR_LOF,
+variant_annotation_colors = {x: COLOR_LOF for x in CSQ_CODING_HIGH_IMPACT}
+variant_annotation_colors.update({x: COLOR_MIS for x in CSQ_CODING_MEDIUM_IMPACT})
+variant_annotation_colors.update({x: COLOR_SYN for x in CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING})
+variant_annotation_colors.update({
+    'stop_lost': COLOR_MIS,
+    'splice_region_variant': COLOR_SYN,
+    'start_lost': COLOR_SYN,
     'Synonymous': COLOR_SYN,
     'Missense': COLOR_MIS,
     'LoF': COLOR_LOF,
-}
+    'PTV': COLOR_LOF
+})
 
 COLOR_EXAC = '#4682B4'
 COLOR_GNOMAD = '#73AB3D'

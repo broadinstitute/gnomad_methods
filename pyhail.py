@@ -90,21 +90,22 @@ def main(args, pass_through_args):
 
     print('Using JAR: {} and files:\n{}'.format(jar, '\n'.join(pyfiles)))
 
-    spark_properties = ['spark.{}=./{}'.format(x, jar_file) for x in ('executor.extraClassPath', 'driver.extraClassPath', 'files')]
-    spark_properties.append('spark.submit.pyFiles=./{}'.format(all_pyfiles[0]))
-    if args.spark_conf:
-        spark_properties.extend(args.spark_conf.split(','))
-
     job = ['gcloud', 'dataproc', 'jobs', 'submit', 'pyspark', script,
            '--cluster', args.cluster,
            '--files={}'.format(jar),
            '--py-files={}'.format(','.join(all_pyfiles)),
-           '--properties={}'.format(','.join(spark_properties)),
+           # '--properties={}'.format(','.join(spark_properties)),
            '--driver-log-levels', 'root=FATAL,is.hail=INFO'
-    ]
+           ]
+    # spark_properties = ['spark.{}=./{}'.format(x, jar_file) for x in ('executor.extraClassPath', 'driver.extraClassPath', 'files')]
+    # spark_properties.append('spark.submit.pyFiles=./{}'.format(all_pyfiles[0]))
+    if args.spark_conf:
+        job.append('--properties={}'.format(args.spark_conf))
+
     if pass_through_args is not None:
         job.append('--')
         job.extend(pass_through_args)
+    print('Running: {}'.format(' '.join(job)))
 
     subprocess.check_output(job)
     if temp_py is not None:

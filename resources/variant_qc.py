@@ -107,3 +107,16 @@ def validated_denovos_path():
     return 'gs://gnomad/resources/validated_de_novos.txt.bgz'
 
 
+def binned_concordance_path(data_type: str, truth_data: str, metric: str) -> str:
+    """
+
+    Returns path to corresponding annotated truth sample concordance Table.
+
+    :param str data_type: One of 'exomes' or 'genomes'
+    :param str truth_data: Currently one of 'NA12878' or 'syndip'
+    :param str metric: Which ranking metric
+    :return: Path to desired HT
+    :rtype: str
+    """
+
+    return f'gs://gnomad/variant_qc/binned_concordance/{data_type}_{truth_data}_{metric}.ht'

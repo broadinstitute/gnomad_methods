@@ -94,6 +94,8 @@ def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: 
         sites_mt = get_gnomad_public_data(data_type, split, release_annotations)
         mt = mt.select_rows(release=sites_mt[mt.v, :])  # TODO: replace with ** to nuke old annotations
 
+    mt = mt.select_globals()  # Required since a backward-incompatible change in Hail
+
     return mt
 
 

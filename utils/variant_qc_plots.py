@@ -3,12 +3,12 @@ from gnomad_hail.resources.variant_qc import *
 from gnomad_hail.utils.plotting import *
 
 
-def get_metrics_pd(data_type: str, metrics: List[str], contigs: Set[str] = None) -> pd.DataFrame:
+def get_binned_models_pd(data_type: str, models: List[str], contigs: Set[str] = None) -> pd.DataFrame:
     """
-    Creates a single DataFrame with all desired binned metrics ready for plotting.
+    Creates a single DataFrame with all desired models binned and ready for plotting.
 
     :param str data_type: One of 'exomes' or 'genomes'
-    :param list of str metrics: Metrics to load
+    :param list of str models: Models to load
     :param list of str contigs: Contigs to load
     :return: Plot-ready DataFrame
     :rtype: DataFrame
@@ -29,8 +29,8 @@ def get_metrics_pd(data_type: str, metrics: List[str], contigs: Set[str] = None)
         )
 
     hts = [
-        aggregate_contig(hl.read_table(score_ranking_path(data_type, metric, binned=True)), contigs)
-            .annotate(model=metric) for metric in metrics
+        aggregate_contig(hl.read_table(score_ranking_path(data_type, model, binned=True)), contigs)
+            .annotate(model=model) for model in models
     ]
 
     ht = hts.pop()
@@ -52,7 +52,7 @@ def plot_metric(df: pd.DataFrame,
                 link_cumul_y: bool = True,
                 legend_position: str = 'top_right') -> Tabs:
     """
-    Generic function for generating QC metric plots using a plotting-ready DataFrame (obtained from `get_metrics_pd`)
+    Generic function for generating QC metric plots using a plotting-ready DataFrame (obtained from `get_binned_models_pd`)
     DataFrame needs to have a `rank_id` column, a `bin` column and a `model` column (contains the model name and needs to be added to binned table(s))
 
     This function generates scatter plots with the metric bin on x-axis and a user-defined function on the y-axis.
@@ -200,25 +200,25 @@ def plot_score_distributions(data_type, models: List[str], snv: bool, cut: int) 
     """
 
     tabs = []
-    for metric in models:
-        if metric in ['vqsr', 'cnn', 'rf_2.0.2', 'rf_2.0.2_beta']:
-            ht = hl.read_table(score_ranking_path(data_type, metric, binned=False))
+    for model in models:
+        if model in ['vqsr', 'cnn', 'rf_2.0.2', 'rf_2.0.2_beta']:
+            ht = hl.read_table(score_ranking_path(data_type, model, binned=False))
         else:
-            ht = hl.read_table(rf_path(data_type, 'rf_result', run_hash=metric))
+            ht = hl.read_table(rf_path(data_type, 'rf_result', run_hash=model))
 
         ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]), keep=snv)
-        binned_ht = hl.read_table(score_ranking_path(data_type, metric, binned=True))
+        binned_ht = hl.read_table(score_ranking_path(data_type, model, binned=True))
         binned_ht = binned_ht.filter(binned_ht.snv, keep=snv)
 
         cut_value = binned_ht.aggregate(hl.agg.min(hl.agg.filter((binned_ht.bin == cut) & (binned_ht.rank_id == 'rank'), binned_ht.min_score)))
 
-        min_score, max_score = (-20, 30) if metric == 'vqsr' else (0.0, 1.0)
+        min_score, max_score = (-20, 30) if model == 'vqsr' else (0.0, 1.0)
         agg_values = ht.aggregate(hl.struct(
-            metric_hist=[hl.agg.hist(ht.score, min_score, max_score, 100),
-                         hl.agg.hist(hl.agg.filter(ht.ac > 0, ht.score), min_score, max_score, 100)],
+            score_hist=[hl.agg.hist(ht.score, min_score, max_score, 100),
+                        hl.agg.hist(hl.agg.filter(ht.ac > 0, ht.score), min_score, max_score, 100)],
             release_counts=hl.agg.counter(hl.agg.filter(ht.ac > 0, ht.score >= cut_value))
         ))
-        metric_hist = agg_values.metric_hist
+        score_hist = agg_values.score_hist
         release_cut = '{0:.2f}'.format(100 * agg_values.release_counts[True] / (agg_values.release_counts[True] + agg_values.release_counts[False]))
 
         rows = []
@@ -226,18 +226,18 @@ def plot_score_distributions(data_type, models: List[str], snv: bool, cut: int) 
         y_range = [DataRange1d(), DataRange1d()]
         for release in [False, True]:
             title = '{0}, {1} cut (score = {2:.2f})'.format('Release' if release else 'All', release_cut if release else cut, cut_value)
-            p = plot_hail_hist(metric_hist[release], title=title)
-            p.line(x=[cut_value, cut_value], y=[0, max(metric_hist[release].bin_freq)], color='red', line_dash='dashed')
+            p = plot_hail_hist(score_hist[release], title=title)
+            p.line(x=[cut_value, cut_value], y=[0, max(score_hist[release].bin_freq)], color='red', line_dash='dashed')
             p.x_range = x_range
             p.y_range = y_range[0]
-            p_cumul = plot_hail_hist_cumulative(metric_hist[release], title=title + ' cumulative')
+            p_cumul = plot_hail_hist_cumulative(score_hist[release], title=title + ' cumulative')
             p_cumul.line(x=[cut_value, cut_value], y=[0.0, 1.0], color='red', line_dash='dashed')
             p_cumul.x_range = x_range
             p_cumul.y_range = y_range[1]
 
             rows.append([p, p_cumul])
 
-        tabs.append(Panel(child=gridplot(rows), title=metric))
+        tabs.append(Panel(child=gridplot(rows), title=model))
     return Tabs(tabs=tabs)
 
 
@@ -317,9 +317,9 @@ def plot_concordance_pr(
     if plot_colors is None:
         # Get a palette automatically
         from bokeh.palettes import d3
-        metrics = sorted(list(set([g[2] for g in pr_df.groups])))
-        palette = d3['Category10'][max(3, len(metrics))]
-        plot_colors = {metric: palette[i] for i, metric in enumerate(metrics)}
+        models = sorted(list(set([g[2] for g in pr_df.groups])))
+        palette = d3['Category10'][max(3, len(models))]
+        plot_colors = {model: palette[i] for i, model in enumerate(models)}
 
     if legend_text is None:
         legend_text = {}
@@ -351,8 +351,8 @@ def plot_concordance_pr(
                 p.axis.axis_label_text_font_size = "20pt"
                 p.axis.axis_label_text_font_style = "normal"
                 p.axis.major_label_text_font_size = "14pt"
-                for metric in set([g[2] for g in pr_df.groups]):
-                    data = pr_df.get_group((rank, truth_sample, metric, snv))
+                for model in set([g[2] for g in pr_df.groups]):
+                    data = pr_df.get_group((rank, truth_sample, model, snv))
                     total_alleles = np.sum(data['n_alleles'])
                     if size_prop is None:
                         data['radius'] = 4
@@ -367,8 +367,8 @@ def plot_concordance_pr(
                              'precision',
                              radius='radius',
                              radius_units='screen',
-                             legend=legend_text.get(metric, metric),
-                             color=plot_colors[metric], source=source)
+                             legend=legend_text.get(model, model),
+                             color=plot_colors[model], source=source)
                     if bins_to_label is not None:
                         label_data = data.loc[data.bin.isin(bins_to_label[variant_type])]
                         label_data['x_offset'] = label_data['recall'] + 0.025
@@ -379,13 +379,13 @@ def plot_concordance_pr(
                             LabelSet(x='x_offset',
                                      y='precision',
                                      text='bin_str',
-                                     text_color=plot_colors[metric],
+                                     text_color=plot_colors[model],
                                      source=label_source)
                         )
                         p.multi_line(
                             xs=[[x, x + 0.05] for x in label_data.recall],
                             ys=[[y, y] for y in label_data.precision],
-                            color=plot_colors[metric]
+                            color=plot_colors[model]
                         )
 
                 p.legend.location = 'bottom_left'

@@ -2,17 +2,64 @@ from gnomad_hail import *
 from gnomad_hail.resources.variant_qc import *
 from gnomad_hail.utils.plotting import *
 
+qc_plots_settings = {
+    'mean_point_size': 4.0,
+    'min_point_size': 1.0,
+    'max_point_size': 16.0,
+    'label_text_font_size': "14pt",
+    'title.text_font_size': "16pt",
+    'subtitle.text_font_size': "14pt",
+    'axis.axis_label_text_font_size': "16pt",
+    'axis.axis_label_text_font_style': "normal",
+    'axis.major_label_text_font_size': "14pt"
+}
 
-def get_binned_models_pd(data_type: str, models: List[str], contigs: Set[str] = None) -> pd.DataFrame:
+
+def get_point_size_col(data: pd.Series, size_prop: str) -> pd.Series:
+    """
+    Given a data Series, returns the corresponding point size either:
+    - Constant to qc_plots_settings['mean_point_size'] if `size_prop` is None
+    - Radius proportional to data, if `size_prop` is 'radius'
+    - Area proportional to data, if `size_prop` is 'area'
+
+    Mean, min and max point  sizes are extracted from qc_plots_settings
+
+    :param Series data: Input data series
+    :param str size_prop: One of None, 'radius' or 'area'
+    :return: Series with corresponding point size for each data point
+    :rtype: Series
+    """
+    if size_prop is None:
+        return pd.Series(len(data) * [qc_plots_settings['mean_point_size']])
+    else:
+        mean_data = np.mean(data)
+        if size_prop == 'radius':
+            return data.apply(lambda x: max(qc_plots_settings['min_point_size'], min(qc_plots_settings['max_point_size'], qc_plots_settings['mean_point_size'] * (x / mean_data))))
+        elif size_prop == 'area':
+            return data.apply(lambda x: max(qc_plots_settings['min_point_size'], min(qc_plots_settings['max_point_size'], qc_plots_settings['mean_point_size'] * np.pi * (np.sqrt(x / mean_data) / np.pi))))
+        else:
+            raise ValueError(f"{size_prop} is not a supported value for argument `size_prop`")
+
+
+def set_plots_defaults(p: Plot) -> None:
+    p.legend.label_text_font_size = qc_plots_settings['label_text_font_size']
+    p.title.text_font_size = qc_plots_settings['title.text_font_size']
+    p.axis.axis_label_text_font_size = qc_plots_settings['axis.axis_label_text_font_size']
+    p.axis.axis_label_text_font_style = qc_plots_settings['axis.axis_label_text_font_style']
+    p.axis.major_label_text_font_size = qc_plots_settings['axis.major_label_text_font_size']
+
+
+def get_binned_models_pd(data_type: str, models: Union[Dict[str, str], List[str]], contigs: Set[str] = None) -> pd.DataFrame:
     """
     Creates a single DataFrame with all desired models binned and ready for plotting.
 
     :param str data_type: One of 'exomes' or 'genomes'
-    :param list of str models: Models to load
+    :param list of str models: Models to load. Either a list of the model ids, or a dict with model id -> model name for display
     :param list of str contigs: Contigs to load
     :return: Plot-ready DataFrame
     :rtype: DataFrame
     """
+
     def aggregate_contig(ht: hl.Table, contigs: Set[str] = None):
         """
         Aggregates all contigs together and computes number for bins accross the contigs.
@@ -28,9 +75,12 @@ def get_binned_models_pd(data_type: str, models: List[str], contigs: Set[str] = 
             **{x: hl.agg.sum(ht[x]) for x in ht.row_value if x not in ['min_score', 'max_score']}
         )
 
+    if not isinstance(models, dict):
+        models = {m: m for m in models}
+
     hts = [
-        aggregate_contig(hl.read_table(score_ranking_path(data_type, model, binned=True)), contigs)
-            .annotate(model=model) for model in models
+        aggregate_contig(hl.read_table(score_ranking_path(data_type, model_id, binned=True)), contigs)
+            .annotate(model=model_name) for model_id, model_name in models.items()
     ]
 
     ht = hts.pop()
@@ -43,6 +93,7 @@ def plot_metric(df: pd.DataFrame,
                 y_name: str,
                 cols: List[str],
                 y_fun: Callable[[pd.Series], Union[float, int]] = lambda x: x,
+                cut: int = None,
                 plot_all: bool = True,
                 plot_bi_allelics: bool = True,
                 plot_singletons: bool = True,
@@ -50,7 +101,8 @@ def plot_metric(df: pd.DataFrame,
                 plot_release: bool = False,
                 colors: Dict[str, str] = None,
                 link_cumul_y: bool = True,
-                legend_position: str = 'top_right') -> Tabs:
+                size_prop: str = 'area'
+                ) -> Tabs:
     """
     Generic function for generating QC metric plots using a plotting-ready DataFrame (obtained from `get_binned_models_pd`)
     DataFrame needs to have a `rank_id` column, a `bin` column and a `model` column (contains the model name and needs to be added to binned table(s))
@@ -73,6 +125,7 @@ def plot_metric(df: pd.DataFrame,
     :param str y_name: Name of the metric plotted on the y-axis
     :param list of str cols: Columns used to compute the metric plotted
     :param callable y_fun: Function to apply to the columns to generate the metric
+    :param int cut: Where to draw the bin cut
     :param bool plot_all: Whether to plot a tab with all variants
     :param bool plot_bi_allelics: Whether to plot a tab with bi-allelic variants only
     :param bool plot_singletons: Whether to plot a tab with singleton variants only
@@ -80,36 +133,51 @@ def plot_metric(df: pd.DataFrame,
     :param bool plot_release: Whether to plot additional rows with release-only variants
     :param dict of str -> str colors: Mapping of model name -> color
     :param bool link_cumul_y: If set, y-axes of cumulative and non-cumulative plots are linked
-    :param str legend_position: Legend position in the plot
+    :param str size_prop: Either 'size' or 'area' can be specified. If either is specified, the points will be sized proportionally to the amount of data in that point.
     :return: Plot
     :rtype: Tabs
     """
 
-    def get_row(df: pd.DataFrame, y_name: str, cols: List[str], y_fun: Callable[[pd.Series], Union[float, int]], title: str, link_cumul_y: bool, legend_position: str) -> Row:
+    def get_row(df: pd.DataFrame, y_name: str, cols: List[str], y_fun: Callable[[pd.Series], Union[float, int]], titles: List[str], link_cumul_y: bool, cut: int = None) -> Row:
         """
         Generates a single row
         """
 
-        def get_plot(df: pd.DataFrame, y_name: str, y_col_name: str, title: str, data_ranges: Tuple[DataRange1d, DataRange1d], legend_position: str) -> Plot:
+        def get_plot(data_source: ColumnDataSource, y_name: str, y_col_name: str, titles: List[str], data_ranges: Tuple[DataRange1d, DataRange1d], cut: int = None) -> Plot:
             """
             Generates a single plot panel
             """
-            data_source = ColumnDataSource(df)
+
             p = figure(
-                title=title,
+                title=titles[0],
                 x_axis_label='bin',
                 y_axis_label=y_name,
                 tools="save,pan,box_zoom,reset,wheel_zoom,box_select,lasso_select,help,hover")
             p.x_range = data_ranges[0]
             p.y_range = data_ranges[1]
-            p.circle('bin', y_col_name, legend='model', color='color', source=data_source)
+
+            if cut:
+                p.add_layout(Span(location=cut, dimension='height', line_color='red', line_dash='dashed'))
+
+            circles = []
+            for model in set(data_source.data['model']):
+                view = CDSView(source=data_source, filters=[BooleanFilter([x == model for x in data_source.data['model']])])
+                circles.append((model, [p.circle('bin', y_col_name, color='color', size='_size', source=data_source, view=view)]))
+
             p.select_one(HoverTool).tooltips = [('model', '@model'),
                                                 ('bin', '@bin'),
                                                 (y_name, f'@{y_col_name}'),
                                                 ('min_score', '@min_score'),
-                                                ('max_score', '@max_score')
+                                                ('max_score', '@max_score'),
+                                                ('n_data_points', '@_n')
                                                 ] + [(col, f'@{col}') for col in cols]
-            p.legend.location = legend_position
+            set_plots_defaults(p)
+            legend = Legend(items=circles, orientation='horizontal', location=(0, 0), click_policy="hide")
+            p.add_layout(legend, 'above')
+
+            for title in titles[1:]:
+                p.add_layout(Title(text=title, text_font_size=qc_plots_settings['subtitle.text_font_size']), 'above')
+
             return p
 
         df['non_cumul'] = df[cols].apply(y_fun, axis=1)
@@ -119,11 +187,12 @@ def plot_metric(df: pd.DataFrame,
         df['cumul'] = df[[f'{col}_cumul' for col in cols]].apply(y_fun, axis=1)
         non_cumul_data_ranges = (DataRange1d(), DataRange1d())
         cumul_data_ranges = non_cumul_data_ranges if link_cumul_y else (non_cumul_data_ranges[0], DataRange1d())
+        data_source = ColumnDataSource(df)
 
-        return Row(get_plot(df, y_name, 'non_cumul', title, non_cumul_data_ranges, legend_position),
-                   get_plot(df, y_name, 'cumul', title + ', cumulative', cumul_data_ranges, legend_position))
+        return Row(get_plot(data_source, y_name, 'non_cumul', titles, non_cumul_data_ranges, cut),
+                   get_plot(data_source, y_name, 'cumul', [titles[0] + ', cumulative'] + titles[1:], cumul_data_ranges, cut))
 
-    def prepare_pd(df: pd.DataFrame, cols: List[str], colors: Dict[str, str] = {}):
+    def prepare_pd(df: pd.DataFrame, cols: List[str], colors: Dict[str, str] = {}, size_prop: str = None):
         """
         Groups a pandas DataFrame by model and bin while keeping relevant columns only. Adds a color column.
         """
@@ -131,6 +200,8 @@ def plot_metric(df: pd.DataFrame,
                                                'min_score': np.min, 'max_score': np.max})
         df = df.reset_index()
         df['color'] = [colors.get(x, 'gray') for x in df['model']]
+        df['_n'] = np.sum(df[cols], axis=1)
+        df['_size'] = get_point_size_col(df['_n'], size_prop)
         return df
 
     colors = colors if colors is not None else {}
@@ -140,9 +211,9 @@ def plot_metric(df: pd.DataFrame,
     if plot_all:
         children = []
         for release in release_strats:
-            title = '{0}, {1}'.format(y_name, 'release' if release else 'all')
-            children.append(get_row(prepare_pd(df.loc[df.rank_id == f'{release}rank'], cols, colors),
-                                    y_name, cols, y_fun, title, link_cumul_y, legend_position))
+            titles = [y_name, 'Release variants (release rank)' if release else 'All variants']
+            children.append(get_row(prepare_pd(df.loc[df.rank_id == f'{release}rank'], cols, colors, size_prop),
+                                    y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='All'))
 
@@ -150,9 +221,9 @@ def plot_metric(df: pd.DataFrame,
         children = []
         for release in release_strats:
             for biallelic_rank in ['', 'biallelic_']:
-                title = '{0}, bi-allelic ({1} rank)'.format(y_name, 'overall' if not release and not biallelic_rank else f'{release[:-1]} {biallelic_rank[:-1]}')
-                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & (df.rank_id == f'{release}{biallelic_rank}rank')], cols, colors),
-                                        y_name, cols, y_fun, title, link_cumul_y, legend_position))
+                titles = [y_name,'Bi-allelic variants ({} rank)'.format('overall' if not release and not biallelic_rank else ' '.join([release[:-1], biallelic_rank[:-1]]).lstrip())]
+                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & (df.rank_id == f'{release}{biallelic_rank}rank')], cols, colors, size_prop),
+                                        y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='Bi-allelic'))
 
@@ -160,9 +231,9 @@ def plot_metric(df: pd.DataFrame,
         children = []
         for release in release_strats:
             for singleton_rank in ['', 'singleton_']:
-                title = '{0}, singletons ({1} rank)'.format(y_name, 'overall' if not release and not singleton_rank else f'{release[:-1]} {singleton_rank[:-1]}')
-                children.append(get_row(prepare_pd(df.loc[df.singleton & (df.rank_id == f'{release}{singleton_rank}rank')], cols, colors),
-                                        y_name, cols, y_fun, title, link_cumul_y, legend_position))
+                titles = [y_name, 'Singletons ({} rank)'.format('overall' if not release and not singleton_rank else " ".join([release[:-1], singleton_rank[:-1]]).lstrip())]
+                children.append(get_row(prepare_pd(df.loc[df.singleton & (df.rank_id == f'{release}{singleton_rank}rank')], cols, colors, size_prop),
+                                        y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='Singletons'))
 
@@ -170,16 +241,16 @@ def plot_metric(df: pd.DataFrame,
         children = []
         for release in release_strats:
             for bisingleton_rank in ['', 'biallelic_singleton_']:
-                title = '{0}, singletons ({1} rank)'.format(y_name, 'overall' if not release and not bisingleton_rank else f'{release[:-1]} {bisingleton_rank[:-1].replace("_", " ")}')
-                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & df.singleton & (df.rank_id == f'{release}{bisingleton_rank}rank')], cols, colors),
-                                        y_name, cols, y_fun, title, link_cumul_y, legend_position))
+                titles = [y_name, 'Bi-allelic singletons ({} rank)'.format('overall' if not release and not bisingleton_rank else " ".join([release[:-1], bisingleton_rank[:-1].replace("_", " ")]).lstrip())]
+                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & df.singleton & (df.rank_id == f'{release}{bisingleton_rank}rank')], cols, colors, size_prop),
+                                        y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='Bi-allelic singletons'))
 
     return Tabs(tabs=tabs)
 
 
-def plot_score_distributions(data_type, models: List[str], snv: bool, cut: int) -> Tabs:
+def plot_score_distributions(data_type, models: Union[Dict[str, str], List[str]], snv: bool, cut: int, colors: Dict[str, str] = None) -> Tabs:
     """
     Generates plots of model scores distributions:
     One tab per model.
@@ -192,27 +263,34 @@ def plot_score_distributions(data_type, models: List[str], snv: bool, cut: int) 
     Cutoff is highlighted by a dashed red line
 
     :param str data_type: One of 'exomes' or 'genomes'
-    :param list of str models: Which models to plot
+    :param list of str or dict of str -> str models: Which models to plot. Can either be a list of models or a dict with mapping from model id to model name for display.
     :param bool snv: Whether to plot SNVs or Indels
     :param int cut: Bin cut on the entire data to highlight
+    :param dict of str -> str colors: Optional colors to use (model name -> desired color)
     :return: Plots of the score distributions
     :rtype: Tabs
     """
 
+    if not isinstance(models, dict):
+        models = {m: m for m in models}
+
+    if colors is None:
+        colors = {m_name: "#033649" for m_name in models.values()}
+
     tabs = []
-    for model in models:
-        if model in ['vqsr', 'cnn', 'rf_2.0.2', 'rf_2.0.2_beta']:
-            ht = hl.read_table(score_ranking_path(data_type, model, binned=False))
+    for model_id, model_name in models.items():
+        if model_id in ['vqsr', 'cnn', 'rf_2.0.2', 'rf_2.0.2_beta']:
+            ht = hl.read_table(score_ranking_path(data_type, model_id, binned=False))
         else:
-            ht = hl.read_table(rf_path(data_type, 'rf_result', run_hash=model))
+            ht = hl.read_table(rf_path(data_type, 'rf_result', run_hash=model_id))
 
         ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]), keep=snv)
-        binned_ht = hl.read_table(score_ranking_path(data_type, model, binned=True))
+        binned_ht = hl.read_table(score_ranking_path(data_type, model_id, binned=True))
         binned_ht = binned_ht.filter(binned_ht.snv, keep=snv)
 
         cut_value = binned_ht.aggregate(hl.agg.min(hl.agg.filter((binned_ht.bin == cut) & (binned_ht.rank_id == 'rank'), binned_ht.min_score)))
 
-        min_score, max_score = (-20, 30) if model == 'vqsr' else (0.0, 1.0)
+        min_score, max_score = (-20, 30) if model_id == 'vqsr' else (0.0, 1.0)
         agg_values = ht.aggregate(hl.struct(
             score_hist=[hl.agg.hist(ht.score, min_score, max_score, 100),
                         hl.agg.hist(hl.agg.filter(ht.ac > 0, ht.score), min_score, max_score, 100)],
@@ -226,41 +304,44 @@ def plot_score_distributions(data_type, models: List[str], snv: bool, cut: int) 
         y_range = [DataRange1d(), DataRange1d()]
         for release in [False, True]:
             title = '{0}, {1} cut (score = {2:.2f})'.format('Release' if release else 'All', release_cut if release else cut, cut_value)
-            p = plot_hail_hist(score_hist[release], title=title)
-            p.line(x=[cut_value, cut_value], y=[0, max(score_hist[release].bin_freq)], color='red', line_dash='dashed')
+            p = plot_hail_hist(score_hist[release], title=title + "\n", fill_color=colors[model_name])
+            p.add_layout(Span(location=cut_value, dimension='height', line_color='red', line_dash='dashed'))
             p.x_range = x_range
             p.y_range = y_range[0]
-            p_cumul = plot_hail_hist_cumulative(score_hist[release], title=title + ' cumulative')
-            p_cumul.line(x=[cut_value, cut_value], y=[0.0, 1.0], color='red', line_dash='dashed')
+            set_plots_defaults(p)
+
+            p_cumul = plot_hail_hist_cumulative(score_hist[release], title=title + ', cumulative', line_color=colors[model_name])
+            p_cumul.add_layout(Span(location=cut_value, dimension='height', line_color='red', line_dash='dashed'))
             p_cumul.x_range = x_range
             p_cumul.y_range = y_range[1]
+            set_plots_defaults(p_cumul)
 
             rows.append([p, p_cumul])
 
-        tabs.append(Panel(child=gridplot(rows), title=model))
+        tabs.append(Panel(child=gridplot(rows), title=model_name))
     return Tabs(tabs=tabs)
 
 
-def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: List[str]) -> pd.DataFrame:
+def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: Union[Dict[str, str], List[str]]) -> pd.DataFrame:
     """
     Creates a pandas DF containing the binned concordance results for all given truth samples / models.
 
     :param str data_type: One of 'exomes' or 'genomes'
     :param list of str truth_samples: List of truth samples to include
-    :param list of str models: List of models to include
+    :param list of str or dict of str -> str models: Models to include. Either a list of the model ids, or a dict with model id -> model name for display
     :return: Pandas dataframe with binned concordance results
     :rtype: DataFrame
     """
 
-    def get_binned_concordance_ht(data_type: str, truth_samples: List[str], models: List[str]) -> hl.Table:
+    def get_binned_concordance_ht(data_type: str, truth_samples: List[str], models: Dict[str, str]) -> hl.Table:
         """
         Combines binned concordance results for multiple truth samples and/or models into a single Table.
         """
         hts = []
         for truth_sample in truth_samples:
-            for metric in models:
-                ht = hl.read_table(binned_concordance_path(data_type, truth_sample, metric))
-                ht = ht.annotate(truth_sample=truth_sample, metric=metric)
+            for model_id, model_name in models.items():
+                ht = hl.read_table(binned_concordance_path(data_type, truth_sample, model_id))
+                ht = ht.annotate(truth_sample=truth_sample, metric=model_name)
                 hts.append(ht)
 
         return hts[0].union(*hts[1:])
@@ -281,6 +362,9 @@ def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: 
         df['cum_alleles'] = df['n_alleles'].cumsum()
         return df[['bin', 'min_score', 'max_score', 'n_alleles', 'tp', 'fp', 'fn', 'cum_alleles', 'cum_tp', 'cum_fp', 'cum_fn', 'cum_tn', 'precision', 'recall']]
 
+    if not isinstance(models, dict):
+        models = {m: m for m in models}
+
     df = get_binned_concordance_ht(data_type, truth_samples, models).to_pandas()
     df = df.groupby(['rank_name', 'truth_sample', 'metric', 'snv']).apply(compute_cumul_metrics)
     return df.fillna(-1).groupby(['rank_name', 'truth_sample', 'metric', 'snv'])
@@ -288,11 +372,10 @@ def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: 
 
 def plot_concordance_pr(
         pr_df: pd.DataFrame,
-        data_type: str,
-        plot_colors: Dict[str, str] = None,
-        legend_text: Dict[str, str] = None,
+        snv: bool,
+        colors: Dict[str, str] = None,
         size_prop: str = None,
-        bins_to_label: Dict[str, List[int]] = None
+        bins_to_label: List[int] = None
 ) -> Column:
     """
     Generates plots showing Precision/Recall curves for truth samples:
@@ -300,100 +383,81 @@ def plot_concordance_pr(
     - One displaying the PR curve with ranking computed on the entire data
     - One displaying the PR curve with ranking computed on the  truth sample only
 
-    Within each tab, a grid of n_truth_samples x 2 plots:
-    - One row per truth sample
-    - One columns per allele type (SNVs, Indels)
+    Within each tab, a row of n_truth_samples.
 
     :param DataFrame pr_df: Input Dataframe
-    :param str data_type: One of 'exomes' or 'genomes' -- use in the title only
-    :param dict of str -> str plot_colors: Optional colors to use (model name -> desired color)
-    :param dict of str -> str legend_text: Optional mapping of model to model name
+    :param bool snv: Whether to plot SNVs or Indels
+    :param dict of str -> str colors: Optional colors to use (model name -> desired color)
     :param str size_prop: Either 'size' or 'area' can be specified. If either is specified, the points will be sized proportionally to the amount of data in that point.
-    :param dict of str -> list of int bins_to_label: Bins to label for each variant type ('snv', 'indel')
+    :param list of int bins_to_label: Bins to label
     :return Bokeh grid of plots
     :rtype Tabs
     """
 
-    if plot_colors is None:
+    if colors is None:
         # Get a palette automatically
         from bokeh.palettes import d3
         models = sorted(list(set([g[2] for g in pr_df.groups])))
         palette = d3['Category10'][max(3, len(models))]
-        plot_colors = {model: palette[i] for i, model in enumerate(models)}
-
-    if legend_text is None:
-        legend_text = {}
+        colors = {model: palette[i] for i, model in enumerate(models)}
 
     hover = HoverTool(tooltips=[
+        ("model", "@model"),
         ("bin", "@bin"),
         ("score (min, max)", "(@min_score, @max_score)"),
         ('n_alleles', '@n_alleles'),
         ('cum_alleles', '@cum_alleles'),
-        ("data (x,y)", "($x, $y)"),
-
+        ("data (x,y)", "($x, $y)")
     ])
 
     tabs = []
-    for rank in ['global_rank', 'truth_sample_rank']:
+    for rank in ['truth_sample_rank', 'global_rank']:
 
-        plot_grid = []
+        plot_row = []
         for truth_sample in set([g[1] for g in pr_df.groups]):
-            plot_rows = []
-            for snv in [True, False]:
-                variant_type = 'snv' if snv else 'indel'
-                p = figure(title='{} {}, {}'.format(data_type, truth_sample, variant_type),
-                           x_axis_label='Recall',
-                           y_axis_label='Precision',
-                           tools=[hover] + [tool for tool in TOOLS.split(',') if tool != 'hover'])
-                p.xaxis[0].formatter = NumeralTickFormatter(format="0%")
-                p.yaxis[0].formatter = NumeralTickFormatter(format="0.0%")
-                p.title.text_font_size = "20pt"
-                p.axis.axis_label_text_font_size = "20pt"
-                p.axis.axis_label_text_font_style = "normal"
-                p.axis.major_label_text_font_size = "14pt"
-                for model in set([g[2] for g in pr_df.groups]):
-                    data = pr_df.get_group((rank, truth_sample, model, snv))
-                    total_alleles = np.sum(data['n_alleles'])
-                    if size_prop is None:
-                        data['radius'] = 4
-                    elif size_prop == 'radius':
-                        data['radius'] = 4 * (data['n_alleles'] / total_alleles)
-                    elif size_prop == 'area':
-                        data['radius'] = 8 * np.sqrt((data['n_alleles'] / total_alleles) / np.pi)
-                    else:
-                        raise ValueError(f"{size_prop} is not a supported value for argument `size_prop`")
-                    source = ColumnDataSource(data)
-                    p.circle('recall',
-                             'precision',
-                             radius='radius',
-                             radius_units='screen',
-                             legend=legend_text.get(model, model),
-                             color=plot_colors[model], source=source)
-                    if bins_to_label is not None:
-                        label_data = data.loc[data.bin.isin(bins_to_label[variant_type])]
-                        label_data['x_offset'] = label_data['recall'] + 0.025
-                        label_data['y_offset'] = label_data['precision']
-                        label_data['bin_str'] = [str(int(t)) for t in label_data['bin']]
-                        label_source = ColumnDataSource(label_data)
-                        p.add_layout(
-                            LabelSet(x='x_offset',
-                                     y='precision',
-                                     text='bin_str',
-                                     text_color=plot_colors[model],
-                                     source=label_source)
-                        )
-                        p.multi_line(
-                            xs=[[x, x + 0.05] for x in label_data.recall],
-                            ys=[[y, y] for y in label_data.precision],
-                            color=plot_colors[model]
-                        )
 
-                p.legend.location = 'bottom_left'
-                p.legend.label_text_font_size = "14pt"
-                plot_rows.append(p)
+            p = figure(title=truth_sample[0].upper() + truth_sample[1:],
+                       x_axis_label='Recall',
+                       y_axis_label='Precision',
+                       tools=[hover] + [tool for tool in TOOLS.split(',') if tool != 'hover'])
+            p.xaxis[0].formatter = NumeralTickFormatter(format="0%")
+            p.yaxis[0].formatter = NumeralTickFormatter(format="0.0%")
 
-            plot_grid.append(plot_rows)
+            circles = []
+            for model in set([g[2] for g in pr_df.groups]):
+                data = pr_df.get_group((rank, truth_sample, model, snv)).copy()
+                data['model'] = [model] * len(data)
+                data['size'] = get_point_size_col(data['n_alleles'], size_prop)
+                source = ColumnDataSource(data)
+                circles.append((model, [p.circle('recall',
+                         'precision',
+                         size='size',
+                         color=colors[model], source=source)]))
+                if bins_to_label is not None:
+                    label_data = data.loc[data.bin.isin(bins_to_label)].copy()
+                    label_data['x_offset'] = label_data['recall'] + 0.025
+                    label_data['y_offset'] = label_data['precision']
+                    label_data['bin_str'] = [str(int(t)) for t in label_data['bin']]
+                    label_source = ColumnDataSource(label_data)
+                    p.add_layout(
+                        LabelSet(x='x_offset',
+                                 y='precision',
+                                 text='bin_str',
+                                 text_color=colors[model],
+                                 source=label_source)
+                    )
+                    p.multi_line(
+                        xs=[[x, x + 0.05] for x in label_data.recall],
+                        ys=[[y, y] for y in label_data.precision],
+                        color=colors[model]
+                    )
 
-        tabs.append(Panel(child=gridplot(plot_grid), title=rank))
+            legend = Legend(items=circles, orientation='horizontal', location=(0, 0), click_policy="hide")
+            p.add_layout(legend, 'above')
+            set_plots_defaults(p)
+            plot_row.append(p)
+
+        tabs.append(Panel(child=Row(children=plot_row), title=rank))
 
     return Tabs(tabs=tabs)
+

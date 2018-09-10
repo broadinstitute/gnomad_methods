@@ -23,7 +23,7 @@ from bokeh.transform import factor_cmap
 if 'old_show' not in dir():
     old_show = hl.Table.show
 
-    def new_show(t, n=10, width=170, truncate=40, types=True):
+    def new_show(t, n=10, width=140, truncate=40, types=True):
         old_show(t, n, width, truncate, types)
     hl.Table.show = new_show
 

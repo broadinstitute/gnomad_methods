@@ -162,7 +162,7 @@ def plot_hail_hist(hist_data: hl.Struct,
                    fill_color: str = "#033649",
                    outlier_fill_color: str = "#036564",
                    line_color: str = '#033649',
-                   hover_mode: str = 'vline') -> bokeh.plotting.Figure:
+                   hover_mode: str = 'mouse') -> bokeh.plotting.Figure:
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
@@ -172,7 +172,7 @@ def plot_hail_hist(hist_data: hl.Struct,
     :param str fill_color: Color to fill the histogram bars that fall within the hist boundaries
     :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
     :param str line_color: Color of the lines around the histogram bars
-    :param str hover_mode: Hover mode; one of 'vline' (default), 'mouse' or 'hline'
+    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
     :return: Histogram plot
     :rtype: Figure
     """

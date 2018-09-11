@@ -206,7 +206,6 @@ def plot_hail_hist(hist_data: hl.Struct,
 
     p.select_one(HoverTool).tooltips = [("bin", "$index"), ("bin_edges", "(@left, @right)"), ("freq", "@top")]
     p.select_one(HoverTool).mode = hover_mode
-    hist_data.bin_freq = [x + low for x in hist_data.bin_freq]
     p.quad(top='top', bottom='bottom',
            left='left', right='right', source=hist_source, fill_color='color', line_color=line_color)
 

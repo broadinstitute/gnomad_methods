@@ -71,7 +71,7 @@ def get_binned_models_pd(data_type: str, models: Union[Dict[str, str], List[str]
             *[k for k in ht.key if k != 'contig']
         ).aggregate(
             min_score=hl.agg.min(ht.min_score),
-            max_score=hl.agg.min(ht.max_score),
+            max_score=hl.agg.max(ht.max_score),
             **{x: hl.agg.sum(ht[x]) for x in ht.row_value if x not in ['min_score', 'max_score']}
         )
 
@@ -83,9 +83,7 @@ def get_binned_models_pd(data_type: str, models: Union[Dict[str, str], List[str]
             .annotate(model=model_name) for model_id, model_name in models.items()
     ]
 
-    ht = hts.pop()
-    if hts:
-        ht = ht.union(*hts)
+    ht = hts[0].union(*hts[1:])
     return ht.to_pandas()
 
 
@@ -98,7 +96,7 @@ def plot_metric(df: pd.DataFrame,
                 plot_bi_allelics: bool = True,
                 plot_singletons: bool = True,
                 plot_bi_allelic_singletons: bool = True,
-                plot_release: bool = False,
+                plot_adj: bool = False,
                 colors: Dict[str, str] = None,
                 link_cumul_y: bool = True,
                 size_prop: str = 'area'
@@ -119,7 +117,7 @@ def plot_metric(df: pd.DataFrame,
 
     This function plots a tab for each of the plot condition(s) selected: all, bi-allelics, bi-allelic singletons.
     Within each tab, each row contains a non-cumulative and a cumulative plot of the bins / values.
-    If `plot_release` is set, then an extra row is added plotting release-sites only (variants in release samples where AC_ADJ>0). The bin for these sites is computed based on relase variants only.
+    If `plot_adj` is set, then an extra row is added plotting only variants in release samples where AC_ADJ>0. The bin for these sites is computed based on those variants only.
 
     :param pd.DataFrame df: Input data
     :param str y_name: Name of the metric plotted on the y-axis
@@ -130,7 +128,7 @@ def plot_metric(df: pd.DataFrame,
     :param bool plot_bi_allelics: Whether to plot a tab with bi-allelic variants only
     :param bool plot_singletons: Whether to plot a tab with singleton variants only
     :param bool plot_bi_allelic_singletons:  Whether to plot a tab with bi-allelic singleton variants only
-    :param bool plot_release: Whether to plot additional rows with release-only variants
+    :param bool plot_adj: Whether to plot additional rows with adj variants in release samples only
     :param dict of str -> str colors: Mapping of model name -> color
     :param bool link_cumul_y: If set, y-axes of cumulative and non-cumulative plots are linked
     :param str size_prop: Either 'size' or 'area' can be specified. If either is specified, the points will be sized proportionally to the amount of data in that point.
@@ -140,12 +138,18 @@ def plot_metric(df: pd.DataFrame,
 
     def get_row(df: pd.DataFrame, y_name: str, cols: List[str], y_fun: Callable[[pd.Series], Union[float, int]], titles: List[str], link_cumul_y: bool, cut: int = None) -> Row:
         """
-        Generates a single row
+        Generates a single row with two plots: a regular scatter plot and a cumulative one.
+        Both plots have bins on the x-axis. The y-axis is computed by applying the function `y_fun` on the columns `cols`.
+
+        Data source is shared between the two plots so that highlighting / selection is linked.
+        X-axis is shared between the two plots.
+        Y-axus is shared if `link_cumul_y` is `True`
+
         """
 
         def get_plot(data_source: ColumnDataSource, y_name: str, y_col_name: str, titles: List[str], data_ranges: Tuple[DataRange1d, DataRange1d], cut: int = None) -> Plot:
             """
-            Generates a single plot panel
+            Generates a single scatter plot panel
             """
 
             p = figure(
@@ -159,10 +163,12 @@ def plot_metric(df: pd.DataFrame,
             if cut:
                 p.add_layout(Span(location=cut, dimension='height', line_color='red', line_dash='dashed'))
 
+            # Add circles layouts one model at a time, so that no default legend is generated.
+            # Because data is in the same ColumnDataSource, use a BooleanFilter to plot each model separately
             circles = []
             for model in set(data_source.data['model']):
                 view = CDSView(source=data_source, filters=[BooleanFilter([x == model for x in data_source.data['model']])])
-                circles.append((model, [p.circle('bin', y_col_name, color='color', size='_size', source=data_source, view=view)]))
+                circles.append((model, [p.circle('bin', y_col_name, color='_color', size='_size', source=data_source, view=view)]))
 
             p.select_one(HoverTool).tooltips = [('model', '@model'),
                                                 ('bin', '@bin'),
@@ -172,19 +178,26 @@ def plot_metric(df: pd.DataFrame,
                                                 ('n_data_points', '@_n')
                                                 ] + [(col, f'@{col}') for col in cols]
             set_plots_defaults(p)
+
+            # Add legend above the plot area
             legend = Legend(items=circles, orientation='horizontal', location=(0, 0), click_policy="hide")
             p.add_layout(legend, 'above')
 
+            # Add subtitles if any
             for title in titles[1:]:
                 p.add_layout(Title(text=title, text_font_size=qc_plots_settings['subtitle.text_font_size']), 'above')
 
             return p
 
+        # Compute non-cumulative values by applying `y_fun`
         df['non_cumul'] = df[cols].apply(y_fun, axis=1)
+
+        # Compute cumulative values for each of the data columns
         for col in cols:
             df[f'{col}_cumul'] = df.groupby('model').aggregate(np.cumsum)[col]
-
         df['cumul'] = df[[f'{col}_cumul' for col in cols]].apply(y_fun, axis=1)
+
+        # Create data ranges that are either shared or distinct depending on the y_cumul parameter
         non_cumul_data_ranges = (DataRange1d(), DataRange1d())
         cumul_data_ranges = non_cumul_data_ranges if link_cumul_y else (non_cumul_data_ranges[0], DataRange1d())
         data_source = ColumnDataSource(df)
@@ -194,55 +207,59 @@ def plot_metric(df: pd.DataFrame,
 
     def prepare_pd(df: pd.DataFrame, cols: List[str], colors: Dict[str, str] = {}, size_prop: str = None):
         """
-        Groups a pandas DataFrame by model and bin while keeping relevant columns only. Adds a color column.
+        Groups a pandas DataFrame by model and bin while keeping relevant columns only.
+        Adds 3 columns used for plotting:
+        1. A _color column column
+        2. A _n column containing the number of data points
+        3. A _size column containing the size of data points based on the `size_prop` and `qc_plot_settings` parameters
         """
         df = df.groupby(['model', 'bin']).agg({**{col: np.sum for col in cols},
                                                'min_score': np.min, 'max_score': np.max})
         df = df.reset_index()
-        df['color'] = [colors.get(x, 'gray') for x in df['model']]
+        df['_color'] = [colors.get(x, 'gray') for x in df['model']]
         df['_n'] = np.sum(df[cols], axis=1)
         df['_size'] = get_point_size_col(df['_n'], size_prop)
         return df
 
     colors = colors if colors is not None else {}
     tabs = []
-    release_strats = ['', 'release_'] if plot_release else ['']
+    adj_strats = ['', 'adj_'] if plot_adj else ['']
 
     if plot_all:
         children = []
-        for release in release_strats:
-            titles = [y_name, 'Release variants (release rank)' if release else 'All variants']
-            children.append(get_row(prepare_pd(df.loc[df.rank_id == f'{release}rank'], cols, colors, size_prop),
+        for adj in adj_strats:
+            titles = [y_name, 'Adj variants (adj rank)' if adj else 'All variants']
+            children.append(get_row(prepare_pd(df.loc[df.rank_id == f'{adj}rank'], cols, colors, size_prop),
                                     y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='All'))
 
     if plot_bi_allelics:
         children = []
-        for release in release_strats:
+        for adj in adj_strats:
             for biallelic_rank in ['', 'biallelic_']:
-                titles = [y_name,'Bi-allelic variants ({} rank)'.format('overall' if not release and not biallelic_rank else ' '.join([release[:-1], biallelic_rank[:-1]]).lstrip())]
-                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & (df.rank_id == f'{release}{biallelic_rank}rank')], cols, colors, size_prop),
+                titles = [y_name,'Bi-allelic variants ({} rank)'.format('overall' if not adj and not biallelic_rank else ' '.join([adj[:-1], biallelic_rank[:-1]]).lstrip())]
+                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & (df.rank_id == f'{adj}{biallelic_rank}rank')], cols, colors, size_prop),
                                         y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='Bi-allelic'))
 
     if plot_singletons:
         children = []
-        for release in release_strats:
+        for adj in adj_strats:
             for singleton_rank in ['', 'singleton_']:
-                titles = [y_name, 'Singletons ({} rank)'.format('overall' if not release and not singleton_rank else " ".join([release[:-1], singleton_rank[:-1]]).lstrip())]
-                children.append(get_row(prepare_pd(df.loc[df.singleton & (df.rank_id == f'{release}{singleton_rank}rank')], cols, colors, size_prop),
+                titles = [y_name, 'Singletons ({} rank)'.format('overall' if not adj and not singleton_rank else " ".join([adj[:-1], singleton_rank[:-1]]).lstrip())]
+                children.append(get_row(prepare_pd(df.loc[df.singleton & (df.rank_id == f'{adj}{singleton_rank}rank')], cols, colors, size_prop),
                                         y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='Singletons'))
 
     if plot_bi_allelic_singletons:
         children = []
-        for release in release_strats:
+        for adj in adj_strats:
             for bisingleton_rank in ['', 'biallelic_singleton_']:
-                titles = [y_name, 'Bi-allelic singletons ({} rank)'.format('overall' if not release and not bisingleton_rank else " ".join([release[:-1], bisingleton_rank[:-1].replace("_", " ")]).lstrip())]
-                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & df.singleton & (df.rank_id == f'{release}{bisingleton_rank}rank')], cols, colors, size_prop),
+                titles = [y_name, 'Bi-allelic singletons ({} rank)'.format('overall' if not adj and not bisingleton_rank else " ".join([adj[:-1], bisingleton_rank[:-1].replace("_", " ")]).lstrip())]
+                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & df.singleton & (df.rank_id == f'{adj}{bisingleton_rank}rank')], cols, colors, size_prop),
                                         y_name, cols, y_fun, titles, link_cumul_y, cut))
 
         tabs.append(Panel(child=Column(children=children), title='Bi-allelic singletons'))
@@ -256,7 +273,7 @@ def plot_score_distributions(data_type, models: Union[Dict[str, str], List[str]]
     One tab per model.
     Within each tab, there is 2x2 grid of plots:
     - One row showing the score distribution across the entire data
-    - One row showing the score distribution across the release data only (release_sample_AC_ADJ > 0)
+    - One row showing the score distribution across the release-samples, adj data only (release_sample_AC_ADJ > 0)
     - One column showing the histogram of the score
     - One column showing the normalized cumulative histogram of the score
 
@@ -294,23 +311,23 @@ def plot_score_distributions(data_type, models: Union[Dict[str, str], List[str]]
         agg_values = ht.aggregate(hl.struct(
             score_hist=[hl.agg.hist(ht.score, min_score, max_score, 100),
                         hl.agg.hist(hl.agg.filter(ht.ac > 0, ht.score), min_score, max_score, 100)],
-            release_counts=hl.agg.counter(hl.agg.filter(ht.ac > 0, ht.score >= cut_value))
+            adj_counts=hl.agg.counter(hl.agg.filter(ht.ac > 0, ht.score >= cut_value))
         ))
         score_hist = agg_values.score_hist
-        release_cut = '{0:.2f}'.format(100 * agg_values.release_counts[True] / (agg_values.release_counts[True] + agg_values.release_counts[False]))
+        adj_cut = '{0:.2f}'.format(100 * agg_values.adj_counts[True] / (agg_values.adj_counts[True] + agg_values.adj_counts[False]))
 
         rows = []
         x_range = DataRange1d()
         y_range = [DataRange1d(), DataRange1d()]
-        for release in [False, True]:
-            title = '{0}, {1} cut (score = {2:.2f})'.format('Release' if release else 'All', release_cut if release else cut, cut_value)
-            p = plot_hail_hist(score_hist[release], title=title + "\n", fill_color=colors[model_name])
+        for adj in [False, True]:
+            title = '{0}, {1} cut (score = {2:.2f})'.format('Adj' if adj else 'All', adj_cut if adj else cut, cut_value)
+            p = plot_hail_hist(score_hist[adj], title=title + "\n", fill_color=colors[model_name])
             p.add_layout(Span(location=cut_value, dimension='height', line_color='red', line_dash='dashed'))
             p.x_range = x_range
             p.y_range = y_range[0]
             set_plots_defaults(p)
 
-            p_cumul = plot_hail_hist_cumulative(score_hist[release], title=title + ', cumulative', line_color=colors[model_name])
+            p_cumul = plot_hail_hist_cumulative(score_hist[adj], title=title + ', cumulative', line_color=colors[model_name])
             p_cumul.add_layout(Span(location=cut_value, dimension='height', line_color='red', line_dash='dashed'))
             p_cumul.x_range = x_range
             p_cumul.y_range = y_range[1]
@@ -341,7 +358,7 @@ def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: 
         for truth_sample in truth_samples:
             for model_id, model_name in models.items():
                 ht = hl.read_table(binned_concordance_path(data_type, truth_sample, model_id))
-                ht = ht.annotate(truth_sample=truth_sample, metric=model_name)
+                ht = ht.annotate(truth_sample=truth_sample, model=model_name)
                 hts.append(ht)
 
         return hts[0].union(*hts[1:])
@@ -353,10 +370,10 @@ def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: 
         df = df.sort_values(by=['bin'])
         df['cum_tp'] = df['tp'].cumsum()
         df['cum_fp'] = df['fp'].cumsum()
-        total_tps = df['tp'].sum() + df['fn'].sum()
-        total_fps = df['fp'].sum()
-        df['cum_tn'] = total_fps - df['cum_fp']
-        df['cum_fn'] = total_tps - df['cum_tp']
+        total_pos = df['tp'].sum() + df['fn'].sum()
+        total_neg = df['fp'].sum()
+        df['cum_tn'] = total_pos - df['cum_fp']
+        df['cum_fn'] = total_neg - df['cum_tp']
         df['precision'] = df['cum_tp'] / (df['cum_tp'] + df['cum_fp'])
         df['recall'] = df['cum_tp'] / (df['cum_tp'] + df['cum_fn'])
         df['cum_alleles'] = df['n_alleles'].cumsum()
@@ -366,8 +383,8 @@ def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: 
         models = {m: m for m in models}
 
     df = get_binned_concordance_ht(data_type, truth_samples, models).to_pandas()
-    df = df.groupby(['rank_name', 'truth_sample', 'metric', 'snv']).apply(compute_cumul_metrics)
-    return df.fillna(-1).groupby(['rank_name', 'truth_sample', 'metric', 'snv'])
+    df = df.groupby(['rank_name', 'truth_sample', 'model', 'snv']).apply(compute_cumul_metrics)
+    return df.fillna(-1).groupby(['rank_name', 'truth_sample', 'model', 'snv'])
 
 
 def plot_concordance_pr(
@@ -385,10 +402,13 @@ def plot_concordance_pr(
 
     Within each tab, a row of n_truth_samples.
 
+    The input to this function should come out of the `get_binned_concordance_pd` function, which creates
+    a DataFrame containing the necessary metris for PR plotting and is grouped by 'rank_name', 'truth_sample', 'model' and 'snv'.
+
     :param DataFrame pr_df: Input Dataframe
     :param bool snv: Whether to plot SNVs or Indels
     :param dict of str -> str colors: Optional colors to use (model name -> desired color)
-    :param str size_prop: Either 'size' or 'area' can be specified. If either is specified, the points will be sized proportionally to the amount of data in that point.
+    :param str size_prop: Either 'radius' or 'area' can be specified. If either is specified, the points will be sized proportionally to the amount of data in that point.
     :param list of int bins_to_label: Bins to label
     :return Bokeh grid of plots
     :rtype Tabs

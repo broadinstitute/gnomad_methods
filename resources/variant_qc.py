@@ -104,6 +104,42 @@ def score_ranking_path(data_type: str,
 
 
 def validated_denovos_path():
-    return 'gs://gnomad/resources/validated_de_novos.txt.bgz'
+    return 'gs://gnomad/resources/Table_S2_All_DN.txt'
 
 
+def get_validated_denovos_ht():
+    """
+    Returns a HT containing all the high-confidence and validated de novo mutations obtained from Jack Kosmicki
+    The table is annotated with samples that are in gnomAD exomes and/or genomes (based on sample ID only)
+    Note that at this moment, there are no gnomAD genomes overlapping with samples in the file.
+    """
+    dnm = hl.import_table(validated_denovos_path(), impute=True)
+    dnm = dnm.transmute(
+        **hl.min_rep(**hl.parse_variant(dnm.Variant)),
+        validated=dnm.Validation_status == 'Passed'
+    )
+    dnm = dnm.key_by('Child_ID')
+
+    genomes = get_gnomad_meta('genomes').select('release', 'high_quality')
+    exomes = get_gnomad_meta('exomes').select('release', 'high_quality')
+
+    dnm = dnm.annotate(
+        gnomad_genomes=hl.struct(**genomes[dnm.key]),
+        gnomad_exomes = hl.struct(**exomes[dnm.key])
+    )
+    return dnm.key_by('locus', 'alleles')
+
+
+def binned_concordance_path(data_type: str, truth_data: str, metric: str) -> str:
+    """
+
+    Returns path to corresponding annotated truth sample concordance Table.
+
+    :param str data_type: One of 'exomes' or 'genomes'
+    :param str truth_data: Currently one of 'NA12878' or 'syndip'
+    :param str metric: Which ranking metric
+    :return: Path to desired HT
+    :rtype: str
+    """
+
+    return f'gs://gnomad/variant_qc/binned_concordance/{data_type}_{truth_data}_{metric}.ht'

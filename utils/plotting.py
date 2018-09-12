@@ -156,37 +156,88 @@ pop_names = {'oth': 'Other',
              'unk': 'Unknown'}
 
 
-def plot_hail_hist(hist_data: hl.Struct, title: str = 'Plot', log: bool = False) -> bokeh.plotting.Figure:
+def plot_hail_hist(hist_data: hl.Struct,
+                   title: str = 'Plot',
+                   log: bool = False,
+                   fill_color: str = "#033649",
+                   outlier_fill_color: str = "#036564",
+                   line_color: str = '#033649',
+                   hover_mode: str = 'mouse') -> bokeh.plotting.Figure:
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+
+    :param Struct hist_data: Data to plot
+    :param str title: Plot title
+    :param bool log: Whether the y-axis should be log
+    :param str fill_color: Color to fill the histogram bars that fall within the hist boundaries
+    :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
+    :param str line_color: Color of the lines around the histogram bars
+    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :return: Histogram plot
+    :rtype: Figure
     """
     low = int(log)
     distance = abs(hist_data.bin_edges[0] - hist_data.bin_edges[1])
     num_data_points = sum(hist_data.bin_freq)
-    title = f'{title} ({num_data_points:,} data points)'
-    p = figure(title=title, y_axis_type="log") if log else figure(title=title)
-    hist_data.bin_freq = [x + low for x in hist_data.bin_freq]
-    p.quad(top=hist_data.bin_freq, bottom=low,
-           left=hist_data.bin_edges[:-1], right=hist_data.bin_edges[1:], fill_color="#036564", line_color="#033649")
-    p.quad(top=[hist_data.n_smaller + low, hist_data.n_larger + low], bottom=[low, low],
-           left=[hist_data.bin_edges[0] - distance, hist_data.bin_edges[-1]],
-           right=[hist_data.bin_edges[0], hist_data.bin_edges[-1] + distance])
+    p = figure(title=title, y_axis_type="log", tools=TOOLS) if log else figure(title=title, tools=TOOLS)
+    p.add_layout(Title(text=f'({num_data_points:,} data points)'), 'above')
+
+    top = [x + low for x in hist_data.bin_freq]
+    left = hist_data.bin_edges[:-1]
+    right = hist_data.bin_edges[1:]
+    colors = [fill_color] * len(hist_data.bin_freq)
+    if hist_data.n_smaller > 0:
+        top.insert(0, hist_data.n_smaller + low)
+        left.insert(0, hist_data.bin_edges[0] - distance)
+        right.insert(0, hist_data.bin_edges[0])
+        colors.insert(0, outlier_fill_color)
+    if hist_data.n_larger > 0:
+        top.append(hist_data.n_larger + low)
+        left.append(hist_data.bin_edges[-1])
+        right.append(hist_data.bin_edges[-1] + distance)
+        colors.append(outlier_fill_color)
+
+    hist_source = ColumnDataSource({'top': top,
+                                    'bottom': [low] * len(top),
+                                    'left': left,
+                                    'right': right,
+                                    'color': colors
+                                    })
+
+    p.select_one(HoverTool).tooltips = [("bin", "$index"), ("bin_edges", "(@left, @right)"), ("freq", "@top")]
+    p.select_one(HoverTool).mode = hover_mode
+    p.quad(top='top', bottom='bottom',
+           left='left', right='right', source=hist_source, fill_color='color', line_color=line_color)
+
     return p
 
 
 def plot_hail_hist_cumulative(hist_data: hl.Struct, title: str = 'Plot', normalize: bool = True,
-                              line_color: str = "#036564", line_width: int = 3, log: bool = False) -> bokeh.plotting.Figure:
+                              line_color: str = "#036564", line_width: int = 3, log: bool = False, hover_mode: str = 'mouse') -> bokeh.plotting.Figure:
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+
+    :param Struct hist_data: Data to plot
+    :param str title: Plot title
+    :param bool normalize: Whether to normalize the data (0,1)
+    :param str line_color: Color of the line
+    :param int line_width: Width of the line
+    :param bool log: Whether the y-axis should be log
+    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :return: Histogram plot
+    :rtype: Figure
     """
     cumulative_data = np.cumsum(hist_data.bin_freq) + hist_data.n_smaller
     np.append(cumulative_data, [cumulative_data[-1] + hist_data.n_larger])
     num_data_points = max(cumulative_data)
 
     if normalize: cumulative_data = cumulative_data / num_data_points
-    title = f'{title} ({num_data_points:,} data points)'
-    p = figure(title=title, y_axis_type="log") if log else figure(title=title)
-    p.line(hist_data.bin_edges[:-1], cumulative_data, line_color=line_color, line_width=line_width)
+    p = figure(title=title, y_axis_type="log", tools=TOOLS) if log else figure(title=title, tools=TOOLS)
+    p.add_layout(Title(text=f'({num_data_points:,} data points)'), 'above')
+    p.select_one(HoverTool).tooltips = [("index", "$index"), ("(x,y)", "(@x, @y)")]
+    p.select_one(HoverTool).mode = hover_mode
+    data_source = ColumnDataSource({'x': hist_data.bin_edges[:-1], 'y': cumulative_data})
+    p.line(x='x', y='y', line_color=line_color, line_width=line_width, source=data_source)
     return p
 
 

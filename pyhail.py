@@ -51,7 +51,8 @@ def main(args, pass_through_args):
 
     spark_version = '2.2.0' if args.hail_version == 'devel' else '2.0.2'
     if not hash_string:
-        hash_string = subprocess.check_output(['gsutil', 'cat', 'gs://hail-common/builds/{}/latest-hash-spark-{}.txt'.format(args.hail_version, spark_version)], universal_newlines=True).rstrip()
+        hash_location = 'gs://hail-common/builds/{}/latest-hash/cloudtools-2-spark-{}.txt'.format(args.hail_version, spark_version)
+        hash_string = subprocess.check_output(['gsutil', 'cat', hash_location], universal_newlines=True).rstrip()
 
     if not hash_string:
         print('Could not get hash string', file=sys.stderr)

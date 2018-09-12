@@ -116,7 +116,7 @@ def get_gnomad_meta(data_type: str, version: str = None, full_meta: bool = False
                    'data_type', 'product', 'product_simplified', 'qc_platform',
                    'project_id', 'project_description', 'internal', 'investigator',
                    'known_pop', 'known_subpop', 'pop', 'subpop',
-                   'neuro', 'control',
+                   'neuro', 'control', 'topmed',
                    'high_quality', 'release']
         if data_type == 'genomes':
             columns.extend(['pcr_free', 'project_name', 'release_2_0_2'])

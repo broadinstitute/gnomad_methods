@@ -84,6 +84,7 @@ def get_binned_models_pd(data_type: str, models: Union[Dict[str, str], List[str]
     ]
 
     ht = hts[0].union(*hts[1:])
+    ht = ht.annotate(n_biallelic=hl.cond(ht.bi_allelic, ht.n, 0))
     return ht.to_pandas()
 
 
@@ -229,40 +230,56 @@ def plot_metric(df: pd.DataFrame,
         children = []
         for adj in adj_strats:
             titles = [y_name, 'Adj variants (adj rank)' if adj else 'All variants']
-            children.append(get_row(prepare_pd(df.loc[df.rank_id == f'{adj}rank'], cols, colors, size_prop),
-                                    y_name, cols, y_fun, titles, link_cumul_y, cut))
+            plot_df = prepare_pd(df.loc[df.rank_id == f'{adj}rank'], cols, colors, size_prop)
+            if len(plot_df) > 0:
+                children.append(get_row(plot_df, y_name, cols, y_fun, titles, link_cumul_y, cut))
+            else:
+                logger.warn('No data found for plot: {}'.format('\t'.join(titles)))
 
-        tabs.append(Panel(child=Column(children=children), title='All'))
+        if children:
+            tabs.append(Panel(child=Column(children=children), title='All'))
 
     if plot_bi_allelics:
         children = []
         for adj in adj_strats:
             for biallelic_rank in ['', 'biallelic_']:
                 titles = [y_name,'Bi-allelic variants ({} rank)'.format('overall' if not adj and not biallelic_rank else ' '.join([adj[:-1], biallelic_rank[:-1]]).lstrip())]
-                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & (df.rank_id == f'{adj}{biallelic_rank}rank')], cols, colors, size_prop),
-                                        y_name, cols, y_fun, titles, link_cumul_y, cut))
+                plot_df = prepare_pd(df.loc[df.bi_allelic & (df.rank_id == f'{adj}{biallelic_rank}rank')], cols, colors, size_prop)
+                if len(plot_df) > 0:
+                    children.append(get_row(plot_df, y_name, cols, y_fun, titles, link_cumul_y, cut))
+                else:
+                    logger.warn('No data found for plot: {}'.format('\t'.join(titles)))
 
-        tabs.append(Panel(child=Column(children=children), title='Bi-allelic'))
+        if children:
+            tabs.append(Panel(child=Column(children=children), title='Bi-allelic'))
 
     if plot_singletons:
         children = []
         for adj in adj_strats:
             for singleton_rank in ['', 'singleton_']:
                 titles = [y_name, 'Singletons ({} rank)'.format('overall' if not adj and not singleton_rank else " ".join([adj[:-1], singleton_rank[:-1]]).lstrip())]
-                children.append(get_row(prepare_pd(df.loc[df.singleton & (df.rank_id == f'{adj}{singleton_rank}rank')], cols, colors, size_prop),
-                                        y_name, cols, y_fun, titles, link_cumul_y, cut))
+                plot_df = prepare_pd(df.loc[df.singleton & (df.rank_id == f'{adj}{singleton_rank}rank')], cols, colors, size_prop)
+                if len(plot_df) > 0:
+                    children.append(get_row(plot_df, y_name, cols, y_fun, titles, link_cumul_y, cut))
+                else:
+                    logger.warn('No data found for plot: {}'.format('\t'.join(titles)))
 
-        tabs.append(Panel(child=Column(children=children), title='Singletons'))
+        if children:
+            tabs.append(Panel(child=Column(children=children), title='Singletons'))
 
     if plot_bi_allelic_singletons:
         children = []
         for adj in adj_strats:
             for bisingleton_rank in ['', 'biallelic_singleton_']:
                 titles = [y_name, 'Bi-allelic singletons ({} rank)'.format('overall' if not adj and not bisingleton_rank else " ".join([adj[:-1], bisingleton_rank[:-1].replace("_", " ")]).lstrip())]
-                children.append(get_row(prepare_pd(df.loc[df.bi_allelic & df.singleton & (df.rank_id == f'{adj}{bisingleton_rank}rank')], cols, colors, size_prop),
-                                        y_name, cols, y_fun, titles, link_cumul_y, cut))
+                plot_df = prepare_pd(df.loc[df.bi_allelic & df.singleton & (df.rank_id == f'{adj}{bisingleton_rank}rank')], cols, colors, size_prop)
+                if len(plot_df) > 0:
+                    children.append(get_row(plot_df, y_name, cols, y_fun, titles, link_cumul_y, cut))
+                else:
+                    logger.warn('No data found for plot: {}'.format('\t'.join(titles)))
 
-        tabs.append(Panel(child=Column(children=children), title='Bi-allelic singletons'))
+        if children:
+            tabs.append(Panel(child=Column(children=children), title='Bi-allelic singletons'))
 
     return Tabs(tabs=tabs)
 

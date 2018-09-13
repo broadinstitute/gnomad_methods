@@ -98,10 +98,13 @@ def main(args, pass_through_args):
            # '--properties={}'.format(','.join(spark_properties)),
            '--driver-log-levels', 'root=FATAL,is.hail=INFO'
            ]
-    # spark_properties = ['spark.{}=./{}'.format(x, jar_file) for x in ('executor.extraClassPath', 'driver.extraClassPath', 'files')]
-    # spark_properties.append('spark.submit.pyFiles=./{}'.format(all_pyfiles[0]))
+    spark_properties = []
+    if args.jar:
+        spark_properties.extend(['spark.{}=./{}'.format(x, jar_file) for x in ('executor.extraClassPath', 'driver.extraClassPath', 'files')])
+        spark_properties.append('spark.submit.pyFiles=./{}'.format(all_pyfiles[0]))
     if args.spark_conf:
-        job.append('--properties={}'.format(args.spark_conf))
+        spark_properties.extend(args.spark_conf.split(','))
+    job.append('--properties={}'.format(','.join(spark_properties)))
 
     if pass_through_args is not None:
         job.append('--')

@@ -99,9 +99,8 @@ def main(args, pass_through_args):
            '--driver-log-levels', 'root=FATAL,is.hail=INFO'
            ]
     spark_properties = []
-    if args.jar:
-        spark_properties.extend(['spark.{}=./{}'.format(x, jar_file) for x in ('executor.extraClassPath', 'driver.extraClassPath', 'files')])
-        spark_properties.append('spark.submit.pyFiles=./{}'.format(all_pyfiles[0]))
+    spark_properties.extend(['spark.{}=./{}'.format(x, jar_file) for x in ('executor.extraClassPath', 'driver.extraClassPath', 'files')])
+    spark_properties.append('spark.submit.pyFiles=./{}'.format(all_pyfiles[0]))
     if args.spark_conf:
         spark_properties.extend(args.spark_conf.split(','))
     job.append('--properties={}'.format(','.join(spark_properties)))

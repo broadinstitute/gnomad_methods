@@ -206,8 +206,8 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
     transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence_to_consequence)
 
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
-    worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence)
-    sorted_scores = hl.sorted(worst_csq_gene.values(), key=lambda tc: tc.csq_score)
+    worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence).values()
+    sorted_scores = hl.sorted(worst_csq_gene, key=lambda tc: tc.csq_score)
     lowest_score = hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0].csq_score)
     gene_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_symbol)
     ensg_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_id)
@@ -215,7 +215,7 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                      worst_consequence_term=csqs.find(lambda c: transcript_csqs.map(lambda csq: csq.most_severe_consequence).contains(c)),
                                      worst_csq_by_gene=worst_csq_gene,
-                                     any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene.values()),
+                                     any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene),
                                      gene_with_most_severe_csq=gene_with_worst_csq,
                                      ensg_with_most_severe_csq=ensg_with_worst_csq)
 

@@ -389,7 +389,7 @@ genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wg
 vep_config = 'gs://hail-common/vep/vep/vep85-gcloud.json'
 
 # Annotations
-context_mt_path = 'gs://gnomad-resources/constraint/context_processed.mt'
+context_mt_path = 'gs://gnomad-resources/context/hail-0.2/context_processed.mt'
 
 
 # Sample QC files

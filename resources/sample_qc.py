@@ -137,3 +137,6 @@ def sample_qc_mendel_ht_path(data_type: str, part: str) -> str:
 def merged_pedigrees_ht_path(data_type: str) -> str:
     return f'gs://gnomad/sample_qc/fam/gnomad_{data_type}_merged_ped.mt'
 
+
+def get_topmed_shared_sites_ht_path(data_type: str) -> str:
+    return f'gs://gnomad/sample_qc/topmed/gnomad_{data_type}_topmed_shared_sites.ht'

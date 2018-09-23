@@ -162,7 +162,8 @@ def plot_hail_hist(hist_data: hl.Struct,
                    fill_color: str = "#033649",
                    outlier_fill_color: str = "#036564",
                    line_color: str = '#033649',
-                   hover_mode: str = 'mouse') -> bokeh.plotting.Figure:
+                   hover_mode: str = 'mouse',
+                   hide_zeros: bool = False) -> bokeh.plotting.Figure:
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
@@ -173,41 +174,101 @@ def plot_hail_hist(hist_data: hl.Struct,
     :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
     :param str line_color: Color of the lines around the histogram bars
     :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param bool hide_zeros: Remove hist bars with 0 count
     :return: Histogram plot
     :rtype: Figure
     """
+
+    return plot_multi_hail_hist({'hist': hist_data},
+                                title=title,
+                                log=log,
+                                fill_color={'hist': fill_color},
+                                outlier_fill_color={'hist': outlier_fill_color},
+                                line_color=line_color,
+                                hover_mode=hover_mode,
+                                hide_zeros=hide_zeros,
+                                alpha=1.0)
+
+
+def plot_multi_hail_hist(hist_data: Dict[str, hl.Struct],
+                         title: str = 'Plot',
+                         log: bool = False,
+                         fill_color: Dict[str, str] = None,
+                         outlier_fill_color: Dict[str, str] = None,
+                         line_color: str = '#033649',
+                         hover_mode: str = 'mouse',
+                         hide_zeros: bool = False,
+                         alpha: float = None) -> bokeh.plotting.Figure:
+    """
+    Plots multiple histograms on the same plot.
+    Each histogram can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+
+    Example usage:
+    plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
+
+    :param dict of str -> Struct hist_data: Data to plot
+    :param str title: Plot title
+    :param bool log: Whether the y-axis should be log
+    :param dict of str ->str fill_color: Color to fill the histogram bars that fall within the hist boundaries
+    :param dict of str -> str outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
+    :param str line_color: Color of the lines around the histogram bars
+    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param bool hide_zeros: Remove hist bars with 0 count
+    :param float alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
+    :return: Histogram plot
+    :rtype: Figure
+    """
+
     low = int(log)
-    distance = abs(hist_data.bin_edges[0] - hist_data.bin_edges[1])
-    num_data_points = sum(hist_data.bin_freq)
+
+    if alpha is None:
+        alpha = 1.0/len(hist_data)
+
+    if fill_color is None:
+        from bokeh.palettes import d3
+        color_palette = d3['Category10'][max(3, len(hist_data))]
+        fill_color = {hist_name: color_palette[i] for i, hist_name in enumerate(hist_data.keys())}
+
+    if outlier_fill_color is None:
+        outlier_fill_color = fill_color
+
     p = figure(title=title, y_axis_type="log", tools=TOOLS) if log else figure(title=title, tools=TOOLS)
-    p.add_layout(Title(text=f'({num_data_points:,} data points)'), 'above')
+    hists = []
+    for label, hist in hist_data.items():
 
-    top = [x + low for x in hist_data.bin_freq]
-    left = hist_data.bin_edges[:-1]
-    right = hist_data.bin_edges[1:]
-    colors = [fill_color] * len(hist_data.bin_freq)
-    if hist_data.n_smaller > 0:
-        top.insert(0, hist_data.n_smaller + low)
-        left.insert(0, hist_data.bin_edges[0] - distance)
-        right.insert(0, hist_data.bin_edges[0])
-        colors.insert(0, outlier_fill_color)
-    if hist_data.n_larger > 0:
-        top.append(hist_data.n_larger + low)
-        left.append(hist_data.bin_edges[-1])
-        right.append(hist_data.bin_edges[-1] + distance)
-        colors.append(outlier_fill_color)
+        data = {}
+        distance = abs(hist.bin_edges[0] - hist.bin_edges[1])
+        data['top'] = [x + low for x in hist.bin_freq]
+        data['left'] = hist.bin_edges[:-1]
+        data['right'] = hist.bin_edges[1:]
+        data['color'] = [fill_color[label]] * len(hist.bin_freq)
+        if hist.n_smaller > 0:
+            data['top'].insert(0, hist.n_smaller + low)
+            data['left'].insert(0, hist.bin_edges[0] - distance)
+            data['right'].insert(0, hist.bin_edges[0])
+            data['color'].insert(0, outlier_fill_color[label])
+        if hist.n_larger > 0:
+            data['top'].append(hist.n_larger + low)
+            data['left'].append(hist.bin_edges[-1])
+            data['right'].append(hist.bin_edges[-1] + distance)
+            data['color'].append(outlier_fill_color[label])
 
-    hist_source = ColumnDataSource({'top': top,
-                                    'bottom': [low] * len(top),
-                                    'left': left,
-                                    'right': right,
-                                    'color': colors
-                                    })
+        data['bottom'] = [low] * len(data['top'])
+        data['label'] = [label] * len(data['top'])
 
-    p.select_one(HoverTool).tooltips = [("bin", "$index"), ("bin_edges", "(@left, @right)"), ("freq", "@top")]
+        hist_source = ColumnDataSource(data)
+
+        view = CDSView(source=hist_source, filters=[BooleanFilter([top > 0 for top in hist_source.data['top']])]) if hide_zeros else CDSView(source=hist_source)
+        hists.append((label, [p.quad(top='top', bottom='bottom', left='left', right='right', source=hist_source, view=view, fill_color='color', alpha=alpha, line_color=line_color)]))
+
+    tooltips = [("bin", "$index"), ("bin_edges", "(@left, @right)"), ("freq", "@top")]
+    if len(hist_data) > 1:
+        tooltips.insert(0, ('label', '@label'))
+        p.add_layout(Legend(items=hists, location=(0, 0), orientation='horizontal', click_policy='hide'), 'above')
+    p.select_one(HoverTool).tooltips = tooltips
     p.select_one(HoverTool).mode = hover_mode
-    p.quad(top='top', bottom='bottom',
-           left='left', right='right', source=hist_source, fill_color='color', line_color=line_color)
+    num_data_points = sum([sum(x.bin_freq) for x in hist_data.values()])
+    p.add_layout(Title(text=f'({num_data_points:,} data points)'), 'above')
 
     return p
 

@@ -64,6 +64,11 @@ variant_annotation_colors.update({
     'PTV': COLOR_LOF
 })
 
+variant_annotation_names = dict(zip(CSQ_ORDER, [x.replace('_variant', '').replace('_', ' ') for x in CSQ_ORDER]))
+variant_annotation_names['stop_gained'] = 'nonsense'
+variant_annotation_names['5_prime_UTR_variant'] = "5' UTR"
+variant_annotation_names['3_prime_UTR_variant'] = "3' UTR"
+
 COLOR_EXAC = '#4682B4'
 COLOR_GNOMAD = '#73AB3D'
 

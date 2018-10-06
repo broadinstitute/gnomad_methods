@@ -386,7 +386,7 @@ genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_eva
 genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list"
 # More can be found at gs://broad-references/hg19
 
-vep_config = 'gs://hail-common/vep/vep/vep85-gcloud.json'
+vep_config = 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json'
 
 # Annotations
 context_mt_path = 'gs://gnomad-resources/context/hail-0.2/context_processed.mt'

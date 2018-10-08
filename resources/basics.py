@@ -368,6 +368,7 @@ NA12878_high_conf_exome_regions_bed_path = "gs://gnomad-public/truth-sets/source
 syndip_high_conf_regions_bed_path = "gs://gnomad-public/truth-sets/source/hybrid.m37m.bed"
 clinvar_tsv_path = "gs://gnomad-resources/clinvar/source/clinvar_alleles.single.b37.tsv.bgz"
 clinvar_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single.b37.vep.mt"
+clinvar_loftee_beta_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single.b37.loftee.beta.vep.mt"
 
 # Useful intervals
 lcr_intervals_path = "gs://gnomad-public/intervals/LCR.GRCh37_compliant.interval_list"  # "gs://gnomad-public/intervals/LCR.interval_list"

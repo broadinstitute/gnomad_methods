@@ -10,6 +10,10 @@ CURRENT_DUPS = '2017-10-04'
 
 RELEASES = ["2.0.1", "2.0.2", "2.1"]
 
+RELEASES = ["2.0.1", "2.0.2"]
+SUBPOPS = {'NFE': ['BGR', 'EST', 'NWE', 'SEU', 'SWE', 'ONF'],
+           'EAS': ['KOR', 'JPN', 'OEA']
+           }
 GENOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH']
 EXOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH', 'SAS']
 EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]

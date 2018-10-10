@@ -17,14 +17,14 @@ EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
 def public_exomes_ht_path(split=True, version=CURRENT_RELEASE):
     if version == '2.1':
-        return f'gs://gnomad-public/release/{version}/ht/exomes/gnomad.exomes.r{version}.ht'
+        return f'gs://gnomad-public/release/{version}/ht/exomes/gnomad.exomes.r{version}.sites.ht'
     else:
         return 'gs://gnomad-public/release/{0}/vds/exomes/gnomad.exomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 
 
 def public_genomes_ht_path(split=True, version=CURRENT_RELEASE):
     if version == '2.1':
-        return f'gs://gnomad-public/release/{version}/ht/genomes/gnomad.genomes.r{version}.ht'
+        return f'gs://gnomad-public/release/{version}/ht/genomes/gnomad.genomes.r{version}.sites.ht'
     else:
         return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 

@@ -2,25 +2,31 @@ import hail as hl
 from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
-CURRENT_RELEASE = "2.0.2"
+CURRENT_RELEASE = "2.1"
 CURRENT_GENOME_META = "2018-09-12"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2018-09-12"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
-RELEASES = ["2.0.1", "2.0.2"]
+RELEASES = ["2.0.1", "2.0.2", "2.1"]
 
 GENOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH']
 EXOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH', 'SAS']
 EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
 
-def public_exomes_mt_path(split=True, version=CURRENT_RELEASE):
-    return 'gs://gnomad-public/release/{0}/mt/exomes/gnomad.exomes.r{0}.sites{1}.mt'.format(version, "" if split else ".unsplit")
+def public_exomes_ht_path(split=True, version=CURRENT_RELEASE):
+    if version == '2.1':
+        return f'gs://gnomad-public/release/{version}/ht/exomes/gnomad.exomes.r{version}.ht'
+    else:
+        return 'gs://gnomad-public/release/{0}/vds/exomes/gnomad.exomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 
 
-def public_genomes_mt_path(split=True, version=CURRENT_RELEASE):
-    return 'gs://gnomad-public/release/{0}/mt/genomes/gnomad.genomes.r{0}.sites{1}.mt'.format(version, "" if split else ".unsplit")
+def public_genomes_ht_path(split=True, version=CURRENT_RELEASE):
+    if version == '2.1':
+        return f'gs://gnomad-public/release/{version}/ht/genomes/gnomad.genomes.r{version}.ht'
+    else:
+        return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
 
 
 def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
@@ -140,9 +146,9 @@ def get_gnomad_public_data_path(data_type, split=True, version=CURRENT_RELEASE):
         return DataException("Select version as one of: {}".format(','.join(RELEASES)))
 
     if data_type == 'exomes':
-        return public_exomes_mt_path(split, version)
+        return public_exomes_ht_path(split, version)
     elif data_type == 'genomes':
-        return public_genomes_mt_path(split, version)
+        return public_genomes_ht_path(split, version)
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
@@ -407,9 +413,9 @@ def qc_temp_data_prefix(data_type: str):
 
 def qc_meta_path(data_type: str):
     if data_type == 'exomes':
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-03-21.txt.bgz'
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-10-10.txt.bgz'
     else:
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-03-21.txt.bgz'
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-10-10.txt.bgz'
 
 
 

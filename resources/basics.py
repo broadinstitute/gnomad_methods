@@ -3,8 +3,8 @@ from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.1"
-CURRENT_GENOME_META = "2018-10-10"  # YYYY-MM-DD
-CURRENT_EXOME_META = "2018-10-10"
+CURRENT_GENOME_META = "2018-10-11"  # YYYY-MM-DD
+CURRENT_EXOME_META = "2018-10-11"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
@@ -416,7 +416,7 @@ def qc_meta_path(data_type: str):
     if data_type == 'exomes':
         return 'gs://gnomad/sample_qc/input_meta/gnomad.exomes.streamlined_metadata.2018-10-10.txt.bgz'
     else:
-        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-10-10.txt.bgz'
+        return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-10-11.txt.bgz'
 
 
 

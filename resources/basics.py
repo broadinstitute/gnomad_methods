@@ -300,7 +300,10 @@ def coverage_mt_path(data_type, by_population: bool = False, by_platform: bool =
 def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool = False) -> str:
     by = '.population' if by_population else ''
     by += '.platform' if by_platform else ''
-    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
+    if by:
+        return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
+    else:
+        return f'gs://gnomad-public/release/2.1/coverage/{data_type}/gnomad.{data_type}.r2.1.coverage.ht'
 
 
 def fam_path(data_type: str, version: str = CURRENT_FAM, true_trios: bool = False) -> str:

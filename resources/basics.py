@@ -42,7 +42,7 @@ def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
     :return: Chosen VDS
     :rtype: MatrixTable
     """
-    return hl.read_matrix_table(get_gnomad_public_data_path(data_type, split=split, version=version))
+    return hl.read_table(get_gnomad_public_data_path(data_type, split=split, version=version))
 
 
 def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: bool = False,

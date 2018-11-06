@@ -400,6 +400,7 @@ vep_config = 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json'
 
 # Annotations
 context_mt_path = 'gs://gnomad-resources/context/hail-0.2/context_processed.mt'
+constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
 
 
 # Sample QC files

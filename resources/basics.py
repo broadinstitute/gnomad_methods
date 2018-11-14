@@ -291,10 +291,8 @@ def metadata_exomes_ht_path(version=CURRENT_EXOME_META):
     return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.ht'.format(version)
 
 
-def coverage_mt_path(data_type, by_population: bool = False, by_platform: bool = False) -> str:
-    by = '.population' if by_population else ''
-    by += '.platform' if by_platform else ''
-    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/mt/gnomad.{data_type}.coverage{by}.mt'
+def coverage_mt_path(data_type) -> str:
+    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/mt/gnomad.{data_type}.coverage.mt'
 
 
 def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool = False) -> str:

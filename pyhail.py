@@ -49,9 +49,9 @@ def main(args, pass_through_args):
     except Exception:
         pass
 
-    spark_version = '2.2.0' if args.hail_version == 'devel' else '2.0.2'
+    spark_version = '2.2.0' if args.hail_version == '0.2' else '2.0.2'
     if not hash_string:
-        hash_location = 'gs://hail-common/builds/{}/latest-hash/cloudtools-2-spark-{}.txt'.format(args.hail_version, spark_version)
+        hash_location = 'gs://hail-common/builds/{}/latest-hash/cloudtools-3-spark-{}.txt'.format(args.hail_version, spark_version)
         hash_string = subprocess.check_output(['gsutil', 'cat', hash_location], universal_newlines=True).rstrip()
 
     if not hash_string:
@@ -123,7 +123,7 @@ if __name__ == '__main__':
     parser.add_argument('--cluster', help='Which cluster to run on', required=True)
 
     hail_script_options = parser.add_argument_group('Additional hail script options')
-    hail_script_options.add_argument('--hail_version', help='Hail version (0.1 or devel)', default='devel')
+    hail_script_options.add_argument('--hail_version', help='Hail version (0.1 or 0.2)', default='0.2')
     hail_script_options.add_argument('--jar', help='Jar file to use')
     hail_script_options.add_argument('--zip', help='Hail zip file to use')
     hail_script_options.add_argument('--add_scripts', help='Comma-separated list of additional python scripts to add.')

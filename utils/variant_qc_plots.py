@@ -389,8 +389,8 @@ def get_binned_concordance_pd(data_type: str, truth_samples: List[str], models: 
         df['cum_fp'] = df['fp'].cumsum()
         total_pos = df['tp'].sum() + df['fn'].sum()
         total_neg = df['fp'].sum()
-        df['cum_tn'] = total_pos - df['cum_fp']
-        df['cum_fn'] = total_neg - df['cum_tp']
+        df['cum_tn'] = total_neg - df['cum_fp']
+        df['cum_fn'] = total_pos - df['cum_tp']
         df['precision'] = df['cum_tp'] / (df['cum_tp'] + df['cum_fp'])
         df['recall'] = df['cum_tp'] / (df['cum_tp'] + df['cum_fn'])
         df['cum_alleles'] = df['n_alleles'].cumsum()

@@ -322,13 +322,13 @@ def plot_score_distributions(data_type, models: Union[Dict[str, str], List[str]]
         binned_ht = hl.read_table(score_ranking_path(data_type, model_id, binned=True))
         binned_ht = binned_ht.filter(binned_ht.snv, keep=snv)
 
-        cut_value = binned_ht.aggregate(hl.agg.min(hl.agg.filter((binned_ht.bin == cut) & (binned_ht.rank_id == 'rank'), binned_ht.min_score)))
+        cut_value = binned_ht.aggregate(hl.agg.filter((binned_ht.bin == cut) & (binned_ht.rank_id == 'rank'), hl.agg.min(binned_ht.min_score)))
 
         min_score, max_score = (-20, 30) if model_id == 'vqsr' else (0.0, 1.0)
         agg_values = ht.aggregate(hl.struct(
             score_hist=[hl.agg.hist(ht.score, min_score, max_score, 100),
-                        hl.agg.hist(hl.agg.filter(ht.ac > 0, ht.score), min_score, max_score, 100)],
-            adj_counts=hl.agg.counter(hl.agg.filter(ht.ac > 0, ht.score >= cut_value))
+                        hl.agg.filter(ht.ac > 0, hl.agg.hist( ht.score, min_score, max_score, 100))],
+            adj_counts=hl.agg.filter(ht.ac > 0, hl.agg.counter( ht.score >= cut_value))
         ))
         score_hist = agg_values.score_hist
         adj_cut = '{0:.2f}'.format(100 * agg_values.adj_counts[True] / (agg_values.adj_counts[True] + agg_values.adj_counts[False]))

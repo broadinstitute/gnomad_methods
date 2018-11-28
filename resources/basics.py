@@ -240,7 +240,7 @@ def annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VE
     Get sites-level annotations
 
     :param str data_type: One of "exomes" or "genomes"
-    :param str annotation_type: One of "vep", "qc_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
+    :param str annotation_type: One of "vep", "qc_stats", "family_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
     :param str hail_version: One of the HAIL_VERSIONs
     :return: Path to annotations Table
     :rtype: str

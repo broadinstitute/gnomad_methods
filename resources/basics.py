@@ -17,24 +17,40 @@ GENOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH']
 EXOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH', 'SAS']
 EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
-POP_DICT = {
-    'afr': 'African-American',
+pop_names = {
+    'oth': 'Other',
+    'afr': 'African-American/African',
     'amr': 'Latino',
-    'asj': 'Ashkenazi Jewish',
     'eas': 'East Asian',
     'fin': 'Finnish',
-    'nfe': 'non-Finnish European',
-    'oth': 'uncertain',
+    'eur': 'European',
+    'nfe': 'Non-Finnish European',
     'sas': 'South Asian',
-    'kor': 'Korean',
-    'oea': 'non-Korean, non-Japanese East Asian',
-    'jpn': 'Japanese',
-    'nwe': 'North-Western European',
-    'swe': 'Swedish',
-    'seu': 'Southern European',
+    'mde': 'Middle Eastern',
+    'asj': 'Ashkenazi Jewish',
+    'uniform': 'Uniform',
+    'sas_non_consang': 'South Asian (F < 0.05)',
+    'consanguineous': 'South Asian (F > 0.05)',
+    'exac': 'ExAC',
+    'bgr': 'Bulgarian (Eastern European)',
+    'deu': 'German',
     'est': 'Estonian',
-    'bgr': 'Bulgarian',
-    'onf': 'other (non-Finnish) European'
+    'esp': 'Spanish',
+    'gbr': 'British',
+    'nwe': 'North-Western European',
+    'seu': 'Southern European',
+    'ita': 'Italian',
+    'swe': 'Swedish',
+    'chn': 'Chinese',
+    'kor': 'Korean',
+    'hkg': 'Hong Kong',
+    'sgp': 'Singaporean',
+    'twn': 'Taiwanese',
+    'jpn': 'Japanese',
+    'oea': 'Other East Asian',
+    'oeu': 'Other European',
+    'onf': 'Other Non-Finnish European',
+    'unk': 'Unknown'
 }
 
 

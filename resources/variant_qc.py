@@ -143,3 +143,43 @@ def binned_concordance_path(data_type: str, truth_data: str, metric: str) -> str
     """
 
     return f'gs://gnomad/variant_qc/binned_concordance/{data_type}_{truth_data}_{metric}.ht'
+
+
+def release_ht_path(data_type: str, nested = True, with_subsets = True, temp = False):
+    '''
+    Fetch filepath for release (variant-only) Hail Tables
+    :param str data_type: 'exomes' or 'genomes'
+    :param bool nested: If True, fetch Table in which variant annotations (e.g., freq, popmax, faf, and age histograms)
+        are in array format ("nested"); if False, fetch Table in which nested variant annotations are unfurled
+    :param bool with_subsets: If True, fetch Table in which all gnomAD subsets are present; if False, fetch Table containing
+        only gnomAD annotations
+    :param bool temp: If True, fetch Table in which nested variant annotations are unfurled but listed under 'info' rather
+        than at the top level; used for sanity-checking sites
+    :return: Filepath for desired Hail Table
+    :rtype: str
+    '''
+    tag = 'nested' if nested else 'flat'
+    tag = tag + '.with_subsets' if with_subsets else tag + '.no_subsets'
+    tag = tag + '.temp' if temp else tag
+    release = RELEASE_VERSION[0:3]
+    if nested and with_subsets:
+        return f'gs://gnomad-public/release/{release}/ht/{data_type}/gnomad.{data_type}.{RELEASE_VERSION}.sites.ht'
+    else:
+        return f'gs://gnomad/release/{release}/ht/gnomad.{data_type}.{RELEASE_VERSION}.{tag}.sites.ht'
+
+
+def release_vcf_path(data_type: str, contig=None, coding_only=False):
+    '''
+    Fetch filepath for release (variant-only) VCFs
+    :param str data_type: 'exomes' or 'genomes'
+    :param str contig: String containing the name of the desired reference contig
+    :return: Filepath for the desired VCF
+    :rtype: str
+    '''
+    release = RELEASE_VERSION[0:3]
+    if contig:
+        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{RELEASE_VERSION}.sites.chr{contig}.vcf.bgz'
+    elif data_type == 'genomes' and coding_only:
+        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{RELEASE_VERSION}.exome_calling_intervals.sites.vcf.bgz'
+    else:
+        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{RELEASE_VERSION}.sites.vcf.bgz'

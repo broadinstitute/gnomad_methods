@@ -1,5 +1,6 @@
 from .basics import *
 
+RELEASE_VERSION = 'r2.1.1'
 
 def get_2_0_2_rf_path(data_type: str, beta: bool):
     """
@@ -161,7 +162,7 @@ def release_ht_path(data_type: str, nested = True, with_subsets = True, temp = F
     tag = 'nested' if nested else 'flat'
     tag = tag + '.with_subsets' if with_subsets else tag + '.no_subsets'
     tag = tag + '.temp' if temp else tag
-    release = RELEASE_VERSION[0:3]
+    release = RELEASE_VERSION[1:]
     if nested and with_subsets:
         return f'gs://gnomad-public/release/{release}/ht/{data_type}/gnomad.{data_type}.{RELEASE_VERSION}.sites.ht'
     else:
@@ -176,7 +177,7 @@ def release_vcf_path(data_type: str, contig=None, coding_only=False):
     :return: Filepath for the desired VCF
     :rtype: str
     '''
-    release = RELEASE_VERSION[0:3]
+    release = RELEASE_VERSION[1:]
     if contig:
         return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{RELEASE_VERSION}.sites.chr{contig}.vcf.bgz'
     elif data_type == 'genomes' and coding_only:

@@ -2,13 +2,13 @@ import hail as hl
 from typing import *
 
 CURRENT_HAIL_VERSION = "0.2"
-CURRENT_RELEASE = "2.1"
+CURRENT_RELEASE = "2.1.1"
 CURRENT_GENOME_META = "2018-10-11"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2018-10-11"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
-RELEASES = ["2.0.1", "2.0.2", "2.1"]
+RELEASES = ["2.0.1", "2.0.2", "2.1", "2.1.1"]
 
 SUBPOPS = {'NFE': ['BGR', 'EST', 'NWE', 'SEU', 'SWE', 'ONF'],
            'EAS': ['KOR', 'JPN', 'OEA']
@@ -16,6 +16,42 @@ SUBPOPS = {'NFE': ['BGR', 'EST', 'NWE', 'SEU', 'SWE', 'ONF'],
 GENOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH']
 EXOME_POPS = ['AFR', 'AMR', 'ASJ', 'EAS', 'FIN', 'NFE', 'OTH', 'SAS']
 EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
+
+pop_names = {
+    'oth': 'Other',
+    'afr': 'African-American/African',
+    'amr': 'Latino',
+    'eas': 'East Asian',
+    'fin': 'Finnish',
+    'eur': 'European',
+    'nfe': 'Non-Finnish European',
+    'sas': 'South Asian',
+    'mde': 'Middle Eastern',
+    'asj': 'Ashkenazi Jewish',
+    'uniform': 'Uniform',
+    'sas_non_consang': 'South Asian (F < 0.05)',
+    'consanguineous': 'South Asian (F > 0.05)',
+    'exac': 'ExAC',
+    'bgr': 'Bulgarian (Eastern European)',
+    'deu': 'German',
+    'est': 'Estonian',
+    'esp': 'Spanish',
+    'gbr': 'British',
+    'nwe': 'North-Western European',
+    'seu': 'Southern European',
+    'ita': 'Italian',
+    'swe': 'Swedish',
+    'chn': 'Chinese',
+    'kor': 'Korean',
+    'hkg': 'Hong Kong',
+    'sgp': 'Singaporean',
+    'twn': 'Taiwanese',
+    'jpn': 'Japanese',
+    'oea': 'Other East Asian',
+    'oeu': 'Other European',
+    'onf': 'Other Non-Finnish European',
+    'unk': 'Unknown'
+}
 
 
 def public_exomes_ht_path(split=True, version=CURRENT_RELEASE):

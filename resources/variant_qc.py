@@ -187,3 +187,8 @@ def release_vcf_path(data_type: str, release_tag=RELEASE_VERSION, contig=None, c
         return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.exome_calling_intervals.sites.vcf.bgz'
     else:
         return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.vcf.bgz'
+
+
+def release_var_hist_path(data_type: str, release_tag=RELEASE_VERSION):
+    release = RELEASE_VERSION[1:] if release_tag==RELEASE_VERSION else release_tag
+    return f'gs://gnomad/release/{release_tag}/json/gnomad.{data_type}.json'

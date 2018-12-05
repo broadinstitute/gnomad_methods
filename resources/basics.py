@@ -252,8 +252,8 @@ def raw_exac_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/mt/exac/exac.mt'.format(hail_version)
 
 
-def exac_release_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/raw/hail-{}/mt/exac/exac.r1.sites.vep.mt'.format(hail_version)
+def exac_release_sites_ht_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/raw/hail-{}/ht/exac/exac.r1.sites.vep.ht'.format(hail_version)
 
 
 def hardcalls_mt_path(data_type, split=True, hail_version=CURRENT_HAIL_VERSION):

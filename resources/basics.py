@@ -138,8 +138,7 @@ def get_gnomad_data(data_type: str, adj: bool = False, split: bool = True, raw: 
     if release_annotations:
         sites_ht = get_gnomad_public_data(data_type, split)
         mt = mt.select_rows(**sites_ht[mt.row_key])
-
-    mt = mt.select_globals()  # Required since a backward-incompatible change in Hail
+        mt = mt.select_globals(**sites_ht.index_globals())
 
     return mt
 
@@ -253,8 +252,8 @@ def raw_exac_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad/raw/hail-{0}/mt/exac/exac.mt'.format(hail_version)
 
 
-def exac_release_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad/raw/hail-{}/mt/exac/exac.r1.sites.vep.mt'.format(hail_version)
+def exac_release_sites_ht_path(hail_version=CURRENT_HAIL_VERSION):
+    return 'gs://gnomad/raw/hail-{}/ht/exac/exac.r1.sites.vep.ht'.format(hail_version)
 
 
 def hardcalls_mt_path(data_type, split=True, hail_version=CURRENT_HAIL_VERSION):
@@ -335,7 +334,10 @@ def coverage_mt_path(data_type) -> str:
 def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool = False) -> str:
     by = '.population' if by_population else ''
     by += '.platform' if by_platform else ''
-    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
+    if by:
+        return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
+    else:
+        return f'gs://gnomad-public/release/2.1/coverage/{data_type}/gnomad.{data_type}.r2.1.coverage.ht'
 
 
 def fam_path(data_type: str, version: str = CURRENT_FAM, true_trios: bool = False) -> str:
@@ -410,9 +412,8 @@ dbsnp_ht_path = "gs://gnomad-public/truth-sets/source/All_20180423.ht"
 NA12878_high_conf_regions_bed_path = "gs://gnomad-public/truth-sets/source/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.bed"
 NA12878_high_conf_exome_regions_bed_path = "gs://gnomad-public/truth-sets/source/union13callableMQonlymerged_addcert_nouncert_excludesimplerep_excludesegdups_excludedecoy_excludeRepSeqSTRs_noCNVs_v2.18_2mindatasets_5minYesNoRatio.bed"
 syndip_high_conf_regions_bed_path = "gs://gnomad-public/truth-sets/source/hybrid.m37m.bed"
-clinvar_tsv_path = "gs://gnomad-resources/clinvar/source/clinvar_alleles.single.b37.tsv.bgz"
-clinvar_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single.b37.vep.mt"
-clinvar_loftee_beta_mt_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_alleles.single.b37.loftee.beta.vep.mt"
+clinvar_vcf_path = "gs://gnomad-resources/clinvar/source/clinvar_20181028.vcf.bgz"
+clinvar_ht_path = "gs://gnomad-resources/clinvar/hail-0.2/clinvar_20181028.vep.ht"
 
 # Useful intervals
 lcr_intervals_path = "gs://gnomad-public/intervals/LCR.GRCh37_compliant.interval_list"  # "gs://gnomad-public/intervals/LCR.interval_list"

@@ -363,7 +363,7 @@ def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_na
             logger.info("Testing results:\n{}".format(pformat(res_pd)))
 
 
-def add_rank(ht: hl.Table,
+def re(ht: hl.Table,
              score_expr: hl.expr.NumericExpression,
              subrank_expr: Optional[Dict[str, hl.expr.BooleanExpression]] = None) -> hl.Table:
     """

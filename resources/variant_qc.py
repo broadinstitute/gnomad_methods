@@ -182,7 +182,7 @@ def release_vcf_path(data_type: str, release_tag=RELEASE_VERSION, contig=None, c
     '''
     release = RELEASE_VERSION[1:] if release_tag==RELEASE_VERSION else release_tag
     if contig:
-        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.chr{contig}.vcf.bgz'
+        return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.{contig}.vcf.bgz'
     elif data_type == 'genomes' and coding_only:
         return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.exome_calling_intervals.sites.vcf.bgz'
     else:

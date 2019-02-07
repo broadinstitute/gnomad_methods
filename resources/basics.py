@@ -54,18 +54,46 @@ pop_names = {
 }
 
 
+def get_release_file(file_path: str, version: str = CURRENT_RELEASE) -> str:
+    """
+    Tries to get the desired file from the corresponding release version on the google cloud.
+    If the file is not found for the desired release version, falls back on previous versions.
+
+    :param  str file_path: Desired file path, with {0} as placeholder(s) for the version number
+    :param str version: Desired file version
+    :return: Path for closest version of the file available
+    """
+    if hl.hadoop_exists(file_path.format(version)):
+        return file_path.format(version)
+    else:
+        for v in range(RELEASES.index(version)-1, -1, -1):
+            if hl.hadoop_exists(file_path.format(RELEASES[v])):
+                print("WARN: Resource {} could not be found for gnomAD release version {}.\n Loading gnomAD release version {} of the file. ({})".format(
+                    file_path.format(version),
+                    version,
+                    RELEASES[v],
+                    file_path.format(RELEASES[v])
+                ))
+                return file_path.format(RELEASES[v])
+
+        print("ERROR: Resource {} could not be found for any release.".format(
+            file_path.format(version)
+        ))
+        return file_path.format(version)
+
+
 def public_exomes_ht_path(split=True, version=CURRENT_RELEASE):
     if int(version[0]) > 1 and int(version[2]) > 0:
-        return f'gs://gnomad-public/release/{version}/ht/exomes/gnomad.exomes.r{version}.sites.ht'
+        return get_release_file('gs://gnomad-public/release/{0}/ht/exomes/gnomad.exomes.r{0}.sites.ht')
     else:
-        return 'gs://gnomad-public/release/{0}/vds/exomes/gnomad.exomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
+        return get_release_file('gs://gnomad-public/release/{{0}}/vds/exomes/gnomad.exomes.r{{0}}.sites{0}.vds'.format(".split" if split else ""))
 
 
 def public_genomes_ht_path(split=True, version=CURRENT_RELEASE):
     if int(version[0]) > 1 and int(version[2]) > 0:
-        return f'gs://gnomad-public/release/{version}/ht/genomes/gnomad.genomes.r{version}.sites.ht'
+        return get_release_file('gs://gnomad-public/release/{0}/ht/genomes/gnomad.genomes.r{0}.sites.ht')
     else:
-        return 'gs://gnomad-public/release/{0}/vds/genomes/gnomad.genomes.r{0}.sites{1}.vds'.format(version, ".split" if split else "")
+        return get_release_file('gs://gnomad-public/release/{{0}}/vds/genomes/gnomad.genomes.r{{0}}.sites{0}.vds'.format(".split" if split else ""))
 
 
 def get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE):
@@ -300,15 +328,17 @@ def sample_annotations_table_path(data_type, annotation_type, hail_version=CURRE
 gnomad_pca_mt_path = "gs://gnomad-genomes/sampleqc/gnomad.pca.mt"
 
 
-def gnomad_public_pca_mt_path(version=CURRENT_RELEASE):
+def gnomad_public_pca_loadings_ht_path(version: str = CURRENT_RELEASE, subpop: str = ""):
     """
     Returns the path for the public gnomAD VDS containing sites and loadings from the PCA
 
     :param str version: One of the RELEASEs
-    :return: path to gnomAD public PCA VDS
+    :param str subpop: Can be empty ("") -> global, "eas" or "nfe"
+    :return: path to gnomAD public PCA loadings HT
     :rtype: str
     """
-    return "gs://gnomad-public/release/{}/pca/gnomad_pca_loadings.mt".format(version)
+    return get_release_file("gs://gnomad-public/release/{{0}}/pca/gnomad.r{{0}}.pca_loadings{0}.ht".format(f'.{subpop}' if subpop else ""),
+                            version)
 
 
 def metadata_genomes_tsv_path(version=CURRENT_GENOME_META):

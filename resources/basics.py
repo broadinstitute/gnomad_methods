@@ -53,6 +53,7 @@ pop_names = {
     'unk': 'Unknown'
 }
 
+REFERENCES = {'GRCh37', 'GRCh38'}
 
 def public_exomes_ht_path(split=True, version=CURRENT_RELEASE):
     if int(version[0]) > 1 and int(version[2]) > 0:
@@ -398,12 +399,17 @@ def syndip_mt_path(hail_version=CURRENT_HAIL_VERSION):
     return 'gs://gnomad-public/truth-sets/hail-{0}/hybrid.m37m.mt'.format(hail_version)
 
 
-def cpg_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/resources/hail-{}/cpg.mt'.format(hail_version)
+def cpg_sites_ht_path():
+    return 'gs://gnomad-public/resources/methylation/cpg.ht'
 
 
-def methylation_sites_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-resources/methylation/hail-{}/methylation.ht'.format(hail_version)
+def methylation_sites_mt_path(hail_version=CURRENT_HAIL_VERSION, ref='GRCh37'):
+    if ref not in REFERENCES:
+        return DataException("Select reference as one of: {}".format(','.join(REFERENCES)))
+    if ref == 'GRCh37':
+        return 'gs://gnomad-public/resources/methylation/methylation.ht'.format(hail_version)
+    else:
+        return 'gs://gnomad-resources/methylation/hail-{}/methylation_GRCh38.ht'.format(hail_version)
 
 
 dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20180423.vcf.bgz"

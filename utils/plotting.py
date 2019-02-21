@@ -277,6 +277,108 @@ def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True
     return Tabs(tabs=[Panel(child=p1, title='Raw'), Panel(child=p2, title='Cumulative')])
 
 
+def joint_plot(
+        x: hl.expr.NumericExpression,
+        y: hl.expr.NumericExpression,
+        label: hl.expr.StringExpression = None,
+        title: str = None,
+        xlabel: str = None,
+        ylabel: str = None,
+        source_fields: Dict[str, hl.expr.StringExpression] = None,
+        colors: Dict[str, str] = None,
+        missing_label: str = 'NA',
+        width: int = 800,
+        height: int = 800,
+        n_divisions: int = None
+) -> Column:
+    """
+
+    Plots a scatter plot with density plots on the side.
+    Supports:
+     * stratification of the data per label
+     * additional source fields that will be displayed in hover
+     * downsampling (set usign `n_divisions`. 500 is a good place to start)
+
+    :param hl.expr.NumericExpression x: X data
+    :param hl.expr.NumericExpression y: Y data
+    :param hl.expr.StringExpression label: Label. If provided, data will be colored by label
+    :param str title: Plot title
+    :param str xlabel: X-axis label
+    :param str ylabel: Y-axis label
+    :param dict of str->hl.expr.StringExpression source_fields: Additional fields for hover display (name->expr)
+    :param dict of str->str colors: Label to color mapping
+    :param srt missing_label: Label for points with missing (`NA`) label
+    :param int width: Scatter plot width (an additional 1/3 width is used for the Y density plot)
+    :param height: Scatter plot height (an additional 1/3 height is used for the X density plot)
+    :param int n_divisions: When provided, data is downsampled. See hail downsample aggregator for more details.
+    :return: A grid arranged with the 3 plots ([X-density],[Scatter, Y-density])
+    :rtype: Column
+    """
+    # Collect data
+    expressions = dict()
+    if label is not None:
+        expressions.update(dict(_label=hl.or_else(label, missing_label)))
+    if source_fields is not None:
+        expressions.update(source_fields)
+
+    if n_divisions is None:
+        collect_expr = hl.struct(_x=x, _y=y, **expressions)
+        plot_data = [point for point in collect_expr.collect() if point._x is not None and point._y is not None]
+        source_pd = pd.DataFrame(plot_data)
+    else:
+        agg_f = x._aggregation_method()
+        res = agg_f(hl.agg.downsample(x, y, label=list(expressions.values()) if expressions else None, n_divisions=n_divisions))
+        source_pd = pd.DataFrame([dict(_x=point[0], _y=point[1], **dict(zip(expressions, point[2]))) for point in res])
+
+    # Prepare color palette
+    if label is not None:
+        factors = sorted(list(set(source_pd['_label'])))
+        if colors is None:
+            from bokeh.palettes import viridis
+            palette = viridis(len(factors))
+            colors = {factors[i]: palette[i] if factors[i] != missing_label else 'gray' for i in range(0, len(factors))}
+
+    # Density plots
+    def get_density_plot(source_pd, axis, height, width, label=None, title=None):
+        """
+        axis should be either '_x' or '_y'
+        """
+        p = figure(title=title, height=height, width=width)
+        if label is None:
+            dens, edges = np.histogram(source_pd[axis], density=True)
+            edges = edges[:-1]
+            xy = (edges, dens) if axis == '_x' else (dens, edges)
+            cds = ColumnDataSource({'x': xy[0], 'y': xy[1]})
+            p.line('x', 'y', source=cds)
+        else:
+            density_data = source_pd[['_label', axis]].groupby('_label').apply(lambda df: np.histogram(df[axis], density=True))
+            for factor, (dens, edges) in density_data.iteritems():
+                edges = edges[:-1]
+                xy = (edges, dens) if axis == '_x' else (dens, edges)
+                cds = ColumnDataSource({'x': xy[0], 'y': xy[1], '_label': [factor] * len(dens)})
+                p.line('x', 'y', color=colors.get(factor, "gray"), legend='_label', source=cds)
+        p.legend.visible = False
+        p.grid.visible = False
+        p.outline_line_color = None
+        return p
+
+    xp = get_density_plot(source_pd, '_x', int(height / 3), width, label, title)
+    xp.xaxis.visible = False
+    yp = get_density_plot(source_pd, '_y', height, int(width / 3), label)
+    yp.yaxis.visible = False
+
+    # Scatter plot
+    sp = figure(x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width, x_range = xp.x_range, y_range = yp.y_range)
+    sp.tools.append(HoverTool(tooltips=[(x, f'@{x}') for x in expressions]))
+    if label is None:
+        sp.circle('_x', '_y', source=ColumnDataSource(source_pd))
+    else:
+        legend_items = [(factor, [sp.circle('_x', '_y', source=ColumnDataSource(source_pd[source_pd['_label']==factor]), color=colors.get(factor, 'gray'))]) for factor in factors]
+        sp.add_layout(Legend(items=legend_items, orientation='vertical', click_policy='hide'), 'left')
+
+    return gridplot([xp], [sp, yp])
+
+
 def set_font_size(p, font_size: str = "12pt"):
     p.title.text_font_size = font_size
     p.legend.label_text_font_size = font_size

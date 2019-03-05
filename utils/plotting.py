@@ -277,6 +277,97 @@ def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True
     return Tabs(tabs=[Panel(child=p1, title='Raw'), Panel(child=p2, title='Cumulative')])
 
 
+def _collect_scatter_plot_data(
+        x: hl.expr.NumericExpression,
+        y: hl.expr.NumericExpression,
+        label: hl.expr.StringExpression = None,
+        source_fields: Dict[str, hl.expr.StringExpression] = None,
+        missing_label: str = 'NA',
+        n_divisions: int = None
+) -> pd.DataFrame:
+
+    expressions = dict()
+    if label is not None:
+        expressions.update(dict(_label=hl.or_else(label, missing_label)))
+    if source_fields is not None:
+        expressions.update(source_fields)
+
+    if n_divisions is None:
+        collect_expr = hl.struct(_x=x, _y=y, **expressions)
+        plot_data = [point for point in collect_expr.collect() if point._x is not None and point._y is not None]
+        source_pd = pd.DataFrame(plot_data)
+    else:
+        agg_f = x._aggregation_method()
+        res = agg_f(hl.agg.downsample(x, y, label=list(expressions.values()) if expressions else None, n_divisions=n_divisions))
+        source_pd = pd.DataFrame([dict(_x=point[0], _y=point[1], **dict(zip(expressions, point[2]))) for point in res])
+
+    return source_pd
+
+
+def _get_color_palette(factors: List[str],  missing_label: str = None) -> Dict[str, str]: # TODO: Find a good way of doing this -- also taking continuous vs categorical into account.
+    n = max(3, len(factors))
+    if n < 11:
+        from bokeh.palettes import Category10
+        palette = Category10[n]
+    elif n < 21:
+        from bokeh.palettes import Category20
+        palette = Category20[n]
+    else:
+        from bokeh.palettes import viridis
+        palette = viridis(n)
+
+    return {factors[i]: palette[i] if factors[i] != missing_label else 'gray' for i in range(0, len(factors))}
+
+
+def _scatter_plot(
+        source_pd: pd.DataFrame,
+        title: str = None,
+        xlabel: str = None,
+        ylabel: str = None,
+        colors: Dict[str, str] = None,
+        width: int = 800,
+        height: int = 800,
+        x_range: Range1d =  None,
+        y_range: Range1d=  None
+) -> Plot:
+    sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width, x_range=x_range, y_range=y_range)
+    sp.tools.append(HoverTool(tooltips=[(x, f'@{x}') for x in source_pd.columns]))
+    if not '_label' in source_pd.columns:
+        sp.circle('_x', '_y', source=ColumnDataSource(source_pd))
+    else:
+        factors = sorted(list(set(source_pd['_label'])))
+        if colors is None:
+            colors = _get_color_palette(factors)
+
+        legend_items = [
+            (
+                factor,
+                [sp.circle('_x', '_y', source=ColumnDataSource(source_pd[source_pd['_label'] == factor]), color=colors.get(factor, 'gray'))]
+            )
+            for factor in factors
+        ]
+        sp.add_layout(Legend(items=legend_items, orientation='vertical', click_policy='hide'), 'left')
+        return sp
+
+
+def scatter_plot(
+    x: hl.expr.NumericExpression,
+    y: hl.expr.NumericExpression,
+    label: hl.expr.StringExpression = None,
+    title: str = None,
+    xlabel: str = None,
+    ylabel: str = None,
+    source_fields: Dict[str, hl.expr.StringExpression] = None,
+    colors: Dict[str, str] = None,
+    missing_label: str = 'NA',
+    width: int = 800,
+    height: int = 800,
+    n_divisions: int = None
+) -> Plot:
+    source_pd = _collect_scatter_plot_data(x, y, label=label, source_fields=source_fields, missing_label=missing_label, n_divisions=n_divisions)
+    return _scatter_plot(source_pd, title=title, xlabel=xlabel, ylabel=ylabel, colors=colors, width=width, height=height)
+
+
 def joint_plot(
         x: hl.expr.NumericExpression,
         y: hl.expr.NumericExpression,
@@ -315,28 +406,14 @@ def joint_plot(
     :rtype: Column
     """
     # Collect data
-    expressions = dict()
-    if label is not None:
-        expressions.update(dict(_label=hl.or_else(label, missing_label)))
-    if source_fields is not None:
-        expressions.update(source_fields)
-
-    if n_divisions is None:
-        collect_expr = hl.struct(_x=x, _y=y, **expressions)
-        plot_data = [point for point in collect_expr.collect() if point._x is not None and point._y is not None]
-        source_pd = pd.DataFrame(plot_data)
-    else:
-        agg_f = x._aggregation_method()
-        res = agg_f(hl.agg.downsample(x, y, label=list(expressions.values()) if expressions else None, n_divisions=n_divisions))
-        source_pd = pd.DataFrame([dict(_x=point[0], _y=point[1], **dict(zip(expressions, point[2]))) for point in res])
+    source_pd = _collect_scatter_plot_data(x, y, label=label, source_fields=source_fields, missing_label=missing_label, n_divisions=n_divisions)
 
     # Prepare color palette
     if label is not None:
         factors = sorted(list(set(source_pd['_label'])))
         if colors is None:
             from bokeh.palettes import viridis
-            palette = viridis(len(factors))
-            colors = {factors[i]: palette[i] if factors[i] != missing_label else 'gray' for i in range(0, len(factors))}
+            colors = _get_color_palette(factors)
 
     # Density plots
     def get_density_plot(source_pd, axis, height, width, label=None, title=None):
@@ -368,13 +445,7 @@ def joint_plot(
     yp.yaxis.visible = False
 
     # Scatter plot
-    sp = figure(x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width, x_range = xp.x_range, y_range = yp.y_range)
-    sp.tools.append(HoverTool(tooltips=[(x, f'@{x}') for x in expressions]))
-    if label is None:
-        sp.circle('_x', '_y', source=ColumnDataSource(source_pd))
-    else:
-        legend_items = [(factor, [sp.circle('_x', '_y', source=ColumnDataSource(source_pd[source_pd['_label']==factor]), color=colors.get(factor, 'gray'))]) for factor in factors]
-        sp.add_layout(Legend(items=legend_items, orientation='vertical', click_policy='hide'), 'left')
+    sp = _scatter_plot(source_pd, xlabel=xlabel, ylabel=ylabel, colors=colors, width=width, height=height, x_range=xp.x_range, y_range = yp.y_range)
 
     return gridplot([xp], [sp, yp])
 

@@ -280,19 +280,23 @@ def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True
 def _collect_scatter_plot_data(
         x: hl.expr.NumericExpression,
         y: hl.expr.NumericExpression,
-        source_fields: Dict[str, hl.expr.Expression] = None,
-        n_divisions: int = None
+        fields: Dict[str, hl.expr.Expression] = None,
+        n_divisions: int = None,
+        missing_label: str =  'NA'
 ) -> pd.DataFrame:
 
     expressions = dict()
-    if source_fields is not None:
-        expressions.update(source_fields)
+    if fields is not None:
+        expressions.update({k: hl.or_else(v, missing_label) if isinstance(v, hl.expr.StringExpression) else v for k, v in fields.items()})
 
     if n_divisions is None:
         collect_expr = hl.struct(_x=x, _y=y, **expressions)
         plot_data = [point for point in collect_expr.collect() if point._x is not None and point._y is not None]
         source_pd = pd.DataFrame(plot_data)
     else:
+        if not all(isinstance(v, hl.expr.StringExpression) for v in expressions.values()):
+            print("WARN: only string expressions are supported with `n_divisions` options at this time. Converting to String")
+            expressions = {k: hl.str(v) if not isinstance(v, hl.expr.StringExpression) else v for k,v in expressions.items()}
         agg_f = x._aggregation_method()
         res = agg_f(hl.agg.downsample(x, y, label=list(expressions.values()) if expressions else None, n_divisions=n_divisions))
         source_pd = pd.DataFrame([dict(_x=point[0], _y=point[1], **dict(zip(expressions, point[2]))) for point in res])
@@ -315,7 +319,7 @@ def _get_categorical_palette(factors: List[str]) -> Dict[str, str]: # TODO: Find
     return CategoricalColorMapper(factors=factors, palette=palette)
 
 
-def _get_scatter_plot_elements(sp: Plot, source_pd: pd.DataFrame, colors: Dict[str, ColorMapper] = None):
+def _get_scatter_plot_elements(sp: Plot, source_pd: pd.DataFrame, label_cols: List[str], colors: Dict[str, ColorMapper] = None):
     sp.tools.append(HoverTool(tooltips=[(x, f'@{x}') for x in source_pd.columns]))
 
     cds = ColumnDataSource(source_pd)
@@ -324,7 +328,6 @@ def _get_scatter_plot_elements(sp: Plot, source_pd: pd.DataFrame, colors: Dict[s
         sp.circle('_x', '_y', source=cds)
         return sp, None, None, None, None, None
 
-    label_cols = [col for col in source_pd.columns if col not in ['_x', '_y']]
     continuous_cols = [col for col in label_cols if
                        (str(source_pd.dtypes[col]).startswith('float') or
                         str(source_pd.dtypes[col]).startswith('int'))]
@@ -389,17 +392,24 @@ def scatter_plot(
     title: str = None,
     xlabel: str = None,
     ylabel: str = None,
+    label_fields: Dict[str, hl.expr.Expression] = None,
     source_fields: Dict[str, hl.expr.Expression] = None,
     colors: Dict[str, ColorMapper] = None,
     width: int = 800,
     height: int = 800,
-    n_divisions: int = None
+    n_divisions: int = None,
+    missing_label: str = 'NA'
 ) -> Column:
-    source_pd = _collect_scatter_plot_data(x, y, source_fields=source_fields, n_divisions=n_divisions)
+    source_fields = {} if source_fields is None else source_fields
+    label_fields = {} if label_fields is None else label_fields
+
+    label_cols = list(label_fields.keys())
+
+    source_pd = _collect_scatter_plot_data(x, y, fields={**source_fields, **label_fields}, n_divisions=n_divisions, missing_label=missing_label)
     sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width)
-    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, colors)
+    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, label_cols, colors)
     plot_elements = [sp]
-    label_cols = [col for col in source_pd.columns if col not in ['_x', '_y']]
+
     if len(label_cols) > 1:
         # JS call back selector
         callback = CustomJS(args=dict(legend_items=legend_items, legend=legend, color_bar=color_bar, color_mappers=color_mappers, all_renderers=all_renderers), code="""
@@ -433,11 +443,13 @@ def joint_plot(
         title: str = None,
         xlabel: str = None,
         ylabel: str = None,
+        label_fields: Dict[str, hl.expr.Expression] = None,
         source_fields: Dict[str, hl.expr.StringExpression] = None,
         colors: Dict[str, ColorMapper] = None,
         width: int = 800,
         height: int = 800,
-        n_divisions: int = None
+        n_divisions: int = None,
+        missing_label: str = 'NA'
 ) -> Column:
     """
 
@@ -447,27 +459,15 @@ def joint_plot(
      * additional source fields that will be displayed in hover
      * downsampling (set usign `n_divisions`. 500 is a good place to start)
 
-    :param hl.expr.NumericExpression x: X data
-    :param hl.expr.NumericExpression y: Y data
-    :param hl.expr.StringExpression label: Label. If provided, data will be colored by label
-    :param str title: Plot title
-    :param str xlabel: X-axis label
-    :param str ylabel: Y-axis label
-    :param dict of str->hl.expr.StringExpression source_fields: Additional fields for hover display (name->expr)
-    :param dict of str->str colors: Label to color mapping
-    :param srt missing_label: Label for points with missing (`NA`) label
-    :param int width: Scatter plot width (an additional 1/3 width is used for the Y density plot)
-    :param height: Scatter plot height (an additional 1/3 height is used for the X density plot)
-    :param int n_divisions: When provided, data is downsampled. See hail downsample aggregator for more details.
-    :return: A grid arranged with the 3 plots ([X-density],[Scatter, Y-density])
-    :rtype: Column
     """
     # Collect data
-    source_pd = _collect_scatter_plot_data(x, y, source_fields=source_fields, n_divisions=n_divisions)
+    source_fields = {} if source_fields is None else source_fields
+    label_fields = {} if label_fields is None else label_fields
+    label_cols = list(label_fields.keys())
+    source_pd = _collect_scatter_plot_data(x, y, fields={**source_fields, **label_fields}, n_divisions=n_divisions, missing_label=missing_label)
     sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width)
-    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, colors)
+    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, label_cols, colors)
 
-    label_cols = [col for col in source_pd.columns if col not in ['_x', '_y']]
     continuous_cols = [col for col in label_cols if
                        (str(source_pd.dtypes[col]).startswith('float') or
                         str(source_pd.dtypes[col]).startswith('int'))]

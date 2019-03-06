@@ -17,7 +17,7 @@ from bokeh.palettes import *
 from bokeh.models import *
 from typing import *
 from bokeh.plotting.helpers import stack
-from bokeh.transform import factor_cmap
+from bokeh.transform import factor_cmap, transform
 
 # Setting some defaults for Table.show
 if 'old_show' not in dir():
@@ -280,15 +280,11 @@ def plot_hail_hist_both(hist_data: hl.Struct, title: str, normalize: bool = True
 def _collect_scatter_plot_data(
         x: hl.expr.NumericExpression,
         y: hl.expr.NumericExpression,
-        label: hl.expr.StringExpression = None,
-        source_fields: Dict[str, hl.expr.StringExpression] = None,
-        missing_label: str = 'NA',
+        source_fields: Dict[str, hl.expr.Expression] = None,
         n_divisions: int = None
 ) -> pd.DataFrame:
 
     expressions = dict()
-    if label is not None:
-        expressions.update(dict(_label=hl.or_else(label, missing_label)))
     if source_fields is not None:
         expressions.update(source_fields)
 
@@ -304,7 +300,7 @@ def _collect_scatter_plot_data(
     return source_pd
 
 
-def _get_color_palette(factors: List[str],  missing_label: str = None) -> Dict[str, str]: # TODO: Find a good way of doing this -- also taking continuous vs categorical into account.
+def _get_categorical_palette(factors: List[str]) -> Dict[str, str]: # TODO: Find a good way of doing this -- also taking continuous vs categorical into account.
     n = max(3, len(factors))
     if n < 11:
         from bokeh.palettes import Category10
@@ -316,68 +312,129 @@ def _get_color_palette(factors: List[str],  missing_label: str = None) -> Dict[s
         from bokeh.palettes import viridis
         palette = viridis(n)
 
-    return {factors[i]: palette[i] if factors[i] != missing_label else 'gray' for i in range(0, len(factors))}
+    return CategoricalColorMapper(factors=factors, palette=palette)
 
 
-def _scatter_plot(
-        source_pd: pd.DataFrame,
-        title: str = None,
-        xlabel: str = None,
-        ylabel: str = None,
-        colors: Dict[str, str] = None,
-        width: int = 800,
-        height: int = 800,
-        x_range: Range1d =  None,
-        y_range: Range1d=  None
-) -> Plot:
-    sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width, x_range=x_range, y_range=y_range)
+def _get_scatter_plot_elements(sp: Plot, source_pd: pd.DataFrame, colors: Dict[str, ColorMapper] = None):
     sp.tools.append(HoverTool(tooltips=[(x, f'@{x}') for x in source_pd.columns]))
-    if not '_label' in source_pd.columns:
-        sp.circle('_x', '_y', source=ColumnDataSource(source_pd))
-    else:
-        factors = sorted(list(set(source_pd['_label'])))
-        if colors is None:
-            colors = _get_color_palette(factors)
 
-        legend_items = [
-            (
-                factor,
-                [sp.circle('_x', '_y', source=ColumnDataSource(source_pd[source_pd['_label'] == factor]), color=colors.get(factor, 'gray'))]
-            )
-            for factor in factors
+    cds = ColumnDataSource(source_pd)
+
+    if all(col in ['_x', '_y'] for col in source_pd.columns):
+        sp.circle('_x', '_y', source=cds)
+        return sp, None, None, None, None, None
+
+    label_cols = [col for col in source_pd.columns if col not in ['_x', '_y']]
+    continuous_cols = [col for col in label_cols if
+                       (str(source_pd.dtypes[col]).startswith('float') or
+                        str(source_pd.dtypes[col]).startswith('int'))]
+    factor_cols = [col for col in label_cols if col not in continuous_cols]
+
+    #  Assign color mappers to columns
+    if colors is None:
+        colors = {}
+    color_mappers = {}
+
+    for col in continuous_cols:
+        low = np.nanmin(source_pd[col])
+        if np.isnan(low):
+            low = 0
+            high = 0
+        else:
+            high = np.nanmax(source_pd[col])
+        color_mappers[col] = colors[col] if col in colors else LinearColorMapper(palette='Magma256', low=low, high=high)
+
+    for col in factor_cols:
+        if col in colors:
+            color_mappers[col] = colors[col]
+        else:
+            factors = list(set(source_pd[col]))
+            color_mappers[col] = _get_categorical_palette(factors)
+
+    # Create initial glyphs
+    initial_col = label_cols[0]
+    initial_mapper = color_mappers[initial_col]
+    legend_items = {}
+
+    if not factor_cols:
+        all_renderers = [
+            sp.circle('_x', '_y', color=transform(initial_col, initial_mapper), source=cds)
         ]
-        sp.add_layout(Legend(items=legend_items, orientation='vertical', click_policy='hide'), 'left')
-        return sp
+
+    else:
+        all_renderers = []
+        legend_items = {col: DefaultDict(list) for col in factor_cols}
+        for key in source_pd.groupby(factor_cols).groups.keys():
+            key = key if len(factor_cols) > 1 else [key]
+            cds_view = CDSView(source=cds, filters=[GroupFilter(column_name=factor_cols[i], group=key[i]) for i in range(0, len(factor_cols))])
+            renderer = sp.circle('_x', '_y', color=transform(initial_col, initial_mapper), source=cds, view=cds_view)
+            all_renderers.append(renderer)
+            for i in range(0, len(factor_cols)):
+                legend_items[factor_cols[i]][key[i]].append(renderer)
+
+        legend_items = {factor: [LegendItem(label=key, renderers=renderers) for key, renderers in key_renderers.items()] for factor, key_renderers in legend_items.items()}
+
+    # Add legend / color bar
+    legend = Legend(visible=False, click_policy='hide', orientation='vertical') if initial_col not in factor_cols else Legend(items=legend_items[initial_col], click_policy='hide', orientation='vertical')
+    color_bar = ColorBar(visible=False) if initial_col not in continuous_cols else ColorBar(color_mapper=color_mappers[initial_col])
+    sp.add_layout(legend, 'left')
+    sp.add_layout(color_bar, 'left')
+
+    return sp, legend_items, legend, color_bar, color_mappers, all_renderers
 
 
 def scatter_plot(
     x: hl.expr.NumericExpression,
     y: hl.expr.NumericExpression,
-    label: hl.expr.StringExpression = None,
     title: str = None,
     xlabel: str = None,
     ylabel: str = None,
-    source_fields: Dict[str, hl.expr.StringExpression] = None,
-    colors: Dict[str, str] = None,
-    missing_label: str = 'NA',
+    source_fields: Dict[str, hl.expr.Expression] = None,
+    colors: Dict[str, ColorMapper] = None,
     width: int = 800,
     height: int = 800,
     n_divisions: int = None
-) -> Plot:
-    source_pd = _collect_scatter_plot_data(x, y, label=label, source_fields=source_fields, missing_label=missing_label, n_divisions=n_divisions)
-    return _scatter_plot(source_pd, title=title, xlabel=xlabel, ylabel=ylabel, colors=colors, width=width, height=height)
+) -> Column:
+    source_pd = _collect_scatter_plot_data(x, y, source_fields=source_fields, n_divisions=n_divisions)
+    sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width)
+    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, colors)
+    plot_elements = [sp]
+    label_cols = [col for col in source_pd.columns if col not in ['_x', '_y']]
+    if len(label_cols) > 1:
+        # JS call back selector
+        callback = CustomJS(args=dict(legend_items=legend_items, legend=legend, color_bar=color_bar, color_mappers=color_mappers, all_renderers=all_renderers), code="""
+
+        for (var i = 0; i < all_renderers.length; i++){
+            all_renderers[i].glyph.fill_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+            all_renderers[i].glyph.line_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+        }
+
+        if (cb_obj.value in legend_items){
+            legend.items=legend_items[cb_obj.value]
+            legend.visible=true
+            color_bar.visible=false
+        }else{
+            legend.visible=false
+            color_bar.visible=true
+        }
+
+        """)
+
+        select = Select(title="Color by", value=label_cols[0], options=label_cols)
+        select.js_on_change('value', callback)
+        plot_elements.insert(0, select)
+
+    return Column(children=plot_elements)
 
 
 def joint_plot(
         x: hl.expr.NumericExpression,
         y: hl.expr.NumericExpression,
-        label: hl.expr.StringExpression = None,
         title: str = None,
         xlabel: str = None,
         ylabel: str = None,
         source_fields: Dict[str, hl.expr.StringExpression] = None,
-        colors: Dict[str, str] = None,
-        missing_label: str = 'NA',
+        colors: Dict[str, ColorMapper] = None,
         width: int = 800,
         height: int = 800,
         n_divisions: int = None
@@ -406,48 +463,110 @@ def joint_plot(
     :rtype: Column
     """
     # Collect data
-    source_pd = _collect_scatter_plot_data(x, y, label=label, source_fields=source_fields, missing_label=missing_label, n_divisions=n_divisions)
+    source_pd = _collect_scatter_plot_data(x, y, source_fields=source_fields, n_divisions=n_divisions)
+    sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width)
+    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, colors)
 
-    # Prepare color palette
-    if label is not None:
-        factors = sorted(list(set(source_pd['_label'])))
-        if colors is None:
-            from bokeh.palettes import viridis
-            colors = _get_color_palette(factors)
+    label_cols = [col for col in source_pd.columns if col not in ['_x', '_y']]
+    continuous_cols = [col for col in label_cols if
+                       (str(source_pd.dtypes[col]).startswith('float') or
+                        str(source_pd.dtypes[col]).startswith('int'))]
+    factor_cols = [col for col in label_cols if col not in continuous_cols]
 
     # Density plots
-    def get_density_plot(source_pd, axis, height, width, label=None, title=None):
+    def get_density_plot_items(
+            source_pd,
+            p,
+            axis,
+            colors: Dict[str, ColorMapper],
+            continuous_cols: List[str],
+            factor_cols: List[str]
+    ):
         """
         axis should be either '_x' or '_y'
         """
-        p = figure(title=title, height=height, width=width)
-        if label is None:
+
+        density_renderers = []
+        if not factor_cols or continuous_cols:
             dens, edges = np.histogram(source_pd[axis], density=True)
             edges = edges[:-1]
             xy = (edges, dens) if axis == '_x' else (dens, edges)
             cds = ColumnDataSource({'x': xy[0], 'y': xy[1]})
-            p.line('x', 'y', source=cds)
-        else:
-            density_data = source_pd[['_label', axis]].groupby('_label').apply(lambda df: np.histogram(df[axis], density=True))
+            line = p.line('x', 'y', source=cds)
+            density_renderers.extend([(col, "", line) for col in continuous_cols])
+
+        for factor_col in factor_cols:
+            factor_colors = colors.get(factor_col, _get_categorical_palette(list(set(source_pd[factor_col]))))
+            factor_colors = dict(zip(factor_colors.factors, factor_colors.palette))
+            density_data = source_pd[[factor_col, axis]].groupby(factor_col).apply(lambda df: np.histogram(df[axis], density=True))
             for factor, (dens, edges) in density_data.iteritems():
                 edges = edges[:-1]
                 xy = (edges, dens) if axis == '_x' else (dens, edges)
-                cds = ColumnDataSource({'x': xy[0], 'y': xy[1], '_label': [factor] * len(dens)})
-                p.line('x', 'y', color=colors.get(factor, "gray"), legend='_label', source=cds)
+                cds = ColumnDataSource({'x': xy[0], 'y': xy[1]})
+                density_renderers.append((factor_col, factor, p.line('x', 'y', color=factor_colors[factor], source=cds)))
         p.legend.visible = False
         p.grid.visible = False
         p.outline_line_color = None
-        return p
+        return p, density_renderers
 
-    xp = get_density_plot(source_pd, '_x', int(height / 3), width, label, title)
+    xp = figure(title=title, height=int(height / 3), width=width, x_range=sp.x_range)
+    xp, x_renderers = get_density_plot_items(source_pd, xp, axis='_x', colors=color_mappers, continuous_cols=continuous_cols, factor_cols=factor_cols)
     xp.xaxis.visible = False
-    yp = get_density_plot(source_pd, '_y', height, int(width / 3), label)
+    yp = figure(height=height, width=int(width / 3), y_range=sp.y_range)
+    yp, y_renderers = get_density_plot_items(source_pd, yp, axis='_y', colors=color_mappers, continuous_cols=continuous_cols, factor_cols=factor_cols)
     yp.yaxis.visible = False
+    density_renderers = x_renderers + y_renderers
+    first_row = [xp]
 
-    # Scatter plot
-    sp = _scatter_plot(source_pd, xlabel=xlabel, ylabel=ylabel, colors=colors, width=width, height=height, x_range=xp.x_range, y_range = yp.y_range)
+    # Does not work -- unsure why :(
+    # if factor_cols:
+    #     for factor_col, litems in legend_items.items():
+    #         for litem in litems:
+    #             x = [(fc, f) for fc, f, d in density_renderers if fc == factor_col and f == litem.label["value"]]
+    #             density_lines = [d for fc, f, d in density_renderers if fc == factor_col and f == litem.label["value"]]
+    #             litem.renderers.extend(density_lines)
 
-    return gridplot([xp], [sp, yp])
+    if len(label_cols) > 1:
+
+        for factor_col, factor, renderer in density_renderers:
+            renderer.visible = factor_col == label_cols[0]
+
+        # JS call back selector
+        callback = CustomJS(
+            args=dict(
+                legend_items=legend_items,
+                legend=legend,
+                color_bar=color_bar,
+                color_mappers=color_mappers,
+                scatter_renderers=all_renderers,
+                density_renderers=x_renderers + y_renderers
+            ), code="""
+
+                for (var i = 0; i < scatter_renderers.length; i++){
+                    scatter_renderers[i].glyph.fill_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+                    scatter_renderers[i].glyph.line_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+                }
+                
+                for (var i = 0; i < density_renderers.length; i++){
+                    density_renderers[i][2].visible = density_renderers[i][0] == cb_obj.value
+                }
+
+                if (cb_obj.value in legend_items){
+                    legend.items=legend_items[cb_obj.value]
+                    legend.visible=true
+                    color_bar.visible=false
+                }else{
+                    legend.visible=false
+                    color_bar.visible=true
+                }
+
+                """)
+
+        select = Select(title="Color by", value=label_cols[0], options=label_cols)
+        select.js_on_change('value', callback)
+        first_row.append(select)
+
+    return gridplot(first_row, [sp, yp])
 
 
 def set_font_size(p, font_size: str = "12pt"):

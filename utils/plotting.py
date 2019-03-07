@@ -324,7 +324,7 @@ def _get_scatter_plot_elements(sp: Plot, source_pd: pd.DataFrame, label_cols: Li
 
     cds = ColumnDataSource(source_pd)
 
-    if all(col in ['_x', '_y'] for col in source_pd.columns):
+    if not label_cols:
         sp.circle('_x', '_y', source=cds)
         return sp, None, None, None, None, None
 

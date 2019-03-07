@@ -407,16 +407,17 @@ def scatter_plot(
 
     source_pd = _collect_scatter_plot_data(x, y, fields={**source_fields, **label_fields}, n_divisions=n_divisions, missing_label=missing_label)
     sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width)
-    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, label_cols, colors)
+    sp, legend_items, legend, color_bar, color_mappers, scatter_renderers = _get_scatter_plot_elements(sp, source_pd, label_cols, colors)
     plot_elements = [sp]
 
     if len(label_cols) > 1:
         # JS call back selector
-        callback = CustomJS(args=dict(legend_items=legend_items, legend=legend, color_bar=color_bar, color_mappers=color_mappers, all_renderers=all_renderers), code="""
+        callback = CustomJS(args=dict(legend_items=legend_items, legend=legend, color_bar=color_bar, color_mappers=color_mappers, scatter_renderers=scatter_renderers), code="""
 
-        for (var i = 0; i < all_renderers.length; i++){
-            all_renderers[i].glyph.fill_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
-            all_renderers[i].glyph.line_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+        for (var i = 0; i < scatter_renderers.length; i++){
+            scatter_renderers[i].glyph.fill_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+            scatter_renderers[i].glyph.line_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+            scatter_renderers[i].visible = true
         }
 
         if (cb_obj.value in legend_items){
@@ -466,7 +467,7 @@ def joint_plot(
     label_cols = list(label_fields.keys())
     source_pd = _collect_scatter_plot_data(x, y, fields={**source_fields, **label_fields}, n_divisions=n_divisions, missing_label=missing_label)
     sp = figure(title=title, x_axis_label=xlabel, y_axis_label=ylabel, height=height, width=width)
-    sp, legend_items, legend, color_bar, color_mappers, all_renderers = _get_scatter_plot_elements(sp, source_pd, label_cols, colors)
+    sp, legend_items, legend, color_bar, color_mappers, scatter_renderers = _get_scatter_plot_elements(sp, source_pd, label_cols, colors)
 
     continuous_cols = [col for col in label_cols if
                        (str(source_pd.dtypes[col]).startswith('float') or
@@ -487,6 +488,7 @@ def joint_plot(
         """
 
         density_renderers = []
+        max_densities = {}
         if not factor_cols or continuous_cols:
             dens, edges = np.histogram(source_pd[axis], density=True)
             edges = edges[:-1]
@@ -494,6 +496,7 @@ def joint_plot(
             cds = ColumnDataSource({'x': xy[0], 'y': xy[1]})
             line = p.line('x', 'y', source=cds)
             density_renderers.extend([(col, "", line) for col in continuous_cols])
+            max_densities = {col: np.max(dens) for col in continuous_cols}
 
         for factor_col in factor_cols:
             factor_colors = colors.get(factor_col, _get_categorical_palette(list(set(source_pd[factor_col]))))
@@ -504,16 +507,18 @@ def joint_plot(
                 xy = (edges, dens) if axis == '_x' else (dens, edges)
                 cds = ColumnDataSource({'x': xy[0], 'y': xy[1]})
                 density_renderers.append((factor_col, factor, p.line('x', 'y', color=factor_colors[factor], source=cds)))
+                max_densities[factor_col] = np.max(list(dens) + [max_densities.get(factor_col, 0)])
+
         p.legend.visible = False
         p.grid.visible = False
         p.outline_line_color = None
-        return p, density_renderers
+        return p, density_renderers, max_densities
 
     xp = figure(title=title, height=int(height / 3), width=width, x_range=sp.x_range)
-    xp, x_renderers = get_density_plot_items(source_pd, xp, axis='_x', colors=color_mappers, continuous_cols=continuous_cols, factor_cols=factor_cols)
+    xp, x_renderers, x_max_densities = get_density_plot_items(source_pd, xp, axis='_x', colors=color_mappers, continuous_cols=continuous_cols, factor_cols=factor_cols)
     xp.xaxis.visible = False
     yp = figure(height=height, width=int(width / 3), y_range=sp.y_range)
-    yp, y_renderers = get_density_plot_items(source_pd, yp, axis='_y', colors=color_mappers, continuous_cols=continuous_cols, factor_cols=factor_cols)
+    yp, y_renderers, y_max_densities = get_density_plot_items(source_pd, yp, axis='_y', colors=color_mappers, continuous_cols=continuous_cols, factor_cols=factor_cols)
     yp.yaxis.visible = False
     density_renderers = x_renderers + y_renderers
     first_row = [xp]
@@ -531,6 +536,12 @@ def joint_plot(
         for factor_col, factor, renderer in density_renderers:
             renderer.visible = factor_col == label_cols[0]
 
+        if label_cols[0] in factor_cols:
+            xp.y_range.start = 0
+            xp.y_range.end = x_max_densities[label_cols[0]]
+            yp.x_range.start = 0
+            yp.x_range.end = y_max_densities[label_cols[0]]
+
         # JS call back selector
         callback = CustomJS(
             args=dict(
@@ -538,13 +549,18 @@ def joint_plot(
                 legend=legend,
                 color_bar=color_bar,
                 color_mappers=color_mappers,
-                scatter_renderers=all_renderers,
-                density_renderers=x_renderers + y_renderers
+                scatter_renderers=scatter_renderers,
+                density_renderers=x_renderers + y_renderers,
+                x_range = xp.y_range,
+                x_max_densities=x_max_densities,
+                y_range=yp.x_range,
+                y_max_densities=y_max_densities
             ), code="""
 
                 for (var i = 0; i < scatter_renderers.length; i++){
                     scatter_renderers[i].glyph.fill_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
                     scatter_renderers[i].glyph.line_color = {field: cb_obj.value, transform: color_mappers[cb_obj.value]}
+                    scatter_renderers[i].visible = true
                 }
                 
                 for (var i = 0; i < density_renderers.length; i++){
@@ -559,6 +575,11 @@ def joint_plot(
                     legend.visible=false
                     color_bar.visible=true
                 }
+                
+                x_range.start = 0
+                y_range.start = 0
+                x_range.end = x_max_densities[cb_obj.value]
+                y_range.end = y_max_densities[cb_obj.value]
 
                 """)
 

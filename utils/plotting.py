@@ -294,12 +294,17 @@ def _collect_scatter_plot_data(
         plot_data = [point for point in collect_expr.collect() if point._x is not None and point._y is not None]
         source_pd = pd.DataFrame(plot_data)
     else:
-        if not all(isinstance(v, hl.expr.StringExpression) for v in expressions.values()):
-            print("WARN: only string expressions are supported with `n_divisions` options at this time. Converting to String")
+        # FIXME: remove the type conversion logic if/when downsample supports continuous values for labels
+        continous_expr = {k: 'int32' for k,v in expressions.items() if isinstance(v, hl.expr.Int32Expression)}
+        continous_expr.update({k: 'int64' for k,v in expressions.items() if isinstance(v, hl.expr.Int64Expression)})
+        continous_expr.update({k: 'float32' for k, v in expressions.items() if isinstance(v, hl.expr.Float32Expression)})
+        continous_expr.update({k: 'float64' for k, v in expressions.items() if isinstance(v, hl.expr.Float64Expression)})
+        if continous_expr:
             expressions = {k: hl.str(v) if not isinstance(v, hl.expr.StringExpression) else v for k,v in expressions.items()}
         agg_f = x._aggregation_method()
         res = agg_f(hl.agg.downsample(x, y, label=list(expressions.values()) if expressions else None, n_divisions=n_divisions))
         source_pd = pd.DataFrame([dict(_x=point[0], _y=point[1], **dict(zip(expressions, point[2]))) for point in res])
+        source_pd = source_pd.astype(continous_expr)
 
     return source_pd
 

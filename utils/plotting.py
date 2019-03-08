@@ -304,7 +304,7 @@ def _collect_scatter_plot_data(
         agg_f = x._aggregation_method()
         res = agg_f(hl.agg.downsample(x, y, label=list(expressions.values()) if expressions else None, n_divisions=n_divisions))
         source_pd = pd.DataFrame([dict(_x=point[0], _y=point[1], **dict(zip(expressions, point[2]))) for point in res])
-        source_pd = source_pd.astype(continous_expr)
+        source_pd = source_pd.astype(continous_expr, copy=False)
 
     return source_pd
 

@@ -114,8 +114,9 @@ def sample_pcs_uniformly(scores_table: hl.Table, num_pcs: int = 5, num_bins: int
     return per_bin.explode(per_bin.s)
 
 
-def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_decoy: bool = True,
-                            filter_segdup: bool = True, high_conf_regions: Optional[List[str]] = None) -> hl.MatrixTable:
+def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: bool = True, filter_decoy: bool = True,
+                            filter_segdup: bool = True, high_conf_regions: Optional[List[str]] = None,
+                            filter_exome_low_coverage_regions: bool = True) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filters low-confidence regions
 
@@ -127,24 +128,38 @@ def filter_low_conf_regions(mt: hl.MatrixTable, filter_lcr: bool = True, filter_
     :return: MT with low confidence regions removed
     :rtype: MatrixTable
     """
-    from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path
+    from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path, high_coverage_intervals_path
 
+    criteria = [True]
     if filter_lcr:
         lcr = hl.import_locus_intervals(lcr_intervals_path)
-        mt = mt.filter_rows(hl.is_defined(lcr[mt.locus]), keep=False)
+        criteria.append(hl.is_missing(lcr[mt.locus]))
 
     if filter_decoy:
         decoy = hl.import_bed(decoy_intervals_path)
-        mt = mt.filter_rows(hl.is_defined(decoy[mt.locus]), keep=False)
+        criteria.append(hl.is_missing(decoy[mt.locus]))
 
     if filter_segdup:
         segdup = hl.import_bed(segdup_intervals_path)
-        mt = mt.filter_rows(hl.is_defined(segdup[mt.locus]), keep=False)
+        criteria.append(hl.is_missing(segdup[mt.locus]))
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
             region = hl.import_locus_intervals(region)
-            mt = mt.filter_rows(hl.is_defined(region[mt.locus]), keep=True)
+            criteria.append(hl.is_defined(region[mt.locus]))
+
+    if filter_exome_low_coverage_regions:
+        high_cov = hl.import_locus_intervals(high_coverage_intervals_path)
+        criteria.append(hl.is_missing(high_cov[mt.locus]))
+
+    import operator
+    import functools
+
+    filter_criteria = functools.reduce(operator.ior, criteria)
+    if isinstance(mt, hl.MatrixTable):
+        mt = mt.filter_rows(filter_criteria)
+    else:
+        mt = mt.filter(filter_criteria)
 
     return mt
 

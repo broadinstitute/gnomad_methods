@@ -10,6 +10,10 @@ import warnings
 import uuid
 
 
+def check_hail_file(fname):
+    return hl.hadoop_exists(f'{fname}/_SUCCESS')
+
+
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Generate unphased version of MatrixTable (assumes call is in mt.GT and is diploid or haploid only)

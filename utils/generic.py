@@ -160,7 +160,7 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
             criteria.append(hl.is_defined(region[mt.locus]))
 
     if criteria:
-        filter_criteria = functools.reduce(operator.ior, criteria)
+        filter_criteria = functools.reduce(operator.iand, criteria)
         if isinstance(mt, hl.MatrixTable):
             mt = mt.filter_rows(filter_criteria)
         else:

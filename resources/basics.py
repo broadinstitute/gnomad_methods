@@ -1,5 +1,6 @@
 import hail as hl
 from typing import *
+from utils.generic import file_exists
 from gnomad_hail.utils.generic import check_hail_file
 
 CURRENT_HAIL_VERSION = "0.2"
@@ -65,11 +66,11 @@ def get_release_file(file_path: str, version: str = CURRENT_RELEASE) -> str:
     :param str version: Desired file version
     :return: Path for closest version of the file available
     """
-    if check_hail_file(file_path.format(version)):
+    if file_exists(file_path.format(version)):
         return file_path.format(version)
     else:
         for v in range(RELEASES.index(version) - 1, -1, -1):
-            if check_hail_file(file_path.format(RELEASES[v])):
+            if file_exists(file_path.format(RELEASES[v])):
                 print("WARN: Resource {} could not be found for gnomAD release version {}.\n Loading gnomAD release version {} of the file. ({})".format(
                     file_path.format(version),
                     version,

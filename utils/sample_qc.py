@@ -7,49 +7,72 @@ import hdbscan
 
 def filter_rows_for_qc(
         mt: hl.MatrixTable,
-        min_af: float = 0.001,
-        min_callrate: float = 0.99,
-        inbreeding_coeff_threshold: float = -0.8,
-        apply_hard_filters: bool = True
+        min_af: Optional[float] = 0.001,
+        min_callrate: Optional[float] = 0.99,
+        min_inbreeding_coeff_threshold: Optional[float] = -0.8,
+        apply_hard_filters: bool = True,
+        bi_allelic_only: bool = True,
+        snv_only : bool = True
 ) -> hl.MatrixTable:
     """
     Annotates rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
     AF and callrate thresholds are taken from gnomAD QC, inbreeding coeff, MQ, FS and QD filter are taken from GATK best practices
 
+    Note: This function expect the typical ``info`` annotation of type struct with fields ``MQ``, ``FS`` and ``QD``
+    if applying hard filters.
+
     :param MatrixTable mt: Input MT
-    :param float min_af: Minimum site AF to keep
-    :param float min_callrate: Minimum site call rate to keep
-    :param float inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
+    :param float min_af: Minimum site AF to keep. Not applied if set to ``None``.
+    :param float min_callrate: Minimum site call rate to keep. Not applied if set to ``None``.
+    :param float min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
     :param bool apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
+    :param bool bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
+    :param bool snv_only: Whether to only keep SNVs or include other variant types
     :return: annotated and filtered table
     :rtype: MatrixTable
     """
-    mt = mt.annotate_rows( # TODO: Make this an option if desired
-        site_callrate=hl.agg.fraction(hl.is_defined(mt.GT)),
-        site_inbreeding_coeff=bi_allelic_site_inbreeding_expr(mt.GT),
-        af=hl.agg.mean(mt.GT.n_alt_alleles()) / 2
-    )
+    annotation_expr = {}
 
-    filter_expr = hl.is_snp(mt.alleles[0], mt.alleles[1]) & (mt.af > min_af) & (mt.site_inbreeding_coeff > inbreeding_coeff_threshold) & (mt.site_callrate > min_callrate)
-    filter_expr = filter_expr & bi_allelic_expr(mt)
+    if min_af is not None:
+        annotation_expr['af'] = hl.agg.mean(mt.GT.n_alt_alleles()) / 2
+    if min_callrate is not None:
+        annotation_expr['site_callrate'] = hl.agg.fraction(hl.is_defined(mt.GT))
+    if min_inbreeding_coeff_threshold is not None:
+        annotation_expr['site_inbreeding_coeff'] = bi_allelic_site_inbreeding_expr(mt.GT)
+
+    if annotation_expr:
+        mt = mt.annotate_rows(**annotation_expr)
+
+    filter_expr = []
+    if min_af is not None:
+        filter_expr.append((mt.af > min_af))
+    if min_callrate is not None:
+        filter_expr.append((mt.site_callrate > min_callrate))
+    if min_inbreeding_coeff_threshold is not None:
+        filter_expr.append((mt.site_inbreeding_coeff > min_inbreeding_coeff_threshold))
+    if snv_only:
+        filter_expr.append(hl.is_snp(mt.alleles[0], mt.alleles[1]))
+    if bi_allelic_only:
+        filter_expr.append(bi_allelic_expr(mt))
+
     if apply_hard_filters:
         if 'info' in mt.row_value: # TODO: Make this more generic?
             if 'QD' in mt.info: # TODO: Compute QD?
-                filter_expr = filter_expr & (mt.info.QD >= 2)
+                filter_expr.append((mt.info.QD >= 2))
             else:
                 logger.warn("Could not apply QD hard filter, as `info.QD` not found in schema.")
             if 'FS' in mt.info:
-                filter_expr = filter_expr & (mt.info.FS  <= 60)
+                filter_expr.append((mt.info.FS  <= 60))
             else:
                 logger.warn("Could not apply FS hard filter, as `info.FS` not found in schema.")
             if 'MQ' in mt.info:
-                filter_expr = filter_expr & (mt.info.MQ >= 30)
+                filter_expr.append((mt.info.MQ >= 30))
             else:
                 logger.warn("Could not apply MQ hard filter, as `info.MQ` not found in schema.")
         else:
             logger.warn("Could not apply hard filters as `info` not found in schema.")
 
-    return mt.filter_rows(filter_expr ).persist()
+    return mt.filter_rows(functools.reduce(operator.iand, filter_expr))
 
 
 def get_qc_mt(
@@ -60,6 +83,9 @@ def get_qc_mt(
         inbreeding_coeff_threshold: float = -0.8,
         apply_hard_filters: bool = True,
         ld_r2: float = 0.1,
+        filter_lcr: bool = True,
+        filter_decoy: bool = True,
+        filter_segdup: bool = True,
         filter_exome_low_coverage_regions: bool = False,
         high_conf_regions: Optional[List[str]] = None
 ) -> hl.MatrixTable:
@@ -80,19 +106,34 @@ def get_qc_mt(
     :param float inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
     :param bool apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
     :param float ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
+    :param bool filter_lcr: Filter LCR regions
+    :param bool filter_decoy: Filter decoy regions
+    :param bool filter_segdup: Filter segmental duplication regions
     :param bool filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
     :param list of str high_conf_regions: If given, the data will be filtered to only include variants in those regions
     :return: Filtered MT
     :rtype: MatrixTable
     """
     logger.info("Creating QC MatrixTable")
+    if ld_r2 is not None:
+        logger.warn("The LD-prune step of this function requires non-preemptible workers only!")
 
-    qc_mt = filter_low_conf_regions(mt, filter_exome_low_coverage_regions=filter_exome_low_coverage_regions, high_conf_regions=high_conf_regions)
+    qc_mt = filter_low_conf_regions(
+        mt,
+        filter_lcr=filter_lcr,
+        filter_decoy=filter_decoy,
+        filter_segdup=filter_segdup,
+        filter_exome_low_coverage_regions=filter_exome_low_coverage_regions, high_conf_regions=high_conf_regions
+    )
+
     if adj_only:
         qc_mt = filter_to_adj(qc_mt) # TODO: Make sure that this works fine before call rate filtering
+
     qc_mt = filter_rows_for_qc(qc_mt, min_af, min_callrate, inbreeding_coeff_threshold, apply_hard_filters)
+
     if ld_r2 is not None:
         pruned_ht = hl.ld_prune(qc_mt.GT, r2=ld_r2)
+        qc_mt = qc_mt.persist()
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))
 
     qc_mt = qc_mt.annotate_globals(
@@ -147,7 +188,7 @@ def run_platform_pca(
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
     Runs a PCA on a sample/interval MT with each entry containing the call rate.
-    When `binzarization_threshold ` is set, the callrate is transformed to a 0/1 value based on the thredhold.
+    When `binzarization_threshold` is set, the callrate is transformed to a 0/1 value based on the threshold.
     E.g. with the default threshold of 0.25, all entries with a callrate < 0.25 are considered as 0s, others as 1s.
 
     :param MatrixTable callrate_mt: Input callrate MT
@@ -208,7 +249,7 @@ def impute_sex(
         platform_ht: hl.Table,
         male_min_f_stat: float,
         female_max_f_stat: float,
-        min_male_y_sites_called: int,
+        min_male_y_sites_called: int = 500,
         max_y_female_call_rate: float = 0.15,
         min_y_male_call_rate: float = 0.8
 ) -> hl.Table:
@@ -227,16 +268,16 @@ def impute_sex(
     """
     logger.info("Imputing samples sex")
 
-    x = hl.filter_intervals(x_mt, [hl.parse_locus_interval('X')])
-    x_ht = hl.impute_sex(x.GT, aaf_threshold=0.05, female_threshold=female_max_f_stat, male_threshold=male_min_f_stat)
-    y = hl.filter_intervals(y_mt, [hl.parse_locus_interval('Y')])
-    y = y.filter_rows(y.locus.in_y_nonpar())
-    sex_ht = y.annotate_cols(
-        qc_platform=platform_ht[y.col_key].qc_platform,
-        is_female=x_ht[y.col_key].is_female,
-        y_call_rate=hl.agg.fraction(hl.is_defined(y.GT)),
-        n_y_sites_called=hl.agg.count_where(hl.is_defined(y.GT)),
-        **{f'x_{ann}': x_ht[y.col_key][ann] for ann in x_ht.row_value if ann != 'is_female'}
+    x_mt = hl.filter_intervals(x_mt, get_reference_genome(x_mt.locus).x_contigs)
+    x_ht = hl.impute_sex(x_mt.GT, aaf_threshold=0.05, female_threshold=female_max_f_stat, male_threshold=male_min_f_stat)
+    y_mt = hl.filter_intervals(y_mt, get_reference_genome(y_mt.locus).y_contigs)
+    y_mt = y_mt.filter_rows(y_mt.locus.in_y_nonpar())
+    sex_ht = y_mt.annotate_cols(
+        qc_platform=platform_ht[y_mt.col_key].qc_platform,
+        is_female=x_ht[y_mt.col_key].is_female,
+        y_call_rate=hl.agg.fraction(hl.is_defined(y_mt.GT)),
+        n_y_sites_called=hl.agg.count_where(hl.is_defined(y_mt.GT)),
+        **{f'x_{ann}': x_ht[y_mt.col_key][ann] for ann in x_ht.row_value if ann != 'is_female'}
     ).cols()
 
     mean_male_y_sites_called = sex_ht.aggregate(hl.agg.filter(~sex_ht.is_female, hl.agg.group_by(sex_ht.qc_platform, hl.agg.mean(sex_ht.n_y_sites_called))))
@@ -304,7 +345,10 @@ def filter_duplicate_samples(
     logger.info(f"Found {len(dups)} duplicate sets.")
     dups_ht = hl.Table.parallelize([hl.struct(dup_set=i, dups=dups[i]) for i in range(0, len(dups))])
     dups_ht = dups_ht.explode(dups_ht.dups, name='_dup')
-    dups_ht = dups_ht.key_by(**dups_ht._dup)
+    if isinstance(dups_ht._dup, hl.expr.StructExpression):
+        dups_ht = dups_ht.key_by(**dups_ht._dup)
+    else:
+        dups_ht = dups_ht.key_by('_dup')
     dups_ht = dups_ht.annotate(rank=samples_rankings_ht[dups_ht.key][rank_ann])
     dups_cols = hl.bind(
         lambda x: hl.struct(
@@ -317,7 +361,10 @@ def filter_duplicate_samples(
         **dups_cols
     )
 
-    dups_ht = dups_ht.key_by(**{f'{x}_kept': expr for x, expr in dups_ht.kept.items()}).drop('kept')
+    if isinstance(dups_ht.kept, hl.expr.StructExpression):
+        dups_ht = dups_ht.key_by(**dups_ht.kept).drop('kept')
+    else:
+        dups_ht = dups_ht.key_by(s=dups_ht.kept) # Since there is no defined name in the case of a non-struct type, use `s`
     return dups_ht
 
 
@@ -366,7 +413,6 @@ def run_pca_with_relateds(
         related_scores = pc_project(related_mt, pca_loadings)
         pca_scores = pca_scores.union(related_scores)
         return pca_evals, pca_scores, pca_loadings
-
 
 
 def compute_stratified_metrics_filter(ht: hl.Table, qc_metrics: List[str], strata: List[str] = None) -> hl.Table:
@@ -427,17 +473,19 @@ def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
     Flattens the result of `filter_duplicate_samples`, so that each line contains a single sample.
     An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
 
+    Note that this assumes that the type of the table key is the same as the type of the `filtered` array.
+
     :param Table dups_ht: Input HT
     :return: Flattened HT
     :rtype: Table
     """
-    dups_ht = dups_ht.key_by()
     dups_ht = dups_ht.annotate(
-        dups=hl.array([(dups_ht.s_kept, True)]).extend(
-            dups_ht.filtered.map(lambda x: (x.s, False))
+        dups=hl.array([(dups_ht.key, False)]).extend(
+            dups_ht.filtered.map(lambda x: (x, True))
         )
     )
     dups_ht = dups_ht.explode('dups')
+    dups_ht = dups_ht.key_by()
     return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by('s')
 
 
@@ -470,17 +518,18 @@ def add_filters_expr(
         )
 
 
-def get_platform_specific_intervals(platform_pc_loadings_ht: hl.Table, threshold: float) -> List[hl.Interval]:
+def get_platform_specific_intervals(platform_pc_loadings_ht: hl.Table, threshold: float, intervals_path: str = exome_calling_intervals_path) -> List[hl.Interval]:
     """
-    This takes the platform PC loadings returns a list of intervals where the sum of the loadings above the given threshold.
+    This takes the platform PC loadings and returns a list of intervals where the sum of the loadings above the given threshold.
     The experimental / untested idea behind this, is that those intervals may be problematic on some platforms.
 
     :param Table platform_pc_loadings_ht: Platform PCA loadings
     :param float threshold: Minimal threshold
+    :param str intervals_path: Path to the intervals file to use (default: b37 exome calling intervals)
     :return: List of intervals with PC loadings above the given threshold
     :rtype: list of Interval
     """
-    intervals = hl.import_locus_intervals(exome_calling_intervals_path)
+    intervals = hl.import_locus_intervals(intervals_path, reference_genome=get_reference_genome(platform_pc_loadings_ht.locus))
     intervals = intervals.key_by('target')
     platform_specific_intervals = platform_pc_loadings_ht.filter(hl.sum(hl.abs(platform_pc_loadings_ht.loadings))>=threshold)
     platform_specific_intervals = platform_specific_intervals.annotate(locus_interval=intervals[platform_specific_intervals.key].interval)

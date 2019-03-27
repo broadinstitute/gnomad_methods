@@ -11,7 +11,7 @@ import uuid
 import operator
 import functools
 from hail.utils.misc import divide_null
-from utils.gnomad_functions import logger
+from .gnomad_functions import logger
 import os
 
 def file_exists(fname: str) -> bool:

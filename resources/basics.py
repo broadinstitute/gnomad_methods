@@ -1,7 +1,6 @@
 import hail as hl
 from typing import *
-from utils.generic import file_exists
-from gnomad_hail.utils.generic import check_hail_file
+from gnomad_hail.utils.generic import file_exists
 
 CURRENT_HAIL_VERSION = "0.2"
 CURRENT_RELEASE = "2.1.1"

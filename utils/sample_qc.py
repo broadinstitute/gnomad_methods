@@ -1,7 +1,7 @@
 import numpy as np
-from utils.generic import *
+from .generic import *
 from gnomad_hail.resources import exome_calling_intervals_path
-from utils.gnomad_functions import logger, filter_to_adj
+from .gnomad_functions import logger, filter_to_adj
 import hdbscan
 
 
@@ -129,11 +129,18 @@ def get_qc_mt(
     if adj_only:
         qc_mt = filter_to_adj(qc_mt) # TODO: Make sure that this works fine before call rate filtering
 
-    qc_mt = filter_rows_for_qc(qc_mt, min_af, min_callrate, inbreeding_coeff_threshold, apply_hard_filters)
+    qc_mt = filter_rows_for_qc(
+        qc_mt,
+        min_af,
+        min_callrate,
+        inbreeding_coeff_threshold,
+        apply_hard_filters
+    )
 
     if ld_r2 is not None:
-        pruned_ht = hl.ld_prune(qc_mt.GT, r2=ld_r2)
         qc_mt = qc_mt.persist()
+        unfiltered_qc_mt = qc_mt.unfilter_entries()
+        pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2)
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))
 
     qc_mt = qc_mt.annotate_globals(
@@ -145,7 +152,7 @@ def get_qc_mt(
             apply_hard_filters=apply_hard_filters,
             ld_r2=ld_r2 if ld_r2 is not None else hl.null(hl.tfloat32),
             filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,
-            high_conf_regions=high_conf_regions if ld_r2 is not None else hl.null(hl.tarray(hl.tstr))
+            high_conf_regions=high_conf_regions if high_conf_regions is not None else hl.null(hl.tarray(hl.tstr))
         )
     )
     return qc_mt.annotate_cols(sample_callrate=hl.agg.fraction(hl.is_defined(qc_mt.GT)))
@@ -161,6 +168,12 @@ def compute_callrate_mt(
     Computes a sample/interval MT with each entry containing the call rate for that sample/interval.
     This can be used as input for imputing exome sequencing platforms.
 
+    Note
+    ----
+    The input interval HT should have a key of type Interval.
+    The resulting table will have a key of the same type as the `intervals_ht` table and
+    contain an `interval_info` field containing all non-key fields of the `intervals_ht`.
+
     :param MatrixTable mt: Input MT
     :param Table intervals_ht: Table containing the intervals. This table has to be keyed by locus. Default is the Broad exome calling intervals.
     :param bool bi_allelic_only: If set, only bi-allelic sites are used for the computation
@@ -169,16 +182,23 @@ def compute_callrate_mt(
     :rtype: MatrixTable
     """
     logger.info('Computing call rate MatrixTable')
+
+    if len(intervals_ht.key) != 1 or not isinstance(intervals_ht.key[0], hl.expr.IntervalExpression):
+        logger.warn(f'Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: {intervals_ht.key}')
+
     if autosomes_only:
         callrate_mt = filter_to_autosomes(mt)
 
     if bi_allelic_only:
         callrate_mt = callrate_mt.filter_rows(bi_allelic_expr(callrate_mt))
 
-    callrate_mt = callrate_mt.annotate_rows(interval=intervals_ht[callrate_mt.locus][intervals_ht.key])
+    intervals_ht = intervals_ht.annotate(_interval_key=intervals_ht.key)
+    callrate_mt = callrate_mt.annotate_rows(**intervals_ht[callrate_mt.locus]._interval_key)
     callrate_mt = callrate_mt.filter_rows(hl.is_defined(callrate_mt.interval))
     callrate_mt = callrate_mt.select_entries(GT_not_called=hl.or_missing(hl.is_missing(callrate_mt.GT), hl.struct()))
-    callrate_mt = callrate_mt.group_rows_by(callrate_mt.interval).aggregate(callrate=hl.agg.fraction(hl.is_missing(callrate_mt.GT_not_called)))
+    callrate_mt = callrate_mt.group_rows_by(*list(intervals_ht.key)).aggregate(callrate=hl.agg.fraction(hl.is_missing(callrate_mt.GT_not_called)))
+    intervals_ht = intervals_ht.drop('_interval_key')
+    callrate_mt = callrate_mt.annotate_rows(interval_info=hl.struct(**intervals_ht[callrate_mt.row_key]))
     return callrate_mt
 
 
@@ -243,7 +263,7 @@ def assign_platform_from_pcs(
     return ht
 
 # TODO: This should be reviewed / merged with work from Kristen
-def impute_sex(
+def infer_sex(
         x_mt: hl.MatrixTable,  # TODO: This feels somewhat unsatisfying to provide two MTs. Maybe just reapply the QC MT filters to both (minus callrate for Y)?
         y_mt: hl.MatrixTable,
         platform_ht: hl.Table,
@@ -268,9 +288,9 @@ def impute_sex(
     """
     logger.info("Imputing samples sex")
 
-    x_mt = hl.filter_intervals(x_mt, get_reference_genome(x_mt.locus).x_contigs)
+    x_mt = hl.filter_intervals(x_mt, [hl.parse_locus_interval(x_contig) for x_contig in get_reference_genome(x_mt.locus).x_contigs])
     x_ht = hl.impute_sex(x_mt.GT, aaf_threshold=0.05, female_threshold=female_max_f_stat, male_threshold=male_min_f_stat)
-    y_mt = hl.filter_intervals(y_mt, get_reference_genome(y_mt.locus).y_contigs)
+    y_mt = hl.filter_intervals(y_mt, [hl.parse_locus_interval(y_contig) for y_contig in get_reference_genome(y_mt.locus).y_contigs])
     y_mt = y_mt.filter_rows(y_mt.locus.in_y_nonpar())
     sex_ht = y_mt.annotate_cols(
         qc_platform=platform_ht[y_mt.col_key].qc_platform,
@@ -297,7 +317,7 @@ def impute_sex(
             no_y_call_rate_platforms.add(platform)
 
     sex_ht = sex_ht.annotate_globals(y_call_rate_stats=y_call_rate_stats,
-                                     no_y_call_rate_platforms=no_y_call_rate_platforms if no_y_call_rate_platforms else hl.empty_set(hl.tint32))
+                                     no_y_call_rate_platforms=no_y_call_rate_platforms if no_y_call_rate_platforms else hl.empty_set(platform_ht.qc_platform.dtype))
     y_female_stats = sex_ht.y_call_rate_stats[(sex_ht.qc_platform, True)]
     y_male_stats = sex_ht.y_call_rate_stats[(sex_ht.qc_platform, False)]
     sex_ht = sex_ht.annotate(
@@ -516,21 +536,3 @@ def add_filters_expr(
                 for filter_name, filter_condition in filters.items()
             ]
         )
-
-
-def get_platform_specific_intervals(platform_pc_loadings_ht: hl.Table, threshold: float, intervals_path: str = exome_calling_intervals_path) -> List[hl.Interval]:
-    """
-    This takes the platform PC loadings and returns a list of intervals where the sum of the loadings above the given threshold.
-    The experimental / untested idea behind this, is that those intervals may be problematic on some platforms.
-
-    :param Table platform_pc_loadings_ht: Platform PCA loadings
-    :param float threshold: Minimal threshold
-    :param str intervals_path: Path to the intervals file to use (default: b37 exome calling intervals)
-    :return: List of intervals with PC loadings above the given threshold
-    :rtype: list of Interval
-    """
-    intervals = hl.import_locus_intervals(intervals_path, reference_genome=get_reference_genome(platform_pc_loadings_ht.locus))
-    intervals = intervals.key_by('target')
-    platform_specific_intervals = platform_pc_loadings_ht.filter(hl.sum(hl.abs(platform_pc_loadings_ht.loadings))>=threshold)
-    platform_specific_intervals = platform_specific_intervals.annotate(locus_interval=intervals[platform_specific_intervals.key].interval)
-    return platform_specific_intervals.locus_interval.collect()

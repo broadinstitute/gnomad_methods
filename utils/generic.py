@@ -14,6 +14,7 @@ from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
 
+
 def file_exists(fname: str) -> bool:
     """
     Check whether a file exists.
@@ -44,15 +45,18 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
     )
 
 
-def get_reference_genome(locus: hl.expr.LocusExpression) -> hl.ReferenceGenome:
+def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression]) -> hl.ReferenceGenome:
     """
     Returns the reference genome associated with the input Locus expression
 
-    :param LocusExpession locus: Input locus
+    :param LocusExpression or IntervalExpression locus: Input locus
     :return: Reference genome
     :rtype: ReferenceGenome
     """
-    return locus.dtype.reference_genome
+    if isinstance(locus, hl.expr.LocusExpression):
+        return locus.dtype.reference_genome
+    assert(isinstance(locus, hl.expr.IntervalExpression))
+    return locus.dtype.point_type.reference_genome
 
 
 def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
@@ -1013,7 +1017,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
     # Create a struct with all possible stats for merging.
     # This step helps when folding because we can rely on the struct schema
     # Note that for intermediate merging, we compute the variance rather than the stdev
-    all_stats = stats.map(lambda x: hl.struct(
+    all_stats = hl.array(stats).map(lambda x: hl.struct(
         min=x.min if 'min' in metrics else hl.null(hl.tfloat64),
         max=x.max if 'max' in metrics else hl.null(hl.tfloat64),
         mean=x.mean if 'mean' in metrics else hl.null(hl.tfloat64),
@@ -1089,10 +1093,10 @@ def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.
     # Use n_called as n for DP and GQ stats
     if 'n_called' in  sample_qc_fields:
         merged_exprs.update({
-            metric: merge_stats_counters_expr(hl.array([
+            metric: merge_stats_counters_expr([
                 sample_qc_expr[metric].annotate(n=sample_qc_expr.n_called)
                 for sample_qc_expr in sample_qc_exprs
-            ])).drop('n')
+            ]).drop('n')
             for metric in stats_metrics
         })
 

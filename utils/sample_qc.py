@@ -234,7 +234,7 @@ def run_platform_pca(
 def assign_platform_from_pcs(
         platform_pca_scores_ht: hl.Table,
         pc_scores_ann: str = 'scores',
-        hdbscan_min_cluster_size: int = 500,
+        hdbscan_min_cluster_size: Optional[int] = None,
         hdbscan_min_samples: int = None
 ) -> hl.Table:
     """
@@ -242,7 +242,7 @@ def assign_platform_from_pcs(
 
     :param Table platform_pca_scores_ht: Input table with the PCA score for each sample
     :param str pc_scores_ann: Field containing the scores
-    :param int hdbscan_min_cluster_size: HDBSCAN `min_cluster_size` parameter
+    :param int hdbscan_min_cluster_size: HDBSCAN `min_cluster_size` parameter. If not specified the smallest of 500 and 0.1*n_samples will be used.
     :param int hdbscan_min_samples: HDBSCAN `min_samples` parameter
     :return: A Table with a `qc_platform` annotation containing the platform based on HDBSCAN clustering
     """
@@ -254,6 +254,8 @@ def assign_platform_from_pcs(
     logger.info('Assigning platforms to {} samples.'.format(len(callrate_data)))
 
     # Cluster data
+    if hdbscan_min_cluster_size is None:
+        hdbscan_min_cluster_size = min(500, 0.1 * data.shape[0])
     clusterer = hdbscan.HDBSCAN(min_cluster_size=hdbscan_min_cluster_size, min_samples=hdbscan_min_samples)
     cluster_labels = clusterer.fit_predict(callrate_data)
     n_clusters = len(set(cluster_labels)) - (-1 in cluster_labels)  # NOTE: -1 is the label for noisy (un-classifiable) data points

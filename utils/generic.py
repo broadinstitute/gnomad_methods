@@ -1,7 +1,6 @@
-
 import hail as hl
 from hail.expr.expressions import *
-from collections import defaultdict, namedtuple, OrderedDict
+from collections import defaultdict, namedtuple, OrderedDict, Counter
 from typing import *
 from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
@@ -10,10 +9,28 @@ import warnings
 import uuid
 import operator
 import functools
+from hail.utils.misc import divide_null
+from .gnomad_functions import logger
+import os
 
 
-def check_hail_file(fname):
-    return hl.hadoop_exists(f'{fname}/_SUCCESS')
+def file_exists(fname: str) -> bool:
+    """
+    Check whether a file exists.
+    Supports either local or Google cloud (gs://) paths.
+    If the file is a Hail file (.ht, .mt extensions), it checks that _SUCCESS is present.
+
+    :param str fname: File name
+    :return: Whether the file exists
+    :rtype: bool
+    """
+    fext = os.path.splitext(fname)[1]
+    if fext in ['.ht', '.mt']:
+        fname += '/_SUCCESS'
+    if fname.startswith('gs://'):
+        return hl.hadoop_exists(fname)
+    else:
+        return os.path.isfile(fname)
 
 
 def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
@@ -24,15 +41,35 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
                                .when(mt.GT.is_diploid(), hl.call(mt.GT[0], mt.GT[1], phased=False))
                                .when(mt.GT.is_haploid(), hl.call(mt.GT[0], phased=False))
                                .default(hl.null(hl.tcall))
-    )
+                               )
+
+
+def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression]) -> hl.ReferenceGenome:
+    """
+    Returns the reference genome associated with the input Locus expression
+
+    :param LocusExpression or IntervalExpression locus: Input locus
+    :return: Reference genome
+    :rtype: ReferenceGenome
+    """
+    if isinstance(locus, hl.expr.LocusExpression):
+        return locus.dtype.reference_genome
+    assert (isinstance(locus, hl.expr.IntervalExpression))
+    return locus.dtype.point_type.reference_genome
 
 
 def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
-    autosomes = hl.parse_locus_interval('1-22')
-    if isinstance(t, hl.MatrixTable):
-        return hl.filter_intervals(t, [autosomes])
-    else:
-        return t.filter(autosomes.contains(t.locus))
+    """
+    Filters the Table or MatrixTable to autosomes only.
+    This assumes that the input contains a field named `locus` of type Locus
+
+    :param MatrixTable or Table t: Input MT/HT
+    :return:  MT/HT autosomes
+    :rtype: MatrixTable or Table
+    """
+    reference = get_reference_genome(t.locus)
+    autosomes = hl.parse_locus_interval(f'{reference.contigs[0]}-{reference.contigs[21]}', reference_genome=reference)
+    return hl.filter_intervals(t, [autosomes])
 
 
 def write_temp_gcs(t: Union[hl.MatrixTable, hl.Table], gcs_path: str,
@@ -170,7 +207,6 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
 
 
 def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
-
     """
     Add most_severe_consequence annotation to transcript consequences
     This is for a given transcript, as there are often multiple annotations for a single transcript:
@@ -211,15 +247,16 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
 
         def csq_score(tc):
             return csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
+
         tcl = tcl.map(lambda tc: tc.annotate(
             csq_score=hl.case(missing_false=True)
-            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
-            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
-            .when(tc.lof == 'LC', csq_score(tc) - 10)
-            .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
-            .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
-            .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
-            .default(csq_score(tc))
+                .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
+                .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
+                .when(tc.lof == 'LC', csq_score(tc) - 10)
+                .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
+                .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
+                .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
+                .default(csq_score(tc))
         ))
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 
@@ -467,7 +504,7 @@ def phase_by_transmission(
     )
 
 
-def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT' ,phased_call_field: str = 'PBT_GT') -> hl.MatrixTable:
+def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT', phased_call_field: str = 'PBT_GT') -> hl.MatrixTable:
     """
         Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
         Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
@@ -608,15 +645,15 @@ def get_duplicated_samples(
     return duplicated_samples
 
 
-def infer_families(kin_ht: hl.Table,
-                   sex: Dict[str, bool],
+def infer_families(relatedness_ht: hl.Table,
+                   sex: Union[hl.Table, Dict[str, bool]],
                    duplicated_samples: Set[str],
                    i_col: str = 'i',
                    j_col: str = 'j',
                    kin_col: str = 'kin',
                    ibd2_col: str = 'ibd2',
                    first_degree_threshold: Tuple[float, float] = (0.2, 0.4),
-                   second_degree_threshold: Tuple[float, float] = (0.05, 0.16),
+                   second_degree_threshold: float = 0.05,
                    ibd2_parent_offspring_threshold: float = 0.2
                    ) -> hl.Pedigree:
     """
@@ -630,15 +667,15 @@ def infer_families(kin_ht: hl.Table,
     Note that this function only returns complete trios defined as:
     one child, one father and one mother (sex is required for both parents)
 
-    :param Table kin_ht: pc_relate output table
-    :param dict of str -> bool sex: A dict containing the sex for each sample. True = female, False = male, None = unknown
+    :param Table relatedness_ht: pc_relate output table
+    :param Table or dict of str -> bool sex: Either a Table with the standard hail `is_female` annotation, or a dict containing the sex for each sample. True = female, False = male, None = unknown
     :param set of str duplicated_samples: Duplicated samples to remove (If not provided, this function won't work as it assumes that each child has exactly two parents)
     :param str i_col: Column containing the 1st sample id in the pc_relate table
     :param str j_col: Column containing the 2nd sample id in the pc_relate table
     :param str kin_col: Column containing the kinship in the pc_relate table
     :param str ibd2_col: Column containing ibd2 in the pc_relate table
     :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
-    :param (float, float) second_degree_threshold: Lower/upper bounds for kin for 2nd degree relatives
+    :param float second_degree_threshold: Lower bound for kin for 2nd degree relatives
     :param float ibd2_parent_offspring_threshold: Upper bound on ibd2 for a parent/offspring
     :return: Pedigree containing all trios in the data
     :rtype: Pedigree
@@ -702,24 +739,46 @@ def infer_families(kin_ht: hl.Table,
         while len(possible_parents) > 1:
             p1 = possible_parents.pop()
             for p2 in possible_parents:
-                if tuple(sorted((p1,p2))) not in relative_pairs:
+                if tuple(sorted((p1, p2))) not in relative_pairs:
                     if sex.get(p1) is False and sex.get(p2):
-                        parents.append((p1,p2))
+                        parents.append((p1, p2))
                     elif sex.get(p1) and sex.get(p2) is False:
-                        parents.append((p2,p1))
+                        parents.append((p2, p1))
 
         if len(parents) == 1:
             return parents[0]
 
         return None
 
+    # Check relatedness table format
+    if not relatedness_ht[i_col].dtype == relatedness_ht[j_col].dtype:
+        logger.error("i_col and j_col of the relatedness table need to be of the same type.")
+
+    # If `relatedness_ht` is keyed by a Struct, attempt to extract `s` instead
+    if isinstance(relatedness_ht[i_col], hl.expr.StructExpression):
+        if 's' in relatedness_ht[i_col]:
+            logger.warn(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
+            relatedness_ht = relatedness_ht.key_by(  # Needed for familial inference at this point -- should be generalized
+                **{
+                    i_col: relatedness_ht[i_col].s,
+                    j_col: relatedness_ht[j_col].s
+                }
+            )
+        else:
+            logger.error(
+                f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}.")
+
+    # If sex is a Table, extract sex information as a Dict
+    if isinstance(sex, hl.Table):
+        sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
+
     # Get first degree relatives - exclude duplicate samples
     dups = hl.literal(duplicated_samples)
-    first_degree_pairs = kin_ht.filter(
-        (kin_ht[kin_col] > first_degree_threshold[0]) &
-        (kin_ht[kin_col] < first_degree_threshold[1]) &
-        ~dups.contains(kin_ht[i_col]) &
-        ~dups.contains(kin_ht[j_col])
+    first_degree_pairs = relatedness_ht.filter(
+        (relatedness_ht[kin_col] >= first_degree_threshold[0]) &
+        (relatedness_ht[kin_col] <= first_degree_threshold[1]) &  # We do not want to include twins/duplicate samples
+        ~dups.contains(relatedness_ht[i_col]) &
+        ~dups.contains(relatedness_ht[j_col])
     ).collect()
     first_degree_relatives = defaultdict(set)
     for row in first_degree_pairs:
@@ -729,10 +788,10 @@ def infer_families(kin_ht: hl.Table,
     # Add second degree relatives for those samples
     # This is needed to distinguish grandparent - child - parent from child - mother, father down the line
     first_degree_samples = hl.literal(set(first_degree_relatives.keys()))
-    second_degree_samples = kin_ht.filter(
-        (first_degree_samples.contains(kin_ht[i_col]) | first_degree_samples.contains(kin_ht[j_col])) &
-        (kin_ht[kin_col] > second_degree_threshold[0]) &
-        (kin_ht[kin_col] < first_degree_threshold[1])
+    second_degree_samples = relatedness_ht.filter(
+        (first_degree_samples.contains(relatedness_ht[i_col]) | first_degree_samples.contains(relatedness_ht[j_col])) &
+        (relatedness_ht[kin_col] >= second_degree_threshold) &
+        (relatedness_ht[kin_col] <= first_degree_threshold[1])
     ).collect()
 
     ibd2 = get_indexed_ibd2(second_degree_samples)
@@ -796,8 +855,8 @@ def expand_pd_array_col(
 
 
 def assign_population_pcs(
-        pop_pc_pd: pd.DataFrame,
-        pc_cols: List[str],
+        pop_pca_scores: Union[hl.Table, pd.DataFrame],
+        pc_cols: Union[hl.expr.ArrayExpression, List[str]],
         known_col: str = 'known_pop',
         fit: RandomForestClassifier = None,
         seed: int = 42,
@@ -806,29 +865,27 @@ def assign_population_pcs(
         min_prob: float = 0.9,
         output_col: str = 'pop',
         missing_label: str = 'oth'
-) -> Tuple[pd.DataFrame, RandomForestClassifier]:
+) -> Tuple[Union[hl.Table, pd.DataFrame], RandomForestClassifier]:
     """
 
     This function uses a random forest model to assign population labels based on the results of PCA.
     Default values for model and assignment parameters are those used in gnomAD.
 
-    Note that if PCs come from Hail, they will be stored in a single column named `scores` by default.
-    The `expand_pd_array_col` can be used to expand this `scores` column into multiple `PC` columns:
+    As input, this function can either take:
+    - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
+        - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
+        - A Hail Table will be returned as output
+    - A Pandas DataFrame. In this case:
+        - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
+        - A pandas DataFrame is returned as output
 
-    ```
-        data = pca_ht.to_pandas() #Load PCA results
-        data = expand_pd_array_col(data, 'scores', 10 , 'PC') # Expand `scores` column for 10 PCs into columns `PC1` ... `PC10`
-        results, rf_model = assign_population_pcs(
-            data,
-            ['PC{}'.format(i + 1) for i in range(10)]),
-            ...
-        )
+    Note
+    ----
+    If you have a Pandas Dataframe and have all PCs as an array in a single column, the
+    `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
 
-    ```
-
-
-    :param Table pop_pc_pd: Pandas dataframe containing population PCs as well as a column with population labels
-    :param list of str pc_cols: Columns storing the PCs to use
+    :param Table or DataFrame pop_pc_pd: Input Hail Table or Pandas Dataframe
+    :param ArrayExpression or list of str pc_cols: Columns storing the PCs to use
     :param str known_col: Column storing the known population labels
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param int seed: Random seed
@@ -837,9 +894,20 @@ def assign_population_pcs(
     :param float min_prob: Minimum probability of belonging to a given population for the population to be set (otherwise set to `None`)
     :param str output_col: Output column storing the assigned population
     :param str missing_label: Label for samples for which the assignment probability is smaller than `min_prob`
-    :return: Dataframe containing sample IDs and imputed population labels, trained random forest model
-    :rtype: DataFrame, RandomForestClassifier
+    :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs and imputed population labels, trained random forest model
+    :rtype: (Table or DataFrame, RandomForestClassifier)
     """
+
+    hail_input = isinstance(pop_pca_scores, hl.Table)
+    if hail_input:
+        pop_pc_pd = pop_pca_scores.select(
+            known_col,
+            pca_scores=pc_cols
+        ).to_pandas()
+        pop_pc_pd = expand_pd_array_col(pop_pc_pd, 'pca_scores', out_cols_prefix='PC')
+        pc_cols = [col for col in pop_pc_pd if col.startswith('PC')]
+    else:
+        pop_pc_pd = pop_pca_scores
 
     train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
 
@@ -854,9 +922,9 @@ def assign_population_pcs(
         evaluate_fit = train_data.loc[~train_data['s'].isin(fit_samples)]
 
         # Train RF
-        training_set_known_labels = train_fit[known_col].as_matrix()
-        training_set_pcs = train_fit[pc_cols].as_matrix()
-        evaluation_set_pcs = evaluate_fit[pc_cols].as_matrix()
+        training_set_known_labels = train_fit[known_col].values
+        training_set_pcs = train_fit[pc_cols].values
+        evaluation_set_pcs = evaluate_fit[pc_cols].values
 
         pop_clf = RandomForestClassifier(n_estimators=n_estimators, random_state=seed)
         pop_clf.fit(training_set_pcs, training_set_known_labels)
@@ -870,12 +938,204 @@ def assign_population_pcs(
         pop_clf = fit
 
     # Classify data
-    pop_pc_pd[output_col] = pop_clf.predict(pop_pc_pd[pc_cols].as_matrix())
-    probs = pop_clf.predict_proba(pop_pc_pd[pc_cols].as_matrix())
+    pop_pc_pd[output_col] = pop_clf.predict(pop_pc_pd[pc_cols].values)
+    probs = pop_clf.predict_proba(pop_pc_pd[pc_cols].values)
     probs = pd.DataFrame(probs, columns=[f'prob_{p}' for p in pop_clf.classes_])
     pop_pc_pd = pd.concat([pop_pc_pd, probs], axis=1)
     probs['max'] = probs.max(axis=1)
     pop_pc_pd.loc[probs['max'] < min_prob, output_col] = missing_label
     pop_pc_pd = pop_pc_pd.drop(pc_cols, axis='columns')
 
-    return pop_pc_pd, pop_clf
+    logger.info("Found the following sample count after population assignment: {}".format(
+        ", ".join(f'{pop}: {count}' for pop, count in Counter(pop_pc_pd[output_col]).items())
+    ))
+
+    if hail_input:
+        pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
+        pops_ht.annotate_globals(
+            assign_pops_from_pc_params=hl.struct(
+                min_assignment_prob=min_prob
+            )
+        )
+        return pops_ht, pop_clf
+    else:
+        return pop_pc_pd, pop_clf
+
+
+def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
+    """
+    Merges multiple stats counters, assuming that they were computed on non-overlapping data.
+    Examples:
+    - Merge stats computed on indel and snv separately
+    - Merge stats computed on bi-allelic and multi-allelic variants separately
+    - Merge stats computed on autosomes and sex chromosomes separately
+
+    :param hl.expr.ArrayExpression stats: An array of stats counters to merge
+    :return: Merged stats Struct
+    :rtype: hl.expr.StructExpression
+    """
+
+    def add_stats(i: hl.expr.StructExpression, j: hl.expr.StructExpression) -> hl.expr.StructExpression:
+        """
+        This merges two stast counters together. It assumes that all stats counter fields are present in the struct.
+
+        :param hl.expr.Tuple i: accumulator: struct with mean, n and variance
+        :param hl.expr.Tuple j: new element: stats_struct -- needs to contain mean, n and variance
+        :return: Accumulation over all elements: struct with mean, n and variance
+        :rtype: hl.expr.StructExpression
+        """
+        delta = j.mean - i.mean
+        n_tot = i.n + j.n
+        return hl.struct(
+            min=hl.min(i.min, j.min),
+            max=hl.max(i.max, j.max),
+            mean=(i.mean * i.n + j.mean * j.n) / n_tot,
+            variance=i.variance + j.variance + (delta * delta * i.n * j.n) / n_tot,
+            n=n_tot,
+            sum=i.sum + j.sum
+        )
+
+    # Gather all metrics present in all stats counters
+    metrics = set(stats[0])
+    dropped_metrics = set()
+    for stat_expr in stats[1:]:
+        stat_expr_metrics = set(stat_expr)
+        dropped_metrics = dropped_metrics.union(stat_expr_metrics.difference(metrics))
+        metrics = metrics.intersection(stat_expr_metrics)
+    if dropped_metrics:
+        logger.warn("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
+
+    # Because merging standard deviation requires having the mean and n,
+    # check that they are also present if `stdev` is. Otherwise remove stdev
+    if 'stdev' in metrics:
+        missing_fields = [x for x in ['n', 'mean'] if x not in metrics]
+        if missing_fields:
+            logger.warn(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
+            metrics.remove('stdev')
+
+    # Create a struct with all possible stats for merging.
+    # This step helps when folding because we can rely on the struct schema
+    # Note that for intermediate merging, we compute the variance rather than the stdev
+    all_stats = hl.array(stats).map(lambda x: hl.struct(
+        min=x.min if 'min' in metrics else hl.null(hl.tfloat64),
+        max=x.max if 'max' in metrics else hl.null(hl.tfloat64),
+        mean=x.mean if 'mean' in metrics else hl.null(hl.tfloat64),
+        variance=x.stdev * x.stdev if 'stdev' in metrics else hl.null(hl.tfloat64),
+        n=x.n if 'n' in metrics else hl.null(hl.tfloat64),
+        sum=x.sum if 'sum' in metrics else hl.null(hl.tfloat64)
+    ))
+
+    # Merge the stats
+    agg_stats = all_stats[1:].fold(add_stats, all_stats[0])
+
+    # Return only the metrics that were present in all independent stats counters
+    # If `stdev` is present, then compute it from the variance
+    return agg_stats.select(
+        **{metric: agg_stats[metric] if metric != 'stdev' else hl.sqrt(agg_stats.variance) for metric in metrics}
+    )
+
+
+def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.expr.StructExpression:
+    """
+    Creates an expression that merges results from non-overlapping strata of hail.sample_qc
+    E.g.:
+    - Compute autosomes and sex chromosomes metrics separately, then merge results
+    - Compute bi-allelic and multi-allelic metrics separately, then merge results
+
+    Note regarding the merging of ``dp_stats`` and ``gq_stats``:
+    Because ``n`` is needed to aggregate ``stdev``, ``n_called`` is used for this purpose.
+    This should work very well on a standard GATK VCF and it essentially assumes that:
+    - samples that are called have `DP` and `GQ` fields
+    - samples that are not called do not have `DP` and `GQ` fields
+    Even if these assumptions are broken for some genotypes, it shouldn't matter too much.
+
+    :param list of StructExpression sample_qc_exprs: List of sample QC struct expressions for each stratification
+    :return: Combined sample QC results
+    :rtype: StructExpression
+    """
+
+    # List of metrics that can be aggregated by summing
+    additive_metrics = [
+        'n_called', 'n_not_called', 'n_hom_ref', 'n_het', 'n_hom_var', 'n_snp',
+        'n_insertion', 'n_deletion', 'n_singleton', 'n_transition', 'n_transversion', 'n_star'
+    ]
+
+    # List of metrics that are ratio of summed metrics (name, nominator, denominator)
+    ratio_metrics = [
+        ('call_rate', 'n_called', 'n_not_called'),
+        ('r_ti_tv', 'n_transition', 'n_transversion'),
+        ('r_het_hom_var', 'n_het', 'n_hom_var'),
+        ('r_insertion_deletion', 'n_insertion', 'n_deletion')
+    ]
+
+    # List of metrics that are struct generated by a stats counter
+    stats_metrics = ['gq_stats', 'dp_stats']
+
+    # Gather metrics present in sample qc fields
+    sample_qc_fields = set(sample_qc_exprs[0])
+    for sample_qc_expr in sample_qc_exprs[1:]:
+        sample_qc_fields = sample_qc_fields.union(set(sample_qc_expr))
+
+    # Merge additive metrics in sample qc fields
+    merged_exprs = {
+        metric: hl.sum([sample_qc_expr[metric] for sample_qc_expr in sample_qc_exprs])
+        for metric in additive_metrics if metric in sample_qc_fields
+    }
+
+    # Merge ratio metrics in sample qc fields
+    merged_exprs.update({
+        metric: hl.float64(divide_null(merged_exprs[nom], merged_exprs[denom]))
+        for metric, nom, denom in ratio_metrics if nom in sample_qc_fields and denom in sample_qc_fields
+    })
+
+    # Merge stats counter metrics in sample qc fields
+    # Use n_called as n for DP and GQ stats
+    if 'n_called' in sample_qc_fields:
+        merged_exprs.update({
+            metric: merge_stats_counters_expr([
+                sample_qc_expr[metric].annotate(n=sample_qc_expr.n_called)
+                for sample_qc_expr in sample_qc_exprs
+            ]).drop('n')
+            for metric in stats_metrics
+        })
+
+    return hl.struct(**merged_exprs)
+
+
+def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
+    """
+    Returns a boolean expression selecting bi-allelic sites only,
+    accounting for whether the input MT/HT was split.
+
+    :param Table or MatrixTable t: Input HT/MT
+    :return: Boolean expression selecting only bi-allelic sites
+    :rtype: BooleanExpression
+    """
+    return (~t.was_split if 'was_split' in t.row else (hl.len(t.alleles) == 2))
+
+
+def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
+    """
+    Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
+    This is implemented based on the GATK InbreedingCoeff metric:
+    https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
+
+    Note
+    ----
+    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+
+    :param CallExpression call: Expression giving the calls in the MT
+    :return: Site inbreeding coefficient expression
+    :rtype: Float32Expression
+    """
+
+    def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
+        n = gt_counts.get(0, 0) + gt_counts.get(1, 0) + gt_counts.get(2, 0)
+        p = (2 * gt_counts.get(0, 0) + gt_counts.get(1, 0)) / (2 * n)
+        q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
+        return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
+
+    return hl.bind(
+        inbreeding_coeff,
+        hl.agg.counter(call.n_alt_alleles())
+    )

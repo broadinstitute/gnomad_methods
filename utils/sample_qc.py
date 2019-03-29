@@ -12,13 +12,15 @@ def filter_rows_for_qc(
         min_inbreeding_coeff_threshold: Optional[float] = -0.8,
         apply_hard_filters: bool = True,
         bi_allelic_only: bool = True,
-        snv_only : bool = True
+        snv_only: bool = True
 ) -> hl.MatrixTable:
     """
     Annotates rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
-    AF and callrate thresholds are taken from gnomAD QC, inbreeding coeff, MQ, FS and QD filter are taken from GATK best practices
+    AF and callrate thresholds are taken from gnomAD QC; inbreeding coeff, MQ, FS and QD filters are taken from GATK best practices
 
-    Note: This function expect the typical ``info`` annotation of type struct with fields ``MQ``, ``FS`` and ``QD``
+    Note
+    ----
+    This function expect the typical ``info`` annotation of type struct with fields ``MQ``, ``FS`` and ``QD``
     if applying hard filters.
 
     :param MatrixTable mt: Input MT
@@ -56,13 +58,13 @@ def filter_rows_for_qc(
         filter_expr.append(bi_allelic_expr(mt))
 
     if apply_hard_filters:
-        if 'info' in mt.row_value: # TODO: Make this more generic?
-            if 'QD' in mt.info: # TODO: Compute QD?
+        if 'info' in mt.row_value:
+            if 'QD' in mt.info:
                 filter_expr.append((mt.info.QD >= 2))
             else:
                 logger.warn("Could not apply QD hard filter, as `info.QD` not found in schema.")
             if 'FS' in mt.info:
-                filter_expr.append((mt.info.FS  <= 60))
+                filter_expr.append((mt.info.FS <= 60))
             else:
                 logger.warn("Could not apply FS hard filter, as `info.FS` not found in schema.")
             if 'MQ' in mt.info:
@@ -97,7 +99,7 @@ def get_qc_mt(
     - Variants passing the set call rate and MAF thresholds
     - Genotypes passing on gnomAD ADJ criteria (GQ>=20, DP>=10, AB>0.2 for hets)
 
-    In addition, the MT will be LD-pruned oif `ld_r2` is set.
+    In addition, the MT will be LD-pruned if `ld_r2` is set.
 
     :param MatrixTable mt: Input MT
     :param bool adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
@@ -127,7 +129,7 @@ def get_qc_mt(
     )
 
     if adj_only:
-        qc_mt = filter_to_adj(qc_mt) # TODO: Make sure that this works fine before call rate filtering
+        qc_mt = filter_to_adj(qc_mt)  # TODO: Make sure that this works fine before call rate filtering
 
     qc_mt = filter_rows_for_qc(
         qc_mt,
@@ -204,7 +206,7 @@ def compute_callrate_mt(
 
 def run_platform_pca(
         callrate_mt: hl.MatrixTable,
-        binzarization_threshold: Optional[float] =0.25
+        binarization_threshold: Optional[float] = 0.25
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
     Runs a PCA on a sample/interval MT with each entry containing the call rate.
@@ -212,14 +214,14 @@ def run_platform_pca(
     E.g. with the default threshold of 0.25, all entries with a callrate < 0.25 are considered as 0s, others as 1s.
 
     :param MatrixTable callrate_mt: Input callrate MT
-    :param float binzarization_threshold: binzarization_threshold. None is no threshold desired
+    :param float binarization_threshold: binzarization_threshold. None is no threshold desired
     :return: eigenvalues, scores_ht, loadings_ht
     :rtype: (list of float, Table Table)
     """
     logger.info("Running platform PCA")
 
-    if binzarization_threshold is not None:
-        callrate_mt = callrate_mt.annotate_entries(callrate=hl.int(callrate_mt.callrate > binzarization_threshold))
+    if binarization_threshold is not None:
+        callrate_mt = callrate_mt.annotate_entries(callrate=hl.int(callrate_mt.callrate > binarization_threshold))
     # Center until Hail's PCA does it for you
     callrate_mt = callrate_mt.annotate_rows(mean_callrate=hl.agg.mean(callrate_mt.callrate))
     callrate_mt = callrate_mt.annotate_entries(callrate=callrate_mt.callrate - callrate_mt.mean_callrate)
@@ -259,8 +261,9 @@ def assign_platform_from_pcs(
 
     data['qc_platform'] = cluster_labels
     ht = hl.Table.from_pandas(data, key=[*platform_pca_scores_ht.key])
-    ht = ht.annotate(qc_platform='platform_'+hl.str(ht.qc_platform))
+    ht = ht.annotate(qc_platform='platform_' + hl.str(ht.qc_platform))
     return ht
+
 
 # TODO: This should be reviewed / merged with work from Kristen
 def infer_sex(
@@ -324,8 +327,8 @@ def infer_sex(
         is_female=(
             hl.case()
                 .when(sex_ht.no_y_call_rate_platforms.contains(sex_ht.qc_platform), sex_ht.is_female)
-                .when(sex_ht.is_female & ((sex_ht.y_call_rate - y_female_stats.min)/(y_male_stats.max - y_female_stats.min) < max_y_female_call_rate), True)
-                .when(~sex_ht.is_female & ((sex_ht.y_call_rate - y_female_stats.min)/(y_male_stats.max - y_female_stats.min) > min_y_male_call_rate), False)
+                .when(sex_ht.is_female & ((sex_ht.y_call_rate - y_female_stats.min) / (y_male_stats.max - y_female_stats.min) < max_y_female_call_rate), True)
+                .when(~sex_ht.is_female & ((sex_ht.y_call_rate - y_female_stats.min) / (y_male_stats.max - y_female_stats.min) > min_y_male_call_rate), False)
                 .or_missing()
         )
     )
@@ -339,7 +342,7 @@ def infer_sex(
         )
     )
 
-    sex_ht =  sex_ht.drop('qc_platform')
+    sex_ht = sex_ht.drop('qc_platform')
     return (sex_ht)
 
 
@@ -384,7 +387,7 @@ def filter_duplicate_samples(
     if isinstance(dups_ht.kept, hl.expr.StructExpression):
         dups_ht = dups_ht.key_by(**dups_ht.kept).drop('kept')
     else:
-        dups_ht = dups_ht.key_by(s=dups_ht.kept) # Since there is no defined name in the case of a non-struct type, use `s`
+        dups_ht = dups_ht.key_by(s=dups_ht.kept)  # Since there is no defined name in the case of a non-struct type, use `s`
     return dups_ht
 
 
@@ -529,10 +532,10 @@ def add_filters_expr(
         current_filters = hl.empty_set(hl.tstr)
 
     return hl.fold(
-            lambda x, y: x.union(y),
-            current_filters,
-            [
-                hl.cond(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
-                for filter_name, filter_condition in filters.items()
-            ]
-        )
+        lambda x, y: x.union(y),
+        current_filters,
+        [
+            hl.cond(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
+            for filter_name, filter_condition in filters.items()
+        ]
+    )

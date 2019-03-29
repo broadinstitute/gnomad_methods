@@ -1,4 +1,3 @@
-
 import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict, Counter
@@ -42,7 +41,7 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
                                .when(mt.GT.is_diploid(), hl.call(mt.GT[0], mt.GT[1], phased=False))
                                .when(mt.GT.is_haploid(), hl.call(mt.GT[0], phased=False))
                                .default(hl.null(hl.tcall))
-    )
+                               )
 
 
 def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression]) -> hl.ReferenceGenome:
@@ -55,7 +54,7 @@ def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalE
     """
     if isinstance(locus, hl.expr.LocusExpression):
         return locus.dtype.reference_genome
-    assert(isinstance(locus, hl.expr.IntervalExpression))
+    assert (isinstance(locus, hl.expr.IntervalExpression))
     return locus.dtype.point_type.reference_genome
 
 
@@ -208,7 +207,6 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
 
 
 def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
-
     """
     Add most_severe_consequence annotation to transcript consequences
     This is for a given transcript, as there are often multiple annotations for a single transcript:
@@ -249,15 +247,16 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
 
         def csq_score(tc):
             return csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
+
         tcl = tcl.map(lambda tc: tc.annotate(
             csq_score=hl.case(missing_false=True)
-            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
-            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
-            .when(tc.lof == 'LC', csq_score(tc) - 10)
-            .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
-            .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
-            .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
-            .default(csq_score(tc))
+                .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
+                .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
+                .when(tc.lof == 'LC', csq_score(tc) - 10)
+                .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
+                .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
+                .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
+                .default(csq_score(tc))
         ))
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 
@@ -505,7 +504,7 @@ def phase_by_transmission(
     )
 
 
-def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT' ,phased_call_field: str = 'PBT_GT') -> hl.MatrixTable:
+def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT', phased_call_field: str = 'PBT_GT') -> hl.MatrixTable:
     """
         Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
         Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
@@ -740,11 +739,11 @@ def infer_families(relatedness_ht: hl.Table,
         while len(possible_parents) > 1:
             p1 = possible_parents.pop()
             for p2 in possible_parents:
-                if tuple(sorted((p1,p2))) not in relative_pairs:
+                if tuple(sorted((p1, p2))) not in relative_pairs:
                     if sex.get(p1) is False and sex.get(p2):
-                        parents.append((p1,p2))
+                        parents.append((p1, p2))
                     elif sex.get(p1) and sex.get(p2) is False:
-                        parents.append((p2,p1))
+                        parents.append((p2, p1))
 
         if len(parents) == 1:
             return parents[0]
@@ -777,7 +776,7 @@ def infer_families(relatedness_ht: hl.Table,
     dups = hl.literal(duplicated_samples)
     first_degree_pairs = relatedness_ht.filter(
         (relatedness_ht[kin_col] >= first_degree_threshold[0]) &
-        (relatedness_ht[kin_col] <= first_degree_threshold[1]) & # We do not want to include twins/duplicate samples
+        (relatedness_ht[kin_col] <= first_degree_threshold[1]) &  # We do not want to include twins/duplicate samples
         ~dups.contains(relatedness_ht[i_col]) &
         ~dups.contains(relatedness_ht[j_col])
     ).collect()
@@ -857,7 +856,7 @@ def expand_pd_array_col(
 
 def assign_population_pcs(
         pop_pca_scores: Union[hl.Table, pd.DataFrame],
-        pc_cols: Union[hl.expr.ArrayExpression,  List[str]],
+        pc_cols: Union[hl.expr.ArrayExpression, List[str]],
         known_col: str = 'known_pop',
         fit: RandomForestClassifier = None,
         seed: int = 42,
@@ -981,7 +980,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         This merges two stast counters together. It assumes that all stats counter fields are present in the struct.
 
         :param hl.expr.Tuple i: accumulator: struct with mean, n and variance
-        :param hl.expr.Tuple j: new element: stats_struct -- needs to contain mean, n and stdev
+        :param hl.expr.Tuple j: new element: stats_struct -- needs to contain mean, n and variance
         :return: Accumulation over all elements: struct with mean, n and variance
         :rtype: hl.expr.StructExpression
         """
@@ -990,7 +989,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         return hl.struct(
             min=hl.min(i.min, j.min),
             max=hl.max(i.max, j.max),
-            mean=(i.mean * i.n + j.mean * j.n)/n_tot,
+            mean=(i.mean * i.n + j.mean * j.n) / n_tot,
             variance=i.variance + (j.variance + (delta * delta * i.n * j.n) / n_tot),
             n=n_tot,
             sum=i.sum + j.sum
@@ -1011,7 +1010,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
     if 'stdev' in metrics:
         missing_fields = [x for x in ['n', 'mean'] if x not in metrics]
         if missing_fields:
-            logger.warn(f'Cannot merge `stdev` from give stats counters since they are missing the following fields: {",".join(missing_fields)}')
+            logger.warn(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
             metrics.remove('stdev')
 
     # Create a struct with all possible stats for merging.
@@ -1063,11 +1062,11 @@ def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.
 
     # List of metrics that are ratio of summed metrics (name, nominator, denominator)
     ratio_metrics = [
-                       ('call_rate', 'n_called', 'n_not_called'),
-                       ('r_ti_tv', 'n_transition', 'n_transversion'),
-                       ('r_het_hom_var', 'n_het', 'n_hom_var'),
-                       ('r_insertion_deletion', 'n_insertion', 'n_deletion')
-                   ]
+        ('call_rate', 'n_called', 'n_not_called'),
+        ('r_ti_tv', 'n_transition', 'n_transversion'),
+        ('r_het_hom_var', 'n_het', 'n_hom_var'),
+        ('r_insertion_deletion', 'n_insertion', 'n_deletion')
+    ]
 
     # List of metrics that are struct generated by a stats counter
     stats_metrics = ['gq_stats', 'dp_stats']
@@ -1085,13 +1084,13 @@ def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.
 
     # Merge ratio metrics in sample qc fields
     merged_exprs.update({
-        metric: hl.float64(divide_null(merged_exprs[nom],merged_exprs[denom]))
+        metric: hl.float64(divide_null(merged_exprs[nom], merged_exprs[denom]))
         for metric, nom, denom in ratio_metrics if nom in sample_qc_fields and denom in sample_qc_fields
     })
 
     # Merge stats counter metrics in sample qc fields
     # Use n_called as n for DP and GQ stats
-    if 'n_called' in  sample_qc_fields:
+    if 'n_called' in sample_qc_fields:
         merged_exprs.update({
             metric: merge_stats_counters_expr([
                 sample_qc_expr[metric].annotate(n=sample_qc_expr.n_called)
@@ -1118,16 +1117,24 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
 def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
+    This is implemented based on the GATK InbreedingCoeff metric:
+    https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
+
+    Note
+    ----
+    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param CallExpression call: Expression giving the calls in the MT
     :return: Site inbreeding coefficient expression
     :rtype: Float32Expression
     """
-    def inbreeding_coeff(gt_counts):
-        n = gt_counts.get(0,0) + gt_counts.get(1,0) + gt_counts.get(2,0) # TODO: May want to consider n == 0 case
-        p = (2 * gt_counts.get(0,0) * gt_counts.get(1,0)) / (2*n)
-        q = (2 * gt_counts.get(2,0) * gt_counts.get(1,0)) / (2*n)
-        return 1 - (gt_counts.get(1,0) / (2 * p * q * n))
+
+    def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
+        n = gt_counts.get(0, 0) + gt_counts.get(1, 0) + gt_counts.get(2, 0)
+        p = (2 * gt_counts.get(0, 0) + gt_counts.get(1, 0)) / (2 * n)
+        q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
+        return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
+
     return hl.bind(
         inbreeding_coeff,
         hl.agg.counter(call.n_alt_alleles())

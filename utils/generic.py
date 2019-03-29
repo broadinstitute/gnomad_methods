@@ -990,7 +990,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
             min=hl.min(i.min, j.min),
             max=hl.max(i.max, j.max),
             mean=(i.mean * i.n + j.mean * j.n) / n_tot,
-            variance=i.variance + (j.variance + (delta * delta * i.n * j.n) / n_tot),
+            variance=i.variance + j.variance + (delta * delta * i.n * j.n) / n_tot,
             n=n_tot,
             sum=i.sum + j.sum
         )

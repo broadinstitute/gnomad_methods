@@ -293,6 +293,19 @@ def filter_vep_to_synonymous_variants(mt: Union[hl.MatrixTable, hl.Table],
     return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
 
 
+def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
+    """
+    Select only primitive types (string, int, float, bool) from a Table.
+    Particularly useful for exporting a Table.
+
+    :param Table ht: Input Table
+    :return: Table with only primitive types selected
+    :rtype: Table
+    """
+    return ht.select(**{x: v for x, v in ht.row_value.items() if
+                        v.dtype in {hl.tstr, hl.tint32, hl.tfloat32, hl.tint64, hl.tfloat64, hl.tbool}})
+
+
 def annotation_type_is_numeric(t: Any) -> bool:
     """
     Given an annotation type, returns whether it is a numerical type or not.

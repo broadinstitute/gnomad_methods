@@ -58,6 +58,23 @@ def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalE
     return locus.dtype.point_type.reference_genome
 
 
+def flip_base(base: str) -> str:
+    """
+    Returns the reverse complement of a base
+
+    :param str base: Base to be flipped
+    :return: Reverse complement of input base
+    :rtype: str
+    """
+
+    return (hl.switch(base)
+            .when('A', 'T')
+            .when('T', 'A')
+            .when('G', 'C')
+            .when('C', 'G')
+            .default(base))
+
+
 def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filters the Table or MatrixTable to autosomes only.

@@ -29,20 +29,48 @@ def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     return mt.drop(mt.adj)
 
 
-def annotate_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
+def get_adj_expr(
+        gt_expr: hl.expr.CallExpression,
+        gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+        dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+        ad_expr: hl.expr.ArrayNumericExpression,
+        adj_gq: int = 20,
+        adj_dp: int = 10,
+        adj_ab: float = 0.2,
+        haploid_adj_dp: int = 10
+) -> hl.expr.BooleanExpression:
+    """
+    Gets adj genotype annotation.
+    Defaults correspond to gnomAD values.
+    """
+    return (
+            (gq_expr >= adj_gq) &
+            hl.cond(
+                gt_expr.is_haploid(),
+                dp_expr >= haploid_adj_dp,
+                dp_expr >= adj_dp
+            ) &
+            (
+                hl.case()
+                .when(~gt_expr.is_het(), True)
+                .when(gt_expr.is_het_ref(), ad_expr[1] / dp_expr >= adj_ab)
+                .default((ad_expr[0] / dp_expr >= adj_ab ) & (ad_expr[1] / dp_expr >= adj_ab ))
+            )
+    )
+
+
+def annotate_adj(
+        mt: hl.MatrixTable,
+        adj_gq: int = 20,
+        adj_dp: int = 10,
+        adj_ab: float = 0.2,
+        haploid_adj_dp: int = 10
+) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid)
+    Defaults correspond to gnomAD values.
     """
-    adj_gq = 20
-    adj_dp = 10
-    adj_ab = 0.2
-
-    return mt.annotate_entries(adj=(mt.GQ >= adj_gq) & (mt.DP >= adj_dp) & (
-                                   ~mt.GT.is_het() |
-                                   ((mt.GT[0] == 0) & (mt.AD[mt.GT[1]] / mt.DP >= adj_ab)) |
-                                   ((mt.GT[0] > 0) & (mt.AD[mt.GT[0]] / mt.DP >= adj_ab) &
-                                    (mt.AD[mt.GT[1]] / mt.DP >= adj_ab))
-                               ))
+    return mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp))
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:

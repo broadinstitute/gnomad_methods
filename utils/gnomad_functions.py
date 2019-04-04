@@ -36,18 +36,18 @@ def get_adj_expr(
         ad_expr: hl.expr.ArrayNumericExpression,
         adj_gq: int = 20,
         adj_dp: int = 10,
-        adj_ab: float = 0.2
+        adj_ab: float = 0.2,
+        haploid_adj_dp: int = 10
 ) -> hl.expr.BooleanExpression:
     """
     Gets adj genotype annotation.
     Defaults correspond to gnomAD values.
-    adj_dp requirement is halved for haploid genotypes.
     """
     return (
             (gq_expr >= adj_gq) &
             hl.cond(
                 gt_expr.is_haploid(),
-                dp_expr >= adj_dp / 2,
+                dp_expr >= haploid_adj_dp,
                 dp_expr >= adj_dp
             ) &
             (
@@ -63,14 +63,14 @@ def annotate_adj(
         mt: hl.MatrixTable,
         adj_gq: int = 20,
         adj_dp: int = 10,
-        adj_ab: float = 0.2
+        adj_ab: float = 0.2,
+        haploid_adj_dp: int = 10
 ) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid)
     Defaults correspond to gnomAD values.
-    adj_dp requirement is halved for haploid genotypes.
     """
-    return mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab))
+    return mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp))
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:

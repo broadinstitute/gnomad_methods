@@ -162,7 +162,7 @@ def get_qc_mt(
 
 def compute_callrate_mt(
         mt: hl.MatrixTable,
-        intervals_ht: hl.Table = hl.import_locus_intervals(exome_calling_intervals_path),
+        intervals_ht: hl.Table,
         bi_allelic_only: bool = True,
         autosomes_only: bool = True
 ) -> hl.MatrixTable:
@@ -177,7 +177,7 @@ def compute_callrate_mt(
     contain an `interval_info` field containing all non-key fields of the `intervals_ht`.
 
     :param MatrixTable mt: Input MT
-    :param Table intervals_ht: Table containing the intervals. This table has to be keyed by locus. Default is the Broad exome calling intervals.
+    :param Table intervals_ht: Table containing the intervals. This table has to be keyed by locus.
     :param bool bi_allelic_only: If set, only bi-allelic sites are used for the computation
     :param bool autosomes_only: If set, only autosomal intervals are used.
     :return: Callrate MT

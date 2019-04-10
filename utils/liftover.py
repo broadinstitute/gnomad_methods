@@ -15,14 +15,14 @@ def get_checkpoint_path(gnomad: bool, data_type: str, table_path: str) -> str:
     """
     Creates a checkpoint path for Table
     :param bool gnomad: Whether data is gnomAD data
-    :param str data_type: Data type (exomes or genomes for gnomAD; None otherwise)
+    :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
     :param str table_path: Path to input Table (if data is not gnomAD data)
     :return: Output checkpoint path
     :rtype: str
     """
     
     if gnomad:
-        return get_gnomad_liftover_data_path(data_type, split=True, version=CURRENT_RELEASE)
+        return get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE)
     else:
         out_name = basename(table_path).split('.')[0]
         return f'{dirname(table_path)}/{out_name}_lift.ht'
@@ -33,7 +33,7 @@ def lift_ht(ht: hl.Table, gnomad: bool, data_type: str, table_path: str,  rg: hl
     Lifts input Table from one reference build to another
     :param Table ht: Table
     :param bool gnomad: Whether data is gnomAD data
-    :param str data_type: Data type (exome or genome)
+    :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
     :param str table_path: Path to input Table (if data is not gnomAD data)
     :param ReferenceGenome rg: Reference genome
     :return: Table with liftover annotations
@@ -44,7 +44,7 @@ def lift_ht(ht: hl.Table, gnomad: bool, data_type: str, table_path: str,  rg: hl
     ht = ht.annotate(new_locus=hl.liftover(ht.locus, rg, include_strand=True),
                      old_locus=ht.locus
                     )
-    ht = ht.key_by(locus=ht.new_locus.result, alleles = ht.alleles)
+    ht = ht.key_by(locus=ht.new_locus.result, alleles=ht.alleles)
     ht = ht.checkpoint(get_checkpoint_path(gnomad, data_type, table_path), overwrite=True)
     return ht
 
@@ -54,7 +54,7 @@ def annotate_snp_mismatch(ht: hl.Table, data_type: str, rg: hl.genetics.Referenc
     Annotates mismatches between reference allele and allele in reference fasta
     Assumes input Table has ht.new_locus annotation
     :param Table ht: Table of SNPs to be annotated
-    :param str data_type: Data type (exome or genome)
+    :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
     :param ReferenceGenome rg: GRCh38 reference genome with fasta sequence loaded
     :return: Table annotated with mismatches between reference allele and allele in fasta
     :rtype: Table
@@ -62,8 +62,6 @@ def annotate_snp_mismatch(ht: hl.Table, data_type: str, rg: hl.genetics.Referenc
  
     # filter to snps
     ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
-    snp_count = ht.count()
-    logger.info('{} SNPs in table'.format(snp_count))
 
     # check if reference allele matches what is in reference fasta
     # for snps on negative strand, make sure reverse complement of ref allele matches what is in reference fasta
@@ -86,7 +84,8 @@ def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
     :rtype: StructExpression
     """
 
-    mismatch = ht.aggregate(hl.struct(total_mismatch=hl.agg.count_where(ht.reference_mismatch),
+    mismatch = ht.aggregate(hl.struct(total_variants=hl.agg.count(),
+                                total_mismatch=hl.agg.count_where(ht.reference_mismatch),
                                 negative_strand=hl.agg.count_where(ht.new_locus.is_negative_strand),
                                 negative_strand_mismatch=hl.agg.count_where(ht.new_locus.is_negative_strand & ht.reference_mismatch)
                                 )
@@ -159,6 +158,8 @@ def main(args):
         ht = annotate_snp_mismatch(ht, data_type, rg37)
 
     mismatch = check_mismatch(ht)
+    logger.info('{} total SNPs'.format(mismatch['total_variants']))
+    logger.info('{} SNPs on minus strand'.format(mismatch['negative_strand']))
     logger.info('{} reference mismatches in SNPs'.format(mismatch['total_mismatch']))
     logger.info('{} mismatches on minus strand'.format(mismatch['negative_strand_mismatch']))
 

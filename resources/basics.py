@@ -497,11 +497,10 @@ def qc_meta_path(data_type: str):
 
 
 # liftover data
-def get_gnomad_liftover_data_path(data_type, split=True, version=CURRENT_RELEASE) -> str:
+def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
     """
     Function to get paths to liftover gnomAD Tables
     :param str data_type: One of `exomes` or `genomes`
-    :param bool split: Whether the dataset should be split
     :param str version: One of the RELEASEs
     :return: Path to chosen Table
     :rtype: str
@@ -509,18 +508,16 @@ def get_gnomad_liftover_data_path(data_type, split=True, version=CURRENT_RELEASE
     if version not in RELEASES:
         return DataException("Select version as one of: {}".format(','.join(RELEASES)))
 
-    if data_type == 'exomes':
-        return f'gs://gnomad/liftover/release/2.1.1/ht/exomes/gnomad.exomes.r{version}.liftover.ht'
-    elif data_type == 'genomes':
-        return f'gs://gnomad/liftover/release/2.1.1/ht/genomes/gnomad.genomes.r{version}.liftover.ht'
-    return DataException("Select data_type as one of 'genomes' or 'exomes'")
+    if data_type != 'exomes' and data_type != 'genomes': 
+        return DataException("Select data_type as one of 'genomes' or 'exomes'")
+
+    return f'gs://gnomad/liftover/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.liftover.ht'
 
 
-def get_gnomad_liftover_data(data_type, split=True, version=CURRENT_RELEASE) -> hl.Table:
+def get_gnomad_liftover_data(data_type, version=CURRENT_RELEASE) -> hl.Table:
     """
     Wrapper function to get liftover gnomAD data as Table
     :param str data_type: One of `exomes` or `genomes`
-    :param bool split: Whether the dataset should be split
     :param str version: One of the RELEASEs
     :return: Chosen Table
     :rtype: Table

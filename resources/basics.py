@@ -510,9 +510,9 @@ def get_gnomad_liftover_data_path(data_type, split=True, version=CURRENT_RELEASE
         return DataException("Select version as one of: {}".format(','.join(RELEASES)))
 
     if data_type == 'exomes':
-        return 'gs://gnomad/liftover/release/2.1.1/ht/exomes/gnomad.exomes.r{version}.liftover.ht'
+        return f'gs://gnomad/liftover/release/2.1.1/ht/exomes/gnomad.exomes.r{version}.liftover.ht'
     elif data_type == 'genomes':
-        return 'gs://gnomad/liftover/release/2.1.1/ht/genomes/gnomad.genomes.r{version}.liftover.ht'
+        return f'gs://gnomad/liftover/release/2.1.1/ht/genomes/gnomad.genomes.r{version}.liftover.ht'
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 

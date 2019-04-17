@@ -60,19 +60,29 @@ def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalE
 
 def flip_base(base: str) -> str:
     """
-    Returns the reverse complement of a base
+    Returns the complement of a base
 
     :param str base: Base to be flipped
-    :return: Reverse complement of input base
+    :return: Complement of input base
     :rtype: str
     """
-
     return (hl.switch(base)
             .when('A', 'T')
             .when('T', 'A')
             .when('G', 'C')
             .when('C', 'G')
             .default(base))
+
+
+def reverse_complement_bases(bases: hl.expr.StringExpression) -> hl.expr.StringExpression:
+    """
+    Returns the reverse complement of a sequence
+
+    :param StringExpression bases: Sequence to be flipped
+    :return: Reverse complement of input sequence
+    :rtype: StringExpression
+    """
+    return hl.delimit(hl.range(bases.length() - 1, -1, -1).map(lambda i: flip_base(bases[i])), '')
 
 
 def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:

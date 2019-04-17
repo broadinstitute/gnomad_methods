@@ -115,6 +115,7 @@ def main(args):
         logger.info('Working on gnomAD {} release ht'.format(data_type))
         logger.info('Reading in release ht')
         ht = get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE)
+        logger.info('Variants in release ht: {}'.format(ht.count()))
 
     else:
         data_type = None
@@ -127,7 +128,7 @@ def main(args):
         if args.build == 38:
             ht = ht.filter(ht.locus.contig == '21')
         else:
-            ht = ht.filter(ht.locus/contig == 'chr21')
+            ht = ht.filter(ht.locus.contig == 'chr21')
 
     logger.info('Adding chain file and loading fasta sequence for destination build')
     if args.build == 38:

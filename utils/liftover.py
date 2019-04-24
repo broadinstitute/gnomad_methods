@@ -169,7 +169,7 @@ if __name__ == '__main__':
 
     # Create argument parser
     parser = argparse.ArgumentParser(description='This script lifts a ht from one build to another')
-    parser.add_argument('-b', '--build', help='Desired build (37 or 38)', type=int, choices=[37, 38], default="38")
+    parser.add_argument('-b', '--build', help='Desired build (37 or 38)', type=int, choices=[37, 38], default=38)
     parser.add_argument('-p', '--table_path', help='Full path to table for liftover')
     parser.add_argument('-g', '--gnomad', help='Liftover table is one of the gnomAD releases', action='store_true')
     parser.add_argument(

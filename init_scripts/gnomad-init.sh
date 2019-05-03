@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 /opt/conda/bin/pip install --upgrade Cython
-PACKAGES="slackclient sklearn tabulate scipy statsmodels ggplot hdbscan"
+PACKAGES="websocket slackclient sklearn tabulate scipy statsmodels ggplot hdbscan"
 /opt/conda/bin/pip install --upgrade $PACKAGES
 
 #export HAIL_VERSION=devel

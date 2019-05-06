@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 /opt/conda/bin/pip install --upgrade Cython
 PACKAGES="slackclient==2.0.0 sklearn tabulate scipy statsmodels ggplot hdbscan websocket-client"
 /opt/conda/bin/pip install --upgrade $PACKAGES

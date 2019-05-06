@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 
 # Installing numpy on workers for pyspark purposes
 /opt/conda/bin/pip install numpy

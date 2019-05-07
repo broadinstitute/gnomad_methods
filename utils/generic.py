@@ -870,14 +870,14 @@ def assign_population_pcs(
         pop_pca_scores: Union[hl.Table, pd.DataFrame],
         pc_cols: Union[hl.expr.ArrayExpression, List[str]],
         known_col: str = 'known_pop',
-        fit: Any = None,
+        fit: Any = None, # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
         seed: int = 42,
         prop_train: float = 0.8,
         n_estimators: int = 100,
         min_prob: float = 0.9,
         output_col: str = 'pop',
         missing_label: str = 'oth'
-) -> Tuple[Union[hl.Table, pd.DataFrame], Any]:
+) -> Tuple[Union[hl.Table, pd.DataFrame], Any]: # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     """
 
     This function uses a random forest model to assign population labels based on the results of PCA.

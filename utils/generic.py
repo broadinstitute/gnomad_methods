@@ -2,7 +2,6 @@ import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict, Counter
 from typing import *
-from sklearn.ensemble import RandomForestClassifier
 import pandas as pd
 import random
 import warnings
@@ -871,14 +870,14 @@ def assign_population_pcs(
         pop_pca_scores: Union[hl.Table, pd.DataFrame],
         pc_cols: Union[hl.expr.ArrayExpression, List[str]],
         known_col: str = 'known_pop',
-        fit: RandomForestClassifier = None,
+        fit: Any = None,
         seed: int = 42,
         prop_train: float = 0.8,
         n_estimators: int = 100,
         min_prob: float = 0.9,
         output_col: str = 'pop',
         missing_label: str = 'oth'
-) -> Tuple[Union[hl.Table, pd.DataFrame], RandomForestClassifier]:
+) -> Tuple[Union[hl.Table, pd.DataFrame], Any]:
     """
 
     This function uses a random forest model to assign population labels based on the results of PCA.
@@ -910,7 +909,7 @@ def assign_population_pcs(
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs and imputed population labels, trained random forest model
     :rtype: (Table or DataFrame, RandomForestClassifier)
     """
-
+    from sklearn.ensemble import RandomForestClassifier
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
         pop_pc_pd = pop_pca_scores.select(

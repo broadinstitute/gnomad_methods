@@ -2,7 +2,6 @@ import numpy as np
 from .generic import *
 from gnomad_hail.resources import exome_calling_intervals_path
 from .gnomad_functions import logger, filter_to_adj
-import hdbscan
 
 
 def filter_rows_for_qc(
@@ -246,6 +245,7 @@ def assign_platform_from_pcs(
     :param int hdbscan_min_samples: HDBSCAN `min_samples` parameter
     :return: A Table with a `qc_platform` annotation containing the platform based on HDBSCAN clustering
     """
+    import hdbscan
     logger.info("Assigning platforms based on platform PCA clustering")
 
     # Read and format data for clustering

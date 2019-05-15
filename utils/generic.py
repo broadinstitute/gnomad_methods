@@ -1176,14 +1176,24 @@ def from_phred(phred_score_expr: hl.expr.NumericExpression) -> hl.expr.Float64Ex
     return 10 ** -(phred_score_expr / 10)
 
 
-def fs_from_sb(sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]) -> hl.expr.Int64Expression:
+def fs_from_sb(
+        sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
+        normalize: bool = True,
+        min_cell_count: int = 200,
+        min_count: int = 4,
+        min_p_value: float = 1e-320
+) -> hl.expr.Int64Expression:
     """
-    Computes GATK `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+    Computes `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
     `FS` is the phred-scaled value of the double-sided Fisher exact test on strand balance.
-    Similar to GATK:
-    - If sum(counts) > 400, they are normalized
-    - If sum(counts) < 4, returns missing
-    - Any p-value below 1e-320 is truncated to that value
+
+    Using default values will have the same behavior as the GATK implementation, that is:
+    - If sum(counts) > 2*`min_cell_count` (default to GATK value of 200), they are normalized
+    - If sum(counts) < `min_count` (default to GATK value of 4), returns missing
+    - Any p-value < `min_p_value` (default to GATK value of 1e-320) is truncated to that value
+
+    In addition to the default GATK behavior, setting `normalize` to `True` will perform a chi-squared test
+    for large counts (> `min_cell_count`) instead of normalizing the cell values.
 
     Note
     ----
@@ -1194,12 +1204,12 @@ def fs_from_sb(sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
     :param ArrayNumericExpression or ArrayExpression sb: Count of ref/alt reads on each strand
+    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (`normalize`=True), or use a chi sq instead of FET (`normalize`=False)
+    :param int min_cell_count: Maximum count for performing a FET
+    :param int min_count: Minimum total count to output `FS` (otherwise `null` it output)
     :return: FS value
     :rtype: Int64Expression
     """
-    TARGET_TABLE_SIZE = 200.0
-    MIN_PVALUE = 1e-320
-
     if not isinstance(sb, hl.expr.ArrayNumericExpression):
         sb = hl.bind(
             lambda x: hl.flatten(x),
@@ -1212,27 +1222,37 @@ def fs_from_sb(sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression
     )
 
     # Normalize table if counts get too large
-    fs_expr = hl.bind(
-        lambda sb, sb_sum: hl.cond(
-            sb_sum <= 2 * TARGET_TABLE_SIZE,
-            sb,
-            sb.map(lambda x: hl.int(x / (sb_sum / TARGET_TABLE_SIZE)))
-        ),
-        sb, sb_sum
-    )
-
-    # FET
-    fs_expr = to_phred(
-        hl.max(
-            hl.fisher_exact_test(
-                fs_expr[0], fs_expr[1], fs_expr[2], fs_expr[3]
-            ).p_value,
-            MIN_PVALUE # Minimal p-val
+    if normalize:
+        fs_expr = hl.bind(
+            lambda sb, sb_sum: hl.cond(
+                sb_sum <= 2 * min_cell_count,
+                sb,
+                sb.map(lambda x: hl.int(x / (sb_sum / min_cell_count)))
+            ),
+            sb, sb_sum
         )
-    )
 
-    # Return null if counts <= 4
+        # FET
+        fs_expr = to_phred(
+            hl.max(
+                hl.fisher_exact_test(
+                    fs_expr[0], fs_expr[1], fs_expr[2], fs_expr[3]
+                ).p_value,
+                min_p_value
+            )
+        )
+    else:
+        fs_expr = to_phred(
+            hl.max(
+                hl.contingency_table_test(
+                    sb[0], sb[1], sb[2], sb[3], min_cell_count=min_cell_count
+                ).p_value,
+                min_p_value
+            )
+        )
+
+    # Return null if counts <= `min_count`
     return hl.or_missing(
-        sb_sum > 4,
+        sb_sum > min_count,
         hl.max(0, fs_expr) # Needed to avoid -0.0 values
     )

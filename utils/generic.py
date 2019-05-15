@@ -1192,7 +1192,7 @@ def fs_from_sb(
     - If sum(counts) < `min_count` (default to GATK value of 4), returns missing
     - Any p-value < `min_p_value` (default to GATK value of 1e-320) is truncated to that value
 
-    In addition to the default GATK behavior, setting `normalize` to `True` will perform a chi-squared test
+    In addition to the default GATK behavior, setting `normalize` to `False` will perform a chi-squared test
     for large counts (> `min_cell_count`) instead of normalizing the cell values.
 
     Note

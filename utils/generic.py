@@ -1151,3 +1151,107 @@ def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Flo
         inbreeding_coeff,
         hl.agg.counter(call.n_alt_alleles())
     )
+
+
+def to_phred(linear_expr: hl.expr.NumericExpression) -> hl.expr.Float64Expression:
+    """
+    Computes the phred-scaled value of the linear-scale input
+
+    :param NumericExpression linear_expr: input
+    :return: Phred-scaled value
+    :rtype: Float64Expression
+    """
+    return -10 * hl.log10(linear_expr)
+
+
+def from_phred(phred_score_expr: hl.expr.NumericExpression) -> hl.expr.Float64Expression:
+    """
+    Computes the linear-scale value of the phred-scaled input.
+
+    :param NumericExpression phred_score_expr: phred-scaled value
+    :return: linear-scale value of the phred-scaled input.
+    :rtype: Float64Expression
+    """
+    return 10 ** -(phred_score_expr / 10)
+
+
+def fs_from_sb(
+        sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
+        normalize: bool = True,
+        min_cell_count: int = 200,
+        min_count: int = 4,
+        min_p_value: float = 1e-320
+) -> hl.expr.Int64Expression:
+    """
+    Computes `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+    `FS` is the phred-scaled value of the double-sided Fisher exact test on strand balance.
+
+    Using default values will have the same behavior as the GATK implementation, that is:
+    - If sum(counts) > 2*`min_cell_count` (default to GATK value of 200), they are normalized
+    - If sum(counts) < `min_count` (default to GATK value of 4), returns missing
+    - Any p-value < `min_p_value` (default to GATK value of 1e-320) is truncated to that value
+
+    In addition to the default GATK behavior, setting `normalize` to `False` will perform a chi-squared test
+    for large counts (> `min_cell_count`) instead of normalizing the cell values.
+
+    Note
+    ----
+    This function can either take
+    - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+    - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+
+    GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
+
+    :param ArrayNumericExpression or ArrayExpression sb: Count of ref/alt reads on each strand
+    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (`normalize`=True), or use a chi sq instead of FET (`normalize`=False)
+    :param int min_cell_count: Maximum count for performing a FET
+    :param int min_count: Minimum total count to output `FS` (otherwise `null` it output)
+    :return: FS value
+    :rtype: Int64Expression
+    """
+    if not isinstance(sb, hl.expr.ArrayNumericExpression):
+        sb = hl.bind(
+            lambda x: hl.flatten(x),
+            sb
+        )
+
+    sb_sum = hl.bind(
+        lambda x: hl.sum(x),
+        sb
+    )
+
+    # Normalize table if counts get too large
+    if normalize:
+        fs_expr = hl.bind(
+            lambda sb, sb_sum: hl.cond(
+                sb_sum <= 2 * min_cell_count,
+                sb,
+                sb.map(lambda x: hl.int(x / (sb_sum / min_cell_count)))
+            ),
+            sb, sb_sum
+        )
+
+        # FET
+        fs_expr = to_phred(
+            hl.max(
+                hl.fisher_exact_test(
+                    fs_expr[0], fs_expr[1], fs_expr[2], fs_expr[3]
+                ).p_value,
+                min_p_value
+            )
+        )
+    else:
+        fs_expr = to_phred(
+            hl.max(
+                hl.contingency_table_test(
+                    sb[0], sb[1], sb[2], sb[3], min_cell_count=min_cell_count
+                ).p_value,
+                min_p_value
+            )
+        )
+
+    # Return null if counts <= `min_count`
+    return hl.or_missing(
+        sb_sum > min_count,
+        hl.max(0, fs_expr) # Needed to avoid -0.0 values
+    )

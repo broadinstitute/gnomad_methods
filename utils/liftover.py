@@ -22,7 +22,8 @@ def get_checkpoint_path(gnomad: bool, data_type: str, table_path: str) -> str:
     """
     
     if gnomad:
-        return get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE)
+        return f'gs://gnomad/liftover/release/2.1.1/ht/{data_type}/gnomad.{data_type}.r2.1.1.liftover.ht'
+        #return get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE)
     else:
         out_name = basename(table_path).split('.')[0]
         return f'{dirname(table_path)}/{out_name}_lift.ht'
@@ -44,6 +45,9 @@ def lift_ht(ht: hl.Table, gnomad: bool, data_type: str, table_path: str,  rg: hl
     ht = ht.annotate(new_locus=hl.liftover(ht.locus, rg, include_strand=True),
                      old_locus=ht.locus
                     )
+    no_target = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.new_locus)))
+    logger.info('Filtering out {} sites that failed to liftover'.format(no_target))
+    ht = ht.filter(hl.is_defined(ht.new_locus)) 
     ht = ht.key_by(locus=ht.new_locus.result, alleles=ht.alleles)
     ht = ht.checkpoint(get_checkpoint_path(gnomad, data_type, table_path), overwrite=True)
     return ht
@@ -97,9 +101,24 @@ def main(args):
 
     hl.init()
     
-    # get reference genomes
-    rg37 = hl.get_reference('GRCh37')
-    rg38 = hl.get_reference('GRCh38')
+    logger.info('Loading reference genomes, adding chain file, and loading fasta sequence for destination build')
+    if args.build == 38:
+        source = hl.get_reference('GRCh37')
+        target = hl.get_reference('GRCh38')
+        chain = 'gs://hail-common/references/grch37_to_grch38.over.chain.gz'
+        target.add_sequence(
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz', 
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+            )
+    else:
+        source = hl.get_reference('GRCh38')
+        target - hl.get_reference('GRCh37')
+        chain = 'gs://hail-common/references/grch38_to_grch37.over.chain.gz'
+        target.add_sequence(
+            'gs://hail-common/references/human_g1k_v37.fasta.gz',
+            'gs://hail-common/references/human_g1k_v37.fasta.fai'
+            ) 
+    source.add_liftover(chain, target)
 
     if args.gnomad:
         gnomad = True
@@ -130,33 +149,11 @@ def main(args):
         else:
             ht = ht.filter(ht.locus.contig == 'chr21')
 
-    logger.info('Adding chain file and loading fasta sequence for destination build')
-    if args.build == 38:
-
-        rg37.add_liftover('gs://hail-common/references/grch37_to_grch38.over.chain.gz', rg38)
-        rg38.add_sequence(
-            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz', 
-            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
-            )
-
-        logger.info('Lifting ht to b{}'.format(args.build))
-        ht = lift_ht(ht, gnomad, data_type, table_path, rg38)
+    logger.info('Lifting ht to b{}'.format(args.build))
+    ht = lift_ht(ht, gnomad, data_type, table_path, rg38)
         
-        logger.info('Checking SNPs for reference mismatches')
-        ht = annotate_snp_mismatch(ht, data_type, rg38)
-
-    else:
-        rg38.add_liftover('gs://hail-common/references/grch38_to_grch37.over.chain.gz', rg37)
-        rg37.add_sequence(
-            'gs://hail-common/references/human_g1k_v37.fasta.gz',
-            'gs://hail-common/references/human_g1k_v37.fasta.fai'
-            ) 
-
-        logger.info('Lifting ht to b{}'.format(args.build))
-        ht = lift_ht(ht, gnomad, data_type, table_path, rg37)
-
-        logger.info('Checking SNPs for reference mismatches')
-        ht = annotate_snp_mismatch(ht, data_type, rg37)
+    logger.info('Checking SNPs for reference mismatches')
+    ht = annotate_snp_mismatch(ht, data_type, rg38)
 
     mismatch = check_mismatch(ht)
     logger.info('{} total SNPs'.format(mismatch['total_variants']))
@@ -169,7 +166,7 @@ if __name__ == '__main__':
 
     # Create argument parser
     parser = argparse.ArgumentParser(description='This script lifts a ht from one build to another')
-    parser.add_argument('-b', '--build', help='Desired build (37 or 38)', type=int, choices=[37, 38], default=38)
+    parser.add_argument('-b', '--build', help='Destination build (37 or 38)', type=int, choices=[37, 38], default=38)
     parser.add_argument('-p', '--table_path', help='Full path to table for liftover')
     parser.add_argument('-g', '--gnomad', help='Liftover table is one of the gnomAD releases', action='store_true')
     parser.add_argument(

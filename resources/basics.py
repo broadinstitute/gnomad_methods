@@ -511,20 +511,7 @@ def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
     if data_type != 'exomes' and data_type != 'genomes': 
         return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
-    return f'gs://gnomad/liftover/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.liftover.ht'
-
-
-def get_gnomad_liftover_data(data_type, version=CURRENT_RELEASE) -> hl.Table:
-    """
-    Wrapper function to get liftover gnomAD data as Table
-    :param str data_type: One of `exomes` or `genomes`
-    :param str version: One of the RELEASEs
-    :return: Chosen Table
-    :rtype: Table
-    """
-    return hl.read_table(get_gnomad_liftover_data_path(data_type, version))
-
-
+    return f'gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht'
 
 
 class DataException(Exception):

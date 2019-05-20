@@ -496,6 +496,23 @@ def qc_meta_path(data_type: str):
         return 'gs://gnomad/sample_qc/input_meta/gnomad.genomes.streamlined_metadata.2018-10-11.txt.bgz'
 
 
+# liftover data
+def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
+    """
+    Function to get paths to liftover gnomAD Tables
+    :param str data_type: One of `exomes` or `genomes`
+    :param str version: One of the RELEASEs
+    :return: Path to chosen Table
+    :rtype: str
+    """
+    if version not in RELEASES:
+        return DataException("Select version as one of: {}".format(','.join(RELEASES)))
+
+    if data_type != 'exomes' and data_type != 'genomes': 
+        return DataException("Select data_type as one of 'genomes' or 'exomes'")
+
+    return f'gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht'
+
 
 class DataException(Exception):
     pass

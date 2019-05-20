@@ -112,7 +112,7 @@ def main(args):
             )
     else:
         source = hl.get_reference('GRCh38')
-        target - hl.get_reference('GRCh37')
+        target = hl.get_reference('GRCh37')
         chain = 'gs://hail-common/references/grch38_to_grch37.over.chain.gz'
         target.add_sequence(
             'gs://hail-common/references/human_g1k_v37.fasta.gz',
@@ -150,10 +150,10 @@ def main(args):
             ht = ht.filter(ht.locus.contig == 'chr21')
 
     logger.info('Lifting ht to b{}'.format(args.build))
-    ht = lift_ht(ht, gnomad, data_type, table_path, rg38)
+    ht = lift_ht(ht, gnomad, data_type, table_path, target)
         
     logger.info('Checking SNPs for reference mismatches')
-    ht = annotate_snp_mismatch(ht, data_type, rg38)
+    ht = annotate_snp_mismatch(ht, data_type, target)
 
     mismatch = check_mismatch(ht)
     logger.info('{} total SNPs'.format(mismatch['total_variants']))

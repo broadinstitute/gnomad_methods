@@ -392,20 +392,24 @@ def genomes_exomes_duplicate_ids_tsv_path(version: str = CURRENT_DUPS) -> str:
     return f"gs://gnomad/metadata/join/gnomad.genomes_exomes.{version}.duplicate_ids.tsv"
 
 
-def omni_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_omni2.5.b37.mt'.format(hail_version)
+def omni_mt_path(hail_version=CURRENT_HAIL_VERSION, is_grch38: bool = False):
+    ref_tag = 'hg38' if is_grch38 else 'b37'
+    return f'gs://gnomad-public/truth-sets/hail-{hail_version}/1000G_omni2.5.{ref_tag}.mt'
 
 
-def mills_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/Mills_and_1000G_gold_standard.indels.b37.mt'.format(hail_version)
+def mills_mt_path(hail_version=CURRENT_HAIL_VERSION, is_grch38: bool = False):
+    ref_tag = 'hg38' if is_grch38 else 'b37'
+    return f'gs://gnomad-public/truth-sets/hail-{hail_version}/Mills_and_1000G_gold_standard.indels.{ref_tag}.mt'
 
 
-def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/hapmap_3.3.b37.mt'.format(hail_version)
+def hapmap_mt_path(hail_version=CURRENT_HAIL_VERSION, is_grch38: bool = False):
+    ref_tag = 'hg38' if is_grch38 else 'b37'
+    return f'gs://gnomad-public/truth-sets/hail-{hail_version}/hapmap_3.3.{ref_tag}.mt'
 
 
-def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION):
-    return 'gs://gnomad-public/truth-sets/hail-{0}/1000G_phase1.snps.high_confidence.b37.mt'.format(hail_version)
+def kgp_high_conf_snvs_mt_path(hail_version=CURRENT_HAIL_VERSION, is_grch38: bool = False):
+    ref_tag = 'hg38' if is_grch38 else 'b37'
+    return f'gs://gnomad-public/truth-sets/hail-{hail_version}/1000G_phase1.snps.high_confidence.{ref_tag}.mt'
 
 
 def kgp_phase3_genotypes_mt_path(split: bool = True, hail_version=CURRENT_HAIL_VERSION) -> str:

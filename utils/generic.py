@@ -249,7 +249,7 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None):
     }
 
     if reference_vep_ht is None:
-        if reference is not None:
+        if reference is None:
             reference = hl.default_reference()
 
         if reference not in VEP_REFERENCES:

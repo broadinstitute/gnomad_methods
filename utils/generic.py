@@ -238,6 +238,7 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None):
 
     :param Table ht: Input Table
     :param Table reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
+    :param ReferenceGenome reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
     :return: VEPped Table
     :rtype: Table
     """
@@ -250,7 +251,7 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None):
 
     if reference_vep_ht is None:
         if reference is None:
-            reference = hl.default_reference()
+            reference = hl.default_reference().name
 
         if reference not in VEP_REFERENCES:
             raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(VEP_REFERENCES.keys())}')

@@ -232,7 +232,7 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
-def vep_or_lookup_vep(ht, reference_vep_ht, reference):
+def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None):
     """
     VEP a table, or lookup variants in a reference database
 

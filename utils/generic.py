@@ -232,13 +232,14 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
-def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None):
+def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
     """
     VEP a table, or lookup variants in a reference database
 
     :param Table ht: Input Table
     :param Table reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
     :param ReferenceGenome reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
+    :param str vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
     :return: VEPped Table
     :rtype: Table
     """
@@ -263,7 +264,10 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None):
     vep_ht = ht.filter(hl.is_defined(ht.vep))
     revep_ht = ht.filter(hl.is_missing(ht.vep))
 
-    revep_ht = hl.vep(revep_ht, vep_config_path(reference))
+    if vep_config is None:
+        vep_config = vep_config_path(reference)
+
+    revep_ht = hl.vep(revep_ht, vep_config)
 
     return vep_ht.union(revep_ht)
 

@@ -174,8 +174,8 @@ def liftover_using_gnomad_map(ht, data_type):
     :return: Lifted over table
     :rtype: Table
     """
-    from gnomad_hail.resources.basics import get_liftover_map_path
-    lift_ht = hl.read_table(get_liftover_map_path(data_type))
+    from gnomad_hail.resources.basics import get_gnomad_liftover_data_path
+    lift_ht = hl.read_table(get_gnomad_liftover_data_path(data_type))
     ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
     return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')
 

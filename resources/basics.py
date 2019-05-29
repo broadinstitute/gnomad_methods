@@ -220,10 +220,6 @@ def get_gnomad_public_data_path(data_type, split=True, version=CURRENT_RELEASE):
     return DataException("Select data_type as one of 'genomes' or 'exomes'")
 
 
-def get_liftover_map_path(data_type):
-    return get_release_file(f'gs://gnomad-public/release/{{0}}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{{0}}.sites.liftover_grch38.ht')
-
-
 def get_gnomad_data_path(data_type, hardcalls=False, split=True, non_refs_only=False, hail_version=CURRENT_HAIL_VERSION):
     """
     Wrapper function to get paths to gnomAD data
@@ -510,10 +506,10 @@ def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
     :rtype: str
     """
     if version not in RELEASES:
-        return DataException("Select version as one of: {}".format(','.join(RELEASES)))
+        raise DataException("Select version as one of: {}".format(','.join(RELEASES)))
 
     if data_type != 'exomes' and data_type != 'genomes': 
-        return DataException("Select data_type as one of 'genomes' or 'exomes'")
+        raise DataException("Select data_type as one of 'genomes' or 'exomes'")
 
     return f'gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht'
 

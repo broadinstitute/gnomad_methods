@@ -434,7 +434,7 @@ def cpg_sites_ht_path():
     return 'gs://gnomad-public/resources/methylation/cpg.ht'
 
 
-def methylation_sites_mt_path(hail_version=CURRENT_HAIL_VERSION, ref='GRCh37'):
+def methylation_sites_ht_path(hail_version=CURRENT_HAIL_VERSION, ref='GRCh37'):
     if ref not in REFERENCES:
         return DataException("Select reference as one of: {}".format(','.join(REFERENCES)))
     if ref == 'GRCh37':
@@ -469,10 +469,25 @@ genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_eva
 genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list"
 # More can be found at gs://broad-references/hg19
 
-vep_config = 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json'
 
-# Annotations
-context_mt_path = 'gs://gnomad-resources/context/hail-0.2/context_processed.mt'
+def vep_config_path(reference='GRCh37'):
+    if reference not in REFERENCES:
+        return DataException("Select reference as one of: {}".format(','.join(REFERENCES)))
+    if reference == 'GRCh37':
+        return 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json'
+    elif reference == 'GRCh38':
+        return 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json'
+
+vep_config = vep_config_path()
+
+
+def context_ht_path(reference='GRCh37'):
+    if reference not in ('GRCh37', ):
+        return DataException("Reference must be GRCh37")
+    if reference == 'GRCh37':
+        return 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht'
+
+
 constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
 
 

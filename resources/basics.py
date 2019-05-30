@@ -527,10 +527,10 @@ def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
     :rtype: str
     """
     if version not in RELEASES:
-        return DataException("Select version as one of: {}".format(','.join(RELEASES)))
+        raise DataException("Select version as one of: {}".format(','.join(RELEASES)))
 
     if data_type != 'exomes' and data_type != 'genomes': 
-        return DataException("Select data_type as one of 'genomes' or 'exomes'")
+        raise DataException("Select data_type as one of 'genomes' or 'exomes'")
 
     return f'gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht'
 

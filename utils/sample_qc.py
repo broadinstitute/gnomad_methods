@@ -9,6 +9,7 @@ def filter_rows_for_qc(
         min_af: Optional[float] = 0.001,
         min_callrate: Optional[float] = 0.99,
         min_inbreeding_coeff_threshold: Optional[float] = -0.8,
+        min_hardy_weinberg_threshold: Optional[float] = 1e-8,
         apply_hard_filters: bool = True,
         bi_allelic_only: bool = True,
         snv_only: bool = True
@@ -26,6 +27,7 @@ def filter_rows_for_qc(
     :param float min_af: Minimum site AF to keep. Not applied if set to ``None``.
     :param float min_callrate: Minimum site call rate to keep. Not applied if set to ``None``.
     :param float min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
+    :param float min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
     :param bool apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
     :param bool bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
     :param bool snv_only: Whether to only keep SNVs or include other variant types
@@ -40,6 +42,8 @@ def filter_rows_for_qc(
         annotation_expr['site_callrate'] = hl.agg.fraction(hl.is_defined(mt.GT))
     if min_inbreeding_coeff_threshold is not None:
         annotation_expr['site_inbreeding_coeff'] = bi_allelic_site_inbreeding_expr(mt.GT)
+    if min_hardy_weinberg_threshold is not None:
+        annotation_expr['hwe'] = hl.agg.hardy_weinberg_test(mt.GT)
 
     if annotation_expr:
         mt = mt.annotate_rows(**annotation_expr)
@@ -51,6 +55,8 @@ def filter_rows_for_qc(
         filter_expr.append((mt.site_callrate > min_callrate))
     if min_inbreeding_coeff_threshold is not None:
         filter_expr.append((mt.site_inbreeding_coeff > min_inbreeding_coeff_threshold))
+    if min_hardy_weinberg_threshold is not None:
+        filter_expr.append((mt.hwe.p_value > min_hardy_weinberg_threshold))
     if snv_only:
         filter_expr.append(hl.is_snp(mt.alleles[0], mt.alleles[1]))
     if bi_allelic_only:
@@ -81,7 +87,8 @@ def get_qc_mt(
         adj_only: bool = True,
         min_af: float = 0.001,
         min_callrate: float = 0.99,
-        inbreeding_coeff_threshold: float = -0.8,
+        min_inbreeding_coeff_threshold: float = -0.8,
+        min_hardy_weinberg_threshold: float = 1e-8,
         apply_hard_filters: bool = True,
         ld_r2: float = 0.1,
         filter_lcr: bool = True,
@@ -104,7 +111,8 @@ def get_qc_mt(
     :param bool adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
     :param float min_af: Minimum allele frequency to keep
     :param float min_callrate: Minimum call rate to keep
-    :param float inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
+    :param float min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
+    :param float min_hardy_weinberg_threshold: Minimum site HW test p-value to keep
     :param bool apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
     :param float ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
     :param bool filter_lcr: Filter LCR regions
@@ -134,7 +142,8 @@ def get_qc_mt(
         qc_mt,
         min_af,
         min_callrate,
-        inbreeding_coeff_threshold,
+        min_inbreeding_coeff_threshold,
+        min_hardy_weinberg_threshold,
         apply_hard_filters
     )
 
@@ -149,7 +158,7 @@ def get_qc_mt(
             adj_only=adj_only,
             min_af=min_af,
             min_callrate=min_callrate,
-            inbreeding_coeff_threshold=inbreeding_coeff_threshold,
+            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold,
             apply_hard_filters=apply_hard_filters,
             ld_r2=ld_r2 if ld_r2 is not None else hl.null(hl.tfloat32),
             filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,

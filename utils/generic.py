@@ -232,6 +232,46 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
+def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
+    """
+    VEP a table, or lookup variants in a reference database
+
+    :param Table ht: Input Table
+    :param Table reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
+    :param ReferenceGenome reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
+    :param str vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
+    :return: VEPped Table
+    :rtype: Table
+    """
+    from gnomad_hail.resources.basics import vep_config_path, context_ht_path
+
+    VEP_REFERENCES = {
+        'GRCh37': context_ht_path(),
+        'GRCh38': '',
+    }
+
+    if reference_vep_ht is None:
+        if reference is None:
+            reference = hl.default_reference().name
+
+        if reference not in VEP_REFERENCES:
+            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(VEP_REFERENCES.keys())}')
+
+        reference_vep_ht = hl.read_table(VEP_REFERENCES[reference])
+
+    ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
+
+    vep_ht = ht.filter(hl.is_defined(ht.vep))
+    revep_ht = ht.filter(hl.is_missing(ht.vep))
+
+    if vep_config is None:
+        vep_config = vep_config_path(reference)
+
+    revep_ht = hl.vep(revep_ht, vep_config)
+
+    return vep_ht.union(revep_ht)
+
+
 def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
     """
     Add most_severe_consequence annotation to transcript consequences
@@ -276,13 +316,14 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
 
         tcl = tcl.map(lambda tc: tc.annotate(
             csq_score=hl.case(missing_false=True)
-                .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
-                .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
-                .when(tc.lof == 'LC', csq_score(tc) - 10)
-                .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
-                .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
-                .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
-                .default(csq_score(tc))
+            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
+            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
+            .when(tc.lof == 'OS', csq_score(tc) - 20)
+            .when(tc.lof == 'LC', csq_score(tc) - 10)
+            .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
+            .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
+            .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
+            .default(csq_score(tc))
         ))
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 

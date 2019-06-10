@@ -434,13 +434,37 @@ def cpg_sites_ht_path():
     return 'gs://gnomad-public/resources/methylation/cpg.ht'
 
 
-def methylation_sites_mt_path(hail_version=CURRENT_HAIL_VERSION, ref='GRCh37'):
+REFERENCE_DATA = {
+    'GRCh37': {
+        'vep_config': 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht',
+        'methylation': 'gs://gnomad-public/resources/methylation/methylation.ht',
+    },
+    'GRCh38': {
+        'vep_config': 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json',
+        'methylation': 'gs://gnomad-resources/methylation/hail-0.2/methylation_GRCh38.ht',
+    }
+}
+
+def methylation_sites_ht_path(ref: str = 'GRCh37'):
+    if ref not in REFERENCE_DATA:
+        raise DataException("Select reference as one of: {}".format(','.join(REFERENCES)))
+    return REFERENCE_DATA[ref]['methylation']
+
+
+def context_ht_path(ref: str = 'GRCh37'):
+    if ref not in ('GRCh37', ):
+        raise DataException("Reference must be GRCh37")
+    return REFERENCE_DATA[ref]['all_possible']
+
+
+def vep_config_path(ref: str = 'GRCh37'):
     if ref not in REFERENCES:
-        return DataException("Select reference as one of: {}".format(','.join(REFERENCES)))
-    if ref == 'GRCh37':
-        return 'gs://gnomad-public/resources/methylation/methylation.ht'.format(hail_version)
-    else:
-        return 'gs://gnomad-resources/methylation/hail-{}/methylation_GRCh38.ht'.format(hail_version)
+        raise DataException("Select reference as one of: {}".format(','.join(REFERENCES)))
+    return REFERENCE_DATA[ref]['vep_config']
+
+
+vep_config = vep_config_path()  # For backwards-compatibility
 
 
 dbsnp_vcf_path = "gs://gnomad-public/truth-sets/source/All_20180423.vcf.bgz"
@@ -469,10 +493,7 @@ genome_evaluation_intervals_path = "gs://gnomad-public/intervals/hg19-v0-wgs_eva
 genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wgs_evaluation_regions.hg38.interval_list"
 # More can be found at gs://broad-references/hg19
 
-vep_config = 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json'
 
-# Annotations
-context_mt_path = 'gs://gnomad-resources/context/hail-0.2/context_processed.mt'
 constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
 
 

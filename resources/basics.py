@@ -359,17 +359,24 @@ def metadata_exomes_ht_path(version=CURRENT_EXOME_META):
     return 'gs://gnomad/metadata/exomes/gnomad.exomes.metadata.{0}.ht'.format(version)
 
 
-def coverage_mt_path(data_type) -> str:
-    return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/mt/gnomad.{data_type}.coverage.mt'
+def coverage_mt_path(data_type, grouped: bool = False) -> str:
+    """
+    Returns the gnomAD coverage MT.
+    If `grouped` is true, then each entry contains aggregated information by platform and sex.
+
+    :param data_type: One of 'exomes' or 'genomes'
+    :param grouped: Whether to load the grouped or full MT
+    :return: Coverage MT
+    :rtype: MatrixTable
+    """
+    return 'gs://gnomad/coverage/hail-0.2/coverage/{0}/mt/gnomad.{0}.coverage{1}.mt'.format(
+        data_type,
+        '.grouped' if grouped else ''
+    )
 
 
-def coverage_ht_path(data_type, by_population: bool = False, by_platform: bool = False) -> str:
-    by = '.population' if by_population else ''
-    by += '.platform' if by_platform else ''
-    if by:
-        return f'gs://gnomad/coverage/hail-0.2/coverage/{data_type}/ht/gnomad.{data_type}.coverage{by}.summary.ht'
-    else:
-        return f'gs://gnomad-public/release/2.1/coverage/{data_type}/gnomad.{data_type}.r2.1.coverage.ht'
+def coverage_ht_path(data_type) -> str:
+    return f'gs://gnomad-public/release/2.1/coverage/{data_type}/gnomad.{data_type}.r2.1.coverage.ht'
 
 
 def fam_path(data_type: str, version: str = CURRENT_FAM, true_trios: bool = False) -> str:

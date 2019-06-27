@@ -332,16 +332,19 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence).values()
     sorted_scores = hl.sorted(worst_csq_gene, key=lambda tc: tc.csq_score)
-    lowest_score = hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0].csq_score)
-    gene_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_symbol)
-    ensg_with_worst_csq = sorted_scores.filter(lambda tc: tc.csq_score == lowest_score).map(lambda tc: tc.gene_id)
+
+    canonical = transcript_csqs.filter(lambda csq: csq.canonical == 1)
+    gene_canonical_dict = canonical.group_by(lambda tc: tc.gene_symbol)
+    worst_csq_gene_canonical = gene_canonical_dict.map_values(find_worst_transcript_consequence).values()
+    sorted_canonical_scores = hl.sorted(worst_csq_gene_canonical, key=lambda tc: tc.csq_score)
 
     vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
                                      worst_consequence_term=csqs.find(lambda c: transcript_csqs.map(lambda csq: csq.most_severe_consequence).contains(c)),
-                                     worst_csq_by_gene=worst_csq_gene,
-                                     any_lof=hl.any(lambda x: x.lof == 'HC', worst_csq_gene),
-                                     gene_with_most_severe_csq=gene_with_worst_csq,
-                                     ensg_with_most_severe_csq=ensg_with_worst_csq)
+                                     worst_csq_by_gene=sorted_scores,
+                                     worst_csq_for_variant=hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0]),
+                                     worst_csq_by_gene_canonical=sorted_canonical_scores,
+                                     worst_csq_for_variant_canonical=hl.or_missing(hl.len(sorted_canonical_scores) > 0, sorted_canonical_scores[0])
+                                     )
 
     return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
 

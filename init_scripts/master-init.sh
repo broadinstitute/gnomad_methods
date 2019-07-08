@@ -4,7 +4,7 @@ set -x
 
 
 # Installing numpy on workers for pyspark purposes
-/miniconda3/bin/pip install numpy
+pip install numpy
 
 ROLE=$(/usr/share/google/get_metadata_value attributes/dataproc-role)
 if [[ "${ROLE}" == 'Master' ]]; then

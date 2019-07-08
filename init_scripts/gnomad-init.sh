@@ -3,7 +3,7 @@
 set -x
 
 pip install --upgrade Cython
-PACKAGES="slackclient==2.0.0 sklearn tabulate scipy statsmodels ggplot hdbscan websocket-client"
+PACKAGES="slackclient==2.0.0 sklearn tabulate scipy statsmodels ggplot hdbscan websocket-client scikit-learn"
 pip install --upgrade --no-deps $PACKAGES
 
 #export HAIL_VERSION=devel
@@ -49,8 +49,8 @@ pip install --upgrade --no-deps $PACKAGES
 #export PYTHONPATH=/home/hail:${SPARK_HOME}/python:$(ls ${SPARK_HOME}/python/lib/py4j-*-src.zip):${HAIL_HOME}/${HAIL_PYTHON_ZIP}
 #export SPARK_CLASSPATH=${HAIL_HOME}/${HAIL_JAR}
 
-conda install -c damianavila82 rise
-conda install selenium phantomjs pillow scikit-learn -c conda-forge
+# conda install -c damianavila82 rise
+# conda install selenium phantomjs pillow -c conda-forge
 
 #PYTHONPATH=.:$PYTHONPATH python tests/test_utils.py
 # Use this instead to turn off Slack messages

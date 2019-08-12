@@ -41,23 +41,25 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     :rtype: Table or MatrixTable
     """
 
-    logger.info('Annotate input with liftover coordinates')
-    if isinstance(t, hl.MatrixTable):
-        t = t.annotate_rows(new_locus=hl.liftover(t.locus, rg, include_strand=True),
-                            old_locus=ht.locus)
-        num_no_target = t.aggregate_rows(hl.agg.count_where(hl.is_missing(t.new_locus)))
-        logger.info(f'Filtering out {num_no_target} sites that failed to liftover')
-        t = t.filter_rows(hl.is_defined(t.new_locus)) 
-        t = t.key_rows_by(locus=t.new_locus.result, alleles=t.alleles)
+    logger.info('Annotating input with liftover coordinates')
+    liftover_expr = {
+        'new_locus': hl.liftover(t.locus, rg, include_strand=True),
+        'old_locus': ht.locus
+    }
+    t = t.annotate(**liftover_expr) if isinstance(t, hl.Table) else t.annotate_rows(**liftover_expr)
 
-    else:
-        t = t.annotate(new_locus=hl.liftover(t.locus, rg, include_strand=True),
-                     old_locus=ht.locus
-                    )
-        num_no_target = t.aggregate(hl.agg.count_where(hl.is_missing(t.new_locus)))
-        logger.info(f'Filtering out {num_no_target} sites that failed to liftover')
-        t = t.filter(hl.is_defined(t.new_locus)) 
-        t = t.key_by(locus=t.new_locus.result, alleles=t.alleles)
+    no_target_expr = hl.agg.count_where(hl.is_missing(t.new_locus))
+    num_no_target = t.aggregate(no_target_expr) if isinstance(t, hl.Table) else t.aggregate_rows(no_target_expr)
+    
+    logger.info(f'Filtering out {num_no_target} sites that failed to liftover')
+    keep_expr = hl.is_defined(t.new_locus)
+    t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
+    
+    row_key_expr = {
+        'locus' = t.new_locus.result,
+        'alleles' = t.alleles
+    }
+    t = t.key_by(row_key_expr) if isinstance(t, hl.Table) else t.key_rows_by(row_key_expr)
 
     logger.info('Writing out lifted over data')
     t = t.checkpoint(get_checkpoint_path(gnomad, data_type, path), overwrite=True)
@@ -77,29 +79,20 @@ def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], data_type: str, rg
     """
  
     logger.info('Filtering to SNPs')
-    if isinstance(t, hl.MatrixTable):
-        t = t.filter_rows(hl.is_snp(t.alleles[0], t.alleles[1]))
+    snp_expr = hl.is_snp(t.alleles[0], t.alleles[1])
+    t = t.filter(snp_expr) if isinstance(t, hl.Table) else t.filter_rows(snp_expr)
 
-        # check if reference allele matches what is in reference fasta
-        # for snps on negative strand, make sure reverse complement of ref allele matches what is in ref fasta
-        t = t.annotate_rows(
-            reference_mismatch=hl.cond(
-                                t.new_locus.is_negative_strand,
-                                (flip_base(ht.alleles[0]) != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)),
-                                (t.alleles[0] != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg))
-                                ))
-    else:
-        t = t.filter(hl.is_snp(t.alleles[0], t.alleles[1]))
-        t = t.annotate(
-            reference_mismatch=hl.cond(
-                                t.new_locus.is_negative_strand,
-                                (flip_base(ht.alleles[0]) != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)),
-                                (t.alleles[0] != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg))
-                                ))
-    return t
-
+    mismatch_expr = {
+        'reference_mismatch' = hl.cond(t.new_locus.is_negative_strand, 
+                                    (flip_base(t.alleles[0]) != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)),
+                                    (t.alleles[0] != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)))
+    }
+    logger.info('Checking if reference allele matches what is in reference fasta')
+    logger.info('For SNPs on the negative strand, make sure the reverse complement of the ref alleles matches what is in the ref fasta')
+    return t.annotate(mismatch_expr) if isinstance(t, hl.Table) else t.annotate_rows(mismatch_expr)
+    
  
-def check_mismatch(t: Union[hl.MatrixTable, hl.Table]) -> hl.expr.expressions.StructExpression:
+def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
     """
     Checks for mismatches between reference allele and allele in reference fasta
     :param Table ht: Table to be checked

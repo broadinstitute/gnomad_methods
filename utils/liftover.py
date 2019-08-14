@@ -30,6 +30,40 @@ def get_checkpoint_path(gnomad: bool, data_type: str, path: str, is_table: bool)
         return f'{out}.ht'if is_table else f'{out}.mt'
 
 
+def get_liftover_genome(t: Union[hl.MatrixTable, hl.Table]) -> list:
+    """
+    Infers genome build of input data and assumes destination build. Prepares to liftover to destination genome build
+
+    :param Table/MatrixTable t: Input Table or MatrixTable
+    :return: List of source build (with liftover chain added) and destination build (with sequence loaded)
+    :rtype: List (containing type hl.genetics.ReferenceGenome)
+    """
+
+    logger.info('Inferring build of input')
+    build = get_reference_genome(t.locus).name
+
+    logger.info('Loading reference genomes, adding chain file, and loading fasta sequence for destination build')
+    if build == 'GRCh38':
+        source = hl.get_reference('GRCh38')
+        target = hl.get_reference('GRCh37')
+        chain = 'gs://hail-common/references/grch38_to_grch37.over.chain.gz'
+        target.add_sequence(
+            'gs://hail-common/references/human_g1k_v37.fasta.gz',
+            'gs://hail-common/references/human_g1k_v37.fasta.fai'
+            ) 
+    else:
+        source = hl.get_reference('GRCh37')
+        target = hl.get_reference('GRCh38')
+        chain = 'gs://hail-common/references/grch37_to_grch38.over.chain.gz'
+        target.add_sequence(
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz', 
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+            )
+
+    source.add_liftover(chain, target)
+    return [source, target]
+
+
 def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, path: str, rg: hl.genetics.ReferenceGenome) -> Union[hl.MatrixTable, hl.Table]:
     """
     Lifts input Table or MatrixTable from one reference build to another
@@ -145,27 +179,6 @@ def main(args):
     if 'was_split' not in t.row:
         t = hl.split_multi(t) if isinstance(t, hl.Table) else hl.split_multi_hts(t) 
 
-    logger.info('Inferring build of input')
-    build = get_reference_genome(t.locus).name
-    logger.info('Loading reference genomes, adding chain file, and loading fasta sequence for destination build')
-    if build == 'GRCh38':
-        source = hl.get_reference('GRCh38')
-        target = hl.get_reference('GRCh37')
-        chain = 'gs://hail-common/references/grch38_to_grch37.over.chain.gz'
-        target.add_sequence(
-            'gs://hail-common/references/human_g1k_v37.fasta.gz',
-            'gs://hail-common/references/human_g1k_v37.fasta.fai'
-            ) 
-    else:
-        source = hl.get_reference('GRCh37')
-        target = hl.get_reference('GRCh38')
-        chain = 'gs://hail-common/references/grch37_to_grch38.over.chain.gz'
-        target.add_sequence(
-            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz', 
-            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
-            )
-    source.add_liftover(chain, target)
-
     if args.test: 
         logger.info('Filtering to chr21 for testing')
         if build == 38:
@@ -173,6 +186,9 @@ def main(args):
         else:
             contig = '21'
         t = t.filter(t.locus.contig == contig) if isinstance(t, hl.Table) else t.filter_rows(t.locus.contig == contig)
+
+    logger.info('Preparing reference genomes for liftover')
+    source, target = get_liftover_genome(t)
 
     logger.info(f'Lifting data to {target.name}')
     t = lift_data(t, gnomad, data_type, path, target)

@@ -65,7 +65,7 @@ def get_liftover_genome(t: Union[hl.MatrixTable, hl.Table]) -> list:
 
 
 def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, path: str, rg: hl.genetics.ReferenceGenome,
-                ow: bool) -> Union[hl.MatrixTable, hl.Table]:
+                overwrite: bool) -> Union[hl.MatrixTable, hl.Table]:
     """
     Lifts input Table or MatrixTable from one reference build to another
 
@@ -74,7 +74,7 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
     :param str path: Path to input Table/MatrixTable (if data is not gnomAD data)
     :param ReferenceGenome rg: Reference genome
-    :param bool ow: Whether to overwrite data
+    :param bool overwrite: Whether to overwrite data
     :return: Table or MatrixTablewith liftover annotations
     :rtype: Table or MatrixTable
     """
@@ -100,7 +100,7 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     t = t.key_by(**row_key_expr) if isinstance(t, hl.Table) else t.key_rows_by(**row_key_expr)
 
     logger.info('Writing out lifted over data')
-    t = t.checkpoint(get_checkpoint_path(gnomad, data_type, path, isinstance(t, hl.Table)), overwrite=ow)
+    t = t.checkpoint(get_checkpoint_path(gnomad, data_type, path, isinstance(t, hl.Table)), overwrite=overwrite)
     return t
 
 

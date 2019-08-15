@@ -64,7 +64,8 @@ def get_liftover_genome(t: Union[hl.MatrixTable, hl.Table]) -> list:
     return [source, target]
 
 
-def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, path: str, rg: hl.genetics.ReferenceGenome) -> Union[hl.MatrixTable, hl.Table]:
+def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, path: str, rg: hl.genetics.ReferenceGenome,
+                ow: bool) -> Union[hl.MatrixTable, hl.Table]:
     """
     Lifts input Table or MatrixTable from one reference build to another
 
@@ -73,6 +74,7 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
     :param str path: Path to input Table/MatrixTable (if data is not gnomAD data)
     :param ReferenceGenome rg: Reference genome
+    :param bool ow: Whether to overwrite data
     :return: Table or MatrixTablewith liftover annotations
     :rtype: Table or MatrixTable
     """
@@ -98,7 +100,7 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     t = t.key_by(**row_key_expr) if isinstance(t, hl.Table) else t.key_rows_by(**row_key_expr)
 
     logger.info('Writing out lifted over data')
-    t = t.checkpoint(get_checkpoint_path(gnomad, data_type, path, isinstance(t, hl.Table)), overwrite=True)
+    t = t.checkpoint(get_checkpoint_path(gnomad, data_type, path, isinstance(t, hl.Table)), overwrite=ow)
     return t
 
 
@@ -191,7 +193,7 @@ def main(args):
     source, target = get_liftover_genome(t)
 
     logger.info(f'Lifting data to {target.name}')
-    t = lift_data(t, gnomad, data_type, path, target)
+    t = lift_data(t, gnomad, data_type, path, target, args.overwrite)
         
     logger.info('Checking SNPs for reference mismatches')
     t = annotate_snp_mismatch(t, data_type, target)
@@ -209,6 +211,7 @@ if __name__ == '__main__':
     parser.add_argument('--mt', help='Full path to MatrixTable to liftover. Specify only if not using --gnomad flag')
     parser.add_argument('--ht', help='Full path to Table to liftover. Specify only if not using --gnomad flag.')
     parser.add_argument('-g', '--gnomad', help='Liftover table is one of the gnomAD releases', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument(
             '--exomes', 
             help='Data type is exomes. One of --exomes or --genomes is required if --gnomad is specified.', 

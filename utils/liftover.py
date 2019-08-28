@@ -150,7 +150,6 @@ def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
 def main(args):
 
     hl.init(log='/liftover.log')
-    hl._set_flags(newaggs=None)
     
     if args.gnomad:
         gnomad = True

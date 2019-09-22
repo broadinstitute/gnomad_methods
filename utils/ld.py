@@ -32,6 +32,19 @@ def get_ld_scores(pop: str):
     return hl.read_table(ld_scores_path('genomes', pop))
 
 
+def get_r_human_readable(pop: str, var1: str, var2: str, ref_genome: str = 'GRCh37'):
+    bm = get_ld_matrix(pop)
+    ht = get_ld_index(pop)
+    chrom, pos, ref, alt = var1.split('-')
+    var1 = (hl.parse_locus(f'{chrom}:{pos}', ref_genome), [ref, alt])
+    chrom, pos, ref, alt = var2.split('-')
+    var2 = (hl.parse_locus(f'{chrom}:{pos}', ref_genome), [ref, alt])
+    return get_r_for_pair_of_variants(bm, ht, var1, var2)
+
+
+# TODO: find LD proxies
+
+
 def get_r_for_pair_of_variants(bm: BlockMatrix, ld_index: hl.Table,
                                var1: (hl.tlocus, hl.tarray(hl.tstr)),
                                var2: (hl.tlocus, hl.tarray(hl.tstr))):
@@ -54,6 +67,11 @@ def get_r_for_pair_of_variants(bm: BlockMatrix, ld_index: hl.Table,
     """
     idx1 = ld_index.filter((ld_index.locus == var1[0]) & (ld_index.alleles == var1[1])).idx.collect()[0]
     idx2 = ld_index.filter((ld_index.locus == var2[0]) & (ld_index.alleles == var2[1])).idx.collect()[0]
+
+    if idx1 > idx2:
+        temp = idx1
+        idx1 = idx2
+        idx2 = temp
 
     return bm[idx1, idx2]
 

@@ -1,6 +1,6 @@
 # Hail utilities for gnomAD
 
-This repo contains a number of Hail utility functions and scripts for the [gnomAD project](http://gnomad.broadinstitute.org) and the [MacArthur lab](http://macarthurlab.org).
+This repo contains a number of [Hail](https://hail.is/) utility functions and scripts for the [gnomAD project](http://gnomad.broadinstitute.org) and the [MacArthur lab](http://macarthurlab.org).
 Load using:
 
 ```python

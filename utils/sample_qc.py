@@ -449,57 +449,93 @@ def run_pca_with_relateds(
         return pca_evals, pca_scores, pca_loadings
 
 
-def compute_stratified_metrics_filter(ht: hl.Table, qc_metrics: List[str], strata: List[str] = None) -> hl.Table:
+def get_median_and_mad_expr(
+        metric_expr: hl.expr.ArrayNumericExpression
+) -> hl.expr.StructExpression:
     """
-    Compute median, MAD, and upper and lower thresholds for each metric used in pop- and platform-specific outlier filtering
+    Computes the median and median absolute deviation (MAD) for the given expression.
+
+    :param ArrayNumericExpression metric_expr: Expression to compute median and MAD for
+    :return: Struct with median and MAD
+    :rtype: StructExpression
+    """
+    return hl.bind(
+        lambda x: hl.struct(
+            median=x[1],
+            mad=1.4826 * hl.median(hl.abs(x[0] - x[1]))
+        ),
+        hl.bind(
+            lambda x: hl.tuple([x, hl.median(x)]),
+            hl.agg.collect(metric_expr)
+        )
+    )
+
+
+def compute_stratified_metrics_filter(
+        ht: hl.Table,
+        qc_metrics: Dict[str, hl.expr.NumericExpression],
+        strata: Optional[Dict[str, hl.expr.Expression]] = None,
+        lower_threshold: float = 4.0,
+        upper_threshold: float = 4.0,
+        metric_threshold: Optional[Dict[str, Tuple[float, float]]] = None,
+        filter_name: str = 'qc_metrics_filters'
+) -> hl.Table:
+    """
+    Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering
 
     :param MatrixTable ht: HT containing relevant sample QC metric annotations
-    :param list qc_metrics: list of metrics for which to compute the critical values for filtering outliers
+    :param dict of str -> qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
     :param list of str strata: List of annotations used for stratification. These metrics should be discrete types!
-    :return: Table grouped by pop and platform, with upper and lower threshold values computed for each sample QC metric
+    :param float lower_threshold: Lower MAD threshold
+    :param float upper_threshold: Upper MAD threshold
+    :param dict str -> (float, float) metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
+    :param str filter_name: Name of resulting filters annotation
+    :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
     :rtype: Table
     """
 
-    def make_pop_filters_expr(ht: hl.Table, qc_metrics: List[str]) -> hl.expr.SetExpression:
-        return hl.set(hl.filter(lambda x: hl.is_defined(x),
-                                [hl.or_missing(ht[f'fail_{metric}'], metric) for metric in qc_metrics]))
+    _metric_threshold = {metric: (lower_threshold, upper_threshold) for metric in qc_metrics}
+    if metric_threshold is not None:
+        _metric_threshold.update(metric_threshold)
 
-    ht = ht.select(*strata, **ht.sample_qc.select(*qc_metrics)).key_by('s').persist()
-
-    def get_metric_expr(ht, metric):
-        return hl.bind(
-            lambda x: x.annotate(
-                upper=x.median + 4 * x.mad,
-                lower=x.median - 4 * x.mad
-            ),
-            hl.bind(
-                lambda elements, median: hl.struct(
-                    median=median,
-                    mad=1.4826 * hl.median(hl.abs(elements - median))
-                ),
-                *hl.bind(
-                    lambda x: hl.tuple([x, hl.median(x)]),
-                    hl.agg.collect(ht[metric])
-                )
+    def make_filters_expr(ht: hl.Table, qc_metrics: Iterable[str]) -> hl.expr.SetExpression:
+        return hl.set(
+            hl.filter(
+                lambda x: hl.is_defined(x),
+                [hl.or_missing(ht[f'fail_{metric}'], metric) for metric in qc_metrics]
             )
         )
 
-    agg_expr = hl.struct(**{metric: get_metric_expr(ht, metric) for metric in qc_metrics})
-    if strata:
-        ht = ht.annotate_globals(metrics_stats=ht.aggregate(hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr)))
-    else:
-        ht = ht.annotate_globals(metrics_stats={(): ht.aggregate(agg_expr)})
+    if strata is None:
+        strata = {}
 
-    strata_exp = hl.tuple([ht[x] for x in strata]) if strata else hl.tuple([])
+    ht = ht.select(**qc_metrics, **strata).key_by('s').persist()
+
+    agg_expr = hl.struct(**{
+        metric: hl.bind(
+            lambda x: x.annotate(
+                lower=x.median - _metric_threshold[metric][0] * x.mad,
+                upper=x.median + _metric_threshold[metric][1] * x.mad
+            ),
+            get_median_and_mad_expr(ht[metric])
+        ) for metric in qc_metrics
+    })
+
+    if strata:
+        ht = ht.annotate_globals(qc_metrics_stats=ht.aggregate(hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr), _localize=False))
+        metrics_stats_expr = ht.qc_metrics_stats[hl.tuple([ht[x] for x in strata])]
+    else:
+        ht = ht.annotate_globals(qc_metrics_stats=ht.aggregate(agg_expr, _localize=False))
+        metrics_stats_expr = ht.qc_metrics_stats
 
     fail_exprs = {
         f'fail_{metric}':
-            (ht[metric] >= ht.metrics_stats[strata_exp][metric].upper) |
-            (ht[metric] <= ht.metrics_stats[strata_exp][metric].lower)
+            (ht[metric] <= metrics_stats_expr[metric].lower) |
+            (ht[metric] >= metrics_stats_expr[metric].upper)
         for metric in qc_metrics}
     ht = ht.transmute(**fail_exprs)
-    pop_platform_filters = make_pop_filters_expr(ht, qc_metrics)
-    return ht.annotate(pop_platform_filters=pop_platform_filters)
+    pop_platform_filters = make_filters_expr(ht, qc_metrics)
+    return ht.annotate(**{filter_name: pop_platform_filters})
 
 
 def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:

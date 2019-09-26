@@ -43,18 +43,52 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
                                )
 
 
-def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression]) -> hl.ReferenceGenome:
+def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
+    """
+    Adds the fasta sequence to a Hail reference genome.
+    Only GRCh37 and GRCh38 references are supported.
+
+    :param ReferenceGenome ref: Input reference genome.
+    :return:
+    """
+    if not ref.has_sequence():
+        if ref.name == 'GRCh38':
+            ref.add_sequence(
+                'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz',
+                'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+            )
+        elif ref.name == 'GRCh37':
+            ref.add_sequence(
+                'gs://hail-common/references/human_g1k_v37.fasta.gz',
+                'gs://hail-common/references/human_g1k_v37.fasta.fai'
+            )
+        else:
+            raise NotImplementedError(f'No known location for the fasta/fai files for genome {ref.name}. Only GRCh37 and GRCh38 are supported at this time.')
+    else:
+        logger.info("Reference genome sequence already present. Ignoring add_reference_sequence.")
+
+    return ref
+
+
+def get_reference_genome(
+        locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression],
+        add_sequence: bool = False
+) -> hl.ReferenceGenome:
     """
     Returns the reference genome associated with the input Locus expression
 
     :param LocusExpression or IntervalExpression locus: Input locus
+    :param  bool add_sequence: If set, the fasta sequence is added to the reference genome
     :return: Reference genome
     :rtype: ReferenceGenome
     """
     if isinstance(locus, hl.expr.LocusExpression):
         return locus.dtype.reference_genome
     assert (isinstance(locus, hl.expr.IntervalExpression))
-    return locus.dtype.point_type.reference_genome
+    ref = locus.dtype.point_type.reference_genome
+    if add_sequence:
+        ref = add_reference_sequence(ref)
+    return ref
 
 
 def flip_base(base: str) -> str:

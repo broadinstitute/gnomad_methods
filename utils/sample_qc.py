@@ -172,7 +172,8 @@ def compute_callrate_mt(
         mt: hl.MatrixTable,
         intervals_ht: hl.Table,
         bi_allelic_only: bool = True,
-        autosomes_only: bool = True
+        autosomes_only: bool = True,
+        match: bool = True,
 ) -> hl.MatrixTable:
     """
     Computes a sample/interval MT with each entry containing the call rate for that sample/interval.
@@ -188,6 +189,7 @@ def compute_callrate_mt(
     :param Table intervals_ht: Table containing the intervals. This table has to be keyed by locus.
     :param bool bi_allelic_only: If set, only bi-allelic sites are used for the computation
     :param bool autosomes_only: If set, only autosomal intervals are used.
+    :param bool matches: If set, returns all intervals in intervals_ht that overlap the locus in the input MT.
     :return: Callrate MT
     :rtype: MatrixTable
     """
@@ -203,10 +205,14 @@ def compute_callrate_mt(
         callrate_mt = callrate_mt.filter_rows(bi_allelic_expr(callrate_mt))
 
     intervals_ht = intervals_ht.annotate(_interval_key=intervals_ht.key)
-    callrate_mt = callrate_mt.annotate_rows(**intervals_ht[callrate_mt.locus]._interval_key)
-    callrate_mt = callrate_mt.filter_rows(hl.is_defined(callrate_mt.interval))
-    callrate_mt = callrate_mt.select_entries(GT_not_called=hl.or_missing(hl.is_missing(callrate_mt.GT), hl.struct()))
-    callrate_mt = callrate_mt.group_rows_by(*list(intervals_ht.key)).aggregate(callrate=hl.agg.fraction(hl.is_missing(callrate_mt.GT_not_called)))
+    callrate_mt = callrate_mt.annotate_rows(_interval_key=intervals_ht.index(callrate_mt.locus, all_matches=match)._interval_key)
+
+    if match:
+        callrate_mt = callrate_mt.explode_rows('_interval_key')
+
+    callrate_mt = callrate_mt.filter_rows(hl.is_defined(callrate_mt._interval_key.interval))
+    callrate_mt = callrate_mt.select_entries(GT=hl.or_missing(hl.is_defined(callrate_mt.GT), hl.struct()))
+    callrate_mt = callrate_mt.group_rows_by(**callrate_mt._interval_key).aggregate(callrate=hl.agg.fraction(hl.is_defined(callrate_mt.GT)))
     intervals_ht = intervals_ht.drop('_interval_key')
     callrate_mt = callrate_mt.annotate_rows(interval_info=hl.struct(**intervals_ht[callrate_mt.row_key]))
     return callrate_mt

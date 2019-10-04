@@ -494,7 +494,8 @@ genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wg
 # More can be found at gs://broad-references/hg19
 
 
-constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
+# constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
+constraint_ht_path = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/gnomad.v2.1.1.lof_metrics.by_gene.ht'
 
 
 # Sample QC files

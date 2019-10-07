@@ -183,6 +183,23 @@ class VEPTests(unittest.TestCase):
         self.assertEqual(results[1], sum(results.values()))
 
 
+    # def test_process_consequences(self):
+    #     proc_vds = process_consequences(self.vds)
+
+
+class SlackResult(unittest.TestResult):
+    def addError(self, test, err):
+        super(SlackResult, self).addError(test, err)
+        err_desc = self._exc_info_to_string(err, test)
+        send_message('#gnomad_paper_code', 'Warning! Error in test: ```{}```'.format(err_desc))
+
+    def addFailure(self, test, err):
+        super(SlackResult, self).addFailure(test, err)
+        err_desc = self._exc_info_to_string(err, test)
+        send_message('#gnomad_paper_code', 'Warning! Test failed: ```{}```'.format(err_desc))
+
+
 if __name__ == '__main__':
     suite = unittest.TestLoader().discover('.')
-    unittest.TextTestRunner(verbosity=2).run(suite)
+    results = SlackResult()
+    suite.run(results)

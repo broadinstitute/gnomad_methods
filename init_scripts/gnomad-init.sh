@@ -3,7 +3,7 @@
 set -x
 
 pip install --upgrade Cython
-PACKAGES="slackclient==2.0.0 sklearn tabulate scipy statsmodels ggplot hdbscan websocket-client scikit-learn"
+PACKAGES="slackclient==2.0.0 sklearn tabulate scipy statsmodels ggplot hdbscan websocket-client scikit-learn joblib"
 pip install --upgrade --no-deps $PACKAGES
 
 #export HAIL_VERSION=devel

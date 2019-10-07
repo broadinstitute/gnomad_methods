@@ -494,7 +494,8 @@ genome_evaluation_intervals_path_hg38 = "gs://gnomad-public/intervals/hg38-v0-wg
 # More can be found at gs://broad-references/hg19
 
 
-constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
+# constraint_ht_path = 'gs://gnomad-public/release/2.1/ht/constraint/constraint.ht'
+constraint_ht_path = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/gnomad.v2.1.1.lof_metrics.by_gene.ht'
 
 
 # Sample QC files
@@ -534,6 +535,10 @@ def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
 
     return f'gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht'
 
+
+gnomad_sv_mt_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1_wRelateds.pruned_wAFs.mt'
+gnomad_sv_vcf_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1_wRelateds.pruned_wAFs.vcf.gz'
+gnomad_sv_release_samples_list_path = 'gs://gnomad/sv/sv_release_samples.txt.gz'
 
 class DataException(Exception):
     pass

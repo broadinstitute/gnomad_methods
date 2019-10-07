@@ -53,8 +53,8 @@ def get_adj_expr(
             (
                 hl.case()
                 .when(~gt_expr.is_het(), True)
-                .when(gt_expr.is_het_ref(), ad_expr[1] / dp_expr >= adj_ab)
-                .default((ad_expr[0] / dp_expr >= adj_ab ) & (ad_expr[1] / dp_expr >= adj_ab ))
+                .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+                .default((ad_expr[gt_expr[0]] / dp_expr >= adj_ab ) & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab ))
             )
     )
 

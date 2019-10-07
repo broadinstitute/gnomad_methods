@@ -1,6 +1,6 @@
 import argparse
 from gnomad_hail.resources import *
-from gnomad_hail.utils.generic import flip_base 
+from gnomad_hail.utils.generic import flip_base, get_reference_genome 
 import logging
 from os.path import dirname, basename
 import sys
@@ -11,74 +11,124 @@ logger = logging.getLogger("liftover")
 logger.setLevel(logging.INFO)
 
 
-def get_checkpoint_path(gnomad: bool, data_type: str, table_path: str) -> str:
+def get_checkpoint_path(gnomad: bool, data_type: str, path: str, is_table: bool) -> str:
     """
     Creates a checkpoint path for Table
     :param bool gnomad: Whether data is gnomAD data
     :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param str table_path: Path to input Table (if data is not gnomAD data)
+    :param str path: Path to input Table/MatrixTable (if data is not gnomAD data)
+    :param bool is_table: Whether data is a Table
     :return: Output checkpoint path
     :rtype: str
     """
     
     if gnomad:
         return f'gs://gnomad/liftover/release/2.1.1/ht/{data_type}/gnomad.{data_type}.r2.1.1.liftover.ht'
-        #return get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE)
     else:
-        out_name = basename(table_path).split('.')[0]
-        return f'{dirname(table_path)}/{out_name}_lift.ht'
+        out_name = basename(path).split('.')[0]
+        out = f'{dirname(path)}/{out_name}_lift'
+        return f'{out}.ht'if is_table else f'{out}.mt'
 
 
-def lift_ht(ht: hl.Table, gnomad: bool, data_type: str, table_path: str,  rg: hl.genetics.ReferenceGenome) -> hl.Table:
+def get_liftover_genome(t: Union[hl.MatrixTable, hl.Table]) -> list:
     """
-    Lifts input Table from one reference build to another
-    :param Table ht: Table
+    Infers genome build of input data and assumes destination build. Prepares to liftover to destination genome build
+
+    :param Table/MatrixTable t: Input Table or MatrixTable
+    :return: List of source build (with liftover chain added) and destination build (with sequence loaded)
+    :rtype: List (containing type hl.genetics.ReferenceGenome)
+    """
+
+    logger.info('Inferring build of input')
+    build = get_reference_genome(t.locus).name
+
+    logger.info('Loading reference genomes, adding chain file, and loading fasta sequence for destination build')
+    if build == 'GRCh38':
+        source = hl.get_reference('GRCh38')
+        target = hl.get_reference('GRCh37')
+        chain = 'gs://hail-common/references/grch38_to_grch37.over.chain.gz'
+        target.add_sequence(
+            'gs://hail-common/references/human_g1k_v37.fasta.gz',
+            'gs://hail-common/references/human_g1k_v37.fasta.fai'
+            ) 
+    else:
+        source = hl.get_reference('GRCh37')
+        target = hl.get_reference('GRCh38')
+        chain = 'gs://hail-common/references/grch37_to_grch38.over.chain.gz'
+        target.add_sequence(
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz', 
+            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+            )
+
+    source.add_liftover(chain, target)
+    return [source, target]
+
+
+def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, path: str, rg: hl.genetics.ReferenceGenome,
+                overwrite: bool) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Lifts input Table or MatrixTable from one reference build to another
+
+    :param Table/MatrixTable t: Table or MatrixTable
     :param bool gnomad: Whether data is gnomAD data
     :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param str table_path: Path to input Table (if data is not gnomAD data)
+    :param str path: Path to input Table/MatrixTable (if data is not gnomAD data)
     :param ReferenceGenome rg: Reference genome
-    :return: Table with liftover annotations
-    :rtype: Table
+    :param bool overwrite: Whether to overwrite data
+    :return: Table or MatrixTablewith liftover annotations
+    :rtype: Table or MatrixTable
     """
 
-    # annotate release file with liftover coordinates
-    ht = ht.annotate(new_locus=hl.liftover(ht.locus, rg, include_strand=True),
-                     old_locus=ht.locus
-                    )
-    no_target = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.new_locus)))
-    logger.info('Filtering out {} sites that failed to liftover'.format(no_target))
-    ht = ht.filter(hl.is_defined(ht.new_locus)) 
-    ht = ht.key_by(locus=ht.new_locus.result, alleles=ht.alleles)
-    ht = ht.checkpoint(get_checkpoint_path(gnomad, data_type, table_path), overwrite=True)
-    return ht
+    logger.info('Annotating input with liftover coordinates')
+    liftover_expr = {
+        'new_locus': hl.liftover(t.locus, rg, include_strand=True),
+        'old_locus': t.locus
+    }
+    t = t.annotate(**liftover_expr) if isinstance(t, hl.Table) else t.annotate_rows(**liftover_expr)
+
+    no_target_expr = hl.agg.count_where(hl.is_missing(t.new_locus))
+    num_no_target = t.aggregate(no_target_expr) if isinstance(t, hl.Table) else t.aggregate_rows(no_target_expr)
+    
+    logger.info(f'Filtering out {num_no_target} sites that failed to liftover')
+    keep_expr = hl.is_defined(t.new_locus)
+    t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
+    
+    row_key_expr = {
+        'locus': t.new_locus.result,
+        'alleles': t.alleles
+    }
+    t = t.key_by(**row_key_expr) if isinstance(t, hl.Table) else t.key_rows_by(**row_key_expr)
+
+    logger.info('Writing out lifted over data')
+    t = t.checkpoint(get_checkpoint_path(gnomad, data_type, path, isinstance(t, hl.Table)), overwrite=overwrite)
+    return t
 
 
-def annotate_snp_mismatch(ht: hl.Table, data_type: str, rg: hl.genetics.ReferenceGenome) -> hl.Table:
+def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], data_type: str, rg: hl.genetics.ReferenceGenome) -> Union[hl.MatrixTable, hl.Table]:
     """
     Annotates mismatches between reference allele and allele in reference fasta
-    Assumes input Table has ht.new_locus annotation
-    :param Table ht: Table of SNPs to be annotated
+
+    Assumes input Table/MatrixTable has t.new_locus annotation
+    :param Table/MatrixTable t: Table/MatrixTable of SNPs to be annotated
     :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param ReferenceGenome rg: GRCh38 reference genome with fasta sequence loaded
+    :param ReferenceGenome rg: Reference genome with fasta sequence loaded
     :return: Table annotated with mismatches between reference allele and allele in fasta
     :rtype: Table
     """
  
-    # filter to snps
-    ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
+    logger.info('Filtering to SNPs')
+    snp_expr = hl.is_snp(t.alleles[0], t.alleles[1])
+    t = t.filter(snp_expr) if isinstance(t, hl.Table) else t.filter_rows(snp_expr)
 
-    # check if reference allele matches what is in reference fasta
-    # for snps on negative strand, make sure reverse complement of ref allele matches what is in reference fasta
-    ht = ht.annotate(
-        reference_mismatch=hl.cond(
-                                ht.new_locus.is_negative_strand,
-                                (flip_base(ht.alleles[0]) != hl.get_sequence(ht.locus.contig, ht.locus.position, reference_genome=rg)),
-                                (ht.alleles[0] != hl.get_sequence(ht.locus.contig, ht.locus.position, reference_genome=rg))
-                                )
-                )
-
-    return ht
-
+    mismatch_expr = {
+        'reference_mismatch': hl.cond(t.new_locus.is_negative_strand, 
+                                    (flip_base(t.alleles[0]) != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)),
+                                    (t.alleles[0] != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)))
+    }
+    logger.info('Checking if reference allele matches what is in reference fasta')
+    logger.info('For SNPs on the negative strand, make sure the reverse complement of the ref alleles matches what is in the ref fasta')
+    return t.annotate(**mismatch_expr) if isinstance(t, hl.Table) else t.annotate_rows(**mismatch_expr)
+    
  
 def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
     """
@@ -99,33 +149,12 @@ def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
 
 def main(args):
 
-    hl.init()
+    hl.init(log='/liftover.log')
     
-    logger.info('Loading reference genomes, adding chain file, and loading fasta sequence for destination build')
-    if args.build == 38:
-        source = hl.get_reference('GRCh37')
-        target = hl.get_reference('GRCh38')
-        chain = 'gs://hail-common/references/grch37_to_grch38.over.chain.gz'
-        target.add_sequence(
-            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz', 
-            'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
-            )
-    else:
-        source = hl.get_reference('GRCh38')
-        target = hl.get_reference('GRCh37')
-        chain = 'gs://hail-common/references/grch38_to_grch37.over.chain.gz'
-        target.add_sequence(
-            'gs://hail-common/references/human_g1k_v37.fasta.gz',
-            'gs://hail-common/references/human_g1k_v37.fasta.fai'
-            ) 
-    source.add_liftover(chain, target)
-
     if args.gnomad:
         gnomad = True
-        table_path = None
-        if not args.exomes and not args.genomes:
-            sys.exit('Error: Must specify --exomes or --genomes if lifting gnomAD ht')
-
+        path = None
+        
         if args.exomes:
             data_type = 'exomes'
         if args.genomes:
@@ -133,29 +162,42 @@ def main(args):
 
         logger.info('Working on gnomAD {} release ht'.format(data_type))
         logger.info('Reading in release ht')
-        ht = get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE)
+        t = get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE)
         logger.info('Variants in release ht: {}'.format(ht.count()))
 
     else:
         data_type = None
-        gnomad = None
-        table_path = args.table_path
-        ht = hl.read_table(table_path)
+        gnomad = False
    
+        if args.ht:
+            path = args.ht
+            t = hl.read_table(args.ht)
+        if args.mt:
+            path = args.mt
+            t = hl.read_matrix_table(args.mt)
+   
+    logger.info('Checking if input data has been split') 
+    if 'was_split' not in t.row:
+        t = hl.split_multi(t) if isinstance(t, hl.Table) else hl.split_multi_hts(t) 
+
     if args.test: 
         logger.info('Filtering to chr21 for testing')
-        if args.build == 38:
-            ht = ht.filter(ht.locus.contig == '21')
+        if build == 38:
+            contig = 'chr21'
         else:
-            ht = ht.filter(ht.locus.contig == 'chr21')
+            contig = '21'
+        t = t.filter(t.locus.contig == contig) if isinstance(t, hl.Table) else t.filter_rows(t.locus.contig == contig)
 
-    logger.info('Lifting ht to b{}'.format(args.build))
-    ht = lift_ht(ht, gnomad, data_type, table_path, target)
+    logger.info('Preparing reference genomes for liftover')
+    source, target = get_liftover_genome(t)
+
+    logger.info(f'Lifting data to {target.name}')
+    t = lift_data(t, gnomad, data_type, path, target, args.overwrite)
         
     logger.info('Checking SNPs for reference mismatches')
-    ht = annotate_snp_mismatch(ht, data_type, target)
-
-    mismatch = check_mismatch(ht)
+    t = annotate_snp_mismatch(t, data_type, target)
+   
+    mismatch = check_mismatch(t) if isinstance(t, hl.Table) else check_mismatch(t.rows()) 
     logger.info('{} total SNPs'.format(mismatch['total_variants']))
     logger.info('{} SNPs on minus strand'.format(mismatch['negative_strand']))
     logger.info('{} reference mismatches in SNPs'.format(mismatch['total_mismatch']))
@@ -164,11 +206,11 @@ def main(args):
 
 if __name__ == '__main__':
 
-    # Create argument parser
     parser = argparse.ArgumentParser(description='This script lifts a ht from one build to another')
-    parser.add_argument('-b', '--build', help='Destination build (37 or 38)', type=int, choices=[37, 38], default=38)
-    parser.add_argument('-p', '--table_path', help='Full path to table for liftover')
+    parser.add_argument('--mt', help='Full path to MatrixTable to liftover. Specify only if not using --gnomad flag')
+    parser.add_argument('--ht', help='Full path to Table to liftover. Specify only if not using --gnomad flag.')
     parser.add_argument('-g', '--gnomad', help='Liftover table is one of the gnomAD releases', action='store_true')
+    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
     parser.add_argument(
             '--exomes', 
             help='Data type is exomes. One of --exomes or --genomes is required if --gnomad is specified.', 
@@ -183,9 +225,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.gnomad and (int(args.exomes) + int(args.genomes) != 1):
-        sys.exit('Error: One and only one of --exomes or --genomes must be specified')
+        sys.exit('Error: One and only one of --exomes or --genomes must be specified with --gnomad flag')
 
-    if not args.table_path and not args.gnomad:
-        sys.exit('Error: One and only one of -p/--table_path or -g/--gnomad must be specified')
+    if args.mt and args.ht:
+        sys.exit('Error: One and only one of --mt or --ht must be specified')
 
     main(args)

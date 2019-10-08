@@ -185,4 +185,5 @@ class VEPTests(unittest.TestCase):
 
 if __name__ == '__main__':
     suite = unittest.TestLoader().discover('.')
+    results = SlackResult()
     unittest.TextTestRunner(verbosity=2).run(suite)

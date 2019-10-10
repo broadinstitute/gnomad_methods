@@ -1,6 +1,7 @@
 import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict, Counter
+from itertools import groupby
 from typing import *
 import pandas as pd
 import random
@@ -728,16 +729,67 @@ def get_duplicated_samples(
     return duplicated_samples
 
 
+def annotate_relatedness_ht(
+        relatedness_ht: hl.Table,
+        first_degree_thresholds: Tuple[float, float] = (0.19, 0.4),
+        second_degree_threshold: float = 0.1,
+        ibd0_0_threshold: float = 0.025,
+        ibd0_25_thresholds: Tuple[float, float] = (0.1, 0.425),
+        # ibd0_50_thresholds = [0.37, 0.625],
+        # ibd0_100_threshold = 0.625  ,
+        ibd1_0_thresholds: Tuple[float, float] = (-0.15, 0.1),
+        # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37),
+        ibd1_50_thresholds: Tuple[float, float] = (0.275, 0.75),
+        ibd1_100_threshold: float = 0.75,
+        ibd2_0_threshold: float = 0.125,
+        ibd2_25_thresholds: Tuple[float, float] = (0.1, 0.5),
+        ibd2_100_thresholds: Tuple[float, float] = (0.75, 1.25)
+) -> hl.Table:
+    return relatedness_ht.annotate(
+        relationship=(
+            hl.case()
+            .when(relatedness_ht.kin < second_degree_threshold, 'Unrelated')
+            .when(
+                (relatedness_ht.kin < first_degree_thresholds[0]),
+                '2nd degree relatives'
+            )
+            .when(
+                (relatedness_ht.kin < first_degree_thresholds[1]) &
+                (relatedness_ht.ibd0 <= ibd0_0_threshold) &
+                (relatedness_ht.ibd1 >= ibd1_100_threshold) &
+                (relatedness_ht.ibd2 <= ibd2_0_threshold),
+                'Parent-child'
+            )
+            .when(
+                (relatedness_ht.kin < first_degree_thresholds[1]) &
+                (relatedness_ht.ibd0 >= ibd0_25_thresholds[0]) &
+                (relatedness_ht.ibd0 <= ibd0_25_thresholds[1]) &
+                (relatedness_ht.ibd1 >= ibd1_50_thresholds[0]) &
+                (relatedness_ht.ibd1 <= ibd1_50_thresholds[1]) &
+                (relatedness_ht.ibd2 >= ibd2_25_thresholds[0]) &
+                (relatedness_ht.ibd2 <= ibd2_25_thresholds[1]),
+                'Siblings'
+            )
+            .when(
+                (relatedness_ht.kin > first_degree_thresholds[1]) &
+                (relatedness_ht.ibd0 < ibd0_0_threshold) &
+                (relatedness_ht.ibd1 >= ibd1_0_thresholds[0]) &
+                (relatedness_ht.ibd1 <= ibd1_0_thresholds[1]) &
+                (relatedness_ht.ibd2 >= ibd2_100_thresholds[0]) &
+                (relatedness_ht.ibd2 <= ibd2_100_thresholds[1]),
+                'Duplicate/twins'
+            )
+            .default('Ambiguous')
+        )
+)
+
+
 def infer_families(relatedness_ht: hl.Table,
                    sex: Union[hl.Table, Dict[str, bool]],
                    duplicated_samples: Set[str],
                    i_col: str = 'i',
                    j_col: str = 'j',
-                   kin_col: str = 'kin',
-                   ibd2_col: str = 'ibd2',
-                   first_degree_threshold: Tuple[float, float] = (0.2, 0.4),
-                   second_degree_threshold: float = 0.05,
-                   ibd2_parent_offspring_threshold: float = 0.2
+                   relationship_col: str ='relationship'
                    ) -> hl.Pedigree:
     """
 
@@ -764,75 +816,6 @@ def infer_families(relatedness_ht: hl.Table,
     :rtype: Pedigree
     """
 
-    def get_fam_samples(sample: str,
-                        fam: Set[str],
-                        samples_rel: Dict[str, Set[str]],
-                        ) -> Set[str]:
-        """
-        Given a sample, its known family and a dict that links samples with their relatives, outputs the set of
-        samples that constitute this sample family.
-
-        :param str sample: sample
-        :param dict of str -> set of str samples_rel: dict(sample -> set(sample_relatives))
-        :param set of str fam: sample known family
-        :return: Family including the sample
-        :rtype: set of str
-        """
-        fam.add(sample)
-        for s2 in samples_rel[sample]:
-            if s2 not in fam:
-                fam = get_fam_samples(s2, fam, samples_rel)
-        return fam
-
-    def get_indexed_ibd2(
-            pc_relate_rows: List[hl.Struct]
-    ) -> Dict[Tuple[str, str], float]:
-        """
-        Given rows from a pc_relate table, creates a dict with:
-        keys: Pairs of individuals, lexically ordered
-        values: ibd2
-
-        :param list of hl.Struct pc_relate_rows: Rows from a pc_relate table
-        :return: Dict of lexically ordered pairs of individuals -> kinship
-        :rtype: dict of (str, str) -> float
-        """
-        ibd2 = dict()
-        for row in pc_relate_rows:
-            ibd2[tuple(sorted((row[i_col], row[j_col])))] = row[ibd2_col]
-        return ibd2
-
-    def get_parents(
-            possible_parents: List[str],
-            relative_pairs: List[Tuple[str, str]],
-            sex: Dict[str, bool]
-    ) -> Union[Tuple[str, str], None]:
-        """
-        Given a list of possible parents for a sample (first degree relatives with low ibd2),
-        looks for a single pair of samples that are unrelated with different sexes.
-        If a single pair is found, return the pair (father, mother)
-
-        :param list of str possible_parents: Possible parents
-        :param list of (str, str) relative_pairs: Pairs of relatives, used to check that parents aren't related with each other
-        :param dict of str -> bool sex: Dict mapping samples to their sex (True = female, False = male, None or missing = unknown)
-        :return: (father, mother) if found, `None` otherwise
-        :rtype: (str, str) or None
-        """
-
-        parents = []
-        while len(possible_parents) > 1:
-            p1 = possible_parents.pop()
-            for p2 in possible_parents:
-                if tuple(sorted((p1, p2))) not in relative_pairs:
-                    if sex.get(p1) is False and sex.get(p2):
-                        parents.append((p1, p2))
-                    elif sex.get(p1) and sex.get(p2) is False:
-                        parents.append((p2, p1))
-
-        if len(parents) == 1:
-            return parents[0]
-
-        return None
-
     # Check relatedness table format
     if not relatedness_ht[i_col].dtype == relatedness_ht[j_col].dtype:
         logger.error("i_col and j_col of the relatedness table need to be of the same type.")
@@ -855,54 +838,148 @@ def infer_families(relatedness_ht: hl.Table,
     if isinstance(sex, hl.Table):
         sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
 
-    # Get first degree relatives - exclude duplicate samples
+    # Get all the relations we care about:
+    # => Remove unrelateds and duplicates
     dups = hl.literal(duplicated_samples)
-    first_degree_pairs = relatedness_ht.filter(
-        (relatedness_ht[kin_col] >= first_degree_threshold[0]) &
-        (relatedness_ht[kin_col] <= first_degree_threshold[1]) &  # We do not want to include twins/duplicate samples
+    relatedness_ht = relatedness_ht.filter(
         ~dups.contains(relatedness_ht[i_col]) &
-        ~dups.contains(relatedness_ht[j_col])
-    ).collect()
-    first_degree_relatives = defaultdict(set)
-    for row in first_degree_pairs:
-        first_degree_relatives[row[i_col]].add(row[j_col])
-        first_degree_relatives[row[j_col]].add(row[i_col])
+        ~dups.contains(relatedness_ht[j_col]) &
+        (relatedness_ht[relationship_col] != 'Unrelated')
+    )
 
-    # Add second degree relatives for those samples
-    # This is needed to distinguish grandparent - child - parent from child - mother, father down the line
-    first_degree_samples = hl.literal(set(first_degree_relatives.keys()))
-    second_degree_samples = relatedness_ht.filter(
-        (first_degree_samples.contains(relatedness_ht[i_col]) | first_degree_samples.contains(relatedness_ht[j_col])) &
-        (relatedness_ht[kin_col] >= second_degree_threshold) &
-        (relatedness_ht[kin_col] <= first_degree_threshold[1])
-    ).collect()
+    samples_by_rel = relatedness_ht.aggregate(
+        hl.agg.group_by(
+            relatedness_ht.relationship,
+            hl.agg.collect_as_set(hl.tuple([
+                hl.sorted([relatedness_ht[i_col], relatedness_ht[j_col]])[0], # TODO check that this is optimized fine
+                hl.sorted([relatedness_ht[i_col], relatedness_ht[j_col]])[1]
+            ]))
+        )
+    )
 
-    ibd2 = get_indexed_ibd2(second_degree_samples)
+    def get_parents_and_children(parent_child_pairs: Set[Tuple[str, str]]) -> Dict[str, List[Tuple[str, str]]]:
+        s_fam = dict()
+        fam_id = 1
+        fams = defaultdict(list)
+        for pair in parent_child_pairs:
+            # if pair[0] in ["8007542422","8007540777"] or pair[1] in ["8007542422","8007540777"]:
+            #     logger.info("Found pair:" + str(pair))
+            if pair[0] in s_fam:
+                if pair[1] in s_fam:
+                    if s_fam[pair[0]] != s_fam[pair[1]]:
+                        # logger.info(f"Merging families {s_fam[pair[0]]} ({str(fams[s_fam[pair[0]]])}) and {s_fam[pair[1]]} ({str(fams[s_fam[pair[1]]])})")
+                        new_fam_id = s_fam[pair[0]]
+                        fam_id_to_merge = s_fam[pair[1]]
+                        for s in s_fam:
+                            if s_fam[s] == fam_id_to_merge:
+                                s_fam[s] = new_fam_id
+                        fams[new_fam_id].extend(fams.pop(fam_id_to_merge))
+                        # logger.info(f"Resulting fam {new_fam_id}: ({str(fams[new_fam_id])})")
+                else:
+                    s_fam[pair[1]] = s_fam[pair[0]]
+                fams[s_fam[pair[0]]].append(pair)
+            elif pair[1] in s_fam:
+                s_fam[pair[0]] = s_fam[pair[1]]
+                fams[s_fam[pair[1]]].append(pair)
+            else:
+                s_fam[pair[0]] = fam_id
+                s_fam[pair[1]] = fam_id
+                fams[fam_id].append(pair)
+                fam_id += 1
 
-    fam_id = 1
-    trios = []
-    while len(first_degree_relatives) > 0:
-        s_fam = get_fam_samples(list(first_degree_relatives)[0], set(),
-                                first_degree_relatives)
-        for s in s_fam:
-            s_rel = first_degree_relatives.pop(s)
+        return fams
+
+    def get_rel(s1, s2):
+        sorted_pair = tuple(sorted([s1, s2]))
+        for rel in samples_by_rel:
+            if sorted_pair in samples_by_rel[rel]:
+                return rel
+        return None
+
+    def get_trios(fam_id: str, first_degree_relatives: List[Tuple[str, str]]) -> List[hl.Trio]:
+
+        def get_possible_parents(samples: List[str]) -> List[Tuple[str, str]]:
             possible_parents = []
-            for rel in s_rel:
-                if ibd2[tuple(sorted((s, rel)))] < ibd2_parent_offspring_threshold:
-                    possible_parents.append(rel)
+            for i in range(len(samples)):
+                for j in range(i, len(samples)):
+                    if get_rel(samples[i], samples[j]) is None:
+                        if sex.get(samples[i]) is True and sex.get(samples[j]) is False:
+                            possible_parents.append((samples[i], samples[j]))
+                        elif sex.get(samples[i]) is False and sex.get(samples[j]) is True:
+                            possible_parents.append((samples[j], samples[i]))
+            return possible_parents
 
-            parents = get_parents(possible_parents, list(ibd2.keys()), sex)
+        def get_children(parents: Tuple[str, str]) -> List[str]:
+            offsprings = defaultdict(list)
+            for pair in first_degree_relatives:
+                if parents[0] == pair[0]:
+                    offsprings[pair[1]].append(parents[0])
+                elif parents[0] == pair[1]:
+                    offsprings[pair[0]].append(parents[0])
+                elif parents[1] == pair[0]:
+                    offsprings[pair[1]].append(parents[1])
+                elif parents[1] == pair[1]:
+                    offsprings[pair[0]].append(parents[1])
 
-            if parents is not None:
-                trios.append(hl.Trio(s=s,
-                                     fam_id=str(fam_id),
-                                     pat_id=parents[0],
-                                     mat_id=parents[1],
-                                     is_female=sex.get(s)))
+            return [s for s, parents in offsprings.items() if len(parents) == 2]
 
-        fam_id += 1
+        def check_sibs(offsprings: List[str]) -> bool:
+            for i in range(len(offsprings)):
+                for j in range(i+1, len(offsprings)):
+                    if get_rel(offsprings[i], offsprings[j]) != "Siblings":
+                        return False
+            return True
 
-    return hl.Pedigree(trios)
+        def check_trios(trios: List[hl.Trio]):
+            children_trios = defaultdict(list)
+            for trio in trios:
+                children_trios[trio.s].append(trio)
+
+            duplicated_children = {s: trios for s, trios in children_trios.items() if len(trios)>1}
+            if duplicated_children:
+                for s, _trios in duplicated_children.items():
+                    logger.warn("Discarded duplicated child {0} found multiple in trios:".format(
+                        s,
+                        ", ".join([str(trio) for trio in _trios])
+                    ))
+            return [trios[0] for trios in children_trios.values() if len(trios)==1]
+
+
+        # Get all possible pairs of parents in (father, mother) order
+        possible_parents = get_possible_parents(list({s for pair in first_degree_relatives for s in pair}))
+
+        trios = []
+        for parents in possible_parents:
+            children = get_children(parents)
+            if check_sibs(children):
+                trios.extend([
+                    hl.Trio(
+                        s=s,
+                        fam_id=str(fam_id),
+                        pat_id=parents[0],
+                        mat_id=parents[1],
+                        is_female=sex.get(s)
+                    )
+                    for s in children
+                ])
+            else:
+                logger.warn(
+                    "Discarded family with same parents, multiple offsprings but offspring failed the sibs test:"
+                    "\nMother: {}\nFather:{}\nChildren:{}".format(
+                        parents[0],
+                        parents[1],
+                        ", ".join(children)
+                    )
+                )
+
+        return check_trios(trios)
+
+
+    fams = get_parents_and_children(samples_by_rel['Parent-child'])
+    return hl.Pedigree([
+        trio for fam_id, first_degree_relatives in fams.items()
+        for trio in get_trios(fam_id, first_degree_relatives)
+    ])
 
 
 def expand_pd_array_col(
@@ -1195,6 +1272,25 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
     :rtype: BooleanExpression
     """
     return (~t.was_split if 'was_split' in t.row else (hl.len(t.alleles) == 2))
+
+
+def bi_allelic_site_inbreeding_from_call_stats_expr(call_stats: hl.expr.StructExpression) -> hl.expr.Float32Expression:
+    """
+    Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
+    This is implemented based on the GATK InbreedingCoeff metric:
+    https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
+
+    Note
+    ----
+    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+
+    :param CallExpression call: Expression giving the calls in the MT
+    :return: Site inbreeding coefficient expression
+    :rtype: Float32Expression
+    """
+
+    n_hets = call_stats.AC - 2*call_stats.homozygote_count
+    return 1 - (n_hets / (call_stats.AF * (1 - call_stats.AF) * call_stats.AN))
 
 
 def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:

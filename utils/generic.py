@@ -1338,7 +1338,20 @@ def vep_struct_to_csq(
                           "LoF_flags|LoF_info"
 ) -> hl.expr.ArrayExpression:
     """
+    Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
+    The fields and their order will correspond to those passed in `csq_fields`, which corresponds to the
+    VCF header that is required to interpret the VCF CSQ INFO field.
 
+    Note that the order is flexible and that all fields that are in the default value are supported.
+    These fields will be formatted in the same way that their VEP CSQ counterparts are.
+
+    While other fields can be added if their name are the same as those in the struct. Their value will be the result of calling
+    hl.str(), so it may differ from their usual VEP CSQ representation.
+
+    :param vep_expr: The input VEP Struct
+    :param csq_fields: The | delimited list of fields to include in the CSQ (in that order)
+    :return: The corresponding CSQ strings
+    :rtype: ArrayExpression
     """
 
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
@@ -1371,10 +1384,12 @@ def vep_struct_to_csq(
                 'cdna_position': hl.str(element.cdna_start) + hl.cond(element.cdna_start == element.cdna_end, '', "-" + hl.str(element.cdna_end)),
                 'cds_position': hl.str(element.cds_start) + hl.cond(element.cds_start == element.cds_end, '', "-" + hl.str(element.cds_end)),
                 'protein_position': hl.str(element.protein_start) + hl.cond(element.protein_start == element.protein_end, '', "-" + hl.str(element.protein_end)),
-                'sift': element.sift_prediction + "(" + hl.str(element.sift_score) + ")",
-                'polyphen': element.polyphen_prediction + "(" + hl.str(element.polyphen_score) + ")",
+                'sift': element.sift_prediction + "(" + hl.format('%.3f', element.sift_score) + ")",
+                'polyphen': element.polyphen_prediction + "(" + hl.format('%.3f', element.polyphen_score) + ")",
                 'domains': hl.delimit(element.domains.map(lambda d: d.db + ":" + d.name), "&")
             })
+        elif feature_type == 'MotifFeature':
+            fields['motif_score_change'] = hl.format('%.3f', element.motif_score_change)
 
         return hl.delimit([hl.or_else(hl.str(fields.get(f, '')), '') for f in _csq_fields], "|")
 
@@ -1393,4 +1408,4 @@ def vep_struct_to_csq(
             )
         )
 
-    return hl.or_missing(hl.len(csq) >  0, csq)
+    return hl.or_missing(hl.len(csq) > 0, csq)

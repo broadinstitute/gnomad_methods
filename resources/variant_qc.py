@@ -180,7 +180,7 @@ def release_vcf_path(data_type: str, release_tag=RELEASE_VERSION, contig=None, c
     :return: Filepath for the desired VCF
     :rtype: str
     '''
-    release = RELEASE_VERSION[1:] if release_tag==RELEASE_VERSION else release_tag
+    release = release_tag.lstrip('r')
     if contig:
         return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.{contig}.vcf.bgz'
     elif data_type == 'genomes' and coding_only:

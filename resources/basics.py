@@ -21,6 +21,7 @@ EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 pop_names = {
     'oth': 'Other',
     'afr': 'African-American/African',
+    'ami': 'Amish',
     'amr': 'Latino',
     'eas': 'East Asian',
     'fin': 'Finnish',
@@ -536,9 +537,11 @@ def get_gnomad_liftover_data_path(data_type, version=CURRENT_RELEASE) -> str:
     return f'gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht'
 
 
-gnomad_sv_mt_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1_wRelateds.pruned_wAFs.mt'
-gnomad_sv_vcf_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1_wRelateds.pruned_wAFs.vcf.gz'
-gnomad_sv_release_samples_list_path = 'gs://gnomad/sv/sv_release_samples.txt.gz'
+gnomad_sv_mt_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1.polished.mt'
+gnomad_sv_vcf_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1.polished.vcf.gz'
+gnomad_sv_public_sites_vcf_path = 'gs://gnomad-public/papers/2019-sv/gnomad_v2.1_sv.sites.vcf.gz'
+gnomad_sv_public_hists_ht_path = 'gs://gnomad-public/papers/2019-sv/gnomad_sv_hists.ht'
+gnomad_sv_release_samples_list_path = 'gs://gnomad/sv/gnomAD-SV_v2_rev1_releasable.samples.list'
 
 class DataException(Exception):
     pass

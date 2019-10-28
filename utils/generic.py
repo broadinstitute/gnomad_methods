@@ -1409,3 +1409,14 @@ def vep_struct_to_csq(
         )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
+
+
+def get_array_element_type(array_expr: hl.expr.ArrayExpression) -> hl.HailType:
+    """
+    Returns the type of an array element.
+
+    :param ArrayExpression array_expr: The array expression to get the element type
+    :return: Hail type
+    :rtype: HailType
+    """
+    return array_expr.dtype.element_type

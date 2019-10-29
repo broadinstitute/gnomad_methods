@@ -45,7 +45,12 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     return ht.select_globals()
 
 
-def densify_sites(mt: hl.MatrixTable, sites_ht: hl.Table, last_END_positions_ht: hl.Table) -> hl.MatrixTable:
+def densify_sites(
+        mt: hl.MatrixTable,
+        sites_ht: hl.Table,
+        last_END_positions_ht: hl.Table,
+        semi_join_rows: bool = True
+) -> hl.MatrixTable:
     """
     Densifies the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
@@ -53,10 +58,11 @@ def densify_sites(mt: hl.MatrixTable, sites_ht: hl.Table, last_END_positions_ht:
     :param MatrixTable mt: Input sparse MT
     :param Table sites_ht: Desired sites to densify
     :param Table last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
+    :param bool semi_join_rows: Whether to filter the MT rows based on semi-join (default, better if sites_ht is large) or based on filter_intervals (better if sites_ht only contains a few sites)
     :return: Dense MT filtered to the sites in `sites_ht`
     :rtype: MatrixTable
     """
-    logger.info("Computing and collecting intervals to densify from sites Table")
+    logger.info("Computing intervals to densify from sites Table.")
     sites_ht = sites_ht.key_by('locus')
     sites_ht = sites_ht.annotate(
         interval=hl.locus_interval(
@@ -68,14 +74,20 @@ def densify_sites(mt: hl.MatrixTable, sites_ht: hl.Table, last_END_positions_ht:
         )
     )
     sites_ht = sites_ht.filter(hl.is_defined(sites_ht.interval))
-    intervals = sites_ht.interval.collect()
 
-    print("Found {0} intervals, totalling {1} bp in the dense Matrix.".format(
-        len(intervals),
-        sum([interval_length(interval) for interval in union_intervals(intervals)])
-    ))
+    if semi_join_rows:
+        mt = mt.filter_rows(hl.is_defined(sites_ht.key_by('interval')[mt.locus]))
+    else:
+        logger.info("Collecting intervals to densify.")
+        intervals = sites_ht.interval.collect()
 
-    mt = hl.filter_intervals(mt, intervals)
+        print("Found {0} intervals, totalling {1} bp in the dense Matrix.".format(
+            len(intervals),
+            sum([interval_length(interval) for interval in union_intervals(intervals)])
+        ))
+
+        mt = hl.filter_intervals(mt, intervals)
+
     mt = hl.experimental.densify(mt)
 
     return mt.filter_rows(

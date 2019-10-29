@@ -281,3 +281,84 @@ def get_site_info_expr(
         additional_metrics['FS'] = fs_from_sb(hl.array(info.SB))
 
     return info.annotate(**additional_metrics)
+
+
+def impute_sex_ploidy(
+        mt: hl.MatrixTable,
+        excluded_intervals: Optional[hl.Table],
+        normalization_contig: str = 'chr20',
+        chr_x: Optional[str] = None,
+        chr_y: Optional[str] = None,
+) -> hl.Table: # TODO: For exomes, calling intervals need to be added
+    """
+    Imputes sex ploidy from a sparse Matrix Table by normalizing the coverage of chromosomes X and Y using
+    the coverage of an autosomal chromosome (by default chr20).
+    Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
+
+    :param MatrixTable mt: Input sparse Matrix Table
+    :param Table excluded_intervals: An optional table of intervals to exclude from the computation.
+    :param str normalization_contig: Which chromosome to normalize by
+    :param str chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
+    :param str chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
+    :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
+    :rtype: Table
+    """
+
+    ref = get_reference_genome(mt.locus, add_sequence=True)
+    if chr_x is None:
+        if len(ref.x_contigs) > 1:
+            raise NotImplementedError(
+                "Found {0} X chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single X chromosome contig. Please use the `chr_x` argument to  specify which X chromosome contig to use ".format(
+                    len(ref.x_contigs),
+                    ",".join(ref.x_contigs)
+                )
+            )
+        chr_x = ref.x_contigs[0]
+    if chr_y is None:
+        if len(ref.y_contigs) > 1:
+            raise NotImplementedError(
+                "Found {0} Y chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single Y chromosome contig. Please use the `chr_y` argument to  specify which Y chromosome contig to use ".format(
+                    len(ref.y_contigs),
+                    ",".join(ref.y_contigs)
+                )
+            )
+        chr_y = ref.y_contigs[0]
+
+    def get_contig_size(chr: str) -> int:
+        contig = hl.utils.range_table(ref.contig_length(chr), n_partitions=int(ref.contig_length(chr)/500_000))
+        contig = contig.annotate(
+            locus=hl.locus(contig=chr, pos=contig.idx+1)
+        )
+        contig = contig.filter(contig.locus.sequence_context().lower() != 'n')
+
+        if chr in ref.y_contigs:
+            contig = contig.filter(contig.locus.in_y_nonpar())
+
+        contig = contig.key_by('locus')
+        contig = contig.filter(hl.is_missing(excluded_intervals[contig.key]))
+        contig_size = contig.count()
+        logger.info(f"Contig {chr} has {contig_size} bases for coverage.")
+        return contig_size
+
+    def get_chr_dp_ann(chr: str) -> hl.Table:
+        contig_size = get_contig_size(chr)
+        chr_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(chr)])
+        return chr_mt.select_cols(**{
+            f'{chr}_mean_dp': hl.agg.sum(hl.cond(chr_mt.LGT.is_hom_ref(), chr_mt.DP * (chr_mt.END - chr_mt.locus.position), chr_mt.DP)) / contig_size
+        }).cols()
+
+    normalizaion_chrom_dp = get_chr_dp_ann(normalization_contig)
+    chrX_dp = get_chr_dp_ann(chr_x)
+    chrY_dp = get_chr_dp_ann(chr_y)
+
+    ht = normalizaion_chrom_dp.annotate(
+        **chrX_dp[normalizaion_chrom_dp.key],
+        **chrY_dp[normalizaion_chrom_dp.key],
+    )
+
+    return ht.annotate(
+        **{
+            f'{chr_x}_ploidy': ht[f'{chr_x}_mean_dp'] / (ht[f'{normalization_contig}_mean_dp'] / 2),
+            f'{chr_y}_ploidy': ht[f'{chr_y}_mean_dp'] / (ht[f'{normalization_contig}_mean_dp'] / 2)
+        }
+    )

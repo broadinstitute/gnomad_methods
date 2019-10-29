@@ -17,8 +17,8 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     :rtype: Table
     """
     mt = mt.select_entries('END')
-    t = mt._localize_entries('__entries', '__cols')
-    return t.select(
+    ht = mt._localize_entries('__entries', '__cols')
+    ht = ht.select(
         last_END_position=hl.or_else(
             hl.min(
                 hl.scan.array_agg(
@@ -26,21 +26,60 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
                         hl.or_missing(
                             hl.is_defined(entry.END),
                             hl.tuple([
-                                t.locus,
+                                ht.locus,
                                 entry.END
                             ])
                         )
                     ),
-                    t.__entries
+                    ht.__entries
                 ).map(
                     lambda x: hl.or_missing(
-                        (x[1] >= t.locus.position) & (x[0].contig == t.locus.contig),
+                        (x[1] >= ht.locus.position) & (x[0].contig == ht.locus.contig),
                         x[0].position
                     )
                 )
             ),
-            t.locus.position
+            ht.locus.position
         )
+    )
+    return ht.select_globals()
+
+
+def densify_sites(mt: hl.MatrixTable, sites_ht: hl.Table, last_END_positions_ht: hl.Table) -> hl.MatrixTable:
+    """
+    Densifies the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
+    Note that only rows that appear both in `mt` and `sites_ht` are returned.
+
+    :param MatrixTable mt: Input sparse MT
+    :param Table sites_ht: Desired sites to densify
+    :param Table last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
+    :return: Dense MT filtered to the sites in `sites_ht`
+    :rtype: MatrixTable
+    """
+    logger.info("Computing and collecting intervals to densify from sites Table")
+    sites_ht = sites_ht.key_by('locus')
+    sites_ht = sites_ht.annotate(
+        interval=hl.locus_interval(
+            sites_ht.locus.contig,
+            last_END_positions_ht[sites_ht.key].last_END_position,
+            end=sites_ht.locus.position,
+            includes_end=True,
+            reference_genome=sites_ht.locus.dtype.reference_genome
+        )
+    )
+    sites_ht = sites_ht.filter(hl.is_defined(sites_ht.interval))
+    intervals = sites_ht.interval.collect()
+
+    print("Found {0} intervals, totalling {1} bp in the dense Matrix.".format(
+        len(intervals),
+        sum([interval_length(interval) for interval in union_intervals(intervals)])
+    ))
+
+    mt = hl.filter_intervals(mt, intervals)
+    mt = hl.experimental.densify(mt)
+
+    return mt.filter_rows(
+        hl.is_defined(sites_ht[mt.locus])
     )
 
 

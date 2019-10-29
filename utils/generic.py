@@ -1484,3 +1484,66 @@ def ht_to_vcf_mt(
     # Create an MT with no cols so that we acn export to VCF
     info_mt = info_ht.to_matrix_table_row_major(columns=['s'], entry_field_name='s')
     return info_mt.filter_cols(False)
+
+
+def sort_intervals(intervals: List[hl.Interval]):
+    """
+    Sorts an array of intervals by:
+    start contig, then start position, then end contig, then end position
+
+    :param list of Interval intervals: Intervals to sort
+    :return: Sorted interval list
+    :rtype: list of Interval
+    """
+    return sorted(
+        intervals,
+        key=lambda interval: (
+            interval.start.reference_genome.contigs.index(interval.start.contig),
+            interval.start.position,
+            interval.end.reference_genome.contigs.index(interval.end.contig),
+            interval.end.position
+        )
+    )
+
+
+def union_intervals(intervals: List[hl.Interval], sorted: bool = False):
+    """
+    Generates a list with the union of all intervals in the input list by merging overlapping intervals.
+
+    :param list of Interval intervals: Intervals to merge
+    :param bool sorted: If set, assumes intervals are already sorted, otherwise will sort.
+    :return: List of merged intervals
+    :rtype: List of Interval
+    """
+    sorted_intervals = intervals if sorted else sort_intervals(intervals)
+    res = sorted_intervals[:1]
+    for interval in sorted_intervals[1:]:
+        if res[-1].start.contig == interval.start.contig:
+            if (res[-1].end.position < interval.end.position):
+                if interval.start.position <= res[-1].end.position:
+                    res[-1] = hl.Interval(res[-1].start, interval.end)
+                else:
+                    res.append(interval)
+        else:
+            res.append(interval)
+
+    return res
+
+
+def interval_length(interval: hl.Interval) -> int:
+    """
+    Returns the total number of bases in an Interval
+
+    :param Interval interval: Input interval
+    :return: Total length of the interval
+    :rtype: int
+    """
+    if interval.start.contig != interval.end.contig:
+        ref = interval.start.reference_genome
+        return (
+                ref.contig_length(interval.start.contig) - interval.start.position +
+                sum(ref.contig_length(contig) for contig in ref.contigs[ref.contigs.index(interval.start.contig)+1:ref.contigs.index(interval.end.contig)]) +
+                interval.end.position
+        )
+    else:
+        return interval.end.position - interval.start.position

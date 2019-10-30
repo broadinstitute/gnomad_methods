@@ -3,6 +3,7 @@ from .generic import *
 INFO_SUM_AGG_FIELDS= ['RAW_MQ', 'QUALapprox']
 INFO_INT32_SUM_AGG_FIELDS = ['DP', 'MQ_DP', 'VarDP']
 INFO_MEDIAN_AGG_FIELDS = ['ReadPosRankSum', 'MQRankSum']
+INFO_ARRAY_SUM_AGG_FIELDS = ['SB', 'RAW_MQandDP']
 
 def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
@@ -98,8 +99,9 @@ def densify_sites(
 def _get_info_agg_expr(
         mt: hl.MatrixTable,
         sum_agg_fields: Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_SUM_AGG_FIELDS,
-        int32_sum_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_INT32_SUM_AGG_FIELDS,
-        median_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_MEDIAN_AGG_FIELDS,
+        int32_sum_agg_fields: Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_INT32_SUM_AGG_FIELDS,
+        median_agg_fields: Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_MEDIAN_AGG_FIELDS,
+        array_sum_agg_fields: Union[List[str], Dict[str, hl.expr.ArrayNumericExpression]] = INFO_ARRAY_SUM_AGG_FIELDS,
         prefix: str = ''
 ) -> Dict[str, hl.expr.Aggregation]:
     """
@@ -108,7 +110,8 @@ def _get_info_agg_expr(
     :param MatrixTable mt: Input MT
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
     :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using median.
+    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
+    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using element-wise summing over an array.
     :param str prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
 
     :return: Dictionary of expression names and their corresponding aggregation Expression
@@ -143,6 +146,9 @@ def _get_info_agg_expr(
     if isinstance(median_agg_fields, list):
         median_agg_fields = _agg_list_to_dict(mt, median_agg_fields)
 
+    if isinstance(array_sum_agg_fields, list):
+        array_sum_agg_fields = _agg_list_to_dict(mt, array_sum_agg_fields)
+
     # Create aggregators
     agg_expr = {}
 
@@ -158,6 +164,10 @@ def _get_info_agg_expr(
         f'{prefix}{k}': hl.int32(hl.agg.sum(expr))
         for k, expr in int32_sum_agg_fields.items()
     })
+    agg_expr.update({
+        f'{prefix}{k}': hl.agg.array_agg(lambda x: hl.agg.sum(x), expr)
+        for k, expr in array_sum_agg_fields.items()
+    })
 
     return agg_expr
 
@@ -167,10 +177,16 @@ def get_as_info_expr(
         sum_agg_fields: Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_SUM_AGG_FIELDS,
         int32_sum_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_INT32_SUM_AGG_FIELDS,
         median_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_MEDIAN_AGG_FIELDS,
+        array_sum_agg_fields: Union[List[str], Dict[str, hl.expr.ArrayNumericExpression]] = INFO_ARRAY_SUM_AGG_FIELDS
 ) -> hl.expr.StructExpression:
     """
     Returns an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
-    Note that while not a parameter, if `SB` is found, it will be aggregated in `AS_SB_TABLE`
+    Notes:
+    1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
+    2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+    3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+       Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input Matrix Table
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
@@ -179,14 +195,25 @@ def get_as_info_expr(
     :return: Expression containing the AS info fields
     :rtype: StructExpression
     """
+    if 'DP' in sum_agg_fields:
+        logger.warn("`DP` was included in allele-specific aggregation. `DP` is typically not aggregated by allele; `VarDP` is.")
 
     agg_expr = _get_info_agg_expr(
         mt=mt,
         sum_agg_fields=sum_agg_fields,
         int32_sum_agg_fields=int32_sum_agg_fields,
         median_agg_fields=median_agg_fields,
+        array_sum_agg_fields=array_sum_agg_fields,
         prefix='AS_'
     )
+
+    # Rename AS_SB to AS_SB_TABLE if present
+    if 'AS_SB' in agg_expr:
+        agg_expr['AS_SB_TABLE'] = agg_expr.pop('AS_SB').map(lambda x: hl.int32(x))
+
+    # If AS_RAW_MQandDP is in agg_expr, compute AS_MQ instead
+    if 'AS_RAW_MQandDP' in agg_expr:
+        agg_expr['AS_MQ'] = agg_expr.pop('AS_RAW_MQandDP').map(lambda x: hl.sqrt(x[0]/x[1]))
 
     # Modify aggregations to aggregate per allele
     agg_expr = {
@@ -200,53 +227,51 @@ def get_as_info_expr(
         for f, expr in agg_expr.items()
     }
 
-    # Add SB aggregation
-    sb_expr = mt['SB'] if 'SB' in mt.entry else mt['gvcf_info']['SB'] if 'gvcf_info' in mt and 'SB' in 'gvcf_info' else None
-    if sb_expr is not None:
-        agg_expr['AS_SB_TABLE'] = hl.array([
-            hl.agg.array_agg(lambda x: hl.agg.sum(x), sb_expr[:2]).map(lambda x: hl.int32(x)) # ref
-        ]).extend(
-            hl.agg.array_agg(
-                lambda ai: hl.agg.filter(
-                    mt.LA.contains(ai),
-                    hl.agg.array_agg(lambda x: hl.agg.sum(x), sb_expr[2:]).map(lambda x: hl.int32(x)) # each alt
-                ),
-                hl.range(1, hl.len(mt.alleles))
-            )
-        )
-
     # Run aggregations
     info = hl.struct(
         **agg_expr
     )
 
-    # Add metrics that combine aggregations
-    additional_metrics = {}
-    if 'AS_RAW_MQ' in info and 'AS_MQ_DP' in info:
-        additional_metrics['AS_MQ'] = (info.AS_RAW_MQ / info.AS_MQ_DP).map(lambda x: hl.sqrt(x))
-    if 'AS_QUALapprox' in info and 'AS_VarDP' in info:
-        additional_metrics['AS_QD'] = info.AS_QUALapprox/ info.AS_VarDP
+    # Add SB Ax2 aggregation logic is SB is present
     if 'AS_SB_TABLE' in info:
-        additional_metrics['AS_FS'] = hl.range(1, hl.len(mt.alleles)).map(
+        info = info.annotate(
+            AS_SB_TABLE=hl.array([
+                info.AS_SB_TABLE.filter(lambda x: hl.is_defined(x)).fold(lambda i, j: i[:2] + j[:2], [0, 0])  # ref
+            ]).extend(
+                info.AS_SB_TABLE.map(lambda x: x[2:])  # each alt
+            )
+        )
+
+    # Add metrics that combine aggregations
+    dependent_agg_expr = {}
+    # Only compute `AS_MQ` from `AS_RAW_MQ` and `AS_MQ_DP` if it wasn't computed from `AS_RAW_MQandDP`
+    if 'AS_MQ'not in info and 'AS_RAW_MQ' in info and 'AS_MQ_DP' in info:
+        dependent_agg_expr['AS_MQ'] = (info.AS_RAW_MQ / info.AS_MQ_DP).map(lambda x: hl.cond(hl.is_finite(x), hl.sqrt(x), 0))
+    if 'AS_QUALapprox' in info and 'AS_VarDP' in info:
+        dependent_agg_expr['AS_QD'] = info.AS_QUALapprox/ info.AS_VarDP.map(lambda x: hl.cond(hl.is_finite(x), x, 0))
+    if 'AS_SB_TABLE' in info:
+        dependent_agg_expr['AS_FS'] = hl.range(1, hl.len(mt.alleles)).map(
             lambda i: fs_from_sb(info.AS_SB_TABLE[0].extend(info.AS_SB_TABLE[i]))
         )
 
-    return info.annotate(**additional_metrics)
+    return info.annotate(**dependent_agg_expr)
 
 
 def get_site_info_expr(
         mt: hl.MatrixTable,
         sum_agg_fields: Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_SUM_AGG_FIELDS,
         int32_sum_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_INT32_SUM_AGG_FIELDS,
-        median_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_MEDIAN_AGG_FIELDS
+        median_agg_fields:  Union[List[str], Dict[str, hl.expr.NumericExpression]] = INFO_MEDIAN_AGG_FIELDS,
+        array_sum_agg_fields: Union[List[str], Dict[str, hl.expr.ArrayNumericExpression]] = INFO_ARRAY_SUM_AGG_FIELDS
 ) -> hl.expr.StructExpression:
     """
     Creates a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
-    If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-    then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-    Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
-    Note that `SB` will also be aggregated if present.
+    Notes:
+    1. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+    2. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+       Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input Matrix Table
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
@@ -255,13 +280,27 @@ def get_site_info_expr(
     :return: Expression containing the site-level info fields
     :rtype: StructExpression
     """
+    if 'DP' in sum_agg_fields:
+        logger.warn("`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr")
 
     agg_expr = _get_info_agg_expr(
         mt=mt,
         sum_agg_fields=sum_agg_fields,
         int32_sum_agg_fields=int32_sum_agg_fields,
-        median_agg_fields=median_agg_fields
+        median_agg_fields=median_agg_fields,
+        array_sum_agg_fields=array_sum_agg_fields
     )
+
+    # Cast SB to int32 if present (required for FS calculation)
+    if 'SB' in agg_expr:
+        agg_expr['SB'] = agg_expr['SB'].map(lambda x: hl.int32(x))
+
+    # If RAW_MQandDP is in agg_expr, compute MQ instead
+    if 'RAW_MQandDP' in agg_expr:
+        agg_expr['MQ'] = hl.rbind(
+            agg_expr.pop('RAW_MQandDP'),
+            lambda raw_mq_and_dp: hl.sqrt(raw_mq_and_dp[0]/raw_mq_and_dp[1])
+        )
 
     # Run aggregator on non-ref genotypes
     info = hl.agg.filter(
@@ -272,15 +311,16 @@ def get_site_info_expr(
     )
 
     # Add metrics that combine aggregations
-    additional_metrics = {}
-    if 'RAW_MQ' in info and 'MQ_DP' in info:
-        additional_metrics['MQ'] = hl.sqrt(info.RAW_MQ / info.MQ_DP)
+    dependent_agg_expr = {}
+    # Only compute `MQ` from `RAW_MQ` and `MQ_DP` if it wasn't computed from `RAW_MQandDP` directly
+    if 'MQ' not in info and 'RAW_MQ' in info and 'MQ_DP' in info:
+        dependent_agg_expr['MQ'] = hl.cond(info.MQ_DP > 0, hl.sqrt(info.RAW_MQ / info.MQ_DP), 0)
     if 'QUALapprox' in info and 'VarDP'in info:
-        additional_metrics['QD'] = info.QUALapprox / info.VarDP
+        dependent_agg_expr['QD'] = hl.cond(info.VarDP > 0, info.QUALapprox / info.VarDP, 0)
     if 'SB' in info:
-        additional_metrics['FS'] = fs_from_sb(hl.array(info.SB))
+        dependent_agg_expr['FS'] = fs_from_sb(hl.array(info.SB))
 
-    return info.annotate(**additional_metrics)
+    return info.annotate(**dependent_agg_expr)
 
 
 def impute_sex_ploidy(

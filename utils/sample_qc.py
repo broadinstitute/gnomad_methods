@@ -88,9 +88,9 @@ def get_qc_mt(
         min_af: float = 0.001,
         min_callrate: float = 0.99,
         min_inbreeding_coeff_threshold: float = -0.8,
-        min_hardy_weinberg_threshold: float = 1e-8,
+        min_hardy_weinberg_threshold: Optional[float] = 1e-8,
         apply_hard_filters: bool = True,
-        ld_r2: float = 0.1,
+        ld_r2: Optional[float] = 0.1,
         filter_lcr: bool = True,
         filter_decoy: bool = True,
         filter_segdup: bool = True,
@@ -449,57 +449,156 @@ def run_pca_with_relateds(
         return pca_evals, pca_scores, pca_loadings
 
 
-def compute_stratified_metrics_filter(ht: hl.Table, qc_metrics: List[str], strata: List[str] = None) -> hl.Table:
+def compute_stratified_metrics_filter(
+        ht: hl.Table,
+        qc_metrics: Dict[str, hl.expr.NumericExpression],
+        strata: Optional[Dict[str, hl.expr.Expression]] = None,
+        lower_threshold: float = 4.0,
+        upper_threshold: float = 4.0,
+        metric_threshold: Optional[Dict[str, Tuple[float, float]]] = None,
+        filter_name: str = 'qc_metrics_filters'
+) -> hl.Table:
     """
-    Compute median, MAD, and upper and lower thresholds for each metric used in pop- and platform-specific outlier filtering
+    Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering
 
     :param MatrixTable ht: HT containing relevant sample QC metric annotations
-    :param list qc_metrics: list of metrics for which to compute the critical values for filtering outliers
+    :param dict of str -> qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
     :param list of str strata: List of annotations used for stratification. These metrics should be discrete types!
-    :return: Table grouped by pop and platform, with upper and lower threshold values computed for each sample QC metric
+    :param float lower_threshold: Lower MAD threshold
+    :param float upper_threshold: Upper MAD threshold
+    :param dict str -> (float, float) metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
+    :param str filter_name: Name of resulting filters annotation
+    :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
     :rtype: Table
     """
 
-    def make_pop_filters_expr(ht: hl.Table, qc_metrics: List[str]) -> hl.expr.SetExpression:
-        return hl.set(hl.filter(lambda x: hl.is_defined(x),
-                                [hl.or_missing(ht[f'fail_{metric}'], metric) for metric in qc_metrics]))
+    _metric_threshold = {metric: (lower_threshold, upper_threshold) for metric in qc_metrics}
+    if metric_threshold is not None:
+        _metric_threshold.update(metric_threshold)
 
-    ht = ht.select(*strata, **ht.sample_qc.select(*qc_metrics)).key_by('s').persist()
-
-    def get_metric_expr(ht, metric):
-        return hl.bind(
-            lambda x: x.annotate(
-                upper=x.median + 4 * x.mad,
-                lower=x.median - 4 * x.mad
-            ),
-            hl.bind(
-                lambda elements, median: hl.struct(
-                    median=median,
-                    mad=1.4826 * hl.median(hl.abs(elements - median))
-                ),
-                *hl.bind(
-                    lambda x: hl.tuple([x, hl.median(x)]),
-                    hl.agg.collect(ht[metric])
-                )
+    def make_filters_expr(ht: hl.Table, qc_metrics: Iterable[str]) -> hl.expr.SetExpression:
+        return hl.set(
+            hl.filter(
+                lambda x: hl.is_defined(x),
+                [hl.or_missing(ht[f'fail_{metric}'], metric) for metric in qc_metrics]
             )
         )
 
-    agg_expr = hl.struct(**{metric: get_metric_expr(ht, metric) for metric in qc_metrics})
-    if strata:
-        ht = ht.annotate_globals(metrics_stats=ht.aggregate(hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr)))
-    else:
-        ht = ht.annotate_globals(metrics_stats={(): ht.aggregate(agg_expr)})
+    if strata is None:
+        strata = {}
 
-    strata_exp = hl.tuple([ht[x] for x in strata]) if strata else hl.tuple([])
+    ht = ht.select(**qc_metrics, **strata).key_by('s').persist()
+
+    agg_expr = hl.struct(**{
+        metric: hl.bind(
+            lambda x: x.annotate(
+                lower=x.median - _metric_threshold[metric][0] * x.mad,
+                upper=x.median + _metric_threshold[metric][1] * x.mad
+            ),
+            get_median_and_mad_expr(ht[metric])
+        ) for metric in qc_metrics
+    })
+
+    if strata:
+        ht = ht.annotate_globals(qc_metrics_stats=ht.aggregate(hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr), _localize=False))
+        metrics_stats_expr = ht.qc_metrics_stats[hl.tuple([ht[x] for x in strata])]
+    else:
+        ht = ht.annotate_globals(qc_metrics_stats=ht.aggregate(agg_expr, _localize=False))
+        metrics_stats_expr = ht.qc_metrics_stats
 
     fail_exprs = {
         f'fail_{metric}':
-            (ht[metric] >= ht.metrics_stats[strata_exp][metric].upper) |
-            (ht[metric] <= ht.metrics_stats[strata_exp][metric].lower)
+            (ht[metric] <= metrics_stats_expr[metric].lower) |
+            (ht[metric] >= metrics_stats_expr[metric].upper)
         for metric in qc_metrics}
     ht = ht.transmute(**fail_exprs)
-    pop_platform_filters = make_pop_filters_expr(ht, qc_metrics)
-    return ht.annotate(pop_platform_filters=pop_platform_filters)
+    pop_platform_filters = make_filters_expr(ht, qc_metrics)
+    return ht.annotate(**{filter_name: pop_platform_filters})
+
+
+def compute_qc_metrics_residuals(
+        ht: hl.Table,
+        pc_scores: hl.expr.ArrayNumericExpression,
+        qc_metrics: Dict[str, hl.expr.NumericExpression],
+        use_pc_square: bool = True,
+        n_pcs: Optional[int] = None,
+        regression_sample_inclusion_expr: hl.expr.BooleanExpression = hl.bool(True)
+) -> hl.Table:
+    """
+    Computes QC metrics residuals after regressing out PCs (and optionally PC^2)
+
+    Note: The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
+    Residuals are always computed for all samples.
+
+    :param Table ht: Input sample QC metrics HT
+    :param ArrayNumericExpressoin pc_scores: The expression in the input HT that stores the PC scores
+    :param dict of str -> NumericExpression qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
+    :param bool use_pc_square: Whether to  use PC^2 in the regression or not
+    :param int n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
+    :param BooleanExpression regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
+    :return:
+    """
+
+    # Annotate QC HT with fields necessary for computation
+    _sample_qc_ht = ht.select(
+        **qc_metrics,
+        scores=pc_scores,
+        _keep=regression_sample_inclusion_expr
+    )
+
+    # If n_pcs wasn't provided, use all PCs
+    if n_pcs is None:
+        n_pcs = _sample_qc_ht.aggregate(hl.agg.min(hl.len(_sample_qc_ht.scores)))
+
+    logger.info("Computing regressed QC metrics filters using {} PCs for metrics: {}".format(
+        n_pcs,
+        ', '.join(qc_metrics)
+    ))
+
+    # Prepare regression variables, adding 1.0 first for the intercept
+    # Adds square of variables if set to
+    x_expr = [1.0] + [_sample_qc_ht.scores[i] for i in range(0, n_pcs)]
+    if use_pc_square:
+        x_expr.extend([_sample_qc_ht.scores[i] * _sample_qc_ht.scores[i] for i in range(0, n_pcs)])
+
+    # Compute linear regressions
+    lms = _sample_qc_ht.aggregate(
+        hl.struct(
+            **{metric:
+                hl.agg.filter(
+                    _sample_qc_ht._keep,
+                    hl.agg.linreg(
+                    y=_sample_qc_ht[metric],
+                    x=x_expr
+                )
+             ) for metric in qc_metrics
+            }
+        )
+    )
+
+    _sample_qc_ht = _sample_qc_ht.annotate_globals(
+        lms=lms
+    ).persist()
+
+    # Compute residuals
+    def get_lm_prediction_expr(metric: str):
+        lm_pred_expr = _sample_qc_ht.lms[metric].beta[0] + hl.sum(
+                hl.range(n_pcs).map(lambda i: _sample_qc_ht.lms[metric].beta[i + 1] * _sample_qc_ht.scores[i])
+        )
+        if use_pc_square:
+            lm_pred_expr = lm_pred_expr + hl.sum(
+                hl.range(n_pcs).map(lambda i: _sample_qc_ht.lms[metric].beta[i + n_pcs + 1] * _sample_qc_ht.scores[i] * _sample_qc_ht.scores[i])
+        )
+        return lm_pred_expr
+
+    residuals_ht = _sample_qc_ht.select(
+        **{
+            f'{metric}_residual': _sample_qc_ht[metric] - get_lm_prediction_expr(metric)
+            for metric in _sample_qc_ht.lms
+        }
+    )
+
+    return residuals_ht.persist()
 
 
 def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:

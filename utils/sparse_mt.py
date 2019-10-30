@@ -175,7 +175,7 @@ def get_as_info_expr(
     :param MatrixTable mt: Input Matrix Table
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
     :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using median.
+    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
     :return: Expression containing the AS info fields
     :rtype: StructExpression
     """
@@ -251,7 +251,7 @@ def get_site_info_expr(
     :param MatrixTable mt: Input Matrix Table
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
     :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using median.
+    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
     :return: Expression containing the site-level info fields
     :rtype: StructExpression
     """
@@ -306,7 +306,7 @@ def impute_sex_ploidy(
 
     ref = get_reference_genome(mt.locus, add_sequence=True)
     if chr_x is None:
-        if len(ref.x_contigs) > 1:
+        if len(ref.x_contigs) != 1:
             raise NotImplementedError(
                 "Found {0} X chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single X chromosome contig. Please use the `chr_x` argument to  specify which X chromosome contig to use ".format(
                     len(ref.x_contigs),
@@ -315,7 +315,7 @@ def impute_sex_ploidy(
             )
         chr_x = ref.x_contigs[0]
     if chr_y is None:
-        if len(ref.y_contigs) > 1:
+        if len(ref.y_contigs) != 1:
             raise NotImplementedError(
                 "Found {0} Y chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single Y chromosome contig. Please use the `chr_y` argument to  specify which Y chromosome contig to use ".format(
                     len(ref.y_contigs),
@@ -324,20 +324,21 @@ def impute_sex_ploidy(
             )
         chr_y = ref.y_contigs[0]
 
-    def get_contig_size(chr: str) -> int:
-        contig = hl.utils.range_table(ref.contig_length(chr), n_partitions=int(ref.contig_length(chr)/500_000))
+    def get_contig_size(contig: str) -> int:
+        contig = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 500_000))
         contig = contig.annotate(
-            locus=hl.locus(contig=chr, pos=contig.idx+1)
+            locus=hl.locus(contig=contig, pos=contig.idx + 1)
         )
         contig = contig.filter(contig.locus.sequence_context().lower() != 'n')
 
-        if chr in ref.y_contigs:
+        if contig in ref.y_contigs:
             contig = contig.filter(contig.locus.in_y_nonpar())
 
         contig = contig.key_by('locus')
-        contig = contig.filter(hl.is_missing(excluded_intervals[contig.key]))
+        if excluded_intervals is not None:
+            contig = contig.filter(hl.is_missing(excluded_intervals[contig.key]))
         contig_size = contig.count()
-        logger.info(f"Contig {chr} has {contig_size} bases for coverage.")
+        logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
         return contig_size
 
     def get_chr_dp_ann(chr: str) -> hl.Table:

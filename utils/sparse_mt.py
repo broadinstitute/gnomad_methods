@@ -1,6 +1,6 @@
 from .generic import *
 
-INFO_SUM_AGG_FIELDS= ['RAW_MQ', 'QUALapprox']
+INFO_SUM_AGG_FIELDS= ['QUALapprox']
 INFO_INT32_SUM_AGG_FIELDS = ['VarDP']
 INFO_MEDIAN_AGG_FIELDS = ['ReadPosRankSum', 'MQRankSum']
 INFO_ARRAY_SUM_AGG_FIELDS = ['SB', 'RAW_MQandDP']
@@ -169,15 +169,40 @@ def _get_info_agg_expr(
         for k, expr in array_sum_agg_fields.items()
     })
 
-    # Handle a few exceptions for specific annotations
+    # Handle annotations combinations and casting for specific annotations
 
-    # If RAW_MQandDP is in agg_expr, compute MQ instead
+    # If RAW_MQandDP is in agg_expr or if both MQ_DP and RAW_MQ are, compute MQ instead
+    mq_tuple = None
     if f'{prefix}RAW_MQandDP' in agg_expr:
-        agg_expr[f'{prefix}MQ'] = hl.rbind(
-            agg_expr.pop(f'{prefix}RAW_MQandDP'),
-            lambda raw_mq_and_dp: hl.sqrt(raw_mq_and_dp[0] / raw_mq_and_dp[1])
+        logger.info(
+            f"Computing {prefix}MQ as sqrt({prefix}RAW_MQandDP[0]/{prefix}RAW_MQandDP[1]). "
+            f"Note that {prefix}MQ will be set to 0 if {prefix}RAW_MQandDP[1] == 0."
+        )
+        mq_tuple = agg_expr.pop(f'{prefix}RAW_MQandDP')
+    elif f'{prefix}RAW_MQ' in agg_expr and f'{prefix}MQ_DP' in agg_expr:
+        logger.info(
+            f"Computing {prefix}MQ as sqrt({prefix}MQ_DP/{prefix}RAW_MQ). "
+            f"Note that MQ will be set to 0 if {prefix}RAW_MQ == 0."
+        )
+        mq_tuple = (agg_expr.pop(f'{prefix}MQ_DP'), agg_expr.pop(f'{prefix}RAW_MQ'))
+
+    if mq_tuple is not None:
+        agg_expr[f'{prefix}MQ'] = hl.cond(
+            mq_tuple[1] > 0,
+            hl.sqrt(mq_tuple[0] / mq_tuple[1]),
+            0
         )
 
+    # If both VarDP and QUALapprox are present, also compute QD.
+    if f"{prefix}VarDP" in agg_expr and f"{prefix}QUALapprox" in agg_expr:
+        logger.info(
+            f"Computing {prefix}QD as {prefix}QUALapprox/{prefix}VarDP. "
+            f"Note that {prefix}QD will be set to 0 if {prefix}VarDP == 0."
+        )
+        var_dp = agg_expr[f"{prefix}VarDP"]
+        agg_expr[f'{prefix}QD'] = hl.cond(var_dp > 0, agg_expr[f"{prefix}QUALapprox"] / var_dp, 0)
+
+    # SB needs to be cast to int32 for FS down the line
     if f'{prefix}SB' in agg_expr:
         agg_expr[f'{prefix}SB'] = agg_expr[f'{prefix}SB'].map(lambda x: hl.int32(x))
 
@@ -208,7 +233,7 @@ def get_as_info_expr(
     :rtype: StructExpression
     """
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
-        logger.warn(
+        logger.warning(
             "`DP` was included in allele-specific aggregation, "
             "however `DP` is typically not aggregated by allele; `VarDP` is.2"
             "Note that the resulting `AS_DP` field will NOT include reference genotypes."
@@ -244,29 +269,21 @@ def get_as_info_expr(
         **agg_expr
     )
 
-    # Add SB Ax2 aggregation logic is SB is present
+    # Add SB Ax2 aggregation logic and FS if SB is present
     if 'AS_SB_TABLE' in info:
+        as_sb_table = hl.array([
+            info.AS_SB_TABLE.filter(lambda x: hl.is_defined(x)).fold(lambda i, j: i[:2] + j[:2], [0, 0])  # ref
+        ]).extend(
+            info.AS_SB_TABLE.map(lambda x: x[2:])  # each alt
+        )
         info = info.annotate(
-            AS_SB_TABLE=hl.array([
-                info.AS_SB_TABLE.filter(lambda x: hl.is_defined(x)).fold(lambda i, j: i[:2] + j[:2], [0, 0])  # ref
-            ]).extend(
-                info.AS_SB_TABLE.map(lambda x: x[2:])  # each alt
+            AS_SB_TABLE=as_sb_table,
+            AS_FS=hl.range(1, hl.len(mt.alleles)).map(
+                lambda i: fs_from_sb(as_sb_table[0].extend(as_sb_table[i]))
             )
         )
 
-    # Add metrics that combine aggregations
-    dependent_agg_expr = {}
-    # Only compute `AS_MQ` from `AS_RAW_MQ` and `AS_MQ_DP` if it wasn't computed from `AS_RAW_MQandDP`
-    if 'AS_MQ'not in info and 'AS_RAW_MQ' in info and 'AS_MQ_DP' in info:
-        dependent_agg_expr['AS_MQ'] = (info.AS_RAW_MQ / info.AS_MQ_DP).map(lambda x: hl.cond(hl.is_finite(x), hl.sqrt(x), 0))
-    if 'AS_QUALapprox' in info and 'AS_VarDP' in info:
-        dependent_agg_expr['AS_QD'] = info.AS_QUALapprox/ info.AS_VarDP.map(lambda x: hl.cond(hl.is_finite(x), x, 0))
-    if 'AS_SB_TABLE' in info:
-        dependent_agg_expr['AS_FS'] = hl.range(1, hl.len(mt.alleles)).map(
-            lambda i: fs_from_sb(info.AS_SB_TABLE[0].extend(info.AS_SB_TABLE[i]))
-        )
-
-    return info.annotate(**dependent_agg_expr)
+    return info
 
 
 def get_site_info_expr(
@@ -293,7 +310,7 @@ def get_site_info_expr(
     :rtype: StructExpression
     """
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
-        logger.warn("`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr")
+        logger.warning("`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr")
 
     agg_expr = _get_info_agg_expr(
         mt=mt,
@@ -302,6 +319,10 @@ def get_site_info_expr(
         median_agg_fields=median_agg_fields,
         array_sum_agg_fields=array_sum_agg_fields
     )
+
+    # Add FS if SB is present
+    # This is done outside of _get_info_agg_expr as the behavior is different in site vs allele-specific versions
+    agg_expr['FS'] = fs_from_sb(agg_expr['SB'])
 
     # Run aggregator on non-ref genotypes
     info = hl.agg.filter(
@@ -317,17 +338,7 @@ def get_site_info_expr(
             DP=agg_expr['DP']
         )
 
-    # Add metrics that combine aggregations
-    dependent_agg_expr = {}
-    # Only compute `MQ` from `RAW_MQ` and `MQ_DP` if it wasn't computed from `RAW_MQandDP` directly
-    if 'MQ' not in info and 'RAW_MQ' in info and 'MQ_DP' in info:
-        dependent_agg_expr['MQ'] = hl.cond(info.MQ_DP > 0, hl.sqrt(info.RAW_MQ / info.MQ_DP), 0)
-    if 'QUALapprox' in info and 'VarDP'in info:
-        dependent_agg_expr['QD'] = hl.cond(info.VarDP > 0, info.QUALapprox / info.VarDP, 0)
-    if 'SB' in info:
-        dependent_agg_expr['FS'] = fs_from_sb(hl.array(info.SB))
-
-    return info.annotate(**dependent_agg_expr)
+    return info
 
 
 def impute_sex_ploidy(

@@ -199,7 +199,7 @@ def _get_info_agg_expr(
             f"Computing {prefix}QD as {prefix}QUALapprox/{prefix}VarDP. "
             f"Note that {prefix}QD will be set to 0 if {prefix}VarDP == 0."
         )
-        var_dp = agg_expr[f"{prefix}VarDP"]
+        var_dp = hl.int32(hl.agg.sum(int32_sum_agg_fields['VarDP']))
         agg_expr[f'{prefix}QD'] = hl.cond(var_dp > 0, agg_expr[f"{prefix}QUALapprox"] / var_dp, 0)
 
     # SB needs to be cast to int32 for FS down the line
@@ -235,7 +235,7 @@ def get_as_info_expr(
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
             "`DP` was included in allele-specific aggregation, "
-            "however `DP` is typically not aggregated by allele; `VarDP` is.2"
+            "however `DP` is typically not aggregated by allele; `VarDP` is."
             "Note that the resulting `AS_DP` field will NOT include reference genotypes."
         )
 

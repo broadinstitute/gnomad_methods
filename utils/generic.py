@@ -1502,8 +1502,8 @@ def ht_to_vcf_mt(
         if f in info_ht.info:
             info_expr[f] = "|" + get_pipe_expr(info_ht.info[f])
 
-    # Take care of strand balance field
-    if 'SB' in info_ht.info:
+    # Flatten SB if it is an array of arrays
+    if 'SB' in info_ht.info and not isinstance(info_ht.info.SB, hl.expr.ArrayNumericExpression):
         info_expr['SB'] = info_ht.info.SB[0].extend(info_ht.info.SB[1])
 
     if 'AS_SB_TABLE' in info_ht.info:

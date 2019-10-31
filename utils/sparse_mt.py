@@ -1,7 +1,7 @@
 from .generic import *
 
 INFO_SUM_AGG_FIELDS= ['RAW_MQ', 'QUALapprox']
-INFO_INT32_SUM_AGG_FIELDS = ['DP', 'MQ_DP', 'VarDP']
+INFO_INT32_SUM_AGG_FIELDS = ['VarDP']
 INFO_MEDIAN_AGG_FIELDS = ['ReadPosRankSum', 'MQRankSum']
 INFO_ARRAY_SUM_AGG_FIELDS = ['SB', 'RAW_MQandDP']
 
@@ -169,6 +169,18 @@ def _get_info_agg_expr(
         for k, expr in array_sum_agg_fields.items()
     })
 
+    # Handle a few exceptions for specific annotations
+
+    # If RAW_MQandDP is in agg_expr, compute MQ instead
+    if f'{prefix}RAW_MQandDP' in agg_expr:
+        agg_expr[f'{prefix}MQ'] = hl.rbind(
+            agg_expr.pop(f'{prefix}RAW_MQandDP'),
+            lambda raw_mq_and_dp: hl.sqrt(raw_mq_and_dp[0] / raw_mq_and_dp[1])
+        )
+
+    if f'{prefix}SB' in agg_expr:
+        agg_expr[f'{prefix}SB'] = agg_expr[f'{prefix}SB'].map(lambda x: hl.int32(x))
+
     return agg_expr
 
 
@@ -195,8 +207,12 @@ def get_as_info_expr(
     :return: Expression containing the AS info fields
     :rtype: StructExpression
     """
-    if 'DP' in sum_agg_fields:
-        logger.warn("`DP` was included in allele-specific aggregation. `DP` is typically not aggregated by allele; `VarDP` is.")
+    if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
+        logger.warn(
+            "`DP` was included in allele-specific aggregation, "
+            "however `DP` is typically not aggregated by allele; `VarDP` is.2"
+            "Note that the resulting `AS_DP` field will NOT include reference genotypes."
+        )
 
     agg_expr = _get_info_agg_expr(
         mt=mt,
@@ -209,11 +225,7 @@ def get_as_info_expr(
 
     # Rename AS_SB to AS_SB_TABLE if present
     if 'AS_SB' in agg_expr:
-        agg_expr['AS_SB_TABLE'] = agg_expr.pop('AS_SB').map(lambda x: hl.int32(x))
-
-    # If AS_RAW_MQandDP is in agg_expr, compute AS_MQ instead
-    if 'AS_RAW_MQandDP' in agg_expr:
-        agg_expr['AS_MQ'] = agg_expr.pop('AS_RAW_MQandDP').map(lambda x: hl.sqrt(x[0]/x[1]))
+        agg_expr['AS_SB_TABLE'] = agg_expr.pop('AS_SB')
 
     # Modify aggregations to aggregate per allele
     agg_expr = {
@@ -280,7 +292,7 @@ def get_site_info_expr(
     :return: Expression containing the site-level info fields
     :rtype: StructExpression
     """
-    if 'DP' in sum_agg_fields:
+    if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warn("`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr")
 
     agg_expr = _get_info_agg_expr(
@@ -291,24 +303,19 @@ def get_site_info_expr(
         array_sum_agg_fields=array_sum_agg_fields
     )
 
-    # Cast SB to int32 if present (required for FS calculation)
-    if 'SB' in agg_expr:
-        agg_expr['SB'] = agg_expr['SB'].map(lambda x: hl.int32(x))
-
-    # If RAW_MQandDP is in agg_expr, compute MQ instead
-    if 'RAW_MQandDP' in agg_expr:
-        agg_expr['MQ'] = hl.rbind(
-            agg_expr.pop('RAW_MQandDP'),
-            lambda raw_mq_and_dp: hl.sqrt(raw_mq_and_dp[0]/raw_mq_and_dp[1])
-        )
-
     # Run aggregator on non-ref genotypes
     info = hl.agg.filter(
         mt.LGT.is_non_ref(),
         hl.struct(
-            **agg_expr
+            **{k: v for k, v in agg_expr.items() if k != 'DP'}
         )
     )
+
+    # Add DP, computed over both ref and non-ref genotypes, if present
+    if 'DP' in agg_expr:
+        info = info.annotate(
+            DP=agg_expr['DP']
+        )
 
     # Add metrics that combine aggregations
     dependent_agg_expr = {}

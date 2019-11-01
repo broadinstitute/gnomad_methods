@@ -875,7 +875,7 @@ def infer_families(relatedness_ht: hl.Table,
     # If `relatedness_ht` is keyed by a Struct, attempt to extract `s` instead
     if isinstance(relatedness_ht[i_col], hl.expr.StructExpression):
         if 's' in relatedness_ht[i_col]:
-            logger.warn(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
+            logger.warning(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
             relatedness_ht = relatedness_ht.key_by(  # Needed for familial inference at this point -- should be generalized
                 **{
                     i_col: relatedness_ht[i_col].s,
@@ -1121,14 +1121,14 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         dropped_metrics = dropped_metrics.union(stat_expr_metrics.difference(metrics))
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
-        logger.warn("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
+        logger.warning("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
 
     # Because merging standard deviation requires having the mean and n,
     # check that they are also present if `stdev` is. Otherwise remove stdev
     if 'stdev' in metrics:
         missing_fields = [x for x in ['n', 'mean'] if x not in metrics]
         if missing_fields:
-            logger.warn(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
+            logger.warning(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
             metrics.remove('stdev')
 
     # Create a struct with all possible stats for merging.
@@ -1483,12 +1483,12 @@ def ht_to_vcf_mt(
     # Convert int64 fields to int32 (int64 isn't supported by VCF)
     for f, ft in info_ht.info.dtype.items():
         if ft == hl.dtype('int64'):
-            logger.warn(f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value.")
+            logger.warning(f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value.")
             info_ht = info_ht.annotate(
                 info=info_ht.info.annotate(**{f: hl.int32(hl.min(2**31 - 1, info_ht.info[f]))})
             )
         elif ft == hl.dtype('array<int64>'):
-            logger.warn(f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value.")
+            logger.warning(f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value.")
             info_ht = info_ht.annotate(
                 info=info_ht.info.annotate(**{f: info_ht.info[f].map(lambda x: hl.int32(hl.min(2**31 - 1, x)))})
             )

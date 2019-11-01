@@ -53,7 +53,7 @@ def densify_sites(
         semi_join_rows: bool = True
 ) -> hl.MatrixTable:
     """
-    Densifies the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
+    Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
 
     :param MatrixTable mt: Input sparse MT
@@ -106,6 +106,13 @@ def _get_info_agg_expr(
 ) -> Dict[str, hl.expr.Aggregation]:
     """
     Helper function containing code to create Aggregators for both site or AS info expression aggregations.
+    Notes:
+    1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
+    2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+    3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+    4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+       Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input MT
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
@@ -221,7 +228,8 @@ def get_as_info_expr(
     Notes:
     1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
     2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+    3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+    4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
 
@@ -298,7 +306,8 @@ def get_site_info_expr(
 
     Notes:
     1. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    2. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+    2. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+    3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
 

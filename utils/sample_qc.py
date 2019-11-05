@@ -498,6 +498,106 @@ def filter_duplicate_samples(
     return dups_ht
 
 
+def compute_related_samples_to_drop(
+        relatedness_ht: hl.Table,
+        rank_ht: hl.Table,
+        kin_threshold: float,
+        filtered_samples: Optional[hl.expr.SetExpression] = None,
+        min_related_hard_filter: Optional[int] = None
+ ) -> hl.Table:
+    """
+    Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
+
+    Note:
+    - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
+    - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
+
+    :param Table relatedness_ht: relatedness HT, as produced by e.g. pc-relate
+    :param float kin_threshold: Kinship threshold to consider two samples as related
+    :param Table rank_ht: Table with a global rank for each sample (smaller is preferred)
+    :param SetExpression filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
+    :param int min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
+    :return: A Table with the list of the samples to drop along with their rank.
+    :rtype: Table
+    """
+
+    # Make sure that the key types are valid
+    assert(len(list(relatedness_ht.key))== 2)
+    assert(relatedness_ht.key[0].dtype == relatedness_ht.key[1].dtype)
+    assert (len(list(rank_ht.key)) == 1)
+    assert (relatedness_ht.key[0].dtype == rank_ht.key[0].dtype)
+
+    logger.info(f"Filtering related samples using a kin threshold of {kin_threshold}")
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kin_threshold)
+
+    filtered_samples_rel = set()
+    if min_related_hard_filter is not None:
+        logger.info(f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion")
+        gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
+        gbi = gbi.explode(gbi.s)
+        gbi = gbi.group_by(gbi.s).aggregate(n=hl.agg.count())
+        filtered_samples_rel = gbi.aggregate(hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s)))
+        logger.info(f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded.")
+
+    if filtered_samples is not None:
+        filtered_samples_rel = filtered_samples_rel.union(
+            relatedness_ht.aggregate(
+                hl.agg.explode(
+                    lambda s: hl.agg.collect_as_set(s),
+                    hl.array(list(relatedness_ht.key)).filter(lambda s: filtered_samples.contains(s))
+                )
+            )
+        )
+
+    if len(filtered_samples_rel) > 0:
+        filtered_samples_lit = hl.literal(filtered_samples_rel)
+        relatedness_ht = relatedness_ht.filter(
+            filtered_samples_lit.contains(relatedness_ht.key[0]) |
+            filtered_samples_lit.contains(relatedness_ht.key[1]),
+            keep=False
+        )
+
+    logger.info("Annotating related sample pairs with rank.")
+    i, j = list(relatedness_ht.key)
+    relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[i])
+    relatedness_ht = relatedness_ht.annotate(
+        **{i: hl.struct(
+            s=relatedness_ht.s,
+            rank=rank_ht[relatedness_ht.key].rank
+        )}
+    )
+    relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[j])
+    relatedness_ht = relatedness_ht.annotate(
+        **{j: hl.struct(
+            s=relatedness_ht.s,
+            rank=rank_ht[relatedness_ht.key].rank
+        )}
+    )
+    relatedness_ht = relatedness_ht.key_by(i, j)
+    relatedness_ht = relatedness_ht.drop('s')
+    relatedness_ht = relatedness_ht.persist()
+
+    related_samples_to_drop_ht = hl.maximal_independent_set(
+        relatedness_ht[i],
+        relatedness_ht[j],
+        keep=False,
+        tie_breaker=lambda l,r: l.rank - r.rank
+    )
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+    related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
+
+    if len(filtered_samples_rel) > 0:
+        related_samples_to_drop_ht = related_samples_to_drop_ht.union(
+            hl.Table.parallelize(
+                [hl.struct(s=s, rank=hl.null(hl.tint64)) for s in filtered_samples_rel],
+                key='s'
+            )
+        )
+
+    return related_samples_to_drop_ht
+
+
 def run_pca_with_relateds(
         qc_mt: hl.MatrixTable,
         related_samples_to_drop: Optional[hl.Table],

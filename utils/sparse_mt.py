@@ -18,15 +18,26 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     :rtype: Table
     """
     mt = mt.select_entries('END')
+
+    # Localize entries, so that they can be viewed as an array and scanned over using hl.scan.array_agg
     ht = mt._localize_entries('__entries', '__cols')
+
+    # Compute the position by using hl.scan._prev_nonnull.
+    # This was inspired by hl.experimental.densify
+    # _prev_non_null is an aggregator that keeps the previous record in memory
+    # and updates it with the given value at the row if it's not null (missing)
+    # The following code computes the following annotation for each row:
+    # 1. Keep a scan of the entries using _prev_nonnull, keeping the start (ht.locus) and end (entry.END) of each ref block  (1.1)
+    # 2. For the current row locus, record the start of the block that starts the furthest away,
+    #    that is the minimum position in the current scan for any block that overlaps the current locus (2.1)
     ht = ht.select(
         last_END_position=hl.or_else(
-            hl.min(
+            hl.min(  # 2. For the current row locus, record the start of the block that starts the furthest away
                 hl.scan.array_agg(
-                    lambda entry: hl.scan._prev_nonnull(
+                    lambda entry: hl.scan._prev_nonnull(  # 1. Keep a scan of the entries using _prev_nonnull
                         hl.or_missing(
-                            hl.is_defined(entry.END),
-                            hl.tuple([
+                            hl.is_defined(entry.END),  # Update the scan whenever a new ref block is encountered
+                            hl.tuple([  # 1.1 keep the start (ht.locus) and end (entry.END) of each ref block
                                 ht.locus,
                                 entry.END
                             ])
@@ -34,7 +45,7 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
                     ),
                     ht.__entries
                 ).map(
-                    lambda x: hl.or_missing(
+                    lambda x: hl.or_missing(  # 2.1 get the start position of blocks that overlap the current locus
                         (x[1] >= ht.locus.position) & (x[0].contig == ht.locus.contig),
                         x[0].position
                     )
@@ -112,7 +123,7 @@ def _get_info_agg_expr(
     3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
+       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input MT
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
@@ -231,7 +242,7 @@ def get_as_info_expr(
     3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
+       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input Matrix Table
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
@@ -309,7 +320,7 @@ def get_site_info_expr(
     2. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` to those in `mt.gvcf_info` in case of a name clash.
+       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input Matrix Table
     :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
@@ -394,7 +405,7 @@ def impute_sex_ploidy(
     def get_contig_size(contig: str) -> int:
         contig = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 500_000))
         contig = contig.annotate(
-            locus=hl.locus(contig=contig, pos=contig.idx + 1)
+            locus=hl.locus(contig=contig, pos=contig.idx + 1, reference_genome=ref)
         )
         contig = contig.filter(contig.locus.sequence_context().lower() != 'n')
 
@@ -415,13 +426,13 @@ def impute_sex_ploidy(
             f'{chr}_mean_dp': hl.agg.sum(hl.cond(chr_mt.LGT.is_hom_ref(), chr_mt.DP * (chr_mt.END - chr_mt.locus.position), chr_mt.DP)) / contig_size
         }).cols()
 
-    normalizaion_chrom_dp = get_chr_dp_ann(normalization_contig)
+    normalization_chrom_dp = get_chr_dp_ann(normalization_contig)
     chrX_dp = get_chr_dp_ann(chr_x)
     chrY_dp = get_chr_dp_ann(chr_y)
 
-    ht = normalizaion_chrom_dp.annotate(
-        **chrX_dp[normalizaion_chrom_dp.key],
-        **chrY_dp[normalizaion_chrom_dp.key],
+    ht = normalization_chrom_dp.annotate(
+        **chrX_dp[normalization_chrom_dp.key],
+        **chrY_dp[normalization_chrom_dp.key],
     )
 
     return ht.annotate(

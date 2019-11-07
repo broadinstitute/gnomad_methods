@@ -1540,28 +1540,28 @@ def sort_intervals(intervals: List[hl.Interval]):
     )
 
 
-def union_intervals(intervals: List[hl.Interval], sorted: bool = False):
+def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
     """
     Generates a list with the union of all intervals in the input list by merging overlapping intervals.
 
     :param list of Interval intervals: Intervals to merge
-    :param bool sorted: If set, assumes intervals are already sorted, otherwise will sort.
+    :param bool is_sorted: If set, assumes intervals are already sorted, otherwise will sort.
     :return: List of merged intervals
     :rtype: List of Interval
     """
-    sorted_intervals = intervals if sorted else sort_intervals(intervals)
-    res = sorted_intervals[:1]
+    sorted_intervals = intervals if is_sorted else sort_intervals(intervals)
+    merged_intervals = sorted_intervals[:1]
     for interval in sorted_intervals[1:]:
-        if res[-1].start.contig == interval.start.contig:
-            if (res[-1].end.position < interval.end.position):
-                if interval.start.position <= res[-1].end.position:
-                    res[-1] = hl.Interval(res[-1].start, interval.end)
+        if merged_intervals[-1].start.contig == interval.start.contig:
+            if (merged_intervals[-1].end.position < interval.end.position):
+                if interval.start.position <= merged_intervals[-1].end.position:
+                    merged_intervals[-1] = hl.Interval(merged_intervals[-1].start, interval.end)
                 else:
-                    res.append(interval)
+                    merged_intervals.append(interval)
         else:
-            res.append(interval)
+            merged_intervals.append(interval)
 
-    return res
+    return merged_intervals
 
 
 def interval_length(interval: hl.Interval) -> int:

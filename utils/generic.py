@@ -12,6 +12,7 @@ from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
 
+INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']
 
 def file_exists(fname: str) -> bool:
     """
@@ -43,18 +44,52 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
                                )
 
 
-def get_reference_genome(locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression]) -> hl.ReferenceGenome:
+def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
+    """
+    Adds the fasta sequence to a Hail reference genome.
+    Only GRCh37 and GRCh38 references are supported.
+
+    :param ReferenceGenome ref: Input reference genome.
+    :return:
+    """
+    if not ref.has_sequence():
+        if ref.name == 'GRCh38':
+            ref.add_sequence(
+                'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz',
+                'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+            )
+        elif ref.name == 'GRCh37':
+            ref.add_sequence(
+                'gs://hail-common/references/human_g1k_v37.fasta.gz',
+                'gs://hail-common/references/human_g1k_v37.fasta.fai'
+            )
+        else:
+            raise NotImplementedError(f'No known location for the fasta/fai files for genome {ref.name}. Only GRCh37 and GRCh38 are supported at this time.')
+    else:
+        logger.info("Reference genome sequence already present. Ignoring add_reference_sequence.")
+
+    return ref
+
+
+def get_reference_genome(
+        locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression],
+        add_sequence: bool = False
+) -> hl.ReferenceGenome:
     """
     Returns the reference genome associated with the input Locus expression
 
     :param LocusExpression or IntervalExpression locus: Input locus
+    :param  bool add_sequence: If set, the fasta sequence is added to the reference genome
     :return: Reference genome
     :rtype: ReferenceGenome
     """
     if isinstance(locus, hl.expr.LocusExpression):
         return locus.dtype.reference_genome
     assert (isinstance(locus, hl.expr.IntervalExpression))
-    return locus.dtype.point_type.reference_genome
+    ref = locus.dtype.point_type.reference_genome
+    if add_sequence:
+        ref = add_reference_sequence(ref)
+    return ref
 
 
 def flip_base(base: str) -> str:
@@ -840,7 +875,7 @@ def infer_families(relatedness_ht: hl.Table,
     # If `relatedness_ht` is keyed by a Struct, attempt to extract `s` instead
     if isinstance(relatedness_ht[i_col], hl.expr.StructExpression):
         if 's' in relatedness_ht[i_col]:
-            logger.warn(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
+            logger.warning(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
             relatedness_ht = relatedness_ht.key_by(  # Needed for familial inference at this point -- should be generalized
                 **{
                     i_col: relatedness_ht[i_col].s,
@@ -1086,14 +1121,14 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         dropped_metrics = dropped_metrics.union(stat_expr_metrics.difference(metrics))
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
-        logger.warn("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
+        logger.warning("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
 
     # Because merging standard deviation requires having the mean and n,
     # check that they are also present if `stdev` is. Otherwise remove stdev
     if 'stdev' in metrics:
         missing_fields = [x for x in ['n', 'mean'] if x not in metrics]
         if missing_fields:
-            logger.warn(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
+            logger.warning(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
             metrics.remove('stdev')
 
     # Create a struct with all possible stats for merging.
@@ -1409,3 +1444,140 @@ def vep_struct_to_csq(
         )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
+
+
+def get_array_element_type(array_expr: hl.expr.ArrayExpression) -> hl.HailType:
+    """
+    Returns the type of an array element.
+
+    :param ArrayExpression array_expr: The array expression to get the element type
+    :return: Hail type
+    :rtype: HailType
+    """
+    return array_expr.dtype.element_type
+
+
+def ht_to_vcf_mt(
+        info_ht: hl.Table,
+        pipe_delimited_annotations  : List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS
+ ) -> hl.MatrixTable:
+    """
+    Creates a MT ready for vcf export from a HT. In particular, the following conversions are done:
+    - All int64 are coerced to int32
+    - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
+
+    Note: The MT returned has no cols.
+
+    :param Table info_ht: Input HT
+    :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct)
+    :return: MatrixTable ready for VCF export
+    :rtype: MatrixTable
+    """
+
+    def get_pipe_expr(array_expr: hl.expr.ArrayExpression) -> hl.expr.StringExpression:
+        return hl.delimit(array_expr.map(lambda x: hl.or_else(hl.str(x), "")), "|")
+
+    # Make sure the HT is keyed by locus, alleles
+    info_ht = info_ht.key_by('locus', 'alleles')
+
+    # Convert int64 fields to int32 (int64 isn't supported by VCF)
+    for f, ft in info_ht.info.dtype.items():
+        if ft == hl.dtype('int64'):
+            logger.warning(f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value.")
+            info_ht = info_ht.annotate(
+                info=info_ht.info.annotate(**{f: hl.int32(hl.min(2**31 - 1, info_ht.info[f]))})
+            )
+        elif ft == hl.dtype('array<int64>'):
+            logger.warning(f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value.")
+            info_ht = info_ht.annotate(
+                info=info_ht.info.annotate(**{f: info_ht.info[f].map(lambda x: hl.int32(hl.min(2**31 - 1, x)))})
+            )
+
+    info_expr = {}
+
+    # Make sure to pipe-delimit fields that need to.
+    # Note: the expr needs to be prefixed by "|" because GATK expect one value for the ref (always empty)
+    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, but it is overwritten below
+    for f in pipe_delimited_annotations:
+        if f in info_ht.info:
+            info_expr[f] = "|" + get_pipe_expr(info_ht.info[f])
+
+    # Flatten SB if it is an array of arrays
+    if 'SB' in info_ht.info and not isinstance(info_ht.info.SB, hl.expr.ArrayNumericExpression):
+        info_expr['SB'] = info_ht.info.SB[0].extend(info_ht.info.SB[1])
+
+    if 'AS_SB_TABLE' in info_ht.info:
+        info_expr['AS_SB_TABLE'] = get_pipe_expr(info_ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ",")))
+
+    # Annotate with new expression and add 's' empty string field required to cast HT to MT
+    info_ht = info_ht.annotate(
+        info=info_ht.info.annotate(**info_expr),
+        s=hl.null(hl.tstr)
+    )
+
+    # Create an MT with no cols so that we acn export to VCF
+    info_mt = info_ht.to_matrix_table_row_major(columns=['s'], entry_field_name='s')
+    return info_mt.filter_cols(False)
+
+
+def sort_intervals(intervals: List[hl.Interval]):
+    """
+    Sorts an array of intervals by:
+    start contig, then start position, then end contig, then end position
+
+    :param list of Interval intervals: Intervals to sort
+    :return: Sorted interval list
+    :rtype: list of Interval
+    """
+    return sorted(
+        intervals,
+        key=lambda interval: (
+            interval.start.reference_genome.contigs.index(interval.start.contig),
+            interval.start.position,
+            interval.end.reference_genome.contigs.index(interval.end.contig),
+            interval.end.position
+        )
+    )
+
+
+def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
+    """
+    Generates a list with the union of all intervals in the input list by merging overlapping intervals.
+
+    :param list of Interval intervals: Intervals to merge
+    :param bool is_sorted: If set, assumes intervals are already sorted, otherwise will sort.
+    :return: List of merged intervals
+    :rtype: List of Interval
+    """
+    sorted_intervals = intervals if is_sorted else sort_intervals(intervals)
+    merged_intervals = sorted_intervals[:1]
+    for interval in sorted_intervals[1:]:
+        if merged_intervals[-1].start.contig == interval.start.contig:
+            if (merged_intervals[-1].end.position < interval.end.position):
+                if interval.start.position <= merged_intervals[-1].end.position:
+                    merged_intervals[-1] = hl.Interval(merged_intervals[-1].start, interval.end)
+                else:
+                    merged_intervals.append(interval)
+        else:
+            merged_intervals.append(interval)
+
+    return merged_intervals
+
+
+def interval_length(interval: hl.Interval) -> int:
+    """
+    Returns the total number of bases in an Interval
+
+    :param Interval interval: Input interval
+    :return: Total length of the interval
+    :rtype: int
+    """
+    if interval.start.contig != interval.end.contig:
+        ref = interval.start.reference_genome
+        return (
+                ref.contig_length(interval.start.contig) - interval.start.position +
+                sum(ref.contig_length(contig) for contig in ref.contigs[ref.contigs.index(interval.start.contig)+1:ref.contigs.index(interval.end.contig)]) +
+                interval.end.position
+        )
+    else:
+        return interval.end.position - interval.start.position

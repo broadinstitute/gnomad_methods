@@ -1345,19 +1345,22 @@ def vep_struct_to_csq(
 
 
 def get_median_and_mad_expr(
-        metric_expr: hl.expr.ArrayNumericExpression
+        metric_expr: hl.expr.ArrayNumericExpression,
+        k: float = 1.4826
 ) -> hl.expr.StructExpression:
     """
     Computes the median and median absolute deviation (MAD) for the given expression.
+    Note that the default value of k assumes normally distributed data.
 
     :param ArrayNumericExpression metric_expr: Expression to compute median and MAD for
+    :param float k: The scaling factor for MAD calculation. Default assumes normally distributed data.
     :return: Struct with median and MAD
     :rtype: StructExpression
     """
     return hl.bind(
         lambda x: hl.struct(
             median=x[1],
-            mad=1.4826 * hl.median(hl.abs(x[0] - x[1]))
+            mad=k * hl.median(hl.abs(x[0] - x[1]))
         ),
         hl.bind(
             lambda x: hl.tuple([x, hl.median(x)]),

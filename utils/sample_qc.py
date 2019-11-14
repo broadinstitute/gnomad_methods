@@ -708,8 +708,8 @@ def compute_stratified_metrics_filter(
             (ht[metric] >= metrics_stats_expr[metric].upper)
         for metric in qc_metrics}
     ht = ht.transmute(**fail_exprs)
-    pop_platform_filters = make_filters_expr(ht, qc_metrics)
-    return ht.annotate(**{filter_name: pop_platform_filters})
+    stratified_filters = make_filters_expr(ht, qc_metrics)
+    return ht.annotate(**{filter_name: stratified_filters})
 
 
 def compute_qc_metrics_residuals(
@@ -732,7 +732,8 @@ def compute_qc_metrics_residuals(
     :param bool use_pc_square: Whether to  use PC^2 in the regression or not
     :param int n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
     :param BooleanExpression regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
-    :return:
+    :return: Table with QC metrics residuals
+    :rtype: Table
     """
 
     # Annotate QC HT with fields necessary for computation
@@ -752,7 +753,7 @@ def compute_qc_metrics_residuals(
     ))
 
     # Prepare regression variables, adding 1.0 first for the intercept
-    # Adds square of variables if set to
+    # Adds square of variables if use_pc_square is true
     x_expr = [1.0] + [_sample_qc_ht.scores[i] for i in range(0, n_pcs)]
     if use_pc_square:
         x_expr.extend([_sample_qc_ht.scores[i] * _sample_qc_ht.scores[i] for i in range(0, n_pcs)])

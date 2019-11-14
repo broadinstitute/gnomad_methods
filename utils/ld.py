@@ -3,17 +3,25 @@ from hail.linalg import BlockMatrix
 
 
 def ld_matrix_path(data_type: str, pop: str, common_only: bool = True, adj: bool = True, version: str = CURRENT_RELEASE):
-    if data_type == 'genomes_snv_sv':
-        return f'gs://gnomad-resources/snv_sv_ld/gnomad.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.bm'
-    else:
-        return f'gs://gnomad-public/release/{version}/ld/gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.bm'
+    subdir = "sv/" if data_type == "genomes_snv_sv" else ""
+    return f'gs://gnomad-public/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.bm'
 
 
 def ld_index_path(data_type: str, pop: str, common_only: bool = True, adj: bool = True, version: str = CURRENT_RELEASE):
-    if data_type == 'genomes_snv_sv':
-        return f'gs://gnomad-resources/snv_sv_ld/gnomad.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.variant_indices.ht'
-    else:
-        return f'gs://gnomad-public/release/{version}/ld/gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.variant_indices.ht'
+    subdir = "sv/" if data_type == "genomes_snv_sv" else ""
+    return f'gs://gnomad-public/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.variant_indices.ht'
+
+
+def ld_snv_sv_path(pop):
+    return f'gs://gnomad-public/release/2.1.1/ld/sv/gnomad.genomes_snv_sv.r2.1.1.{pop}.snv_sv.ld.ht'
+
+
+def ld_snv_sv_index_path(pop, type):
+    return f'gs://gnomad-public/release/2.1.1/ld/sv/gnomad.genomes_snv_sv.r2.1.1.{pop}.snv_sv.ld.{type}.txt.bgz'
+
+
+def cross_pop_ld_scores_path(data_type: str, pop1: str, pop2: str, adj: bool = True, version: str = CURRENT_RELEASE):
+    return f'gs://gnomad-public/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop1}.{pop2}.{"adj." if adj else ""}ld_scores.ht'
 
 
 def ld_scores_path(data_type: str, pop: str, adj: bool = True, version: str = CURRENT_RELEASE):

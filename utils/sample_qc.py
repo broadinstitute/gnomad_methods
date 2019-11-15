@@ -88,9 +88,9 @@ def get_qc_mt(
         min_af: float = 0.001,
         min_callrate: float = 0.99,
         min_inbreeding_coeff_threshold: float = -0.8,
-        min_hardy_weinberg_threshold: float = 1e-8,
+        min_hardy_weinberg_threshold: Optional[float] = 1e-8,
         apply_hard_filters: bool = True,
-        ld_r2: float = 0.1,
+        ld_r2: Optional[float] = 0.1,
         filter_lcr: bool = True,
         filter_decoy: bool = True,
         filter_segdup: bool = True,
@@ -363,6 +363,102 @@ def infer_sex(
     return (sex_ht)
 
 
+def get_sex_expr(
+    chr_x_ploidy: hl.expr.NumericExpression,
+    chr_y_ploidy: hl.expr.NumericExpression,
+    f_stat: hl.expr.NumericExpression,
+    xx_x_ploidy_cutoffs: Tuple[float, float] = (1.4, 2.25),
+    xy_x_ploidy_cutoffs: Tuple[float, float] = (0.5, 1.4),
+    xx_y_ploidy_cutoff: float = 0.1,
+    xy_y_ploidy_cutoffs: Tuple[float, float] = (0.15, 1.2),
+    yy_y_ploidy_cutoff: float = 1.3,
+    xxx_x_ploidy_cutoff:float = 2.5,
+    f_stat_female_cutoff: float = -0.2,
+    f_stat_male_cutoff: float = 0.2
+) -> hl.expr.StructExpression:
+    # TODO: Automate cutoffs
+    # TODO: Provide alternatives in case of missing annotations (e.g. no chr_y_ploidy)
+    """
+    Creates a struct with the following annotations:
+    - karyoptype (str)
+    - sex (str), which can be either 'male', 'female' or missing
+    - is_female (missing for karyotypes that aren't either 'XX' or 'XY')
+
+    :param NumericExpression chr_x_ploidy: chrom X ploidy (or relative ploidy)
+    :param NumericExpression  chr_y_ploidy: chrom Y ploidy (or relative ploidy)
+    :param NumericExpression f_stat: chrom X F-stat
+    :param Tuple[float, float] xx_x_ploidy_cutoffs: Boundaries around the chom X ploidy for females
+    :param Tuple[float, float] xy_x_ploidy_cutoffs: Boundaries around the chom X ploidy for males
+    :param float xx_y_ploidy_cutoff: Max y ploidy for females
+    :param Tuple[float, float] xy_y_ploidy_cutoffs: Boundaries around the chom Y ploidy for males
+    :param float yy_y_ploidy_cutoff: Min chrom Y ploidy for YY
+    :param float xxx_x_ploidy_cutoff: Min chrom X ploidy for XXX
+    :param float f_stat_female_cutoff: Min f-stat for females
+    :param flat f_stat_male_cutoff: Max f-stat for males
+    :return: Struct expression with sex anotations
+    :rtype: StructExpression
+    """
+
+    sex_expr = hl.struct(
+        sex_karyotype=(
+            hl.case()
+                .when(
+                (chr_x_ploidy > xx_x_ploidy_cutoffs[0]) &
+                (chr_x_ploidy < xx_x_ploidy_cutoffs[1]) &
+                (chr_y_ploidy < xx_y_ploidy_cutoff) &
+                (f_stat < f_stat_female_cutoff),
+                'XX')
+                .when(
+                (chr_x_ploidy > xy_x_ploidy_cutoffs[0]) &
+                (chr_x_ploidy < xy_x_ploidy_cutoffs[1]) &
+                (chr_y_ploidy > xy_y_ploidy_cutoffs[0]) &
+                (chr_y_ploidy < xy_y_ploidy_cutoffs[1]) &
+                (f_stat > f_stat_male_cutoff),
+                'XY')
+                .when(
+                (chr_x_ploidy > xy_x_ploidy_cutoffs[0]) &
+                (chr_x_ploidy < xy_x_ploidy_cutoffs[1]) &
+                (chr_y_ploidy > yy_y_ploidy_cutoff) &
+                (f_stat > f_stat_male_cutoff),
+                'XYY')
+                .when(
+                (chr_x_ploidy > xx_x_ploidy_cutoffs[0]) &
+                (chr_x_ploidy < xx_x_ploidy_cutoffs[1]) &
+                (chr_y_ploidy > xy_y_ploidy_cutoffs[0]) &
+                (chr_y_ploidy < xy_y_ploidy_cutoffs[1]) &
+                (f_stat < f_stat_female_cutoff),
+                'XXY')
+                .when(
+                (chr_x_ploidy > xxx_x_ploidy_cutoff) &
+                (chr_y_ploidy < xx_y_ploidy_cutoff) &
+                (f_stat < f_stat_female_cutoff),
+                'XXX')
+                .when(
+                (chr_y_ploidy < xx_y_ploidy_cutoff) &
+                (chr_x_ploidy > xy_x_ploidy_cutoffs[0]) &
+                (chr_x_ploidy < xy_x_ploidy_cutoffs[1]) &
+                (f_stat > f_stat_male_cutoff),
+                'X0')
+                .default('Ambiguous')
+        )
+    )
+
+    return sex_expr.annotate(
+        sex=(
+            hl.case()
+                .when(sex_expr.sex_karyotype == 'XX', 'female')
+                .when(sex_expr.sex_karyotype == 'XY', 'male')
+                .or_missing()
+        ),
+        is_female=(
+            hl.case()
+                .when(sex_expr.sex_karyotype == 'XX', True)
+                .when(sex_expr.sex_karyotype == 'XY', False)
+                .or_missing()
+        )
+    )
+
+
 def filter_duplicate_samples(
         relatedness_ht: hl.Table,
         samples_rankings_ht: hl.Table,
@@ -406,6 +502,106 @@ def filter_duplicate_samples(
     else:
         dups_ht = dups_ht.key_by(s=dups_ht.kept)  # Since there is no defined name in the case of a non-struct type, use `s`
     return dups_ht
+
+
+def compute_related_samples_to_drop(
+        relatedness_ht: hl.Table,
+        rank_ht: hl.Table,
+        kin_threshold: float,
+        filtered_samples: Optional[hl.expr.SetExpression] = None,
+        min_related_hard_filter: Optional[int] = None
+ ) -> hl.Table:
+    """
+    Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
+
+    Note:
+    - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
+    - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
+
+    :param Table relatedness_ht: relatedness HT, as produced by e.g. pc-relate
+    :param float kin_threshold: Kinship threshold to consider two samples as related
+    :param Table rank_ht: Table with a global rank for each sample (smaller is preferred)
+    :param SetExpression filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
+    :param int min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
+    :return: A Table with the list of the samples to drop along with their rank.
+    :rtype: Table
+    """
+
+    # Make sure that the key types are valid
+    assert(len(list(relatedness_ht.key))== 2)
+    assert(relatedness_ht.key[0].dtype == relatedness_ht.key[1].dtype)
+    assert (len(list(rank_ht.key)) == 1)
+    assert (relatedness_ht.key[0].dtype == rank_ht.key[0].dtype)
+
+    logger.info(f"Filtering related samples using a kin threshold of {kin_threshold}")
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kin_threshold)
+
+    filtered_samples_rel = set()
+    if min_related_hard_filter is not None:
+        logger.info(f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion")
+        gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
+        gbi = gbi.explode(gbi.s)
+        gbi = gbi.group_by(gbi.s).aggregate(n=hl.agg.count())
+        filtered_samples_rel = gbi.aggregate(hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s)))
+        logger.info(f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded.")
+
+    if filtered_samples is not None:
+        filtered_samples_rel = filtered_samples_rel.union(
+            relatedness_ht.aggregate(
+                hl.agg.explode(
+                    lambda s: hl.agg.collect_as_set(s),
+                    hl.array(list(relatedness_ht.key)).filter(lambda s: filtered_samples.contains(s))
+                )
+            )
+        )
+
+    if len(filtered_samples_rel) > 0:
+        filtered_samples_lit = hl.literal(filtered_samples_rel)
+        relatedness_ht = relatedness_ht.filter(
+            filtered_samples_lit.contains(relatedness_ht.key[0]) |
+            filtered_samples_lit.contains(relatedness_ht.key[1]),
+            keep=False
+        )
+
+    logger.info("Annotating related sample pairs with rank.")
+    i, j = list(relatedness_ht.key)
+    relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[i])
+    relatedness_ht = relatedness_ht.annotate(
+        **{i: hl.struct(
+            s=relatedness_ht.s,
+            rank=rank_ht[relatedness_ht.key].rank
+        )}
+    )
+    relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[j])
+    relatedness_ht = relatedness_ht.annotate(
+        **{j: hl.struct(
+            s=relatedness_ht.s,
+            rank=rank_ht[relatedness_ht.key].rank
+        )}
+    )
+    relatedness_ht = relatedness_ht.key_by(i, j)
+    relatedness_ht = relatedness_ht.drop('s')
+    relatedness_ht = relatedness_ht.persist()
+
+    related_samples_to_drop_ht = hl.maximal_independent_set(
+        relatedness_ht[i],
+        relatedness_ht[j],
+        keep=False,
+        tie_breaker=lambda l,r: l.rank - r.rank
+    )
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+    related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
+
+    if len(filtered_samples_rel) > 0:
+        related_samples_to_drop_ht = related_samples_to_drop_ht.union(
+            hl.Table.parallelize(
+                [hl.struct(s=s, rank=hl.null(hl.tint64)) for s in filtered_samples_rel],
+                key='s'
+            )
+        )
+
+    return related_samples_to_drop_ht
 
 
 def run_pca_with_relateds(
@@ -455,57 +651,157 @@ def run_pca_with_relateds(
         return pca_evals, pca_scores, pca_loadings
 
 
-def compute_stratified_metrics_filter(ht: hl.Table, qc_metrics: List[str], strata: List[str] = None) -> hl.Table:
+def compute_stratified_metrics_filter(
+        ht: hl.Table,
+        qc_metrics: Dict[str, hl.expr.NumericExpression],
+        strata: Optional[Dict[str, hl.expr.Expression]] = None,
+        lower_threshold: float = 4.0,
+        upper_threshold: float = 4.0,
+        metric_threshold: Optional[Dict[str, Tuple[float, float]]] = None,
+        filter_name: str = 'qc_metrics_filters'
+) -> hl.Table:
     """
-    Compute median, MAD, and upper and lower thresholds for each metric used in pop- and platform-specific outlier filtering
+    Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering
 
     :param MatrixTable ht: HT containing relevant sample QC metric annotations
-    :param list qc_metrics: list of metrics for which to compute the critical values for filtering outliers
+    :param dict of str -> qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
     :param list of str strata: List of annotations used for stratification. These metrics should be discrete types!
-    :return: Table grouped by pop and platform, with upper and lower threshold values computed for each sample QC metric
+    :param float lower_threshold: Lower MAD threshold
+    :param float upper_threshold: Upper MAD threshold
+    :param dict str -> (float, float) metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
+    :param str filter_name: Name of resulting filters annotation
+    :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
     :rtype: Table
     """
 
-    def make_pop_filters_expr(ht: hl.Table, qc_metrics: List[str]) -> hl.expr.SetExpression:
-        return hl.set(hl.filter(lambda x: hl.is_defined(x),
-                                [hl.or_missing(ht[f'fail_{metric}'], metric) for metric in qc_metrics]))
+    _metric_threshold = {metric: (lower_threshold, upper_threshold) for metric in qc_metrics}
+    if metric_threshold is not None:
+        _metric_threshold.update(metric_threshold)
 
-    ht = ht.select(*strata, **ht.sample_qc.select(*qc_metrics)).key_by('s').persist()
-
-    def get_metric_expr(ht, metric):
-        return hl.bind(
-            lambda x: x.annotate(
-                upper=x.median + 4 * x.mad,
-                lower=x.median - 4 * x.mad
-            ),
-            hl.bind(
-                lambda elements, median: hl.struct(
-                    median=median,
-                    mad=1.4826 * hl.median(hl.abs(elements - median))
-                ),
-                *hl.bind(
-                    lambda x: hl.tuple([x, hl.median(x)]),
-                    hl.agg.collect(ht[metric])
-                )
+    def make_filters_expr(ht: hl.Table, qc_metrics: Iterable[str]) -> hl.expr.SetExpression:
+        return hl.set(
+            hl.filter(
+                lambda x: hl.is_defined(x),
+                [hl.or_missing(ht[f'fail_{metric}'], metric) for metric in qc_metrics]
             )
         )
 
-    agg_expr = hl.struct(**{metric: get_metric_expr(ht, metric) for metric in qc_metrics})
-    if strata:
-        ht = ht.annotate_globals(metrics_stats=ht.aggregate(hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr)))
-    else:
-        ht = ht.annotate_globals(metrics_stats={(): ht.aggregate(agg_expr)})
+    if strata is None:
+        strata = {}
 
-    strata_exp = hl.tuple([ht[x] for x in strata]) if strata else hl.tuple([])
+    ht = ht.select(**qc_metrics, **strata).key_by('s').persist()
+
+    agg_expr = hl.struct(**{
+        metric: hl.bind(
+            lambda x: x.annotate(
+                lower=x.median - _metric_threshold[metric][0] * x.mad,
+                upper=x.median + _metric_threshold[metric][1] * x.mad
+            ),
+            get_median_and_mad_expr(ht[metric])
+        ) for metric in qc_metrics
+    })
+
+    if strata:
+        ht = ht.annotate_globals(qc_metrics_stats=ht.aggregate(hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr), _localize=False))
+        metrics_stats_expr = ht.qc_metrics_stats[hl.tuple([ht[x] for x in strata])]
+    else:
+        ht = ht.annotate_globals(qc_metrics_stats=ht.aggregate(agg_expr, _localize=False))
+        metrics_stats_expr = ht.qc_metrics_stats
 
     fail_exprs = {
         f'fail_{metric}':
-            (ht[metric] >= ht.metrics_stats[strata_exp][metric].upper) |
-            (ht[metric] <= ht.metrics_stats[strata_exp][metric].lower)
+            (ht[metric] <= metrics_stats_expr[metric].lower) |
+            (ht[metric] >= metrics_stats_expr[metric].upper)
         for metric in qc_metrics}
     ht = ht.transmute(**fail_exprs)
-    pop_platform_filters = make_pop_filters_expr(ht, qc_metrics)
-    return ht.annotate(pop_platform_filters=pop_platform_filters)
+    stratified_filters = make_filters_expr(ht, qc_metrics)
+    return ht.annotate(**{filter_name: stratified_filters})
+
+
+def compute_qc_metrics_residuals(
+        ht: hl.Table,
+        pc_scores: hl.expr.ArrayNumericExpression,
+        qc_metrics: Dict[str, hl.expr.NumericExpression],
+        use_pc_square: bool = True,
+        n_pcs: Optional[int] = None,
+        regression_sample_inclusion_expr: hl.expr.BooleanExpression = hl.bool(True)
+) -> hl.Table:
+    """
+    Computes QC metrics residuals after regressing out PCs (and optionally PC^2)
+
+    Note: The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
+    Residuals are always computed for all samples.
+
+    :param Table ht: Input sample QC metrics HT
+    :param ArrayNumericExpressoin pc_scores: The expression in the input HT that stores the PC scores
+    :param dict of str -> NumericExpression qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
+    :param bool use_pc_square: Whether to  use PC^2 in the regression or not
+    :param int n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
+    :param BooleanExpression regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
+    :return: Table with QC metrics residuals
+    :rtype: Table
+    """
+
+    # Annotate QC HT with fields necessary for computation
+    _sample_qc_ht = ht.select(
+        **qc_metrics,
+        scores=pc_scores,
+        _keep=regression_sample_inclusion_expr
+    )
+
+    # If n_pcs wasn't provided, use all PCs
+    if n_pcs is None:
+        n_pcs = _sample_qc_ht.aggregate(hl.agg.min(hl.len(_sample_qc_ht.scores)))
+
+    logger.info("Computing regressed QC metrics filters using {} PCs for metrics: {}".format(
+        n_pcs,
+        ', '.join(qc_metrics)
+    ))
+
+    # Prepare regression variables, adding 1.0 first for the intercept
+    # Adds square of variables if use_pc_square is true
+    x_expr = [1.0] + [_sample_qc_ht.scores[i] for i in range(0, n_pcs)]
+    if use_pc_square:
+        x_expr.extend([_sample_qc_ht.scores[i] * _sample_qc_ht.scores[i] for i in range(0, n_pcs)])
+
+    # Compute linear regressions
+    lms = _sample_qc_ht.aggregate(
+        hl.struct(
+            **{metric:
+                hl.agg.filter(
+                    _sample_qc_ht._keep,
+                    hl.agg.linreg(
+                    y=_sample_qc_ht[metric],
+                    x=x_expr
+                )
+             ) for metric in qc_metrics
+            }
+        )
+    )
+
+    _sample_qc_ht = _sample_qc_ht.annotate_globals(
+        lms=lms
+    ).persist()
+
+    # Compute residuals
+    def get_lm_prediction_expr(metric: str):
+        lm_pred_expr = _sample_qc_ht.lms[metric].beta[0] + hl.sum(
+                hl.range(n_pcs).map(lambda i: _sample_qc_ht.lms[metric].beta[i + 1] * _sample_qc_ht.scores[i])
+        )
+        if use_pc_square:
+            lm_pred_expr = lm_pred_expr + hl.sum(
+                hl.range(n_pcs).map(lambda i: _sample_qc_ht.lms[metric].beta[i + n_pcs + 1] * _sample_qc_ht.scores[i] * _sample_qc_ht.scores[i])
+        )
+        return lm_pred_expr
+
+    residuals_ht = _sample_qc_ht.select(
+        **{
+            f'{metric}_residual': _sample_qc_ht[metric] - get_lm_prediction_expr(metric)
+            for metric in _sample_qc_ht.lms
+        }
+    )
+
+    return residuals_ht.persist()
 
 
 def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
@@ -556,3 +852,118 @@ def add_filters_expr(
             for filter_name, filter_condition in filters.items()
         ]
     )
+
+
+def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.expr.StructExpression:
+    """
+    Creates an expression that merges results from non-overlapping strata of hail.sample_qc
+    E.g.:
+    - Compute autosomes and sex chromosomes metrics separately, then merge results
+    - Compute bi-allelic and multi-allelic metrics separately, then merge results
+
+    Note regarding the merging of ``dp_stats`` and ``gq_stats``:
+    Because ``n`` is needed to aggregate ``stdev``, ``n_called`` is used for this purpose.
+    This should work very well on a standard GATK VCF and it essentially assumes that:
+    - samples that are called have `DP` and `GQ` fields
+    - samples that are not called do not have `DP` and `GQ` fields
+    Even if these assumptions are broken for some genotypes, it shouldn't matter too much.
+
+    :param list of StructExpression sample_qc_exprs: List of sample QC struct expressions for each stratification
+    :return: Combined sample QC results
+    :rtype: StructExpression
+    """
+
+    # List of metrics that can be aggregated by summing
+    additive_metrics = [
+        'n_called', 'n_not_called', 'n_hom_ref', 'n_het', 'n_hom_var', 'n_snp',
+        'n_insertion', 'n_deletion', 'n_singleton', 'n_transition', 'n_transversion', 'n_star'
+    ]
+
+    # List of metrics that are ratio of summed metrics (name, nominator, denominator)
+    ratio_metrics = [
+        ('call_rate', 'n_called', 'n_not_called'),
+        ('r_ti_tv', 'n_transition', 'n_transversion'),
+        ('r_het_hom_var', 'n_het', 'n_hom_var'),
+        ('r_insertion_deletion', 'n_insertion', 'n_deletion')
+    ]
+
+    # List of metrics that are struct generated by a stats counter
+    stats_metrics = ['gq_stats', 'dp_stats']
+
+    # Gather metrics present in sample qc fields
+    sample_qc_fields = set(sample_qc_exprs[0])
+    for sample_qc_expr in sample_qc_exprs[1:]:
+        sample_qc_fields = sample_qc_fields.union(set(sample_qc_expr))
+
+    # Merge additive metrics in sample qc fields
+    merged_exprs = {
+        metric: hl.sum([sample_qc_expr[metric] for sample_qc_expr in sample_qc_exprs])
+        for metric in additive_metrics if metric in sample_qc_fields
+    }
+
+    # Merge ratio metrics in sample qc fields
+    merged_exprs.update({
+        metric: hl.float64(divide_null(merged_exprs[nom], merged_exprs[denom]))
+        for metric, nom, denom in ratio_metrics if nom in sample_qc_fields and denom in sample_qc_fields
+    })
+
+    # Merge stats counter metrics in sample qc fields
+    # Use n_called as n for DP and GQ stats
+    if 'n_called' in sample_qc_fields:
+        merged_exprs.update({
+            metric: merge_stats_counters_expr([
+                sample_qc_expr[metric].annotate(n=sample_qc_expr.n_called)
+                for sample_qc_expr in sample_qc_exprs
+            ]).drop('n')
+            for metric in stats_metrics
+        })
+
+    return hl.struct(**merged_exprs)
+
+
+def compute_stratified_sample_qc(
+        mt: hl.MatrixTable,
+        strata: Dict[str, hl.expr.BooleanExpression],
+        tmp_ht_prefix: Optional[str],
+        gt_expr: Optional[hl.expr.CallExpression]
+) -> hl.Table:
+    """
+    Runs hl.sample_qc on different strata and then also merge the results into a single expression.
+    Note that strata should be non-overlapping,  e.g. SNV vs indels or bi-allelic vs multi-allelic
+
+    :param MatrixTable mt: Input MT
+    :param dict of str -> BooleanExpression strata: Strata names and filtering expressions
+    :param str tmp_ht_prefix: Optional path prefix to write the intermediate strata results to (recommended for larger datasets)
+    :param CallExpression gt_expr: Optional entry field storing the genotype (if not specified, then it is assumed that it is stored in mt.GT)
+    :return: Sample QC table, including strat-specific numbers
+    :rtype: Table
+    """
+    mt = mt.select_rows(
+        **strata
+    )
+
+    if gt_expr is not None:
+        mt = mt.select_entries(GT=gt_expr)
+    else:
+        mt = mt.select_entries('GT')
+
+    strat_hts = {}
+    for strat in strata:
+        strat_sample_qc_ht = hl.sample_qc(mt.filter_rows(mt[strat])).cols()
+        if tmp_ht_prefix is not None:
+            strat_sample_qc_ht = strat_sample_qc_ht.checkpoint(tmp_ht_prefix + f'_{strat}.ht', overwrite=True)
+        else:
+            strat_sample_qc_ht = strat_sample_qc_ht.persist()
+        strat_hts[strat] = strat_sample_qc_ht
+
+    sample_qc_ht = strat_hts.pop(list(strata)[0])
+    sample_qc_ht = sample_qc_ht.select(
+        **{f'{list(strata)[0]}_sample_qc': sample_qc_ht.sample_qc},
+        **{f'{strat}_sample_qc': strat_hts[strat][sample_qc_ht.key].sample_qc for strat in list(strata)[1:]}
+    )
+    sample_qc_ht = sample_qc_ht.annotate(
+        sample_qc=merge_sample_qc_expr(list(sample_qc_ht.row_value.values()))
+    )
+
+    return sample_qc_ht
+

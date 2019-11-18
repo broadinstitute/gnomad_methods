@@ -187,10 +187,9 @@ def generate_fam_stats_expr(
     return hl.struct(**fam_stats_expr)
 
 
-def add_binned_rank(
+def compute_binned_rank(
         ht: hl.Table,
         score_expr: hl.expr.NumericExpression,
-        partition_expr: Optional[hl.expr.Expression] = None,
         rank_expr: Dict[str, hl.expr.BooleanExpression] = {'rank': True},
         n_bins: int = 100,
         k: int = 1000,
@@ -205,17 +204,21 @@ def add_binned_rank(
 
     Notes
     -----
-    * When the `group_expr` argument is provided, EACH rank is computed independently on the groups. This is useful for e.g. ranking SNVs and indels separately.
-    * The `group_expr` defines which data
+    The `rank_expr` defines which data the rank(s) should be computed on. E.g., to get an SNV rank and an Indel rank,
+    the following could be used:
+    rank_expr={
+       'snv_rank': hl.is_snp(ht.alleles[0], ht.alleles[1]),
+       'indels_rank': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
+    }
 
     :param Table ht: Input Table
     :param NumericExpression score_expr: Expression containing the score
-    :param rank_expr:
-    :param Expression partition_expr:
-    :param n_bins:
-    :param k:
-    :param desc:
-    :return:
+    :param dict of str -> BooleanExpression rank_expr: Rank(s) to be computed (see notes)
+    :param int n_bins: Number of bins to bin the data into
+    :param int k: The `k` parameter of approx_quantiles
+    :param bool desc: Whether to bin the score in descending order
+    :return: Table with the binned ranks
+    :rtype: Table
     """
     import math
 
@@ -260,50 +263,50 @@ def add_binned_rank(
 
     ht = ht.annotate(
         **{f'_filter_{rid}': rexpr for rid, rexpr in rank_expr.items()},
-        _score=score_expr,
-        _group=partition_expr if partition_expr is not None else True
+        _score=score_expr
     )
 
     logger.info(f'Adding rank using approximate_quantiles binned into {n_bins}, using k={10*n_bins}')
-    rank_stats = ht.aggregate(hl.struct(
-        **{
-            rid: hl.agg.filter(
-                ht[f'_filter_{rid}'],
-                hl.agg.group_by(
-                    ht._group,
+    rank_stats = ht.aggregate(
+        hl.struct(
+            **{
+                rid: hl.agg.filter(
+                    ht[f'_filter_{rid}'],
                     hl.struct(
                         n=hl.agg.count(),
                         quantiles=hl.agg.approx_quantiles(ht._score, [x / (n_bins) for x in range(1, n_bins)], k=k)
                     )
                 )
-            )
-            for rid in rank_expr
-        }
-    ))
+                for rid in rank_expr
+            }
+        )
+    )
 
     # Take care of bins with duplicated boundaries
     for rname in rank_stats:
-        for snv in [True, False]:
-            merged_bins, global_bin_indices, bin_boundaries = quantiles_to_bin_boundaries(rank_stats[rname][snv].quantiles)
-            logger.debug(f'Merged bins: ' + str(merged_bins))
-            rank_stats[rname][snv] = rank_stats[rname][snv].annotate(
-                bin_boundaries=bin_boundaries,
-                global_bin_indices=global_bin_indices,
-                merged_bins=merged_bins
-            )
+        merged_bins, global_bin_indices, bin_boundaries = quantiles_to_bin_boundaries(rank_stats[rname].quantiles)
+        logger.debug(f'Merged bins: ' + str(merged_bins))
+        rank_stats[rname] = rank_stats[rname].annotate(
+            bin_boundaries=bin_boundaries,
+            global_bin_indices=global_bin_indices,
+            merged_bins=merged_bins
+        )
 
     logger.debug(str(rank_stats))
 
     ht = ht.annotate_globals(
-        rank_stats=hl.literal(rank_stats, dtype=hl.tstruct(**{
-            rank_id: hl.tdict(hl.tbool, hl.tstruct(
-                n=hl.tint64,
-                quantiles=hl.tarray(hl.tfloat64),
-                bin_boundaries=hl.tarray(hl.tfloat64),
-                global_bin_indices=hl.tarray(hl.tint32),
-                merged_bins=hl.tdict(hl.tint32, hl.tint32)
-            )) for rank_id in rank_expr
-        }))
+        rank_stats=hl.literal(
+            rank_stats,
+            dtype=hl.tstruct(**{
+                rank_id: hl.tdict(hl.tbool, hl.tstruct(
+                    n=hl.tint64,
+                    quantiles=hl.tarray(hl.tfloat64),
+                    bin_boundaries=hl.tarray(hl.tfloat64),
+                    global_bin_indices=hl.tarray(hl.tint32),
+                    merged_bins=hl.tdict(hl.tint32, hl.tint32)
+                )) for rank_id in rank_expr
+            })
+        )
     )
 
     # Annotate the rank as the index in the unique boundaries array
@@ -311,7 +314,7 @@ def add_binned_rank(
         **{
             rank_id: hl.or_missing(
                 ht[f'_filter_{rank_id}'],
-                hl.binary_search(ht.rank_stats[rank_id][ht._group].bin_boundaries, ht._score),
+                hl.binary_search(ht.rank_stats[rank_id].bin_boundaries, ht._score),
             ) for rank_id in rank_expr
         }
     )
@@ -319,12 +322,12 @@ def add_binned_rank(
     # Convert the rank to global rank by expanding merged bins, that is:
     # If a value falls in a bin that needs expansion, assign it randomly to one of the expanded bins
     # Otherwise, simply modify the rank bin to its global index (with expanded bins that is)
-    ht = ht.annotate(
+    ht = ht.select(
         **{
             rank_id: hl.cond(
-                ht.rank_stats[rank_id][ht._group].merged_bins.contains(ht[rank_id]),
-                ht[rank_id] + hl.int(hl.rand_unif(0, ht.rank_stats[rank_id][ht._group].merged_bins[ht[rank_id]] + 1)),
-                ht.rank_stats[rank_id][ht._group].global_bin_indices[ht[rank_id]]
+                ht.rank_stats[rank_id].merged_bins.contains(ht[rank_id]),
+                ht[rank_id] + hl.int(hl.rand_unif(0, ht.rank_stats[rank_id].merged_bins[ht[rank_id]] + 1)),
+                ht.rank_stats[rank_id].global_bin_indices[ht[rank_id]]
             )
             for rank_id in rank_expr
         }
@@ -335,7 +338,4 @@ def add_binned_rank(
             **{rank_id: n_bins - ht[rank_id] for rank_id in rank_expr}
         )
 
-    return ht.drop(
-        *[f'_filter_{rank_id}' for rank_id in rank_expr],
-        '_score'
-    )
+    return ht

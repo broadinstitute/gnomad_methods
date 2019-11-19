@@ -4,8 +4,8 @@ from .generic import *
 def get_lowqual_expr(
         alleles: hl.expr.ArrayExpression,
         qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
-        snp_phred_threshold: 30,
-        snp_phred_het_prior: 30,  # 1/1000
+        snv_phred_threshold: 30,
+        snv_phred_het_prior: 30,  # 1/1000
         indel_phred_threshold: 30,
         indel_phred_het_prior: 39  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
@@ -13,14 +13,19 @@ def get_lowqual_expr(
     Computes lowqual threshold expression for either split or unsplit alleles based on
     (AS_)QUALapprox
 
-    :param ArrayExpression alleles: Expression
-    :param qual_approx_expr:
-    :return:
+    :param ArrayExpression alleles: Array of alleles
+    :param ArraynumericExpression or NumericExpression qual_approx_expr: QUALapprox or AS_QUALapprox
+    :param int snv_phred_threshold: Phred-scaled SNV "emission" threshold (similar to GATK emission threshold)
+    :param int snv_phred_het_prior: Phred-scaled SNV heterozygosity prior (30 = 1/1000 bases, GATK default)
+    :param int indel_phred_threshold: Phred-scaled indel "emission" threshold (similar to GATK emission threshold)
+    :param int indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
+    :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
+    :rtype: BooleanExpression or ArrayExpression
     """
     def low_qual_expr(ref: hl.expr.StringExpression, alt: hl.expr.StringExpression, qual_approx: hl.expr.NumericExpression) -> BooleanExpression:
         return hl.cond(
             hl.is_snp(ref, alt),
-            qual_approx < snp_phred_threshold + snp_phred_het_prior,
+            qual_approx < snv_phred_threshold + snv_phred_het_prior,
             qual_approx < indel_phred_threshold + indel_phred_het_prior
         )
     if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):

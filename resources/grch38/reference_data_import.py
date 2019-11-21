@@ -48,9 +48,10 @@ def main(args):
     if args.dbsnp:
         hl.import_vcf(
             dbsnp.source_path,
+            force_bgz=True,
             contig_recoding=NO_CHR_TO_CHR_CONTIG_RECODING,
             skip_invalid_loci=True,
-            header_file=dbsnp.vcf_header_path,
+            header_file=dbsnp.attributes['vcf_header_path'],
             min_partitions=400
         ).rows().write(dbsnp.path, overwrite=args.overwrite)
 

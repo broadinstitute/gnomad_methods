@@ -12,20 +12,26 @@ na12878_giab = MatrixTableResource(
 )
 
 # Versioned resources: versions should be listed from most recent to oldest
-clinvar = TableResource.versioned({
-    '20181028': TableResource(
-        path="gs://gnomad-public/resources/grch38/clinvar_20190923.ht",
-        source_path='gs://gnomad-public/resources/grch38/clinvar_20190923.vcf.gz'
-    )
-})
+clinvar = TableResource.versioned(
+    default_version='20190923',
+    versions={
+        '20190923': TableResource(
+            path="gs://gnomad-public/resources/grch38/clinvar_20190923.ht",
+            source_path='gs://gnomad-public/resources/grch38/clinvar_20190923.vcf.gz'
+        )
+    }
+)
 
-dbsnp = TableResource.versioned({
-    'b151':  TableResource(
-        path='gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.ht',
-        source_path='gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.bgz',
-        vcf_header_path='gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.header'
-    )
-})
+dbsnp = TableResource.versioned(
+    default_version='b151',
+    versions={
+        'b151': TableResource(
+            path='gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.ht',
+            source_path='gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.bgz',
+            attributes={'vcf_header_path': 'gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.header'}
+        )
+    }
+)
 
 hapmap = TableResource(
     path='gs://gnomad-public/resources/grch38/hapmap_3.3.hg38.ht',
@@ -37,12 +43,15 @@ kgp_omni = TableResource(
     source_path='gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz'
 )
 
-kgp = TableResource.versioned({
-    'phase_1_hc': TableResource(
-        path='gs://gnomad-public/resources/grch38/1000G_phase1.snps.high_confidence.hg38.ht',
-        source_path='gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz'
-    )
-})
+kgp = TableResource.versioned(
+    default_version='phase_1_hc',
+    versions={
+        'phase_1_hc': TableResource(
+            path='gs://gnomad-public/resources/grch38/1000G_phase1.snps.high_confidence.hg38.ht',
+            source_path='gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz'
+        )
+    }
+)
 
 mills = TableResource(
     path='gs://gnomad-public/resources/grch38/Mills_and_1000G_gold_standard.indels.hg38.ht',

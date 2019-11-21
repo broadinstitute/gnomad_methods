@@ -12,7 +12,7 @@ na12878_giab = MatrixTableResource(
 )
 
 # Versioned resources: versions should be listed from most recent to oldest
-clinvar = TableResource.versioned(
+clinvar = VersionedTableResource(
     default_version='20190923',
     versions={
         '20190923': TableResource(
@@ -22,7 +22,7 @@ clinvar = TableResource.versioned(
     }
 )
 
-dbsnp = TableResource.versioned(
+dbsnp = VersionedTableResource(
     default_version='b151',
     versions={
         'b151': TableResource(
@@ -43,7 +43,7 @@ kgp_omni = TableResource(
     source_path='gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz'
 )
 
-kgp = TableResource.versioned(
+kgp = VersionedTableResource(
     default_version='phase_1_hc',
     versions={
         'phase_1_hc': TableResource(

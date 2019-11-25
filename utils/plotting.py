@@ -78,6 +78,7 @@ dataset_colors = {
 }
 
 COLOR_AMR = '#ED1E24'
+COLOR_AMI = '#FFC0CB'
 COLOR_EUR = '#6AA5CD'
 COLOR_AFR = '#941494'
 COLOR_SAS = '#FF9912'
@@ -90,6 +91,7 @@ COLOR_FIN = '#002F6C'
 
 
 pop_colors = {'afr': COLOR_AFR,
+              'ami': COLOR_AMI,
               'amr': COLOR_AMR,
               'eas': COLOR_EAS,
               'fin': COLOR_FIN,

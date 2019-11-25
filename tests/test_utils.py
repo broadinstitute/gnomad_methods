@@ -202,4 +202,4 @@ class SlackResult(unittest.TestResult):
 if __name__ == '__main__':
     suite = unittest.TestLoader().discover('.')
     results = SlackResult()
-    suite.run(results)
+    unittest.TextTestRunner(verbosity=2).run(suite)

@@ -1,5 +1,6 @@
-POP_NAMES = {
+POP_NAMES = { # TODO Is this useful? It's already in basics.py
     'AFR': "African/African American",
+    'AMI': 'Amish',
     'AMR': "Admixed American",
     'ASJ': "Ashkenazi Jewish",
     'EAS': "East Asian",

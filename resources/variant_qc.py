@@ -180,7 +180,7 @@ def release_vcf_path(data_type: str, release_tag=RELEASE_VERSION, contig=None, c
     :return: Filepath for the desired VCF
     :rtype: str
     '''
-    release = RELEASE_VERSION[1:] if release_tag==RELEASE_VERSION else release_tag
+    release = release_tag.lstrip('r')
     if contig:
         return f'gs://gnomad-public/release/{release}/vcf/{data_type}/gnomad.{data_type}.{release_tag}.sites.{contig}.vcf.bgz'
     elif data_type == 'genomes' and coding_only:
@@ -192,3 +192,13 @@ def release_vcf_path(data_type: str, release_tag=RELEASE_VERSION, contig=None, c
 def release_var_hist_path(data_type: str, release_tag=RELEASE_VERSION):
     release = RELEASE_VERSION[1:] if release_tag==RELEASE_VERSION else release_tag
     return f'gs://gnomad/release/{release_tag}/json/gnomad.{data_type}.json'
+
+
+def get_ucsc_mappability():
+    ucsc_mappability = hl.import_table('gs://gnomad-public/resources/ucsc/wgEncodeDukeMapabilityUniqueness35bp.bedGraph', impute=True, no_header=True)
+    return ucsc_mappability.select(
+        interval=hl.interval(
+            hl.locus(ucsc_mappability.f0[3:], ucsc_mappability.f1 + 1),
+            hl.locus(ucsc_mappability.f0[3:], ucsc_mappability.f2 + 1)),
+        duke_35_map=ucsc_mappability.f3
+    ).key_by('interval')

@@ -84,9 +84,10 @@ def get_reference_genome(
     :rtype: ReferenceGenome
     """
     if isinstance(locus, hl.expr.LocusExpression):
-        return locus.dtype.reference_genome
-    assert (isinstance(locus, hl.expr.IntervalExpression))
-    ref = locus.dtype.point_type.reference_genome
+        ref = locus.dtype.reference_genome
+    else:
+        assert (isinstance(locus, hl.expr.IntervalExpression))
+        ref = locus.dtype.point_type.reference_genome
     if add_sequence:
         ref = add_reference_sequence(ref)
     return ref

@@ -49,7 +49,7 @@ def generate_fam_stats_expr(
     Both transmission and de novo mutation metrics can be stratified using additional filters.
     If an empty dict is passed as one of the strata arguments, then this metric isn't computed.
 
-    :param MatrixTable trio_mt: A trio stndard trio MT (with the format as produced by hail.methods.trio_matrix
+    :param MatrixTable trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix
     :param dict of str -> BooleanExpression transmitted_strata: Strata for the transmission counts
     :param dict of str -> BooleanExpression de_novo_strata: Strata for the de novo counts
     :param BooleanExpression proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
@@ -126,7 +126,7 @@ def generate_fam_stats_expr(
             logger.warning("Since no proband sex expression was given to generate_fam_stats_expr, only DNMs in autosomes will be counted.")
             return hl.or_missing(
                 locus.in_autosome(),
-                trio_mt.proband_entry.GT.is_het() & trio_mt.father_entry.GT.is_hom_ref() & trio_mt.mother_entry.GT.is_hom_ref()
+                proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref()
             )
         return (
             hl.cond(
@@ -141,46 +141,39 @@ def generate_fam_stats_expr(
         )
 
     # Create transmission counters
-    fam_stats_expr = {
-        f'n_transmitted_{name}': hl.agg.filter(
-            _get_composite_filter_expr(trio_mt.proband_entry.GT.is_non_ref(), expr),
-            hl.agg.sum(
-                trans_count_map.get(
-                    (
-                        trio_mt.proband_entry.GT.n_alt_alleles(),
-                        trio_mt.father_entry.GT.n_alt_alleles(),
-                        trio_mt.mother_entry.GT.n_alt_alleles(),
-                        _get_copy_state(trio_mt.locus)
+    fam_stats = hl.struct(
+        **{
+            name: hl.agg.filter(
+                _get_composite_filter_expr(trio_mt.proband_entry.GT.is_non_ref(), expr),
+                hl.agg.sum(
+                    trans_count_map.get(
+                        (
+                            trio_mt.proband_entry.GT.n_alt_alleles(),
+                            trio_mt.father_entry.GT.n_alt_alleles(),
+                            trio_mt.mother_entry.GT.n_alt_alleles(),
+                            _get_copy_state(trio_mt.locus)
+                        )
                     )
-                )[0]
-            )
-        ) for name, expr in transmitted_strata.items()
-    }
+                )
+            ) for name, expr in transmitted_strata.items()
+        }
+    )
 
-    fam_stats_expr.update({
-        f'n_untransmitted_{name}': hl.agg.filter(
-            _get_composite_filter_expr(trio_mt.proband_entry.GT.is_non_ref(), expr),
-            hl.agg.sum(
-                trans_count_map.get(
-                    (
-                        trio_mt.proband_entry.GT.n_alt_alleles(),
-                        trio_mt.father_entry.GT.n_alt_alleles(),
-                        trio_mt.mother_entry.GT.n_alt_alleles(),
-                        _get_copy_state(trio_mt.locus)
-                    )
-                )[1]
-            )
-        ) for name, expr in transmitted_strata.items()
-    })
+    fam_stats = fam_stats.select(
+        **{
+            f'n_transmitted_{name}': fam_stats[name][0],
+            f'n_untransmitted_{name}': fam_stats[name][1]
+        } for name in fam_stats
+    )
 
     # Create de novo counters
-    fam_stats_expr.update({
+    fam_stats = fam_stats.annotate({
         f'n_de_novo_{name}': hl.agg.filter(
             _get_composite_filter_expr(
                 _is_dnm(
                     trio_mt.proband_entry.GT,
-                    trio_mt.mother_entry.GT,
                     trio_mt.father_entry.GT,
+                    trio_mt.mother_entry.GT,
                     trio_mt.locus,
                     proband_is_female_expr
                 ), expr
@@ -189,7 +182,7 @@ def generate_fam_stats_expr(
         ) for name, expr in de_novo_strata.items()
     })
 
-    return hl.struct(**fam_stats_expr)
+    return fam_stats
 
 
 def compute_binned_rank(
@@ -227,7 +220,7 @@ def compute_binned_rank(
     """
     import math
 
-    def quantiles_to_bin_boundaries(quantiles: List[int]) -> Tuple[DefaultDict, List[int], List[float]]:
+    def quantiles_to_bin_boundaries(quantiles: List[int]) -> Dict:
         """
         Merges bins with the same boundaries into a unique bin while keeping track of
         which bins have been merged and the global index of all bins.
@@ -240,30 +233,30 @@ def compute_binned_rank(
 
         # Pad the quantiles to create boundaries for the first and last bins
         bin_boundaries = [-math.inf] + quantiles + [math.inf]
-        bins_merged = defaultdict(int)
+        merged_bins = defaultdict(int)
 
         # If every quantile has a unique value, then bin boudaries are unique
         # and can be passed to binary_search as-is
         if len(quantiles) == len(set(quantiles)):
-            return (
-                bins_merged,
-                list(range(len(bin_boundaries))),
-                bin_boundaries
+            return dict(
+                merged_bins=merged_bins,
+                global_bin_indices=list(range(len(bin_boundaries))),
+                bin_boundaries=bin_boundaries
             )
 
         indexed_bins = list(enumerate(bin_boundaries))
         i = 1
         while i < len(indexed_bins):
             if indexed_bins[i - 1][1] == indexed_bins[i][1]:
-                bins_merged[i - 1] += 1
+                merged_bins[i - 1] += 1
                 indexed_bins.pop(i)
             else:
                 i += 1
 
-        return (
-            bins_merged,
-            [x[0] for x in indexed_bins],
-            [x[1] for x in indexed_bins]
+        return dict(
+            merged_bins=merged_bins,
+            global_bin_indices=[x[0] for x in indexed_bins],
+            bin_boundaries=[x[1] for x in indexed_bins]
         )
 
     ht = ht.annotate(
@@ -271,7 +264,7 @@ def compute_binned_rank(
         _score=score_expr
     )
 
-    logger.info(f'Adding rank using approximate_quantiles binned into {n_bins}, using k={10*n_bins}')
+    logger.info(f'Adding rank using approximate_quantiles binned into {n_bins}, using k={k}')
     rank_stats = ht.aggregate(
         hl.struct(
             **{
@@ -288,14 +281,13 @@ def compute_binned_rank(
     )
 
     # Take care of bins with duplicated boundaries
-    for rname in rank_stats:
-        merged_bins, global_bin_indices, bin_boundaries = quantiles_to_bin_boundaries(rank_stats[rname].quantiles)
-        logger.debug(f'Merged bins: ' + str(merged_bins))
-        rank_stats[rname] = rank_stats[rname].annotate(
-            bin_boundaries=bin_boundaries,
-            global_bin_indices=global_bin_indices,
-            merged_bins=merged_bins
-        )
+    rank_stats = rank_stats.annotate(
+        **{
+            rname: rank_stats[rname].annotate(
+                    **quantiles_to_bin_boundaries(rank_stats[rname].quantiles)
+            ) for rname in rank_stats
+        }
+    )
 
     logger.debug(str(rank_stats))
 
@@ -303,13 +295,13 @@ def compute_binned_rank(
         rank_stats=hl.literal(
             rank_stats,
             dtype=hl.tstruct(**{
-                rank_id: hl.tdict(hl.tbool, hl.tstruct(
+                rank_id: hl.tstruct(
                     n=hl.tint64,
                     quantiles=hl.tarray(hl.tfloat64),
                     bin_boundaries=hl.tarray(hl.tfloat64),
                     global_bin_indices=hl.tarray(hl.tint32),
                     merged_bins=hl.tdict(hl.tint32, hl.tint32)
-                )) for rank_id in rank_expr
+                ) for rank_id in rank_expr
             })
         )
     )

@@ -375,8 +375,8 @@ def impute_sex_ploidy(
     Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
 
     :param MatrixTable mt: Input sparse Matrix Table
-    :param str excluded_intervals: Path to an optional table of intervals to exclude from the computation.
-    :param str included_intervals: Path to an optional table of intervals to use in the computation. REQUIRED for exomes.
+    :param str excluded_intervals: Optional table of intervals to exclude from the computation.
+    :param str included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
     :param str normalization_contig: Which chromosome to normalize by
     :param str chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param str chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
@@ -403,14 +403,6 @@ def impute_sex_ploidy(
                 )
             )
         chr_y = ref.y_contigs[0]
-
-    # read in excluded intervals and calling intervals table (included intervals table) if using
-    '''if excluded_intervals is not None:
-        logger.info("Reading in excluded intervals table")
-        excluded_ht = hl.read_table(excluded_intervals)
-    if included_intervals is not None:
-        logger.info("Reading in calling intervals table")
-        intervals_ht = hl.read_table(included_intervals)'''
 
     def get_contig_size(contig: str) -> int:
         logger.info(f"Working on {contig}")

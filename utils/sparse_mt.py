@@ -363,7 +363,8 @@ def get_site_info_expr(
 
 def impute_sex_ploidy(
         mt: hl.MatrixTable,
-        excluded_intervals: Optional[hl.Table],
+        excluded_intervals: Optional[hl.Table] = None,
+        included_intervals: Optional[hl.Table] = None,
         normalization_contig: str = 'chr20',
         chr_x: Optional[str] = None,
         chr_y: Optional[str] = None,
@@ -374,7 +375,8 @@ def impute_sex_ploidy(
     Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
 
     :param MatrixTable mt: Input sparse Matrix Table
-    :param Table excluded_intervals: An optional table of intervals to exclude from the computation.
+    :param str excluded_intervals: Optional table of intervals to exclude from the computation.
+    :param str included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
     :param str normalization_contig: Which chromosome to normalize by
     :param str chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param str chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
@@ -403,27 +405,41 @@ def impute_sex_ploidy(
         chr_y = ref.y_contigs[0]
 
     def get_contig_size(contig: str) -> int:
-        contig = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 500_000))
-        contig = contig.annotate(
-            locus=hl.locus(contig=contig, pos=contig.idx + 1, reference_genome=ref)
+        logger.info(f"Working on {contig}")
+        contig_ht = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 500_000))
+        contig_ht = contig_ht.annotate(
+            locus=hl.locus(contig=contig, pos=contig_ht.idx + 1, reference_genome=ref)
         )
-        contig = contig.filter(contig.locus.sequence_context().lower() != 'n')
+        contig_ht = contig_ht.filter(contig_ht.locus.sequence_context().lower() != 'n')
 
+        if contig in ref.x_contigs:
+            contig_ht = contig_ht.filter(contig_ht.locus.in_x_nonpar())
         if contig in ref.y_contigs:
-            contig = contig.filter(contig.locus.in_y_nonpar())
+            contig_ht = contig_ht.filter(contig_ht.locus.in_y_nonpar())
 
-        contig = contig.key_by('locus')
+        contig_ht = contig_ht.key_by('locus')
+        if included_intervals is not None:
+            contig_ht = contig_ht.filter(hl.is_defined(included_intervals[contig_ht.key]))
         if excluded_intervals is not None:
-            contig = contig.filter(hl.is_missing(excluded_intervals[contig.key]))
-        contig_size = contig.count()
+            contig_ht = contig_ht.filter(hl.is_missing(excluded_intervals[contig_ht.key]))
+        contig_size = contig_ht.count()
         logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
         return contig_size
 
-    def get_chr_dp_ann(chr: str) -> hl.Table:
-        contig_size = get_contig_size(chr)
-        chr_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(chr)])
+    def get_chr_dp_ann(chrom: str) -> hl.Table:
+        contig_size = get_contig_size(chrom)
+        chr_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(chrom)])
+
+        if chrom in ref.x_contigs:
+            chr_mt = chr_mt.filter_rows(chr_mt.locus.in_x_nonpar())
+        if chrom in ref.y_contigs:
+            chr_mt = chr_mt.filter_rows(chr_mt.locus.in_y_nonpar())
+
+        if included_intervals is not None:
+            chr_mt = chr_mt.filter_rows(hl.is_defined(included_intervals[chr_mt.locus]))
+
         return chr_mt.select_cols(**{
-            f'{chr}_mean_dp': hl.agg.sum(hl.cond(chr_mt.LGT.is_hom_ref(), chr_mt.DP * (chr_mt.END - chr_mt.locus.position), chr_mt.DP)) / contig_size
+            f'{chrom}_mean_dp': hl.agg.sum(hl.cond(chr_mt.LGT.is_hom_ref(), chr_mt.DP * (chr_mt.END - chr_mt.locus.position), chr_mt.DP)) / contig_size
         }).cols()
 
     normalization_chrom_dp = get_chr_dp_ann(normalization_contig)

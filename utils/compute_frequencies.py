@@ -1,7 +1,7 @@
 from gnomad_hail import *
 
 
-def generate_downsamplings_cumulative(mt: hl.MatrixTable, downsamplings: List[int]) -> Tuple[hl.MatrixTable, List[int]]:
+def _generate_downsamplings_cumulative(mt: hl.MatrixTable, downsamplings: List[int]) -> Tuple[hl.MatrixTable, List[int]]:
     pop_data = [x[0] for x in get_sample_data(mt, [mt.meta.pop])]
     pops = Counter(pop_data)
     downsamplings = list(set(downsamplings + list(pops.values())))  # Add the pops values if not in yet
@@ -21,9 +21,87 @@ def generate_downsamplings_cumulative(mt: hl.MatrixTable, downsamplings: List[in
     return mt.annotate_cols(downsampling=global_ht[mt.s]), downsamplings
 
 
-def add_faf_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, locus: hl.expr.LocusExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
+def popmax_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
     """
     Calculates popmax (add an additional entry into freq with popmax: pop)
+
+    :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom']
+    :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq
+    :param set of str populations: Set of populations over which to calculate popmax
+    :return: Frequency data with annotated popmax
+    :rtype: ArrayExpression
+    """
+    pops_to_use = hl.literal(populations)
+    freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(freq, freq_meta))
+    freq_filtered = hl.filter(
+        lambda f: (f.meta.size() == 2) & (f.meta.get('group') == 'adj') &
+                  pops_to_use.contains(f.meta.get('pop')) & (f.AC > 0),
+        freq
+    )
+    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
+    return hl.or_missing(
+        hl.len(sorted_freqs) > 0,
+        hl.struct(
+            AC=sorted_freqs[0].AC,
+            AF=sorted_freqs[0].AF,
+            AN=sorted_freqs[0].AN,
+            homozygote_count=sorted_freqs[0].homozygote_count,
+            pop=sorted_freqs[0].meta['pop']
+        )
+    )
+
+
+def project_max_expr(
+        project_expr: hl.expr.StringExpression,
+        gt_expr: hl.expr.CallExpression,
+        alleles_expr: hl.expr.ArrayExpression,
+        n_projects: int = 5
+) -> hl.expr.ArrayExpression:
+    """
+    Creates the projectmax annotation, which is an array containing for each non-ref allele
+    an array with AC, AN and AF for the `n_projects` with the largest AF at this row.
+    Note that only projects with AF > 0 are returned.
+
+    :param StringExpression project_expr: column expression containing the project
+    :param CallExpression gt_expr: entry expression containing the genotype
+    :param ArrayExpression alleles_expr: row expression containing the alleles
+    :param int n_projects: Maximum number of projects to return for each row
+    :return: projectmax expression
+    :rtype: ArrayExpression
+    """
+
+    n_alleles = hl.len(alleles_expr)
+
+    # compute call stats by  project
+    project_cs = hl.array(hl.agg.group_by(project_expr, hl.agg.call_stats(gt_expr, alleles_expr)))
+
+    return hl.or_missing(
+        n_alleles > 1,
+        hl.range(1, n_alleles).map(
+            lambda ai: hl.sorted(
+                project_cs.filter(
+                    # filter to projects with AF > 0
+                    lambda x: x[1].AF[ai] > 0
+                ),
+                # order the callstats computed by AF in decreasing order
+                lambda x: -x[1].AF[ai]
+                # take the n_projects projects with largest AF
+            )[:n_projects].map(
+                # add the project in the callstats struct
+                lambda x: x[1].annotate(
+                    AC=[x[1].AC[0], x[1].AC[ai]],
+                    AF=[x[1].AF[0], x[1].AF[ai]],
+                    homozygote_count=[x[1].homozygote_count[0], x[1].homozygote_count[ai]],
+                    project=x[0]
+                )
+            )
+        )
+    )
+
+
+def faf_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, locus: hl.expr.LocusExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
+    """
+    Calculates the filtering allele frequency
 
     :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom']
     :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq
@@ -50,14 +128,30 @@ def add_faf_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpressi
 
 def generate_frequency_data(
         mt: hl.MatrixTable,
-        calculate_age_hists: bool = True,
         calculate_faf: bool = True,
+        calculate_age_hists: bool = True,
         calculate_by_platform: bool = False,
         calculate_downsampling: bool = False,
         calculate_project_max: bool = False,
         pops_to_remove_for_popmax: Optional[List[str]] = None
 ) -> Tuple[hl.Table, hl.Table]:
     """
+    Creates a table with allele frequencies by population, sex, subpopulation.
+    Additionally, the following can also be computed:
+    - age histograms
+    - filtering allele frequencies
+    - frequencies by platform
+    - frequencies by downsampling the data to N samples (incl. by pop)
+    - project max
+
+    The input MT needs the following fields:
+    - meta.pop
+    - meta.sex
+
+    Important note
+    --------------
+    Currently this only supports bi-allelic sites.
+
     :param MatrixTable mt: Input MatrixTable
     :param bool calculate_downsampling: Calculate frequencies for downsampled data
     :param bool calculate_by_platform: Calculate frequencies for PCR-free data
@@ -65,7 +159,7 @@ def generate_frequency_data(
     :param list of str pops_to_remove_for_popmax: Populations to remove for the popmax calculation (typically inbred/bottleneck pops)
     """
     if calculate_downsampling:
-        mt, downsamplings = generate_downsamplings_cumulative(mt)
+        mt, downsamplings = _generate_downsamplings_cumulative(mt)
         print(f'Got {len(downsamplings)} downsamplings: {downsamplings}')
     cut_dict = {'pop': hl.agg.filter(hl.is_defined(mt.meta.pop), hl.agg.counter(mt.meta.pop)),
                 'sex': hl.agg.filter(hl.is_defined(mt.meta.sex), hl.agg.collect_as_set(mt.meta.sex)),
@@ -156,12 +250,13 @@ def generate_frequency_data(
     pops = set(cut_data.pop.keys())
     [pops.discard(x) for x in pops_to_remove_for_popmax]
 
-    mt = mt.annotate_rows(popmax=add_popmax_expr(mt.freq, mt.freq_meta, populations=pops))
+    mt = mt.annotate_rows(popmax=popmax_expr(mt.freq, mt.freq_meta, populations=pops))
 
     if calculate_faf:
-        mt = mt.annotate_rows(faf=add_faf_expr(mt.freq, mt.freq_meta, mt.locus, populations=pops))
+        mt = mt.annotate_rows(faf=faf_expr(mt.freq, mt.freq_meta, mt.locus, populations=pops))
 
     if calculate_project_max:
-        mt = get_projectmax(mt, mt.project_id)
+        # Note that the [0] at the end is because the mt here is bi-allelic
+        mt = mt.annotate_rows(project_max=project_max_expr(mt.project_id, mt.GT, mt.alleles, 5)[0])
 
     return mt.rows(), sample_data

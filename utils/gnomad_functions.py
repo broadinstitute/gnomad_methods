@@ -116,42 +116,6 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     )
 
 
-def add_popmax_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
-    """
-    Calculates popmax (add an additional entry into freq with popmax: pop)
-
-    :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom']
-    :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq
-    :param set of str populations: Set of populations over which to calculate popmax
-    :return: Frequency data with annotated popmax
-    :rtype: ArrayExpression
-    """
-    pops_to_use = hl.literal(populations)
-    freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(freq, freq_meta))
-    freq_filtered = hl.filter(lambda f: (f.meta.size() == 2) & (f.meta.get('group') == 'adj') &
-                                        pops_to_use.contains(f.meta.get('pop')) & (f.AC > 0), freq)
-    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
-    return hl.or_missing(hl.len(sorted_freqs) > 0,
-        hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
-                  homozygote_count=sorted_freqs[0].homozygote_count,
-                  pop=sorted_freqs[0].meta['pop']))
-
-
-def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.MatrixTable:
-    """
-    First pass of projectmax (returns aggregated MT with project_max field)
-
-    :param MatrixTable mt: Input MT
-    :param StringExpression loc: Column expression location of project ID (e.g. mt.meta.pid)
-    :return: Frequency data with annotated project_max
-    :rtype: MatrixTable
-    """
-    mt = mt.annotate_cols(project=loc)
-    agg_mt = mt.group_cols_by(mt.project).aggregate(callstats=hl.agg.call_stats(mt.GT, mt.alleles))
-    return agg_mt.annotate_rows(project_max=hl.agg.take(hl.struct(**agg_mt.callstats, project=agg_mt.project),
-                                                        5, -agg_mt.callstats.AF[1]))
-
-
 def read_list_data(input_file: str) -> List[str]:
     if input_file.startswith('gs://'):
         hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])

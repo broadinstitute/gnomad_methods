@@ -6,7 +6,7 @@ NO_CHR_TO_CHR_CONTIG_RECODING['MT'] = 'chrM'
 
 
 def import_purcell_5k() -> hl.Table:
-    p5k = hl.import_locus_intervals(purcell_5k.source_path, reference_genome='GRCh37')
+    p5k = hl.import_locus_intervals(purcell_5k.import_sources['source_path'], reference_genome='GRCh37')
     p5k = p5k.annotate(
         start=hl.liftover(p5k.interval.start, 'GRCh38'),
         end=hl.liftover(p5k.interval.start, 'GRCh38')
@@ -33,7 +33,7 @@ def main(args):
 
     if args.clinvar:
         hl.import_vcf(
-            clinvar.source_path,
+            clinvar.import_sources['source_path'],
             force_bgz=True,
             contig_recoding=NO_CHR_TO_CHR_CONTIG_RECODING,
             skip_invalid_loci=True,
@@ -42,30 +42,30 @@ def main(args):
 
     if args.na12878:
         hl.import_vcf(
-            na12878_giab.source_path, force_bgz=True, min_partitions=100
+            na12878_giab.import_sources['source_path'], force_bgz=True, min_partitions=100
         ).write(na12878_giab.path, overwrite=args.overwrite)
 
     if args.dbsnp:
         hl.import_vcf(
-            dbsnp.source_path,
+            dbsnp.import_sources['source_path'],
             force_bgz=True,
             contig_recoding=NO_CHR_TO_CHR_CONTIG_RECODING,
             skip_invalid_loci=True,
-            header_file=dbsnp.attributes['vcf_header_path'],
+            header_file=dbsnp.import_sources['vcf_header_path'],
             min_partitions=400
         ).rows().write(dbsnp.path, overwrite=args.overwrite)
 
     if  args.hapmap:
-        hl.import_vcf(hapmap.source_path, force_bgz=True).rows().write(hapmap.path, overwrite=args.overwrite)
+        hl.import_vcf(hapmap.import_sources['source_path'], force_bgz=True).rows().write(hapmap.path, overwrite=args.overwrite)
 
     if args.kgp_omni:
-        hl.import_vcf(kgp_omni.source_path, force_bgz=True).rows().write(kgp_omni.path, overwrite=args.overwrite)
+        hl.import_vcf(kgp_omni.import_sources['source_path'], force_bgz=True).rows().write(kgp_omni.path, overwrite=args.overwrite)
 
     if args.kgp:
-        hl.import_vcf(kgp.source_path, force_bgz=True).rows().write(kgp.path, overwrite=args.overwrite)
+        hl.import_vcf(kgp.import_sources['source_path'], force_bgz=True).rows().write(kgp.path, overwrite=args.overwrite)
 
     if args.mills:
-        hl.import_vcf(mills.source_path, force_bgz=True).rows().write(mills.path, overwrite=args.overwrite)
+        hl.import_vcf(mills.import_sources['source_path'], force_bgz=True).rows().write(mills.path, overwrite=args.overwrite)
 
 
 if __name__ == "__main__":

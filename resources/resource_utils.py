@@ -11,28 +11,24 @@ class BaseResource(ABC):
     """
 
     @abstractmethod
-    def __init__(self, path: str, source_path: Optional[str] = None, attributes: Dict[str, Any] = None, expected_file_extension: str = ""):
+    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, expected_file_extension: str = ""):
         """
         Creates a Resource
-
         :param str path: The resource path
-        :param str source_path: The path for the resource source when it was originally imported
-        :param dict of str attributes: Additional attributes for the resource
+        :param dict of str import_sources: Additional attributes for the resource
         """
 
         if expected_file_extension and not path.endswith(expected_file_extension):
-            logger.warning(f"Created the following TableResource with a path that doesn't ends with {expected_file_extension}: {self}")
+            logger.warning(
+                f"Created the following TableResource with a path that doesn't ends with {expected_file_extension}: {self}")
 
-        self.source_path = source_path
         self.path = path
-        self.attributes = attributes
+        self.import_sources = import_sources
 
     def __repr__(self):
         attr_str = [f'path={self.path}']
-        if self.source_path is not None:
-            attr_str.append(f'source_path={self.source_path}')
-        if self.attributes is not None:
-            attr_str.append(f'attributes={self.attributes}')
+        if self.import_sources is not None:
+            attr_str.append(f'import_sources={self.import_sources}')
         return f'{self.__class__.__name__}({",".join(attr_str)})'
 
 
@@ -41,11 +37,10 @@ class TableResource(BaseResource):
     A Hail Table resource
     """
 
-    def __init__(self, path: str, source_path: Optional[str] = None, attributes: Dict[str, Any] = None):
+    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, ):
         super().__init__(
             path=path,
-            source_path=source_path,
-            attributes=attributes,
+            import_sources=import_sources,
             expected_file_extension='.ht'
         )
 
@@ -63,15 +58,14 @@ class MatrixTableResource(BaseResource):
     A Hail MatrixTable resource
     """
 
-    def __init__(self, path: str, source_path: Optional[str] = None, attributes: Dict[str, Any] = None):
+    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, ):
         super().__init__(
             path=path,
-            source_path=source_path,
-            attributes=attributes,
+            import_sources=import_sources,
             expected_file_extension='.mt'
         )
 
-    def mt(self)-> hl.MatrixTable:
+    def mt(self) -> hl.MatrixTable:
         """
         Read and return the Hail MatrixTable resource
         :return: Hail MatrixTable resource
@@ -85,18 +79,16 @@ class PedigreeResource(BaseResource):
     A pedigree resource
     """
 
-    def __init__(self, path: str, attributes: Dict[str, Any] = None):
+    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, ):
         super().__init__(
             path=path,
-            source_path=None,
-            attributes=attributes,
+            import_sources=import_sources,
             expected_file_extension='.ped'
         )
 
     def ht(self, delimiter=r"\\s+") -> hl.Table:
         """
         Reads the pedigree into a family HT using hl.import_fam().
-
         :param str delimiter: Delimiter used in the ped file
         :return: Family table
         :rtype: Table
@@ -106,7 +98,6 @@ class PedigreeResource(BaseResource):
     def pedigree(self, delimiter=r"\\s+") -> hl.Pedigree:
         """
         Reads the pedigree into an hl.Pedigree using hl.Pedigree.read().
-
         :param str delimiter: Delimiter used in the ped file
         :return: pedigree
         :rtype: Pedigree
@@ -124,9 +115,7 @@ class BaseVersionedResource(BaseResource, ABC):
         Creates a versioned resource.
         The `path`/`source_path` attributes of the versioned resource are those
         of the default version of the resource.
-
         In addition, all versions of the resource are stored in the `versions` attribute.
-
         :param str default_version: The default version of this resource (needs to be in the `versions` dict)
         :param dict of str -> BaseResource versions: A dict of version name -> resource.
         """
@@ -135,12 +124,12 @@ class BaseVersionedResource(BaseResource, ABC):
             raise TypeError("Can't instantiate abstract class BaseVersionedResource")
 
         if default_version not in versions:
-            raise KeyError(f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}.")
+            raise KeyError(
+                f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}.")
 
         super().__init__(
             path=versions[default_version].path,
-            source_path=versions[default_version].source_path,
-            attributes=versions[default_version].attributes
+            import_sources=versions[default_version].import_sources
         )
         self.default_version = default_version
         self.versions = versions
@@ -149,9 +138,9 @@ class BaseVersionedResource(BaseResource, ABC):
         return f'{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})'
 
 
-class VersionedTableResource(TableResource, BaseVersionedResource):
+class VersionedTableResource(BaseVersionedResource, TableResource, ):
     pass
 
 
-class VersionedMatrixTableResource(MatrixTableResource, BaseVersionedResource):
+class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
     pass

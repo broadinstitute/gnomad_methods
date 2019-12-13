@@ -1,7 +1,7 @@
 from gnomad_hail import *
 
 
-def _generate_downsamplings_cumulative(mt: hl.MatrixTable, downsamplings: List[int]) -> Tuple[hl.MatrixTable, List[int]]:
+def generate_downsamplings_cumulative(mt: hl.MatrixTable, downsamplings: List[int]) -> Tuple[hl.MatrixTable, List[int]]:
     pop_data = [x[0] for x in get_sample_data(mt, [mt.meta.pop])]
     pops = Counter(pop_data)
     downsamplings = list(set(downsamplings + list(pops.values())))  # Add the pops values if not in yet
@@ -18,6 +18,7 @@ def _generate_downsamplings_cumulative(mt: hl.MatrixTable, downsamplings: List[i
         else:
             global_ht = global_ht.union(pop_ht)
     global_ht = global_ht.key_by('s')
+    logger.info(f'Found {len(downsamplings)} downsamplings: {downsamplings}')
     return mt.annotate_cols(downsampling=global_ht[mt.s]), downsamplings
 
 
@@ -126,14 +127,58 @@ def faf_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, 
     ))
 
 
+def qual_hist_expr(
+        gt_expr: Optional[hl.expr.CallExpression] = None,
+        gq_expr: Optional[hl.expr.NumericExpression] = None,
+        dp_expr: Optional[hl.expr.NumericExpression] = None,
+        ad_expr: Optional[hl.expr.ArrayNumericExpression] = None
+) -> hl.expr.StructExpression:
+    """
+    Returns an expression with genotype quality hsitograms based on the arguments given (dp, gq, ad).
+    Notes
+    -----
+    - If `gt_expr` is provided, will return histograms for non-reference samples only as well as all samples.
+    - `gt_expr` is required for the allele-balance histogram, as it is only computed on het samples.
+
+    :param CallExpression gt_expr: Genotype
+    :param NumericExpression gq_expr: Genotype quality
+    :param NumericExpression dp_expr: Depth
+    :param ArrayNumericExpression ad_expr: Allelic Depth (bi-allelic here)
+    :return: Genotype quality histograms expression
+    :rtype: StructExpression
+    """
+    qual_hists = {}
+    if gq_expr is not None:
+        qual_hists['gq_hist'] = hl.agg.hist(gq_expr, 0, 100, 20)
+    if dp_expr is not None:
+        qual_hists['dp_hist'] = hl.agg.hist(dp_expr, 0, 100, 20)
+
+    if gt_expr is not None:
+        qual_hists= {
+            **{f'{qual}_all': qual_hist for qual, qual_hist in qual_hists},
+            **{f'{qual}_alt': hl.agg.filter(gt_expr.is_non_ref(), qual_hist) for qual, qual_hist in qual_hists}
+        }
+        if ad_expr is not None:
+            qual_hists['ab_hist_alt'] = hl.agg.filter(gt_expr.is_het(), hl.agg.hist(ad_expr[1] / hl.sum(ad_expr), 0, 1, 20))
+
+    else:
+        qual_hists = {f'{qual}_all': qual_hist for qual, qual_hist in qual_hists}
+
+    return hl.struct(**qual_hists)
+
+
 def generate_frequency_data(
         mt: hl.MatrixTable,
+        sex_expr: Optional[hl.expr.StringExpression] = None,
+        pop_expr: Optional[hl.expr.StringExpression] = None,
+        subpop_expr: Optional[hl.expr.StringExpression] = None,
+        platform_expr: Optional[hl.expr.StringExpression] = None,
+        project_expr: Optional[hl.expr.StringExpression] = None,
+        age_expr: Optional[hl.expr.NumericExpression] = None,
         calculate_faf: bool = True,
-        calculate_age_hists: bool = True,
-        calculate_by_platform: bool = False,
-        calculate_downsampling: bool = False,
-        calculate_project_max: bool = False,
-        pops_to_remove_for_popmax: Optional[List[str]] = None
+        calculate_popmax: bool = True,
+        pops_to_remove_for_faf_and_popmax: Optional[List[str]] = None,
+        downsamplings: Optional[List[int]] = None
 ) -> Tuple[hl.Table, hl.Table]:
     """
     Creates a table with allele frequencies by population, sex, subpopulation.
@@ -156,107 +201,126 @@ def generate_frequency_data(
     :param bool calculate_downsampling: Calculate frequencies for downsampled data
     :param bool calculate_by_platform: Calculate frequencies for PCR-free data
     :param bool calculate_age_hists: Calculate age histograms for het and hom_var calls
-    :param list of str pops_to_remove_for_popmax: Populations to remove for the popmax calculation (typically inbred/bottleneck pops)
+    :param list of str pops_to_remove_for_faf_and_popmax: Populations to remove for the popmax calculation (typically inbred/bottleneck pops)
     """
-    if calculate_downsampling:
-        mt, downsamplings = _generate_downsamplings_cumulative(mt)
-        print(f'Got {len(downsamplings)} downsamplings: {downsamplings}')
-    cut_dict = {'pop': hl.agg.filter(hl.is_defined(mt.meta.pop), hl.agg.counter(mt.meta.pop)),
-                'sex': hl.agg.filter(hl.is_defined(mt.meta.sex), hl.agg.collect_as_set(mt.meta.sex)),
-                'subpop': hl.agg.filter(hl.is_defined(mt.meta.subpop) & hl.is_defined(mt.meta.pop),
-                                        hl.agg.collect_as_set(hl.struct(subpop=mt.meta.subpop, pop=mt.meta.pop)))
-                }
-    if calculate_by_platform:
-        cut_dict['platform'] = hl.agg.filter(hl.is_defined(mt.meta.qc_platform),
-                                             hl.agg.collect_as_set(mt.meta.qc_platform))
+
+    # Annotate cols with provided cuts
+    mt = mt.select_cols(
+        **{
+            name[:-5]: expr for name, expr in locals()
+            if expr is not None and name in
+               [ 'sex_expr', 'pop_expr', 'subpop_expr', 'platform_expr', 'project_expr', 'age_expr']
+        }
+    )
+
+    # Create downsamplings if needed
+    if downsamplings is not None:
+        mt, downsamplings = generate_downsamplings_cumulative(mt, downsamplings)
+
+    # Get counters for sex, pop and subpop if set
+    cut_dict = {
+        cut: hl.agg.filter(hl.is_defined(mt[cut]), hl.agg.counter(mt[cut]))
+        for cut in ['sex', 'pop', 'platform'] if cut in mt.col_value
+    }
+    if 'subpop' in mt.col_value:
+        cut_dict['subpop'] = hl.agg.filter(
+            hl.is_defined(mt.pop) & hl.is_defined(mt.subpop),
+            hl.agg.counter(hl.struct(subpop=mt.subpop, pop=mt.pop))
+        )
+
     cut_data = mt.aggregate_cols(hl.struct(**cut_dict))
 
     sample_group_filters = [({}, True)]
-    sample_group_filters.extend([
-        ({'pop': pop}, mt.meta.pop == pop) for pop in cut_data.pop
-    ] + [
-        ({'sex': sex}, mt.meta.sex == sex) for sex in cut_data.sex
-    ] + [
-        ({'pop': pop, 'sex': sex}, (mt.meta.sex == sex) & (mt.meta.pop == pop))
-        for sex in cut_data.sex for pop in cut_data.pop
-    ] + [
-        ({'subpop': subpop.subpop, 'pop': subpop.pop},
-         mt.meta.subpop == subpop.subpop)
-        for subpop in cut_data.subpop
-    ])
+    sample_group_filters.extend(
+        [
+            ({'pop': pop}, mt.pop == pop) for pop in cut_data.get('pop', {})
+        ] + [
+            ({'sex': sex}, mt.sex == sex) for sex in cut_data.get('sex', {})
+        ] + [
+            ({'pop': pop, 'sex': sex}, (mt.sex == sex) & (mt.pop == pop))
+            for sex in cut_data.get('sex', {}) for pop in cut_data.get('pop', {})
+        ] + [
+            ({'subpop': subpop.subpop, 'pop': subpop.pop}, mt.subpop == subpop.subpop)
+            for subpop in cut_data.get('subpop', {})
+        ] + [
+            ({'platform': str(platform)}, mt.platform == platform)
+            for platform in cut_data.get('platform', {})
+        ]
+    )
 
-    if calculate_by_platform:
-        sample_group_filters.extend([
-            ({'platform': str(platform)}, mt.meta.qc_platform == platform)
-            for platform in cut_data.platform
-        ])
-
-    if calculate_downsampling:
+    if downsamplings is not None:
         sample_group_filters.extend([
             ({'downsampling': str(ds), 'pop': 'global'},
              mt.downsampling.global_idx < ds) for ds in downsamplings
         ])
         sample_group_filters.extend([
             ({'downsampling': str(ds), 'pop': pop},
-             (mt.downsampling.pop_idx < ds) & (mt.meta.pop == pop))
-            for ds in downsamplings for pop, pop_count in cut_data.pop.items() if ds <= pop_count
+             (mt.downsampling.pop_idx < ds) & (mt.pop == pop))
+            for ds in downsamplings for pop, pop_count in cut_data.get('pop', {}).items() if ds <= pop_count
         ])
-    mt = mt.select_cols(group_membership=[x[1] for x in sample_group_filters], project_id=mt.meta.project_id, age=mt.meta.age)
-    mt = mt.select_rows()
 
-    def get_meta_expressions(sample_group_filters):
-        meta_expressions = []
-        for i in range(len(sample_group_filters)):
-            subgroup_dict = sample_group_filters[i][0]
-            subgroup_dict['group'] = 'adj'
-            meta_expressions.append(subgroup_dict)
-        meta_expressions.insert(1, {'group': 'raw'})
-        return meta_expressions
+    # Annotate columns with group_membership
+    mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
 
-    def get_freq_expressions(mt, n_groups):
-
-        adj_freq_expressions = hl.agg.array_agg(
-            lambda i: hl.agg.filter(mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)),
-            hl.range(n_groups)
-        )
-
-        # Insert raw as the second element of the array
-        return adj_freq_expressions[:1].extend([
-            hl.agg.call_stats(mt.GT, mt.alleles)
-        ]).extend(
-            adj_freq_expressions[1:]
-        ).map(
-            lambda cs: cs.annotate(
-                AC=cs.AC[1],
-                AF=cs.AF[1],
-                homozygote_count=cs.homozygote_count[1]
-            )
-        )
-
-    frequency_expression = get_freq_expressions(mt, len(sample_group_filters))
-    print(f'Calculating {len(sample_group_filters) + 1} aggregators...')
+    # Create and annotate global expression with meta information
+    meta_expressions = [dict(**sample_group[0], group='adj') for sample_group in sample_group_filters]
+    meta_expressions.insert(1, {'group': 'raw'})
     global_expression = {
-        'freq_meta': get_meta_expressions(sample_group_filters)
+        'freq_meta': meta_expressions
     }
-    mt = mt.annotate_rows(freq=frequency_expression)
+    if downsamplings is not None:
+        global_expression['downsamplings'] = downsamplings
 
-    if calculate_age_hists:
-        mt = mt.annotate_rows(age_hist_het=hl.agg.filter(mt.adj & mt.GT.is_het(), hl.agg.hist(mt.age, 30, 80, 10)),
-                              age_hist_hom=hl.agg.filter(mt.adj & mt.GT.is_hom_var(), hl.agg.hist(mt.age, 30, 80, 10)))
-    if calculate_downsampling: global_expression['downsamplings'] = downsamplings
     mt = mt.annotate_globals(**global_expression)
-    sample_data = mt.cols()
 
-    pops = set(cut_data.pop.keys())
-    [pops.discard(x) for x in pops_to_remove_for_popmax]
+    # Create frequency expression array from the sample groups
+    freq_expr = hl.agg.array_agg(
+        lambda i: hl.agg.filter(mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)),
+        hl.range(len(sample_group_filters))
+    )
 
-    mt = mt.annotate_rows(popmax=popmax_expr(mt.freq, mt.freq_meta, populations=pops))
+    # Insert raw as the second element of the array
+    freq_expr = freq_expr[:1].extend([
+        hl.agg.call_stats(mt.GT, mt.alleles)
+    ]).extend(
+        freq_expr[1:]
+    )
+
+    # Select non-ref allele (assumes bi-allelic)
+    freq_expr = freq_expr.map(
+        lambda cs: cs.annotate(
+            AC=cs.AC[1],
+            AF=cs.AF[1],
+            homozygote_count=cs.homozygote_count[1]
+        )
+    )
+
+    # Create row expressions
+    row_expression = {'freq': freq_expr}
+
+    if 'age' in mt.col_value:
+        row_expression.update({
+            'age_hist_het': hl.agg.filter(mt.adj & mt.GT.is_het(), hl.agg.hist(mt.age, 30, 80, 10)),
+            'age_hist_hom': hl.agg.filter(mt.adj & mt.GT.is_hom_var(), hl.agg.hist(mt.age, 30, 80, 10))
+        })
+
+    if 'project' in mt.col_value:
+        # Note that the [0] at the end is because the mt here is bi-allelic
+        row_expression['project_max'] = project_max_expr(mt.project, mt.GT, mt.alleles, 5)[0]
+
+    pops = {pop for pop in cut_data.get('pop', []) if pop not in pops_to_remove_for_faf_and_popmax}
+    if calculate_popmax:
+        row_expression['popmax'] = popmax_expr(freq_expr, mt.freq_meta, populations=pops)
 
     if calculate_faf:
-        mt = mt.annotate_rows(faf=faf_expr(mt.freq, mt.freq_meta, mt.locus, populations=pops))
+        row_expression['faf'] = faf_expr(freq_expr, mt.freq_meta, mt.locus, populations=pops)
 
-    if calculate_project_max:
-        # Note that the [0] at the end is because the mt here is bi-allelic
-        mt = mt.annotate_rows(project_max=project_max_expr(mt.project_id, mt.GT, mt.alleles, 5)[0])
+    mt = mt.select_rows(**row_expression)
 
-    return mt.rows(), sample_data
+    # Select col expressions
+    cols = ['group_membership']
+    if downsamplings:
+        cols.append('downsampling')
+    mt = mt.select_cols(*cols)
+
+    return mt.rows(), mt.cols()

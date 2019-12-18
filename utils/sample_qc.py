@@ -372,7 +372,7 @@ def get_sex_expr(
     f_stat_XY_cutoff: float = 0.2,
     lower_SD_cutoff: int = 5,
     upper_SD_cutoff: int = 6,
-    Y_lower_bound: int = 2,
+    Y_lower_bound: int = 7,
 ) -> hl.expr.StructExpression:
     """
     Creates a struct with the following annotations:
@@ -420,7 +420,8 @@ def get_sex_expr(
                         X_stats.mean + (upper_SD_cutoff * X_stats.stdev)
                         ]
         cutoffs["Y"] = [
-                        abs(min((Y_lower_bound * Y_stats.stdev), Y_stats.mean - (upper_SD_cutoff * Y_stats.stdev))), 
+                        #abs(min((Y_lower_bound * Y_stats.stdev), Y_stats.mean - (upper_SD_cutoff * Y_stats.stdev))), 
+                        abs(min(Y_stats.mean - (Y_lower_bound * Y_stats.stdev), Y_stats.mean - (upper_SD_cutoff * Y_stats.stdev))),
                         Y_stats.mean + (lower_SD_cutoff * Y_stats.stdev), 
                         Y_stats.mean + (upper_SD_cutoff * Y_stats.stdev)
                         ]

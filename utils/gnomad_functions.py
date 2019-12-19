@@ -90,6 +90,27 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     ), n_alt_alleles=hl.len(non_star_alleles))
 
 
+def adjusted_sex_ploidy_expr(
+        locus_expr: hl.expr.LocusExpression,
+        gt_expr: hl.expr.CallExpression,
+        sex_expr: hl.expr.StringExpression,
+        male_str: str = 'male',
+        female_str: str = 'female'
+) -> hl.expr.CallExpression:
+    male = sex_expr == male_str
+    female = sex_expr == female_str
+    x_nonpar = locus_expr.in_x_nonpar()
+    y_par = locus_expr.in_y_par()
+    y_nonpar = locus_expr.in_y_nonpar()
+    return (
+        hl.case(missing_false=True)
+            .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
+            .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
+            .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
+            .default(gt_expr)
+    )
+
+
 def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
                       male_str: str = 'male', female_str: str = 'female') -> hl.MatrixTable:
     """
@@ -102,17 +123,14 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     :return: MatrixTable with fixed ploidy for sex chromosomes
     :rtype: MatrixTable
     """
-    male = sex_expr == male_str
-    female = sex_expr == female_str
-    x_nonpar = mt.locus.in_x_nonpar()
-    y_par = mt.locus.in_y_par()
-    y_nonpar = mt.locus.in_y_nonpar()
     return mt.annotate_entries(
-        GT=hl.case(missing_false=True)
-        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
-        .default(mt.GT)
+        GT=adjusted_sex_ploidy_expr(
+            mt.locus,
+            mt.GT,
+            sex_expr,
+            male_str,
+            female_str
+        )
     )
 
 

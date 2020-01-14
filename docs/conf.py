@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+from directives import AutoModuleSummary
 
 # Add gnomad_hail to import path.
 # Since the gnomad_hail package is at the top level of the repository, this
@@ -26,10 +27,20 @@ html_theme_options = {
     "display_version": False,
 }
 
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 html_css_files = ["theme_overrides.css"]
 
 html_show_sphinx = False
 
 html_show_copyright = False
+
+autodoc_default_options = {
+    "members": True,
+    "undoc-members": True,
+    "member-order": "bysource",
+}
+
+
+def setup(app):
+    app.add_directive("gnomadhail_automodulesummary", AutoModuleSummary)

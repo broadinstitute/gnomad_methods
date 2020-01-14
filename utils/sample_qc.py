@@ -368,153 +368,105 @@ def get_sex_expr(
     chr_x_ploidy: hl.expr.NumericExpression,
     chr_y_ploidy: hl.expr.NumericExpression,
     f_stat: hl.expr.NumericExpression,
-    f_stat_XX_cutoff: float = -0.2,
-    f_stat_XY_cutoff: float = 0.2,
+    f_stat_cutoff: float = 0.5,
     lower_SD_cutoff: int = 5,
-    upper_SD_cutoff: int = 6,
-    Y_lower_bound: int = 7,
+    upper_SD_cutoff: int = 6
 ) -> hl.expr.StructExpression:
     """
     Creates a struct with the following annotations:
     - sex_karyoptype (str)
     - sex (str), which can be either 'male', 'female', 'ambiguous_sex', or 'sex_aneuploidy'
     - is_female (missing for karyotypes that aren't either 'XX' or 'XY')
+    Note that f-stat is used only to split the samples into roughly 'XX' and 'XY' categories and is not used in the final annotation.
 
     :param Table ht: Table with samples, their f-stats, and their sex chromosome ploidies
     :param NumericExpression chr_x_ploidy: chrom X ploidy (or relative ploidy)
     :param NumericExpression  chr_y_ploidy: chrom Y ploidy (or relative ploidy)
     :param NumericExpression f_stat: chrom X f-stat
-    :param float f_stat_XX_cutoff: Min f-stat for XX samples
-    :param flat f_stat_XY_cutoff: Max f-stat for XY samples
-    :param int lower_SD_cutoff: Number of standard deviations to use when determining upper limit of sex chromosome ploidy cutoffs
-    :param int upper_SD_cutoff: Permissive number of standard deviations to use when determining lower ploidy limit and aneuploidy cutoffs
-    :param int Y_lower_bound: Number of standard deviations to use as the lower bound for Y, specifically to correct for somatic loss of Y
+    :param float f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
+    :param int lower_SD_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
+    :param int upper_SD_cutoff: Permissive number of standard deviations to use when determining aneuploidy cutoffs
     :rtype: StructExpression
     """
-    def get_ploidy_cutoffs(ht: hl.Table, sex: str, f_stat_cutoff: float, lower_SD_cutoff: int, upper_SD_cutoff: int, Y_lower_bound: int) -> dict:
+    def get_ploidy_cutoffs(ht: hl.Table, f_stat_cutoff: float, lower_SD_cutoff: int, upper_SD_cutoff: int) -> dict:
         """
         Gets chromosome X and Y ploidy cutoffs for XY and XX samples
 
         :param Table ht: Table with samples and their sex chromosome ploidies
         :param str sex: Sex for which to check X/Y ploidies. Assumes input is either XX or XY.
-        :param float f_stat_cutoff: f-stat cutoff value. Assumes XX values will be above cutoff and XY values will be below cutoff.
+        :param float f_stat_cutoff: f-stat cutoff value. Assumes XX values will be below cutoff and XY values will be above cutoff.
         :param int lower_SD_cutoff: Number of standard deviations to use when determining upper limit of sex chromosome ploidy cutoffs
         :param int upper_SD_cutoff: Permissive number of standard deviations to use when determining lower ploidy limit and aneuploidy cutoffs
-        :param int Y_lower_bound: Number of standard deviations to use as the lower bound for Y, specifically to correct for somatic loss of Y
         :return: Dictionary of ploidy cutoffs; key: sex chrom, values: [lower cut, upper cut, outlier (aneuploidy) cut]
         :rtype: dict
         """
-        if sex == "XX":
-            ht = ht.filter(ht.f_stat < f_stat_cutoff)
-        else:
-            ht = ht.filter(ht.f_stat > f_stat_cutoff)
+        xx_ht = ht.filter(ht.f_stat < f_stat_cutoff)
+        xy_ht = ht.filter(ht.f_stat > f_stat_cutoff)
 
         # Get mean/stdev for chrX/Y ploidies
-        X_stats = ht.aggregate(hl.agg.stats(ht.chrX_ploidy))
-        Y_stats = ht.aggregate(hl.agg.stats(ht.chrY_ploidy))
+        xx_x_stats = xx_ht.aggregate(hl.agg.stats(xx_ht.chrX_ploidy))
+        xy_x_stats = xy_ht.aggregate(hl.agg.stats(xy_ht.chrX_ploidy))
+        xx_y_stats = xx_ht.aggregate(hl.agg.stats(xx_ht.chrY_ploidy))
+        xy_y_stats = xy_ht.aggregate(hl.agg.stats(xy_ht.chrY_ploidy))
 
         # Set cutoffs -- keep cutoffs permissive to account for loss of sex chromosomes
         cutoffs = {}
         cutoffs["X"] = [
-                        X_stats.mean - (upper_SD_cutoff * X_stats.stdev), X_stats.mean + (lower_SD_cutoff * X_stats.stdev), 
-                        X_stats.mean + (upper_SD_cutoff * X_stats.stdev)
+                        (xy_x_stats.mean - (upper_SD_cutoff * xy_x_stats.stdev), xy_x_stats.mean + (lower_SD_cutoff * xy_x_stats.stdev)),
+                        (xx_x_stats.mean - (lower_SD_cutoff * xx_x_stats.stdev), xx_x_stats.mean + (lower_SD_cutoff * xx_x_stats.stdev)),
+                        xx_x_stats.mean + (upper_SD_cutoff * xx_x_stats.stdev)
                         ]
         cutoffs["Y"] = [
-                        #abs(min((Y_lower_bound * Y_stats.stdev), Y_stats.mean - (upper_SD_cutoff * Y_stats.stdev))), 
-                        abs(min(Y_stats.mean - (Y_lower_bound * Y_stats.stdev), Y_stats.mean - (upper_SD_cutoff * Y_stats.stdev))),
-                        Y_stats.mean + (lower_SD_cutoff * Y_stats.stdev), 
-                        Y_stats.mean + (upper_SD_cutoff * Y_stats.stdev)
+                        abs(xx_y_stats.mean - (upper_SD_cutoff * xx_y_stats.stdev)),
+                        xy_y_stats.mean + (lower_SD_cutoff * xy_y_stats.stdev), 
+                        xy_y_stats.mean + (upper_SD_cutoff * xy_y_stats.stdev)
                         ]
         return cutoffs
    
  
-    xx_cutoffs = get_ploidy_cutoffs(ht, "XX", f_stat_XX_cutoff, lower_SD_cutoff, upper_SD_cutoff, Y_lower_bound)
-    xy_cutoffs = get_ploidy_cutoffs(ht, "XY", f_stat_XY_cutoff, lower_SD_cutoff, upper_SD_cutoff, Y_lower_bound)
-
-    xx_x_ploidy_cutoffs = xx_cutoffs["X"][:2]
-    xxx_x_ploidy_cutoff = xx_cutoffs["X"][2]
-    xx_y_ploidy_cutoff = xx_cutoffs["Y"][1]
-    logger.info('XX cutoffs:')
-    logger.info(f'X {xx_x_ploidy_cutoffs}')
-    logger.info(f'XXX {xxx_x_ploidy_cutoff}')
-    logger.info(f'Y {xx_y_ploidy_cutoff}')
-
-    xy_x_ploidy_cutoff = xy_cutoffs["X"][1]
-    xy_y_ploidy_cutoffs = xy_cutoffs["Y"][:2]
-    yy_y_ploidy_cutoff = xy_cutoffs["Y"][2]
-    logger.info('XY cutoffs:')
-    logger.info(f'X {xy_x_ploidy_cutoff}')
-    logger.info(f'Y {xy_y_ploidy_cutoffs}')
-    logger.info(f'YY {yy_y_ploidy_cutoff}')
+    cutoffs = get_ploidy_cutoffs(ht, f_stat_cutoff, lower_SD_cutoff, upper_SD_cutoff)
+    x_ploidy_cutoffs = cutoffs["X"]
+    y_ploidy_cutoffs = cutoffs["Y"]
+    logger.info(f'X cutoffs: {x_ploidy_cutoffs}') 
+    logger.info(f'Y cutoffs: {y_ploidy_cutoffs}')
 
     sex_expr = hl.struct(
         X_karyotype=(
             hl.case()
                 .when(
-                    (ht.chrX_ploidy < xy_x_ploidy_cutoff),
+                    ((chr_x_ploidy > x_ploidy_cutoffs[0][0]) &
+                    (chr_x_ploidy < x_ploidy_cutoffs[0][1])),
                     'X')
                 .when(
-                    ((ht.chrX_ploidy > xx_x_ploidy_cutoffs[0]) &
-                    (ht.chrX_ploidy < xx_x_ploidy_cutoffs[1])),
+                    ((chr_x_ploidy > x_ploidy_cutoffs[1][0]) &
+                    (chr_x_ploidy < x_ploidy_cutoffs[1][1])),
                     'XX')
                 .when(
-                    (ht.chrX_ploidy >= xxx_x_ploidy_cutoff),
+                    (chr_x_ploidy >= x_ploidy_cutoffs[2]),
                     'XXX')
-                .or_missing()
+                .default('Ambiguous')
         ),
         Y_karyotype=(
             hl.case()
+                .when(chr_y_ploidy < y_ploidy_cutoffs[0], '')
                 .when(
-                    ((ht.chrY_ploidy < xy_y_ploidy_cutoffs[0]) & 
-                    (ht.chrY_ploidy > xx_y_ploidy_cutoff)),
-                    'Y-')
-                .when(
-                    ((ht.chrY_ploidy > xy_y_ploidy_cutoffs[0]) &
-                    (ht.chrY_ploidy < xy_y_ploidy_cutoffs[1])),
+                    ((chr_y_ploidy > y_ploidy_cutoffs[0]) &
+                    (chr_y_ploidy < y_ploidy_cutoffs[1])),
                     'Y')
                 .when(
-                    ((ht.chrY_ploidy > xy_y_ploidy_cutoffs[1]) &
-                    (ht.chrY_ploidy < yy_y_ploidy_cutoff)),
-                    'Y+')
-                .when(
-                     (ht.chrY_ploidy >= yy_y_ploidy_cutoff),
+                     chr_y_ploidy >= y_ploidy_cutoffs[2],
                     'YY')
-                .or_missing()
+                .default('Ambiguous')
             )
     )
-
-    sex_expr = sex_expr.annotate(
-        sex_karyotype=(hl.case()
-            .when(
-                ((hl.is_defined(sex_expr.X_karyotype) & hl.is_defined(sex_expr.Y_karyotype)) &
-                ((sex_expr.Y_karyotype == 'Y') | (sex_expr.Y_karyotype == 'YY'))),
-                hl.format('%s%s', sex_expr.X_karyotype, sex_expr.Y_karyotype)
-            )
-            .when(
-                (hl.is_defined(sex_expr.X_karyotype) & hl.is_missing(sex_expr.Y_karyotype)),
-                hl.if_else(
-                    sex_expr.X_karyotype == 'X',
-                    'X0',
-                    sex_expr.X_karyotype)
-            )
-            .default('Ambiguous')
-        )
-    )
-
+    
     return sex_expr.annotate(
-        sex=(
+        sex_karyotype=(
             hl.case()
-                .when(sex_expr.sex_karyotype == 'XX', 'female')
-                .when(sex_expr.sex_karyotype == 'XY', 'male')
-                .when(sex_expr.sex_karyotype == 'Ambiguous', 'ambiguous_sex')
-                .default('sex_aneuploidy')
-        ),
-        is_female=(
-            hl.case()
-                .when(sex_expr.sex_karyotype == 'XX', True)
-                .when(sex_expr.sex_karyotype == 'XY', False)
-                .or_missing()
-        )
+                .when((hl.len(sex_expr.X_karyotype) < 4) & (hl.len(sex_expr.Y_karyotype) < 3),
+                    hl.format('%s%s', sex_expr.X_karyotype, sex_expr.Y_karyotype))
+                .default('Ambiguous')
+            )
     )
 
 

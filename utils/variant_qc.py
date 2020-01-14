@@ -189,6 +189,7 @@ def compute_binned_rank(
         ht: hl.Table,
         score_expr: hl.expr.NumericExpression,
         rank_expr: Dict[str, hl.expr.BooleanExpression] = {'rank': True},
+        stratify_snv_indel: bool = True,
         n_bins: int = 100,
         k: int = 1000,
         desc: bool = True
@@ -259,8 +260,19 @@ def compute_binned_rank(
             bin_boundaries=[x[1] for x in indexed_bins]
         )
 
+    if stratify_snv_indel:
+        # For each bin, add a SNV / indel stratification
+        bin_expr = {
+            f'{bin_id}_{snv}': (bin_expr & snv_expr)
+            for bin_id, bin_expr in bin_expr.items()
+            for snv, snv_expr in [
+                ('snv', ht.snv),
+                ('indel', ~ht.snv)
+            ]
+        }
+
     ht = ht.annotate(
-        **{f'_filter_{rid}': rexpr for rid, rexpr in rank_expr.items()},
+        **{f'_filter_{rid}': rexpr for rid, rexpr in bin_expr.items()},
         _score=score_expr
     )
 
@@ -275,7 +287,7 @@ def compute_binned_rank(
                         quantiles=hl.agg.approx_quantiles(ht._score, [x / (n_bins) for x in range(1, n_bins)], k=k)
                     )
                 )
-                for rid in rank_expr
+                for rid in bin_expr
             }
         )
     )
@@ -295,13 +307,13 @@ def compute_binned_rank(
         rank_stats=hl.literal(
             rank_stats,
             dtype=hl.tstruct(**{
-                rank_id: hl.tstruct(
+                bin_id: hl.tstruct(
                     n=hl.tint64,
                     quantiles=hl.tarray(hl.tfloat64),
                     bin_boundaries=hl.tarray(hl.tfloat64),
                     global_bin_indices=hl.tarray(hl.tint32),
                     merged_bins=hl.tdict(hl.tint32, hl.tint32)
-                ) for rank_id in rank_expr
+                ) for bin_id in bin_expr
             })
         )
     )
@@ -309,10 +321,10 @@ def compute_binned_rank(
     # Annotate the rank as the index in the unique boundaries array
     ht = ht.annotate(
         **{
-            rank_id: hl.or_missing(
-                ht[f'_filter_{rank_id}'],
-                hl.binary_search(ht.rank_stats[rank_id].bin_boundaries, ht._score),
-            ) for rank_id in rank_expr
+            bin_id: hl.or_missing(
+                ht[f'_filter_{bin_id}'],
+                hl.binary_search(ht.rank_stats[bin_id].bin_boundaries, ht._score),
+            ) for bin_id in bin_expr
         }
     )
 
@@ -321,18 +333,323 @@ def compute_binned_rank(
     # Otherwise, simply modify the rank bin to its global index (with expanded bins that is)
     ht = ht.select(
         **{
-            rank_id: hl.cond(
-                ht.rank_stats[rank_id].merged_bins.contains(ht[rank_id]),
-                ht[rank_id] + hl.int(hl.rand_unif(0, ht.rank_stats[rank_id].merged_bins[ht[rank_id]] + 1)),
-                ht.rank_stats[rank_id].global_bin_indices[ht[rank_id]]
+            bin_id: hl.cond(
+                ht.rank_stats[bin_id].merged_bins.contains(ht[bin_id]),
+                ht[bin_id] + hl.int(hl.rand_unif(0, ht.rank_stats[bin_id].merged_bins[ht[bin_id]] + 1)),
+                ht.rank_stats[bin_id].global_bin_indices[ht[bin_id]]
             )
-            for rank_id in rank_expr
+            for bin_id in bin_expr
         }
     )
 
     if desc:
         ht = ht.annotate(
-            **{rank_id: n_bins - ht[rank_id] for rank_id in rank_expr}
+            **{bin_id: n_bins - ht[bin_id] for bin_id in bin_expr}
         )
+
+    # Annotate the HT with the bin
+    # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
+    if stratify_snv_indel:
+        ht = ht.annotate(
+            **{
+                bin_id: hl.cond(
+                    ht.snv,
+                    bin_ht[f'{bin_id}_snv'],
+                    bin_ht[f'{bin_id}_indel']
+                )
+                for bin_id in bin_expr
+            }
+        )
+
+    return ht
+
+
+def create_binned_ht(ht: hl.Table, n_bins: int = 100) -> hl.Table:
+    """
+    Annotates table with a bin, where variants are binned based on score into `n_bins` equally-sized bins.
+    Note that the following fields should be present:
+    - score
+    - ac - expected that this is the adj filtered allele count
+    - ac_raw - expected that this is the raw allele count before adj filtering
+
+    Computes bin numbers stratified by SNV / Indels and with the following sub bins
+    - singletons
+    - biallelics
+    - biallelic singletons
+    - adj
+    - adj biallelics
+    - adj singletons
+    - adj biallelic singletons
+
+    :param Table ht: Input table
+    :param int n_bins: Number of bins to bin into
+    :return table with bin number for each variant
+    :rtype: Table
+    """
+
+    ht = ht.annotate(
+        singleton=ht.ac_raw == 1,
+        snv=hl.is_snp(ht.alleles[0], ht.alleles[1])
+    )
+
+    ht = ht.filter(
+        ht.ac_raw > 0
+    ).persist()
+
+    # Desired bins and sub-bins
+    # TODO: add to a get default bins and change names to bin from rank and and make other function aggregate
+    # TODO: make a parameter for singleton and adj, both boolean criteria
+    bin_expr = {
+        'bin': True,
+        'singleton_bin': ht.singleton,
+        'biallelic_bin': ~ht.was_split,
+        'biallelic_singleton_bin': ~ht.was_split & ht.singleton,
+        'adj_bin': ht.ac > 0,
+        'adj_biallelic_bin': ~ht.was_split & (ht.ac > 0),
+        'adj_singleton_bin': ht.singleton & (ht.ac > 0),
+        'adj_biallelic_singleton_bin': ~ht.was_split & ht.singleton & (ht.ac > 0)
+    }
+
+    return compute_binned_rank(ht, ht.score, bin_expr, n_bins)[ht.key]
+
+
+def compute_aggregate_binned_data(rank_ht: hl.Table, checkpoint_path: Optional[str] = None) -> hl.Table:
+    """
+    Creates binned data from a rank Table grouped by rank_id (rank, biallelic, etc.), contig, snv, bi_allelic and singleton
+    containing the information needed for evaluation plots.
+
+    Requires that `info` be annotate on the Table with a struct that includes QD, FS, and MQ
+
+    Note that the following fields should be present:
+    - ac
+    - ac_raw
+
+    :param Table rank_ht: Input rank Table
+    :param str checkpoint_path: If provided an intermediate checkpoint table is created with all required annotations before shuffling.
+    :return Table grouped by rank(s) and with counts of QC metrics
+    :rtype Table
+    """
+
+    # Load external evaluation data
+    clinvar_ht = hl.read_table(clinvar_ht_path)
+    info_ht = hl.read_table(get_info_ht_path())
+    # TODO: Can stay
+    info_ht = info_ht.annotate(
+        fail_hard_filters=(info_ht.info.QD < 2) | (info_ht.info.FS > 60) | (info_ht.info.MQ < 30)
+    )
+    ht_truth_data = hl.read_table(truth_ht_path)
+    fam_ht = hl.read_table(fam_stats_ht_path)
+
+    # Annotate rank table with the evaluation data
+    rank_ht = rank_ht.annotate(
+        indel_length=hl.abs(rank_ht.alleles[0].length() - rank_ht.alleles[1].length())
+    )
+
+    # Explode the rank table by rank_id
+    rank_ht = rank_ht.annotate(
+        rank_bins=hl.array([
+            hl.Struct(
+                rank_id=rank_name,
+                bin=rank_ht[rank_name]
+            )
+            for rank_name in rank_ht.rank_stats
+        ])
+    )
+    rank_ht = rank_ht.explode(rank_ht.rank_bins)
+    rank_ht = rank_ht.transmute(
+        rank_id=rank_ht.rank_bins.rank_id,
+        bin=rank_ht.rank_bins.bin
+    )
+    rank_ht = rank_ht.filter(hl.is_defined(rank_ht.bin))
+
+    if checkpoint_path is not None:
+        rank_ht.checkpoint(checkpoint_path, overwrite=True)
+    else:
+        rank_ht = rank_ht.persist()
+
+    # Group by rank_id, bin and additional stratification desired
+    # and compute QC metrics per bin
+    # TODO: pass a dict for these or pass a function that takes a HT and returns a dict of aggregators with the corresponding a
+    #  where we have a default function
+    return (
+        rank_ht
+            .group_by(
+            rank_id=rank_ht.rank_id,
+            contig=rank_ht.locus.contig,
+            snv=hl.is_snp(rank_ht.alleles[0], rank_ht.alleles[1]),
+            bi_allelic=~rank_ht.was_split,
+            singleton=rank_ht.singleton,
+            release_adj=rank_ht.ac > 0,
+            bin=rank_ht.bin
+        )._set_buffer_size(20000)
+            .aggregate(
+            min_score=hl.agg.min(rank_ht.score),
+            max_score=hl.agg.max(rank_ht.score),
+            n=hl.agg.count(),
+            n_ins=hl.agg.count_where(hl.is_insertion(rank_ht.alleles[0], rank_ht.alleles[1])),
+            n_del=hl.agg.count_where(hl.is_deletion(rank_ht.alleles[0], rank_ht.alleles[1])),
+            n_ti=hl.agg.count_where(hl.is_transition(rank_ht.alleles[0], rank_ht.alleles[1])),
+            n_tv=hl.agg.count_where(hl.is_transversion(rank_ht.alleles[0], rank_ht.alleles[1])),
+            n_1bp_indel=hl.agg.count_where(rank_ht.indel_length == 1),
+            n_mod3bp_indel=hl.agg.count_where((rank_ht.indel_length % 3) == 0),
+            n_singleton=hl.agg.count_where(rank_ht.singleton),
+            fail_hard_filters=hl.agg.count_where(rank_ht.fail_hard_filters),
+            n_vqsr_pos_train=hl.agg.count_where(rank_ht.positive_train_site),
+            n_vqsr_neg_train=hl.agg.count_where(rank_ht.negative_train_site)
+        )
+    )
+
+
+def default_aggregators(ht: hl.Table) -> Dict[str, hl.expr.Aggregator]:
+    #    Requires that `info` be annotate on the Table with a struct that includes QD, FS, and MQ
+    # Load external evaluation data
+    clinvar = hl.read_table(clinvar_ht_path)[ht.key]
+    info = hl.read_table(get_info_ht_path())[ht.key]
+    # TODO: Can stay
+    info = info.annotate(
+        fail_hard_filters=(info.info.QD < 2) | (info.info.FS > 60) | (info.info.MQ < 30)
+    )
+    truth_data = hl.read_table(truth_ht_path)[ht.key]
+    fam = hl.read_table(fam_stats_ht_path)[ht.key]
+
+    return dict(
+        n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
+        n_de_novos_hq=hl.agg.sum(fam.n_de_novos_hq),
+        n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
+        n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
+        n_trans_singletons=hl.agg.filter(ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)),
+        n_untrans_singletons=hl.agg.filter((ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
+                                           hl.agg.sum(fam.tdt.u)),  # TODO adapt names
+        # n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
+        n_omni=hl.agg.count_where(truth_data.omni),
+        n_mills=hl.agg.count_where(truth_data.mills),
+        n_hapmap=hl.agg.count_where(truth_data.hapmap),
+        n_kgp_phase1_hc=hl.agg.count_where(truth_data.kgp_phase1_hc),
+        fail_hard_filters=hl.agg.count_where(rank_ht.fail_hard_filters)
+    )
+
+
+def compute_binned_truth_sample_concordance(
+        ht: hl.Table,
+        binned_rank_score_ht: hl.Table
+) -> hl.Table:
+    """
+    The input HT should contain two row fields:
+    * GT: a CallExpression containing the genotype of the evaluation data for the sample
+    * truth_GT: a CallExpression containing the genotype of the truth sample
+
+    The table is grouped by global/truth sample rank, bin and variant type and
+    contains TP, FP and FN.
+
+    :param Table ht: Input HT
+    :param Table binned_rank_score_ht: Table with the binned rank for each variant
+    :return: Binned truth sample concordance HT
+    :rtype: Table
+    """
+
+    # Annotate score and global rank
+    indexed_ranked_score_ht = binned_rank_score_ht[ht.key]
+    ht = ht.annotate(
+    score=indexed_ranked_score_ht.score,
+    global_rank=indexed_ranked_score_ht.rank
+    )
+
+    # Annotate the truth sample rank
+    ht = compute_binned_rank(
+        ht,
+        score_expr=ht.score,
+        rank_expr={'truth_sample_rank': hl.expr.bool(True)},
+        n_bins=100
+    )
+
+    # Explode the global and truth sample ranks
+    ht = ht.annotate(rank=[
+        hl.tuple(['global_rank', ht.global_rank]),
+        hl.tuple(['truth_sample_rank', ht.truth_sample_rank])
+    ])
+
+    ht = ht.explode(ht.rank)
+    ht = ht.annotate(
+        rank_id=ht.rank[0],
+        bin=hl.int(ht.rank[1])
+    )
+
+    # Compute TP, FP and FN by rank_id, variant type and bin
+    return ht.group_by(
+        'rank_id',
+        'snv',
+        'bin'
+    ).aggregate(
+        # TP => allele is found in both data sets
+        tp=hl.agg.count_where(ht.GT.is_non_ref() & ht.truth_GT.is_non_ref()),
+        # FP => allele is found only in test data set
+        fp=hl.agg.count_where(ht.GT.is_non_ref() & hl.or_else(ht.truth_GT.is_hom_ref(), True)),
+        # FN => allele is found in truth data only
+        fn=hl.agg.count_where(ht.GT.is_hom_ref() & hl.or_else(ht.truth_GT.is_non_ref(), True)),
+        min_score=hl.agg.min(ht.score),
+        max_score=hl.agg.max(ht.score),
+        n_alleles=hl.agg.count()
+    ).repartition(5)
+
+
+def create_truth_sample_ht(
+        mt: hl.MatrixTable,
+        truth_mt: hl.MatrixTable,
+        high_confidence_intervals_ht: hl.Table,
+        keep_lowqual: bool
+) -> hl.Table:
+    """
+    Computes a table comparing a truth sample in callset vs the truth.
+
+    :param MatrixTable mt: MT of truth sample from callset to be compared to truth
+    :param MatrixTable truth_mt: MT of truth sample
+    :param Table high_confidence_intervals_ht: High confidence interval HT
+    :param bool keep_lowqual: If False lowqual variants are removed
+    :return:
+    :rtype: Table
+    """
+
+    def split_filter_and_flatten_ht(truth_mt: hl.MatrixTable, high_confidence_intervals_ht: hl.Table) -> hl.Table:
+        """
+        Splits a truth sample MT and filter it to the given high confidence intervals.
+        Then "flatten" it as a HT by annotating GT in a row field.
+
+        :param MatrixTable truth_mt: Truth sample MT
+        :param Table high_confidence_intervals_ht: High confidence intervals
+        :return: Truth sample table with GT as a row annotation
+        :rtype: Table
+        """
+        assert(truth_mt.count_cols() == 1)
+
+        if not 'was_split' in truth_mt.row:
+            truth_mt = hl.split_multi_hts(truth_mt)
+
+        truth_mt = truth_mt.filter_rows(
+            hl.is_defined(high_confidence_intervals_ht[truth_mt.locus])
+        )
+        truth_mt = truth_mt.rename({'GT': '_GT'})
+        return truth_mt.annotate_rows(GT=hl.agg.take(truth_mt._GT, 1)[0]).rows()
+
+    # Load truth sample MT,
+    # restrict it to high confidence intervals
+    # and flatten it to a HT by annotating GT in a row annotation
+    truth_ht = split_filter_and_flatten_ht(
+        truth_mt,
+        high_confidence_intervals_ht
+    )
+    truth_ht = truth_ht.rename({f: f'truth_{f}' for f in truth_ht.row_value})
+
+    #  Similarly load, filter and flatten callset truth sample MT
+    ht = split_filter_and_flatten_ht(
+        mt,
+        high_confidence_intervals_ht
+    )
+
+
+    # Outer join of truth and callset truth and annotate the score and global rank bin
+    ht = truth_ht.join(ht, how="outer")
+    ht = ht.annotate(
+        snv=hl.is_snp(ht.alleles[0], ht.alleles[1])
+    )
 
     return ht

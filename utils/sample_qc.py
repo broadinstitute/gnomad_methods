@@ -425,7 +425,7 @@ def get_sex_expr(
                         sex_stats['xx'].x.mean + (aneuploidy_cutoff * sex_stats['xx'].x.stdev)
                     ],
                     [
-                        abs(sex_stats['xx'].y.mean - (aneuploidy_cutoff * sex_stats['xx'].y.stdev)),
+                        sex_stats['xx'].y.mean + (aneuploidy_cutoff * sex_stats['xx'].y.stdev),
                         sex_stats['xy'].y.mean + (normal_ploidy_cutoff * sex_stats['xy'].y.stdev), 
                         sex_stats['xy'].y.mean + (aneuploidy_cutoff * sex_stats['xy'].y.stdev)
                     ]

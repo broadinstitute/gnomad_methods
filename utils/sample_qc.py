@@ -384,8 +384,8 @@ def get_ploidy_cutoffs(
     :param float f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
     :param int normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes.
     :param int aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
-    :return: Tuple of ploidy cutoff tuples: ((chrX cutoffs), (chrY cutoffs))
-    :rtype: tuple
+    :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
+    :rtype: Tuple
     """
     # Group sex chromosome ploidy table by f_stat cutoff and get mean/stdev for chrX/Y ploidies
     sex_stats = ht.aggregate(
@@ -397,6 +397,8 @@ def get_ploidy_cutoffs(
             )
         )
     )
+    logger.info(f"XX stats: {sex_stats['xx']}") 
+    logger.info(f"XY stats: {sex_stats['xy']}")
 
     cutoffs = (
                 (
@@ -410,8 +412,8 @@ def get_ploidy_cutoffs(
                 )
             )
  
-    logger.info(f"XX stats: {sex_stats['xx']}") 
-    logger.info(f"XY stats: {sex_stats['xy']}")
+    logger.info(f"X ploidy cutoffs: {cutoffs[0]}") 
+    logger.info(f"Y ploidy cutoffs: {cutoffs[1]}")
     return cutoffs
 
 

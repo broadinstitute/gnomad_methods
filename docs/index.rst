@@ -11,4 +11,4 @@ Contents
 .. toctree::
    :maxdepth: 3
 
-   API Reference <api>
+   API Reference <api_reference/index>

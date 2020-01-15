@@ -377,7 +377,6 @@ def get_sex_expr(
 
     Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes. 
     Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies (samples with a single copy of X, three copies of X, two copies of Y). 
-    Note that this uses the aneuploidy_cutoff parameter to determine the minimum ploidy for a single copy of X and Y; this is intentionally permissive to account for loss of the sex chromosomes.
 
     Note that X0 is currently returned as 'X'.
     Also note that f-stat is used only to split the samples into roughly 'XX' and 'XY' categories and is not used in the final karyotype annotation.
@@ -398,12 +397,11 @@ def get_sex_expr(
         :param NumericExpression f_stat: Chromosome X f-stat
         :param float f_stat_cutoff: f-stat cutoff value. Assumes XX values will be below cutoff and XY values will be above cutoff.
         :param int normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes
-        :param int aneuploidy_cutoff: Number of standard deviations to use when determining lower ploidy limit and aneuploidy cutoff
+        :param int aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies
         :return: Tuple of ploidy cutoffs: (chrX cutoffs, chrY cutoffs)
         :rtype: tuple
         """
         ht = f_stat._indices.source
-        ht.describe()
 
         # Group sex chromosome ploidy table by f_stat cutoff and get mean/stdev for chrX/Y ploidies
         sex_stats = ht.aggregate(
@@ -420,12 +418,12 @@ def get_sex_expr(
         # Returns tuple of cutoffs: [(single X lower, single X upper), (double X lower, double X upper), (triple X lower)], [(single Y lower, single Y upper, double Y lower]
         cutoffs = (
                     [
-                        (sex_stats['xy'].x.mean - (aneuploidy_cutoff * sex_stats['xy'].x.stdev), sex_stats['xy'].x.mean + (normal_ploidy_cutoff * sex_stats['xy'].x.stdev)),
+                        sex_stats['xy'].x.mean + (normal_ploidy_cutoff * sex_stats['xy'].x.stdev),
                         (sex_stats['xx'].x.mean - (normal_ploidy_cutoff * sex_stats['xx'].x.stdev), sex_stats['xx'].x.mean + (normal_ploidy_cutoff * sex_stats['xx'].x.stdev)),
                         sex_stats['xx'].x.mean + (aneuploidy_cutoff * sex_stats['xx'].x.stdev)
                     ],
                     [
-                        sex_stats['xx'].y.mean + (aneuploidy_cutoff * sex_stats['xx'].y.stdev),
+                        sex_stats['xx'].y.mean + (normal_ploidy_cutoff * sex_stats['xx'].y.stdev),
                         sex_stats['xy'].y.mean + (normal_ploidy_cutoff * sex_stats['xy'].y.stdev), 
                         sex_stats['xy'].y.mean + (aneuploidy_cutoff * sex_stats['xy'].y.stdev)
                     ]
@@ -441,9 +439,7 @@ def get_sex_expr(
         X_karyotype=(
             hl.case()
                 .when(
-                    ((chr_x_ploidy > x_ploidy_cutoffs[0][0]) &
-                    (chr_x_ploidy < x_ploidy_cutoffs[0][1])),
-                    'X')
+                    chr_x_ploidy < x_ploidy_cutoffs[0], 'X')
                 .when(
                     ((chr_x_ploidy > x_ploidy_cutoffs[1][0]) &
                     (chr_x_ploidy < x_ploidy_cutoffs[1][1])),

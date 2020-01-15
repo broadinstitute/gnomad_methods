@@ -368,12 +368,12 @@ def get_ploidy_cutoffs(
     f_stat_cutoff: float, 
     normal_ploidy_cutoff: int = 5, 
     aneuploidy_cutoff: int = 6
-) -> tuple:
+) -> Tuple[Tuple[float, Tuple[float, float], float], Tuple[Tuple[float, float], float]]:
     """
     Gets chromosome X and Y ploidy cutoffs for XY and XX samples. Note this assumes the input hail Table has the fields f_stat, chrX_ploidy, and chrY_ploidy.
-    Returns a tuple of sex chromosome ploidy cutoffs: ([x_ploidy_cutoffs], [y_ploidy_cutoffs]).
-    x_ploidy_cutoffs: [upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X]
-    y_ploidy_cutoffs: [lower cutoff for single Y, upper cutoff for single Y, lower cutoff for double Y]
+    Returns a tuple of sex chromosome ploidy cutoffs: ((x_ploidy_cutoffs), (y_ploidy_cutoffs)).
+    x_ploidy_cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
+    y_ploidy_cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
 
     Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes. 
     Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies. 
@@ -384,7 +384,7 @@ def get_ploidy_cutoffs(
     :param float f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
     :param int normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes.
     :param int aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
-    :return: Tuple of ploidy cutoff lists: ([chrX cutoffs], [chrY cutoffs])
+    :return: Tuple of ploidy cutoff tuples: ((chrX cutoffs), (chrY cutoffs))
     :rtype: tuple
     """
     # Group sex chromosome ploidy table by f_stat cutoff and get mean/stdev for chrX/Y ploidies
@@ -399,16 +399,15 @@ def get_ploidy_cutoffs(
     )
 
     cutoffs = (
-                [
+                (
                     sex_stats["xy"].x.mean + (normal_ploidy_cutoff * sex_stats["xy"].x.stdev),
                     (sex_stats["xx"].x.mean - (normal_ploidy_cutoff * sex_stats["xx"].x.stdev), sex_stats["xx"].x.mean + (normal_ploidy_cutoff * sex_stats["xx"].x.stdev)),
                     sex_stats["xx"].x.mean + (aneuploidy_cutoff * sex_stats["xx"].x.stdev)
-                ],
-                [
-                    sex_stats["xx"].y.mean + (normal_ploidy_cutoff * sex_stats["xx"].y.stdev),
-                    sex_stats["xy"].y.mean + (normal_ploidy_cutoff * sex_stats["xy"].y.stdev), 
+                ),
+                (
+                    (sex_stats["xx"].y.mean + (normal_ploidy_cutoff * sex_stats["xx"].y.stdev), sex_stats["xy"].y.mean + (normal_ploidy_cutoff * sex_stats["xy"].y.stdev)), 
                     sex_stats["xy"].y.mean + (aneuploidy_cutoff * sex_stats["xy"].y.stdev)
-                ]
+                )
             )
  
     logger.info(f"XX stats: {sex_stats['xx']}") 
@@ -419,8 +418,8 @@ def get_ploidy_cutoffs(
 def get_sex_expr(
     chr_x_ploidy: hl.expr.NumericExpression,
     chr_y_ploidy: hl.expr.NumericExpression,
-    x_ploidy_cutoffs: list,
-    y_ploidy_cutoffs: list,
+    x_ploidy_cutoffs: Tuple[float, Tuple[float, float], float],
+    y_ploidy_cutoffs: Tuple[Tuple[float, float], float],
 ) -> hl.expr.StructExpression:
     """
     Creates a struct with the following annotation:
@@ -432,8 +431,8 @@ def get_sex_expr(
 
     :param NumericExpression chr_x_ploidy: Chromosome X ploidy (or relative ploidy)
     :param NumericExpression  chr_y_ploidy: Chromosome Y ploidy (or relative ploidy)
-    :param list x_ploidy_cutoffs: List of X chromosome ploidy cutoffs: [upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X]
-    :param list y_ploidy_cutoffs: List of Y chromosome ploidy cutoffs: [lower cutoff for single Y, upper cutoff for single Y, lower cutoff for double Y]
+    :param list x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
+    :param list y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
     :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype
     :rtype: StructExpression
     """
@@ -453,13 +452,13 @@ def get_sex_expr(
         ),
         Y_karyotype=(
             hl.case()
-                .when(chr_y_ploidy < y_ploidy_cutoffs[0], "")
+                .when(chr_y_ploidy < y_ploidy_cutoffs[0][0], "")
                 .when(
-                    ((chr_y_ploidy > y_ploidy_cutoffs[0]) &
-                    (chr_y_ploidy < y_ploidy_cutoffs[1])),
+                    ((chr_y_ploidy > y_ploidy_cutoffs[0][0]) &
+                    (chr_y_ploidy < y_ploidy_cutoffs[0][1])),
                     "Y")
                 .when(
-                     chr_y_ploidy >= y_ploidy_cutoffs[2],
+                     chr_y_ploidy >= y_ploidy_cutoffs[1],
                     "YY")
                 .default("Ambiguous")
             )

@@ -1,3 +1,5 @@
+import itertools
+
 from .generic import *
 
 
@@ -160,10 +162,13 @@ def generate_fam_stats_expr(
     )
 
     fam_stats = fam_stats.select(
-        **{
-            f'n_transmitted_{name}': fam_stats[name][0],
-            f'n_untransmitted_{name}': fam_stats[name][1]
-        } for name in fam_stats
+        **dict(itertools.chain.from_iterable(
+            [
+                (f'n_transmitted_{name}', fam_stats[name][0]),
+                (f'n_untransmitted_{name}', fam_stats[name][1]),
+            ]
+            for name in fam_stats
+        ))
     )
 
     # Create de novo counters

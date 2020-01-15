@@ -398,7 +398,6 @@ def get_ploidy_cutoffs(
         )
     )
 
-    # Set cutoffs -- keep cutoffs permissive to account for loss of sex chromosomes
     cutoffs = (
                 [
                     sex_stats["xy"].x.mean + (normal_ploidy_cutoff * sex_stats["xy"].x.stdev),

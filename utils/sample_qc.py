@@ -415,7 +415,7 @@ def get_sex_expr(
         )
 
         # Set cutoffs -- keep cutoffs permissive to account for loss of sex chromosomes
-        # Returns tuple of cutoffs: [(single X lower, single X upper), (double X lower, double X upper), (triple X lower)], [(single Y lower, single Y upper, double Y lower]
+        # Returns tuple of cutoffs: [(single X lower, single X upper), (double X lower, double X upper), (triple X lower)], [single Y lower, single Y upper, double Y lower]
         cutoffs = (
                     [
                         sex_stats['xy'].x.mean + (normal_ploidy_cutoff * sex_stats['xy'].x.stdev),

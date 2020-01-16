@@ -281,9 +281,9 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
     """
     from gnomad_hail.resources.basics import vep_config_path, context_ht_path
 
+    if reference is None:
+        reference = hl.default_reference().name
     if reference_vep_ht is None:
-        if reference is None:
-            reference = hl.default_reference().name
 
         possible_refs = ('GRCh37', 'GRCh38')
         if reference not in possible_refs:

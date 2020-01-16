@@ -281,19 +281,15 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
     """
     from gnomad_hail.resources.basics import vep_config_path, context_ht_path
 
-    VEP_REFERENCES = {
-        'GRCh37': context_ht_path(),
-        'GRCh38': '',
-    }
-
     if reference_vep_ht is None:
         if reference is None:
             reference = hl.default_reference().name
 
-        if reference not in VEP_REFERENCES:
-            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(VEP_REFERENCES.keys())}')
+        possible_refs = ('GRCh37', 'GRCh38')
+        if reference not in possible_refs:
+            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}')
 
-        reference_vep_ht = hl.read_table(VEP_REFERENCES[reference])
+        reference_vep_ht = context_ht_path(reference)
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 

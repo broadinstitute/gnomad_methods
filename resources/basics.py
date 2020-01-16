@@ -450,6 +450,7 @@ REFERENCE_DATA = {
     },
     'GRCh38': {
         'vep_config': 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht',
         'methylation': 'gs://gnomad-resources/methylation/hail-0.2/methylation_GRCh38.ht',
     }
 }

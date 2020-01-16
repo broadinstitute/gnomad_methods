@@ -93,12 +93,23 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
 def adjusted_sex_ploidy_expr(
         locus_expr: hl.expr.LocusExpression,
         gt_expr: hl.expr.CallExpression,
-        sex_expr: hl.expr.StringExpression,
-        male_str: str = 'male',
-        female_str: str = 'female'
+        karyotype_expr: hl.expr.StringExpression,
+        xy_karyotype_str: str = 'XY',
+        xx_karyotype_str: str = 'XX'
 ) -> hl.expr.CallExpression:
-    male = sex_expr == male_str
-    female = sex_expr == female_str
+    """
+    Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
+    
+    :param LocusExpression locus_expr: Locus
+    :param CallExpression gt_expr: Genotype
+    :param StringExpression karyotype_expr: Karyotype
+    :param str xy_karyotype_str: Male sex karyotype representation
+    :param xx_karyotype_str: Female sex karyotype representation
+    :return: Genotype adjusted for sex ploidy
+    :rtype: CallExpression
+    """
+    male = karyotype_expr == xy_karyotype_str
+    female = karyotype_expr == xx_karyotype_str
     x_nonpar = locus_expr.in_x_nonpar()
     y_par = locus_expr.in_y_par()
     y_nonpar = locus_expr.in_y_nonpar()
@@ -134,12 +145,20 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     )
 
 
-def read_list_data(input_file: str) -> List[str]:
-    if input_file.startswith('gs://'):
-        hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])
-        f = gzip.open("/" + os.path.basename(input_file)) if input_file.endswith('gz') else open("/" + os.path.basename(input_file))
+def read_list_data(input_file_path: str) -> List[str]:
+    """
+    Reads a file input into a python list (each line will be an element).
+    Supports Google storage paths and .gz compression.
+    
+    :param str input_file_path: File path
+    :return: List of lines
+    :rtype: List
+    """
+    if input_file_path.startswith('gs://'):
+        hl.hadoop_copy(input_file_path, 'file:///' + input_file_path.split("/")[-1])
+        f = gzip.open("/" + os.path.basename(input_file_path)) if input_file_path.endswith('gz') else open("/" + os.path.basename(input_file_path))
     else:
-        f = gzip.open(input_file) if input_file.endswith('gz') else open(input_file)
+        f = gzip.open(input_file_path) if input_file_path.endswith('gz') else open(input_file_path)
     output = []
     for line in f:
         output.append(line.strip())

@@ -20,7 +20,7 @@ def pop_max_expr(
 
     :param ArrayExpression freq: ArrayExpression of Structs with fields ['AC', 'AF', 'AN', 'homozygote_count']
     :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq (as returned by annotate_freq)
-    :param set of str pops_to_exclude: Set of populations over which to calculate popmax
+    :param set of str pops_to_exclude: Set of populations to skip for popmax calcluation
     :return: Popmax struct
     :rtype: StructExpression
     """
@@ -266,7 +266,7 @@ def annotate_freq(
     Notes
     -----
     Currently this only supports bi-allelic sites.
-    The input `mt` need to have the following entry fields:
+    The input `mt` needs to have the following entry fields:
     - GT: a CallExpression containing the genotype
     - adj: a BooleanExpression containing whether the genotype is of high quality or not.
     All expressions arguments need to be expression on the input `mt`.

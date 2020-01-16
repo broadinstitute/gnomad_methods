@@ -462,7 +462,7 @@ def methylation_sites_ht_path(ref: str = 'GRCh37'):
 
 
 def context_ht_path(ref: str = 'GRCh37'):
-    if ref not in ('GRCh37', ):
+    if ref not in REFERENCES:
         raise DataException("Reference must be GRCh37")
     return REFERENCE_DATA[ref]['all_possible']
 

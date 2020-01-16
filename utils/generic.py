@@ -289,7 +289,7 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
         if reference not in possible_refs:
             raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}')
 
-        reference_vep_ht = context_ht_path(reference)
+        reference_vep_ht = hl.read_table(context_ht_path(reference))
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 

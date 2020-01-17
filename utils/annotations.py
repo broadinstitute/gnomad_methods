@@ -63,7 +63,7 @@ def project_max_expr(
     Notes
     -----
     Only projects with AF > 0 are returned.
-    In case of ties, the project ordering is no guaranteed, and at most `n_projects` are returned.
+    In case of ties, the project ordering is not guaranteed, and at most `n_projects` are returned.
 
     :param StringExpression project_expr: column expression containing the project
     :param CallExpression gt_expr: entry expression containing the genotype

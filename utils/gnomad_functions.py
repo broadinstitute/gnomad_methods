@@ -90,6 +90,38 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     ), n_alt_alleles=hl.len(non_star_alleles))
 
 
+def adjusted_sex_ploidy_expr(
+        locus_expr: hl.expr.LocusExpression,
+        gt_expr: hl.expr.CallExpression,
+        karyotype_expr: hl.expr.StringExpression,
+        xy_karyotype_str: str = 'XY',
+        xx_karyotype_str: str = 'XX'
+) -> hl.expr.CallExpression:
+    """
+    Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
+    
+    :param LocusExpression locus_expr: Locus
+    :param CallExpression gt_expr: Genotype
+    :param StringExpression karyotype_expr: Karyotype
+    :param str xy_karyotype_str: Male sex karyotype representation
+    :param xx_karyotype_str: Female sex karyotype representation
+    :return: Genotype adjusted for sex ploidy
+    :rtype: CallExpression
+    """
+    male = karyotype_expr == xy_karyotype_str
+    female = karyotype_expr == xx_karyotype_str
+    x_nonpar = locus_expr.in_x_nonpar()
+    y_par = locus_expr.in_y_par()
+    y_nonpar = locus_expr.in_y_nonpar()
+    return (
+        hl.case(missing_false=True)
+            .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
+            .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
+            .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
+            .default(gt_expr)
+    )
+
+
 def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
                       male_str: str = 'male', female_str: str = 'female') -> hl.MatrixTable:
     """
@@ -102,62 +134,31 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     :return: MatrixTable with fixed ploidy for sex chromosomes
     :rtype: MatrixTable
     """
-    male = sex_expr == male_str
-    female = sex_expr == female_str
-    x_nonpar = mt.locus.in_x_nonpar()
-    y_par = mt.locus.in_y_par()
-    y_nonpar = mt.locus.in_y_nonpar()
     return mt.annotate_entries(
-        GT=hl.case(missing_false=True)
-        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
-        .default(mt.GT)
+        GT=adjusted_sex_ploidy_expr(
+            mt.locus,
+            mt.GT,
+            sex_expr,
+            male_str,
+            female_str
+        )
     )
 
 
-def add_popmax_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
+def read_list_data(input_file_path: str) -> List[str]:
     """
-    Calculates popmax (add an additional entry into freq with popmax: pop)
-
-    :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom']
-    :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq
-    :param set of str populations: Set of populations over which to calculate popmax
-    :return: Frequency data with annotated popmax
-    :rtype: ArrayExpression
+    Reads a file input into a python list (each line will be an element).
+    Supports Google storage paths and .gz compression.
+    
+    :param str input_file_path: File path
+    :return: List of lines
+    :rtype: List
     """
-    pops_to_use = hl.literal(populations)
-    freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(freq, freq_meta))
-    freq_filtered = hl.filter(lambda f: (f.meta.size() == 2) & (f.meta.get('group') == 'adj') &
-                                        pops_to_use.contains(f.meta.get('pop')) & (f.AC > 0), freq)
-    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
-    return hl.or_missing(hl.len(sorted_freqs) > 0,
-        hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
-                  homozygote_count=sorted_freqs[0].homozygote_count,
-                  pop=sorted_freqs[0].meta['pop']))
-
-
-def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.MatrixTable:
-    """
-    First pass of projectmax (returns aggregated MT with project_max field)
-
-    :param MatrixTable mt: Input MT
-    :param StringExpression loc: Column expression location of project ID (e.g. mt.meta.pid)
-    :return: Frequency data with annotated project_max
-    :rtype: MatrixTable
-    """
-    mt = mt.annotate_cols(project=loc)
-    agg_mt = mt.group_cols_by(mt.project).aggregate(callstats=hl.agg.call_stats(mt.GT, mt.alleles))
-    return agg_mt.annotate_rows(project_max=hl.agg.take(hl.struct(**agg_mt.callstats, project=agg_mt.project),
-                                                        5, -agg_mt.callstats.AF[1]))
-
-
-def read_list_data(input_file: str) -> List[str]:
-    if input_file.startswith('gs://'):
-        hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])
-        f = gzip.open("/" + os.path.basename(input_file)) if input_file.endswith('gz') else open("/" + os.path.basename(input_file))
+    if input_file_path.startswith('gs://'):
+        hl.hadoop_copy(input_file_path, 'file:///' + input_file_path.split("/")[-1])
+        f = gzip.open("/" + os.path.basename(input_file_path)) if input_file_path.endswith('gz') else open("/" + os.path.basename(input_file_path))
     else:
-        f = gzip.open(input_file) if input_file.endswith('gz') else open(input_file)
+        f = gzip.open(input_file_path) if input_file_path.endswith('gz') else open(input_file_path)
     output = []
     for line in f:
         output.append(line.strip())

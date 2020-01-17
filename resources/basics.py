@@ -3,13 +3,13 @@ from typing import *
 from gnomad_hail.utils.generic import file_exists
 
 CURRENT_HAIL_VERSION = "0.2"
-CURRENT_RELEASE = "2.1.1"
+CURRENT_RELEASE = "2.1.1"  #: Current gnomAD release.
 CURRENT_GENOME_META = "2018-10-11"  # YYYY-MM-DD
 CURRENT_EXOME_META = "2018-10-11"
 CURRENT_FAM = '2018-04-12'
 CURRENT_DUPS = '2017-10-04'
 
-RELEASES = ["2.0.1", "2.0.2", "2.1", "2.1.1"]
+RELEASES = ["2.0.1", "2.0.2", "2.1", "2.1.1"]  #: All available gnomAD releases.
 
 SUBPOPS = {'NFE': ['BGR', 'EST', 'NWE', 'SEU', 'SWE', 'ONF'],
            'EAS': ['KOR', 'JPN', 'OEA']

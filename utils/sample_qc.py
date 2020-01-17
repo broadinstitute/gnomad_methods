@@ -18,10 +18,10 @@ def filter_rows_for_qc(
     Annotates rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
     AF and callrate thresholds are taken from gnomAD QC; inbreeding coeff, MQ, FS and QD filters are taken from GATK best practices
 
-    Note
-    ----
-    This function expect the typical ``info`` annotation of type struct with fields ``MQ``, ``FS`` and ``QD``
-    if applying hard filters.
+    .. note::
+
+        This function expect the typical ``info`` annotation of type struct with fields ``MQ``, ``FS`` and ``QD``
+        if applying hard filters.
 
     :param MatrixTable mt: Input MT
     :param float min_af: Minimum site AF to keep. Not applied if set to ``None``.
@@ -179,11 +179,11 @@ def compute_callrate_mt(
     Computes a sample/interval MT with each entry containing the call rate for that sample/interval.
     This can be used as input for imputing exome sequencing platforms.
 
-    Note
-    ----
-    The input interval HT should have a key of type Interval.
-    The resulting table will have a key of the same type as the `intervals_ht` table and
-    contain an `interval_info` field containing all non-key fields of the `intervals_ht`.
+    .. note::
+
+        The input interval HT should have a key of type Interval.
+        The resulting table will have a key of the same type as the `intervals_ht` table and
+        contain an `interval_info` field containing all non-key fields of the `intervals_ht`.
 
     :param MatrixTable mt: Input MT
     :param Table intervals_ht: Table containing the intervals. This table has to be keyed by locus.

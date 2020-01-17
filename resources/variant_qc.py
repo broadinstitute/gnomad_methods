@@ -60,8 +60,8 @@ def rf_path(data_type: str,
             hail_version: str = CURRENT_HAIL_VERSION
             ) -> str:
     """
-
     Gets the path to the desired RF data.
+
     Data can take the following values:
         - 'training': path to the training data for a given run
         - 'model': path to pyspark pipeline RF model
@@ -149,6 +149,7 @@ def binned_concordance_path(data_type: str, truth_data: str, metric: str) -> str
 def release_ht_path(data_type: str, release_tag=RELEASE_VERSION, nested=True, with_subsets=True, temp=False):
     '''
     Fetch filepath for release (variant-only) Hail Tables
+
     :param str data_type: 'exomes' or 'genomes'
     :param str release_tag: String describing release version for use in output filepaths
     :param bool nested: If True, fetch Table in which variant annotations (e.g., freq, popmax, faf, and age histograms)
@@ -173,6 +174,7 @@ def release_ht_path(data_type: str, release_tag=RELEASE_VERSION, nested=True, wi
 def release_vcf_path(data_type: str, release_tag=RELEASE_VERSION, contig=None, coding_only=False):
     '''
     Fetch filepath for release (variant-only) VCFs
+
     :param str data_type: 'exomes' or 'genomes'
     :param str release_tag: String describing release version for use in output filepaths
     :param str contig: String containing the name of the desired reference contig

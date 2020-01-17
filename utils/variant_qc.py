@@ -12,8 +12,7 @@ def get_lowqual_expr(
         indel_phred_het_prior: 39  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
-    Computes lowqual threshold expression for either split or unsplit alleles based on
-    (AS_)QUALapprox
+    Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
 
     :param ArrayExpression alleles: Array of alleles
     :param ArraynumericExpression or NumericExpression qual_approx_expr: QUALapprox or AS_QUALapprox
@@ -205,14 +204,14 @@ def compute_binned_rank(
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
     randomly across the bins it spans.
 
-    Notes
-    -----
-    The `rank_expr` defines which data the rank(s) should be computed on. E.g., to get an SNV rank and an Indel rank,
-    the following could be used:
-    rank_expr={
-       'snv_rank': hl.is_snp(ht.alleles[0], ht.alleles[1]),
-       'indels_rank': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
-    }
+    .. note::
+
+        The `rank_expr` defines which data the rank(s) should be computed on. E.g., to get an SNV rank and an Indel rank,
+        the following could be used:
+        rank_expr={
+        'snv_rank': hl.is_snp(ht.alleles[0], ht.alleles[1]),
+        'indels_rank': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
+        }
 
     :param Table ht: Input Table
     :param NumericExpression score_expr: Expression containing the score

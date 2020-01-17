@@ -60,10 +60,10 @@ def project_max_expr(
     - homozygote_count: int32,
     - project: str
 
-    Notes
-    -----
-    Only projects with AF > 0 are returned.
-    In case of ties, the project ordering is not guaranteed, and at most `n_projects` are returned.
+    .. note::
+
+        Only projects with AF > 0 are returned.
+        In case of ties, the project ordering is not guaranteed, and at most `n_projects` are returned.
 
     :param StringExpression project_expr: column expression containing the project
     :param CallExpression gt_expr: entry expression containing the genotype
@@ -186,11 +186,11 @@ def qual_hist_expr(
     """
     Returns a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
 
-    Notes
-    -----
-    - If `gt_expr` is provided, will return histograms for non-reference samples only as well as all samples.
-    - `gt_expr` is required for the allele-balance histogram, as it is only computed on het samples.
-    - If `adj_expr` is provided, additional histograms are computed using only adj samples.
+    .. note::
+
+        - If `gt_expr` is provided, will return histograms for non-reference samples only as well as all samples.
+        - `gt_expr` is required for the allele-balance histogram, as it is only computed on het samples.
+        - If `adj_expr` is provided, additional histograms are computed using only adj samples.
 
     :param CallExpression gt_expr: Entry expression containing genotype
     :param NumericExpression gq_expr: Entry expression containing genotype quality
@@ -263,16 +263,16 @@ def annotate_freq(
     Adds a row annotation `freq` to the input `mt` with stratified allele frequencies,
     and a global annotation `freq_meta` with metadata.
 
-    Notes
-    -----
-    Currently this only supports bi-allelic sites.
-    The input `mt` needs to have the following entry fields:
-    - GT: a CallExpression containing the genotype
-    - adj: a BooleanExpression containing whether the genotype is of high quality or not.
-    All expressions arguments need to be expression on the input `mt`.
+    .. note::
 
-    `freq` row annotation
-    ---------------------
+        Currently this only supports bi-allelic sites.
+        The input `mt` needs to have the following entry fields:
+        - GT: a CallExpression containing the genotype
+        - adj: a BooleanExpression containing whether the genotype is of high quality or not.
+        All expressions arguments need to be expression on the input `mt`.
+
+    .. rubric:: `freq` row annotation
+
     The `freq` row annotation is an Array of Struct, with each Struct containing the following fields:
     - AC: int32,
     - AF: float64,
@@ -282,14 +282,14 @@ def annotate_freq(
     Each element of the array corresponds to a stratification of the data,
     and the metadata about these annotations is stored in the globals.
 
-    Global `freq_meta` metadata annotation
-    --------------------------------------
+    .. rubric:: Global `freq_meta` metadata annotation
+
     The global annotation `freq_meta` is added to the input `mt`. It is a list of dict.
     Each element of the list contains metadata on a frequency stratification and the index in the list corresponds
     to the index of that frequency stratification in the `freq` row annotation.
 
-    The `downsamplings` parameter
-    -----------------------------
+    .. rubric:: The `downsamplings` parameter
+
     If the `downsamplings` parameter is used, frequencies will be computed for all samples and by population
     (if `pop_expr` is specified) by downsampling the number of samples without replacement to each of the numbers specified in the
     `downsamplings` array, provided that there are enough samples in the dataset.

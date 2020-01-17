@@ -108,11 +108,10 @@ def plot_metric(df: pd.DataFrame,
 
     This function generates scatter plots with the metric bin on x-axis and a user-defined function on the y-axis.
     The data for the y-axis function needs to from the columns specified in `cols`. The function is specified with the `y_fun` argument and data columns are access as a list.
-    As an example, plotting Transition to transversion ratio is done as follows:
-    ```
-    plot_metric(snvs, 'Ti/Tv', ['n_ti', 'n_tv'], y_fun=lambda x: x[0]/x[1], colors=colors)
+    As an example, plotting Transition to transversion ratio is done as follows::
 
-    ```
+        plot_metric(snvs, 'Ti/Tv', ['n_ti', 'n_tv'], y_fun=lambda x: x[0]/x[1], colors=colors)
+
     In this command, `x[0]` correspond to the  first column selected (`'n_ti'`)  and `x[1]` to the second (`'n_tv'`).
 
 
@@ -427,8 +426,8 @@ def plot_concordance_pr(
     :param dict of str -> str colors: Optional colors to use (model name -> desired color)
     :param str size_prop: Either 'radius' or 'area' can be specified. If either is specified, the points will be sized proportionally to the amount of data in that point.
     :param list of int bins_to_label: Bins to label
-    :return Bokeh grid of plots
-    :rtype Tabs
+    :return: Bokeh grid of plots
+    :rtype: Tabs
     """
 
     if colors is None:

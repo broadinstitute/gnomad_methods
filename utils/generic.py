@@ -645,11 +645,10 @@ def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT'
         2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
 
 
-        Typical usage:
-        ```
+        Typical usage::
+
             trio_matrix = hl.trio_matrix(mt, ped)
             phased_trio_matrix = phase_trio_matrix_by_transmission(trio_matrix)
-        ```
 
         :param MatrixTable tm: Trio MatrixTable (entries should be a Struct with `proband_entry`, `mother_entry` and `father_entry` present)
         :param str call_field: genotype field name to phase
@@ -982,11 +981,11 @@ def assign_population_pcs(
         missing_label: str = 'oth'
 ) -> Tuple[Union[hl.Table, pd.DataFrame], Any]: # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     """
-
     This function uses a random forest model to assign population labels based on the results of PCA.
     Default values for model and assignment parameters are those used in gnomAD.
 
     As input, this function can either take:
+
     - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
         - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
         - A Hail Table will be returned as output
@@ -994,10 +993,10 @@ def assign_population_pcs(
         - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
         - A pandas DataFrame is returned as output
 
-    Note
-    ----
-    If you have a Pandas Dataframe and have all PCs as an array in a single column, the
-    `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
+    .. note::
+
+        If you have a Pandas Dataframe and have all PCs as an array in a single column, the
+        `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
 
     :param Table or DataFrame pop_pc_pd: Input Hail Table or Pandas Dataframe
     :param ArrayExpression or list of str pc_cols: Columns storing the PCs to use
@@ -1168,9 +1167,9 @@ def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Flo
     This is implemented based on the GATK InbreedingCoeff metric:
     https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
 
-    Note
-    ----
-    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+    .. note::
+
+        The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param CallExpression call: Expression giving the calls in the MT
     :return: Site inbreeding coefficient expression
@@ -1230,18 +1229,18 @@ def fs_from_sb(
     In addition to the default GATK behavior, setting `normalize` to `False` will perform a chi-squared test
     for large counts (> `min_cell_count`) instead of normalizing the cell values.
 
-    Note
-    ----
-    This function can either take
-    - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
-    - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+    .. note::
+
+        This function can either take
+        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
     :param ArrayNumericExpression or ArrayExpression sb: Count of ref/alt reads on each strand
-    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (`normalize`=True), or use a chi sq instead of FET (`normalize`=False)
+    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (normalize=True), or use a chi sq instead of FET (normalize=False)
     :param int min_cell_count: Maximum count for performing a FET
-    :param int min_count: Minimum total count to output `FS` (otherwise `null` it output)
+    :param int min_count: Minimum total count to output FS (otherwise null it output)
     :return: FS value
     :rtype: Int64Expression
     """

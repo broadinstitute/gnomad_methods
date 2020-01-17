@@ -285,13 +285,13 @@ def melt_kt(kt, columns_to_melt, key_column_name='variable', value_column_name='
     :param str value_column_name: What to call the value column
     :return: melted Key Table
     :rtype: KeyTable
-    return (kt
-            .annotate('comb = [{}]'.format(', '.join(['{{k: "{0}", value: {0}}}'.format(x) for x in columns_to_melt])))
-            .drop(columns_to_melt)
-            .explode('comb')
-            .annotate('{} = comb.k, {} = comb.value'.format(key_column_name, value_column_name))
-            .drop('comb'))
     """
+    # return (kt
+    #         .annotate('comb = [{}]'.format(', '.join(['{{k: "{0}", value: {0}}}'.format(x) for x in columns_to_melt])))
+    #         .drop(columns_to_melt)
+    #         .explode('comb')
+    #         .annotate('{} = comb.k, {} = comb.value'.format(key_column_name, value_column_name))
+    #         .drop('comb'))
     raise NotImplementedError
 
 
@@ -321,14 +321,14 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
     | 1:2:A:G |      AFR |   100  |    10  |
     +---------+----------+--------+--------+
 
-    This is done with:
+    This is done with::
 
-    columns_to_melt = {
-        'NFE': ['AC_NFE', 'Hom_NFE'],
-        'AFR': ['AC_AFR', 'Hom_AFR']
-    }
-    value_column_names = ['AC', 'Hom']
-    key_column_name = 'pop'
+        columns_to_melt = {
+            'NFE': ['AC_NFE', 'Hom_NFE'],
+            'AFR': ['AC_AFR', 'Hom_AFR']
+        }
+        value_column_names = ['AC', 'Hom']
+        key_column_name = 'pop'
 
     Note that len(value_column_names) == len(columns_to_melt[i]) for all in columns_to_melt
 
@@ -338,28 +338,27 @@ def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='va
     :param str key_column_name: What to call the key column
     :return: melted Key Table
     :rtype: KeyTable
-
-    if any([len(value_column_names) != len(v) for v in columns_to_melt.values()]):
-        logger.warning('Length of columns_to_melt sublist is not equal to length of value_column_names')
-        logger.warning('value_column_names = %s', value_column_names)
-        logger.warning('columns_to_melt = %s', columns_to_melt)
-
-    # I think this goes something like this:
-    fields = []
-    for k, v in columns_to_melt.items():
-        subfields = [': '.join(x) for x in zip(value_column_names, v)]
-        field = '{{k: "{0}", {1}}}'.format(k, ', '.join(subfields))
-        fields.append(field)
-
-    split_text = ', '.join(['{0} = comb.{0}'.format(x) for x in value_column_names])
-
-    return (kt
-            .annotate('comb = [{}]'.format(', '.join(fields)))
-            .drop([y for x in columns_to_melt.values() for y in x])
-            .explode('comb')
-            .annotate('{} = comb.k, {}'.format(key_column_name, split_text))
-            .drop('comb'))
     """
+    # if any([len(value_column_names) != len(v) for v in columns_to_melt.values()]):
+    #     logger.warning('Length of columns_to_melt sublist is not equal to length of value_column_names')
+    #     logger.warning('value_column_names = %s', value_column_names)
+    #     logger.warning('columns_to_melt = %s', columns_to_melt)
+
+    # # I think this goes something like this:
+    # fields = []
+    # for k, v in columns_to_melt.items():
+    #     subfields = [': '.join(x) for x in zip(value_column_names, v)]
+    #     field = '{{k: "{0}", {1}}}'.format(k, ', '.join(subfields))
+    #     fields.append(field)
+
+    # split_text = ', '.join(['{0} = comb.{0}'.format(x) for x in value_column_names])
+
+    # return (kt
+    #         .annotate('comb = [{}]'.format(', '.join(fields)))
+    #         .drop([y for x in columns_to_melt.values() for y in x])
+    #         .explode('comb')
+    #         .annotate('{} = comb.k, {}'.format(key_column_name, split_text))
+    #         .drop('comb'))
     raise NotImplementedError
 
 

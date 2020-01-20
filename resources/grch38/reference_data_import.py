@@ -1,5 +1,15 @@
 import argparse
-from .reference_data import *
+import hail as hl
+from .reference_data import (
+    purcell_5k,
+    na12878_giab,
+    clinvar,
+    dbsnp,
+    hapmap,
+    kgp,
+    kgp_omni,
+    mills,
+)
 
 NO_CHR_TO_CHR_CONTIG_RECODING = {str(x): f'chr{x}' for x in list(range(1, 23)) + ['X', 'Y']}
 NO_CHR_TO_CHR_CONTIG_RECODING['MT'] = 'chrM'

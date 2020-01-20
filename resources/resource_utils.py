@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from gnomad_hail import logger
+from gnomad_hail.utils.gnomad_functions import logger
 import hail as hl
 from abc import ABC, abstractmethod
 
@@ -83,7 +83,7 @@ class PedigreeResource(BaseResource):
         super().__init__(
             path=path,
             import_sources=import_sources,
-            expected_file_extension='.ped'
+            expected_file_extension='.fam'
         )
 
     def ht(self, delimiter=r"\\s+") -> hl.Table:
@@ -138,9 +138,13 @@ class BaseVersionedResource(BaseResource, ABC):
         return f'{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})'
 
 
-class VersionedTableResource(BaseVersionedResource, TableResource, ):
+class VersionedTableResource(BaseVersionedResource, TableResource):
     pass
 
 
 class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
+    pass
+
+
+class DataException(Exception):
     pass

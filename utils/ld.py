@@ -1,5 +1,8 @@
 from gnomad_hail.resources import *
 from hail.linalg import BlockMatrix
+from resources.grch37.gnomad import CURRENT_GENOME_RELEASE, CURRENT_EXOME_RELEASE, public_release
+
+CURRENT_RELEASE = CURRENT_GENOME_RELEASE + CURRENT_EXOME_RELEASE
 
 
 def ld_matrix_path(data_type: str, pop: str, common_only: bool = True, adj: bool = True, version: str = CURRENT_RELEASE):
@@ -113,7 +116,7 @@ def get_r_within_gene(bm: BlockMatrix, ld_index: hl.Table, gene: str, vep_ht: hl
     :rtype: Table
     """
     if vep_ht is None:
-        vep_ht = get_gnomad_public_data('exomes')
+        vep_ht = public_release('exomes').ht()
     if reference_genome is None:
         reference_genome = hl.default_reference().name
     intervals = hl.experimental.get_gene_intervals(gene_symbols=[gene], reference_genome=reference_genome)

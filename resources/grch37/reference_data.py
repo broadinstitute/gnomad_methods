@@ -30,7 +30,7 @@ kgp_omni = MatrixTableResource(
 mills = MatrixTableResource(
     path="gs://gnomad-public/truth-sets/hail-0.2/Mills_and_1000G_gold_standard.indels.b37.mt",
     import_sources={
-        "source_path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
+        "source_path": "gs://gnomad-public/truth-sets/source/Mills_and_1000G_gold_standard.indels.b37.vcf.bgz",
     },
 )
 

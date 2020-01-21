@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from gnomad_hail.utils.gnomad_functions import logger
 import hail as hl
+from hail.linalg import BlockMatrix
 from abc import ABC, abstractmethod
 
 
@@ -105,6 +106,27 @@ class PedigreeResource(BaseResource):
         return hl.Pedigree.read(self.path, delimiter=delimiter)
 
 
+class BlockMatrixResource(BaseResource):
+    """
+    A Hail MatrixTable resource
+    """
+
+    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, ):
+        super().__init__(
+            path=path,
+            import_sources=import_sources,
+            expected_file_extension='.bm'
+        )
+
+    def bm(self) -> BlockMatrix:
+        """
+        Read and return the Hail MatrixTable resource
+        :return: Hail MatrixTable resource
+        :rtype: MatrixTable
+        """
+        return BlockMatrix.read(self.path)
+
+
 class BaseVersionedResource(BaseResource, ABC):
     """
     Abstract class for a versioned resource
@@ -149,6 +171,14 @@ class VersionedTableResource(BaseVersionedResource, TableResource):
 
 
 class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
+    pass
+
+
+class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
+    pass
+
+
+class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
     pass
 
 

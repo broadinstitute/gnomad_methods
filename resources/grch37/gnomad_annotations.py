@@ -11,7 +11,7 @@ def _annotations_ht_path(data_type, annotation_type):
     :return: Path to annotations Table
     :rtype: str
     """
-    return 'gs://gnomad/annotations/hail-{0}/ht/{1}/gnomad.{1}.{2}.ht'.format(data_type, annotation_type)
+    return 'gs://gnomad/annotations/hail-0.2/ht/{0}/gnomad.{0}.{1}.ht'.format(data_type, annotation_type)
 
 
 def vep(data_type) -> TableResource:

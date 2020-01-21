@@ -127,12 +127,18 @@ class BaseVersionedResource(BaseResource, ABC):
             raise KeyError(
                 f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}.")
 
+        for version_name, version_resource in versions.items():
+            if version_resource.__class__ not in self.__class__.__bases__:
+                raise TypeError(f"Cannot create a {self.__class__.__name__} resource with version {version_name} of type {version_resource.__class__.__name__}")
+
+        self.default_version = default_version
+        self.versions = versions
+
         super().__init__(
             path=versions[default_version].path,
             import_sources=versions[default_version].import_sources
         )
-        self.default_version = default_version
-        self.versions = versions
+
 
     def __repr__(self):
         return f'{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})'

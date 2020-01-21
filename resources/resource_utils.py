@@ -18,12 +18,12 @@ class BaseResource(ABC):
         :param dict of str import_sources: Additional attributes for the resource
         """
 
-        if expected_file_extension and not path.endswith(expected_file_extension):
-            logger.warning(
-                f"Created the following TableResource with a path that doesn't ends with {expected_file_extension}: {self}")
-
         self.path = path
         self.import_sources = import_sources
+
+        if expected_file_extension and not path.endswith(expected_file_extension):
+            logger.warning(
+                f"Created the following {self.__class__.__name__} with a path that doesn't ends with {expected_file_extension}: {self}")
 
     def __repr__(self):
         attr_str = [f'path={self.path}']

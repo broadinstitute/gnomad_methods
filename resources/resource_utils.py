@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any
 from gnomad_hail.utils.gnomad_functions import logger
 import hail as hl
+from hail.linalg import BlockMatrix
 from abc import ABC, abstractmethod
 
 
@@ -18,12 +19,12 @@ class BaseResource(ABC):
         :param dict of str import_sources: Additional attributes for the resource
         """
 
-        if expected_file_extension and not path.endswith(expected_file_extension):
-            logger.warning(
-                f"Created the following TableResource with a path that doesn't ends with {expected_file_extension}: {self}")
-
         self.path = path
         self.import_sources = import_sources
+
+        if expected_file_extension and not path.endswith(expected_file_extension):
+            logger.warning(
+                f"Created the following {self.__class__.__name__} with a path that doesn't ends with {expected_file_extension}: {self}")
 
     def __repr__(self):
         attr_str = [f'path={self.path}']
@@ -105,6 +106,27 @@ class PedigreeResource(BaseResource):
         return hl.Pedigree.read(self.path, delimiter=delimiter)
 
 
+class BlockMatrixResource(BaseResource):
+    """
+    A Hail MatrixTable resource
+    """
+
+    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, ):
+        super().__init__(
+            path=path,
+            import_sources=import_sources,
+            expected_file_extension='.bm'
+        )
+
+    def bm(self) -> BlockMatrix:
+        """
+        Read and return the Hail MatrixTable resource
+        :return: Hail MatrixTable resource
+        :rtype: MatrixTable
+        """
+        return BlockMatrix.read(self.path)
+
+
 class BaseVersionedResource(BaseResource, ABC):
     """
     Abstract class for a versioned resource
@@ -127,12 +149,18 @@ class BaseVersionedResource(BaseResource, ABC):
             raise KeyError(
                 f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}.")
 
+        for version_name, version_resource in versions.items():
+            if version_resource.__class__ not in self.__class__.__bases__:
+                raise TypeError(f"Cannot create a {self.__class__.__name__} resource with version {version_name} of type {version_resource.__class__.__name__}")
+
+        self.default_version = default_version
+        self.versions = versions
+
         super().__init__(
             path=versions[default_version].path,
             import_sources=versions[default_version].import_sources
         )
-        self.default_version = default_version
-        self.versions = versions
+
 
     def __repr__(self):
         return f'{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})'
@@ -143,6 +171,14 @@ class VersionedTableResource(BaseVersionedResource, TableResource):
 
 
 class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
+    pass
+
+
+class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
+    pass
+
+
+class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
     pass
 
 

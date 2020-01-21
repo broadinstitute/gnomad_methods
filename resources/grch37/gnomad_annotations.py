@@ -1,7 +1,7 @@
-from gnomad_hail import CURRENT_HAIL_VERSION
 from gnomad_hail.resources.resource_utils import TableResource
 
-def _annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_VERSION):
+
+def _annotations_ht_path(data_type, annotation_type):
     """
     Get sites-level annotations
 
@@ -11,8 +11,7 @@ def _annotations_ht_path(data_type, annotation_type, hail_version=CURRENT_HAIL_V
     :return: Path to annotations Table
     :rtype: str
     """
-    return 'gs://gnomad/annotations/hail-{0}/ht/{1}/gnomad.{1}.{2}.ht'.format(hail_version, data_type,
-                                                                              annotation_type)
+    return 'gs://gnomad/annotations/hail-0.2/ht/{0}/gnomad.{0}.{1}.ht'.format(data_type, annotation_type)
 
 
 def vep(data_type) -> TableResource:

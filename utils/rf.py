@@ -6,7 +6,7 @@ from pyspark.ml.classification import *
 from pyspark.ml import *
 import hail as hl
 import pandas as pd
-from pyspark.sql.functions import udf, col
+from pyspark.sql.functions import udf, col  # pylint: disable=no-name-in-module
 from pyspark.sql.types import ArrayType, DoubleType
 
 def run_rf_test(

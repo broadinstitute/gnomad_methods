@@ -1,6 +1,8 @@
 import argparse
-from gnomad_hail.resources import *
-from gnomad_hail.utils.generic import flip_base, get_reference_genome 
+from typing import Union
+import hail as hl
+from gnomad_hail.resources.grch37.gnomad import public_release
+from gnomad_hail.utils.generic import flip_base, get_reference_genome
 import logging
 from os.path import dirname, basename
 import sys
@@ -162,8 +164,8 @@ def main(args):
 
         logger.info('Working on gnomAD {} release ht'.format(data_type))
         logger.info('Reading in release ht')
-        t = get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE)
-        logger.info('Variants in release ht: {}'.format(ht.count()))
+        t = public_release(data_type).ht()
+        logger.info('Variants in release ht: {}'.format(t.count()))
 
     else:
         data_type = None

@@ -1,3 +1,5 @@
+from bokeh.palettes import d3  # pylint: disable=no-name-in-module
+
 from gnomad_hail import *
 from gnomad_qc.resources.variant_qc import *
 from gnomad_hail.utils.plotting import *
@@ -433,7 +435,6 @@ def plot_concordance_pr(
 
     if colors is None:
         # Get a palette automatically
-        from bokeh.palettes import d3
         models = sorted(list(set([g[2] for g in pr_df.groups])))
         palette = d3['Category10'][max(3, len(models))]
         colors = {model: palette[i] for i, model in enumerate(models)}

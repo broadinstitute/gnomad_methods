@@ -13,11 +13,13 @@ from bokeh.layouts import gridplot, row, widgetbox
 from bokeh.plotting import figure, show, output_file
 from bokeh.io import output_notebook, push_notebook, export_png
 from bokeh.models.widgets import Tabs, Panel
-from bokeh.palettes import *
+from bokeh.palettes import d3, Spectral8, viridis  # pylint: disable=no-name-in-module
 from bokeh.models import *
 from typing import *
 from bokeh.plotting.helpers import stack
 from bokeh.transform import factor_cmap
+
+from .gnomad_functions import logger
 
 # Setting some defaults for Table.show
 if 'old_show' not in dir():
@@ -196,7 +198,6 @@ def plot_multi_hail_hist(hist_data: Dict[str, hl.Struct],
         alpha = 1.0/len(hist_data)
 
     if fill_color is None:
-        from bokeh.palettes import d3
         color_palette = d3['Category10'][max(3, len(hist_data))]
         fill_color = {hist_name: color_palette[i] for i, hist_name in enumerate(hist_data.keys())}
 
@@ -510,7 +511,6 @@ def pair_plot(
     :return: Grid of plots (column of rows)
     :rtype: Column
     """
-    from bokeh.palettes import viridis
 
     if tooltip_cols is None:
         tooltip_cols = [] if label_col is None else [label_col]

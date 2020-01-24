@@ -339,7 +339,3 @@ def fam(data_type: str, true_trios: bool = False) -> PedigreeResource:
         current_fam = CURRENT_GENOME_FAM
 
     return PedigreeResource(path=_fam_path(data_type, current_fam, true_trios))
-
-
-def vep_config_path():
-    return "gs://hail-common/vep/vep/vep85-loftee-gcloud.json"

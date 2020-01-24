@@ -1534,12 +1534,12 @@ def interval_length(interval: hl.Interval) -> int:
                 interval.end.position
         )
     else:
-        return interval.end.position - interval.start.positio
+        return interval.end.position - interval.start.position
 
 
 def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
     """
-    Reparitions a MatrixTable on read
+    Repartitions a MatrixTable on read
 
     :param str path: Path to input MatrixTable
     :param int n_partitions: Number of desired partitions

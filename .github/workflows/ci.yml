@@ -64,3 +64,9 @@ jobs:
           git push --force origin gh-pages
 
           rm $HOME/.ssh/id_rsa
+
+          # Restore the original working tree by checking out the
+          # commit that triggered the workflow.
+          # This restores requirements.txt so that @actions/cache
+          # can use it for determining the cache key.
+          git checkout ${GITHUB_SHA}

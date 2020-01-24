@@ -1,0 +1,72 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+jobs:
+  docs:
+    name: Build documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.7
+      - name: Use pip cache
+        uses: actions/cache@v1
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            pip-
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r docs/requirements.txt
+      - name: Build docs
+        run: ./docs/build.sh
+      - name: Publish to GitHub Pages
+        if: github.event_name == 'push'
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          # Create empty gh-pages branch
+          git checkout --orphan gh-pages
+
+          # Remove files other than docs
+          git rm -rf .
+          find . -name __pycache__ | xargs rm -r
+
+          # Move docs to root
+          mv docs/html/* ./
+          rm -r docs
+
+          # Tell GitHub not to treat this as a Jekyll site
+          touch .nojekyll
+
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+          git add .
+          git commit --allow-empty -m "Update docs"
+
+          mkdir -p $HOME/.ssh
+          echo "${DEPLOY_KEY}" > $HOME/.ssh/id_rsa
+          chmod 600 $HOME/.ssh/id_rsa
+          ssh-keyscan github.com >> $HOME/.ssh/known_hosts
+
+          git remote rm origin
+          git remote add origin git@github.com:${GITHUB_REPOSITORY}.git
+
+          git push --force origin gh-pages
+
+          rm $HOME/.ssh/id_rsa
+
+          # Restore the original working tree by checking out the
+          # commit that triggered the workflow.
+          # This restores requirements.txt so that @actions/cache
+          # can use it for determining the cache key.
+          git checkout ${GITHUB_SHA}

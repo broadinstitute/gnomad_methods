@@ -1539,7 +1539,7 @@ def interval_length(interval: hl.Interval) -> int:
 
 def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
     """
-    Repartitions a MatrixTable on read
+    Repartitions a MatrixTable on read. Currently the best way to increase the number of partitions in a MatrixTable.
 
     :param str path: Path to input MatrixTable
     :param int n_partitions: Number of desired partitions

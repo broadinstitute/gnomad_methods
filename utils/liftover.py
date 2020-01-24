@@ -180,16 +180,16 @@ def main(args):
     if 'was_split' not in t.row:
         t = hl.split_multi(t) if isinstance(t, hl.Table) else hl.split_multi_hts(t) 
 
+    logger.info('Preparing reference genomes for liftover')
+    source, target = get_liftover_genome(t)
+    
     if args.test: 
         logger.info('Filtering to chr21 for testing')
-        if build == 38:
+        if source.name == 'GRCh38':
             contig = 'chr21'
         else:
             contig = '21'
-        t = t.filter(t.locus.contig == contig) if isinstance(t, hl.Table) else t.filter_rows(t.locus.contig == contig)
-
-    logger.info('Preparing reference genomes for liftover')
-    source, target = get_liftover_genome(t)
+        t = hl.filter_intervals(t, [hl.parse_locus_interval(contig, reference_genome=source.name)])
 
     logger.info(f'Lifting data to {target.name}')
     t = lift_data(t, gnomad, data_type, path, target, args.overwrite)

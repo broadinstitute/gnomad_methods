@@ -233,23 +233,23 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     :return: MatrixTable or Table with low confidence regions removed
     :rtype: MatrixTable or Table
     """
-    from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path, high_coverage_intervals_path
+    from gnomad_hail.resources.grch37.reference_data import lcr_intervals, decoy_intervals, seg_dup_intervals, high_coverage_intervals
 
     criteria = []
     if filter_lcr:
-        lcr = hl.import_locus_intervals(lcr_intervals_path)
+        lcr = lcr_intervals.ht()
         criteria.append(hl.is_missing(lcr[mt.locus]))
 
     if filter_decoy:
-        decoy = hl.import_bed(decoy_intervals_path)
+        decoy = decoy_intervals.ht()
         criteria.append(hl.is_missing(decoy[mt.locus]))
 
     if filter_segdup:
-        segdup = hl.import_bed(segdup_intervals_path)
+        segdup = seg_dup_intervals.ht()
         criteria.append(hl.is_missing(segdup[mt.locus]))
 
     if filter_exome_low_coverage_regions:
-        high_cov = hl.import_locus_intervals(high_coverage_intervals_path)
+        high_cov = high_coverage_intervals.ht()
         criteria.append(hl.is_missing(high_cov[mt.locus]))
 
     if high_conf_regions is not None:
@@ -278,7 +278,7 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
     :return: VEPped Table
     :rtype: Table
     """
-    from gnomad_hail.resources.basics import vep_config_path, context_ht_path
+    from gnomad_qc.resources.basics import vep_config_path, context_ht_path
 
     VEP_REFERENCES = {
         'GRCh37': context_ht_path(),

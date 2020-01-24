@@ -174,8 +174,8 @@ def liftover_using_gnomad_map(ht, data_type):
     :return: Lifted over table
     :rtype: Table
     """
-    from gnomad_hail.resources.basics import get_gnomad_liftover_data_path
-    lift_ht = hl.read_table(get_gnomad_liftover_data_path(data_type))
+    from gnomad_hail.resources.grch37.gnomad import liftover
+    lift_ht = liftover(data_type).ht()
     ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
     return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')
 
@@ -372,7 +372,7 @@ def get_rf_runs(data_type: str) -> Dict:
     :rtype: dict
     """
     
-    from gnomad_hail.resources.variant_qc import rf_run_hash_path
+    from gnomad_qc.resources.variant_qc import rf_run_hash_path
 
     json_file = rf_run_hash_path(data_type)
     if hl.utils.hadoop_exists(json_file):

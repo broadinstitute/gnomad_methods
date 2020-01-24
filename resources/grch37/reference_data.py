@@ -43,7 +43,7 @@ syndip = MatrixTableResource(
 
 # Versioned resources: versions should be listed from most recent to oldest
 dbsnp = VersionedTableResource(
-    default_version="b151",
+    default_version="2018-04-23",
     versions={
         "2018-04-23": TableResource(
             path="gs://gnomad-public/truth-sets/source/All_20180423.ht",

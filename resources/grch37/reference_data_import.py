@@ -82,7 +82,7 @@ def main(args):
         )
 
     if args.lcr_intervals:
-        hl.import_locus_intervals(syndip.import_sources["source_path"]).write(
+        hl.import_locus_intervals(lcr_intervals.import_sources["source_path"]).write(
             lcr_intervals.path, overwrite=args.overwrite
         )
 
@@ -126,7 +126,7 @@ def main(args):
             na12878_hc_intervals.path, overwrite=args.overwrite
         )
 
-    if args.na12878_exome_hc_intervals:
+    if args.na12878_hc_exome_intervals:
         hl.import_bed(na12878_hc_exome_intervals.import_sources["source_path"]).write(
             na12878_hc_exome_intervals.path, overwrite=args.overwrite
         )
@@ -139,9 +139,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--purcell_5k", help="Purcell5k sites (from intervals)", action="store_true"
-    )
+    parser.add_argument("--purcell_5k", help="Purcell5k sites (from intervals)", action="store_true")
     parser.add_argument("--clinvar", help="Import clinvar VCF", action="store_true")
     parser.add_argument("--na12878", help="Imports GiaB NA12878", action="store_true")
     parser.add_argument("--dbsnp", help="Imports DBSNP", action="store_true")
@@ -153,13 +151,13 @@ if __name__ == "__main__":
     parser.add_argument("--lcr_intervals", help="Imports low confidence regions' intervals", action="store_true")
     parser.add_argument("--decoy_intervals", help="Imports decoy intervals", action="store_true")
     parser.add_argument("--seg_dup_intervals", help="Imports segmental duplication intervals", action="store_true")
-    parser.add_argument("--exomes_hc_intervals", help="Imports high confidence exome intervals", action="store_true")
-    parser.add_argument("--exomes_calling_intervals", help="Imports exome calling intervals", action="store_true")
-    parser.add_argument("--exomes_evaluation_intervals", help="Imports exome evaluation intervals", action="store_true")
-    parser.add_argument("--genomes_evaluation_intervals", help="Imports genome evaluation intervals", action="store_true")
+    parser.add_argument("--exome_hc_intervals", help="Imports high confidence exome intervals", action="store_true")
+    parser.add_argument("--exome_calling_intervals", help="Imports exome calling intervals", action="store_true")
+    parser.add_argument("--exome_evaluation_intervals", help="Imports exome evaluation intervals", action="store_true")
+    parser.add_argument("--genome_evaluation_intervals", help="Imports genome evaluation intervals", action="store_true")
     parser.add_argument("--high_coverage_intervals", help="Imports genome evaluation intervals", action="store_true")
-    parser.add_argument("--na12878_hc_intervals", help="Imports NA12878 high confidence regions", actions="store_true")
-    parser.add_argument("--na12878_hc_exome_intervals", help="Imports NA12878 ecxome high confidence regions", actions="store_true")
-    parser.add_argument("--syndyp_hc_intervals", help="Imports high confidence synthetic duplicate intervals", actions="store_true")
+    parser.add_argument("--na12878_hc_intervals", help="Imports NA12878 high confidence regions", action="store_true")
+    parser.add_argument("--na12878_hc_exome_intervals", help="Imports NA12878 ecxome high confidence regions", action="store_true")
+    parser.add_argument("--syndyp_hc_intervals", help="Imports high confidence synthetic duplicate intervals", action="store_true")
     parser.add_argument("--overwrite", help="Overwrites existing files", action="store_true")
     main(parser.parse_args())

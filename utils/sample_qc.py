@@ -1,6 +1,5 @@
 import numpy as np
 from .generic import *
-from gnomad_hail.resources import exome_calling_intervals_path
 from .gnomad_functions import logger, filter_to_adj
 
 

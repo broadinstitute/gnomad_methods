@@ -1,15 +1,9 @@
 
-import re
-import sys
 import logging
 import gzip
 import os
-
 import hail as hl
-from hail.expr.expressions import *
-from collections import defaultdict, namedtuple, OrderedDict
-from pprint import pprint, pformat
-import argparse
+from pprint import pformat
 import pandas as pd
 from typing import *
 import json
@@ -175,8 +169,8 @@ def liftover_using_gnomad_map(ht, data_type):
     :return: Lifted over table
     :rtype: Table
     """
-    from gnomad_hail.resources.basics import get_gnomad_liftover_data_path
-    lift_ht = hl.read_table(get_gnomad_liftover_data_path(data_type))
+    from gnomad_hail.resources.grch37.gnomad import liftover
+    lift_ht = liftover(data_type).ht()
     ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
     return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')
 
@@ -251,27 +245,6 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     filt = lambda x: combine_functions(criteria, x)
     criteria = hl.any(filt, t.freq)
     return t.filter_rows(criteria, keep=keep) if isinstance(t, hl.MatrixTable) else t.filter(criteria, keep=keep)
-
-
-def get_rf_runs(data_type: str) -> Dict:
-    """
-
-    Loads RF run data from JSON file.
-
-    :param str data_type: One of 'exomes' or 'genomes'
-    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
-    :rtype: dict
-    """
-    
-    from gnomad_hail.resources.variant_qc import rf_run_hash_path
-
-    json_file = rf_run_hash_path(data_type)
-    if hl.utils.hadoop_exists(json_file):
-        with hl.hadoop_open(rf_run_hash_path(data_type)) as f:
-            return json.load(f)
-    else:
-        logger.warning("File {json_file} could not be found. Returning empty RF run hash dict.")
-        return {}
 
 
 def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_name: str = 'rf_prediction') -> None:

@@ -4,10 +4,7 @@ from pathlib import Path
 from directives import AutoModuleSummary
 
 # Add gnomad_hail to import path.
-# Since the gnomad_hail package is at the top level of the repository, this
-# configuration depends on the repository being checked out into a directory
-# named gnomad_hail.
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 project = "gnomad_hail"

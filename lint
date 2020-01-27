@@ -2,4 +2,4 @@
 
 cd "$(dirname "$0")"
 
-pylint "$@" __init__.py resources utils 
+pylint "$@" gnomad_hail

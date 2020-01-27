@@ -1,7 +1,7 @@
-#!/usr/bin/env bash -eu
+#!/bin/sh
 
-DOCS_DIR=$(dirname "${BASH_SOURCE}")
-cd $DOCS_DIR
+DOCS_DIR=$(dirname "$0")
+cd "${DOCS_DIR}"
 
 rm -rf api_reference
 ./generate_api_reference.py

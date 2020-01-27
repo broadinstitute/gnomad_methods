@@ -372,7 +372,7 @@ def get_rf_runs(data_type: str) -> Dict:
     :rtype: dict
     """
     
-    from gnomad_qc.resources.variant_qc import rf_run_hash_path
+    from gnomad_qc.resources.variant_qc import rf_run_hash_path  # FIXME: Need to update so there is no reference to gnomad_qc
 
     json_file = rf_run_hash_path(data_type)
     if hl.utils.hadoop_exists(json_file):

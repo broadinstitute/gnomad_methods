@@ -1,7 +1,7 @@
 from bokeh.palettes import d3  # pylint: disable=no-name-in-module
 
 from gnomad_hail import *
-from gnomad_qc.resources.variant_qc import *
+from gnomad_qc.resources.variant_qc import score_ranking_path, rf_path, binned_concordance_path  # FIXME: Need to update so there is no reference to gnomad_qc
 from gnomad_hail.utils.plotting import *
 
 qc_plots_settings = {

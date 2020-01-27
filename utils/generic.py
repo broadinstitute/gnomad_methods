@@ -11,8 +11,21 @@ import functools
 from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
+from gnomad_hail.resources.resource_utils import DataException
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']
+
+VEP_REFERENCE_DATA = {
+    'GRCh37': {
+        'vep_config': 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht',
+    },
+    'GRCh38': {
+        'vep_config': 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht',
+    }
+}
+
 
 def file_exists(fname: str) -> bool:
     """
@@ -267,6 +280,18 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
+def vep_context_ht_path(ref: str = 'GRCh37'):
+    if ref not in VEP_REFERENCE_DATA.keys():
+        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
+    return VEP_REFERENCE_DATA[ref]['all_possible']
+
+
+def vep_config_path(ref: str = 'GRCh37'):
+    if ref not in VEP_REFERENCE_DATA.keys():
+        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
+    return VEP_REFERENCE_DATA[ref]['vep_config']
+
+
 def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
     """
     VEP a table, or lookup variants in a reference database
@@ -278,21 +303,15 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
     :return: VEPped Table
     :rtype: Table
     """
-    from gnomad_qc.resources.basics import vep_config_path, context_ht_path
-
-    VEP_REFERENCES = {
-        'GRCh37': context_ht_path(),
-        'GRCh38': '',
-    }
-
+    if reference is None:
+        reference = hl.default_reference().name
     if reference_vep_ht is None:
-        if reference is None:
-            reference = hl.default_reference().name
 
-        if reference not in VEP_REFERENCES:
-            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(VEP_REFERENCES.keys())}')
+        possible_refs = ('GRCh37', 'GRCh38')
+        if reference not in possible_refs:
+            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}')
 
-        reference_vep_ht = hl.read_table(VEP_REFERENCES[reference])
+        reference_vep_ht = hl.read_table(vep_context_ht_path(reference))
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 

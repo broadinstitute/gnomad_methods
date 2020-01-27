@@ -375,7 +375,7 @@ def train_rf(
     string_features = [x[0] for x in df.dtypes if x[0] != label and x[1] == 'string']
     if string_features:
         logger.info("Indexing string features: {}".format(",".join(string_features)))
-    string_features_indexers = [StringIndexer(inputCol=x, outputCol=x + "_indexed").fit(df)
+    string_features_indexers = [StringIndexer(inputCol=x, outputCol=x + "_indexed").setHandleInvalid("keep").fit(df)
                                 for x in string_features]
 
     assembler = VectorAssembler(inputCols=[x[0] + "_indexed" if x[1] == 'string' else x[0]

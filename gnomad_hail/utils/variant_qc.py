@@ -1,3 +1,5 @@
+import itertools
+
 from .generic import *
 
 
@@ -353,11 +355,10 @@ def annotate_quantile_bin(
     # Annotate the HT with the bin
     # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
     if stratify_snv_indel:
-        ht.describe()
-        ht = ht.annotate(
+        bin_ht = bin_ht.transmute(
             **{
                 bin_id: hl.cond(
-                    ht.snv,
+                    ht[bin_ht.key].snv,
                     bin_ht[f'{bin_id}_snv'],
                     bin_ht[f'{bin_id}_indel']
                 )
@@ -365,6 +366,8 @@ def annotate_quantile_bin(
             }
         )
 
+    ht = ht.annotate(**bin_ht[ht.key])
+    
     return ht
 
 

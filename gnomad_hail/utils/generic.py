@@ -11,8 +11,21 @@ import functools
 from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
+from gnomad_hail.resources.resource_utils import DataException
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']
+
+VEP_REFERENCE_DATA = {
+    'GRCh37': {
+        'vep_config': 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht',
+    },
+    'GRCh38': {
+        'vep_config': 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht',
+    }
+}
+
 
 def file_exists(fname: str) -> bool:
     """
@@ -234,23 +247,23 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     :return: MatrixTable or Table with low confidence regions removed
     :rtype: MatrixTable or Table
     """
-    from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path, high_coverage_intervals_path
+    from gnomad_hail.resources.grch37.reference_data import lcr_intervals, decoy_intervals, seg_dup_intervals, high_coverage_intervals
 
     criteria = []
     if filter_lcr:
-        lcr = hl.import_locus_intervals(lcr_intervals_path)
+        lcr = lcr_intervals.ht()
         criteria.append(hl.is_missing(lcr[mt.locus]))
 
     if filter_decoy:
-        decoy = hl.import_bed(decoy_intervals_path)
+        decoy = decoy_intervals.ht()
         criteria.append(hl.is_missing(decoy[mt.locus]))
 
     if filter_segdup:
-        segdup = hl.import_bed(segdup_intervals_path)
+        segdup = seg_dup_intervals.ht()
         criteria.append(hl.is_missing(segdup[mt.locus]))
 
     if filter_exome_low_coverage_regions:
-        high_cov = hl.import_locus_intervals(high_coverage_intervals_path)
+        high_cov = high_coverage_intervals.ht()
         criteria.append(hl.is_missing(high_cov[mt.locus]))
 
     if high_conf_regions is not None:
@@ -268,6 +281,18 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
+def vep_context_ht_path(ref: str = 'GRCh37'):
+    if ref not in VEP_REFERENCE_DATA.keys():
+        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
+    return VEP_REFERENCE_DATA[ref]['all_possible']
+
+
+def vep_config_path(ref: str = 'GRCh37'):
+    if ref not in VEP_REFERENCE_DATA.keys():
+        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
+    return VEP_REFERENCE_DATA[ref]['vep_config']
+
+
 def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
     """
     VEP a table, or lookup variants in a reference database
@@ -279,21 +304,15 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
     :return: VEPped Table
     :rtype: Table
     """
-    from gnomad_hail.resources.basics import vep_config_path, context_ht_path
-
-    VEP_REFERENCES = {
-        'GRCh37': context_ht_path(),
-        'GRCh38': '',
-    }
-
+    if reference is None:
+        reference = hl.default_reference().name
     if reference_vep_ht is None:
-        if reference is None:
-            reference = hl.default_reference().name
 
-        if reference not in VEP_REFERENCES:
-            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(VEP_REFERENCES.keys())}')
+        possible_refs = ('GRCh37', 'GRCh38')
+        if reference not in possible_refs:
+            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}')
 
-        reference_vep_ht = hl.read_table(VEP_REFERENCES[reference])
+        reference_vep_ht = hl.read_table(vep_context_ht_path(reference))
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 
@@ -649,11 +668,10 @@ def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT'
         2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
 
 
-        Typical usage:
-        ```
+        Typical usage::
+
             trio_matrix = hl.trio_matrix(mt, ped)
             phased_trio_matrix = phase_trio_matrix_by_transmission(trio_matrix)
-        ```
 
         :param MatrixTable tm: Trio MatrixTable (entries should be a Struct with `proband_entry`, `mother_entry` and `father_entry` present)
         :param str call_field: genotype field name to phase
@@ -986,11 +1004,11 @@ def assign_population_pcs(
         missing_label: str = 'oth'
 ) -> Tuple[Union[hl.Table, pd.DataFrame], Any]: # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     """
-
     This function uses a random forest model to assign population labels based on the results of PCA.
     Default values for model and assignment parameters are those used in gnomAD.
 
     As input, this function can either take:
+
     - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
         - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
         - A Hail Table will be returned as output
@@ -998,10 +1016,10 @@ def assign_population_pcs(
         - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
         - A pandas DataFrame is returned as output
 
-    Note
-    ----
-    If you have a Pandas Dataframe and have all PCs as an array in a single column, the
-    `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
+    .. note::
+
+        If you have a Pandas Dataframe and have all PCs as an array in a single column, the
+        `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
 
     :param Table or DataFrame pop_pc_pd: Input Hail Table or Pandas Dataframe
     :param ArrayExpression or list of str pc_cols: Columns storing the PCs to use
@@ -1122,7 +1140,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         dropped_metrics = dropped_metrics.union(stat_expr_metrics.difference(metrics))
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
-        logger.warning("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
+        logger.warning(f"The following metrics will be dropped during stats counter merging as they do not appear in all counters: {', '.join(dropped_metrics)}")
 
     # Because merging standard deviation requires having the mean and n,
     # check that they are also present if `stdev` is. Otherwise remove stdev
@@ -1172,9 +1190,9 @@ def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Flo
     This is implemented based on the GATK InbreedingCoeff metric:
     https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
 
-    Note
-    ----
-    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+    .. note::
+
+        The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param CallExpression call: Expression giving the calls in the MT
     :return: Site inbreeding coefficient expression
@@ -1234,18 +1252,18 @@ def fs_from_sb(
     In addition to the default GATK behavior, setting `normalize` to `False` will perform a chi-squared test
     for large counts (> `min_cell_count`) instead of normalizing the cell values.
 
-    Note
-    ----
-    This function can either take
-    - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
-    - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+    .. note::
+
+        This function can either take
+        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
     :param ArrayNumericExpression or ArrayExpression sb: Count of ref/alt reads on each strand
-    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (`normalize`=True), or use a chi sq instead of FET (`normalize`=False)
+    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (normalize=True), or use a chi sq instead of FET (normalize=False)
     :param int min_cell_count: Maximum count for performing a FET
-    :param int min_count: Minimum total count to output `FS` (otherwise `null` it output)
+    :param int min_count: Minimum total count to output FS (otherwise null it output)
     :return: FS value
     :rtype: Int64Expression
     """
@@ -1540,3 +1558,17 @@ def interval_length(interval: hl.Interval) -> int:
         )
     else:
         return interval.end.position - interval.start.position
+
+
+def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
+    """
+    Repartitions a MatrixTable on read. Currently the best way to increase the number of partitions in a MatrixTable.
+
+    :param str path: Path to input MatrixTable
+    :param int n_partitions: Number of desired partitions
+    :return: MatrixTable with the number of desired partitions
+    :rtype: hl.MatrixTable
+    """
+    mt = hl.read_matrix_table(path)
+    intervals = mt._calculate_new_partitions(n_partitions)
+    return hl.read_matrix_table(path, _intervals=intervals)

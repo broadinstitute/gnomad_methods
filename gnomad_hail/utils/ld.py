@@ -1,48 +1,13 @@
-from gnomad_hail.resources import *
+from gnomad_hail.resources.grch37.gnomad_ld import ld_index, ld_matrix
+from gnomad_hail.resources.grch37.gnomad import public_release
 from hail.linalg import BlockMatrix
+import hail as hl
 
-
-def ld_matrix_path(data_type: str, pop: str, common_only: bool = True, adj: bool = True, version: str = CURRENT_RELEASE):
-    subdir = "sv/" if data_type == "genomes_snv_sv" else ""
-    return f'gs://gnomad-public/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.bm'
-
-
-def ld_index_path(data_type: str, pop: str, common_only: bool = True, adj: bool = True, version: str = CURRENT_RELEASE):
-    subdir = "sv/" if data_type == "genomes_snv_sv" else ""
-    return f'gs://gnomad-public/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.variant_indices.ht'
-
-
-def ld_snv_sv_path(pop):
-    return f'gs://gnomad-public/release/2.1.1/ld/sv/gnomad.genomes_snv_sv.r2.1.1.{pop}.snv_sv.ld.ht'
-
-
-def ld_snv_sv_index_path(pop, type):
-    return f'gs://gnomad-public/release/2.1.1/ld/sv/gnomad.genomes_snv_sv.r2.1.1.{pop}.snv_sv.ld.{type}.txt.bgz'
-
-
-def cross_pop_ld_scores_path(data_type: str, pop1: str, pop2: str, adj: bool = True, version: str = CURRENT_RELEASE):
-    return f'gs://gnomad-public/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop1}.{pop2}.{"adj." if adj else ""}ld_scores.ht'
-
-
-def ld_scores_path(data_type: str, pop: str, adj: bool = True, version: str = CURRENT_RELEASE):
-    return f'gs://gnomad-public/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop}.{"adj." if adj else ""}ld_scores.ht'
-
-
-def get_ld_matrix(pop: str):
-    return BlockMatrix.read(ld_matrix_path('genomes', pop))
-
-
-def get_ld_index(pop: str):
-    return hl.read_table(ld_index_path('genomes', pop))
-
-
-def get_ld_scores(pop: str):
-    return hl.read_table(ld_scores_path('genomes', pop))
 
 
 def get_r_human_readable(pop: str, var1: str, var2: str, ref_genome: str = 'GRCh37'):
-    bm = get_ld_matrix(pop)
-    ht = get_ld_index(pop)
+    bm = ld_matrix(pop).bm()
+    ht = ld_index(pop).ht()
     chrom, pos, ref, alt = var1.split('-')
     var1 = (hl.parse_locus(f'{chrom}:{pos}', ref_genome), [ref, alt])
     chrom, pos, ref, alt = var2.split('-')
@@ -95,7 +60,7 @@ def get_r_within_gene_in_pop(pop: str, gene: str):
     :return: Table with pairs of variants
     :rtype: Table
     """
-    return get_r_within_gene(get_ld_matrix(pop), get_ld_index(pop), gene, None, 'GRCh37')
+    return get_r_within_gene(ld_matrix(pop).bm(), ld_index(pop).ht(), gene, None, 'GRCh37')
 
 
 def get_r_within_gene(bm: BlockMatrix, ld_index: hl.Table, gene: str, vep_ht: hl.Table = None, reference_genome: str = None):
@@ -113,7 +78,7 @@ def get_r_within_gene(bm: BlockMatrix, ld_index: hl.Table, gene: str, vep_ht: hl
     :rtype: Table
     """
     if vep_ht is None:
-        vep_ht = get_gnomad_public_data('exomes')
+        vep_ht = public_release('exomes').ht()
     if reference_genome is None:
         reference_genome = hl.default_reference().name
     intervals = hl.experimental.get_gene_intervals(gene_symbols=[gene], reference_genome=reference_genome)

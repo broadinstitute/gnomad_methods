@@ -10,8 +10,7 @@ def get_lowqual_expr(
         indel_phred_het_prior: 39  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
-    Computes lowqual threshold expression for either split or unsplit alleles based on
-    (AS_)QUALapprox
+    Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
 
     :param ArrayExpression alleles: Array of alleles
     :param ArraynumericExpression or NumericExpression qual_approx_expr: QUALapprox or AS_QUALapprox
@@ -160,8 +159,13 @@ def generate_fam_stats_expr(
     )
 
     fam_stats = fam_stats.select(
-        **{f'n_transmitted_{name}': fam_stats[name][0] for name in fam_stats},
-        **{f'n_untransmitted_{name}': fam_stats[name][1] for name in fam_stats}
+        **dict(itertools.chain.from_iterable(
+            [
+                (f'n_transmitted_{name}', fam_stats[name][0]),
+                (f'n_untransmitted_{name}', fam_stats[name][1]),
+            ]
+            for name in fam_stats
+        ))
     )
 
     # Create de novo counters
@@ -199,14 +203,14 @@ def annotate_quantile_bin(
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
     randomly across the bins it spans.
 
-    Notes
-    -----
-    The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get an SNV quantile bin and an Indel
-    quantile bin, the following could be used:
-    bin_expr={
+    .. note::
+
+        The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get an SNV quantile bin and an Indel
+        quantile bin, the following could be used:
+        bin_expr={
        'snv_bin': hl.is_snp(ht.alleles[0], ht.alleles[1]),
        'indels_bin': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
-    }
+        }
 
     :param Table ht: Input Table
     :param NumericExpression score_expr: Expression containing the score

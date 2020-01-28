@@ -1,6 +1,8 @@
 import argparse
-from gnomad_hail.resources import *
-from gnomad_hail.utils.generic import flip_base, get_reference_genome 
+from typing import Union
+import hail as hl
+from gnomad_hail.resources.grch37.gnomad import public_release
+from gnomad_hail.utils.generic import flip_base, get_reference_genome
 import logging
 from os.path import dirname, basename
 import sys
@@ -162,8 +164,8 @@ def main(args):
 
         logger.info('Working on gnomAD {} release ht'.format(data_type))
         logger.info('Reading in release ht')
-        t = get_gnomad_public_data(data_type, split=True, version=CURRENT_RELEASE)
-        logger.info('Variants in release ht: {}'.format(ht.count()))
+        t = public_release(data_type).ht()
+        logger.info('Variants in release ht: {}'.format(t.count()))
 
     else:
         data_type = None
@@ -180,16 +182,16 @@ def main(args):
     if 'was_split' not in t.row:
         t = hl.split_multi(t) if isinstance(t, hl.Table) else hl.split_multi_hts(t) 
 
+    logger.info('Preparing reference genomes for liftover')
+    source, target = get_liftover_genome(t)
+    
     if args.test: 
         logger.info('Filtering to chr21 for testing')
-        if build == 38:
+        if source.name == 'GRCh38':
             contig = 'chr21'
         else:
             contig = '21'
-        t = t.filter(t.locus.contig == contig) if isinstance(t, hl.Table) else t.filter_rows(t.locus.contig == contig)
-
-    logger.info('Preparing reference genomes for liftover')
-    source, target = get_liftover_genome(t)
+        t = hl.filter_intervals(t, [hl.parse_locus_interval(contig, reference_genome=source.name)])
 
     logger.info(f'Lifting data to {target.name}')
     t = lift_data(t, gnomad, data_type, path, target, args.overwrite)

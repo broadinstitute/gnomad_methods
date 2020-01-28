@@ -1,15 +1,9 @@
 
-import re
-import sys
 import logging
 import gzip
 import os
-
 import hail as hl
-from hail.expr.expressions import *
-from collections import defaultdict, namedtuple, OrderedDict
-from pprint import pprint, pformat
-import argparse
+from pprint import pformat
 import pandas as pd
 from typing import *
 import json
@@ -90,6 +84,38 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     ), n_alt_alleles=hl.len(non_star_alleles))
 
 
+def adjusted_sex_ploidy_expr(
+        locus_expr: hl.expr.LocusExpression,
+        gt_expr: hl.expr.CallExpression,
+        karyotype_expr: hl.expr.StringExpression,
+        xy_karyotype_str: str = 'XY',
+        xx_karyotype_str: str = 'XX'
+) -> hl.expr.CallExpression:
+    """
+    Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
+    
+    :param LocusExpression locus_expr: Locus
+    :param CallExpression gt_expr: Genotype
+    :param StringExpression karyotype_expr: Karyotype
+    :param str xy_karyotype_str: Male sex karyotype representation
+    :param xx_karyotype_str: Female sex karyotype representation
+    :return: Genotype adjusted for sex ploidy
+    :rtype: CallExpression
+    """
+    male = karyotype_expr == xy_karyotype_str
+    female = karyotype_expr == xx_karyotype_str
+    x_nonpar = locus_expr.in_x_nonpar()
+    y_par = locus_expr.in_y_par()
+    y_nonpar = locus_expr.in_y_nonpar()
+    return (
+        hl.case(missing_false=True)
+            .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
+            .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
+            .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
+            .default(gt_expr)
+    )
+
+
 def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
                       male_str: str = 'male', female_str: str = 'female') -> hl.MatrixTable:
     """
@@ -102,62 +128,31 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     :return: MatrixTable with fixed ploidy for sex chromosomes
     :rtype: MatrixTable
     """
-    male = sex_expr == male_str
-    female = sex_expr == female_str
-    x_nonpar = mt.locus.in_x_nonpar()
-    y_par = mt.locus.in_y_par()
-    y_nonpar = mt.locus.in_y_nonpar()
     return mt.annotate_entries(
-        GT=hl.case(missing_false=True)
-        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar) & mt.GT.is_het(), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar), hl.call(mt.GT[0], phased=False))
-        .default(mt.GT)
+        GT=adjusted_sex_ploidy_expr(
+            mt.locus,
+            mt.GT,
+            sex_expr,
+            male_str,
+            female_str
+        )
     )
 
 
-def add_popmax_expr(freq: hl.expr.ArrayExpression, freq_meta: hl.expr.ArrayExpression, populations: Set[str]) -> hl.expr.ArrayExpression:
+def read_list_data(input_file_path: str) -> List[str]:
     """
-    Calculates popmax (add an additional entry into freq with popmax: pop)
-
-    :param ArrayExpression freq: ArrayExpression of Structs with ['ac', 'an', 'hom']
-    :param ArrayExpression freq_meta: ArrayExpression of meta dictionaries corresponding to freq
-    :param set of str populations: Set of populations over which to calculate popmax
-    :return: Frequency data with annotated popmax
-    :rtype: ArrayExpression
+    Reads a file input into a python list (each line will be an element).
+    Supports Google storage paths and .gz compression.
+    
+    :param str input_file_path: File path
+    :return: List of lines
+    :rtype: List
     """
-    pops_to_use = hl.literal(populations)
-    freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(freq, freq_meta))
-    freq_filtered = hl.filter(lambda f: (f.meta.size() == 2) & (f.meta.get('group') == 'adj') &
-                                        pops_to_use.contains(f.meta.get('pop')) & (f.AC > 0), freq)
-    sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
-    return hl.or_missing(hl.len(sorted_freqs) > 0,
-        hl.struct(AC=sorted_freqs[0].AC, AF=sorted_freqs[0].AF, AN=sorted_freqs[0].AN,
-                  homozygote_count=sorted_freqs[0].homozygote_count,
-                  pop=sorted_freqs[0].meta['pop']))
-
-
-def get_projectmax(mt: hl.MatrixTable, loc: hl.expr.StringExpression) -> hl.MatrixTable:
-    """
-    First pass of projectmax (returns aggregated MT with project_max field)
-
-    :param MatrixTable mt: Input MT
-    :param StringExpression loc: Column expression location of project ID (e.g. mt.meta.pid)
-    :return: Frequency data with annotated project_max
-    :rtype: MatrixTable
-    """
-    mt = mt.annotate_cols(project=loc)
-    agg_mt = mt.group_cols_by(mt.project).aggregate(callstats=hl.agg.call_stats(mt.GT, mt.alleles))
-    return agg_mt.annotate_rows(project_max=hl.agg.take(hl.struct(**agg_mt.callstats, project=agg_mt.project),
-                                                        5, -agg_mt.callstats.AF[1]))
-
-
-def read_list_data(input_file: str) -> List[str]:
-    if input_file.startswith('gs://'):
-        hl.hadoop_copy(input_file, 'file:///' + input_file.split("/")[-1])
-        f = gzip.open("/" + os.path.basename(input_file)) if input_file.endswith('gz') else open("/" + os.path.basename(input_file))
+    if input_file_path.startswith('gs://'):
+        hl.hadoop_copy(input_file_path, 'file:///' + input_file_path.split("/")[-1])
+        f = gzip.open("/" + os.path.basename(input_file_path)) if input_file_path.endswith('gz') else open("/" + os.path.basename(input_file_path))
     else:
-        f = gzip.open(input_file) if input_file.endswith('gz') else open(input_file)
+        f = gzip.open(input_file_path) if input_file_path.endswith('gz') else open(input_file_path)
     output = []
     for line in f:
         output.append(line.strip())
@@ -174,8 +169,8 @@ def liftover_using_gnomad_map(ht, data_type):
     :return: Lifted over table
     :rtype: Table
     """
-    from gnomad_hail.resources.basics import get_gnomad_liftover_data_path
-    lift_ht = hl.read_table(get_gnomad_liftover_data_path(data_type))
+    from gnomad_hail.resources.grch37.gnomad import liftover
+    lift_ht = liftover(data_type).ht()
     ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
     return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')
 
@@ -250,137 +245,6 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     filt = lambda x: combine_functions(criteria, x)
     criteria = hl.any(filt, t.freq)
     return t.filter_rows(criteria, keep=keep) if isinstance(t, hl.MatrixTable) else t.filter(criteria, keep=keep)
-
-
-def melt_kt(kt, columns_to_melt, key_column_name='variable', value_column_name='value'):
-    """
-    Go from wide to long, or from:
-
-    +---------+---------+---------+
-    | Variant | AC_NFE  | AC_AFR  |
-    +=========+=========+=========+
-    | 1:1:A:G |      1  |      8  |
-    +---------+---------+---------+
-    | 1:2:A:G |     10  |    100  |
-    +---------+---------+---------+
-
-    to:
-
-    +---------+----------+--------+
-    | Variant | variable | value  |
-    +=========+==========+========+
-    | 1:1:A:G |   AC_NFE |     1  |
-    +---------+----------+--------+
-    | 1:1:A:G |   AC_AFR |     8  |
-    +---------+----------+--------+
-    | 1:2:A:G |   AC_NFE |    10  |
-    +---------+----------+--------+
-    | 1:2:A:G |   AC_AFR |   100  |
-    +---------+----------+--------+
-
-    :param KeyTable kt: Input KeyTable
-    :param list of str columns_to_melt: Which columns to spread out
-    :param str key_column_name: What to call the key column
-    :param str value_column_name: What to call the value column
-    :return: melted Key Table
-    :rtype: KeyTable
-    return (kt
-            .annotate('comb = [{}]'.format(', '.join(['{{k: "{0}", value: {0}}}'.format(x) for x in columns_to_melt])))
-            .drop(columns_to_melt)
-            .explode('comb')
-            .annotate('{} = comb.k, {} = comb.value'.format(key_column_name, value_column_name))
-            .drop('comb'))
-    """
-    raise NotImplementedError
-
-
-def melt_kt_grouped(kt, columns_to_melt, value_column_names, key_column_name='variable'):
-    """
-    Go from wide to long for a group of variables, or from:
-
-    +---------+---------+---------+---------+---------+
-    | Variant | AC_NFE  | AC_AFR  | Hom_NFE | Hom_AFR |
-    +=========+=========+=========+=========+=========+
-    | 1:1:A:G |      1  |      8  |       0 |       0 |
-    +---------+---------+---------+---------+---------+
-    | 1:2:A:G |     10  |    100  |       1 |      10 |
-    +---------+---------+---------+---------+---------+
-
-    to:
-
-    +---------+----------+--------+--------+
-    | Variant |      pop |    AC  |   Hom  |
-    +=========+==========+========+========+
-    | 1:1:A:G |      NFE |     1  |     0  |
-    +---------+----------+--------+--------+
-    | 1:1:A:G |      AFR |     8  |     0  |
-    +---------+----------+--------+--------+
-    | 1:2:A:G |      NFE |    10  |     1  |
-    +---------+----------+--------+--------+
-    | 1:2:A:G |      AFR |   100  |    10  |
-    +---------+----------+--------+--------+
-
-    This is done with:
-
-    columns_to_melt = {
-        'NFE': ['AC_NFE', 'Hom_NFE'],
-        'AFR': ['AC_AFR', 'Hom_AFR']
-    }
-    value_column_names = ['AC', 'Hom']
-    key_column_name = 'pop'
-
-    Note that len(value_column_names) == len(columns_to_melt[i]) for all in columns_to_melt
-
-    :param KeyTable kt: Input KeyTable
-    :param dict of list of str columns_to_melt: Which columns to spread out
-    :param list of str value_column_names: What to call the value columns
-    :param str key_column_name: What to call the key column
-    :return: melted Key Table
-    :rtype: KeyTable
-
-    if any([len(value_column_names) != len(v) for v in columns_to_melt.values()]):
-        logger.warning('Length of columns_to_melt sublist is not equal to length of value_column_names')
-        logger.warning('value_column_names = %s', value_column_names)
-        logger.warning('columns_to_melt = %s', columns_to_melt)
-
-    # I think this goes something like this:
-    fields = []
-    for k, v in columns_to_melt.items():
-        subfields = [': '.join(x) for x in zip(value_column_names, v)]
-        field = '{{k: "{0}", {1}}}'.format(k, ', '.join(subfields))
-        fields.append(field)
-
-    split_text = ', '.join(['{0} = comb.{0}'.format(x) for x in value_column_names])
-
-    return (kt
-            .annotate('comb = [{}]'.format(', '.join(fields)))
-            .drop([y for x in columns_to_melt.values() for y in x])
-            .explode('comb')
-            .annotate('{} = comb.k, {}'.format(key_column_name, split_text))
-            .drop('comb'))
-    """
-    raise NotImplementedError
-
-
-def get_rf_runs(data_type: str) -> Dict:
-    """
-
-    Loads RF run data from JSON file.
-
-    :param str data_type: One of 'exomes' or 'genomes'
-    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
-    :rtype: dict
-    """
-    
-    from gnomad_hail.resources.variant_qc import rf_run_hash_path
-
-    json_file = rf_run_hash_path(data_type)
-    if hl.utils.hadoop_exists(json_file):
-        with hl.hadoop_open(rf_run_hash_path(data_type)) as f:
-            return json.load(f)
-    else:
-        logger.warning("File {json_file} could not be found. Returning empty RF run hash dict.")
-        return {}
 
 
 def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_name: str = 'rf_prediction') -> None:

@@ -12,8 +12,8 @@ if [[ "${ROLE}" == 'Master' ]]; then
     mkdir -p /home/hail/
 
     cd /home/hail
-    git clone https://github.com/macarthur-lab/gnomad_hail.git
-    cd gnomad_hail/init_scripts
+    git clone https://github.com/macarthur-lab/gnomad_hail.git .
+    cd init_scripts
     chmod +x gnomad-init.sh sparklyr-init.sh
 
     # This is here so as not have 2 apt-get processes fighting for a lock

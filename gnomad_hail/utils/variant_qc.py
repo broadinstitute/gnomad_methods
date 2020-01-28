@@ -15,7 +15,8 @@ def get_lowqual_expr(
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
 
     :param ArrayExpression alleles: Array of alleles
-    :param ArraynumericExpression or NumericExpression qual_approx_expr: QUALapprox or AS_QUALapprox
+    :param qual_approx_expr: QUALapprox or AS_QUALapprox
+    :type qual_approx_expr: ArraynumericExpression or NumericExpression
     :param int snv_phred_threshold: Phred-scaled SNV "emission" threshold (similar to GATK emission threshold)
     :param int snv_phred_het_prior: Phred-scaled SNV heterozygosity prior (30 = 1/1000 bases, GATK default)
     :param int indel_phred_threshold: Phred-scaled indel "emission" threshold (similar to GATK emission threshold)
@@ -43,6 +44,7 @@ def generate_fam_stats_expr(
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the following counts:
+
     - Number of alleles in het parents transmitted to the proband
     - Number of alleles in het parents not transmitted to the proband
     - Number of de novo mutations
@@ -51,8 +53,10 @@ def generate_fam_stats_expr(
     If an empty dict is passed as one of the strata arguments, then this metric isn't computed.
 
     :param MatrixTable trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix
-    :param dict of str -> BooleanExpression transmitted_strata: Strata for the transmission counts
-    :param dict of str -> BooleanExpression de_novo_strata: Strata for the de novo counts
+    :param transmitted_strata: Strata for the transmission counts
+    :type transmitted_strata: dict of str -> BooleanExpression
+    :param de_novo_strata: Strata for the de novo counts
+    :type de_novo_strata: dict of str -> BooleanExpression
     :param BooleanExpression proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
     :return: An expression with the counts
     :rtype: StructExpression
@@ -199,6 +203,7 @@ def compute_binned_rank(
 ) -> hl.Table:
     """
     Returns a table containing a binned rank for each row.
+
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
     This is done based on quantiles computed with hl.agg.approx_quantiles.
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
@@ -215,7 +220,8 @@ def compute_binned_rank(
 
     :param Table ht: Input Table
     :param NumericExpression score_expr: Expression containing the score
-    :param dict of str -> BooleanExpression rank_expr: Rank(s) to be computed (see notes)
+    :param rank_expr: Rank(s) to be computed (see notes)
+    :type rank_expr: dict of str -> BooleanExpression
     :param int n_bins: Number of bins to bin the data into
     :param int k: The `k` parameter of approx_quantiles
     :param bool desc: Whether to bin the score in descending order

@@ -93,12 +93,12 @@ def adjusted_sex_ploidy_expr(
 ) -> hl.expr.CallExpression:
     """
     Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
-    
+
     :param LocusExpression locus_expr: Locus
     :param CallExpression gt_expr: Genotype
     :param StringExpression karyotype_expr: Karyotype
     :param str xy_karyotype_str: Male sex karyotype representation
-    :param xx_karyotype_str: Female sex karyotype representation
+    :param str xx_karyotype_str: Female sex karyotype representation
     :return: Genotype adjusted for sex ploidy
     :rtype: CallExpression
     """
@@ -143,7 +143,7 @@ def read_list_data(input_file_path: str) -> List[str]:
     """
     Reads a file input into a python list (each line will be an element).
     Supports Google storage paths and .gz compression.
-    
+
     :param str input_file_path: File path
     :return: List of lines
     :rtype: List
@@ -182,10 +182,13 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     """
     Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
     (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
+
     At least one of frequency or allele_count is required.
+
     Subpop can be specified without a population if desired.
 
-    :param MatrixTable or Table t: Input MatrixTable or Table
+    :param t: Input MatrixTable or Table
+    :type t: MatrixTable or Table
     :param str direction: One of "above", "below", and "equal" (how to apply the filter)
     :param float frequency: Frequency to filter by (one of frequency or allele_count is required)
     :param int allele_count: Allele count to filter by (one of frequency or allele_count is required)
@@ -281,7 +284,8 @@ def add_rank(ht: hl.Table,
 
     :param Table ht: input Hail Table containing variants (with QC annotations) to be ranked
     :param NumericExpression score_expr: the Table annotation by which ranking should be scored
-    :param dict str -> BooleanExpression subrank_expr: Any subranking to be added in the form name_of_subrank: subrank_filtering_expr
+    :param subrank_expr: Any subranking to be added in the form name_of_subrank: subrank_filtering_expr
+    :type subrank_expr: dict of str -> BooleanExpression
     :return: Table with rankings added
     :rtype: Table
     """

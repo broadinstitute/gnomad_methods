@@ -11,7 +11,9 @@ def pop_max_expr(
     that has the highest AF from the populations provided in `freq_meta`,
     excluding those specified in `pops_to_exclude`.
     Only frequencies from adj populations are considered.
+
     This resulting struct contains the following fields:
+
     - AC: int32,
     - AF: float64,
     - AN: int32,
@@ -53,7 +55,9 @@ def project_max_expr(
     """
     Creates an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
     This return an array with one element per non-reference allele.
+
     Each of these elements is itself an array of structs with the following fields:
+
     - AC: int32,
     - AF: float64,
     - AN: int32,
@@ -300,8 +304,10 @@ def annotate_freq(
     :param StringExpression sex_expr: When specified, frequencies are stratified by sex. If `pop_expr` is also specified, then a pop/sex stratifiction is added.
     :param StringExpression pop_expr: When specified, frequencies are stratified by population. If `sex_expr` is also specified, then a pop/sex stratifiction is added.
     :param StringExpression subpop_expr: When specified, frequencies are stratified by sub-continental population. Note that `pop_expr` is required as well when using this option.
-    :param dict of str -> StringExpression additional_strata_expr: When specified, frequencies are stratified by the given additional strata found in the dict. This can e.g. be used to stratify by platform.
-    :param list of int downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
+    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata found in the dict. This can e.g. be used to stratify by platform.
+    :type additional_strata_expr: dict of str -> StringExpression
+    :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
+    :type downsamplings: list of int
     :return: MatrixTable with `freq` annotation
     """
 

@@ -90,6 +90,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     """
     Publically released VCF. Provide specific contig, i.e. "chr20", to retrieve contig
     specific VCF
+
     :param str data_type: One of "exomes" or "genomes"
     :param str version: One of the release versions of gnomAD on GRCh37
     :param str contig: Single contig "chr1" to "chrY"

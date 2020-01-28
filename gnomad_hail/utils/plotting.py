@@ -177,13 +177,19 @@ def plot_multi_hail_hist(hist_data: Dict[str, hl.Struct],
     Each histogram can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     Example usage:
-    plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
 
-    :param dict of str -> Struct hist_data: Data to plot
+    .. code-block:: python
+
+        plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
+
+    :param hist_data: Data to plot
+    :type hist_data: dict of str -> Struct
     :param str title: Plot title
     :param bool log: Whether the y-axis should be log
-    :param dict of str ->str fill_color: Color to fill the histogram bars that fall within the hist boundaries
-    :param dict of str -> str outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
+    :param fill_color: Color to fill the histogram bars that fall within the hist boundaries
+    :type fill_color: dict of str -> str
+    :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
+    :type outlier_fill_color: dict of str -> str
     :param str line_color: Color of the lines around the histogram bars
     :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
     :param bool hide_zeros: Remove hist bars with 0 count
@@ -304,9 +310,9 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
 
 def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
-    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively
-    Or if an unordered Table is provided, a Figure with file sizes is output
-    If metadata file or rows directory is missing, returns None
+    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively.
+    Or if an unordered Table is provided, a Figure with file sizes is output.
+    If metadata file or rows directory is missing, returns None.
     """
     panel_size = 600
     subpanel_size = 150
@@ -495,19 +501,22 @@ def pair_plot(
         tooltip_cols: List[str] = None
 ) -> Column:
     """
-
     Plots each column of `data` against each other and returns a grid of plots.
+
     The diagonal contains a histogram of each column, or a density plot if labels are provided.
     The lower diagonal contains scatter plots of each column against each other.
     The upper diagonal is empty.
+
     All columns should be numerical with the exception of the `label_col` if provided.
     If a color dict containing provided mapping labels to specific colors can be specified using `color_dict`
 
     :param DataFrame data: Dataframe to plot
     :param str label_col: Column of the DataFrame containing the labels
-    :param list of str or dict of str -> str colors: RGB hex colors. If a dict is provided, it should contain the mapping of label to colors.
+    :param colors: RGB hex colors. If a dict is provided, it should contain the mapping of label to colors.
+    :type colors: list or str or dict of str -> str
     :param str tools: Tools for the resulting plots
-    :param list of str tooltip_cols: Additional columns that should be displayed in tooltip
+    :param tooltip_cols: Additional columns that should be displayed in tooltip
+    :type tooltip_cols: list of str
     :return: Grid of plots (column of rows)
     :rtype: Column
     """

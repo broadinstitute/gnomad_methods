@@ -38,7 +38,7 @@ def generate_fam_stats_expr(
         trio_mt: hl.MatrixTable,
         transmitted_strata: Dict[str, Optional[hl.expr.BooleanExpression]] = {'raw': None},
         de_novo_strata: Dict[str, Optional[hl.expr.BooleanExpression]] = {'raw': None},
-        proband_is_female_expr: Optional[hl.expr.BooleanExpression] =  None
+        proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the following counts:
@@ -160,10 +160,8 @@ def generate_fam_stats_expr(
     )
 
     fam_stats = fam_stats.select(
-        **{
-            f'n_transmitted_{name}': fam_stats[name][0],
-            f'n_untransmitted_{name}': fam_stats[name][1]
-        } for name in fam_stats
+        **{f'n_transmitted_{name}': fam_stats[name][0] for name in fam_stats},
+        **{f'n_untransmitted_{name}': fam_stats[name][1] for name in fam_stats}
     )
 
     # Create de novo counters

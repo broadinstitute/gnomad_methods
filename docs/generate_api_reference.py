@@ -88,7 +88,7 @@ def write_module_doc(module_name):
 PACKAGE_DOC_TEMPLATE = """{title}
 
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
     {module_links}
 """

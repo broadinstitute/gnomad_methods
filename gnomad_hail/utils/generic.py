@@ -91,8 +91,9 @@ def get_reference_genome(
     """
     Returns the reference genome associated with the input Locus expression
 
-    :param LocusExpression or IntervalExpression locus: Input locus
-    :param  bool add_sequence: If set, the fasta sequence is added to the reference genome
+    :param locus: Input locus
+    :type locus: LocusExpression or IntervalExpression
+    :param bool add_sequence: If set, the fasta sequence is added to the reference genome
     :return: Reference genome
     :rtype: ReferenceGenome
     """
@@ -138,7 +139,8 @@ def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTa
     Filters the Table or MatrixTable to autosomes only.
     This assumes that the input contains a field named `locus` of type Locus
 
-    :param MatrixTable or Table t: Input MT/HT
+    :param t: Input MT/HT
+    :type t: MatrixTable or Table
     :return:  MT/HT autosomes
     :rtype: MatrixTable or Table
     """
@@ -160,8 +162,10 @@ def get_sample_data(mt: hl.MatrixTable, fields: List[hl.expr.StringExpression], 
     """
     Hail devs hate this one simple py4j trick to speed up sample queries
 
-    :param MatrixTable or Table mt: MT
-    :param list of StringExpression fields: fields
+    :param mt:
+    :type mt: MatrixTable or Table
+    :param fields:
+    :type fields: list of StringExpression
     :param sep: Separator to use (tab usually fine)
     :param delim: Delimiter to use (pipe usually fine)
     :return: Sample data
@@ -213,9 +217,13 @@ def pc_project(
 
 def sample_pcs_uniformly(scores_table: hl.Table, num_pcs: int = 5, num_bins: int = 10, num_per_bin: int = 20) -> hl.Table:
     """
-    Sample somewhat uniformly in num_pcs-dimensional PC space, by:
+    Sample somewhat uniformly in num_pcs-dimensional PC space.
+
+    Works by:
+
     1. Binning each PC axis into num_bins bins, creating an array of num_pcs with num_bins possible values (total of num_bins ^ num_pcs sectors)
     2. For each k-dimensional sector, take up to num_per_bin samples
+
     Max number of samples return is num_per_bin * num_bins ^ num_pcs, but in practice, typically much fewer (corners of PC space are sparse)
 
     Assumes your scores are in scores_table.scores (and sample stored in `s`)
@@ -238,12 +246,14 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     """
     Filters low-confidence regions
 
-    :param MatrixTable or Table mt: MatrixTable or Table to filter
+    :param mt: MatrixTable or Table to filter
+    :type mt: MatrixTable or Table
     :param bool filter_lcr: Whether to filter LCR regions
     :param bool filter_decoy: Whether to filter decoy regions
     :param bool filter_segdup: Whether to filter Segdup regions
     :param bool filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
-    :param list of str high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
+    :param high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
+    :type high_conf_regions: list of str
     :return: MatrixTable or Table with low confidence regions removed
     :rtype: MatrixTable or Table
     """
@@ -329,7 +339,8 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
 
 def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
     """
-    Add most_severe_consequence annotation to transcript consequences
+    Add most_severe_consequence annotation to transcript consequences.
+
     This is for a given transcript, as there are often multiple annotations for a single transcript:
     e.g. splice_region_variant&intron_variant -> splice_region_variant
     """
@@ -710,10 +721,10 @@ def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.M
     """
 
     Splits a trio MatrixTable back into a sample MatrixTable.
-    It assumes that the input MatrixTable schema
 
     :param MatrixTable tm: Input trio MatrixTable
-    :param list of str col_keys: Column keys for the sample MatrixTable
+    :param col_keys: Column keys for the sample MatrixTable
+    :type col_keys: list of str
     :return: Sample MatrixTable
     :rtype: MatrixTable
     """
@@ -748,7 +759,6 @@ def get_duplicated_samples(
 ) -> List[Set[str]]:
     """
     Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
-
 
     :param Table kin_ht: pc_relate output table
     :param str i_col: Column containing the 1st sample
@@ -1021,8 +1031,10 @@ def assign_population_pcs(
         If you have a Pandas Dataframe and have all PCs as an array in a single column, the
         `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
 
-    :param Table or DataFrame pop_pc_pd: Input Hail Table or Pandas Dataframe
-    :param ArrayExpression or list of str pc_cols: Columns storing the PCs to use
+    :param pop_pc_pd: Input Hail Table or Pandas Dataframe
+    :type pop_pc_pd: Table or DataFrame
+    :param pc_cols: Columns storing the PCs to use
+    :type pc_cols: ArrayExpression or list of str
     :param str known_col: Column storing the known population labels
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param int seed: Random seed
@@ -1102,7 +1114,9 @@ def assign_population_pcs(
 def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
     """
     Merges multiple stats counters, assuming that they were computed on non-overlapping data.
+
     Examples:
+
     - Merge stats computed on indel and snv separately
     - Merge stats computed on bi-allelic and multi-allelic variants separately
     - Merge stats computed on autosomes and sex chromosomes separately
@@ -1177,7 +1191,8 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
     Returns a boolean expression selecting bi-allelic sites only,
     accounting for whether the input MT/HT was split.
 
-    :param Table or MatrixTable t: Input HT/MT
+    :param t: Input HT/MT
+    :type t: Table or MatrixTable
     :return: Boolean expression selecting only bi-allelic sites
     :rtype: BooleanExpression
     """
@@ -1187,6 +1202,7 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
 def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
+
     This is implemented based on the GATK InbreedingCoeff metric:
     https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
 
@@ -1260,7 +1276,8 @@ def fs_from_sb(
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
-    :param ArrayNumericExpression or ArrayExpression sb: Count of ref/alt reads on each strand
+    :param sb: Count of ref/alt reads on each strand
+    :type sb: ArrayNumericExpression or ArrayExpression
     :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (normalize=True), or use a chi sq instead of FET (normalize=False)
     :param int min_cell_count: Maximum count for performing a FET
     :param int min_count: Minimum total count to output FS (otherwise null it output)
@@ -1326,6 +1343,7 @@ def vep_struct_to_csq(
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
+
     The fields and their order will correspond to those passed in `csq_fields`, which corresponds to the
     VCF header that is required to interpret the VCF CSQ INFO field.
 
@@ -1422,7 +1440,7 @@ def get_median_and_mad_expr(
         )
     )
 
-                            
+
 def get_array_element_type(array_expr: hl.expr.ArrayExpression) -> hl.HailType:
     """
     Returns the type of an array element.
@@ -1447,6 +1465,7 @@ def ht_to_vcf_mt(
 
     :param Table info_ht: Input HT
     :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct)
+    :type pipe_delimited_annotations: list of str
     :return: MatrixTable ready for VCF export
     :rtype: MatrixTable
     """
@@ -1502,7 +1521,8 @@ def sort_intervals(intervals: List[hl.Interval]):
     Sorts an array of intervals by:
     start contig, then start position, then end contig, then end position
 
-    :param list of Interval intervals: Intervals to sort
+    :param intervals: Intervals to sort
+    :type intervals: list of Interval
     :return: Sorted interval list
     :rtype: list of Interval
     """
@@ -1521,7 +1541,8 @@ def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
     """
     Generates a list with the union of all intervals in the input list by merging overlapping intervals.
 
-    :param list of Interval intervals: Intervals to merge
+    :param intervals: Intervals to merge
+    :type intervals: list of Interval
     :param bool is_sorted: If set, assumes intervals are already sorted, otherwise will sort.
     :return: List of merged intervals
     :rtype: List of Interval

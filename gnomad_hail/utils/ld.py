@@ -24,12 +24,14 @@ def get_r_for_pair_of_variants(bm: BlockMatrix, ld_index: hl.Table,
     """
     Get `r` value (LD) for pair of variants `var1` and `var2`.
 
-    bm = get_ld_matrix('nfe')
-    ld_index = get_ld_index('nfe')
-    var1 = (hl.parse_locus('1:10146', 'GRCh37'), ['AC', 'A'])
-    var2 = (hl.parse_locus('1:10151', 'GRCh37'), ['TA', 'T'])
-    get_r_for_pair_of_variants(bm, ld_index, var1, var2)
-    # 0.01789767935482124
+    .. code-block:: python
+
+        bm = get_ld_matrix('nfe')
+        ld_index = get_ld_index('nfe')
+        var1 = (hl.parse_locus('1:10146', 'GRCh37'), ['AC', 'A'])
+        var2 = (hl.parse_locus('1:10151', 'GRCh37'), ['TA', 'T'])
+        get_r_for_pair_of_variants(bm, ld_index, var1, var2)
+        # 0.01789767935482124
 
     :param BlockMatrix bm: Input BlockMatrix
     :param Table ld_index: Corresponding index table

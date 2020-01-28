@@ -9,6 +9,7 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
     This function takes a sparse MT and computes for each row the genomic position of the
     most upstream reference block overlapping that row.
+
     Note that since reference blocks do not extend beyond contig boundaries, only the position is kept.
 
     This function returns a Table with that annotation.  (`last_END_position`).
@@ -65,6 +66,7 @@ def densify_sites(
 ) -> hl.MatrixTable:
     """
     Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
+
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
 
     :param MatrixTable mt: Input sparse MT
@@ -247,9 +249,12 @@ def get_as_info_expr(
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input Matrix Table
-    :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
-    :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
+    :param sum_agg_fields: Fields to aggregate using sum.
+    :type sum_agg_fields: list of str or dict of str -> NumericExpression
+    :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
+    :type int32_sum_agg_fields: list of str or dict of str -> NumericExpression
+    :param median_agg_fields: Fields to aggregate using (approximate) median.
+    :type median_agg_fields: list of str or dict of str -> NumericExpression
     :return: Expression containing the AS info fields
     :rtype: StructExpression
     """
@@ -326,9 +331,12 @@ def get_site_info_expr(
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param MatrixTable mt: Input Matrix Table
-    :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
-    :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
+    :param sum_agg_fields: Fields to aggregate using sum.
+    :type sum_agg_fields: list of str or dict of str -> NumericExpression
+    :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
+    :type int32_sum_agg_fields: list of str or dict of str -> NumericExpression
+    :param median_agg_fields: Fields to aggregate using (approximate) median.
+    :type median_agg_fields: list of str or dict of str -> NumericExpression
     :return: Expression containing the site-level info fields
     :rtype: StructExpression
     """

@@ -98,6 +98,7 @@ def get_qc_mt(
 ) -> hl.MatrixTable:
     """
     Creates a QC-ready MT by keeping:
+
     - Variants outside known problematic regions
     - Bi-allelic SNVs only
     - Variants passing hard thresholds
@@ -118,7 +119,8 @@ def get_qc_mt(
     :param bool filter_decoy: Filter decoy regions
     :param bool filter_segdup: Filter segmental duplication regions
     :param bool filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
-    :param list of str high_conf_regions: If given, the data will be filtered to only include variants in those regions
+    :param high_conf_regions: If given, the data will be filtered to only include variants in those regions
+    :type high_conf_regions: list of str
     :return: Filtered MT
     :rtype: MatrixTable
     """
@@ -374,9 +376,9 @@ def get_ploidy_cutoffs(
     x_ploidy_cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
     y_ploidy_cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
 
-    Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes. 
-    Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies. 
-    
+    Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes.
+    Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies.
+
     Note that f-stat is used only to split the samples into roughly 'XX' and 'XY' categories and is not used in the final karyotype annotation.
 
     :param Table ht: Table with f_stat and sex chromosome ploidies
@@ -529,9 +531,10 @@ def compute_related_samples_to_drop(
     """
     Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
 
-    Note:
-    - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
-    - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
+    .. note::
+
+        - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
+        - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
 
     :param Table relatedness_ht: relatedness HT, as produced by e.g. pc-relate
     :param float kin_threshold: Kinship threshold to consider two samples as related
@@ -679,11 +682,14 @@ def compute_stratified_metrics_filter(
     Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering
 
     :param MatrixTable ht: HT containing relevant sample QC metric annotations
-    :param dict of str -> qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
-    :param list of str strata: List of annotations used for stratification. These metrics should be discrete types!
+    :param qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
+    :type qc_metrics: dict of str -> NumericExpression
+    :param strata: List of annotations used for stratification. These metrics should be discrete types!
+    :type strata: dict of str -> Expression
     :param float lower_threshold: Lower MAD threshold
     :param float upper_threshold: Upper MAD threshold
-    :param dict str -> (float, float) metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
+    :param metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
+    :type metric_threshold: dict of str -> (float, float)
     :param str filter_name: Name of resulting filters annotation
     :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
     :rtype: Table
@@ -744,12 +750,15 @@ def compute_qc_metrics_residuals(
     """
     Computes QC metrics residuals after regressing out PCs (and optionally PC^2)
 
-    Note: The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
-    Residuals are always computed for all samples.
+    .. note::
+
+        The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
+        Residuals are always computed for all samples.
 
     :param Table ht: Input sample QC metrics HT
     :param ArrayNumericExpressoin pc_scores: The expression in the input HT that stores the PC scores
-    :param dict of str -> NumericExpression qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
+    :param qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
+    :type qc_metrics: dict of str -> NumericExpression
     :param bool use_pc_square: Whether to  use PC^2 in the regression or not
     :param int n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
     :param BooleanExpression regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
@@ -851,7 +860,8 @@ def add_filters_expr(
 
     Current filters are kept if provided using `current_filters`
 
-    :param dict of str -> BooleanExpression filters: The filters and their expressions
+    :param filters: The filters and their expressions
+    :type filters: dict of str -> BooleanExpression
     :param SetExpression current_filters: The set of current filters
     :return: An expression that can be used to annotate the filters
     :rtype: SetExpression
@@ -872,18 +882,23 @@ def add_filters_expr(
 def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.expr.StructExpression:
     """
     Creates an expression that merges results from non-overlapping strata of hail.sample_qc
+
     E.g.:
+
     - Compute autosomes and sex chromosomes metrics separately, then merge results
     - Compute bi-allelic and multi-allelic metrics separately, then merge results
 
     Note regarding the merging of ``dp_stats`` and ``gq_stats``:
     Because ``n`` is needed to aggregate ``stdev``, ``n_called`` is used for this purpose.
     This should work very well on a standard GATK VCF and it essentially assumes that:
+
     - samples that are called have `DP` and `GQ` fields
     - samples that are not called do not have `DP` and `GQ` fields
+
     Even if these assumptions are broken for some genotypes, it shouldn't matter too much.
 
-    :param list of StructExpression sample_qc_exprs: List of sample QC struct expressions for each stratification
+    :param sample_qc_exprs: List of sample QC struct expressions for each stratification
+    :type sample_qc_exprs: list of StructExpression
     :return: Combined sample QC results
     :rtype: StructExpression
     """
@@ -947,7 +962,8 @@ def compute_stratified_sample_qc(
     Note that strata should be non-overlapping,  e.g. SNV vs indels or bi-allelic vs multi-allelic
 
     :param MatrixTable mt: Input MT
-    :param dict of str -> BooleanExpression strata: Strata names and filtering expressions
+    :param strata: Strata names and filtering expressions
+    :type strata: dict of str -> BooleanExpression
     :param str tmp_ht_prefix: Optional path prefix to write the intermediate strata results to (recommended for larger datasets)
     :param CallExpression gt_expr: Optional entry field storing the genotype (if not specified, then it is assumed that it is stored in mt.GT)
     :return: Sample QC table, including strat-specific numbers

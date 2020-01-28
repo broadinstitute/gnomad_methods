@@ -183,17 +183,17 @@ def generate_fam_stats_expr(
     return fam_stats
 
 
-def compute_binned_rank(
+def annotate_quantile_bin(
         ht: hl.Table,
         score_expr: hl.expr.NumericExpression,
-        rank_expr: Dict[str, hl.expr.BooleanExpression] = {'rank': True},
+        bin_expr: Dict[str, hl.expr.BooleanExpression] = {'bin': True},
         stratify_snv_indel: bool = True,
         n_bins: int = 100,
         k: int = 1000,
         desc: bool = True
 ) -> hl.Table:
     """
-    Returns a table containing a binned rank for each row.
+    Returns a table annotated with a bin for each row based on quantiles of `score_expr`.
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
     This is done based on quantiles computed with hl.agg.approx_quantiles.
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
@@ -201,20 +201,20 @@ def compute_binned_rank(
 
     Notes
     -----
-    The `rank_expr` defines which data the rank(s) should be computed on. E.g., to get an SNV rank and an Indel rank,
-    the following could be used:
-    rank_expr={
-       'snv_rank': hl.is_snp(ht.alleles[0], ht.alleles[1]),
-       'indels_rank': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
+    The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get an SNV quantile bin and an Indel
+    quantile bin, the following could be used:
+    bin_expr={
+       'snv_bin': hl.is_snp(ht.alleles[0], ht.alleles[1]),
+       'indels_bin': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
     }
 
     :param Table ht: Input Table
     :param NumericExpression score_expr: Expression containing the score
-    :param dict of str -> BooleanExpression rank_expr: Rank(s) to be computed (see notes)
+    :param dict of str -> BooleanExpression bin_expr: Quantile bin(s) to be computed (see notes)
     :param int n_bins: Number of bins to bin the data into
     :param int k: The `k` parameter of approx_quantiles
     :param bool desc: Whether to bin the score in descending order
-    :return: Table with the binned ranks
+    :return: Table with the quantile bins
     :rtype: Table
     """
     import math
@@ -269,20 +269,20 @@ def compute_binned_rank(
             ]
         }
 
-    ht = ht.annotate(
+    bin_ht = ht.annotate(
         **{f'_filter_{rid}': rexpr for rid, rexpr in bin_expr.items()},
         _score=score_expr
     )
 
-    logger.info(f'Adding rank using approximate_quantiles binned into {n_bins}, using k={k}')
-    rank_stats = ht.aggregate(
+    logger.info(f'Adding quantile bins using approximate_quantiles binned into {n_bins}, using k={k}')
+    bin_stats = bin_ht.aggregate(
         hl.struct(
             **{
                 rid: hl.agg.filter(
-                    ht[f'_filter_{rid}'],
+                    bin_ht[f'_filter_{rid}'],
                     hl.struct(
                         n=hl.agg.count(),
-                        quantiles=hl.agg.approx_quantiles(ht._score, [x / (n_bins) for x in range(1, n_bins)], k=k)
+                        quantiles=hl.agg.approx_quantiles(bin_ht._score, [x / (n_bins) for x in range(1, n_bins)], k=k)
                     )
                 )
                 for rid in bin_expr
@@ -291,19 +291,19 @@ def compute_binned_rank(
     )
 
     # Take care of bins with duplicated boundaries
-    rank_stats = rank_stats.annotate(
+    bin_stats = bin_stats.annotate(
         **{
-            rname: rank_stats[rname].annotate(
-                    **quantiles_to_bin_boundaries(rank_stats[rname].quantiles)
-            ) for rname in rank_stats
+            rname: bin_stats[rname].annotate(
+                    **quantiles_to_bin_boundaries(bin_stats[rname].quantiles)
+            ) for rname in bin_stats
         }
     )
 
-    logger.debug(str(rank_stats))
+    logger.debug(str(bin_stats))
 
-    ht = ht.annotate_globals(
-        rank_stats=hl.literal(
-            rank_stats,
+    bin_ht = bin_ht.annotate_globals(
+        bin_stats=hl.literal(
+            bin_stats,
             dtype=hl.tstruct(**{
                 bin_id: hl.tstruct(
                     n=hl.tint64,
@@ -316,33 +316,33 @@ def compute_binned_rank(
         )
     )
 
-    # Annotate the rank as the index in the unique boundaries array
-    ht = ht.annotate(
+    # Annotate the bin as the index in the unique boundaries array
+    bin_ht = bin_ht.annotate(
         **{
             bin_id: hl.or_missing(
-                ht[f'_filter_{bin_id}'],
-                hl.binary_search(ht.rank_stats[bin_id].bin_boundaries, ht._score),
+                bin_ht[f'_filter_{bin_id}'],
+                hl.binary_search(bin_ht.bin_stats[bin_id].bin_boundaries, bin_ht._score),
             ) for bin_id in bin_expr
         }
     )
 
-    # Convert the rank to global rank by expanding merged bins, that is:
+    # Convert the bin to global bin by expanding merged bins, that is:
     # If a value falls in a bin that needs expansion, assign it randomly to one of the expanded bins
-    # Otherwise, simply modify the rank bin to its global index (with expanded bins that is)
-    ht = ht.select(
+    # Otherwise, simply modify the bin to its global index (with expanded bins that is)
+    bin_ht = bin_ht.select(
         **{
             bin_id: hl.cond(
-                ht.rank_stats[bin_id].merged_bins.contains(ht[bin_id]),
-                ht[bin_id] + hl.int(hl.rand_unif(0, ht.rank_stats[bin_id].merged_bins[ht[bin_id]] + 1)),
-                ht.rank_stats[bin_id].global_bin_indices[ht[bin_id]]
+                bin_ht.bin_stats[bin_id].merged_bins.contains(bin_ht[bin_id]),
+                bin_ht[bin_id] + hl.int(hl.rand_unif(0, bin_ht.bin_stats[bin_id].merged_bins[bin_ht[bin_id]] + 1)),
+                bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]]
             )
             for bin_id in bin_expr
         }
     )
 
     if desc:
-        ht = ht.annotate(
-            **{bin_id: n_bins - ht[bin_id] for bin_id in bin_expr}
+        bin_ht = bin_ht.annotate(
+            **{bin_id: n_bins - bin_ht[bin_id] for bin_id in bin_expr}
         )
 
     # Annotate the HT with the bin

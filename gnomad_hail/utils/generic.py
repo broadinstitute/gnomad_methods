@@ -247,7 +247,7 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     Filters low-confidence regions
 
     :param mt: MatrixTable or Table to filter
-    :param mt: MatrixTable or Table
+    :type mt: MatrixTable or Table
     :param bool filter_lcr: Whether to filter LCR regions
     :param bool filter_decoy: Whether to filter decoy regions
     :param bool filter_segdup: Whether to filter Segdup regions

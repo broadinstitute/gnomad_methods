@@ -260,6 +260,7 @@ def annotate_quantile_bin(
 
     if stratify_snv_indel:
         # For each bin, add a SNV / indel stratification
+        bin_expr_no_snv_strat = bin_expr
         bin_expr = {
             f'{bin_id}_{snv}': (bin_expr & snv_expr)
             for bin_id, bin_expr in bin_expr.items()
@@ -355,7 +356,7 @@ def annotate_quantile_bin(
                     bin_ht[f'{bin_id}_snv'],
                     bin_ht[f'{bin_id}_indel']
                 )
-                for bin_id in bin_expr
+                for bin_id in bin_expr_no_snv_strat
             }
         )
 

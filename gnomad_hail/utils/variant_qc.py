@@ -377,7 +377,7 @@ def create_binned_ht(
         singleton: bool = True,
         biallelic: bool = True,
         adj: bool = True,
-        add_substrat = None
+        add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None
 ) -> hl.Table:
     """
     Annotates table with a bin, where variants are binned based on score into `n_bins` equally-sized bins.
@@ -386,7 +386,7 @@ def create_binned_ht(
     - ac - expected that this is the adj filtered allele count
     - ac_raw - expected that this is the raw allele count before adj filtering
 
-    Computes bin numbers stratified by SNV / Indels and with the following sub bins
+    Computes bin numbers stratified by SNV / Indels and with the following optional sub bins
     - singletons
     - biallelics
     - biallelic singletons
@@ -397,6 +397,10 @@ def create_binned_ht(
 
     :param Table ht: Input table
     :param int n_bins: Number of bins to bin into
+    :param bool singleton: Should bins be stratified by singletons
+    :param bool biallelic: Should bins be stratified by bi-alleleic variants
+    :param bool adj: Should bins be stratified by adj filtering
+    :param dictionary of boolean expr keyed by str add_substrat: Any additional stratifications for adding bins
     :return table with bin number for each variant
     :rtype: Table
     """
@@ -489,6 +493,7 @@ def compute_aggregate_binned_data(
         `min_score` - minimun of score annotation per group
         `max_score` - maiximum of score annotation per group
         `n` - count of variants per group
+        `n_ins` - count of insertion per group
         `n_ins` - count of insertion per group
         `n_del` - count of deletions per group
         `n_ti` - count of transitions per group

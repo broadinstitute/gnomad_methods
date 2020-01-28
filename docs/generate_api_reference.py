@@ -12,12 +12,9 @@ import re
 import sys
 
 # Add gnomad_hail to import path.
-# Since the gnomad_hail package is at the top level of the repository, this
-# configuration depends on the repository being checked out into a directory
-# named gnomad_hail.
-sys.path.insert(0, str(pathlib.Path(os.path.abspath(__file__)).parent.parent.parent))
+sys.path.insert(0, str(pathlib.Path(os.path.abspath(__file__)).parent.parent))
 
-ROOT_PACKAGE_PATH = str(pathlib.Path(os.path.abspath(__file__)).parent.parent)
+ROOT_PACKAGE_PATH = str(pathlib.Path(os.path.abspath(__file__)).parent.parent / "gnomad_hail")
 
 DOCS_DIRECTORY = str(pathlib.Path(os.path.abspath(__file__)).parent)
 

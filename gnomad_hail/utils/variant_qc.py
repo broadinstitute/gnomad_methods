@@ -1,6 +1,7 @@
 import itertools
-
 from .generic import *
+import gnomad_hail.resources.grch37 as grch37_resources
+import gnomad_hail.resources.grch38 as grch38_resources
 
 
 def get_lowqual_expr(

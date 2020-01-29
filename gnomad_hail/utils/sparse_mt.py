@@ -14,9 +14,8 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
 
     This function returns a Table with that annotation.  (`last_END_position`).
 
-    :param MatrixTable mt: Input MatrixTable
+    :param mt: Input MatrixTable
     :return: Output Table with `last_END_position` annotation
-    :rtype: Table
     """
     mt = mt.select_entries('END')
 
@@ -69,12 +68,11 @@ def densify_sites(
 
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
 
-    :param MatrixTable mt: Input sparse MT
-    :param Table sites_ht: Desired sites to densify
-    :param Table last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
-    :param bool semi_join_rows: Whether to filter the MT rows based on semi-join (default, better if sites_ht is large) or based on filter_intervals (better if sites_ht only contains a few sites)
+    :param mt: Input sparse MT
+    :param sites_ht: Desired sites to densify
+    :param last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
+    :param semi_join_rows: Whether to filter the MT rows based on semi-join (default, better if sites_ht is large) or based on filter_intervals (better if sites_ht only contains a few sites)
     :return: Dense MT filtered to the sites in `sites_ht`
-    :rtype: MatrixTable
     """
     logger.info("Computing intervals to densify from sites Table.")
     sites_ht = sites_ht.key_by('locus')
@@ -119,7 +117,9 @@ def _get_info_agg_expr(
 ) -> Dict[str, hl.expr.Aggregation]:
     """
     Helper function containing code to create Aggregators for both site or AS info expression aggregations.
+
     Notes:
+
     1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
     2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
@@ -127,15 +127,14 @@ def _get_info_agg_expr(
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
-    :param MatrixTable mt: Input MT
-    :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
-    :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using element-wise summing over an array.
-    :param str prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
+    :param mt: Input MT
+    :param sum_agg_fields: Fields to aggregate using sum.
+    :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
+    :param median_agg_fields: Fields to aggregate using (approximate) median.
+    :param median_agg_fields: Fields to aggregate using element-wise summing over an array.
+    :param prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
 
     :return: Dictionary of expression names and their corresponding aggregation Expression
-    :rtype: dict of str -> Aggregation
     """
 
     def _agg_list_to_dict(mt: hl.MatrixTable, fields: List[str]) -> Dict[str, hl.expr.NumericExpression]:
@@ -248,15 +247,11 @@ def get_as_info_expr(
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
-    :param MatrixTable mt: Input Matrix Table
+    :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
-    :type sum_agg_fields: list of str or dict of str -> NumericExpression
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :type int32_sum_agg_fields: list of str or dict of str -> NumericExpression
     :param median_agg_fields: Fields to aggregate using (approximate) median.
-    :type median_agg_fields: list of str or dict of str -> NumericExpression
     :return: Expression containing the AS info fields
-    :rtype: StructExpression
     """
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
@@ -330,15 +325,11 @@ def get_site_info_expr(
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
-    :param MatrixTable mt: Input Matrix Table
+    :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
-    :type sum_agg_fields: list of str or dict of str -> NumericExpression
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :type int32_sum_agg_fields: list of str or dict of str -> NumericExpression
     :param median_agg_fields: Fields to aggregate using (approximate) median.
-    :type median_agg_fields: list of str or dict of str -> NumericExpression
     :return: Expression containing the site-level info fields
-    :rtype: StructExpression
     """
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning("`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr")
@@ -385,14 +376,13 @@ def impute_sex_ploidy(
     the coverage of an autosomal chromosome (by default chr20).
     Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
 
-    :param MatrixTable mt: Input sparse Matrix Table
-    :param str excluded_intervals: Optional table of intervals to exclude from the computation.
-    :param str included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
-    :param str normalization_contig: Which chromosome to normalize by
-    :param str chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
-    :param str chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
+    :param mt: Input sparse Matrix Table
+    :param excluded_intervals: Optional table of intervals to exclude from the computation.
+    :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
+    :param normalization_contig: Which chromosome to normalize by
+    :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
+    :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
     :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
-    :rtype: Table
     """
 
     ref = get_reference_genome(mt.locus, add_sequence=True)

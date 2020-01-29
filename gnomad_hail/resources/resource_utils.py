@@ -16,8 +16,8 @@ class BaseResource(ABC):
         """
         Creates a Resource
 
-        :param str path: The resource path
-        :param dict of str import_sources: Additional attributes for the resource
+        :param path: The resource path
+        :param import_sources: Additional attributes for the resource
         """
 
         self.path = path
@@ -51,7 +51,6 @@ class TableResource(BaseResource):
         Read and return the Hail Table resource
 
         :return: Hail Table resource
-        :rtype: Table
         """
         return hl.read_table(self.path)
 
@@ -73,7 +72,6 @@ class MatrixTableResource(BaseResource):
         Read and return the Hail MatrixTable resource
 
         :return: Hail MatrixTable resource
-        :rtype: MatrixTable
         """
         return hl.read_matrix_table(self.path)
 
@@ -94,9 +92,8 @@ class PedigreeResource(BaseResource):
         """
         Reads the pedigree into a family HT using hl.import_fam().
 
-        :param str delimiter: Delimiter used in the ped file
+        :param delimiter: Delimiter used in the ped file
         :return: Family table
-        :rtype: Table
         """
         return hl.import_fam(self.path, delimiter=delimiter)
 
@@ -104,9 +101,8 @@ class PedigreeResource(BaseResource):
         """
         Reads the pedigree into an hl.Pedigree using hl.Pedigree.read().
 
-        :param str delimiter: Delimiter used in the ped file
+        :param delimiter: Delimiter used in the ped file
         :return: pedigree
-        :rtype: Pedigree
         """
         return hl.Pedigree.read(self.path, delimiter=delimiter)
 
@@ -128,7 +124,6 @@ class BlockMatrixResource(BaseResource):
         Read and return the Hail MatrixTable resource
 
         :return: Hail MatrixTable resource
-        :rtype: MatrixTable
         """
         return BlockMatrix.read(self.path)
 
@@ -145,8 +140,8 @@ class BaseVersionedResource(BaseResource, ABC):
         of the default version of the resource.
         In addition, all versions of the resource are stored in the `versions` attribute.
 
-        :param str default_version: The default version of this resource (needs to be in the `versions` dict)
-        :param dict of str -> BaseResource versions: A dict of version name -> resource.
+        :param default_version: The default version of this resource (needs to be in the `versions` dict)
+        :param versions: A dict of version name -> resource.
         """
 
         if type(self) is BaseVersionedResource:

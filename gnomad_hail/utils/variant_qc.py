@@ -277,7 +277,6 @@ def compute_quantile_bin(
 
     if stratify_snv_indel:
         # For each bin, add a SNV / indel stratification
-        bin_expr_no_snv_strat = bin_expr
         bin_expr = {
             f'{bin_id}_{snv}': (bin_expr & snv_expr)
             for bin_id, bin_expr in bin_expr.items()
@@ -364,7 +363,20 @@ def compute_quantile_bin(
         )
 
     # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
+    # Update the global bin_stats struct to reflect the change in bin names in the table
     if stratify_snv_indel:
+        bin_expr_no_snv = {bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_stats}
+        bin_ht = bin_ht.annotate_globals(
+            bin_stats=hl.struct(
+                **{
+                    bin_id: hl.struct(
+                        **{snv: bin_ht.bin_stats[f"{bin_id}_{snv}"] for snv in ["snv", "indel"]}
+                    )
+                    for bin_id in bin_expr_no_snv
+                }
+            )
+        )
+
         bin_ht = bin_ht.transmute(
             **{
                 bin_id: hl.cond(
@@ -372,13 +384,11 @@ def compute_quantile_bin(
                     bin_ht[f'{bin_id}_snv'],
                     bin_ht[f'{bin_id}_indel']
                 )
-                for bin_id in bin_expr_no_snv_strat
+                for bin_id in bin_expr_no_snv
             }
         )
 
-    ht = ht.annotate(**bin_ht[ht.key])
-    
-    return ht
+    return bin_ht
 
 
 def create_binned_ht(

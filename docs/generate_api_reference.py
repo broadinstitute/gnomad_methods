@@ -14,7 +14,9 @@ import sys
 # Add gnomad_hail to import path.
 sys.path.insert(0, str(pathlib.Path(os.path.abspath(__file__)).parent.parent))
 
-ROOT_PACKAGE_PATH = str(pathlib.Path(os.path.abspath(__file__)).parent.parent / "gnomad_hail")
+ROOT_PACKAGE_PATH = str(
+    pathlib.Path(os.path.abspath(__file__)).parent.parent / "gnomad_hail"
+)
 
 DOCS_DIRECTORY = str(pathlib.Path(os.path.abspath(__file__)).parent)
 
@@ -65,6 +67,8 @@ def format_title(title):
 
 MODULE_DOC_TEMPLATE = """{title}
 
+{module_doc}
+
 .. gnomadhail_automodulesummary:: {module_name}
 
 .. automodule:: {module_name}
@@ -78,7 +82,9 @@ def write_module_doc(module_name):
     module = importlib.import_module(module_name)
 
     doc = MODULE_DOC_TEMPLATE.format(
-        title=format_title(module_name), module_name=module_name
+        module_name=module_name,
+        title=format_title(module_name),
+        module_doc=module.__doc__ or "",
     )
 
     doc_path = module_doc_path(module)
@@ -87,8 +93,10 @@ def write_module_doc(module_name):
 
 PACKAGE_DOC_TEMPLATE = """{title}
 
+{package_doc}
+
 .. toctree::
-    :maxdepth: 1
+    :maxdepth: 2
 
     {module_links}
 """
@@ -115,7 +123,9 @@ def write_package_doc(package_name):
             module_links.append(f"{module.name} <{module.name}>")
 
     doc = PACKAGE_DOC_TEMPLATE.format(
-        title=format_title(package_name), module_links="\n    ".join(module_links)
+        title=format_title(package_name),
+        package_doc=package.__doc__ or "",
+        module_links="\n    ".join(module_links),
     )
 
     doc_path = package_doc_path(package)

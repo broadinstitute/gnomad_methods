@@ -15,14 +15,13 @@ def get_lowqual_expr(
     """
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
 
-    :param ArrayExpression alleles: Array of alleles
-    :param ArraynumericExpression or NumericExpression qual_approx_expr: QUALapprox or AS_QUALapprox
-    :param int snv_phred_threshold: Phred-scaled SNV "emission" threshold (similar to GATK emission threshold)
-    :param int snv_phred_het_prior: Phred-scaled SNV heterozygosity prior (30 = 1/1000 bases, GATK default)
-    :param int indel_phred_threshold: Phred-scaled indel "emission" threshold (similar to GATK emission threshold)
-    :param int indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
+    :param alleles: Array of alleles
+    :param qual_approx_expr: QUALapprox or AS_QUALapprox
+    :param snv_phred_threshold: Phred-scaled SNV "emission" threshold (similar to GATK emission threshold)
+    :param snv_phred_het_prior: Phred-scaled SNV heterozygosity prior (30 = 1/1000 bases, GATK default)
+    :param indel_phred_threshold: Phred-scaled indel "emission" threshold (similar to GATK emission threshold)
+    :param indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
-    :rtype: BooleanExpression or ArrayExpression
     """
     def low_qual_expr(
             ref: hl.expr.StringExpression,
@@ -51,6 +50,7 @@ def generate_fam_stats_expr(
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the following counts:
+
     - Number of alleles in het parents transmitted to the proband
     - Number of alleles in het parents not transmitted to the proband
     - Number of de novo mutations
@@ -58,12 +58,11 @@ def generate_fam_stats_expr(
     Both transmission and de novo mutation metrics can be stratified using additional filters.
     If an empty dict is passed as one of the strata arguments, then this metric isn't computed.
 
-    :param MatrixTable trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix
-    :param dict of str -> BooleanExpression transmitted_strata: Strata for the transmission counts
-    :param dict of str -> BooleanExpression de_novo_strata: Strata for the de novo counts
-    :param BooleanExpression proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
+    :param trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix
+    :param transmitted_strata: Strata for the transmission counts
+    :param de_novo_strata: Strata for the de novo counts
+    :param proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
     :return: An expression with the counts
-    :rtype: StructExpression
     """
 
     # Create map for transmitted, untransmitted and DNM
@@ -208,6 +207,7 @@ def compute_quantile_bin(
 ) -> hl.Table:
     """
     Returns a table with a bin for each row based on quantiles of `score_expr`.
+
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
     This is done based on quantiles computed with hl.agg.approx_quantiles.
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed

@@ -16,12 +16,12 @@ logger.setLevel(logging.INFO)
 def get_checkpoint_path(gnomad: bool, data_type: str, path: str, is_table: bool) -> str:
     """
     Creates a checkpoint path for Table
-    :param bool gnomad: Whether data is gnomAD data
-    :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param str path: Path to input Table/MatrixTable (if data is not gnomAD data)
-    :param bool is_table: Whether data is a Table
+
+    :param gnomad: Whether data is gnomAD data
+    :param data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
+    :param path: Path to input Table/MatrixTable (if data is not gnomAD data)
+    :param is_table: Whether data is a Table
     :return: Output checkpoint path
-    :rtype: str
     """
     
     if gnomad:
@@ -36,9 +36,8 @@ def get_liftover_genome(t: Union[hl.MatrixTable, hl.Table]) -> list:
     """
     Infers genome build of input data and assumes destination build. Prepares to liftover to destination genome build
 
-    :param Table/MatrixTable t: Input Table or MatrixTable
+    :param t: Input Table or MatrixTable
     :return: List of source build (with liftover chain added) and destination build (with sequence loaded)
-    :rtype: List (containing type hl.genetics.ReferenceGenome)
     """
 
     logger.info('Inferring build of input')
@@ -71,14 +70,13 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     """
     Lifts input Table or MatrixTable from one reference build to another
 
-    :param Table/MatrixTable t: Table or MatrixTable
-    :param bool gnomad: Whether data is gnomAD data
-    :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param str path: Path to input Table/MatrixTable (if data is not gnomAD data)
-    :param ReferenceGenome rg: Reference genome
-    :param bool overwrite: Whether to overwrite data
+    :param t: Table or MatrixTable
+    :param gnomad: Whether data is gnomAD data
+    :param data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
+    :param path: Path to input Table/MatrixTable (if data is not gnomAD data)
+    :param rg: Reference genome
+    :param overwrite: Whether to overwrite data
     :return: Table or MatrixTablewith liftover annotations
-    :rtype: Table or MatrixTable
     """
 
     logger.info('Annotating input with liftover coordinates')
@@ -111,11 +109,11 @@ def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], data_type: str, rg
     Annotates mismatches between reference allele and allele in reference fasta
 
     Assumes input Table/MatrixTable has t.new_locus annotation
-    :param Table/MatrixTable t: Table/MatrixTable of SNPs to be annotated
-    :param str data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param ReferenceGenome rg: Reference genome with fasta sequence loaded
+
+    :param t: Table/MatrixTable of SNPs to be annotated
+    :param data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
+    :param rg: Reference genome with fasta sequence loaded
     :return: Table annotated with mismatches between reference allele and allele in fasta
-    :rtype: Table
     """
  
     logger.info('Filtering to SNPs')
@@ -135,9 +133,9 @@ def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], data_type: str, rg
 def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
     """
     Checks for mismatches between reference allele and allele in reference fasta
-    :param Table ht: Table to be checked
+
+    :param ht: Table to be checked
     :return: StructExpression containing counts for mismatches and count for all variants on negative strand
-    :rtype: StructExpression
     """
 
     mismatch = ht.aggregate(hl.struct(total_variants=hl.agg.count(),

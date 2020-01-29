@@ -22,16 +22,15 @@ def filter_rows_for_qc(
         This function expect the typical ``info`` annotation of type struct with fields ``MQ``, ``FS`` and ``QD``
         if applying hard filters.
 
-    :param MatrixTable mt: Input MT
-    :param float min_af: Minimum site AF to keep. Not applied if set to ``None``.
-    :param float min_callrate: Minimum site call rate to keep. Not applied if set to ``None``.
-    :param float min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
-    :param float min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
-    :param bool apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
-    :param bool bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
-    :param bool snv_only: Whether to only keep SNVs or include other variant types
+    :param mt: Input MT
+    :param min_af: Minimum site AF to keep. Not applied if set to ``None``.
+    :param min_callrate: Minimum site call rate to keep. Not applied if set to ``None``.
+    :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
+    :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
+    :paramapply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
+    :parambi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
+    :paramsnv_only: Whether to only keep SNVs or include other variant types
     :return: annotated and filtered table
-    :rtype: MatrixTable
     """
     annotation_expr = {}
 
@@ -98,6 +97,7 @@ def get_qc_mt(
 ) -> hl.MatrixTable:
     """
     Creates a QC-ready MT by keeping:
+
     - Variants outside known problematic regions
     - Bi-allelic SNVs only
     - Variants passing hard thresholds
@@ -106,21 +106,20 @@ def get_qc_mt(
 
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
-    :param MatrixTable mt: Input MT
-    :param bool adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
-    :param float min_af: Minimum allele frequency to keep
-    :param float min_callrate: Minimum call rate to keep
-    :param float min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
-    :param float min_hardy_weinberg_threshold: Minimum site HW test p-value to keep
-    :param bool apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
-    :param float ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
-    :param bool filter_lcr: Filter LCR regions
-    :param bool filter_decoy: Filter decoy regions
-    :param bool filter_segdup: Filter segmental duplication regions
-    :param bool filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
-    :param list of str high_conf_regions: If given, the data will be filtered to only include variants in those regions
+    :param mt: Input MT
+    :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
+    :param min_af: Minimum allele frequency to keep
+    :param min_callrate: Minimum call rate to keep
+    :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
+    :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep
+    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
+    :param ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
+    :param filter_lcr: Filter LCR regions
+    :param filter_decoy: Filter decoy regions
+    :param filter_segdup: Filter segmental duplication regions
+    :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
+    :param high_conf_regions: If given, the data will be filtered to only include variants in those regions
     :return: Filtered MT
-    :rtype: MatrixTable
     """
     logger.info("Creating QC MatrixTable")
     if ld_r2 is not None:
@@ -184,13 +183,12 @@ def compute_callrate_mt(
         The resulting table will have a key of the same type as the `intervals_ht` table and
         contain an `interval_info` field containing all non-key fields of the `intervals_ht`.
 
-    :param MatrixTable mt: Input MT
-    :param Table intervals_ht: Table containing the intervals. This table has to be keyed by locus.
-    :param bool bi_allelic_only: If set, only bi-allelic sites are used for the computation
-    :param bool autosomes_only: If set, only autosomal intervals are used.
-    :param bool matches: If set, returns all intervals in intervals_ht that overlap the locus in the input MT.
+    :param mt: Input MT
+    :param intervals_ht: Table containing the intervals. This table has to be keyed by locus.
+    :param bi_allelic_only: If set, only bi-allelic sites are used for the computation
+    :param autosomes_only: If set, only autosomal intervals are used.
+    :param matches: If set, returns all intervals in intervals_ht that overlap the locus in the input MT.
     :return: Callrate MT
-    :rtype: MatrixTable
     """
     logger.info('Computing call rate MatrixTable')
 
@@ -226,10 +224,9 @@ def run_platform_pca(
     When `binzarization_threshold` is set, the callrate is transformed to a 0/1 value based on the threshold.
     E.g. with the default threshold of 0.25, all entries with a callrate < 0.25 are considered as 0s, others as 1s.
 
-    :param MatrixTable callrate_mt: Input callrate MT
-    :param float binarization_threshold: binzarization_threshold. None is no threshold desired
+    :param callrate_mt: Input callrate MT
+    :param binarization_threshold: binzarization_threshold. None is no threshold desired
     :return: eigenvalues, scores_ht, loadings_ht
-    :rtype: (list of float, Table Table)
     """
     logger.info("Running platform PCA")
 
@@ -253,10 +250,10 @@ def assign_platform_from_pcs(
     """
     Assigns platforms using HBDSCAN on the results of call rate PCA.
 
-    :param Table platform_pca_scores_ht: Input table with the PCA score for each sample
-    :param str pc_scores_ann: Field containing the scores
-    :param int hdbscan_min_cluster_size: HDBSCAN `min_cluster_size` parameter. If not specified the smallest of 500 and 0.1*n_samples will be used.
-    :param int hdbscan_min_samples: HDBSCAN `min_samples` parameter
+    :param platform_pca_scores_ht: Input table with the PCA score for each sample
+    :param pc_scores_ann: Field containing the scores
+    :param hdbscan_min_cluster_size: HDBSCAN `min_cluster_size` parameter. If not specified the smallest of 500 and 0.1*n_samples will be used.
+    :param hdbscan_min_samples: HDBSCAN `min_samples` parameter
     :return: A Table with a `qc_platform` annotation containing the platform based on HDBSCAN clustering
     """
     import hdbscan
@@ -374,17 +371,16 @@ def get_ploidy_cutoffs(
     x_ploidy_cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
     y_ploidy_cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
 
-    Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes. 
-    Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies. 
-    
+    Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes.
+    Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies.
+
     Note that f-stat is used only to split the samples into roughly 'XX' and 'XY' categories and is not used in the final karyotype annotation.
 
-    :param Table ht: Table with f_stat and sex chromosome ploidies
-    :param float f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
-    :param int normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes.
-    :param int aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
+    :param ht: Table with f_stat and sex chromosome ploidies
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
+    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes.
+    :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
     :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
-    :rtype: Tuple
     """
     # Group sex chromosome ploidy table by f_stat cutoff and get mean/stdev for chrX/Y ploidies
     sex_stats = ht.aggregate(
@@ -430,12 +426,11 @@ def get_sex_expr(
 
     Note that X0 is currently returned as 'X'.
 
-    :param NumericExpression chr_x_ploidy: Chromosome X ploidy (or relative ploidy)
-    :param NumericExpression  chr_y_ploidy: Chromosome Y ploidy (or relative ploidy)
-    :param list x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
-    :param list y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
+    :param chr_x_ploidy: Chromosome X ploidy (or relative ploidy)
+    :param chr_y_ploidy: Chromosome Y ploidy (or relative ploidy)
+    :param x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
+    :param y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
     :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype
-    :rtype: StructExpression
     """
     sex_expr = hl.struct(
         X_karyotype=(
@@ -485,11 +480,10 @@ def filter_duplicate_samples(
 
     `samples_rankings_ht` is a HT containing a global rank for each of the sample (smaller is better).
 
-    :param Table relatedness_ht: Input relatedness HT
-    :param Table samples_rankings_ht: HT with global rank for each sample
-    :param str rank_ann: Annotation in `samples_ranking_ht` containing each sample global rank (smaller is better).
+    :param relatedness_ht: Input relatedness HT
+    :param samples_rankings_ht: HT with global rank for each sample
+    :param rank_ann: Annotation in `samples_ranking_ht` containing each sample global rank (smaller is better).
     :return: HT with duplicate sample sets, including which to keep/filter
-    :rtype: Table
     """
     logger.info("Getting duplicate samples")
     dups = get_duplicated_samples(relatedness_ht)
@@ -529,17 +523,17 @@ def compute_related_samples_to_drop(
     """
     Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
 
-    Note:
-    - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
-    - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
+    .. note::
 
-    :param Table relatedness_ht: relatedness HT, as produced by e.g. pc-relate
-    :param float kin_threshold: Kinship threshold to consider two samples as related
-    :param Table rank_ht: Table with a global rank for each sample (smaller is preferred)
-    :param SetExpression filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
-    :param int min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
+        - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
+        - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
+
+    :param relatedness_ht: relatedness HT, as produced by e.g. pc-relate
+    :param kin_threshold: Kinship threshold to consider two samples as related
+    :param rank_ht: Table with a global rank for each sample (smaller is preferred)
+    :param filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
+    :param min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
     :return: A Table with the list of the samples to drop along with their rank.
-    :rtype: Table
     """
 
     # Make sure that the key types are valid
@@ -635,12 +629,11 @@ def run_pca_with_relateds(
     The loadings Table returned also contains a `pca_af` annotation which is the allele frequency
     used for PCA. This is useful to project other samples in the PC space.
 
-    :param MatrixTable qc_mt: Input QC MT
-    :param Table related_samples_to_drop: Optional table of related samples to drop
-    :param int n_pcs: Number of PCs to compute
-    :param bool autosomes_only: Whether to run the analysis on autosomes only
+    :param qc_mt: Input QC MT
+    :param related_samples_to_drop: Optional table of related samples to drop
+    :param n_pcs: Number of PCs to compute
+    :param autosomes_only: Whether to run the analysis on autosomes only
     :return: eigenvalues, scores and loadings
-    :rtype: (list of float, Table, Table)
     """
 
     unrelated_mt = qc_mt.persist()
@@ -678,15 +671,14 @@ def compute_stratified_metrics_filter(
     """
     Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering
 
-    :param MatrixTable ht: HT containing relevant sample QC metric annotations
-    :param dict of str -> qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
-    :param list of str strata: List of annotations used for stratification. These metrics should be discrete types!
-    :param float lower_threshold: Lower MAD threshold
-    :param float upper_threshold: Upper MAD threshold
-    :param dict str -> (float, float) metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
-    :param str filter_name: Name of resulting filters annotation
+    :param ht: HT containing relevant sample QC metric annotations
+    :param qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
+    :param strata: List of annotations used for stratification. These metrics should be discrete types!
+    :param lower_threshold: Lower MAD threshold
+    :param upper_threshold: Upper MAD threshold
+    :param metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
+    :param filter_name: Name of resulting filters annotation
     :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
-    :rtype: Table
     """
 
     _metric_threshold = {metric: (lower_threshold, upper_threshold) for metric in qc_metrics}
@@ -744,17 +736,18 @@ def compute_qc_metrics_residuals(
     """
     Computes QC metrics residuals after regressing out PCs (and optionally PC^2)
 
-    Note: The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
-    Residuals are always computed for all samples.
+    .. note::
 
-    :param Table ht: Input sample QC metrics HT
-    :param ArrayNumericExpressoin pc_scores: The expression in the input HT that stores the PC scores
-    :param dict of str -> NumericExpression qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
-    :param bool use_pc_square: Whether to  use PC^2 in the regression or not
-    :param int n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
-    :param BooleanExpression regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
+        The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
+        Residuals are always computed for all samples.
+
+    :param ht: Input sample QC metrics HT
+    :param pc_scores: The expression in the input HT that stores the PC scores
+    :param qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
+    :param use_pc_square: Whether to  use PC^2 in the regression or not
+    :param n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
+    :param regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
     :return: Table with QC metrics residuals
-    :rtype: Table
     """
 
     # Annotate QC HT with fields necessary for computation
@@ -826,9 +819,8 @@ def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
 
     Note that this assumes that the type of the table key is the same as the type of the `filtered` array.
 
-    :param Table dups_ht: Input HT
+    :param dups_ht: Input HT
     :return: Flattened HT
-    :rtype: Table
     """
     dups_ht = dups_ht.annotate(
         dups=hl.array([(dups_ht.key, False)]).extend(
@@ -851,10 +843,9 @@ def add_filters_expr(
 
     Current filters are kept if provided using `current_filters`
 
-    :param dict of str -> BooleanExpression filters: The filters and their expressions
-    :param SetExpression current_filters: The set of current filters
+    :param filters: The filters and their expressions
+    :param current_filters: The set of current filters
     :return: An expression that can be used to annotate the filters
-    :rtype: SetExpression
     """
     if current_filters is None:
         current_filters = hl.empty_set(hl.tstr)
@@ -872,20 +863,23 @@ def add_filters_expr(
 def merge_sample_qc_expr(sample_qc_exprs: List[hl.expr.StructExpression]) -> hl.expr.StructExpression:
     """
     Creates an expression that merges results from non-overlapping strata of hail.sample_qc
+
     E.g.:
+
     - Compute autosomes and sex chromosomes metrics separately, then merge results
     - Compute bi-allelic and multi-allelic metrics separately, then merge results
 
     Note regarding the merging of ``dp_stats`` and ``gq_stats``:
     Because ``n`` is needed to aggregate ``stdev``, ``n_called`` is used for this purpose.
     This should work very well on a standard GATK VCF and it essentially assumes that:
+
     - samples that are called have `DP` and `GQ` fields
     - samples that are not called do not have `DP` and `GQ` fields
+
     Even if these assumptions are broken for some genotypes, it shouldn't matter too much.
 
-    :param list of StructExpression sample_qc_exprs: List of sample QC struct expressions for each stratification
+    :param sample_qc_exprs: List of sample QC struct expressions for each stratification
     :return: Combined sample QC results
-    :rtype: StructExpression
     """
 
     # List of metrics that can be aggregated by summing
@@ -946,12 +940,11 @@ def compute_stratified_sample_qc(
     Runs hl.sample_qc on different strata and then also merge the results into a single expression.
     Note that strata should be non-overlapping,  e.g. SNV vs indels or bi-allelic vs multi-allelic
 
-    :param MatrixTable mt: Input MT
-    :param dict of str -> BooleanExpression strata: Strata names and filtering expressions
-    :param str tmp_ht_prefix: Optional path prefix to write the intermediate strata results to (recommended for larger datasets)
-    :param CallExpression gt_expr: Optional entry field storing the genotype (if not specified, then it is assumed that it is stored in mt.GT)
+    :param mt: Input MT
+    :param strata: Strata names and filtering expressions
+    :param tmp_ht_prefix: Optional path prefix to write the intermediate strata results to (recommended for larger datasets)
+    :param gt_expr: Optional entry field storing the genotype (if not specified, then it is assumed that it is stored in mt.GT)
     :return: Sample QC table, including strat-specific numbers
-    :rtype: Table
     """
     mt = mt.select_rows(
         **strata

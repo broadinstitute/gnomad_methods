@@ -9,11 +9,12 @@ pip install numpy
 ROLE=$(/usr/share/google/get_metadata_value attributes/dataproc-role)
 if [[ "${ROLE}" == 'Master' ]]; then
 
-    mkdir -p /home/hail/
+    git clone https://github.com/macarthur-lab/gnomad_hail.git /home/gnomad_hail
 
-    cd /home/hail
-    git clone https://github.com/macarthur-lab/gnomad_hail.git
-    cd gnomad_hail/init_scripts
+    mkdir -p /home/hail/
+    ln -s ln -s /home/gnomad_hail/gnomad_hail /home/hail
+
+    cd /home/gnomad_hail/init_scripts
     chmod +x gnomad-init.sh sparklyr-init.sh
 
     # This is here so as not have 2 apt-get processes fighting for a lock

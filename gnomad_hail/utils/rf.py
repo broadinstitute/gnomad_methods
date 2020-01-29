@@ -14,16 +14,16 @@ def run_rf_test(
         output: str = '/tmp'
 ) -> Tuple[pyspark.ml.PipelineModel, hl.MatrixTable]:
     """
-    Runs a dummy test RF on a given MT:
+    Runs a dummy test RF on a given MT.
+
     1. Creates row annotations and labels to run model on
     2. Trains a RF pipeline model (including median imputation of missing values in created annotations)
     3. Saves the RF pipeline model
     4. Applies the model to the MT and prints features importance
 
-    :param MatrixTable mt: Input MT
-    :param str output: Output files prefix to save the RF model
+    :param mt: Input MT
+    :param output: Output files prefix to save the RF model
     :return: RF model and MatrixTable after applying RF model
-    :rtype: (PipelineModel, MatrixTable)
     """
 
     mt = mt.annotate_rows(
@@ -75,10 +75,9 @@ def check_ht_fields_for_spark(ht: hl.Table, fields: List[str]) -> None:
     """
     Checks specified fields of a hail table for Spark DataFrame conversion (type and name)
 
-    :param Table ht: input Table
-    :param list of str fields: Fields to test
+    :param ht: input Table
+    :param fields: Fields to test
     :return: None
-    :rtype: None
     """
 
     allowed_types = [hl.tfloat, hl.tfloat32, hl.tfloat64, hl.tint, hl.tint32, hl.tint64, hl.tstr, hl.tbool]
@@ -103,17 +102,16 @@ def get_columns_quantiles(
         relative_error: int = 0.001
 ) -> Dict[str, List[float]]:
     """
-    Computes approximate quantiles of specified numeric fields from non-missing values.
-    Non-numeric fields are ignored.
+    Computes approximate quantiles of specified numeric fields from non-missing values. Non-numeric fields are ignored.
+
     This function returns a Dict of column name -> list of quantiles in the same order specified.
     If a column only has NAs, None is returned.
 
-    :param Table ht: input HT
-    :param list of str fields: list of features to impute. If none given, all numerical features with missing data are imputed
-    :param list of float quantiles: list of quantiles to return (e.g. [0.5] would return the median)
-    :param float relative_error: The relative error on the quantile approximation
+    :param ht: input HT
+    :param fields: list of features to impute. If none given, all numerical features with missing data are imputed
+    :param quantiles: list of quantiles to return (e.g. [0.5] would return the median)
+    :param relative_error: The relative error on the quantile approximation
     :return: Dict of column -> quantiles
-    :rtype: dict of str -> list of float
     """
 
     check_ht_fields_for_spark(ht, fields)
@@ -139,18 +137,19 @@ def ht_to_rf_df(
         index: str = None
 ) -> pyspark.sql.DataFrame:
     """
-
     Creates a Spark dataframe ready for RF from a HT.
     Rows with any missing features are dropped.
     Missing labels are replaced with 'NA'
-    Note: Only basic types are supported!
 
-    :param Table ht: Input HT
-    :param list of str features: Features that will be used for RF
-    :param str label: Label column that will be predicted by RF
-    :param str index: Optional index column to keep (E.g. for joining results back at later stage)
+    .. note::
+
+        Only basic types are supported!
+
+    :param ht: Input HT
+    :param features: Features that will be used for RF
+    :param label: Label column that will be predicted by RF
+    :param index: Optional index column to keep (E.g. for joining results back at later stage)
     :return: Spark Dataframe
-    :rtype: DataFrame
     """
 
     cols_to_keep = features + [label]
@@ -171,11 +170,10 @@ def get_features_importance(
     """
     Extract the features importance from a Pipeline model containing a RandomForestClassifier stage.
 
-    :param PipelineModel rf_pipeline: Input pipeline
-    :param int rf_index: index of the RandomForestClassifier stage
-    :param int assembler_index: index of the VectorAssembler stage
+    :param rf_pipeline: Input pipeline
+    :param rf_index: index of the RandomForestClassifier stage
+    :param assembler_index: index of the VectorAssembler stage
     :return: feature importance for each feature in the RF model
-    :rtype: dict of str: float
     """
 
     feature_names = [x[:-len("_indexed")] if x.endswith("_indexed") else x for x in
@@ -190,9 +188,8 @@ def get_labels(
     """
     Returns the labels from the StringIndexer stage at index 0 from an RF pipeline model
 
-    :param PipelineModel rf_pipeline: Input pipeline
+    :param rf_pipeline: Input pipeline
     :return: labels
-    :rtype: list of str
     """
     return rf_pipeline.stages[0].labels
 
@@ -205,18 +202,18 @@ def test_model(
         prediction_col_name: str = 'rf_prediction'
 ) -> List[hl.tstruct]:
     """
-    A wrapper to test a model on a set of examples with known labels:
+    A wrapper to test a model on a set of examples with known labels.
+
     1) Runs the model on the data
     2) Prints confusion matrix and accuracy
     3) Returns confusion matrix as a list of struct
 
-    :param Table ht: Input table
-    :param PipelineModel rf_model: RF Model
-    :param list of str features: Columns containing features that were used in the model
-    :param str label: Column containing label to be predicted
-    :param str prediction_col_name: Where to store the prediction
+    :param ht: Input table
+    :param rf_model: RF Model
+    :param features: Columns containing features that were used in the model
+    :param label: Column containing label to be predicted
+    :param prediction_col_name: Where to store the prediction
     :return: A list containing structs with {label, prediction, n}
-    :rtype: list of Struct
     """
 
     ht = apply_rf_model(ht.filter(hl.is_defined(ht[label])),
@@ -250,14 +247,13 @@ def apply_rf_model(
     """
     Applies a Random Forest (RF) pipeline model to a Table and annotate the RF probabilities and predictions.
 
-    :param MatrixTable ht: Input HT
-    :param PipelineModel rf_model: Random Forest pipeline model
-    :param list of str features: List of feature columns in the pipeline. !Should match the model list of features!
-    :param str label: Column containing the labels. !Should match the model labels!
-    :param str probability_col_name: Name of the column that will store the RF probabilities
-    :param str prediction_col_name: Name of the column that will store the RF predictions
+    :param ht: Input HT
+    :param rf_model: Random Forest pipeline model
+    :param features: List of feature columns in the pipeline. !Should match the model list of features!
+    :param label: Column containing the labels. !Should match the model labels!
+    :param probability_col_name: Name of the column that will store the RF probabilities
+    :param prediction_col_name: Name of the column that will store the RF predictions
     :return: Table with RF columns
-    :rtype: Table
     """
 
     logger.info("Applying RF model.")
@@ -311,11 +307,10 @@ def save_model(
     """
     Saves a Random Forest pipeline model.
 
-    :param PipelineModel rf_pipeline: Pipeline to save
-    :param str out_path: Output path
-    :param bool overwrite: If set, will overwrite existing file(s) at output location
+    :param rf_pipeline: Pipeline to save
+    :param out_path: Output path
+    :param overwrite: If set, will overwrite existing file(s) at output location
     :return: Nothing
-    :rtype: NoneType
     """
     logger.info("Saving model to %s" % out_path)
     if overwrite:
@@ -330,9 +325,8 @@ def load_model(
     """
     Loads a Random Forest pipeline model.
 
-    :param str input_path: Location of model to load
+    :param input_path: Location of model to load
     :return: Random Forest pipeline model
-    :rtype: PipelineModel
     """
     logger.info("Loading model from {}".format(input_path))
     return pyspark.ml.PipelineModel.load(input_path)
@@ -348,13 +342,12 @@ def train_rf(
     """
     Trains a Random Forest (RF) pipeline model.
 
-    :param Table ht: Input HT
-    :param list of str features: List of columns to be used as features
-    :param str label: Column containing the label to predict
-    :param int num_trees: Number of trees to use
-    :param int max_depth: Maximum tree depth
+    :param ht: Input HT
+    :param features: List of columns to be used as features
+    :param label: Column containing the label to predict
+    :param num_trees: Number of trees to use
+    :param max_depth: Maximum tree depth
     :return: Random Forest pipeline model
-    :rtype: PipelineModel
     """
 
     logger.info("Training RF model using:\n"

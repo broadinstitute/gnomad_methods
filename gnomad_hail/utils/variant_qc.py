@@ -208,11 +208,12 @@ def compute_quantile_bin(
 ) -> hl.Table:
     """
     Returns a table with a bin for each row based on quantiles of `score_expr`.
+
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
     This is done based on quantiles computed with hl.agg.approx_quantiles.
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
     randomly across the bins it spans.
-    If stratify_snv_indel is set all items in `bin_expr` will be stratified by snv / indels for the bin calculation,
+    If `stratify_snv_indel` is set all items in `bin_expr` will be stratified by snv / indels for the bin calculation,
     however, because SNV and indel rows are mutually exclusive, they are re-combined into a single bin.
 
     .. note::

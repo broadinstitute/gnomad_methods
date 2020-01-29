@@ -24,14 +24,21 @@ def get_lowqual_expr(
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
     :rtype: BooleanExpression or ArrayExpression
     """
-    def low_qual_expr(ref: hl.expr.StringExpression, alt: hl.expr.StringExpression, qual_approx: hl.expr.NumericExpression) -> BooleanExpression:
+    def low_qual_expr(
+            ref: hl.expr.StringExpression,
+            alt: hl.expr.StringExpression,
+            qual_approx:
+            hl.expr.NumericExpression
+    ) -> BooleanExpression:
         return hl.cond(
             hl.is_snp(ref, alt),
             qual_approx < snv_phred_threshold + snv_phred_het_prior,
             qual_approx < indel_phred_threshold + indel_phred_het_prior
         )
     if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):
-        return hl.range(1, hl.len(alleles)).map(lambda ai: low_qual_expr(alleles[0], alleles[ai], qual_approx_expr[ai - 1]))
+        return hl.range(1, hl.len(alleles)).map(
+            lambda ai: low_qual_expr(alleles[0], alleles[ai], qual_approx_expr[ai - 1])
+        )
     else:
         return low_qual_expr(alleles[0], alleles[1], qual_approx_expr)
 
@@ -190,7 +197,7 @@ def generate_fam_stats_expr(
     return fam_stats
 
 
-def annotate_quantile_bin(
+def compute_quantile_bin(
         ht: hl.Table,
         score_expr: hl.expr.NumericExpression,
         bin_expr: Dict[str, hl.expr.BooleanExpression] = {'bin': True},
@@ -200,11 +207,13 @@ def annotate_quantile_bin(
         desc: bool = True
 ) -> hl.Table:
     """
-    Returns a table annotated with a bin for each row based on quantiles of `score_expr`.
+    Returns a table with a bin for each row based on quantiles of `score_expr`.
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
     This is done based on quantiles computed with hl.agg.approx_quantiles.
     If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
     randomly across the bins it spans.
+    If stratify_snv_indel is set all items in `bin_expr` will be stratified by snv / indels for the bin calculation,
+    however, because SNV and indel rows are mutually exclusive, they are re-combined into a single bin.
 
     .. note::
 
@@ -218,6 +227,7 @@ def annotate_quantile_bin(
     :param Table ht: Input Table
     :param NumericExpression score_expr: Expression containing the score
     :param dict of str -> BooleanExpression bin_expr: Quantile bin(s) to be computed (see notes)
+    :param bool stratify_snv_indel: Should all `bin_expr` items be stratified by snv / indels
     :param int n_bins: Number of bins to bin the data into
     :param int k: The `k` parameter of approx_quantiles
     :param bool desc: Whether to bin the score in descending order
@@ -278,7 +288,7 @@ def annotate_quantile_bin(
         }
 
     bin_ht = ht.annotate(
-        **{f'_filter_{rid}': rexpr for rid, rexpr in bin_expr.items()},
+        **{f'_filter_{bin_id}': bin_expr for bin_id, bin_expr in bin_expr.items()},
         _score=score_expr
     )
 
@@ -286,14 +296,14 @@ def annotate_quantile_bin(
     bin_stats = bin_ht.aggregate(
         hl.struct(
             **{
-                rid: hl.agg.filter(
-                    bin_ht[f'_filter_{rid}'],
+                bin_id: hl.agg.filter(
+                    bin_ht[f'_filter_{bin_id}'],
                     hl.struct(
                         n=hl.agg.count(),
                         quantiles=hl.agg.approx_quantiles(bin_ht._score, [x / (n_bins) for x in range(1, n_bins)], k=k)
                     )
                 )
-                for rid in bin_expr
+                for bin_id in bin_expr
             }
         )
     )
@@ -353,7 +363,6 @@ def annotate_quantile_bin(
             **{bin_id: n_bins - bin_ht[bin_id] for bin_id in bin_expr}
         )
 
-    # Annotate the HT with the bin
     # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
     if stratify_snv_indel:
         bin_ht = bin_ht.transmute(
@@ -455,38 +464,77 @@ def create_binned_ht(
         for add_id, add_expr in add_substrat.items():
             bin_expr = update_bin_expr(bin_expr, add_expr, add_id)
 
-    return annotate_quantile_bin(ht, ht.score, bin_expr, n_bins=n_bins)[ht.key]
+    bin_ht = compute_quantile_bin(
+        ht,
+        score_expr=ht.score,
+        bin_expr=bin_expr,
+        n_bins=n_bins
+    )
+    ht = ht.join(bin_ht, how='left')
+
+    return ht
 
 
-def default_score_bin_agg(ht: hl.Table) -> Dict[str, hl.expr.Aggregation]:
+def default_score_bin_agg(
+        ht: hl.Table,
+        truth_ht: hl.Table,
+        fam_stats_ht: hl.Table
+) -> Dict[str, hl.expr.Aggregation]:
+    """
+    Default aggregation function to pass to `compute_aggregate_binned_data` to add aggregations for number of ClinVar
+    variants, number of truth variants (omni, mills, hapmap, and kgp_phase1), and family statistics.
+
+    Note that the following fields should be present:
+    In ht:
+        - ac_raw - expected that this is the raw allele count before adj filtering
+    In truth_ht (truth_data annotation):
+        - omni
+        - mills
+        - hapmap
+        - kgp_phase1_hc
+    In fam_stats_ht:
+        - n_de_novos_hq
+        - n_de_novos_adj
+        - n_de_novos_raw
+        - n_transmitted_raw
+        - unrelated_qc_callstats
+        - tdt
+
+    :param Table ht: Table that aggregation will be performed on
+    :param Table truth_ht: Path to truth sites HT
+    :param Table fam_stats_ht: Path to family statistics HT
+    :return:
+    """
     # Load external evaluation data
-    clinvar_ht = hl.read_table(clinvar_ht_path)[ht.key]
-    truth_data_ht = hl.read_table(truth_ht_path)[ht.key]
-    fam_ht = hl.read_table(fam_stats_ht_path)[ht.key]
+    build = get_reference_genome(ht.locus).name
+    clinvar = (grch37_resources.reference_data.clinvar if build == 'GRCh37' else grch38_resources.reference_data.clinvar).ht()[ht.key]
+    truth_data = truth_ht[ht.key].truth_data
+    fam = fam_stats_ht[ht.key]
 
     return dict(
-        n_clinvar=hl.agg.count_where(hl.is_defined(clinvar_ht)),
-        n_de_novos_hq=hl.agg.sum(fam_ht.n_de_novos_hq),
-        n_de_novos_adj=hl.agg.sum(fam_ht.n_de_novos_adj),
-        n_de_novo=hl.agg.sum(fam_ht.n_de_novos_raw),
-        n_trans_singletons=hl.agg.filter(ht.ac_raw == 2, hl.agg.sum(fam_ht.n_transmitted_raw)),
-        n_untrans_singletons=hl.agg.filter((ht.ac_raw < 3) & (fam_ht.unrelated_qc_callstats.AC[1] == 1),
-                                           hl.agg.sum(fam_ht.tdt.u)),
-        # n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
-        n_omni=hl.agg.count_where(truth_data_ht.omni),
-        n_mills=hl.agg.count_where(truth_data_ht.mills),
-        n_hapmap=hl.agg.count_where(truth_data_ht.hapmap),
-        n_kgp_phase1_hc=hl.agg.count_where(truth_data_ht.kgp_phase1_hc),
+        n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
+        n_de_novos_hq=hl.agg.sum(fam.n_de_novos_hq),
+        n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
+        n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
+        n_trans_singletons=hl.agg.filter(ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)),
+        n_untrans_singletons=hl.agg.filter((ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
+                                           hl.agg.sum(fam.tdt.u)),
+        ## n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
+        n_omni=hl.agg.count_where(truth_data.omni),
+        n_mills=hl.agg.count_where(truth_data.mills),
+        n_hapmap=hl.agg.count_where(truth_data.hapmap),
+        n_kgp_phase1_hc=hl.agg.count_where(truth_data.kgp_phase1_hc)
     )
 
 
 def compute_aggregate_binned_data(
         bin_ht: hl.Table,
-        agg_func: Dict[str, hl.expr.Aggregation] = default_score_bin_agg,
-        checkpoint_path: Optional[str] = None
+        agg_func: Callable = default_score_bin_agg,
+        checkpoint_path: Optional[str] = None,
+        **kwargs
 ) -> hl.Table:
     """
-    Aggregates a Table that has been annotated with bins based on quantiles (`annotate_quantile_bin` or
+    Aggregates a Table that has been annotated with bins based on quantiles (`compute_quantile_bin` or
     `create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
     singleton. Then for each grouping, min/max of `score` will be computed and any other desired aggregations.
 
@@ -510,6 +558,7 @@ def compute_aggregate_binned_data(
     annotation for `fail_hard_filters`
 
     :param Table bin_ht: Input Table with a `bin_id` annotation
+    :param callable agg_func: Function that returns a dict of any additional aggregations to perform
     :param str checkpoint_path: If provided an intermediate checkpoint table is created with all required annotations before shuffling.
     :return Table grouped by rank(s) and with counts of QC metrics
     :rtype Table
@@ -544,8 +593,7 @@ def compute_aggregate_binned_data(
 
     # Group by bin_id, bin and additional stratification desired and compute QC metrics per bin
     return (
-        bin_ht
-            .group_by(
+        bin_ht.group_by(
             bin_id=bin_ht.bin_id,
             contig=bin_ht.locus.contig,
             snv=hl.is_snp(bin_ht.alleles[0], bin_ht.alleles[1]),
@@ -568,7 +616,7 @@ def compute_aggregate_binned_data(
             fail_hard_filters=hl.agg.count_where(bin_ht.fail_hard_filters),
             n_vqsr_pos_train=hl.agg.count_where(bin_ht.positive_train_site),
             n_vqsr_neg_train=hl.agg.count_where(bin_ht.negative_train_site),
-            **agg_func(bin_ht)
+            **agg_func(bin_ht, **kwargs)
         )
     )
 
@@ -594,17 +642,18 @@ def compute_binned_truth_sample_concordance(
     # Annotate score and global bin
     indexed_binned_score_ht = binned_score_ht[ht.key]
     ht = ht.annotate(
-    score=indexed_binned_score_ht.score,
-    global_bin=indexed_binned_score_ht.bin
+        score=indexed_binned_score_ht.score,
+        global_bin=indexed_binned_score_ht.bin
     )
 
     # Annotate the truth sample quantile bin
-    ht = annotate_quantile_bin(
+    bin_ht = compute_quantile_bin(
         ht,
         score_expr=ht.score,
         bin_expr={'truth_sample_bin': hl.expr.bool(True)},
         n_bins=100
     )
+    ht = ht.join(bin_ht, how='left')
 
     # Explode the global and truth sample bins
     ht = ht.annotate(bin=[

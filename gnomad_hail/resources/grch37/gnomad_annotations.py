@@ -1,15 +1,13 @@
 from gnomad_hail.resources.resource_utils import TableResource
 
 
-def _annotations_ht_path(data_type, annotation_type):
+def _annotations_ht_path(data_type: str, annotation_type: str):
     """
     Get sites-level annotations
 
-    :param str data_type: One of "exomes" or "genomes"
-    :param str annotation_type: One of "vep", "qc_stats", "family_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
-    :param str hail_version: One of the HAIL_VERSIONs
+    :param data_type: One of "exomes" or "genomes"
+    :param annotation_type: One of "vep", "qc_stats", "family_stats", "frequencies", "rf", "omes_concordance", "NA12878_concordance", "syndip_concordance", "omes_by_platform_concordance"
     :return: Path to annotations Table
-    :rtype: str
     """
     return 'gs://gnomad/annotations/hail-0.2/ht/{0}/gnomad.{0}.{1}.ht'.format(data_type, annotation_type)
 

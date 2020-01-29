@@ -140,16 +140,15 @@ def plot_hail_hist(hist_data: hl.Struct,
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
-    :param Struct hist_data: Data to plot
-    :param str title: Plot title
-    :param bool log: Whether the y-axis should be log
-    :param str fill_color: Color to fill the histogram bars that fall within the hist boundaries
+    :param hist_data: Data to plot
+    :param title: Plot title
+    :param log: Whether the y-axis should be log
+    :param fill_color: Color to fill the histogram bars that fall within the hist boundaries
     :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
-    :param str line_color: Color of the lines around the histogram bars
-    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
-    :param bool hide_zeros: Remove hist bars with 0 count
+    :param line_color: Color of the lines around the histogram bars
+    :param hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param hide_zeros: Remove hist bars with 0 count
     :return: Histogram plot
-    :rtype: Figure
     """
 
     return plot_multi_hail_hist({'hist': hist_data},
@@ -183,19 +182,15 @@ def plot_multi_hail_hist(hist_data: Dict[str, hl.Struct],
         plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
 
     :param hist_data: Data to plot
-    :type hist_data: dict of str -> Struct
-    :param str title: Plot title
-    :param bool log: Whether the y-axis should be log
+    :param title: Plot title
+    :param log: Whether the y-axis should be log
     :param fill_color: Color to fill the histogram bars that fall within the hist boundaries
-    :type fill_color: dict of str -> str
     :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
-    :type outlier_fill_color: dict of str -> str
-    :param str line_color: Color of the lines around the histogram bars
-    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
-    :param bool hide_zeros: Remove hist bars with 0 count
-    :param float alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
+    :param line_color: Color of the lines around the histogram bars
+    :param hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param hide_zeros: Remove hist bars with 0 count
+    :param alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
     :return: Histogram plot
-    :rtype: Figure
     """
 
     low = int(log)
@@ -256,15 +251,14 @@ def plot_hail_hist_cumulative(hist_data: hl.Struct, title: str = 'Plot', normali
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
-    :param Struct hist_data: Data to plot
-    :param str title: Plot title
-    :param bool normalize: Whether to normalize the data (0,1)
-    :param str line_color: Color of the line
-    :param int line_width: Width of the line
-    :param bool log: Whether the y-axis should be log
-    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param hist_data: Data to plot
+    :param title: Plot title
+    :param normalize: Whether to normalize the data (0,1)
+    :param line_color: Color of the line
+    :param line_width: Width of the line
+    :param log: Whether the y-axis should be log
+    :param hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
     :return: Histogram plot
-    :rtype: Figure
     """
     cumulative_data = np.cumsum(hist_data.bin_freq) + hist_data.n_smaller
     np.append(cumulative_data, [cumulative_data[-1] + hist_data.n_larger])
@@ -510,15 +504,12 @@ def pair_plot(
     All columns should be numerical with the exception of the `label_col` if provided.
     If a color dict containing provided mapping labels to specific colors can be specified using `color_dict`
 
-    :param DataFrame data: Dataframe to plot
-    :param str label_col: Column of the DataFrame containing the labels
+    :param data: Dataframe to plot
+    :param label_col: Column of the DataFrame containing the labels
     :param colors: RGB hex colors. If a dict is provided, it should contain the mapping of label to colors.
-    :type colors: list or str or dict of str -> str
-    :param str tools: Tools for the resulting plots
+    :param tools: Tools for the resulting plots
     :param tooltip_cols: Additional columns that should be displayed in tooltip
-    :type tooltip_cols: list of str
     :return: Grid of plots (column of rows)
-    :rtype: Column
     """
 
     if tooltip_cols is None:

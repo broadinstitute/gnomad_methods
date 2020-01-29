@@ -93,14 +93,13 @@ def adjusted_sex_ploidy_expr(
 ) -> hl.expr.CallExpression:
     """
     Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
-    
-    :param LocusExpression locus_expr: Locus
-    :param CallExpression gt_expr: Genotype
-    :param StringExpression karyotype_expr: Karyotype
-    :param str xy_karyotype_str: Male sex karyotype representation
+
+    :param locus_expr: Locus
+    :param gt_expr: Genotype
+    :param karyotype_expr: Karyotype
+    :param xy_karyotype_str: Male sex karyotype representation
     :param xx_karyotype_str: Female sex karyotype representation
     :return: Genotype adjusted for sex ploidy
-    :rtype: CallExpression
     """
     male = karyotype_expr == xy_karyotype_str
     female = karyotype_expr == xx_karyotype_str
@@ -121,12 +120,11 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     """
     Converts males to haploid on non-PAR X/Y, sets females to missing on Y
 
-    :param MatrixTable mt: Input MatrixTable
-    :param StringExpression sex_expr: Expression pointing to sex in MT (if not male_str or female_str, no change)
-    :param str male_str: String for males (default 'male')
-    :param str female_str: String for females (default 'female')
+    :param mt: Input MatrixTable
+    :param sex_expr: Expression pointing to sex in MT (if not male_str or female_str, no change)
+    :param male_str: String for males (default 'male')
+    :param female_str: String for females (default 'female')
     :return: MatrixTable with fixed ploidy for sex chromosomes
-    :rtype: MatrixTable
     """
     return mt.annotate_entries(
         GT=adjusted_sex_ploidy_expr(
@@ -143,10 +141,9 @@ def read_list_data(input_file_path: str) -> List[str]:
     """
     Reads a file input into a python list (each line will be an element).
     Supports Google storage paths and .gz compression.
-    
-    :param str input_file_path: File path
+
+    :param input_file_path: File path
     :return: List of lines
-    :rtype: List
     """
     if input_file_path.startswith('gs://'):
         hl.hadoop_copy(input_file_path, 'file:///' + input_file_path.split("/")[-1])
@@ -164,10 +161,9 @@ def liftover_using_gnomad_map(ht, data_type):
     """
     Liftover a gnomAD table using already-established liftover file. Warning: shuffles!
 
-    :param Table ht: Input Hail table
-    :param str data_type: one of "exomes" or "genomes" which to map across
+    :param ht: Input Hail table
+    :param data_type: one of "exomes" or "genomes" which to map across
     :return: Lifted over table
-    :rtype: Table
     """
     from gnomad_hail.resources.grch37.gnomad import liftover
     lift_ht = liftover(data_type).ht()
@@ -182,20 +178,21 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     """
     Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
     (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
+
     At least one of frequency or allele_count is required.
+
     Subpop can be specified without a population if desired.
 
-    :param MatrixTable or Table t: Input MatrixTable or Table
-    :param str direction: One of "above", "below", and "equal" (how to apply the filter)
-    :param float frequency: Frequency to filter by (one of frequency or allele_count is required)
-    :param int allele_count: Allele count to filter by (one of frequency or allele_count is required)
-    :param str population: Population in which to filter frequency
-    :param str subpop: Sub-population in which to filter frequency
-    :param int downsampling: Downsampling in which to filter frequency
-    :param bool keep: Whether to keep rows passing this frequency (passed to filter_rows)
-    :param bool adj: Whether to use adj frequency
+    :param t: Input MatrixTable or Table
+    :param direction: One of "above", "below", and "equal" (how to apply the filter)
+    :param frequency: Frequency to filter by (one of frequency or allele_count is required)
+    :param allele_count: Allele count to filter by (one of frequency or allele_count is required)
+    :param population: Population in which to filter frequency
+    :param subpop: Sub-population in which to filter frequency
+    :param downsampling: Downsampling in which to filter frequency
+    :param keep: Whether to keep rows passing this frequency (passed to filter_rows)
+    :param adj: Whether to use adj frequency
     :return: Filtered MatrixTable or Table
-    :rtype: MatrixTable or Table
     """
     if frequency is None and allele_count is None:
         raise ValueError('At least one of frequency or allele_count must be specified')
@@ -251,11 +248,10 @@ def pretty_print_runs(runs: Dict, label_col: str = 'rf_label', prediction_col_na
     """
     Prints the information for the RF runs loaded from the json file storing the RF run hashes -> info
 
-    :param dict runs: Dictionary containing JSON input loaded from RF run file
-    :param str label_col: Name of the RF label column
-    :param str prediction_col_name: Name of the RF prediction column
+    :param runs: Dictionary containing JSON input loaded from RF run file
+    :param label_col: Name of the RF label column
+    :param prediction_col_name: Name of the RF prediction column
     :return: Nothing -- only prints information
-    :rtype: None
     """
 
     for run_hash, run_data in runs.items():
@@ -279,11 +275,10 @@ def add_rank(ht: hl.Table,
 
     In addition, variant counts (snv, indel separately) is added as a global (`rank_variant_counts`).
 
-    :param Table ht: input Hail Table containing variants (with QC annotations) to be ranked
-    :param NumericExpression score_expr: the Table annotation by which ranking should be scored
-    :param dict str -> BooleanExpression subrank_expr: Any subranking to be added in the form name_of_subrank: subrank_filtering_expr
+    :param ht: input Hail Table containing variants (with QC annotations) to be ranked
+    :param score_expr: the Table annotation by which ranking should be scored
+    :param subrank_expr: Any subranking to be added in the form name_of_subrank: subrank_filtering_expr
     :return: Table with rankings added
-    :rtype: Table
     """
 
     key = ht.key

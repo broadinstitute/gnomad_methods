@@ -24,19 +24,20 @@ def get_r_for_pair_of_variants(bm: BlockMatrix, ld_index: hl.Table,
     """
     Get `r` value (LD) for pair of variants `var1` and `var2`.
 
-    bm = get_ld_matrix('nfe')
-    ld_index = get_ld_index('nfe')
-    var1 = (hl.parse_locus('1:10146', 'GRCh37'), ['AC', 'A'])
-    var2 = (hl.parse_locus('1:10151', 'GRCh37'), ['TA', 'T'])
-    get_r_for_pair_of_variants(bm, ld_index, var1, var2)
-    # 0.01789767935482124
+    .. code-block:: python
 
-    :param BlockMatrix bm: Input BlockMatrix
-    :param Table ld_index: Corresponding index table
-    :param tuple var1: Tuple of locus and alleles
-    :param tuple var2: Tuple of locus and alleles
+        bm = get_ld_matrix('nfe')
+        ld_index = get_ld_index('nfe')
+        var1 = (hl.parse_locus('1:10146', 'GRCh37'), ['AC', 'A'])
+        var2 = (hl.parse_locus('1:10151', 'GRCh37'), ['TA', 'T'])
+        get_r_for_pair_of_variants(bm, ld_index, var1, var2)
+        # 0.01789767935482124
+
+    :param bm: Input BlockMatrix
+    :param ld_index: Corresponding index table
+    :param var1: Tuple of locus and alleles
+    :param var2: Tuple of locus and alleles
     :return: Correlation (r) between two variants
-    :rtype: float
     """
     idx1 = ld_index.filter((ld_index.locus == var1[0]) & (ld_index.alleles == var1[1])).idx.collect()[0]
     idx2 = ld_index.filter((ld_index.locus == var2[0]) & (ld_index.alleles == var2[1])).idx.collect()[0]
@@ -55,10 +56,9 @@ def get_r_within_gene_in_pop(pop: str, gene: str):
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 
-    :param str pop: Population for which to get LD information
-    :param str gene: Gene symbol as string
+    :param pop: Population for which to get LD information
+    :param gene: Gene symbol as string
     :return: Table with pairs of variants
-    :rtype: Table
     """
     return get_r_within_gene(ld_matrix(pop).bm(), ld_index(pop).ht(), gene, None, 'GRCh37')
 
@@ -69,13 +69,12 @@ def get_r_within_gene(bm: BlockMatrix, ld_index: hl.Table, gene: str, vep_ht: hl
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 
-    :param BlockMatrix bm: Input Block Matrix
-    :param Table ld_index: Corresponding index table
-    :param str gene: Gene symbol as string
-    :param Table vep_ht: Table with VEP annotations (if None, gets from get_gnomad_public_data())
-    :param str reference_genome: Reference genome to pass to get_gene_intervals for fast filtering to gene
+    :param bm: Input Block Matrix
+    :param ld_index: Corresponding index table
+    :param gene: Gene symbol as string
+    :param vep_ht: Table with VEP annotations (if None, gets from get_gnomad_public_data())
+    :param reference_genome: Reference genome to pass to get_gene_intervals for fast filtering to gene
     :return: Table with pairs of variants
-    :rtype: Table
     """
     if vep_ht is None:
         vep_ht = public_release('exomes').ht()

@@ -7,10 +7,10 @@ import gnomad_hail.resources.grch38 as grch38_resources
 def get_lowqual_expr(
         alleles: hl.expr.ArrayExpression,
         qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
-        snv_phred_threshold: 30,
-        snv_phred_het_prior: 30,  # 1/1000
-        indel_phred_threshold: 30,
-        indel_phred_het_prior: 39  # 1/8,000
+        snv_phred_threshold: int = 30,
+        snv_phred_het_prior: int = 30,  # 1/1000
+        indel_phred_threshold: int = 30,
+        indel_phred_het_prior: int = 39  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
@@ -220,19 +220,18 @@ def compute_quantile_bin(
         The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get an SNV quantile bin and an Indel
         quantile bin, the following could be used:
         bin_expr={
-       'snv_bin': hl.is_snp(ht.alleles[0], ht.alleles[1]),
-       'indels_bin': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
+        'snv_bin': hl.is_snp(ht.alleles[0], ht.alleles[1]),
+        'indels_bin': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
         }
 
-    :param Table ht: Input Table
-    :param NumericExpression score_expr: Expression containing the score
-    :param dict of str -> BooleanExpression bin_expr: Quantile bin(s) to be computed (see notes)
-    :param bool stratify_snv_indel: Should all `bin_expr` items be stratified by snv / indels
-    :param int n_bins: Number of bins to bin the data into
-    :param int k: The `k` parameter of approx_quantiles
-    :param bool desc: Whether to bin the score in descending order
+    :param ht: Input Table
+    :param score_expr: Expression containing the score
+    :param bin_expr: Quantile bin(s) to be computed (see notes)
+    :param stratify_snv_indel: Should all `bin_expr` items be stratified by snv / indels
+    :param n_bins: Number of bins to bin the data into
+    :param k: The `k` parameter of approx_quantiles
+    :param desc: Whether to bin the score in descending order
     :return: Table with the quantile bins
-    :rtype: Table
     """
     import math
 
@@ -415,14 +414,13 @@ def create_binned_ht(
     - adj singletons
     - adj biallelic singletons
 
-    :param Table ht: Input table
-    :param int n_bins: Number of bins to bin into
-    :param bool singleton: Should bins be stratified by singletons
-    :param bool biallelic: Should bins be stratified by bi-alleleic variants
-    :param bool adj: Should bins be stratified by adj filtering
-    :param dictionary of boolean expr keyed by str add_substrat: Any additional stratifications for adding bins
-    :return table with bin number for each variant
-    :rtype: Table
+    :param ht: Input table
+    :param n_bins: Number of bins to bin into
+    :param singleton: Should bins be stratified by singletons
+    :param biallelic: Should bins be stratified by bi-alleleic variants
+    :param adj: Should bins be stratified by adj filtering
+    :param add_substrat: Any additional stratifications for adding bins
+    :return: table with bin number for each variant
     """
     def update_bin_expr(
             bin_expr: Dict[str, hl.expr.BooleanExpression],
@@ -432,13 +430,12 @@ def create_binned_ht(
         """
         Updates a dictionary of expressions to add another stratification
 
-        :param Dict of BooleanExpressions keyed by strings bin_expr: Dictionary of expressions to add another
+        :param bin_expr: Dictionary of expressions to add another
         stratification to
-        :param BooleanExpression new_expr: New Boolean expression to add to `bin_expr`
-        :param str new_id: Name to add to each current key in `bin_expr` to indicate the new stratification
+        :param new_expr: New Boolean expression to add to `bin_expr`
+        :param new_id: Name to add to each current key in `bin_expr` to indicate the new stratification
         :return: Dictionary of `bin_expr` updated with `new_expr` added as an additional stratification to all
         expressions already in `bin_expr`
-        :rtype: Dict of BooleanExpressions keyed by strings
         """
         bin_expr.update({
             f'{new_id}_{bin_id}': bin_expr & new_expr
@@ -495,6 +492,7 @@ def default_score_bin_agg(
     variants, number of truth variants (omni, mills, hapmap, and kgp_phase1), and family statistics.
 
     Note that the following fields should be present:
+
     In ht:
         - ac_raw - expected that this is the raw allele count before adj filtering
     In truth_ht (truth_data annotation):
@@ -510,10 +508,10 @@ def default_score_bin_agg(
         - unrelated_qc_callstats
         - tdt
 
-    :param Table ht: Table that aggregation will be performed on
-    :param Table truth_ht: Path to truth sites HT
-    :param Table fam_stats_ht: Path to family statistics HT
-    :return:
+    :param ht: Table that aggregation will be performed on
+    :param truth_ht: Path to truth sites HT
+    :param fam_stats_ht: Path to family statistics HT
+    :return: a dictionary containing aggrecations to perform on ht
     """
     # Load external evaluation data
     build = get_reference_genome(ht.locus).name
@@ -567,11 +565,10 @@ def compute_aggregate_binned_data(
     Requires that `bin_ht` be annotated with an `info` struct that includes QD, FS, and MQ in order to add an
     annotation for `fail_hard_filters`
 
-    :param Table bin_ht: Input Table with a `bin_id` annotation
-    :param callable agg_func: Function that returns a dict of any additional aggregations to perform
-    :param str checkpoint_path: If provided an intermediate checkpoint table is created with all required annotations before shuffling.
-    :return Table grouped by rank(s) and with counts of QC metrics
-    :rtype Table
+    :param bin_ht: Input Table with a `bin_id` annotation
+    :param agg_func: Function that returns a dict of any additional aggregations to perform
+    :param checkpoint_path: If provided an intermediate checkpoint table is created with all required annotations before shuffling.
+    :return: Table grouped by rank(s) and with counts of QC metrics
     """
     # Annotate binned table with the evaluation data
     bin_ht = bin_ht.annotate(
@@ -643,10 +640,9 @@ def compute_binned_truth_sample_concordance(
     The table is grouped by global/truth sample bin and variant type and
     contains TP, FP and FN.
 
-    :param Table ht: Input HT
-    :param Table binned_score_ht: Table with the an annotation for quantile bin for each variant
+    :param ht: Input HT
+    :param binned_score_ht: Table with the an annotation for quantile bin for each variant
     :return: Binned truth sample concordance HT
-    :rtype: Table
     """
 
     # Annotate score and global bin
@@ -703,11 +699,10 @@ def create_truth_sample_ht(
     """
     Computes a table comparing a truth sample in callset vs the truth.
 
-    :param MatrixTable mt: MT of truth sample from callset to be compared to truth
-    :param MatrixTable truth_mt: MT of truth sample
-    :param Table high_confidence_intervals_ht: High confidence interval HT
-    :return:
-    :rtype: Table
+    :param mt: MT of truth sample from callset to be compared to truth
+    :param truth_mt: MT of truth sample
+    :param high_confidence_intervals_ht: High confidence interval HT
+    :return: Table containing both the callset truth sample and the truth data
     """
 
     def split_filter_and_flatten_ht(truth_mt: hl.MatrixTable, high_confidence_intervals_ht: hl.Table) -> hl.Table:
@@ -715,10 +710,9 @@ def create_truth_sample_ht(
         Splits a truth sample MT and filter it to the given high confidence intervals.
         Then "flatten" it as a HT by annotating GT in a row field.
 
-        :param MatrixTable truth_mt: Truth sample MT
-        :param Table high_confidence_intervals_ht: High confidence intervals
+        :param truth_mt: Truth sample MT
+        :param high_confidence_intervals_ht: High confidence intervals
         :return: Truth sample table with GT as a row annotation
-        :rtype: Table
         """
         assert(truth_mt.count_cols() == 1)
 

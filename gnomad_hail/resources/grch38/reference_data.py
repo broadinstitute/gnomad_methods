@@ -33,7 +33,7 @@ syndip = MatrixTableResource(
 )
 
 syndip_hc_intervals = TableResource(
-    path='gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7_hc_regions.ht',
+    path='gs://gnomad-public/truth-sets/source/syndip_b38_hc_regions.ht',
     import_sources={
         "source_path": 'gs://gnomad-public/truth-sets/source/syndip.b38.bed'
     }

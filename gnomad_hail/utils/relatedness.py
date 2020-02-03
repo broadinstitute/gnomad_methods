@@ -36,6 +36,47 @@ This is used in the case of a pair of samples which kinship/IBD values do not co
 """
 
 
+def get_duplicated_samples(
+        kin_ht: hl.Table,
+        i_col: str = 'i',
+        j_col: str = 'j',
+        kin_col: str = 'kin',
+        duplicate_threshold: float = 0.4
+) -> List[Set[str]]:
+    """
+    Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
+
+    :param kin_ht: pc_relate output table
+    :param i_col: Column containing the 1st sample
+    :param j_col: Column containing the 2nd sample
+    :param kin_col: Column containing the kinship value
+    :param duplicate_threshold: Kinship threshold to consider two samples duplicated
+    :return: List of samples that are duplicates
+    """
+
+    def get_all_dups(s, dups, samples_duplicates):
+        if s in samples_duplicates:
+            dups.add(s)
+            s_dups = samples_duplicates.pop(s)
+            for s_dup in s_dups:
+                if s_dup not in dups:
+                    dups = get_all_dups(s_dup, dups, samples_duplicates)
+        return dups
+
+    dup_rows = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
+
+    samples_duplicates = defaultdict(set)
+    for row in dup_rows:
+        samples_duplicates[row[i_col]].add(row[j_col])
+        samples_duplicates[row[j_col]].add(row[i_col])
+
+    duplicated_samples = []
+    while len(samples_duplicates) > 0:
+        duplicated_samples.append(get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates))
+
+    return duplicated_samples
+
+
 def get_relationship_expr(
         kin_expr: hl.expr.NumericExpression,
         ibd0_expr: hl.expr.NumericExpression,
@@ -67,13 +108,13 @@ def get_relationship_expr(
     :param second_degree_min_kin: min kinship threshold for 2nd degree relatives
     :param ibd0_0_max: max IBD0 threshold for 0 IBD0 sharing
     :param ibd0_25_thresholds: (min, max) thresholds for 0.25 IBD0 sharing
-    :param ibd1_0_thresholds: max IBD1 threshold for 0 IBD0 sharing
+    :param ibd1_0_thresholds: (min, max) thresholds for 0 IBD1 sharing. Note that the min is there because pc_relate can output large negative values in some corner cases.
     :param ibd1_50_thresholds: (min, max) thresholds for 0.5 IBD1 sharing
     :param ibd1_100_min: min IBD1 threshold for 1.0 IBD1 sharing
     :param ibd2_0_threshold: max IBD2 threshold for 0 IBD2 sharing
     :param ibd2_25_thresholds: (min, max) thresholds for 0.25 IBD2 sharing
-    :param ibd2_100_thresholds: 
-    :return: 
+    :param ibd2_100_thresholds: (min, max) thresholds for 1.00 IBD2 sharing. Note that the min is there because pc_relate can output much larger IBD2 values in some corner cases.
+    :return: The relationship annotation using the constants defined in this module.
     """
     return (
             hl.case()
@@ -132,11 +173,11 @@ def infer_families(relationship_ht: hl.Table,
 
     :param relationship_ht: Input relationship table
     :param sex: A Table or dict giving the sex for each sample (`TRUE`=female, `FALSE`=male). If a Table is given, it should have a field `is_female`.
-    :param duplicated_samples: The set of all duplicated samples
-    :param i_col:
-    :param j_col:
-    :param relationship_col:
-    :return:
+    :param duplicated_samples: All duplicated samples TO REMOVE (If not provided, this function won't work as it assumes that each child has exactly two parents)
+    :param i_col: Column containing the 1st sample of the pair in the relationship table
+    :param j_col: Column containing the 2nd sample of the pair in the relationship table
+    :param relationship_col: Column contatining the relationship for the sample pair as defined in this module constants.
+    :return: Pedigree of complete trios
     """
 
     def group_parent_child_pairs_by_fam(parent_child_pairs: Iterable[Tuple[str, str]]) -> List[List[Tuple[str, str]]]:

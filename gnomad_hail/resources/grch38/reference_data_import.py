@@ -68,7 +68,7 @@ def main(args):
             syndip_hc_intervals.import_sources['source_path'],
             reference_genome='GRCh38',
             skip_invalid_intervals=True
-        ).write(na12878_giab_hc_intervals.path, overwrite=args.overwrite)
+        ).write(syndip_hc_intervals.path, overwrite=args.overwrite)
 
     if args.dbsnp:
         hl.import_vcf(

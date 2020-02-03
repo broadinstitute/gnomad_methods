@@ -1,6 +1,6 @@
 import argparse
 import hail as hl
-from .reference_data import (
+from gnomad_hail.resources.grch37.reference_data import (
     purcell_5k_intervals,
     clinvar,
     na12878_giab,

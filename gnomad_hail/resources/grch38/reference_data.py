@@ -82,6 +82,7 @@ mills = TableResource(
     },
 )
 
+
 def get_truth_ht() -> Table:
     """
     Returns a table with the following annotations from the latest version of the corresponding truth data:

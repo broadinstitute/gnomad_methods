@@ -320,7 +320,7 @@ def infer_families(relationship_ht: hl.Table,
 
             for s, s_trios in children_trios.items():
                 if len(s_trios) > 1:
-                    logger.warn("Discarded duplicated child {0} found multiple in trios:".format(
+                    logger.warn("Discarded duplicated child {0} found multiple in trios: {1}".format(
                         s,
                         ", ".join([str(trio) for trio in s_trios])
                     ))

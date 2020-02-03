@@ -1,8 +1,10 @@
 import argparse
 import hail as hl
-from .reference_data import (
+from gnomad_hail.resources.grch38.reference_data import (
     purcell_5k,
     na12878_giab,
+    na12878_giab_hc_intervals,
+    syndip_hc_intervals,
     clinvar,
     dbsnp,
     hapmap,
@@ -55,6 +57,19 @@ def main(args):
             na12878_giab.import_sources['source_path'], force_bgz=True, min_partitions=100
         ).write(na12878_giab.path, overwrite=args.overwrite)
 
+        hl.import_bed(
+            na12878_giab_hc_intervals.import_sources['source_path'],
+            reference_genome='GRCh38',
+            skip_invalid_intervals=True
+        ).write(na12878_giab_hc_intervals.path, overwrite=args.overwrite)
+
+    if args.syndip:
+        hl.import_bed(
+            syndip_hc_intervals.import_sources['source_path'],
+            reference_genome='GRCh38',
+            skip_invalid_intervals=True
+        ).write(na12878_giab_hc_intervals.path, overwrite=args.overwrite)
+
     if args.dbsnp:
         hl.import_vcf(
             dbsnp.import_sources['source_path'],
@@ -83,6 +98,7 @@ if __name__ == "__main__":
     parser.add_argument('--purcell_5k', help='Lift-over Purcell5k sites (from intervals)', action='store_true')
     parser.add_argument('--clinvar', help='Import clinvar VCF', action='store_true')
     parser.add_argument('--na12878', help='Imports GiaB NA12878', action='store_true')
+    parser.add_argument('--syndip', help="Imports Heng Li's Syndip", action='store_true')
     parser.add_argument('--dbsnp', help='Imports DBSNP', action='store_true')
     parser.add_argument('--hapmap', help='Imports HapMap', action='store_true')
     parser.add_argument('--kgp_omni', help='Imports Omni / KGP sites VCF', action='store_true')

@@ -1,0 +1,341 @@
+import hail as hl
+from gnomad_hail import logger
+from typing import Dict, List, Tuple, Set, Union, Iterable
+from collections import defaultdict
+
+UNRELATED = 'Unrelated'
+"""
+String representation for a pair of unrelated individuals in this module.
+Typically >2nd degree relatives, but the threshold is user-dependant.
+"""
+
+SECOND_DEGREE_RELATIVES = '2nd degree relatives'
+"""
+String representation for a pair of 2nd degree relatives in this module.
+"""
+
+PARENT_CHILD = 'Parent-child'
+"""
+String representation for a parent-child pair in this module.
+"""
+
+SIBLINGS = 'Siblings'
+"""
+String representation for a sibling pair in this module.
+"""
+
+DUPLICATE_OR_TWINS = 'Duplicate/twins'
+"""
+String representation for a pair of samples who are identical (either MZ twins of duplicate) in this module.
+"""
+
+AMBIGUOUS_RELATIONSHIP = 'Ambiguous'
+"""
+String representation for a pair of samples whose relationship is ambiguous.
+This is used in the case of a pair of samples which kinship/IBD values do not correspond to any biological relationship between two individuals.
+"""
+
+
+def get_relationship_expr(
+        kin_expr: hl.expr.NumericExpression,
+        ibd0_expr: hl.expr.NumericExpression,
+        ibd1_expr: hl.expr.NumericExpression,
+        ibd2_expr: hl.expr.NumericExpression,
+        first_degree_kin_thresholds: Tuple[float, float] = (0.19, 0.4),
+        second_degree_min_kin: float = 0.1,
+        ibd0_0_max: float = 0.025,
+        ibd0_25_thresholds: Tuple[float, float] = (0.1, 0.425),
+        # ibd0_50_thresholds = [0.37, 0.625], Not useful for relationship inference
+        # ibd0_100_threshold = 0.625  , Not useful for relationship inference
+        ibd1_0_thresholds: Tuple[float, float] = (-0.15, 0.1),
+        # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37), Not useful for relationship inference
+        ibd1_50_thresholds: Tuple[float, float] = (0.275, 0.75),
+        ibd1_100_min: float = 0.75,
+        ibd2_0_threshold: float = 0.125,
+        ibd2_25_thresholds: Tuple[float, float] = (0.1, 0.5),
+        ibd2_100_thresholds: Tuple[float, float] = (0.75, 1.25)
+) -> hl.expr.StringExpression:
+    """
+    Returns an expression that gives the relationship between a pair of samples given their kin coefficient and IBDO, IBD1, IBD2 values.
+    The kinship coefficient values in the defaults are in line with those output from `hail.methods.pc_relate <https://hail.is/docs/0.2/methods/genetics.html?highlight=pc_relate#hail.methods.pc_relate>`_.
+    
+    :param kin_expr: Kin coefficient expression
+    :param ibd0_expr: IBDO expression
+    :param ibd1_expr: IBD1 expression
+    :param ibd2_expr: IDB2 expression
+    :param first_degree_kin_thresholds: (min, max) kinship threshold for 1st degree relatives
+    :param second_degree_min_kin: min kinship threshold for 2nd degree relatives
+    :param ibd0_0_max: max IBD0 threshold for 0 IBD0 sharing
+    :param ibd0_25_thresholds: (min, max) thresholds for 0.25 IBD0 sharing
+    :param ibd1_0_thresholds: max IBD1 threshold for 0 IBD0 sharing
+    :param ibd1_50_thresholds: (min, max) thresholds for 0.5 IBD1 sharing
+    :param ibd1_100_min: min IBD1 threshold for 1.0 IBD1 sharing
+    :param ibd2_0_threshold: max IBD2 threshold for 0 IBD2 sharing
+    :param ibd2_25_thresholds: (min, max) thresholds for 0.25 IBD2 sharing
+    :param ibd2_100_thresholds: 
+    :return: 
+    """
+    return (
+            hl.case()
+                .when(kin_expr < second_degree_min_kin, UNRELATED)
+                .when(
+                (kin_expr < first_degree_kin_thresholds[0]),
+                SECOND_DEGREE_RELATIVES
+            )
+                .when(
+                (kin_expr < first_degree_kin_thresholds[1]) &
+                (ibd0_expr <= ibd0_0_max) &
+                (ibd1_expr >= ibd1_100_min) &
+                (ibd2_expr <= ibd2_0_threshold),
+                PARENT_CHILD
+            )
+                .when(
+                (kin_expr < first_degree_kin_thresholds[1]) &
+                (ibd0_expr >= ibd0_25_thresholds[0]) &
+                (ibd0_expr <= ibd0_25_thresholds[1]) &
+                (ibd1_expr >= ibd1_50_thresholds[0]) &
+                (ibd1_expr <= ibd1_50_thresholds[1]) &
+                (ibd2_expr >= ibd2_25_thresholds[0]) &
+                (ibd2_expr <= ibd2_25_thresholds[1]),
+                SIBLINGS
+            )
+                .when(
+                (kin_expr > first_degree_kin_thresholds[1]) &
+                (ibd0_expr < ibd0_0_max) &
+                (ibd1_expr >= ibd1_0_thresholds[0]) &
+                (ibd1_expr <= ibd1_0_thresholds[1]) &
+                (ibd2_expr >= ibd2_100_thresholds[0]) &
+                (ibd2_expr <= ibd2_100_thresholds[1]),
+                DUPLICATE_OR_TWINS
+            )
+                .default(AMBIGUOUS_RELATIONSHIP)
+    )
+
+
+def infer_families(relationship_ht: hl.Table,
+                   sex: Union[hl.Table, Dict[str, bool]],
+                   duplicated_samples: Set[str],
+                   i_col: str = 'i',
+                   j_col: str = 'j',
+                   relationship_col: str = 'relationship'
+                   ) -> hl.Pedigree:
+    """
+    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
+    The `relationship_col` should be a column specifying the relationship between each two samples as defined in this module's constants.
+
+    This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
+    trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
+
+    .. note::
+
+    This function only returns complete trios defined as: one child, one father and one mother (sex is required for both parents).
+
+    :param relationship_ht: Input relationship table
+    :param sex: A Table or dict giving the sex for each sample (`TRUE`=female, `FALSE`=male). If a Table is given, it should have a field `is_female`.
+    :param duplicated_samples: The set of all duplicated samples
+    :param i_col:
+    :param j_col:
+    :param relationship_col:
+    :return:
+    """
+
+    def group_parent_child_pairs_by_fam(parent_child_pairs: Iterable[Tuple[str, str]]) -> List[List[Tuple[str, str]]]:
+        """
+        Takes all parent-children pairs and groups them by family id.
+        A family here is defined as a list of sample-pairs, which all share at least one sample with at least one other sample-pair.
+        Family ids
+
+        :param parent_child_pairs: All the parent-children pairs
+        :return: A list of families, where each element of the list a list of the parent-children pairs
+        """
+        fam_id = 1  # stores the current family id
+        s_fam = dict()  # stores the family id for each sample
+        fams = defaultdict(list)
+        for pair in parent_child_pairs:
+            if pair[0] in s_fam:
+                if pair[1] in s_fam:
+                    if s_fam[pair[0]] != s_fam[pair[1]]:  # If both samples are in different families, merge the families
+                        new_fam_id = s_fam[pair[0]]
+                        fam_id_to_merge = s_fam[pair[1]]
+                        for s in s_fam:
+                            if s_fam[s] == fam_id_to_merge:
+                                s_fam[s] = new_fam_id
+                        fams[new_fam_id].extend(fams.pop(fam_id_to_merge))
+                else:
+                    s_fam[pair[1]] = s_fam[pair[0]]
+                fams[s_fam[pair[0]]].append(pair)
+            elif pair[1] in s_fam:
+                s_fam[pair[0]] = s_fam[pair[1]]
+                fams[s_fam[pair[1]]].append(pair)
+            else:
+                s_fam[pair[0]] = fam_id
+                s_fam[pair[1]] = fam_id
+                fams[fam_id].append(pair)
+                fam_id += 1
+
+        return list(fams.values())
+
+    def get_trios(
+            fam_id: str,
+            parent_child_pairs: List[Tuple[str, str]],
+            related_pairs: Dict[Tuple[str, str], str]
+    ) -> List[hl.Trio]:
+        """
+        Generates trios based from the list of parent-child pairs in the family and
+        all related pairs in the data. Only complete parent/offspring trios are included in the results.
+
+        The trios are assembled as follows:
+        1. All pairs of unrelated samples with different sexes within the family are extracted as possible parent pairs
+        2. For each possible parent pair, a list of all children is constructed (each child in the list has a parent-offspring pair with each parent)
+        3. If there are multiple children for a given parent pair, all children should be siblings with each other
+        4. Check that each child was only assigned a single pair of parents. If a child is found to have multiple parent pairs, they are ALL discarded.
+
+        :param fam_id: The family ID
+        :param parent_child_pairs: The parent-child pairs for this family
+        :param related_pairs: All related sample pairs in the data
+        :return: List of trios in the family
+        """
+
+        def get_possible_parents(samples: List[str]) -> List[Tuple[str, str]]:
+            """
+            1. All pairs of unrelated samples with different sexes within the family are extracted as possible parent pairs
+
+            :param samples: All samples in the family
+            :return: Possible parent pairs
+            """
+            possible_parents = []
+            for i in range(len(samples)):
+                for j in range(i, len(samples)):
+                    if related_pairs[tuple(sorted([samples[i], samples[j]]))] is None:
+                        if sex.get(samples[i]) is True and sex.get(samples[j]) is False:
+                            possible_parents.append((samples[i], samples[j]))
+                        elif sex.get(samples[i]) is False and sex.get(samples[j]) is True:
+                            possible_parents.append((samples[j], samples[i]))
+            return possible_parents
+
+        def get_children(possible_parents: Tuple[str, str]) -> List[str]:
+            """
+            2. For each possible parent pair, a list of all children is constructed (each child in the list has a parent-offspring pair with each parent)
+
+            :param possible_parents: A pair of possible parents
+            :return: The list of all children (if any) corresponding to the possible parents
+            """
+            offsprings = defaultdict(list)
+            for pair in parent_child_pairs:
+                if possible_parents[0] == pair[0]:
+                    offsprings[pair[1]].append(possible_parents[0])
+                elif possible_parents[0] == pair[1]:
+                    offsprings[pair[0]].append(possible_parents[0])
+                elif possible_parents[1] == pair[0]:
+                    offsprings[pair[1]].append(possible_parents[1])
+                elif possible_parents[1] == pair[1]:
+                    offsprings[pair[0]].append(possible_parents[1])
+
+            return [s for s, parents in offsprings.items() if len(parents) == 2]
+
+        def check_sibs(children: List[str]) -> bool:
+            """
+            3. If there are multiple children for a given parent pair, all children should be siblings with each other
+
+            :param children: List of all children for a given parent pair
+            :return: Whether all children in the list are siblings
+            """
+            for i in range(len(children)):
+                for j in range(i + 1, len(children)):
+                    if related_pairs[tuple(sorted([children[i], children[j]]))] != SIBLINGS:
+                        return False
+            return True
+
+        def discard_multi_parents_children(trios: List[hl.Trio]):
+            """
+            4. Check that each child was only assigned a single pair of parents. If a child is found to have multiple parent pairs, they are ALL discarded.
+
+            :param trios: All trios formed for this family
+            :return: The list of trios for which each child has a single parents pair.
+            """
+            children_trios = defaultdict(list)
+            for trio in trios:
+                children_trios[trio.s].append(trio)
+
+            for s, s_trios in children_trios:
+                if len(s_trios) > 1:
+                    logger.warn("Discarded duplicated child {0} found multiple in trios:".format(
+                        s,
+                        ", ".join([str(trio) for trio in s_trios])
+                    ))
+
+            return [trios[0] for trios in children_trios.values() if len(trios) == 1]
+
+        # Get all possible pairs of parents in (father, mother) order
+        all_possible_parents = get_possible_parents(list({s for pair in parent_child_pairs for s in pair}))
+
+        trios = []
+        for possible_parents in all_possible_parents:
+            children = get_children(possible_parents)
+            if check_sibs(children):
+                trios.extend([
+                    hl.Trio(
+                        s=s,
+                        fam_id=fam_id,
+                        pat_id=possible_parents[0],
+                        mat_id=possible_parents[1],
+                        is_female=sex.get(s)
+                    )
+                    for s in children
+                ])
+            else:
+                logger.warn(
+                    "Discarded family with same parents, and multiple offspring that weren't siblings:"
+                    "\nMother: {}\nFather:{}\nChildren:{}".format(
+                        possible_parents[0],
+                        possible_parents[1],
+                        ", ".join(children)
+                    )
+                )
+
+        return discard_multi_parents_children(trios)
+
+    # Check relatedness table format
+    if not relationship_ht[i_col].dtype == relationship_ht[j_col].dtype:
+        logger.error("i_col and j_col of the relatedness table need to be of the same type.")
+
+    # If `relatedness_ht` is keyed by a Struct, attempt to extract `s` instead
+    if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
+        if 's' in relationship_ht[i_col]:
+            logger.warn(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
+            relationship_ht = relationship_ht.key_by(  # Needed for familial inference at this point -- should be generalized
+                **{
+                    i_col: relationship_ht[i_col].s,
+                    j_col: relationship_ht[j_col].s
+                }
+            )
+        else:
+            logger.error(
+                f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}.")
+
+    # If sex is a Table, extract sex information as a Dict
+    if isinstance(sex, hl.Table):
+        sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
+
+    # Get all the relations we care about:
+    # => Remove unrelateds and duplicates
+    dups = hl.literal(duplicated_samples)
+    relationship_ht = relationship_ht.filter(
+        ~dups.contains(relationship_ht[i_col]) &
+        ~dups.contains(relationship_ht[j_col]) &
+        (relationship_ht[relationship_col] != UNRELATED)
+    )
+
+    # Collect all related sample pairs and
+    # create a dictionnary with pairs as keys and relationships as values
+    # Sample-pairs are tuples ordered by sample name
+    related_pairs = {
+        tuple(sorted([i, j])): rel for i, j, rel in
+        hl.tuple([relationship_ht.i, relationship_ht.j, relationship_ht.relationship]).collect()
+    }
+
+    parent_child_pairs_by_fam = group_parent_child_pairs_by_fam([pair for pair, rel in related_pairs.items() if rel == PARENT_CHILD])
+    return hl.Pedigree([
+        trio for fam_index, parent_child_pairs in enumerate(parent_child_pairs_by_fam)
+        for trio in get_trios(str(fam_index), parent_child_pairs, related_pairs)
+    ])

@@ -1,6 +1,7 @@
 import numpy as np
 from .generic import *
 from .gnomad_functions import logger, filter_to_adj
+from gnomad_hail.utils.relatedness import get_duplicated_samples
 
 
 def filter_rows_for_qc(
@@ -810,26 +811,6 @@ def compute_qc_metrics_residuals(
     )
 
     return residuals_ht.persist()
-
-
-def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
-    """
-    Flattens the result of `filter_duplicate_samples`, so that each line contains a single sample.
-    An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
-
-    Note that this assumes that the type of the table key is the same as the type of the `filtered` array.
-
-    :param dups_ht: Input HT
-    :return: Flattened HT
-    """
-    dups_ht = dups_ht.annotate(
-        dups=hl.array([(dups_ht.key, False)]).extend(
-            dups_ht.filtered.map(lambda x: (x, True))
-        )
-    )
-    dups_ht = dups_ht.explode('dups')
-    dups_ht = dups_ht.key_by()
-    return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by('s')
 
 
 def add_filters_expr(

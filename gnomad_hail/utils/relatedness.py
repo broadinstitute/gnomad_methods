@@ -77,7 +77,27 @@ def get_duplicated_samples(
     return duplicated_samples
 
 
-def get_relationship_expr(
+def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
+    """
+    Flattens the result of `filter_duplicate_samples`, so that each line contains a single sample.
+    An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
+
+    Note that this assumes that the type of the table key is the same as the type of the `filtered` array.
+
+    :param dups_ht: Input HT
+    :return: Flattened HT
+    """
+    dups_ht = dups_ht.annotate(
+        dups=hl.array([(dups_ht.key, False)]).extend(
+            dups_ht.filtered.map(lambda x: (x, True))
+        )
+    )
+    dups_ht = dups_ht.explode('dups')
+    dups_ht = dups_ht.key_by()
+    return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by('s')
+
+
+def get_relationship_expr( # TODO: The thredshold detection could be easily automated by fitting distributions over the data.
         kin_expr: hl.expr.NumericExpression,
         ibd0_expr: hl.expr.NumericExpression,
         ibd1_expr: hl.expr.NumericExpression,
@@ -169,7 +189,7 @@ def infer_families(relationship_ht: hl.Table,
 
     .. note::
 
-    This function only returns complete trios defined as: one child, one father and one mother (sex is required for both parents).
+        This function only returns complete trios defined as: one child, one father and one mother (sex is required for both parents).
 
     :param relationship_ht: Input relationship table
     :param sex: A Table or dict giving the sex for each sample (`TRUE`=female, `FALSE`=male). If a Table is given, it should have a field `is_female`.
@@ -298,7 +318,7 @@ def infer_families(relationship_ht: hl.Table,
             for trio in trios:
                 children_trios[trio.s].append(trio)
 
-            for s, s_trios in children_trios:
+            for s, s_trios in children_trios.items():
                 if len(s_trios) > 1:
                     logger.warn("Discarded duplicated child {0} found multiple in trios:".format(
                         s,

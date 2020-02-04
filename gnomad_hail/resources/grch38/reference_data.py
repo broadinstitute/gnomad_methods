@@ -5,6 +5,8 @@ from gnomad_hail.resources.resource_utils import (
     VersionedMatrixTableResource,
 )
 
+from hail import Table
+
 
 # Resources with no versioning needed
 purcell_5k = TableResource(
@@ -97,3 +99,23 @@ mills = TableResource(
         "source_path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
     }
 )
+
+
+def get_truth_ht() -> Table:
+    """
+    Returns a table with the following annotations from the latest version of the corresponding truth data:
+    - hapmap
+    - kgp_omni (1000 Genomes intersection Onni 2.5M array)
+    - kgp_phase_1_hc (high confidence sites in 1000 genonmes)
+    - mills (Mills & Devine indels)
+
+    :return: A table with the latest version of popular truth data annotations
+    """
+
+    return hapmap.ht().select(hapmap=True).join(
+        kgp_omni.ht().select(omni=True), how="outer"
+    ).join(
+        kgp.versions['phase_1_hc'].ht().select(kgp_phase1_hc=True), how="outer"
+    ).join(
+        mills.ht().select(mills=True), how="outer"
+    ).repartition(200, shuffle=False).persist()

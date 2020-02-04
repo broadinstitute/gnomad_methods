@@ -255,7 +255,7 @@ def liftover(data_type: str) -> VersionedTableResource:
 
     return VersionedTableResource(
         current_release,
-        {release: TableResource(path=_public_coverage_ht_path(data_type, release)) for release in releases},
+        {release: TableResource(path=_liftover_data_path(data_type, release)) for release in releases},
     )
 
 

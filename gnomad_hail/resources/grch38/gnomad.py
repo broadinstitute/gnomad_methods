@@ -1,5 +1,7 @@
 from gnomad_hail.resources.resource_utils import (
     TableResource,
+    VersionedMatrixTableResource,
+    MatrixTableResource,
     VersionedTableResource,
     DataException,
 )
@@ -12,6 +14,19 @@ DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 
+gnomad_syndip = VersionedMatrixTableResource(
+    default_version='3.0',
+    versions={
+        "3.0": MatrixTableResource(path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt")
+    }
+)
+
+na12878 = VersionedMatrixTableResource(
+    default_version='3.0',
+    versions={
+        "3.0": MatrixTableResource(path='gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_na12878.mt')
+    }
+)
 
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """

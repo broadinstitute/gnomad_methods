@@ -214,17 +214,18 @@ def compute_quantile_bin(
 
     If `compute_snv_indel_separately` is True all items in `bin_expr` will be stratified by snv / indels for the bin
     calculation. Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
-    example if we have the following four variants and scores and `n_bins` of 4:
+    example if we have the following four variants and scores and `n_bins` of 2:
 
-    ========   =======   ======   ==================================   =================================
-    Variant    Type      Score    bin                                  bin
-                                  compute_snv_indel_separately=False   compute_snv_indel_separately=True
-    ========   =======   ======   ==================================   =================================
-    Var1       SNV       0.1      1                                    1
-    Var2       SNV       0.2      2                                    2
-    Var3       Indel     0.3      3                                    1
-    Var4       Indel     0.4      4                                    2
-    ========   =======   ======   ==================================   =================================
+    ========   =======   ======   =================   =================
+    Variant    Type      Score    bin - `compute_snv_indel_separately`:
+    --------   -------   ------   -------------------------------------
+    \          \         \        False               True
+    ========   =======   ======   =================   =================
+    Var1       SNV       0.1      1                   1
+    Var2       SNV       0.2      1                   2
+    Var3       Indel     0.3      2                   1
+    Var4       Indel     0.4      2                   2
+    ========   =======   ======   =================   =================
 
     .. note::
 
@@ -402,7 +403,7 @@ def compute_quantile_bin(
     return bin_ht
 
 
-def create_binned_ht(
+def default_create_binned_ht(
         ht: hl.Table,
         n_bins: int = 100,
         singleton: bool = True,
@@ -411,11 +412,15 @@ def create_binned_ht(
         add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None
 ) -> hl.Table:
     """
-    Annotates table with a bin, where variants are binned based on score into `n_bins` equally-sized bins.
-    Note that the following fields should be present:
-    - score
-    - ac - expected that this is the adj filtered allele count
-    - ac_raw - expected that this is the raw allele count before adj filtering
+    This is meant as a default wrapper for `compute_quantile_bin`. It annotates table with a bin, where variants are
+    binned based on score into `n_bins` equally-sized bins.
+
+    .. Note::
+
+        The following fields should be present:
+        - score
+        - ac - expected that this is the adj filtered allele count
+        - ac_raw - expected that this is the raw allele count before adj filtering
 
     Computes bin numbers stratified by SNV / Indels and with the following optional sub bins
     - singletons
@@ -555,7 +560,7 @@ def compute_aggregate_binned_data(
 ) -> hl.Table:
     """
     Aggregates a Table that has been annotated with bins based on quantiles (`compute_quantile_bin` or
-    `create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
+    `default_create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
     singleton. Then for each grouping, min/max of `score` will be computed and any other desired aggregations.
 
     Automatic aggregations that will be done are:

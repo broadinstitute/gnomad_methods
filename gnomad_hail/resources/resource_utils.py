@@ -1,14 +1,8 @@
-from typing import Optional, Dict, Any
-from typing_extensions import Protocol
+from typing import Optional, Dict, Any, Callable
 from gnomad_hail.utils.gnomad_functions import logger
 import hail as hl
 from hail.linalg import BlockMatrix
 from abc import ABC, abstractmethod
-
-
-# Protocol class for LazyTable Callable with kwargs
-class LazyTableImportFuncCallable(Protocol):
-    def __call__(self, path: str, **kwargs) -> hl.Table: ...
 
 
 # Resource classes
@@ -18,7 +12,12 @@ class BaseResource(ABC):
     """
 
     @abstractmethod
-    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, expected_file_extension: Optional[str] = None):
+    def __init__(
+            self,
+            path: Optional[str] = None,
+            import_sources: Optional[Dict[str, Any]] = None,
+            expected_file_extension: Optional[str] = None
+    ):
         """
         Creates a Resource
 
@@ -29,7 +28,7 @@ class BaseResource(ABC):
         self.path = path
         self.import_sources = import_sources
 
-        if expected_file_extension is not None and not path.endswith(expected_file_extension):
+        if path is not None and expected_file_extension is not None and not path.endswith(expected_file_extension):
             logger.warning(
                 f"Created the following {self.__class__.__name__} with a path that doesn't ends with {expected_file_extension}: {self}")
 
@@ -45,52 +44,38 @@ class TableResource(BaseResource):
     A Hail Table resource
     """
 
-    def __init__(self, path: str, import_sources: Optional[Dict[str, Any]] = None, expected_file_extension: Optional[str] = '.ht'):
+    def __init__(
+            self,
+            path: Optional[str] = None,
+            import_sources: Optional[Dict[str, Any]] = None,
+            import_func: Optional[Callable[..., hl.Table]] = None,
+            expected_file_extension: Optional[str] = '.ht'
+    ):
+
+        if path is None and import_func is None:
+            raise ValueError("TableResource requires one of path or import_func arguments.")
+
         super().__init__(
             path=path,
             import_sources=import_sources,
             expected_file_extension=expected_file_extension
         )
 
-    def ht(self) -> hl.Table:
+        self.import_func =import_func
+
+    def ht(self, force_import: bool = False) -> hl.Table:
         """
         Read and return the Hail Table resource
 
         :return: Hail Table resource
         """
-        return hl.read_table(self.path)
+        if self.path is None or force_import:
+            return self.import_func(**self.import_sources)
+        else:
+            return hl.read_table(self.path)
 
-
-class LazyTableResource(TableResource):
-    """
-    A Hail Table resource that imports the table from source when .ht() is called for the first time.
-    """
-
-    _ht = None
-
-    def __init__(
-            self,
-            path: str,
-            import_func: LazyTableImportFuncCallable,
-            import_args: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(
-            path=path,
-            import_sources=None,
-            expected_file_extension=None
-        )
-        self.import_func=import_func
-        self.import_args = import_args
-
-    def ht(self) -> hl.Table:
-        """
-        Imports and return the HT
-
-        :return: Hail Table resource
-        """
-        if self._ht is None:
-            self._ht = self.import_func(path=self.path, **self.import_args)
-        return self._ht
+    def import_resource(self, overwrite: bool = False):
+        self.import_func(**self.import_sources).write(self.path, overwrite=overwrite)
 
 
 class MatrixTableResource(BaseResource):

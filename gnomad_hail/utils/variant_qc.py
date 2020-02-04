@@ -329,8 +329,6 @@ def compute_quantile_bin(
         }
     )
 
-    logger.debug(str(bin_stats))
-
     bin_ht = bin_ht.annotate_globals(
         bin_stats=hl.literal(
             bin_stats,

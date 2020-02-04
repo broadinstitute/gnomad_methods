@@ -209,20 +209,33 @@ def compute_quantile_bin(
     Returns a table with a bin for each row based on quantiles of `score_expr`.
 
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
-    This is done based on quantiles computed with hl.agg.approx_quantiles.
-    If a single value in `score_expr` spans more than one bin, the rows with this value are distributed
-    randomly across the bins it spans.
-    If `stratify_snv_indel` is set all items in `bin_expr` will be stratified by snv / indels for the bin calculation,
-    however, because SNV and indel rows are mutually exclusive, they are re-combined into a single bin.
+    This is done based on quantiles computed with hl.agg.approx_quantiles. If a single value in `score_expr` spans more
+    than one bin, the rows with this value are distributed randomly across the bins it spans.
+
+    If `stratify_snv_indel` is True all items in `bin_expr` will be stratified by snv / indels for the bin calculation.
+    Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
+    example if we have the following four variants and scores and `n_bins` of 4:
+
+    ========   =======   ======   ==============================   ==============================
+    Variant    Type      Score    bin - stratify_snv_indel=False   bin - stratify_snv_indel=True
+    ========   =======   ======   ==============================   ==============================
+    Var1       SNV       0.1      1                                1
+    Var2       SNV       0.2      2                                2
+    Var3       Indel     0.3      3                                1
+    Var4       Indel     0.4      4                                2
+    ========   =======   ======   ==============================   ==============================
 
     .. note::
 
-        The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get an SNV quantile bin and an Indel
-        quantile bin, the following could be used:
-        bin_expr={
-        'snv_bin': hl.is_snp(ht.alleles[0], ht.alleles[1]),
-        'indels_bin': ~hl.is_snp(ht.alleles[0], ht.alleles[1])
-        }
+        The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get a biallelic quantile bin and an
+        singleton quantile bin, the following could be used:
+
+        .. code-block:: python
+
+            bin_expr={
+                'biallelic_bin': ~ht.was_split,
+                'singleton_bin': ht.singleton
+            }
 
     :param ht: Input Table
     :param score_expr: Expression containing the score

@@ -200,7 +200,7 @@ def compute_quantile_bin(
         ht: hl.Table,
         score_expr: hl.expr.NumericExpression,
         bin_expr: Dict[str, hl.expr.BooleanExpression] = {'bin': True},
-        stratify_snv_indel: bool = True,
+        compute_snv_indel_separately: bool = True,
         n_bins: int = 100,
         k: int = 1000,
         desc: bool = True
@@ -212,18 +212,19 @@ def compute_quantile_bin(
     This is done based on quantiles computed with hl.agg.approx_quantiles. If a single value in `score_expr` spans more
     than one bin, the rows with this value are distributed randomly across the bins it spans.
 
-    If `stratify_snv_indel` is True all items in `bin_expr` will be stratified by snv / indels for the bin calculation.
-    Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
+    If `compute_snv_indel_separately` is True all items in `bin_expr` will be stratified by snv / indels for the bin
+    calculation. Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
     example if we have the following four variants and scores and `n_bins` of 4:
 
-    ========   =======   ======   ==============================   ==============================
-    Variant    Type      Score    bin - stratify_snv_indel=False   bin - stratify_snv_indel=True
-    ========   =======   ======   ==============================   ==============================
-    Var1       SNV       0.1      1                                1
-    Var2       SNV       0.2      2                                2
-    Var3       Indel     0.3      3                                1
-    Var4       Indel     0.4      4                                2
-    ========   =======   ======   ==============================   ==============================
+    ========   =======   ======   ==================================   =================================
+    Variant    Type      Score    bin                                  bin
+                                  compute_snv_indel_separately=False   compute_snv_indel_separately=True
+    ========   =======   ======   ==================================   =================================
+    Var1       SNV       0.1      1                                    1
+    Var2       SNV       0.2      2                                    2
+    Var3       Indel     0.3      3                                    1
+    Var4       Indel     0.4      4                                    2
+    ========   =======   ======   ==================================   =================================
 
     .. note::
 
@@ -240,7 +241,7 @@ def compute_quantile_bin(
     :param ht: Input Table
     :param score_expr: Expression containing the score
     :param bin_expr: Quantile bin(s) to be computed (see notes)
-    :param stratify_snv_indel: Should all `bin_expr` items be stratified by snv / indels
+    :param compute_snv_indel_separately: Should all `bin_expr` items be stratified by snv / indels
     :param n_bins: Number of bins to bin the data into
     :param k: The `k` parameter of approx_quantiles
     :param desc: Whether to bin the score in descending order
@@ -287,7 +288,7 @@ def compute_quantile_bin(
             bin_boundaries=[x[1] for x in indexed_bins]
         )
 
-    if stratify_snv_indel:
+    if compute_snv_indel_separately:
         # For each bin, add a SNV / indel stratification
         bin_expr = {
             f'{bin_id}_{snv}': (bin_expr & snv_expr)
@@ -376,7 +377,7 @@ def compute_quantile_bin(
 
     # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
     # Update the global bin_stats struct to reflect the change in bin names in the table
-    if stratify_snv_indel:
+    if compute_snv_indel_separately:
         bin_expr_no_snv = {bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_stats}
         bin_ht = bin_ht.annotate_globals(
             bin_stats=hl.struct(

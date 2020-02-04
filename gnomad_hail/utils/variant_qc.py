@@ -501,7 +501,6 @@ def default_create_binned_ht(
 
 def default_score_bin_agg(
         ht: hl.Table,
-        truth_ht: hl.Table,
         fam_stats_ht: hl.Table
 ) -> Dict[str, hl.expr.Aggregation]:
     """
@@ -512,7 +511,7 @@ def default_score_bin_agg(
 
     In ht:
         - ac_raw - expected that this is the raw allele count before adj filtering
-    In truth_ht (truth_data annotation):
+    In truth_ht:
         - omni
         - mills
         - hapmap
@@ -526,14 +525,21 @@ def default_score_bin_agg(
         - tdt
 
     :param ht: Table that aggregation will be performed on
-    :param truth_ht: Path to truth sites HT
     :param fam_stats_ht: Path to family statistics HT
     :return: a dictionary containing aggrecations to perform on ht
     """
     # Load external evaluation data
     build = get_reference_genome(ht.locus).name
-    clinvar = (grch37_resources.reference_data.clinvar if build == 'GRCh37' else grch38_resources.reference_data.clinvar).ht()[ht.key]
-    truth_data = truth_ht[ht.key].truth_data
+    clinvar = (
+        grch37_resources.reference_data.clinvar
+        if build == "GRCh37"
+        else grch38_resources.reference_data.clinvar
+    ).ht()[ht.key]
+    truth_data = (
+        grch37_resources.reference_data.get_truth_ht()
+        if build == "GRCh37"
+        else grch38_resources.reference_data.get_truth_ht()
+    )[ht.key]
     fam = fam_stats_ht[ht.key]
 
     return dict(

@@ -47,9 +47,12 @@ class BaseResource(ABC):
         return f'{self.__class__.__name__}({",".join(attr_str)})'
 
     @abstractmethod
-    def import_resource(self):
+    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Abstract method to import the resource using its import_func and writes it in its path.
+
+        :param overwrite: If ``True``, overwrite an existing file at the destination.
+        :param kwargs: Any other parameters to be passed to the underlying hail write function (acceptable parameters depend on specific resource types)
         """
         pass
 
@@ -87,7 +90,7 @@ class TableResource(BaseResource):
         else:
             return hl.read_table(self.path)
 
-    def import_resource(self, overwrite: bool = False, **kwargs):
+    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Imports the TableResource using its import_func and writes it in its path.
 
@@ -135,7 +138,7 @@ class MatrixTableResource(BaseResource):
         else:
             return hl.read_matrix_table(self.path)
 
-    def import_resource(self, overwrite: bool = False, **kwargs):
+    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Imports the MatrixTable resource using its import_func and writes it in its path.
 
@@ -195,12 +198,17 @@ class PedigreeResource(BaseResource):
         """
         return hl.Pedigree.read(self.path, delimiter=self.delimiter)
 
-    def import_resource(self):
+    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Imports the Pedigree resource using its import_func and writes it in its path.
 
+        :param overwrite: If set, existing file(s) will be overwritten. IMPORTANT: Currently there is no implementation of this method when `overwrite` is set the `False`
+        :param kwargs: Any other parameters to be passed to hl.Pedigree.write
         :return: Nothing
         """
+        if not overwrite:
+            raise NotImplementedError
+
         self.import_func(**self.import_sources).write(self.path)
 
 
@@ -234,7 +242,7 @@ class BlockMatrixResource(BaseResource):
         """
         return BlockMatrix.read(self.path)
 
-    def import_resource(self, overwrite: bool = False, **kwargs):
+    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Imports the BlockMatrixResource using its import_func and writes it in its path.
 

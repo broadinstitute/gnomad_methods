@@ -661,38 +661,45 @@ def run_pca_with_relateds(
 
 def annotate_relationship(
     relatedness_ht: hl.Table,
-    first_degree_threshold: List[float] = [0.1767767, 0.4],
-    second_degree_threshold: float = 0.08838835,
-    ibd2_parent_offspring_threshold: float = 0.14
+    first_degree_lower_threshold: float = 0.1767767,
+    first_degree_upper_threshold: float = 0.4,
+    second_degree_lower_threshold: float = 0.08838835,
+    ibd0_parent_offspring_threshold: float = 0.09
     ) -> hl.Table:
     """
     Annotates a kinship Table with second-degree, full-sibling, and parent-child relationships
 
-    :param relatedness_ht: kinship Table to be annotated
-    :param first_degree_threshold: lower and upper kinship thresholds for first degree relatedness
-    :param second_degree_threshold: kinship threshold for second degree relatedness
-    :param ibd2_parent_offspring_threshold: IBD2 threshold to differentiate parent-child from full-sibling
+    :param relatedness_ht: Kinship Table to be annotated
+    :param first_degree_lower_threshold: Lower kinship threshold for first degree relatedness. Also upper threshold for second degree relatedness
+    :param first_degree_upper_threshold: Upper kinship thresholds for first degree relatedness
+    :param second_degree_lower_threshold: Lower kinship threshold for second degree relatedness. Upper threshold is the same as first degree lower threshold
+    :param ibd0_parent_offspring_threshold: IBD0 threshold to differentiate parent-child from full-sibling
     :return: Table with relationship annotations
     :rtype: Table
     """
     relatedness_ht = relatedness_ht.annotate(
         relationship_classification=hl.case()
         .when(
-            (relatedness_ht.kin > second_degree_threshold)
-            & (relatedness_ht.kin < first_degree_threshold[0]),
+            (relatedness_ht.kin > second_degree_lower_threshold)
+            & (relatedness_ht.kin < first_degree_lower_threshold),
             "Second-degree",
         )
         .when(
-            (relatedness_ht.kin > first_degree_threshold[0])
-            & (relatedness_ht.kin < first_degree_threshold[1])
-            & (relatedness_ht.ibd2 >= ibd2_parent_offspring_threshold),
+            (relatedness_ht.kin > first_degree_lower_threshold)
+            & (relatedness_ht.kin < first_degree_upper_threshold)
+            & (relatedness_ht.ibd0 >= ibd0_parent_offspring_threshold),
             "Full-sibling",
         )
         .when(
-            (relatedness_ht.kin > first_degree_threshold[0])
-            & (relatedness_ht.kin < first_degree_threshold[1])
-            & (relatedness_ht.ibd2 < ibd2_parent_offspring_threshold),
+            (relatedness_ht.kin > first_degree_lower_threshold)
+            & (relatedness_ht.kin < first_degree_upper_threshold)
+            & (relatedness_ht.ibd0 < ibd0_parent_offspring_threshold),
             "Parent-child",
+        )
+        .when(
+            (relatedness_ht.kin >= first_degree_upper_threshold)
+            & (relatedness_ht.ibd0 < ibd0_parent_offspring_threshold),
+            "Monozygotic-twins",
         )
         .default("None")
     )

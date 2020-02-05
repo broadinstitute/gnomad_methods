@@ -194,10 +194,10 @@ def get_truth_ht() -> Table:
     :return: A table with the latest version of popular truth data annotations
     """
 
-    return hapmap.ht().select(hapmap=True).join(
-        kgp_omni.ht().select(omni=True), how="outer"
+    return hapmap.mt().rows().select(hapmap=True).join(
+        kgp_omni.mt().rows().select(omni=True), how="outer"
     ).join(
-        kgp.versions['phase_1_hc'].ht().select(kgp_phase1_hc=True), how="outer"
+        kgp.versions['phase_1_hc'].mt().rows().select(kgp_phase1_hc=True), how="outer"
     ).join(
-        mills.ht().select(mills=True), how="outer"
+        mills.mt().rows().select(mills=True), how="outer"
     ).repartition(200, shuffle=False).persist()

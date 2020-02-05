@@ -415,21 +415,21 @@ def default_create_binned_ht(
     This is meant as a default wrapper for `compute_quantile_bin`. It annotates table with a bin, where variants are
     binned based on score into `n_bins` equally-sized bins.
 
-    .. Note::
+    .. note::
 
         The following fields should be present:
-        - score
-        - ac - expected that this is the adj filtered allele count
-        - ac_raw - expected that this is the raw allele count before adj filtering
+            - score
+            - ac - expected that this is the adj filtered allele count
+            - ac_raw - expected that this is the raw allele count before adj filtering
 
     Computes bin numbers stratified by SNV / Indels and with the following optional sub bins
-    - singletons
-    - biallelics
-    - biallelic singletons
-    - adj
-    - adj biallelics
-    - adj singletons
-    - adj biallelic singletons
+        - singletons
+        - biallelics
+        - biallelic singletons
+        - adj
+        - adj biallelics
+        - adj singletons
+        - adj biallelic singletons
 
     :param ht: Input table
     :param n_bins: Number of bins to bin into
@@ -679,7 +679,6 @@ def compute_binned_truth_sample_concordance(
     :param n_bins: Number of bins to bin the data into
     :return: Binned truth sample concordance HT
     """
-
     # Annotate score and global bin
     indexed_binned_score_ht = binned_score_ht[ht.key]
     ht = ht.annotate(
@@ -692,7 +691,7 @@ def compute_binned_truth_sample_concordance(
         ht,
         score_expr=ht.score,
         bin_expr={'truth_sample_bin': hl.expr.bool(True)},
-        n_bins=100
+        n_bins=n_bins
     )
     ht = ht.join(bin_ht, how='left')
 

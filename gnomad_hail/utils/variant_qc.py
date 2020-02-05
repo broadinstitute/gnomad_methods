@@ -653,18 +653,30 @@ def compute_aggregate_binned_data(
 
 def compute_binned_truth_sample_concordance(
         ht: hl.Table,
-        binned_score_ht: hl.Table
+        binned_score_ht: hl.Table,
+        n_bins: int = 100
 ) -> hl.Table:
     """
-    The input HT should contain two row fields:
-    * GT: a CallExpression containing the genotype of the evaluation data for the sample
-    * truth_GT: a CallExpression containing the genotype of the truth sample
+    Determines the concordance (TP, FP, FN) between a truth sample within the callset and the samples truth data
+    grouped by bins computed using `compute_quantile_bin`.
 
-    The table is grouped by global/truth sample bin and variant type and
-    contains TP, FP and FN.
+    .. note::
+
+        The input 'ht` should contain three row fields:
+            - score: value to use for quantile binning
+            - GT: a CallExpression containing the genotype of the evaluation data for the sample
+            - truth_GT: a CallExpression containing the genotype of the truth sample
+
+        The input `binned_score_ht` should contain:
+             - score: value used to bin the full callset
+             - bin: the full callset quantile bin
+
+
+    The table is grouped by global/truth sample bin and variant type and contains TP, FP and FN.
 
     :param ht: Input HT
     :param binned_score_ht: Table with the an annotation for quantile bin for each variant
+    :param n_bins: Number of bins to bin the data into
     :return: Binned truth sample concordance HT
     """
 

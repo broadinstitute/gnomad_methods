@@ -1,4 +1,5 @@
 from gnomad_hail import *
+import itertools
 
 
 def pop_max_expr(
@@ -421,7 +422,45 @@ def annotate_freq(
     return mt.annotate_rows(freq=freq_expr).drop('_freq_meta')
 
 
-def generate_fam_stats(
+def get_lowqual_expr(
+        alleles: hl.expr.ArrayExpression,
+        qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
+        snv_phred_threshold: int = 30,
+        snv_phred_het_prior: int = 30,  # 1/1000
+        indel_phred_threshold: int = 30,
+        indel_phred_het_prior: int = 39  # 1/8,000
+) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
+    """
+    Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
+
+    :param alleles: Array of alleles
+    :param qual_approx_expr: QUALapprox or AS_QUALapprox
+    :param snv_phred_threshold: Phred-scaled SNV "emission" threshold (similar to GATK emission threshold)
+    :param snv_phred_het_prior: Phred-scaled SNV heterozygosity prior (30 = 1/1000 bases, GATK default)
+    :param indel_phred_threshold: Phred-scaled indel "emission" threshold (similar to GATK emission threshold)
+    :param indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
+    :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
+    """
+    def low_qual_expr(
+            ref: hl.expr.StringExpression,
+            alt: hl.expr.StringExpression,
+            qual_approx:
+            hl.expr.NumericExpression
+    ) -> BooleanExpression:
+        return hl.cond(
+            hl.is_snp(ref, alt),
+            qual_approx < snv_phred_threshold + snv_phred_het_prior,
+            qual_approx < indel_phred_threshold + indel_phred_het_prior
+        )
+    if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):
+        return hl.range(1, hl.len(alleles)).map(
+            lambda ai: low_qual_expr(alleles[0], alleles[ai], qual_approx_expr[ai - 1])
+        )
+    else:
+        return low_qual_expr(alleles[0], alleles[1], qual_approx_expr)
+
+
+def default_generate_fam_stats(
         mt: hl.MatrixTable,
         fam_file: str
 ) -> hl.Table:
@@ -439,6 +478,7 @@ def generate_fam_stats(
 
     mt = filter_to_autosomes(mt)
     mt = annotate_adj(mt)
+    mt = mt.filter_rows(hl.len(mt.alleles) == 2)
     mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
     trio_adj = (mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj)
 
@@ -451,7 +491,7 @@ def generate_fam_stats(
             },
             de_novo_strata={
                 'raw': None,
-                'adj': trio_adj,
+                'adj': trio_adj
             },
             proband_is_female_expr=mt.is_female
         )

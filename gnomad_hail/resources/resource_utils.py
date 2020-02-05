@@ -12,7 +12,7 @@ class BaseResource(ABC):
 
     :param path: The resource path
     :param import_sources: Any sources that are required for the import and need to be kept track of (e.g. .vcf path for an imported VCF)
-    :param import_func: A function used to import the resource. `import_func` will be passed the `import_sources` dictionary as kwargs. `import_func` will be passed the `import_sources` dictionary as kwargs.
+    :param import_func: A function used to import the resource. `import_func` will be passed the `import_sources` dictionary as kwargs.
     :param expected_file_extensions: A list of all expected file extensions. If path doesn't end with one of these, a warning if emitted.
     """
 
@@ -31,9 +31,9 @@ class BaseResource(ABC):
         self.import_sources = import_sources
         self.import_func = import_func
 
-        if path is not None and expected_file_extensions and not [ext for ext in expected_file_extensions if path.endswith(ext)]:
+        if path is not None and expected_file_extensions and not any(path.endswith(ext) for ext in expected_file_extensions):
             logger.warning(
-                "Created the following {} with a path that doesn't ends with {}: {}".format(
+                "Created the following {} with a path that doesn't end with {}: {}".format(
                     self.__class__.__name__,
                     " or ".join(expected_file_extensions),
                     self
@@ -273,7 +273,8 @@ class BaseVersionedResource(BaseResource, ABC):
 
         super().__init__(
             path=versions[default_version].path,
-            import_sources=versions[default_version].import_sources
+            import_sources=versions[default_version].import_sources,
+            import_func=versions[default_version].import_func
         )
 
 
@@ -314,10 +315,10 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
     """
     Versioned Pedigree resource
 
-    The `path`/`source_path` attributes of the versioned resource are those of the default version of the resource.
+    The attributes (path, import_sources and import_fun of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
-    :param default_version: The default version of this Pedigree resource (must to be in the `versions` dict)
+    :param default_version: The default version of this Pedigree resource (must be in the `versions` dict)
     :param versions: A dict of version name -> PedigreeResource.
     """
 

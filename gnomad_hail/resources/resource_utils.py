@@ -33,7 +33,12 @@ class BaseResource(ABC):
 
         if path is not None and expected_file_extensions and not [ext for ext in expected_file_extensions if path.endswith(ext)]:
             logger.warning(
-                f"Created the following {self.__class__.__name__} with a path that doesn't ends with {expected_file_extension}: {self}")
+                "Created the following {} with a path that doesn't ends with {}: {}".format(
+                    self.__class__.__name__,
+                    " or ".join(expected_file_extensions),
+                    self
+                )
+            )
 
     def __repr__(self):
         attr_str = [f'path={self.path}']

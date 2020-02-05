@@ -591,7 +591,7 @@ def default_score_bin_agg(
         else grch38_resources.reference_data.get_truth_ht()
     )[ht.key]
     fam = fam_stats_ht[ht.key]
-    fam.describe()
+
     return dict(
         min_score=hl.agg.min(ht.score),
         max_score=hl.agg.max(ht.score),

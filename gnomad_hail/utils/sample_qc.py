@@ -664,7 +664,7 @@ def annotate_relationship(
     first_degree_threshold: List[float] = [0.1767767, 0.4],
     second_degree_threshold: float = 0.08838835,
     ibd2_parent_offspring_threshold: float = 0.14
-):
+    ) -> hl.Table:
     """
     Annotates a kinship Table with second-degree, full-sibling, and parent-child relationships
 
@@ -672,8 +672,8 @@ def annotate_relationship(
     :param first_degree_threshold: lower and upper kinship thresholds for first degree relatedness
     :param second_degree_threshold: kinship threshold for second degree relatedness
     :param ibd2_parent_offspring_threshold: IBD2 threshold to differentiate parent-child from full-sibling
-    :return: None
-    :rtype: None
+    :return: Table with relationship annotations
+    :rtype: Table
     """
     relatedness_ht = relatedness_ht.annotate(
         relationship_classification=hl.case()

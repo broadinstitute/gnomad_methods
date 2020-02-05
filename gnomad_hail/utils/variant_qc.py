@@ -500,34 +500,84 @@ def default_create_binned_ht(
 
 
 def default_score_bin_agg(
-        ht: hl.Table,
+        ht: hl.GroupedTable,
         fam_stats_ht: hl.Table
 ) -> Dict[str, hl.expr.Aggregation]:
     """
-    Default aggregation function to pass to `compute_aggregate_binned_data` to add aggregations for number of ClinVar
-    variants, number of truth variants (omni, mills, hapmap, and kgp_phase1), and family statistics.
+    Default aggregation function to add aggregations for min/max of score, number of ClinVar variants, number of truth
+    variants (omni, mills, hapmap, and kgp_phase1), and family statistics.
 
-    Note that the following fields should be present:
+    .. note::
 
-    In ht:
-        - ac_raw - expected that this is the raw allele count before adj filtering
-    In truth_ht:
-        - omni
-        - mills
-        - hapmap
-        - kgp_phase1_hc
-    In fam_stats_ht:
-        - n_de_novos_hq
-        - n_de_novos_adj
-        - n_de_novos_raw
-        - n_transmitted_raw
-        - unrelated_qc_callstats
-        - tdt
+        This function uses `ht._parent` to get the origin Table from the GroupedTable for the aggregation
+
+    This can easily be combined with the GroupedTable returned by `compute_grouped_binned_ht`
+
+    Example:
+
+    .. code-block:: python
+
+        binned_ht = create_binned_ht(...)
+        grouped_binned_ht = compute_grouped_binned_ht(binned_ht)
+        agg_ht = grouped_binned_ht.aggregate(default_score_bin_agg(**grouped_binned_ht, ...))
+
+    .. note::
+
+        The following annotations should be present:
+
+        In ht:
+            - score
+            - singleton
+            - positive_train_site
+            - negative_train_site
+            - ac_raw - expected that this is the raw allele count before adj filtering
+            - info - struct that includes QD, FS, and MQ in order to add an annotation for fail_hard_filters
+
+        In truth_ht:
+            - omni
+            - mills
+            - hapmap
+            - kgp_phase1_hc
+
+        In fam_stats_ht:
+            - n_de_novos_adj
+            - n_de_novos_raw
+            - n_transmitted_raw
+            - unrelated_qc_callstats
+            - tdt
+
+    Automatic aggregations that will be done are:
+        - `min_score` - minimun of score annotation per group
+        - `max_score` - maiximum of score annotation per group
+        - `n` - count of variants per group
+        - `n_ins` - count of insertion per group
+        - `n_ins` - count of insertion per group
+        - `n_del` - count of deletions per group
+        - `n_ti` - count of transitions per group
+        - `n_tv` - count of trnasversions per group
+        - `n_1bp_indel` - count of one base pair indels per group
+        - `n_mod3bp_indel` - count of indels with a length divisible by three per group
+        - `n_singleton` - count of singletons per group
+        - `fail_hard_filters` - count of variants per group with QD < 2 | FS > 60 | MQ < 30
+        - `n_vqsr_pos_train` - count of variants that were a VQSR positive train site per group
+        - `n_vqsr_neg_train` - count of variants that were a VQSR negative train site per group
+        - `n_clinvar` - count of clinvar variants
+        - `n_de_novos_adj` - count of adj filtered de dovo variants
+        - `n_de_novos` - count of raw unfilterd filtered de dovo variants
+        - `n_trans_singletons` - count of transmitted singletons
+        - `n_untrans_singletons` - count of untransmitted singletons
+        - `n_omni` - count of omni truth variants
+        - `n_mills` - count of mills truth variants
+        - `n_hapmap` - count of hapmap truth variants
+        - `n_kgp_phase1_hc` - count of 1000 genomes phase 1 high confidence truth variants
 
     :param ht: Table that aggregation will be performed on
     :param fam_stats_ht: Path to family statistics HT
-    :return: a dictionary containing aggrecations to perform on ht
+    :return: a dictionary containing aggregations to perform on ht
     """
+    # Annotate binned table with the evaluation data
+    ht = ht._parent
+    indel_length=hl.abs(ht.alleles[0].length() - ht.alleles[1].length())
     # Load external evaluation data
     build = get_reference_genome(ht.locus).name
     clinvar = (
@@ -541,16 +591,28 @@ def default_score_bin_agg(
         else grch38_resources.reference_data.get_truth_ht()
     )[ht.key]
     fam = fam_stats_ht[ht.key]
-
+    fam.describe()
     return dict(
+        min_score=hl.agg.min(ht.score),
+        max_score=hl.agg.max(ht.score),
+        n=hl.agg.count(),
+        n_ins=hl.agg.count_where(hl.is_insertion(ht.alleles[0], ht.alleles[1])),
+        n_del=hl.agg.count_where(hl.is_deletion(ht.alleles[0], ht.alleles[1])),
+        n_ti=hl.agg.count_where(hl.is_transition(ht.alleles[0], ht.alleles[1])),
+        n_tv=hl.agg.count_where(hl.is_transversion(ht.alleles[0], ht.alleles[1])),
+        n_1bp_indel=hl.agg.count_where(indel_length == 1),
+        n_mod3bp_indel=hl.agg.count_where((indel_length % 3) == 0),
+        n_singleton=hl.agg.count_where(ht.singleton),
+        fail_hard_filters=hl.agg.count_where((ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)),
+        n_vqsr_pos_train=hl.agg.count_where(ht.positive_train_site),
+        n_vqsr_neg_train=hl.agg.count_where(ht.negative_train_site),
         n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
-        n_de_novos_hq=hl.agg.sum(fam.n_de_novos_hq),
         n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
         n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
         n_trans_singletons=hl.agg.filter(ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)),
         n_untrans_singletons=hl.agg.filter((ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
                                            hl.agg.sum(fam.tdt.u)),
-        ## n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
+        # n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
         n_omni=hl.agg.count_where(truth_data.omni),
         n_mills=hl.agg.count_where(truth_data.mills),
         n_hapmap=hl.agg.count_where(truth_data.hapmap),
@@ -558,47 +620,24 @@ def default_score_bin_agg(
     )
 
 
-def compute_aggregate_binned_data(
+def compute_grouped_binned_ht(
         bin_ht: hl.Table,
-        agg_func: Callable = default_score_bin_agg,
         checkpoint_path: Optional[str] = None,
-        **kwargs
-) -> hl.Table:
+) -> hl.GroupedTable:
     """
-    Aggregates a Table that has been annotated with bins based on quantiles (`compute_quantile_bin` or
+    Groups a Table that has been annotated with bins based on quantiles (`compute_quantile_bin` or
     `default_create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
-    singleton. Then for each grouping, min/max of `score` will be computed and any other desired aggregations.
+    singleton.
 
-    Automatic aggregations that will be done are:
-        `min_score` - minimun of score annotation per group
-        `max_score` - maiximum of score annotation per group
-        `n` - count of variants per group
-        `n_ins` - count of insertion per group
-        `n_ins` - count of insertion per group
-        `n_del` - count of deletions per group
-        `n_ti` - count of transitions per group
-        `n_tv` - count of trnasversions per group
-        `n_1bp_indel` - count of one base pair indels per group
-        `n_mod3bp_indel` - count of indels with a length divisible by three per group
-        `n_singleton` - count of singletons per group
-        `fail_hard_filters` - count of variants per group with QD < 2 | FS > 60 | MQ < 30
-        `n_vqsr_pos_train` - count of variants that were a VQSR positive train site per group
-        `n_vqsr_neg_train` - count of variants that were a VQSR negative train site per group
+    .. note::
 
-    Requires that `bin_ht` be annotated with an `info` struct that includes QD, FS, and MQ in order to add an
-    annotation for `fail_hard_filters`
+        If performing an aggregation following this grouping (such as `default_score_bin_agg`) then the aggregation
+        function will need to use `ht._parent` to get the origin Table from the GroupedTable for the aggregation
 
     :param bin_ht: Input Table with a `bin_id` annotation
-    :param agg_func: Function that returns a dict of any additional aggregations to perform
     :param checkpoint_path: If provided an intermediate checkpoint table is created with all required annotations before shuffling.
-    :return: Table grouped by rank(s) and with counts of QC metrics
+    :return: Table grouped by bins(s)
     """
-    # Annotate binned table with the evaluation data
-    bin_ht = bin_ht.annotate(
-        indel_length=hl.abs(bin_ht.alleles[0].length() - bin_ht.alleles[1].length()),
-        fail_hard_filters=(bin_ht.info.QD < 2) | (bin_ht.info.FS > 60) | (bin_ht.info.MQ < 30)
-    )
-
     # Explode the rank table by bin_id
     bin_ht = bin_ht.annotate(
         quantile_bins=hl.array([
@@ -622,8 +661,7 @@ def compute_aggregate_binned_data(
         bin_ht = bin_ht.persist()
 
     # Group by bin_id, bin and additional stratification desired and compute QC metrics per bin
-    return (
-        bin_ht.group_by(
+    return bin_ht.group_by(
             bin_id=bin_ht.bin_id,
             contig=bin_ht.locus.contig,
             snv=hl.is_snp(bin_ht.alleles[0], bin_ht.alleles[1]),
@@ -632,23 +670,6 @@ def compute_aggregate_binned_data(
             release_adj=bin_ht.ac > 0,
             bin=bin_ht.bin
         )._set_buffer_size(20000)
-            .aggregate(
-            min_score=hl.agg.min(bin_ht.score),
-            max_score=hl.agg.max(bin_ht.score),
-            n=hl.agg.count(),
-            n_ins=hl.agg.count_where(hl.is_insertion(bin_ht.alleles[0], bin_ht.alleles[1])),
-            n_del=hl.agg.count_where(hl.is_deletion(bin_ht.alleles[0], bin_ht.alleles[1])),
-            n_ti=hl.agg.count_where(hl.is_transition(bin_ht.alleles[0], bin_ht.alleles[1])),
-            n_tv=hl.agg.count_where(hl.is_transversion(bin_ht.alleles[0], bin_ht.alleles[1])),
-            n_1bp_indel=hl.agg.count_where(bin_ht.indel_length == 1),
-            n_mod3bp_indel=hl.agg.count_where((bin_ht.indel_length % 3) == 0),
-            n_singleton=hl.agg.count_where(bin_ht.singleton),
-            fail_hard_filters=hl.agg.count_where(bin_ht.fail_hard_filters),
-            n_vqsr_pos_train=hl.agg.count_where(bin_ht.positive_train_site),
-            n_vqsr_neg_train=hl.agg.count_where(bin_ht.negative_train_site),
-            **agg_func(bin_ht, **kwargs)
-        )
-    )
 
 
 def compute_binned_truth_sample_concordance(

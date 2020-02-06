@@ -28,6 +28,7 @@ def _import_purcell_5k(path) -> hl.Table:
     )
     return p5k.key_by('locus')
 
+
 # Resources with no versioning needed
 purcell_5k = TableResource(
     path="gs://gnomad-public/resources/grch38/purcell5k.ht",
@@ -43,7 +44,8 @@ na12878_giab = MatrixTableResource(
     import_args={
         "path": "gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz",
         "force_bgz": True,
-        "min_partitions": 100
+        "min_partitions": 100,
+        "reference_genome": "GRCh38",
     }
 )
 
@@ -84,7 +86,8 @@ clinvar = VersionedTableResource(
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
-                "min_partitions": 100
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
             },
         )
     }
@@ -102,7 +105,8 @@ dbsnp = VersionedTableResource(
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
-                "min_partitions": 400
+                "min_partitions": 400,
+                "reference_genome": "GRCh38",
             },
         )
     }
@@ -113,7 +117,8 @@ hapmap = TableResource(
     import_func=import_sites_vcf,
     import_args={
         "path": "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz",
-        "force_bgz": True
+        "force_bgz": True,
+        "reference_genome": "GRCh38",
     }
 )
 
@@ -122,7 +127,8 @@ kgp_omni = TableResource(
     import_func=import_sites_vcf,
     import_args={
         "path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz",
-        "force_bgz": True
+        "force_bgz": True,
+        "reference_genome": "GRCh38",
     }
 )
 
@@ -134,7 +140,8 @@ kgp = VersionedTableResource(
             import_func=import_sites_vcf,
             import_args={
                 "path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
-                "force_bgz": True
+                "force_bgz": True,
+                "reference_genome": "GRCh38",
             }
         )
     }
@@ -145,7 +152,8 @@ mills = TableResource(
     import_func=import_sites_vcf,
     import_args={
         "path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
-        "force_bgz": True
+        "force_bgz": True,
+        "reference_genome": "GRCh38",
     }
 )
 

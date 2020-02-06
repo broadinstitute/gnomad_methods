@@ -25,7 +25,7 @@ def get_module_importable_resources(module, prefix: Optional[str] = None) -> Dic
     :param prefix: 
     :return: 
     """
-    _prefix = f'{prefix}.' if prefix is not None else ''
+    _prefix = f'{prefix}.' if prefix else ''
     resources = {}
     for resource_name, resource in getmembers(module, lambda x: isinstance(x, BaseResource)):
         if resource.path and resource.import_func:
@@ -64,7 +64,7 @@ grch38_resources = get_module_importable_resources(grch38, 'grch38')
 
 
 def main(args):
-    resources = grch37_resources
+    resources = grch37_resources.copy()
     resources.update(grch38_resources)
     for arg in [arg for arg, arg_value in vars(args).items() if arg_value and arg != 'overwrite']:
             resource_name, resource = resources[arg]

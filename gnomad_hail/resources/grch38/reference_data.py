@@ -10,6 +10,7 @@ import hail as hl
 
 from hail import Table
 
+
 def _import_purcell_5k(path) -> hl.Table:
     p5k = hl.import_locus_intervals(path, reference_genome='GRCh37')
     p5k = p5k.annotate(

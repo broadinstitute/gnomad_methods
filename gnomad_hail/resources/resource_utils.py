@@ -257,7 +257,7 @@ class BaseVersionedResource(BaseResource, ABC):
     """
     Abstract class for a versioned resource
 
-    The `path`/`source_path` attributes of the versioned resource are those of the default version of the resource.
+    The `path`/`import_args` attributes of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
     :param default_version: The default version of this resource (must to be in the `versions` dict)
@@ -294,7 +294,7 @@ class VersionedTableResource(BaseVersionedResource, TableResource):
     """
     Versioned Table resource
 
-    The `path`/`source_path` attributes of the versioned resource are those of the default version of the resource.
+    The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
     :param default_version: The default version of this Table resource (must to be in the `versions` dict)
@@ -308,7 +308,7 @@ class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
     """
     Versioned MatrixTable resource
 
-    The `path`/`source_path` attributes of the versioned resource are those of the default version of the resource.
+    The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
     :param default_version: The default version of this MatrixTable resource (must to be in the `versions` dict)
@@ -323,7 +323,7 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
     """
     Versioned Pedigree resource
 
-    The attributes (path, import_args and import_fun of the versioned resource are those of the default version of the resource.
+    The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
     :param default_version: The default version of this Pedigree resource (must be in the `versions` dict)
@@ -338,7 +338,7 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
     """
     Versioned BlockMatrix resource
 
-    The `path`/`source_path` attributes of the versioned resource are those of the default version of the resource.
+    The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
     :param default_version: The default version of this BlockMatrix resource (must to be in the `versions` dict)

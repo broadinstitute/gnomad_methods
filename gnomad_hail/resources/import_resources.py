@@ -28,8 +28,7 @@ def get_module_importable_resources(module, prefix: Optional[str] = None) -> Dic
     _prefix = f'{prefix}.' if prefix is not None else ''
     resources = {}
     for resource_name, resource in getmembers(module, lambda x: isinstance(x, BaseResource)):
-        # if resource.path and resource.import_func:
-        if resource.path:
+        if resource.path and resource.import_func:
             arg_name = f'{_prefix}{resource_name}'
             if isinstance(resource, BaseVersionedResource):
                 for version in resource.versions:
@@ -53,12 +52,12 @@ def add_arguments_from_resources_dict(container: argparse._ActionsContainer, res
             f"--{arg_name}",
             help="Imports {}{} to {}".format(
                 resource_name,
-                " from " + resource.import_sources['source_path'] if resource.import_sources and 'source_path' in resource.import_sources else "",
+                " from " + resource.import_args.get('path', '???') if resource.import_args else "???",
                 resource.path
             ),
             action="store_true"
         )
-
+        
 
 grch37_resources = get_module_importable_resources(grch37, 'grch37')
 grch38_resources = get_module_importable_resources(grch38, 'grch38')

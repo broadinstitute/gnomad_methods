@@ -11,8 +11,8 @@ class BaseResource(ABC):
     Generic abstract resource class.
 
     :param path: The resource path
-    :param import_sources: Any sources that are required for the import and need to be kept track of (e.g. .vcf path for an imported VCF)
-    :param import_func: A function used to import the resource. `import_func` will be passed the `import_sources` dictionary as kwargs.
+    :param import_args: Any sources that are required for the import and need to be kept track of (e.g. .vcf path for an imported VCF)
+    :param import_func: A function used to import the resource. `import_func` will be passed the `import_args` dictionary as kwargs.
     :param expected_file_extensions: A list of all expected file extensions. If path doesn't end with one of these, a warning if emitted.
     """
 
@@ -20,7 +20,7 @@ class BaseResource(ABC):
     def __init__(
             self,
             path: Optional[str] = None,
-            import_sources: Optional[Dict[str, Any]] = None,
+            import_args: Optional[Dict[str, Any]] = None,
             import_func: Optional[Callable] = None,
             expected_file_extensions: Optional[List[str]] = None
     ):
@@ -28,7 +28,7 @@ class BaseResource(ABC):
             raise ValueError(f"{self.__class__.__name__} requires at least one of path or import_func arguments.")
 
         self.path = path
-        self.import_sources = import_sources
+        self.import_args = import_args
         self.import_func = import_func
 
         if path is not None and expected_file_extensions and not any(path.endswith(ext) for ext in expected_file_extensions):
@@ -42,8 +42,8 @@ class BaseResource(ABC):
 
     def __repr__(self):
         attr_str = [f'path={self.path}']
-        if self.import_sources is not None:
-            attr_str.append(f'import_sources={self.import_sources}')
+        if self.import_args is not None:
+            attr_str.append(f'import_args={self.import_args}')
         return f'{self.__class__.__name__}({",".join(attr_str)})'
 
     @abstractmethod
@@ -62,19 +62,19 @@ class TableResource(BaseResource):
     A Hail Table resource
 
     :param path: The Table path (typically ending in .ht)
-    :param import_sources: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
-    :param import_func: A function used to import the Table. `import_func` will be passed the `import_sources` dictionary as kwargs.
+    :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
+    :param import_func: A function used to import the Table. `import_func` will be passed the `import_args` dictionary as kwargs.
     """
 
     def __init__(
             self,
             path: Optional[str] = None,
-            import_sources: Optional[Dict[str, Any]] = None,
+            import_args: Optional[Dict[str, Any]] = None,
             import_func: Optional[Callable[..., hl.Table]] = None
     ):
         super().__init__(
             path=path,
-            import_sources=import_sources,
+            import_args=import_args,
             import_func=import_func,
             expected_file_extensions=['.ht']
         )
@@ -86,7 +86,7 @@ class TableResource(BaseResource):
         :return: Hail Table resource
         """
         if self.path is None or force_import:
-            return self.import_func(**self.import_sources)
+            return self.import_func(**self.import_args)
         else:
             return hl.read_table(self.path)
 
@@ -98,7 +98,7 @@ class TableResource(BaseResource):
         :param kwargs: Any other parameters to be passed to hl.Table.write
         :return: Nothing
         """
-        self.import_func(**self.import_sources).write(
+        self.import_func(**self.import_args).write(
             self.path,
             overwrite=overwrite,
             **kwargs
@@ -110,19 +110,19 @@ class MatrixTableResource(BaseResource):
     A Hail MatrixTable resource
 
     :param path: The MatrixTable path (typically ending in .mt)
-    :param import_sources: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
-    :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_sources` dictionary as kwargs.
+    :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
+    :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_args` dictionary as kwargs.
     """
 
     def __init__(
             self,
             path: Optional[str] = None,
-            import_sources: Optional[Dict[str, Any]] = None,
+            import_args: Optional[Dict[str, Any]] = None,
             import_func: Optional[Callable[..., hl.MatrixTable]] = None
     ):
         super().__init__(
             path=path,
-            import_sources=import_sources,
+            import_args=import_args,
             import_func=import_func,
             expected_file_extensions=['.mt']
         )
@@ -134,7 +134,7 @@ class MatrixTableResource(BaseResource):
         :return: Hail MatrixTable resource
         """
         if self.path is None or force_import:
-            return self.import_func(**self.import_sources)
+            return self.import_func(**self.import_args)
         else:
             return hl.read_matrix_table(self.path)
 
@@ -146,7 +146,7 @@ class MatrixTableResource(BaseResource):
         :param kwargs: Any other parameters to be passed to hl.MatrixTable.write
         :return: Nothing
         """
-        self.import_func(**self.import_sources).write(self.path, overwrite=overwrite, **kwargs)
+        self.import_func(**self.import_args).write(self.path, overwrite=overwrite, **kwargs)
 
 
 class PedigreeResource(BaseResource):
@@ -154,8 +154,8 @@ class PedigreeResource(BaseResource):
     A pedigree resource
 
     :param path: The Pedigree path (typically ending in .fam or .ped)
-    :param import_sources: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
-    :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_sources` dictionary as kwargs.
+    :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
+    :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_args` dictionary as kwargs.
     :param quant_pheno: If ``True``, phenotype is interpreted as quantitative.
     :param delimiter: Field delimiter regex.
     :param missing: The string used to denote missing values. For case-control, 0, -9, and non-numeric are also treated as missing.
@@ -164,7 +164,7 @@ class PedigreeResource(BaseResource):
     def __init__(
             self,
             path: Optional[str] = None,
-            import_sources: Optional[Dict[str, Any]] = None,
+            import_args: Optional[Dict[str, Any]] = None,
             import_func: Optional[Callable[..., hl.MatrixTable]] = None,
             quant_pheno: bool = False,
             delimiter: str = r"\\s+",
@@ -172,7 +172,7 @@ class PedigreeResource(BaseResource):
     ):
         super().__init__(
             path=path,
-            import_sources=import_sources,
+            import_args=import_args,
             import_func=import_func,
             expected_file_extensions=['.fam', '.ped']
         )
@@ -209,7 +209,7 @@ class PedigreeResource(BaseResource):
         if not overwrite:
             raise NotImplementedError
 
-        self.import_func(**self.import_sources).write(self.path)
+        self.import_func(**self.import_args).write(self.path)
 
 
 class BlockMatrixResource(BaseResource):
@@ -217,19 +217,19 @@ class BlockMatrixResource(BaseResource):
     A Hail BlockMatrix resource
 
     :param path: The BlockMatrix path (typically ending in .bm)
-    :param import_sources: Any sources that are required for the import and need to be kept track of and/or passed to the import_func.
-    :param import_func: A function used to import the BlockMatrix. `import_func` will be passed the `import_sources` dictionary as kwargs.
+    :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func.
+    :param import_func: A function used to import the BlockMatrix. `import_func` will be passed the `import_args` dictionary as kwargs.
     """
 
     def __init__(
             self,
             path: Optional[str] = None,
-            import_sources: Optional[Dict[str, Any]] = None,
+            import_args: Optional[Dict[str, Any]] = None,
             import_func: Optional[Callable[..., BlockMatrix]] = None
     ):
         super().__init__(
             path=path,
-            import_sources=import_sources,
+            import_args=import_args,
             import_func=import_func,
             expected_file_extensions=[".bm"]
         )
@@ -250,7 +250,7 @@ class BlockMatrixResource(BaseResource):
         :param kwargs: Any additional parameters to be passed to BlockMatrix.write
         :return: Nothing
         """
-        self.import_func(**self.import_sources).write(self.path, overwrite=False, **kwargs)
+        self.import_func(**self.import_args).write(self.path, overwrite=False, **kwargs)
 
 
 class BaseVersionedResource(BaseResource, ABC):
@@ -281,7 +281,7 @@ class BaseVersionedResource(BaseResource, ABC):
 
         super().__init__(
             path=versions[default_version].path,
-            import_sources=versions[default_version].import_sources,
+            import_args=versions[default_version].import_args,
             import_func=versions[default_version].import_func
         )
 
@@ -323,7 +323,7 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
     """
     Versioned Pedigree resource
 
-    The attributes (path, import_sources and import_fun of the versioned resource are those of the default version of the resource.
+    The attributes (path, import_args and import_fun of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
     :param default_version: The default version of this Pedigree resource (must be in the `versions` dict)
@@ -351,3 +351,36 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
 
 class DataException(Exception):
     pass
+
+
+NO_CHR_TO_CHR_CONTIG_RECODING = {
+    '1': 'chr1',
+    '2': 'chr2',
+    '3': 'chr3',
+    '4': 'chr4',
+    '5': 'chr5',
+    '6': 'chr6',
+    '7': 'chr7',
+    '8': 'chr8',
+    '9': 'chr9',
+    '10': 'chr10',
+    '11': 'chr11',
+    '12': 'chr12',
+    '13': 'chr13',
+    '14': 'chr14',
+    '15': 'chr15',
+    '16': 'chr16',
+    '17': 'chr17',
+    '18': 'chr18',
+    '19': 'chr19',
+    '20': 'chr20',
+    '21': 'chr21',
+    '22': 'chr22',
+    'X': 'chrX',
+    'Y': 'chrY',
+    'MT': 'chrM'
+}
+
+def import_sites_vcf(**kwargs) -> hl.Table:
+    return hl.import_vcf(**kwargs).rows()
+

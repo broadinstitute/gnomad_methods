@@ -3,30 +3,59 @@ from gnomad_hail.resources.resource_utils import (
     VersionedTableResource,
     MatrixTableResource,
     VersionedMatrixTableResource,
+    import_sites_vcf,
+    NO_CHR_TO_CHR_CONTIG_RECODING
 )
+import hail as hl
 
 from hail import Table
+
+
+def _import_purcell_5k(path) -> hl.Table:
+    p5k = hl.import_locus_intervals(path, reference_genome='GRCh37')
+    p5k = p5k.annotate(
+        start=hl.liftover(p5k.interval.start, 'GRCh38'),
+        end=hl.liftover(p5k.interval.start, 'GRCh38')
+    )
+    p5k = p5k.filter(
+        (p5k.start.contig == 'chr' + p5k.interval.start.contig) &
+        (p5k.end.contig == 'chr' + p5k.interval.end.contig)
+    )
+    p5k = p5k.key_by()
+    p5k = p5k.select(
+        locus=p5k.start,
+        locus_b37=p5k.interval.start
+    )
+    return p5k.key_by('locus')
 
 
 # Resources with no versioning needed
 purcell_5k = TableResource(
     path="gs://gnomad-public/resources/grch38/purcell5k.ht",
-    import_sources={
-        "source_path": "gs://gnomad-public/intervals/purcell5k.interval_list",
+    import_func=_import_purcell_5k,
+    import_args={
+        "path": "gs://gnomad-public/intervals/purcell5k.interval_list",
     }
 )
 
 na12878_giab = MatrixTableResource(
     path="gs://gnomad-public/truth-sets/hail-0.2/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.mt",
-    import_sources={
-        "source_path": "gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz",
+    import_func=hl.import_vcf,
+    import_args={
+        "path": "gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz",
+        "force_bgz": True,
+        "min_partitions": 100,
+        "reference_genome": "GRCh38",
     }
 )
 
 na12878_giab_hc_intervals = TableResource(
     path='gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7_hc_regions.ht',
-    import_sources={
-        "source_path": 'gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed'
+    import_func=hl.import_bed,
+    import_args={
+        "path": 'gs://gnomad-public/truth-sets/source/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed',
+        "reference_genome": 'GRCh38',
+        "skip_invalid_intervals": True
     }
 )
 
@@ -36,8 +65,12 @@ syndip = MatrixTableResource(
 
 syndip_hc_intervals = TableResource(
     path='gs://gnomad-public/truth-sets/source/syndip_b38_hc_regions.ht',
-    import_sources={
-        "source_path": 'gs://gnomad-public/truth-sets/source/syndip.b38.bed'
+    import_func=hl.import_bed,
+    import_args={
+        "path": 'gs://gnomad-public/truth-sets/source/syndip.b38.bed',
+        "reference_genome": 'GRCh38',
+        "skip_invalid_intervals": True,
+        "min_partitions": 10
     }
 )
 
@@ -47,8 +80,14 @@ clinvar = VersionedTableResource(
     versions={
         "20190923": TableResource(
             path="gs://gnomad-public/resources/grch38/clinvar_20190923.ht",
-            import_sources={
-                "source_path": "gs://gnomad-public/resources/grch38/clinvar_20190923.vcf.gz",
+            import_func=import_sites_vcf,
+            import_args={
+                "path": "gs://gnomad-public/resources/grch38/clinvar_20190923.vcf.gz",
+                "force_bgz": True,
+                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
             },
         )
     }
@@ -59,9 +98,15 @@ dbsnp = VersionedTableResource(
     versions={
         "b151": TableResource(
             path="gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.ht",
-            import_sources={
-                "source_path": "gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.bgz",
-                "vcf_header_path": "gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.header",
+            import_func=import_sites_vcf,
+            import_args={
+                "path": "gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.bgz",
+                "header_file": "gs://gnomad-public/resources/grch38/dbsnp_b151_grch38_all_20180418.vcf.header",
+                "force_bgz": True,
+                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 400,
+                "reference_genome": "GRCh38",
             },
         )
     }
@@ -69,15 +114,21 @@ dbsnp = VersionedTableResource(
 
 hapmap = TableResource(
     path="gs://gnomad-public/resources/grch38/hapmap_3.3.hg38.ht",
-    import_sources={
-        "source_path": "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz",
+    import_func=import_sites_vcf,
+    import_args={
+        "path": "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz",
+        "force_bgz": True,
+        "reference_genome": "GRCh38",
     }
 )
 
 kgp_omni = TableResource(
     path="gs://gnomad-public/resources/grch38/1000G_omni2.5.hg38.ht",
-    import_sources={
-        "source_path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz",
+    import_func=import_sites_vcf,
+    import_args={
+        "path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz",
+        "force_bgz": True,
+        "reference_genome": "GRCh38",
     }
 )
 
@@ -86,8 +137,11 @@ kgp = VersionedTableResource(
     versions={
         "phase_1_hc": TableResource(
             path="gs://gnomad-public/resources/grch38/1000G_phase1.snps.high_confidence.hg38.ht",
-            import_sources={
-                "source_path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
+            import_func=import_sites_vcf,
+            import_args={
+                "path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
+                "force_bgz": True,
+                "reference_genome": "GRCh38",
             }
         )
     }
@@ -95,8 +149,11 @@ kgp = VersionedTableResource(
 
 mills = TableResource(
     path="gs://gnomad-public/resources/grch38/Mills_and_1000G_gold_standard.indels.hg38.ht",
-    import_sources={
-        "source_path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
+    import_func=import_sites_vcf,
+    import_args={
+        "path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
+        "force_bgz": True,
+        "reference_genome": "GRCh38",
     }
 )
 

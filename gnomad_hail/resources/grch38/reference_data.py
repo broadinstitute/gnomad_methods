@@ -41,6 +41,14 @@ syndip_hc_intervals = TableResource(
     }
 )
 
+lcr_intervals = TableResource(
+    import_args={
+        "reference_genome": 'GRCh38',
+        "skip_invalid_intervals": True
+    }
+    import_func=hl.import_locus_intervals
+)
+
 # Versioned resources: versions should be listed from most recent to oldest
 clinvar = VersionedTableResource(
     default_version="20190923",

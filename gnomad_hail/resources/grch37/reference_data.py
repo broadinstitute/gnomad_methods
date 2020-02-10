@@ -41,10 +41,10 @@ kgp_omni = TableResource(
 )
 
 mills = TableResource(
-    path="gs:/gnomad-public/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.ht",
+    path="gs://gnomad-public/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.ht",
     import_func=import_sites_vcf,
     import_args={
-        "path": "gs:/gnomad-public/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.vcf.bgz",
+        "path": "gs://gnomad-public/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.vcf.bgz",
         "force_bgz": True,
         "min_partitions": 100,
         "reference_genome": "GRCh37",
@@ -184,46 +184,46 @@ seg_dup_intervals = TableResource(
 )
 
 exome_hc_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/exome_hc_intervals/exomes_high_coverage.auto.interval_list.ht",
+    path="gs://gnomad-public/resources/grch37/broad_intervals/exomes_high_coverage.auto.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gnomad-public/resources/grch37/exome_hc_intervals/exomes_high_coverage.auto.interval_list",
+        "path": "gs://gnomad-public/resources/grch37/broad_intervals/exomes_high_coverage.auto.interval_list",
         "reference_genome": "GRCh37",
     },
 )
 
 high_coverage_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/high_coverage_intervals/high_coverage.auto.interval_list.ht",
+    path="gs://gnomad-public/resources/grch37/broad_intervals/high_coverage.auto.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gnomad-public/resources/grch37/high_coverage_intervals/high_coverage.auto.interval_list",
+        "path": "gs://gnomad-public/resources/grch37/broad_intervals/high_coverage.auto.interval_list",
         "reference_genome": "GRCh37",
     },
 )
 
 exome_calling_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/exome_calling_intervals/exome_calling_regions.v1.interval_list.ht",
+    path="gs://gnomad-public/resources/grch37/broad_intervals/exome_calling_regions.v1.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gnomad-public/resources/grch37/exome_calling_intervals/exome_calling_regions.v1.interval_list",
+        "path": "gs://gnomad-public/resources/grch37/broad_intervals/exome_calling_regions.v1.interval_list",
         "reference_genome": "GRCh37",
     },
 )
 
 exome_evaluation_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/exome_evaluation_intervals/exome_evaluation_regions.v1.noheader.interval_list.ht",
+    path="gs://gnomad-public/resources/grch37/broad_intervals/exome_evaluation_regions.v1.noheader.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gnomad-public/resources/grch37/exome_evaluation_intervals/exome_evaluation_regions.v1.noheader.interval_list",
+        "path": "gs://gnomad-public/resources/grch37/broad_intervals/exome_evaluation_regions.v1.noheader.interval_list",
         "reference_genome": "GRCh37",
     },
 )
 
 genome_evaluation_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/genome_evaluation_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list.ht",
+    path="gs://gnomad-public/resources/grch37/broad_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gnomad-public/resources/grch37/genome_evaluation_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list",
+        "path": "gs://gnomad-public/resources/grch37/broad_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list",
         "reference_genome": "GRCh37",
     },
 )

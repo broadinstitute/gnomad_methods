@@ -219,7 +219,6 @@ genome_evaluation_intervals = TableResource(
     },
 )
 
-
 na12878_hc_intervals = TableResource(
     path="gs://gnomad-public/resources/grch37/na12878/NA12878_GIAB_highconf_intervals.ht",
     import_func=hl.import_bed,
@@ -228,7 +227,6 @@ na12878_hc_intervals = TableResource(
         "reference_genome": "GRCh37",
     },
 )
-
 
 syndip_hc_intervals = TableResource(
     path="gs://gnomad-public/resources/grch37/syndip/syndip_highconf_genome_intervals.ht",

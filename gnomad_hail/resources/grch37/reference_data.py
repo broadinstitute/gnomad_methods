@@ -192,6 +192,15 @@ exome_hc_intervals = TableResource(
     },
 )
 
+high_coverage_intervals = TableResource(
+    path="gs://gnomad-public/resources/grch37/high_coverage_intervals/high_coverage.auto.interval_list.ht",
+    import_func=hl.import_locus_intervals,
+    import_args={
+        "path": "gs://gnomad-public/resources/grch37/high_coverage_intervals/high_coverage.auto.interval_list",
+        "reference_genome": "GRCh37",
+    },
+)
+
 exome_calling_intervals = TableResource(
     path="gs://gnomad-public/resources/grch37/exome_calling_intervals/exome_calling_regions.v1.interval_list.ht",
     import_func=hl.import_locus_intervals,

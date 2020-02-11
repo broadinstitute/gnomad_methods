@@ -656,4 +656,148 @@ def generate_fam_stats_expr(
         ) for name, expr in de_novo_strata.items()
     })
 
-    return fam_stats
+def create_sib_mt(
+        mt: hl.MatrixTable,
+        sib_ht: hl.Table,
+        i_col: str = 'i',
+        j_col: str = 'j',
+        sex_ht: hl.Table = None,
+        is_female_col: Optional[str] = None
+) -> hl.MatrixTable:
+    """
+    Builds and returns a matrix where columns correspond to i, j pairs in `sib_ht` and entries contain genotypes for
+    the pair.
+
+    This function creates the sib_ht expected by `generate_sib_stats_expr`
+
+    As input it takes the full MT and a hail Table with a row for each pair of sibling pairs i,j and an optional table
+    containing sex information, if no `sex_ht` is supplied, the MT will be filtered to autosomes.
+
+    :param mt: Input Matrix table
+    :param sib_ht: Input sibling pairs table
+    :param i_col: Column containing the 1st sample of the pair in the relationship table
+    :param j_col: Column containing the 2nd sample of the pair in the relationship table
+    :param sex_ht: An optional table containing sex information for the samples. If not given, counts are only computed for autosomes.
+    :param is_female_col: An optional column in sex_ht giving the samples sex. If not given, counts are only computed for autosomes.
+    :return: A Table with the sibling shared variant counts
+    """
+    if is_female_col is None or sex_ht is None:
+        logger.warning(
+            "Since no proband sex expression was given to generate_trip_stats_expr, only DNMs in autosomes will be counted."
+        )
+
+    # Get column HT with index for position of the sample in the columns
+    cols_ht = mt.key_cols_by().cols()
+    cols_ht = cols_ht.add_index()
+    cols_ht = cols_ht.key_by("s")
+
+    sib_ht = sib_ht.annotate(
+        sibs=hl.struct(
+            sib1=cols_ht[sib_ht[i_col].s].idx,
+            sib2=cols_ht[sib_ht[j_col].s].idx,
+            sib1_is_female=sex_ht[sib_ht[i_col].s][is_female_col],
+            sib2_is_female=sex_ht[sib_ht[j_col].s][is_female_col],
+        )
+    )
+
+    sibs = sib_ht.sibs.collect()
+    sibs_type = hl.dtype(
+        "array<struct{sib1:int32,sib2:int32,sib1_is_female:bool,sib2_is_female:bool}>"
+    )
+    mt = mt.annotate_globals(**{"sibs": hl.literal(sibs, sibs_type)})
+    mt = mt.localize_entries("entry_structs", "columns")
+
+    mt = mt.annotate_globals(
+        **{
+            "columns": hl.map(
+                lambda i: hl.bind(
+                    lambda t: hl.struct(
+                        id=i,
+                        sib1=mt.columns[t.sib1],
+                        sib2=mt.columns[t.sib2],
+                        sib1_is_female=t.sib1_is_female,
+                        sib2_is_female=t.sib2_is_female
+                    ),
+                    mt.sibs[i]
+                ),
+                hl.range(0, len(sibs))
+            )
+        }
+    )
+
+    mt = mt.annotate(
+        **{
+            "entry_structs": hl.map(
+                lambda i: hl.bind(
+                    lambda t: hl.struct(
+                        sib1_entry=mt.entry_structs[t.sib1],
+                        sib2_entry=mt.entry_structs[t.sib2]
+                    ),
+                    mt.sibs[i]
+                ),
+                hl.range(0, len(sibs))
+            )
+        }
+    )
+
+    mt = mt._unlocalize_entries("entry_structs", "columns", ["id"])
+
+    return mt
+
+
+def default_generate_sib_stats(
+        mt: hl.MatrixTable,
+        relatedness_ht: hl.Table,
+        sex_ht: hl.Table,
+        i_col: str = 'i',
+        j_col: str = 'j',
+        relationship_col: str = 'relationship'
+) -> hl.expr.StructExpression:
+    """
+    This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
+    shared by pairs of siblings in `relatedness_ht`.
+
+    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
+    The `relationship_col` should be a column specifying the relationship between each two samples as defined by
+    the constants in `gnomad_hail.utils.relatedness`.
+
+    :param mt: Input Matrix table
+    :param relatedness_ht: Input relationship table
+    :param sex_ht: A Table containing sex information for the samples
+    :param i_col: Column containing the 1st sample of the pair in the relationship table
+    :param j_col: Column containing the 2nd sample of the pair in the relationship table
+    :param relationship_col: Column containing the relationship for the sample pair as defined in this module constants.
+    :return: A Table with the sibling shared variant counts
+    """
+    sex_ht = sex_ht.annotate(
+        is_female=hl.case()
+            .when(sex_ht.sex_karyotype == "XX", True)
+            .when(sex_ht.sex_karyotype == "XY", False)
+            .or_missing()
+    )
+
+    sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == 'Siblings')
+    sibs = hl.literal(set(sib_ht[i_col].s.collect()) & set(sib_ht[j_col].s.collect()))
+    mt = mt.filter_cols(sibs.contains(mt.s))
+    mt = annotate_adj(mt)
+
+    sib_mt = create_sib_mt(
+        mt,
+        sib_ht,
+        sex_ht=sex_ht,
+        is_female_col='is_female'
+    )
+
+    sib_stats_ht = sib_mt.select_rows(
+        **generate_sib_stats_expr(
+            sib_mt,
+            strata={
+                'raw': True,
+                'adj': (sib_mt.sib1_entry.adj & sib_mt.sib2_entry.adj)
+            },
+            sib1_is_female_col='sib1_is_female',
+            sib2_is_female_col='sib2_is_female'
+        )
+    ).rows()
+
+    return sib_stats_ht

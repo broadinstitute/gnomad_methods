@@ -280,7 +280,7 @@ def assign_platform_from_pcs(
 
 def infer_sex(
         mt: hl.MatrixTable,
-        ploidy_ht = hl.Table,
+        ploidy_ht: hl.Table,
         f_stat_cutoff: float,
         sites_ht: Optional[hl.Table],
         aaf_expr: Optional[str] = None,

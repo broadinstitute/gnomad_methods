@@ -63,9 +63,9 @@ syndip = MatrixTableResource(
 
 # Versioned resources: versions should be listed from most recent to oldest
 dbsnp = VersionedTableResource(
-    default_version="2018-04-23",
+    default_version="20180423",
     versions={
-        "2018-04-23": TableResource(
+        "20180423": TableResource(
             path="gs://gnomad-public/resources/grch37/dbsnp/All_20180423.ht",
             import_func=import_sites_vcf,
             import_args={

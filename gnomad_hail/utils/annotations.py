@@ -876,7 +876,7 @@ def default_generate_sib_stats(
         i_col: str = 'i',
         j_col: str = 'j',
         relationship_col: str = 'relationship'
-) -> hl.expr.StructExpression:
+) -> hl.Table:
     """
     This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
     shared by pairs of siblings in `relatedness_ht`.
@@ -924,4 +924,4 @@ def default_generate_sib_stats(
         )
     ).rows()
 
-    return sib_stats_ht
+    return sib_stats_ht.filter(sib_stats_ht.n_sib_shared_variants_raw > 0)

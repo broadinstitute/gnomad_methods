@@ -278,85 +278,54 @@ def assign_platform_from_pcs(
     return ht
 
 
-# TODO: This should be reviewed / merged with work from Kristen
 def infer_sex(
-        x_mt: hl.MatrixTable,  # TODO: This feels somewhat unsatisfying to provide two MTs. Maybe just reapply the QC MT filters to both (minus callrate for Y)?
-        y_mt: hl.MatrixTable,
-        platform_ht: hl.Table,
-        male_min_f_stat: float,
-        female_max_f_stat: float,
-        min_male_y_sites_called: int = 500,
-        max_y_female_call_rate: float = 0.15,
-        min_y_male_call_rate: float = 0.8
+        mt: hl.MatrixTable,
+        ploidy_ht = hl.Table,
+        f_stat_cutoff: float,
+        gt_expr: str = 'GT',
+        aaf_expr: Optional[str] = None,
+        sites_ht: Optional[hl.Table],
+        aaf_threshold: float = 0.001,
+        male_threshold: float = 0.75,
+        female_threshold: float = 0.5,
 ) -> hl.Table:
     """
     Imputes sample sex based on X-chromosome heterozygosity and Y-callrate (if Y calls are present)
 
-    :param x_mt:
-    :param y_mt:
-    :param platform_ht:
-    :param male_min_f_stat:
-    :param female_max_f_stat:
-    :param min_male_y_sites_called:
-    :param max_y_female_call_rate:
-    :param min_y_male_call_rate:
+    :param mt: Input MatrixTable
+    :param ploidy_ht: Table with imputed sex chromosome ploidies
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
+    :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
+    :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
+    :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex.
+    :param float aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
+    :param float male_threshold: Threshold above which a sample will be called male.
+    :param float female_threshold: Threshold below which a sample will be called female
     :return:
     """
-    logger.info("Imputing samples sex")
+    logger.info("Filtering mt to chrX")
+    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(x_contig) for x_contig in get_reference_genome(mt.locus).x_contigs])
 
-    x_mt = hl.filter_intervals(x_mt, [hl.parse_locus_interval(x_contig) for x_contig in get_reference_genome(x_mt.locus).x_contigs])
-    x_ht = hl.impute_sex(x_mt.GT, aaf_threshold=0.05, female_threshold=female_max_f_stat, male_threshold=male_min_f_stat)
-    y_mt = hl.filter_intervals(y_mt, [hl.parse_locus_interval(y_contig) for y_contig in get_reference_genome(y_mt.locus).y_contigs])
-    y_mt = y_mt.filter_rows(y_mt.locus.in_y_nonpar())
-    sex_ht = y_mt.annotate_cols(
-        qc_platform=platform_ht[y_mt.col_key].qc_platform,
-        is_female=x_ht[y_mt.col_key].is_female,
-        y_call_rate=hl.agg.fraction(hl.is_defined(y_mt.GT)),
-        n_y_sites_called=hl.agg.count_where(hl.is_defined(y_mt.GT)),
-        **{f'x_{ann}': x_ht[y_mt.col_key][ann] for ann in x_ht.row_value if ann != 'is_female'}
-    ).cols()
+    if sites_ht:
+        logger.info("Filtering to provided sites")
+        mt = mt.filter_rows(hl.is_defined(sites_ht[mt.row_key]))
 
-    mean_male_y_sites_called = sex_ht.aggregate(hl.agg.filter(~sex_ht.is_female, hl.agg.group_by(sex_ht.qc_platform, hl.agg.mean(sex_ht.n_y_sites_called))))
-    y_call_rate_stats = sex_ht.aggregate(
-        hl.agg.filter(
-            hl.is_defined(sex_ht.is_female),
-            hl.agg.group_by(hl.tuple([sex_ht.qc_platform, sex_ht.is_female]),
-                            hl.agg.stats(sex_ht.y_call_rate)
-                            )
+    logger.info("Calculating inbreeding coefficient on chrX")
+    sex_ht = hl.impute_sex(mt.gt_expr, aaf_threshold=aaf_threshold, male_threshold=male_threshold, female_threshold=female_threshold, aaf=aaf_expr)
+
+    logger.info("Annotating sex ht with sex chromosome ploidies")
+    sex_ht = sex_ht.annotate(**ploidy_ht[sex_ht.key])
+
+    logger.info("Inferring sex karyotypes")
+    x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(sex_ht, f_stat_cutoff)
+    return sex_ht.annotate(
+            **get_sex_expr(
+                sex_ht.chrX_ploidy,
+                sex_ht.chrY_ploidy,
+                x_ploidy_cutoffs,
+                y_ploidy_cutoffs
         )
     )
-
-    no_y_call_rate_platforms = set()
-    for platform, sites_called in mean_male_y_sites_called.items():
-        if sites_called < min_male_y_sites_called:
-            logger.warn(f"Mean number of sites in males on Y chromosome for platform {platform} is < {min_male_y_sites_called} ({sites_called} sites found). Y call rate filter will NOT be applied for samples on platform {platform}.")
-            no_y_call_rate_platforms.add(platform)
-
-    sex_ht = sex_ht.annotate_globals(y_call_rate_stats=y_call_rate_stats,
-                                     no_y_call_rate_platforms=no_y_call_rate_platforms if no_y_call_rate_platforms else hl.empty_set(platform_ht.qc_platform.dtype))
-    y_female_stats = sex_ht.y_call_rate_stats[(sex_ht.qc_platform, True)]
-    y_male_stats = sex_ht.y_call_rate_stats[(sex_ht.qc_platform, False)]
-    sex_ht = sex_ht.annotate(
-        is_female=(
-            hl.case()
-                .when(sex_ht.no_y_call_rate_platforms.contains(sex_ht.qc_platform), sex_ht.is_female)
-                .when(sex_ht.is_female & ((sex_ht.y_call_rate - y_female_stats.min) / (y_male_stats.max - y_female_stats.min) < max_y_female_call_rate), True)
-                .when(~sex_ht.is_female & ((sex_ht.y_call_rate - y_female_stats.min) / (y_male_stats.max - y_female_stats.min) > min_y_male_call_rate), False)
-                .or_missing()
-        )
-    )
-    sex_ht = sex_ht.annotate_globals(
-        impute_sex_params=hl.struct(
-            male_min_f_stat=male_min_f_stat,
-            female_max_f_stat=female_max_f_stat,
-            min_male_y_sites_called=min_male_y_sites_called,
-            max_y_female_call_rate=max_y_female_call_rate,
-            min_y_male_call_rate=min_y_male_call_rate
-        )
-    )
-
-    sex_ht = sex_ht.drop('qc_platform')
-    return (sex_ht)
 
 
 def get_ploidy_cutoffs(

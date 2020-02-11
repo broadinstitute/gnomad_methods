@@ -282,9 +282,9 @@ def infer_sex(
         mt: hl.MatrixTable,
         ploidy_ht = hl.Table,
         f_stat_cutoff: float,
-        gt_expr: str = 'GT',
-        aaf_expr: Optional[str] = None,
         sites_ht: Optional[hl.Table],
+        aaf_expr: Optional[str] = None,
+        gt_expr: str = 'GT',
         aaf_threshold: float = 0.001,
         male_threshold: float = 0.75,
         female_threshold: float = 0.5,
@@ -295,9 +295,9 @@ def infer_sex(
     :param mt: Input MatrixTable
     :param ploidy_ht: Table with imputed sex chromosome ploidies
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
-    :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
-    :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
     :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex.
+    :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
+    :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
     :param float aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
     :param float male_threshold: Threshold above which a sample will be called male.
     :param float female_threshold: Threshold below which a sample will be called female

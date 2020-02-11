@@ -52,7 +52,7 @@ mills = TableResource(
 )
 
 syndip = MatrixTableResource(
-    path="gs://gnomad-public/gnomad-public/resources/grch37/syndip/hybrid.m37m.mt",
+    path="gs://gnomad-public/resources/grch37/syndip/hybrid.m37m.mt",
     import_func=hl.import_vcf,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/syndip/hybrid.m37m.vcf.bgz",

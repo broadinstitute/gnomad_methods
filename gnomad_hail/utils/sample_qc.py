@@ -303,7 +303,12 @@ def infer_sex(
     :param float female_threshold: Threshold below which a sample will be called female
     :return:
     """
-    logger.info("Filtering mt to chrX")
+    logger.info("Filtering mt to biallelic SNPs on chrX")
+    rows = list(mt.row)
+    if 'was_split' in rows:
+        mt = mt.filter_rows((~mt.was_split) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
+    else:
+        mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
     mt = hl.filter_intervals(mt, [hl.parse_locus_interval(x_contig) for x_contig in get_reference_genome(mt.locus).x_contigs])
 
     if sites_ht:

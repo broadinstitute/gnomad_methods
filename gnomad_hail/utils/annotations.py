@@ -1,4 +1,6 @@
 from gnomad_hail import *
+# from gnomad_hail.utils.relatedness import SIBLINGS
+
 import itertools
 
 
@@ -447,8 +449,7 @@ def get_lowqual_expr(
     def low_qual_expr(
             ref: hl.expr.StringExpression,
             alt: hl.expr.StringExpression,
-            qual_approx:
-            hl.expr.NumericExpression
+            qual_approx: hl.expr.NumericExpression
     ) -> BooleanExpression:
         return hl.cond(
             hl.is_snp(ref, alt),
@@ -463,52 +464,11 @@ def get_lowqual_expr(
         return low_qual_expr(alleles[0], alleles[1], qual_approx_expr)
 
 
-def default_generate_fam_stats(
-        mt: hl.MatrixTable,
-        fam_file: str
-) -> hl.Table:
-    # Load Pedigree data and filter MT to samples present in any of the trios
-    ped = hl.Pedigree.read(fam_file, delimiter="\t")
-    fam_ht = hl.import_fam(fam_file, delimiter="\t")
-    fam_ht = fam_ht.annotate(
-        fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id]
-    )
-    fam_ht = fam_ht.explode('fam_members', name='s')
-    fam_ht = fam_ht.key_by('s').select().distinct()
-
-    mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
-    logger.info(f"Generating family stats using {mt.count_cols()} samples from {len(ped.trios)} trios.")
-
-    mt = filter_to_autosomes(mt)
-    mt = annotate_adj(mt)
-    mt = mt.filter_rows(hl.len(mt.alleles) == 2)
-    mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
-    trio_adj = (mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj)
-
-    ht = mt.select_rows(
-        **generate_fam_stats_expr(
-            mt,
-            transmitted_strata={
-                'raw':  None,
-                'adj': trio_adj
-            },
-            de_novo_strata={
-                'raw': None,
-                'adj': trio_adj
-            },
-            proband_is_female_expr=mt.is_female
-        )
-    ).rows()
-
-    return ht.filter(
-        ht.n_de_novos_raw + ht.n_transmitted_raw + ht.n_untransmitted_raw > 0
-    )
-
-
-def generate_fam_stats_expr(
+def generate_trio_stats_expr(
         trio_mt: hl.MatrixTable,
         transmitted_strata: Dict[str, Optional[hl.expr.BooleanExpression]] = {'raw': None},
         de_novo_strata: Dict[str, Optional[hl.expr.BooleanExpression]] = {'raw': None},
+        ac_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
         proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None
 ) -> hl.expr.StructExpression:
     """
@@ -517,13 +477,16 @@ def generate_fam_stats_expr(
         - Number of alleles in het parents transmitted to the proband
         - Number of alleles in het parents not transmitted to the proband
         - Number of de novo mutations
+        - Parent allele count
+        - Proband allele count
 
-    Both transmission and de novo mutation metrics can be stratified using additional filters.
+    Transmission and de novo mutation metrics and allele countes can be stratified using additional filters.
     If an empty dict is passed as one of the strata arguments, then this metric isn't computed.
 
     :param trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix
     :param transmitted_strata: Strata for the transmission counts
     :param de_novo_strata: Strata for the de novo counts
+    :param ac_strata: Strata for the parent and child allele counts
     :param proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
     :return: An expression with the counts
     """
@@ -594,7 +557,7 @@ def generate_fam_stats_expr(
         Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
         """
         if proband_is_female is None:
-            logger.warning("Since no proband sex expression was given to generate_fam_stats_expr, only DNMs in autosomes will be counted.")
+            logger.warning("Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted.")
             return hl.or_missing(
                 locus.in_autosome(),
                 proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref()
@@ -612,9 +575,9 @@ def generate_fam_stats_expr(
         )
 
     # Create transmission counters
-    fam_stats = hl.struct(
+    trio_stats = hl.struct(
         **{
-            name: hl.agg.filter(
+            f'{name2}_{name}': hl.agg.filter(
                 _get_composite_filter_expr(trio_mt.proband_entry.GT.is_non_ref(), expr),
                 hl.agg.sum(
                     trans_count_map.get(
@@ -624,37 +587,198 @@ def generate_fam_stats_expr(
                             trio_mt.mother_entry.GT.n_alt_alleles(),
                             _get_copy_state(trio_mt.locus)
                         )
-                    )
+                    )[i]
                 )
             ) for name, expr in transmitted_strata.items()
+            for i, name2 in enumerate(['n_transmitted','n_untransmitted'])
         }
     )
 
-    fam_stats = fam_stats.select(
-        **dict(itertools.chain.from_iterable(
-            [
-                (f'n_transmitted_{name}', fam_stats[name][0]),
-                (f'n_untransmitted_{name}', fam_stats[name][1]),
-            ]
-            for name in fam_stats
-        ))
+    # Create de novo counters
+    trio_stats = trio_stats.annotate(
+        **{
+            f'n_de_novos_{name}': hl.agg.filter(
+                _get_composite_filter_expr(
+                    _is_dnm(
+                        trio_mt.proband_entry.GT,
+                        trio_mt.father_entry.GT,
+                        trio_mt.mother_entry.GT,
+                        trio_mt.locus,
+                        proband_is_female_expr
+                    ), expr
+                ),
+                hl.agg.count()
+            ) for name, expr in de_novo_strata.items()
+        }
     )
 
-    # Create de novo counters
-    fam_stats = fam_stats.annotate({
-        f'n_de_novo_{name}': hl.agg.filter(
-            _get_composite_filter_expr(
-                _is_dnm(
-                    trio_mt.proband_entry.GT,
-                    trio_mt.father_entry.GT,
-                    trio_mt.mother_entry.GT,
-                    trio_mt.locus,
-                    proband_is_female_expr
-                ), expr
-            ),
-            hl.agg.count()
-        ) for name, expr in de_novo_strata.items()
-    })
+    trio_stats = trio_stats.annotate(
+        **{
+            f'ac_parents_{name}': hl.agg.filter(
+                expr,
+                hl.agg.sum(trio_mt.father_entry.GT.n_alt_alleles() + trio_mt.mother_entry.GT.n_alt_alleles())
+            ) for name, expr in ac_strata.items()
+        },
+        **{
+            f'ac_children_{name}': hl.agg.filter(
+                expr,
+                hl.agg.sum(trio_mt.proband_entry.GT.n_alt_alleles())
+            ) for name, expr in ac_strata.items()
+        }
+    )
+
+    return trio_stats
+
+
+def filter_mt_to_trios(
+        mt: hl.MatrixTable,
+        fam_ht: hl.Table
+) -> hl.MatrixTable:
+    """
+    Filters a MatrixTable to a set of trios in `fam_ht`, filters to autosomes, and annotates with adj.
+
+    :param mt: A Matrix Table to filter to only trios
+    :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
+    :return: A MT filtered to trios and adj annotated
+    """
+    # Filter MT to samples present in any of the trios
+    fam_ht = fam_ht.annotate(
+        fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id]
+    )
+    fam_ht = fam_ht.explode('fam_members', name='s')
+    fam_ht = fam_ht.key_by('s').select().distinct()
+
+    mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
+    mt = filter_to_autosomes(mt)
+    mt = annotate_adj(mt)
+
+    return mt
+
+
+def default_generate_trio_stats(
+        mt: hl.MatrixTable,
+        ped: hl.Pedigree
+    ) -> hl.Table:
+    """
+    Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
+
+    .. note::
+
+        Expects that `mt` is annotated with adj and if dealing with a sparse MT,
+        `hl.experimental.densify` must be run first.
+
+    :param mt: A Matrix Table of only trios
+    :param ped: A Pedigree of trios to calculates stats on loaded using `hl.Pedigree.read`
+    :return: Table with trio stats
+    """
+    mt = mt.filter_rows(hl.len(mt.alleles) == 2)
+    mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
+    logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
+    trio_adj = (mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj)
+
+    ht = mt.select_rows(
+        **generate_trio_stats_expr(
+            mt,
+            transmitted_strata={
+                'raw':  None,
+                'adj': trio_adj
+            },
+            de_novo_strata={
+                'raw': None,
+                'adj': trio_adj
+            },
+            ac_strata={
+                'raw': True,
+                'adj': trio_adj
+            },
+            proband_is_female_expr=mt.is_female
+        )
+    ).rows()
+
+    return ht.filter(
+        ht.n_de_novos_raw + ht.n_transmitted_raw + ht.n_untransmitted_raw > 0
+    )
+
+
+def generate_sib_stats_expr(
+    sib_mt: hl.MatrixTable,
+    strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    sib1_entry: str = 'sib1_entry',
+    sib2_entry: str = 'sib2_entry',
+    sib1_is_female_col: Optional[str] = None,
+    sib2_is_female_col: Optional[str] = None
+) -> hl.expr.StructExpression:
+    """
+    Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
+
+    The sibling sharing counts can be stratified using additional filters using `stata`.
+
+    .. note::
+
+        This function expects the MT has either been split or filtered to only bi-allelics
+
+    :param sib_mt: Input sibling Matrix table generated by `create_sib_mt`
+    :param strata: Dict with additional strata to use when computing shared sibling variant counts
+    :param sib1_entry: Entry containing the 1st sibling of the pair in sibling MT
+    :param sib2_entry: Entry containing the 2nd sibling of the pair in sibling MT
+    :param sib1_is_female_col: An optional column in sib_mt giving sib2 sex. If not given, counts are only computed for autosomes.
+    :param sib2_is_female_col: An optional column in sib_mt giving sib2 sex. If not given, counts are only computed for autosomes.
+    :return: A Table with the sibling shared variant counts
+    """
+
+    def get_alt_count(locus, gt, is_female):
+        """
+        Helper method to calculate alt allele count with sex info if present
+        """
+        return (
+            hl.case()
+            .when(
+                ~is_female & (locus.in_x_nonpar() | locus.in_y_nonpar()),
+                hl.min(1, gt.n_alt_alleles()),
+            )
+            .when(is_female & locus.in_y_nonpar(), 0)
+            .when(is_female | locus.in_autosome_or_par(), gt.n_alt_alleles())
+            .default(0)
+        )
+
+    # Create sibling sharing counters
+    sib_stats = hl.struct(
+        **{
+            f"n_sib_shared_variants_{name}": hl.agg.filter(
+                expr,
+                hl.or_missing(
+                    ((sib1_is_female_col is not None) & (sib2_is_female_col is not None)) | sib_mt.locus.in_autosome(),
+                    hl.agg.sum(
+                        hl.if_else(
+                            hl.is_missing(sib_mt[sib1_entry].GT.n_alt_alleles()) | hl.is_missing(sib_mt[sib2_entry].GT.n_alt_alleles()),
+                            0,
+                            hl.min(
+                                get_alt_count(
+                                    sib_mt.locus, sib_mt[sib1_entry].GT, sib_mt[sib1_is_female_col]
+                                ),
+                                get_alt_count(
+                                    sib_mt.locus, sib_mt[sib2_entry].GT, sib_mt[sib2_is_female_col]
+                                ),
+                            ),
+                        )
+                    ),
+                ),
+            )
+            for name, expr in strata.items()
+        }
+    )
+
+    sib_stats = sib_stats.annotate(
+        **{
+            f'ac_sibs_{name}': hl.agg.filter(
+                expr,
+                hl.agg.sum(sib_mt.sib1_entry.GT.n_alt_alleles() + sib_mt.sib2_entry.GT.n_alt_alleles())
+            ) for name, expr in strata.items()
+        }
+    )
+
+    return sib_stats
+
 
 def create_sib_mt(
         mt: hl.MatrixTable,

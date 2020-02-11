@@ -15,7 +15,8 @@ def _import_purcell_5k(path) -> hl.Table:
     p5k = hl.import_locus_intervals(path, reference_genome='GRCh37')
     rg37 = hl.get_reference('GRCh37')
     rg38 = hl.get_reference('GRCh38')
-    rg37.add_liftover('gs://hail-common/references/grch37_to_grch38.over.chain.gz', rg38)
+    if not rg37.has_liftover:
+        rg37.add_liftover('gs://hail-common/references/grch37_to_grch38.over.chain.gz', rg38)
     p5k = p5k.annotate(
         start=hl.liftover(p5k.interval.start, 'GRCh38'),
         end=hl.liftover(p5k.interval.start, 'GRCh38')

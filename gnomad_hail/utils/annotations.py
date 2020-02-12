@@ -665,7 +665,6 @@ def filter_mt_to_trios(
 
 def default_generate_trio_stats(
         mt: hl.MatrixTable,
-        ped: hl.Pedigree
     ) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
@@ -675,12 +674,10 @@ def default_generate_trio_stats(
         Expects that `mt` is annotated with adj and if dealing with a sparse MT,
         `hl.experimental.densify` must be run first.
 
-    :param mt: A Matrix Table of only trios
-    :param ped: A Pedigree of trios to calculates stats on loaded using `hl.Pedigree.read`
+    :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
     :return: Table with trio stats
     """
     mt = mt.filter_rows(hl.len(mt.alleles) == 2)
-    mt = hl.trio_matrix(mt, pedigree=ped, complete_trios=True)
     logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
     trio_adj = (mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj)
 

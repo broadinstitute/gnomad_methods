@@ -794,7 +794,7 @@ def create_sib_mt(
     """
     if is_female_col is None or sex_ht is None:
         logger.warning(
-            "Since no proband sex expression was given to generate_trip_stats_expr, only DNMs in autosomes will be counted."
+            "Since no proband sex expression was given to generate_sib_stats_expr, only variants in autosomes will be counted."
         )
 
     # Get column HT with index for position of the sample in the columns

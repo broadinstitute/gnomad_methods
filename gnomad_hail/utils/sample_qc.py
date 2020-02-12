@@ -290,14 +290,14 @@ def default_annotate_sex(
     """
     Imputes sample sex based on X-chromosome heterozygosity and sex chromosome ploidy. 
     Returns Table with the following fields:
-        - s (str): Sample
-        - f_stat (float64): Sample f-stat. Calculated using hl.impute_sex.
-        - n_called (int64): Number of variants with a genotype call. Calculated using hl.impute_sex.
-        - expected_homs (float64): Expected number of homozygotes. Calculated using hl.impute_sex.
-        - observed_homs (int64): Expected number of homozygotes. Calculated using hl.impute_sex.
-        - X_karyotype (str): Sample's chromosome X karyotype.
-        - Y_karyotype (str): Sample's chromosome Y karyotype.
-        - sex_karyotype (str): Sample's sex karyotype.
+    - s (str): Sample
+    - f_stat (float64): Sample f-stat. Calculated using hl.impute_sex.
+    - n_called (int64): Number of variants with a genotype call. Calculated using hl.impute_sex.
+    - expected_homs (float64): Expected number of homozygotes. Calculated using hl.impute_sex.
+    - observed_homs (int64): Expected number of homozygotes. Calculated using hl.impute_sex.
+    - X_karyotype (str): Sample's chromosome X karyotype.
+    - Y_karyotype (str): Sample's chromosome Y karyotype.
+    - sex_karyotype (str): Sample's sex karyotype.
 
     :param mt: Input MatrixTable
     :param ploidy_ht: Table of samples with their imputed sex chromosome ploidies

@@ -1,7 +1,6 @@
 from gnomad_hail import *
+# TODO: Use import below when relatedness PR goes in
 # from gnomad_hail.utils.relatedness import SIBLINGS
-
-import itertools
 
 
 def pop_max_expr(
@@ -466,8 +465,8 @@ def get_lowqual_expr(
 
 def generate_trio_stats_expr(
         trio_mt: hl.MatrixTable,
-        transmitted_strata: Dict[str, Optional[hl.expr.BooleanExpression]] = {'raw': None},
-        de_novo_strata: Dict[str, Optional[hl.expr.BooleanExpression]] = {'raw': None},
+        transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
+        de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
         ac_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
         proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None
 ) -> hl.expr.StructExpression:
@@ -480,8 +479,10 @@ def generate_trio_stats_expr(
         - Parent allele count
         - Proband allele count
 
-    Transmission and de novo mutation metrics and allele countes can be stratified using additional filters.
-    If an empty dict is passed as one of the strata arguments, then this metric isn't computed.
+    Transmission and de novo mutation metrics and allele counts can be stratified using additional filters.
+    `transmitted_strata`, `de_novo_strata`, and `ac_strata` all expect a dictionary of filtering expressions keyed
+     by their desired suffix to append for labeling. The default will perform counts using all genotypes and append
+     'raw' to the label.
 
     :param trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix
     :param transmitted_strata: Strata for the transmission counts
@@ -534,18 +535,6 @@ def generate_trio_stats_expr(
             .or_missing()
         )
 
-    def _get_composite_filter_expr(
-            expr1: hl.expr.BooleanExpression,
-            expr2: Optional[hl.expr.BooleanExpression]
-    ) -> hl.expr.BooleanExpression:
-        """
-        Helper method to join two expression with support for None.
-        """
-        if expr2 is None:
-            return expr1
-        else:
-            return expr1 & expr2
-
     def _is_dnm(
             proband_gt: hl.expr.CallExpression,
             father_gt: hl.expr.CallExpression,
@@ -578,7 +567,7 @@ def generate_trio_stats_expr(
     trio_stats = hl.struct(
         **{
             f'{name2}_{name}': hl.agg.filter(
-                _get_composite_filter_expr(trio_mt.proband_entry.GT.is_non_ref(), expr),
+                trio_mt.proband_entry.GT.is_non_ref() & expr,
                 hl.agg.sum(
                     trans_count_map.get(
                         (
@@ -597,18 +586,18 @@ def generate_trio_stats_expr(
     # Create de novo counters
     trio_stats = trio_stats.annotate(
         **{
-            f'n_de_novos_{name}': hl.agg.filter(
-                _get_composite_filter_expr(
-                    _is_dnm(
-                        trio_mt.proband_entry.GT,
-                        trio_mt.father_entry.GT,
-                        trio_mt.mother_entry.GT,
-                        trio_mt.locus,
-                        proband_is_female_expr
-                    ), expr
-                ),
-                hl.agg.count()
-            ) for name, expr in de_novo_strata.items()
+            f"n_de_novos_{name}": hl.agg.filter(
+                _is_dnm(
+                    trio_mt.proband_entry.GT,
+                    trio_mt.father_entry.GT,
+                    trio_mt.mother_entry.GT,
+                    trio_mt.locus,
+                    proband_is_female_expr,
+                )
+                & expr,
+                hl.agg.count(),
+            )
+            for name, expr in de_novo_strata.items()
         }
     )
 
@@ -883,7 +872,8 @@ def default_generate_sib_stats(
 
     This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
     The `relationship_col` should be a column specifying the relationship between each two samples as defined by
-    the constants in `gnomad_hail.utils.relatedness`.
+    the constants in `gnomad_hail.utils.relatedness`. This relationship_col will be used to filter to only pairs of
+    samples that are annotated as `SIBLINGS`.
 
     :param mt: Input Matrix table
     :param relatedness_ht: Input relationship table
@@ -900,6 +890,7 @@ def default_generate_sib_stats(
             .or_missing()
     )
 
+    # TODO: Change to use SIBLINGS constant when relatedness PR goes in
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == 'Siblings')
     sibs = hl.literal(set(sib_ht[i_col].s.collect()) & set(sib_ht[j_col].s.collect()))
     mt = mt.filter_cols(sibs.contains(mt.s))

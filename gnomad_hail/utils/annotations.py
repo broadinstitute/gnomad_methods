@@ -558,7 +558,7 @@ def generate_trio_stats_expr(
                 proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
                 hl.or_missing(
                     ~proband_is_female,
-                    proband_gt.is_het() & father_gt.is_hom_ref()
+                    proband_gt.is_hom_var() & father_gt.is_hom_ref()
                 )
             )
         )
@@ -684,9 +684,7 @@ def default_generate_trio_stats(
         )
     ).rows()
 
-    return ht.filter(
-        ht.n_de_novos_raw + ht.n_transmitted_raw + ht.n_untransmitted_raw > 0
-    )
+    return ht
 
 
 def generate_sib_stats_expr(
@@ -915,4 +913,4 @@ def default_generate_sib_stats(
         )
     ).rows()
 
-    return sib_stats_ht.filter(sib_stats_ht.n_sib_shared_variants_raw > 0)
+    return sib_stats_ht

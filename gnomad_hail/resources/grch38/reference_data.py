@@ -6,7 +6,7 @@ from gnomad_hail.resources.resource_utils import (
     import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING
 )
-from gnomad_hail.utils.generic import vep_config_path
+from gnomad_hail.utils.generic import vep_or_lookup_vep
 import hail as hl
 
 from hail import Table
@@ -36,7 +36,7 @@ def _import_purcell_5k(path) -> hl.Table:
 
 def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = import_sites_vcf(**kwargs)
-    clinvar = hl.vep(clinvar, vep_config_path(ref='GRCh38'))
+    clinvar = vep_or_lookup_vep(clinvar, reference='GRCh38')
     return clinvar
 
 

@@ -278,45 +278,54 @@ def assign_platform_from_pcs(
     return ht
 
 
-def infer_sex(
+def default_annotate_sex(
         mt: hl.MatrixTable,
         ploidy_ht: hl.Table,
-        f_stat_cutoff: float,
         sites_ht: Optional[hl.Table],
         aaf_expr: Optional[str] = None,
         gt_expr: str = 'GT',
-        aaf_threshold: float = 0.001,
-        male_threshold: float = 0.75,
-        female_threshold: float = 0.5,
+        f_stat_cutoff: float = 0.5,
+        aaf_threshold: float = 0.001
 ) -> hl.Table:
     """
-    Imputes sample sex based on X-chromosome heterozygosity and Y-callrate (if Y calls are present)
+    Imputes sample sex based on X-chromosome heterozygosity and sex chromosome ploidy. 
+    Returns Table with the following fields:
+        - s (str): Sample
+        - f_stat (float64): Sample f-stat. Calculated using hl.impute_sex.
+        - n_called (int64): Number of variants with a genotype call. Calculated using hl.impute_sex.
+        - expected_homs (float64): Expected number of homozygotes. Calculated using hl.impute_sex.
+        - observed_homs (int64): Expected number of homozygotes. Calculated using hl.impute_sex.
+        - X_karyotype (str): Sample's chromosome X karyotype.
+        - Y_karyotype (str): Sample's chromosome Y karyotype.
+        - sex_karyotype (str): Sample's sex karyotype.
 
     :param mt: Input MatrixTable
-    :param ploidy_ht: Table with imputed sex chromosome ploidies
-    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
+    :param ploidy_ht: Table of samples with their imputed sex chromosome ploidies
     :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex.
     :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
     :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
     :param float aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
-    :param float male_threshold: Threshold above which a sample will be called male.
-    :param float female_threshold: Threshold below which a sample will be called female
-    :return:
+    :return: Table of samples and their imputed sex karyotypes.
     """
-    logger.info("Filtering mt to biallelic SNPs on chrX")
-    rows = list(mt.row)
-    if 'was_split' in rows:
+    x_contigs = get_reference_genome(mt.locus).x_contigs
+    logger.info(f"Filtering mt to biallelic SNPs in X contigs: {x_contigs}")
+    if 'was_split' in list(mt.row):
         mt = mt.filter_rows((~mt.was_split) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
     else:
         mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
-    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(x_contig) for x_contig in get_reference_genome(mt.locus).x_contigs])
+    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig) for contig in x_contigs])
 
     if sites_ht:
+        if aaf_expr == None:
+            logger.warn("sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele frequency is 'AF'.")
+            aaf_expr = "AF"
         logger.info("Filtering to provided sites")
-        mt = mt.filter_rows(hl.is_defined(sites_ht[mt.row_key]))
+        mt = mt.annotate_rows(**sites_ht[mt.row_key])
+        mt = mt.filter_rows(hl.is_defined(mt[aaf_expr]))
 
     logger.info("Calculating inbreeding coefficient on chrX")
-    sex_ht = hl.impute_sex(mt.gt_expr, aaf_threshold=aaf_threshold, male_threshold=male_threshold, female_threshold=female_threshold, aaf=aaf_expr)
+    sex_ht = hl.impute_sex(mt[gt_expr], aaf_threshold=aaf_threshold, male_threshold=f_stat_cutoff, female_threshold=f_stat_cutoff, aaf=aaf_expr)
 
     logger.info("Annotating sex ht with sex chromosome ploidies")
     sex_ht = sex_ht.annotate(**ploidy_ht[sex_ht.key])
@@ -330,7 +339,8 @@ def infer_sex(
                 x_ploidy_cutoffs,
                 y_ploidy_cutoffs
         )
-    )
+    ).drop('chr20_mean_dp', 'chrX_mean_dp', 'chrY_mean_dp', 'chrX_ploidy', 'chrY_ploidy')
+
 
 
 def get_ploidy_cutoffs(

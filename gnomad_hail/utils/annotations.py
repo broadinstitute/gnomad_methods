@@ -1,4 +1,5 @@
 from gnomad_hail import *
+import itertools
 # TODO: Use import below when relatedness PR goes in
 # from gnomad_hail.utils.relatedness import SIBLINGS
 
@@ -563,6 +564,26 @@ def generate_trio_stats_expr(
             )
         )
 
+    def _ac_an_parent_child_count(
+            proband_gt: hl.expr.CallExpression,
+            father_gt: hl.expr.CallExpression,
+            mother_gt: hl.expr.CallExpression
+    ) -> Dict[str, hl.expr.Int64Expression]:
+        """
+        Helper method to get AC and AN for parents and children
+        """
+        ac_parent_expr = hl.agg.sum(father_gt.n_alt_alleles() + mother_gt.n_alt_alleles())
+        an_parent_expr = hl.agg.sum((hl.is_defined(father_gt) + hl.is_defined(mother_gt))*2)
+        ac_child_expr = hl.agg.sum(proband_gt.n_alt_alleles())
+        an_child_expr = hl.agg.sum(hl.is_defined(proband_gt)*2)
+
+        return {
+            f'ac_parents': ac_parent_expr,
+            f'an_parents': an_parent_expr,
+            f'ac_children': ac_child_expr,
+            f'an_children': an_child_expr
+        }
+
     # Create transmission counters
     trio_stats = hl.struct(
         **{
@@ -579,14 +600,14 @@ def generate_trio_stats_expr(
                     )[i]
                 )
             ) for name, expr in transmitted_strata.items()
-            for i, name2 in enumerate(['n_transmitted','n_untransmitted'])
+            for i, name2 in enumerate(['n_transmitted', 'n_untransmitted'])
         }
     )
 
     # Create de novo counters
     trio_stats = trio_stats.annotate(
         **{
-            f"n_de_novos_{name}": hl.agg.filter(
+            f'n_de_novos_{name}': hl.agg.filter(
                 _is_dnm(
                     trio_mt.proband_entry.GT,
                     trio_mt.father_entry.GT,
@@ -603,16 +624,14 @@ def generate_trio_stats_expr(
 
     trio_stats = trio_stats.annotate(
         **{
-            f'ac_parents_{name}': hl.agg.filter(
+            f'{name2}_{name}': hl.agg.filter(
                 expr,
-                hl.agg.sum(trio_mt.father_entry.GT.n_alt_alleles() + trio_mt.mother_entry.GT.n_alt_alleles())
+                _ac_an_parent_child_count(
+                    trio_mt.proband_entry.GT,
+                    trio_mt.father_entry.GT,
+                    trio_mt.mother_entry.GT)[name2]
             ) for name, expr in ac_strata.items()
-        },
-        **{
-            f'ac_children_{name}': hl.agg.filter(
-                expr,
-                hl.agg.sum(trio_mt.proband_entry.GT.n_alt_alleles())
-            ) for name, expr in ac_strata.items()
+            for name2 in ['ac_parents', 'an_parents', 'ac_children', 'an_children']
         }
     )
 
@@ -669,11 +688,11 @@ def default_generate_trio_stats(
         **generate_trio_stats_expr(
             mt,
             transmitted_strata={
-                'raw':  None,
+                'raw':  True,
                 'adj': trio_adj
             },
             de_novo_strata={
-                'raw': None,
+                'raw': True,
                 'adj': trio_adj
             },
             ac_strata={

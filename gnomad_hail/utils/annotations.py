@@ -671,8 +671,8 @@ def default_generate_trio_stats(
 
     .. note::
 
-        Expects that `mt` is annotated with adj and if dealing with a sparse MT,
-        `hl.experimental.densify` must be run first.
+        Expects that `mt` is it a trio matrix table that was annotated with adj and if dealing with
+        a sparse MT `hl.experimental.densify` must be run first.
 
     :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
     :return: Table with trio stats

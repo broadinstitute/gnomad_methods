@@ -285,8 +285,6 @@ def default_annotate_sex(
         excluded_intervals: Optional[hl.Table] = None,
         included_intervals: Optional[hl.Table] = None,
         normalization_contig: str = 'chr20',
-        chr_x: Optional[str] = None,
-        chr_y: Optional[str] = None,
         sites_ht: Optional[hl.Table] = None,
         aaf_expr: Optional[str] = None,
         gt_expr: str = 'GT',
@@ -294,7 +292,8 @@ def default_annotate_sex(
         aaf_threshold: float = 0.001
 ) -> hl.Table:
     """
-    Imputes sample sex based on X-chromosome heterozygosity and sex chromosome ploidy. 
+    Imputes sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
+ 
     Returns Table with the following fields:
         - s (str): Sample
         - chr20_mean_dp (float32): Sample's mean coverage over chromosome 20.
@@ -314,9 +313,7 @@ def default_annotate_sex(
     :param bool is_sparse: Whether input MatrixTable is in sparse data format
     :param excluded_intervals: Optional table of intervals to exclude from the computation.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
-    :param normalization_contig: Which chromosome to normalize by
-    :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
-    :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
+    :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex chromosome ploidies.
     :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex,
                     and pulls alternate allele frequency from this Table.
     :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
@@ -329,7 +326,7 @@ def default_annotate_sex(
     if is_sparse:
         ploidy_ht = impute_sex_ploidy(
                 mt, excluded_intervals, included_intervals,
-                normalization_contig, chr_x, chr_y
+                normalization_contig
         )
     else:
         raise NotImplementedError("Imputing sex ploidy does not exist yet for dense data.")

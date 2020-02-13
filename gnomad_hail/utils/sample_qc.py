@@ -331,7 +331,7 @@ def default_annotate_sex(
                 normalization_contig, chr_x, chr_y
         )
     else:
-        raise NotImplementedError("Impute sex ploidy does not exist yet for dense data.")
+        raise NotImplementedError("Imputing sex ploidy does not exist yet for dense data.")
 
     x_contigs = get_reference_genome(mt.locus).x_contigs
     logger.info(f"Filtering mt to biallelic SNPs in X contigs: {x_contigs}")

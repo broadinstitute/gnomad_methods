@@ -37,21 +37,18 @@ This is used in the case of a pair of samples which kinship/IBD values do not co
 
 
 def get_duplicated_samples(
-        kin_ht: hl.Table,
+        relationship_ht: hl.Table,
         i_col: str = 'i',
         j_col: str = 'j',
-        kin_col: str = 'kin',
-        duplicate_threshold: float = 0.4
+        rel_col: str = 'relationship'
 ) -> List[Set[str]]:
     """
     Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
-
-    :param kin_ht: pc_relate output table
+    :param relationship_ht: Table with relationships between pairs of samples
     :param i_col: Column containing the 1st sample
     :param j_col: Column containing the 2nd sample
-    :param kin_col: Column containing the kinship value
-    :param duplicate_threshold: Kinship threshold to consider two samples duplicated
-    :return: List of samples that are duplicates
+    :param rel_col: Column containing the sample pair relationship annotated with get_relationship_expr
+    :return: List of sets of samples that are duplicates
     """
 
     def get_all_dups(s, dups, samples_duplicates):
@@ -63,12 +60,18 @@ def get_duplicated_samples(
                     dups = get_all_dups(s_dup, dups, samples_duplicates)
         return dups
 
-    dup_rows = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
+    logger.info("Computing duplicate sets")
+    dup_pairs = relationship_ht.aggregate(
+        hl.agg.filter(
+            relationship_ht[rel_col] == DUPLICATE_OR_TWINS,
+            hl.agg.collect(hl.tuple([relationship_ht[i_col], relationship_ht[j_col]]))
+        )
+    )
 
     samples_duplicates = defaultdict(set)
-    for row in dup_rows:
-        samples_duplicates[row[i_col]].add(row[j_col])
-        samples_duplicates[row[j_col]].add(row[i_col])
+    for i, j in dup_pairs:
+        samples_duplicates[i].add(j)
+        samples_duplicates[j].add(i)
 
     duplicated_samples = []
     while len(samples_duplicates) > 0:
@@ -77,12 +80,48 @@ def get_duplicated_samples(
     return duplicated_samples
 
 
-def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
+def get_duplicate_samples_ht(
+        duplicated_samples: List[Set[str]],
+        samples_rankings_ht: hl.Table,
+        rank_ann: str = 'rank'
+):
+    """
+    Creates a HT with duplicated samples sets.
+    Each row is indexed by the sample that is kept and also contains the set of duplicate samples that should be filtered.
+
+    `samples_rankings_ht` is a HT containing a global rank for each of the sample (smaller is better).
+
+    :param duplicated_samples: List of sets of duplicated samples
+    :param samples_rankings_ht: HT with global rank for each sample
+    :param rank_ann: Annotation in `samples_ranking_ht` containing each sample global rank (smaller is better).
+    :return: HT with duplicate sample sets, including which to keep/filter
+    """
+    dups_ht = hl.Table.parallelize([hl.struct(dup_set=i, dups=duplicated_samples[i]) for i in range(0, len(duplicated_samples))])
+    dups_ht = dups_ht.explode(dups_ht.dups, name='_dup')
+    dups_ht = dups_ht.key_by('_dup')
+    dups_ht = dups_ht.annotate(rank=samples_rankings_ht[dups_ht.key][rank_ann])
+    dups_cols = hl.bind(
+        lambda x: hl.struct(
+            kept=x[0],
+            filtered=x[1:]
+        ),
+        hl.sorted(hl.agg.collect(hl.tuple([dups_ht._dup, dups_ht.rank])), key=lambda x: x[1]).map(lambda x: x[0])
+    )
+    dups_ht = dups_ht.group_by(dups_ht.dup_set).aggregate(
+        **dups_cols
+    )
+
+    if isinstance(dups_ht.kept, hl.expr.StructExpression):
+        dups_ht = dups_ht.key_by(**dups_ht.kept).drop('kept')
+    else:
+        dups_ht = dups_ht.key_by(s=dups_ht.kept)  # Since there is no defined name in the case of a non-struct type, use `s`
+    return dups_ht
+
+
+def explode_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
     """
     Flattens the result of `filter_duplicate_samples`, so that each line contains a single sample.
     An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
-
-    Note that this assumes that the type of the table key is the same as the type of the `filtered` array.
 
     :param dups_ht: Input HT
     :return: Flattened HT
@@ -97,7 +136,7 @@ def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
     return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by('s')
 
 
-def get_relationship_expr( # TODO: The thredshold detection could be easily automated by fitting distributions over the data.
+def get_relationship_expr(  # TODO: The threshold detection could be easily automated by fitting distributions over the data.
         kin_expr: hl.expr.NumericExpression,
         ibd0_expr: hl.expr.NumericExpression,
         ibd1_expr: hl.expr.NumericExpression,
@@ -112,13 +151,13 @@ def get_relationship_expr( # TODO: The thredshold detection could be easily auto
         # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37), Not useful for relationship inference
         ibd1_50_thresholds: Tuple[float, float] = (0.275, 0.75),
         ibd1_100_min: float = 0.75,
-        ibd2_0_threshold: float = 0.125,
+        ibd2_0_max: float = 0.125,
         ibd2_25_thresholds: Tuple[float, float] = (0.1, 0.5),
         ibd2_100_thresholds: Tuple[float, float] = (0.75, 1.25)
 ) -> hl.expr.StringExpression:
     """
     Returns an expression that gives the relationship between a pair of samples given their kin coefficient and IBDO, IBD1, IBD2 values.
-    The kinship coefficient values in the defaults are in line with those output from `hail.methods.pc_relate <https://hail.is/docs/0.2/methods/genetics.html?highlight=pc_relate#hail.methods.pc_relate>`_.
+    The kinship coefficient values in the defaults are in line with those output from `hail.methods.pc_relate <https://hail.is/docs/0.2/methods/genetics.html?highlight=pc_relate#hail.methods.pc_relate>`.
     
     :param kin_expr: Kin coefficient expression
     :param ibd0_expr: IBDO expression
@@ -131,51 +170,51 @@ def get_relationship_expr( # TODO: The thredshold detection could be easily auto
     :param ibd1_0_thresholds: (min, max) thresholds for 0 IBD1 sharing. Note that the min is there because pc_relate can output large negative values in some corner cases.
     :param ibd1_50_thresholds: (min, max) thresholds for 0.5 IBD1 sharing
     :param ibd1_100_min: min IBD1 threshold for 1.0 IBD1 sharing
-    :param ibd2_0_threshold: max IBD2 threshold for 0 IBD2 sharing
+    :param ibd2_0_max: max IBD2 threshold for 0 IBD2 sharing
     :param ibd2_25_thresholds: (min, max) thresholds for 0.25 IBD2 sharing
     :param ibd2_100_thresholds: (min, max) thresholds for 1.00 IBD2 sharing. Note that the min is there because pc_relate can output much larger IBD2 values in some corner cases.
     :return: The relationship annotation using the constants defined in this module.
     """
     return (
-            hl.case()
-                .when(kin_expr < second_degree_min_kin, UNRELATED)
-                .when(
-                (kin_expr < first_degree_kin_thresholds[0]),
-                SECOND_DEGREE_RELATIVES
-            )
-                .when(
-                (kin_expr < first_degree_kin_thresholds[1]) &
-                (ibd0_expr <= ibd0_0_max) &
-                (ibd1_expr >= ibd1_100_min) &
-                (ibd2_expr <= ibd2_0_threshold),
-                PARENT_CHILD
-            )
-                .when(
-                (kin_expr < first_degree_kin_thresholds[1]) &
-                (ibd0_expr >= ibd0_25_thresholds[0]) &
-                (ibd0_expr <= ibd0_25_thresholds[1]) &
-                (ibd1_expr >= ibd1_50_thresholds[0]) &
-                (ibd1_expr <= ibd1_50_thresholds[1]) &
-                (ibd2_expr >= ibd2_25_thresholds[0]) &
-                (ibd2_expr <= ibd2_25_thresholds[1]),
-                SIBLINGS
-            )
-                .when(
-                (kin_expr > first_degree_kin_thresholds[1]) &
-                (ibd0_expr < ibd0_0_max) &
-                (ibd1_expr >= ibd1_0_thresholds[0]) &
-                (ibd1_expr <= ibd1_0_thresholds[1]) &
-                (ibd2_expr >= ibd2_100_thresholds[0]) &
-                (ibd2_expr <= ibd2_100_thresholds[1]),
-                DUPLICATE_OR_TWINS
-            )
-                .default(AMBIGUOUS_RELATIONSHIP)
+        hl.case()
+            .when(kin_expr < second_degree_min_kin, UNRELATED)
+            .when(
+            (kin_expr < first_degree_kin_thresholds[0]),
+            SECOND_DEGREE_RELATIVES
+        )
+            .when(
+            (kin_expr < first_degree_kin_thresholds[1]) &
+            (ibd0_expr <= ibd0_0_max) &
+            (ibd1_expr >= ibd1_100_min) &
+            (ibd2_expr <= ibd2_0_max),
+            PARENT_CHILD
+        )
+            .when(
+            (kin_expr < first_degree_kin_thresholds[1]) &
+            (ibd0_expr >= ibd0_25_thresholds[0]) &
+            (ibd0_expr <= ibd0_25_thresholds[1]) &
+            (ibd1_expr >= ibd1_50_thresholds[0]) &
+            (ibd1_expr <= ibd1_50_thresholds[1]) &
+            (ibd2_expr >= ibd2_25_thresholds[0]) &
+            (ibd2_expr <= ibd2_25_thresholds[1]),
+            SIBLINGS
+        )
+            .when(
+            (kin_expr > first_degree_kin_thresholds[1]) &
+            (ibd0_expr < ibd0_0_max) &
+            (ibd1_expr >= ibd1_0_thresholds[0]) &
+            (ibd1_expr <= ibd1_0_thresholds[1]) &
+            (ibd2_expr >= ibd2_100_thresholds[0]) &
+            (ibd2_expr <= ibd2_100_thresholds[1]),
+            DUPLICATE_OR_TWINS
+        )
+            .default(AMBIGUOUS_RELATIONSHIP)
     )
 
 
 def infer_families(relationship_ht: hl.Table,
                    sex: Union[hl.Table, Dict[str, bool]],
-                   duplicated_samples: Set[str],
+                   duplicate_samples_ht: hl.Table,
                    i_col: str = 'i',
                    j_col: str = 'j',
                    relationship_col: str = 'relationship'
@@ -266,8 +305,8 @@ def infer_families(relationship_ht: hl.Table,
             """
             possible_parents = []
             for i in range(len(samples)):
-                for j in range(i, len(samples)):
-                    if related_pairs[tuple(sorted([samples[i], samples[j]]))] is None:
+                for j in range(i + 1, len(samples)):
+                    if related_pairs.get(tuple(sorted([samples[i], samples[j]]))) is None:
                         if sex.get(samples[i]) is True and sex.get(samples[j]) is False:
                             possible_parents.append((samples[i], samples[j]))
                         elif sex.get(samples[i]) is False and sex.get(samples[j]) is True:
@@ -356,36 +395,40 @@ def infer_families(relationship_ht: hl.Table,
 
         return discard_multi_parents_children(trios)
 
-    # Check relatedness table format
-    if not relationship_ht[i_col].dtype == relationship_ht[j_col].dtype:
-        logger.error("i_col and j_col of the relatedness table need to be of the same type.")
-
-    # If `relatedness_ht` is keyed by a Struct, attempt to extract `s` instead
-    if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
-        if 's' in relationship_ht[i_col]:
-            logger.warn(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
-            relationship_ht = relationship_ht.key_by(  # Needed for familial inference at this point -- should be generalized
-                **{
-                    i_col: relationship_ht[i_col].s,
-                    j_col: relationship_ht[j_col].s
-                }
-            )
-        else:
-            logger.error(
-                f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}.")
-
-    # If sex is a Table, extract sex information as a Dict
-    if isinstance(sex, hl.Table):
-        sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
-
     # Get all the relations we care about:
     # => Remove unrelateds and duplicates
-    dups = hl.literal(duplicated_samples)
+    dups = duplicate_samples_ht.aggregate(
+        hl.agg.explode(
+            lambda dup: hl.agg.collect_as_set(dup),
+            duplicate_samples_ht.filtered
+        ),
+        _localize=False
+    )
     relationship_ht = relationship_ht.filter(
         ~dups.contains(relationship_ht[i_col]) &
         ~dups.contains(relationship_ht[j_col]) &
         (relationship_ht[relationship_col] != UNRELATED)
     )
+
+    # Check relatedness table format
+    if not relationship_ht[i_col].dtype == relationship_ht[j_col].dtype:
+        logger.error("i_col and j_col of the relatedness table need to be of the same type.")
+
+    # If i_col and j_col aren't str, then convert them
+    if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
+        logger.warning(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Expression will be converted to string in Pedigrees.")
+        if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
+            logger.info(f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree.")
+            relationship_ht = relationship_ht.key_by(
+                **{
+                    i_col: hl.delimit(hl.array([hl.str(relationship_ht[i_col][x]) for x in relationship_ht[i_col]]), "_"),
+                    j_col: hl.delimit(hl.array([hl.str(relationship_ht[j_col][x]) for x in relationship_ht[j_col]]), "_")
+                }
+            )
+
+    # If sex is a Table, extract sex information as a Dict
+    if isinstance(sex, hl.Table):
+        sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
 
     # Collect all related sample pairs and
     # create a dictionnary with pairs as keys and relationships as values

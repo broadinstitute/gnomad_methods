@@ -755,35 +755,26 @@ def generate_sib_stats_expr(
         )
 
     # If a sample is in sib_ht more than one time, keep only one of the sibling pairs
+    # First filter to only samples found in mt to keep as many pairs as possible
+    s_to_keep = hl.literal((set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect())) & set(mt.s.collect()))
+    sib_ht = sib_ht.filter(s_to_keep.contains(sib_ht[i_col].s) & s_to_keep.contains(sib_ht[j_col].s))
     sib_ht = sib_ht.add_index('sib_idx')
-    sib_ht = sib_ht.annotate(
-        sibs=[sib_ht[i_col].s, sib_ht[j_col].s]
-    )
+    sib_ht = sib_ht.annotate(sib_idx=hl.str(sib_ht.sib_idx))
+    sib_ht = sib_ht.annotate(sibs=[sib_ht[i_col].s, sib_ht[j_col].s])
     sib_ht = sib_ht.explode('sibs').key_by('sibs')
-    sib_distinct_ht = sib_ht.distinct().key_by('sib_idx')
-    sib_ht = sib_ht.filter(hl.is_defined(sib_distinct_ht[sib_ht.sib_idx]))
-    sib_ht = sib_ht[mt.s]
+    sib_distinct_ht = sib_ht.distinct()
 
-    # Confirm that for each pair in sib_ht, both sibs are in the mt, only count pairs where both sibs are present
-    sib_count = mt.aggregate_cols(
-        hl.agg.filter(
-            hl.is_defined(sib_ht.sib_idx),
-            hl.agg.counter(sib_ht.sib_idx)
-        )
-    )
-    pairs_to_keep = hl.literal(
-        {
-            sib_idx for sib_idx, num in sib_count.items() if num == 2
-        },
-        dtype=hl.tset(hl.tint64)
-    )
-    logger.info(f"Generating sibling variant sharing counts using {hl.len(pairs_to_keep)} pairs.")
+    sib_counter = sib_distinct_ht.aggregate(hl.agg.counter(sib_distinct_ht.sib_idx))
+    pairs_to_keep = hl.literal({sib_idx for sib_idx, num in sib_counter.items() if num == 2})
+    sib_ht = sib_ht.filter(pairs_to_keep.contains(sib_ht.sib_idx))
+    sib_ht = sib_ht[mt.s]
+    logger.info(f"Generating sibling variant sharing counts using {hl.eval(hl.len(pairs_to_keep))} pairs.")
 
     # Create sibling sharing counters
     sib_stats = hl.struct(
         **{
             f"n_sib_shared_variants_{name}": hl.sum(hl.agg.filter(
-                pairs_to_keep.contains(sib_ht.sib_idx) & expr,
+                expr,
                 hl.agg.group_by(
                     sib_ht.sib_idx,
                     hl.or_missing(
@@ -799,7 +790,7 @@ def generate_sib_stats_expr(
     sib_stats = sib_stats.annotate(
         **{
             f'ac_sibs_{name}': hl.agg.filter(
-                expr & pairs_to_keep.contains(sib_ht.sib_idx),
+                expr & hl.is_defined(sib_ht.sib_idx),
                 hl.agg.sum(mt.GT.n_alt_alleles())
             ) for name, expr in strata.items()
         }
@@ -842,8 +833,8 @@ def default_generate_sib_stats(
 
     # TODO: Change to use SIBLINGS constant when relatedness PR goes in
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == 'Siblings')
-    sibs = hl.literal(set(sib_ht[i_col].s.collect()) & set(sib_ht[j_col].s.collect()))
-    mt = mt.filter_cols(sibs.contains(mt.s))
+    s_to_keep = set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect())
+    mt = mt.filter_cols(hl.literal(s_to_keep).contains(mt.s))
     mt = annotate_adj(mt)
 
     mt = mt.annotate_cols(
@@ -854,6 +845,8 @@ def default_generate_sib_stats(
         **generate_sib_stats_expr(
             mt,
             sib_ht,
+            i_col=i_col,
+            j_col=j_col,
             strata={
                 'raw': True,
                 'adj': mt.adj

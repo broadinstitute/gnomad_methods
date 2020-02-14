@@ -1,5 +1,5 @@
 hail
 hdbscan
 ipywidgets
-sklearn
+scikit-learn
 slackclient==2.0.0

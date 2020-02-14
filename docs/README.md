@@ -14,8 +14,10 @@ pip install -r docs/requirements.txt
 The generated HTML is placed in docs/html. To view the documentation, run:
 
 ```
-python3 -m http.server -d docs/html
+(cd docs/html && python3 -m http.server)
 ```
+
+and open http://localhost:8000 in a web browser.
 
 ## References
 

@@ -761,14 +761,11 @@ def generate_sib_stats_expr(
     sib_ht = sib_ht.add_index('sib_idx')
     sib_ht = sib_ht.annotate(sib_idx=hl.str(sib_ht.sib_idx))
     sib_ht = sib_ht.annotate(sibs=[sib_ht[i_col].s, sib_ht[j_col].s])
-    sib_ht = sib_ht.explode('sibs').key_by('sibs')
-    sib_distinct_ht = sib_ht.distinct()
-
-    sib_counter = sib_distinct_ht.aggregate(hl.agg.counter(sib_distinct_ht.sib_idx))
-    pairs_to_keep = hl.literal({sib_idx for sib_idx, num in sib_counter.items() if num == 2})
-    sib_ht = sib_ht.filter(pairs_to_keep.contains(sib_ht.sib_idx))
-    sib_ht = sib_ht[mt.s]
-    logger.info(f"Generating sibling variant sharing counts using {hl.eval(hl.len(pairs_to_keep))} pairs.")
+    sib_ht = sib_ht.explode('sibs').key_by('sibs').distinct()
+    sib_ht = sib_ht.group_by(sib_ht.sib_idx).aggregate(sibs=hl.agg.collect(sib_ht.sibs))
+    sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
+    logger.info(f"Generating sibling variant sharing counts using {sib_ht.count()} pairs.")
+    sib_ht = sib_ht.explode('sibs').key_by('sibs')[mt.s]
 
     # Create sibling sharing counters
     sib_stats = hl.struct(

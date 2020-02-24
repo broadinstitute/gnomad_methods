@@ -500,28 +500,21 @@ def get_annotations_hists(
     log10_annotations: List[str] = ["DP"],
 ) -> Dict[str, hl.expr.StructExpression]:
     """
-    Creates histograms for variant metrics.
+    Creates histograms for variant metrics in ht.info.
     Used when creating site quality distribution json files.
 
-    :param Table ht: Table with variant metrics
-    :param Dict annotations_hists: Dictionary of metrics names and their histogram values (start, end, bins)
-    :param List log10_annotations: List of metrics to log scale
+    :param ht: Table with variant metrics
+    :param annotations_hists: Dictionary of metrics names and their histogram values (start, end, bins)
+    :param log10_annotations: List of metrics to log scale
     :return: Dictionary of metrics and their histograms
     :rtype: Dict[str, hl.expr.StructExpression]
     """
-    hist_dict = {}
-
     # Check all fields in ht.info and create histograms if they are in annotations_hists dict
-    info_fields = list(ht.row.info)
-    for field in info_fields:
-        if field in annotations_hists:
-            start, end, bins = annotations_hists[field]
-            if field in log10_annotations:
-                hist_dict[field] = hl.agg.hist(hl.log10(ht[field]), start, end, bins)
-            else:
-                hist_dict[field] = hl.agg.hist(ht[field], start, end, bins)
-
-    return hist_dict
+    return {
+        field: hl.agg.hist(
+            hl.log10(ht[field]) if field in log10_annotations else ht[field], start, end, bin
+        ) for field, (start, end, bins) in annotations_hists.items() if field in ht.row.info
+    }
 
 
 def create_frequency_bins(ht: hl.Table) -> hl.Table:
@@ -529,7 +522,7 @@ def create_frequency_bins(ht: hl.Table) -> hl.Table:
     Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
     Used when creating site quality distribution json files.
 
-    :param Table ht: Table with variant metrics and frequencies
+    :param ht: Table with variant metrics and frequencies
     :return: Table with bin annotation
     :rtype: hl.Table
     """

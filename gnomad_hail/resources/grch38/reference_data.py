@@ -6,6 +6,7 @@ from gnomad_hail.resources.resource_utils import (
     import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING
 )
+from gnomad_hail.utils.generic import vep_or_lookup_vep
 import hail as hl
 
 from hail import Table
@@ -31,6 +32,12 @@ def _import_purcell_5k(path) -> hl.Table:
         locus_b37=p5k.interval.start
     )
     return p5k.key_by('locus')
+
+
+def _import_clinvar(**kwargs) -> hl.Table:
+    clinvar = import_sites_vcf(**kwargs)
+    clinvar = vep_or_lookup_vep(clinvar, reference='GRCh38')
+    return clinvar
 
 
 # Resources with no versioning needed
@@ -84,7 +91,7 @@ clinvar = VersionedTableResource(
     versions={
         "20190923": TableResource(
             path="gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.ht",
-            import_func=import_sites_vcf,
+            import_func=_import_clinvar,
             import_args={
                 "path": "gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
                 "force_bgz": True,

@@ -554,8 +554,7 @@ def create_frequency_bins_expr(
     :return: Expression containing bin name
     :rtype: hl.expr.StringExpression
     """
-    ht = ht.annotate(
-        metric=(
+    bin_expr=(
             hl.case()
             .when(AC == 1, "binned_singleton")
             .when(AC == 2, "binned_doubleton")
@@ -575,5 +574,4 @@ def create_frequency_bins_expr(
             .when((AF >= 0.5) & (AF <= 1), "binned_1")
             .default(hl.null(hl.tstr))
         )
-    )
-    return ht
+    return bin_expr

@@ -512,42 +512,67 @@ def get_annotations_hists(
     # Check all fields in ht.info and create histograms if they are in annotations_hists dict
     return {
         field: hl.agg.hist(
-            hl.log10(ht[field]) if field in log10_annotations else ht[field], start, end, bin
-        ) for field, (start, end, bins) in annotations_hists.items() if field in ht.row.info
+            hl.log10(ht[field]) if field in log10_annotations else ht[field],
+            start,
+            end,
+            bin,
+        )
+        for field, (start, end, bins) in annotations_hists.items()
+        if field in ht.row.info
     }
 
 
-def create_frequency_bins(ht: hl.Table) -> hl.Table:
+def create_frequency_bins_expr(
+    AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
+) -> hl.expr.StringExpression:
     """
     Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
+
+    Bins: 
+        - singleton
+        - doubleton 
+        - 0.00005 
+        - 0.0001 
+        - 0.0002
+        - 0.0005
+        - 0.001, 
+        - 0.002
+        - 0.005
+        - 0.01
+        - 0.02
+        - 0.05
+        - 0.1
+        - 0.2
+        - 0.5
+        - 1
+    
+    NOTE: Frequencies should be frequencies from raw data.
     Used when creating site quality distribution json files.
 
-    :param ht: Table with variant metrics and frequencies
-    :return: Table with bin annotation
-    :rtype: hl.Table
+    :param AC: Field in input that contains the allele count information
+    :param AF: Field in input that contains the allele frequency information
+    :return: Expression containing bin name
+    :rtype: hl.expr.StringExpression
     """
-    # NOTE: freq[1] is raw frequencies
     ht = ht.annotate(
         metric=(
             hl.case()
-            .when(ht.freq[1].AC == 1, "binned_singleton")
-            .when(ht.freq[1].AC == 2, "binned_doubleton")
-            .when((ht.freq[1].AC > 2) & (ht.freq[1].AF < 0.00005), "binned_0.00005")
-            .when(
-                (ht.freq[1].AF >= 0.00005) & (ht.freq[1].AF < 0.0001), "binned_0.0001"
-            )
-            .when((ht.freq[1].AF >= 0.0001) & (ht.freq[1].AF < 0.0002), "binned_0.0002")
-            .when((ht.freq[1].AF >= 0.0002) & (ht.freq[1].AF < 0.0005), "binned_0.0005")
-            .when((ht.freq[1].AF >= 0.0005) & (ht.freq[1].AF < 0.001), "binned_0.001")
-            .when((ht.freq[1].AF >= 0.001) & (ht.freq[1].AF < 0.002), "binned_0.002")
-            .when((ht.freq[1].AF >= 0.002) & (ht.freq[1].AF < 0.005), "binned_0.005")
-            .when((ht.freq[1].AF >= 0.005) & (ht.freq[1].AF < 0.01), "binned_0.01")
-            .when((ht.freq[1].AF >= 0.01) & (ht.freq[1].AF < 0.02), "binned_0.02")
-            .when((ht.freq[1].AF >= 0.02) & (ht.freq[1].AF < 0.05), "binned_0.05")
-            .when((ht.freq[1].AF >= 0.05) & (ht.freq[1].AF < 0.1), "binned_0.1")
-            .when((ht.freq[1].AF >= 0.1) & (ht.freq[1].AF < 0.2), "binned_0.2")
-            .when((ht.freq[1].AF >= 0.2) & (ht.freq[1].AF < 0.5), "binned_0.5")
-            .when((ht.freq[1].AF >= 0.5) & (ht.freq[1].AF <= 1), "binned_1")
+            .when(AC == 1, "binned_singleton")
+            .when(AC == 2, "binned_doubleton")
+            .when((AC > 2) & (AF < 0.00005), "binned_0.00005")
+            .when((AF >= 0.00005) & (AF < 0.0001), "binned_0.0001")
+            .when((AF >= 0.0001) & (AF < 0.0002), "binned_0.0002")
+            .when((AF >= 0.0002) & (AF < 0.0005), "binned_0.0005")
+            .when((AF >= 0.0005) & (AF < 0.001), "binned_0.001")
+            .when((AF >= 0.001) & (AF < 0.002), "binned_0.002")
+            .when((AF >= 0.002) & (AF < 0.005), "binned_0.005")
+            .when((AF >= 0.005) & (AF < 0.01), "binned_0.01")
+            .when((AF >= 0.01) & (AF < 0.02), "binned_0.02")
+            .when((AF >= 0.02) & (AF < 0.05), "binned_0.05")
+            .when((AF >= 0.05) & (AF < 0.1), "binned_0.1")
+            .when((AF >= 0.1) & (AF < 0.2), "binned_0.2")
+            .when((AF >= 0.2) & (AF < 0.5), "binned_0.5")
+            .when((AF >= 0.5) & (AF <= 1), "binned_1")
             .default(hl.null(hl.tstr))
         )
     )

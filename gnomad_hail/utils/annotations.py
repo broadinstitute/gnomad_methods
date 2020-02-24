@@ -419,3 +419,63 @@ def annotate_freq(
 
     # Return MT with freq row annotation
     return mt.annotate_rows(freq=freq_expr).drop('_freq_meta')
+
+
+def get_annotations_hists(
+    ht: hl.Table, annotations_hists: Dict[str, Tuple],
+    log10_annotations: List[str] = ['DP']
+    ) -> Dict[str, hl.expr.StructExpression]:
+    """
+    Creates histograms for variant metrics.
+    Used when creating site quality distribution json files.
+
+    :param Table ht: Table with variant metrics
+    :param Dict annotations_hists: Dictionary of metrics names and their histogram values (start, end, bins)
+    :param List log10_annotations: List of metrics to log scale
+    :return: Dictionary of metrics and their histograms
+    :rtype: Dict[str, hl.expr.StructExpression]
+    """
+    hist_dict = {}
+
+    # Check all fields in ht.info and create histograms if they are in annotations_hists dict
+    info_fields = list(ht.row.info)
+    for field in info_fields:
+        if field in annotations_hists:
+            start, end, bins = annotations_hists[field]
+            if field in log10_annotations:
+                hist_dict[field] = hl.agg.hist(hl.log10(ht[field]), start, end, bins)
+            else:
+                hist_dict[field] = hl.agg.hist(ht[field], start, end, bins)
+
+    return hist_dict
+
+
+def create_frequency_bins(ht: hl.Table) -> hl.Table:
+    """
+    Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
+    Used when creating site quality distribution json files.
+
+    :param Table ht: Table with variant metrics and frequencies
+    :return: Table with bin annotation
+    :rtype: hl.Table
+    """
+    # NOTE: freq[1] is raw frequencies
+    ht = ht.annotate(metric=(hl.case()
+                             .when(ht.freq[1].AC== 1, "binned_singleton")
+                             .when(ht.freq[1].AC == 2, "binned_doubleton")
+                             .when((ht.freq[1].AC > 2) & (ht.freq[1].AF < 0.00005), "binned_0.00005")
+                             .when((ht.freq[1].AF >= 0.00005) & (ht.freq[1].AF < 0.0001), "binned_0.0001")
+                             .when((ht.freq[1].AF >= 0.0001) & (ht.freq[1].AF < 0.0002), "binned_0.0002")
+                             .when((ht.freq[1].AF >= 0.0002) & (ht.freq[1].AF < 0.0005), "binned_0.0005")
+                             .when((ht.freq[1].AF >= 0.0005) & (ht.freq[1].AF < 0.001), "binned_0.001")
+                             .when((ht.freq[1].AF >= 0.001) & (ht.freq[1].AF < 0.002), "binned_0.002")
+                             .when((ht.freq[1].AF >= 0.002) & (ht.freq[1].AF < 0.005), "binned_0.005")
+                             .when((ht.freq[1].AF >= 0.005) & (ht.freq[1].AF < 0.01), "binned_0.01")
+                             .when((ht.freq[1].AF >= 0.01) & (ht.freq[1].AF < 0.02), "binned_0.02")
+                             .when((ht.freq[1].AF >= 0.02) & (ht.freq[1].AF < 0.05), "binned_0.05")
+                             .when((ht.freq[1].AF >= 0.05) & (ht.freq[1].AF < 0.1), "binned_0.1")
+                             .when((ht.freq[1].AF >= 0.1) & (ht.freq[1].AF < 0.2), "binned_0.2")
+                             .when((ht.freq[1].AF >= 0.2) & (ht.freq[1].AF < 0.5), "binned_0.5")
+                             .when((ht.freq[1].AF >= 0.5) & (ht.freq[1].AF <= 1), "binned_1")
+                             .default(hl.null(hl.tstr))))
+    return ht

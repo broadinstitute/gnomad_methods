@@ -1,13 +1,14 @@
 from gnomad_hail import *
 import itertools
+
 # TODO: Use import below when relatedness PR goes in
 # from gnomad_hail.utils.relatedness import SIBLINGS
 
 
 def pop_max_expr(
-        freq: hl.expr.ArrayExpression,
-        freq_meta: hl.expr.ArrayExpression,
-        pops_to_exclude: Optional[Set[str]] = None
+    freq: hl.expr.ArrayExpression,
+    freq_meta: hl.expr.ArrayExpression,
+    pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
     Creates an expression containing popmax: the frequency information about the population
@@ -31,29 +32,23 @@ def pop_max_expr(
     """
     _pops_to_exclude = hl.literal(pops_to_exclude)
     popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i:
-        (hl.set(freq_meta[i].keys()) == {'group', 'pop'}) &
-        (freq_meta[i]['group'] == 'adj') &
-        (~_pops_to_exclude.contains(freq_meta[i]['pop']))
+        lambda i: (hl.set(freq_meta[i].keys()) == {"group", "pop"})
+        & (freq_meta[i]["group"] == "adj")
+        & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
     )
     freq_filtered = popmax_freq_indices.map(
-        lambda i: freq[i].annotate(pop=freq_meta[i]['pop'])
-    ).filter(
-        lambda f: f.AC > 0
-    )
+        lambda i: freq[i].annotate(pop=freq_meta[i]["pop"])
+    ).filter(lambda f: f.AC > 0)
 
     sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
-    return hl.or_missing(
-        hl.len(sorted_freqs) > 0,
-        sorted_freqs[0]
-    )
+    return hl.or_missing(hl.len(sorted_freqs) > 0, sorted_freqs[0])
 
 
 def project_max_expr(
-        project_expr: hl.expr.StringExpression,
-        gt_expr: hl.expr.CallExpression,
-        alleles_expr: hl.expr.ArrayExpression,
-        n_projects: int = 5
+    project_expr: hl.expr.StringExpression,
+    gt_expr: hl.expr.CallExpression,
+    alleles_expr: hl.expr.ArrayExpression,
+    n_projects: int = 5,
 ) -> hl.expr.ArrayExpression:
     """
     Creates an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
@@ -82,15 +77,18 @@ def project_max_expr(
     n_alleles = hl.len(alleles_expr)
 
     # compute call stats by  project
-    project_cs = hl.array(hl.agg.group_by(project_expr, hl.agg.call_stats(gt_expr, alleles_expr)))
+    project_cs = hl.array(
+        hl.agg.group_by(project_expr, hl.agg.call_stats(gt_expr, alleles_expr))
+    )
 
     return hl.or_missing(
-        n_alleles > 1, # Exclude monomorphic sites
+        n_alleles > 1,  # Exclude monomorphic sites
         hl.range(1, n_alleles).map(
             lambda ai: hl.sorted(
                 project_cs.filter(
                     # filter to projects with AF > 0
-                    lambda x: x[1].AF[ai] > 0
+                    lambda x: x[1].AF[ai]
+                    > 0
                 ),
                 # order the callstats computed by AF in decreasing order
                 lambda x: -x[1].AF[ai]
@@ -102,20 +100,19 @@ def project_max_expr(
                     AF=x[1].AF[ai],
                     AN=x[1].AN,
                     homozygote_count=x[1].homozygote_count[ai],
-                    project=x[0]
+                    project=x[0],
                 )
             )
-        )
+        ),
     )
 
 
 def faf_expr(
-        freq: hl.expr.ArrayExpression,
-        freq_meta: hl.expr.ArrayExpression,
-        locus: hl.expr.LocusExpression,
-        pops_to_exclude: Optional[Set[str]] = None,
-        faf_thresholds: List[float] = [0.95, 0.99]
-
+    freq: hl.expr.ArrayExpression,
+    freq_meta: hl.expr.ArrayExpression,
+    locus: hl.expr.LocusExpression,
+    pops_to_exclude: Optional[Set[str]] = None,
+    faf_thresholds: List[float] = [0.95, 0.99],
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
     Calculates the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
@@ -141,40 +138,54 @@ def faf_expr(
     :param faf_thresholds: List of FAF thresholds to compute
     :return: (FAF expression, FAF metadata)
     """
-    _pops_to_exclude = hl.literal(pops_to_exclude) if pops_to_exclude is not None else {}
+    _pops_to_exclude = (
+        hl.literal(pops_to_exclude) if pops_to_exclude is not None else {}
+    )
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i:
-        (freq_meta[i].get('group') == 'adj') &
-        (
-            (freq_meta[i].size() == 1) |
-            ((hl.set(freq_meta[i].keys()) == {'pop', 'group'}) & (~_pops_to_exclude.contains(freq_meta[i]['pop'])))
+        lambda i: (freq_meta[i].get("group") == "adj")
+        & (
+            (freq_meta[i].size() == 1)
+            | (
+                (hl.set(freq_meta[i].keys()) == {"pop", "group"})
+                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+            )
         )
     )
     sex_faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i:
-        (freq_meta[i].get('group') == 'adj') &
-        (freq_meta[i].contains('sex')) &
-        (
-            (freq_meta[i].size() == 2) |
-            ((hl.set(freq_meta[i].keys()) == {'pop', 'group', 'sex'}) & (~_pops_to_exclude.contains(freq_meta[i]['pop'])))
+        lambda i: (freq_meta[i].get("group") == "adj")
+        & (freq_meta[i].contains("sex"))
+        & (
+            (freq_meta[i].size() == 2)
+            | (
+                (hl.set(freq_meta[i].keys()) == {"pop", "group", "sex"})
+                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+            )
         )
     )
 
     faf_expr = faf_freq_indices.map(
-        lambda i: hl.struct(**{
-            f'faf{str(threshold)[2:]}': hl.experimental.filtering_allele_frequency(freq[i].AC, freq[i].AN, threshold)
-            for threshold in faf_thresholds
-        })
+        lambda i: hl.struct(
+            **{
+                f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
+                    freq[i].AC, freq[i].AN, threshold
+                )
+                for threshold in faf_thresholds
+            }
+        )
     )
 
     faf_expr = faf_expr.extend(
         sex_faf_freq_indices.map(
             lambda i: hl.or_missing(
                 ~locus.in_autosome_or_par(),
-                hl.struct(**{
-                    f'faf{str(threshold)[2:]}': hl.experimental.filtering_allele_frequency(freq[i].AC, freq[i].AN, threshold)
-                    for threshold in faf_thresholds
-                })
+                hl.struct(
+                    **{
+                        f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
+                            freq[i].AC, freq[i].AN, threshold
+                        )
+                        for threshold in faf_thresholds
+                    }
+                ),
             )
         )
     )
@@ -184,11 +195,11 @@ def faf_expr(
 
 
 def qual_hist_expr(
-        gt_expr: Optional[hl.expr.CallExpression] = None,
-        gq_expr: Optional[hl.expr.NumericExpression] = None,
-        dp_expr: Optional[hl.expr.NumericExpression] = None,
-        ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
-        adj_expr: Optional[hl.expr.BooleanExpression] = None
+    gt_expr: Optional[hl.expr.CallExpression] = None,
+    gq_expr: Optional[hl.expr.NumericExpression] = None,
+    dp_expr: Optional[hl.expr.NumericExpression] = None,
+    ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
+    adj_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Returns a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
@@ -208,36 +219,52 @@ def qual_hist_expr(
     """
     qual_hists = {}
     if gq_expr is not None:
-        qual_hists['gq_hist'] = hl.agg.hist(gq_expr, 0, 100, 20)
+        qual_hists["gq_hist"] = hl.agg.hist(gq_expr, 0, 100, 20)
     if dp_expr is not None:
-        qual_hists['dp_hist'] = hl.agg.hist(dp_expr, 0, 100, 20)
+        qual_hists["dp_hist"] = hl.agg.hist(dp_expr, 0, 100, 20)
 
     if gt_expr is not None:
-        qual_hists= {
-            **{f'{qual_hist_name}_all': qual_hist_expr for qual_hist_name, qual_hist_expr in qual_hists.items()},
-            **{f'{qual_hist_name}_alt': hl.agg.filter(gt_expr.is_non_ref(), qual_hist_expr) for qual_hist_name, qual_hist_expr in qual_hists.items()}
+        qual_hists = {
+            **{
+                f"{qual_hist_name}_all": qual_hist_expr
+                for qual_hist_name, qual_hist_expr in qual_hists.items()
+            },
+            **{
+                f"{qual_hist_name}_alt": hl.agg.filter(
+                    gt_expr.is_non_ref(), qual_hist_expr
+                )
+                for qual_hist_name, qual_hist_expr in qual_hists.items()
+            },
         }
         if ad_expr is not None:
-            qual_hists['ab_hist_alt'] = hl.agg.filter(gt_expr.is_het(), hl.agg.hist(ad_expr[1] / hl.sum(ad_expr), 0, 1, 20))
+            qual_hists["ab_hist_alt"] = hl.agg.filter(
+                gt_expr.is_het(), hl.agg.hist(ad_expr[1] / hl.sum(ad_expr), 0, 1, 20)
+            )
 
     else:
-        qual_hists = {f'{qual_hist_name}_all': qual_hist_expr for qual_hist_name, qual_hist_expr in qual_hists.items()}
+        qual_hists = {
+            f"{qual_hist_name}_all": qual_hist_expr
+            for qual_hist_name, qual_hist_expr in qual_hists.items()
+        }
 
     if adj_expr is not None:
-        qual_hists.update({
-            f'{qual_hist_name}_adj': hl.agg.filter(adj_expr, qual_hist_expr) for qual_hist_name, qual_hist_expr in qual_hists.items()
-        })
+        qual_hists.update(
+            {
+                f"{qual_hist_name}_adj": hl.agg.filter(adj_expr, qual_hist_expr)
+                for qual_hist_name, qual_hist_expr in qual_hists.items()
+            }
+        )
 
     return hl.struct(**qual_hists)
 
 
 def age_hists_expr(
-        adj_expr: hl.expr.BooleanExpression,
-        gt_expr: hl.expr.CallExpression,
-        age_expr: hl.expr.NumericExpression,
-        lowest_boundary: int = 30,
-        highest_boundary: int = 80,
-        n_bins: int = 10
+    adj_expr: hl.expr.BooleanExpression,
+    gt_expr: hl.expr.CallExpression,
+    age_expr: hl.expr.NumericExpression,
+    lowest_boundary: int = 30,
+    highest_boundary: int = 80,
+    n_bins: int = 10,
 ) -> hl.expr.StructExpression:
     """
     Returns a StructExpression with the age histograms for hets and homs.
@@ -251,18 +278,24 @@ def age_hists_expr(
     :return: A struct with `age_hist_het` and `age_hist_hom`
     """
     return hl.struct(
-        age_hist_het=hl.agg.filter(adj_expr & gt_expr.is_het(), hl.agg.hist(age_expr, lowest_boundary, highest_boundary, n_bins)),
-        age_hist_hom=hl.agg.filter(adj_expr & gt_expr.is_hom_var(), hl.agg.hist(age_expr, lowest_boundary, highest_boundary, n_bins))
+        age_hist_het=hl.agg.filter(
+            adj_expr & gt_expr.is_het(),
+            hl.agg.hist(age_expr, lowest_boundary, highest_boundary, n_bins),
+        ),
+        age_hist_hom=hl.agg.filter(
+            adj_expr & gt_expr.is_hom_var(),
+            hl.agg.hist(age_expr, lowest_boundary, highest_boundary, n_bins),
+        ),
     )
 
 
 def annotate_freq(
-        mt: hl.MatrixTable,
-        sex_expr: Optional[hl.expr.StringExpression] = None,
-        pop_expr: Optional[hl.expr.StringExpression] = None,
-        subpop_expr: Optional[hl.expr.StringExpression] = None,
-        additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
-        downsamplings: Optional[List[int]] = None
+    mt: hl.MatrixTable,
+    sex_expr: Optional[hl.expr.StringExpression] = None,
+    pop_expr: Optional[hl.expr.StringExpression] = None,
+    subpop_expr: Optional[hl.expr.StringExpression] = None,
+    additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
+    downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
     Adds a row annotation `freq` to the input `mt` with stratified allele frequencies,
@@ -312,7 +345,9 @@ def annotate_freq(
     """
 
     if subpop_expr is not None and pop_expr is None:
-        raise NotImplementedError("annotate_freq requires pop_expr when using subpop_expr")
+        raise NotImplementedError(
+            "annotate_freq requires pop_expr when using subpop_expr"
+        )
 
     if additional_strata_expr is None:
         additional_strata_expr = {}
@@ -326,19 +361,22 @@ def annotate_freq(
         _freq_meta_expr = _freq_meta_expr.annotate(subpop=subpop_expr)
 
     # Annotate cols with provided cuts
-    mt = mt.annotate_cols(
-        _freq_meta=_freq_meta_expr
-    )
+    mt = mt.annotate_cols(_freq_meta=_freq_meta_expr)
 
     # Get counters for sex, pop and subpop if set
     cut_dict = {
-        cut: hl.agg.filter(hl.is_defined(mt._freq_meta[cut]), hl.agg.counter(mt._freq_meta[cut]))
-        for cut in mt._freq_meta if cut != 'subpop'
+        cut: hl.agg.filter(
+            hl.is_defined(mt._freq_meta[cut]), hl.agg.counter(mt._freq_meta[cut])
+        )
+        for cut in mt._freq_meta
+        if cut != "subpop"
     }
-    if 'subpop' in mt._freq_meta:
-        cut_dict['subpop'] = hl.agg.filter(
+    if "subpop" in mt._freq_meta:
+        cut_dict["subpop"] = hl.agg.filter(
             hl.is_defined(mt._freq_meta.pop) & hl.is_defined(mt._freq_meta.subpop),
-            hl.agg.counter(hl.struct(subpop=mt._freq_meta.subpop, pop=mt._freq_meta.pop))
+            hl.agg.counter(
+                hl.struct(subpop=mt._freq_meta.subpop, pop=mt._freq_meta.pop)
+            ),
         )
 
     cut_data = mt.aggregate_cols(hl.struct(**cut_dict))
@@ -347,93 +385,129 @@ def annotate_freq(
     # Create downsamplings if needed
     if downsamplings is not None:
         # Add exact pop size downsampling if pops were provided
-        if cut_data.get('pop'):
-            downsamplings = list(set(downsamplings + list(cut_data.get('pop').values())))  # Add the pops values if not in yet
-            downsamplings = sorted([x for x in downsamplings if x <= sum(cut_data.get('pop').values())])
-        logger.info(f'Found {len(downsamplings)} downsamplings: {downsamplings}')
+        if cut_data.get("pop"):
+            downsamplings = list(
+                set(downsamplings + list(cut_data.get("pop").values()))
+            )  # Add the pops values if not in yet
+            downsamplings = sorted(
+                [x for x in downsamplings if x <= sum(cut_data.get("pop").values())]
+            )
+        logger.info(f"Found {len(downsamplings)} downsamplings: {downsamplings}")
 
         # Shuffle the samples, then create a global index for downsampling
         # And a pop-index if pops were provided
         downsampling_ht = mt.cols()
         downsampling_ht = downsampling_ht.annotate(r=hl.rand_unif(0, 1))
         downsampling_ht = downsampling_ht.order_by(downsampling_ht.r)
-        scan_expr = {'global_idx': hl.scan.count()}
-        if cut_data.get('pop'):
-            scan_expr['pop_idx'] = hl.scan.counter(downsampling_ht._freq_meta.pop).get(downsampling_ht._freq_meta.pop, 0)
+        scan_expr = {"global_idx": hl.scan.count()}
+        if cut_data.get("pop"):
+            scan_expr["pop_idx"] = hl.scan.counter(downsampling_ht._freq_meta.pop).get(
+                downsampling_ht._freq_meta.pop, 0
+            )
         downsampling_ht = downsampling_ht.annotate(**scan_expr)
-        downsampling_ht = downsampling_ht.key_by('s').select(*scan_expr)
+        downsampling_ht = downsampling_ht.key_by("s").select(*scan_expr)
         mt = mt.annotate_cols(downsampling=downsampling_ht[mt.s])
         mt = mt.annotate_globals(downsamplings=downsamplings)
 
         # Create downsampled sample groups
-        sample_group_filters.extend([
-            ({'downsampling': str(ds), 'pop': 'global'},
-             mt.downsampling.global_idx < ds) for ds in downsamplings
-        ])
-        if cut_data.get('pop'):
-            sample_group_filters.extend([
-                ({'downsampling': str(ds), 'pop': pop},
-                 (mt.downsampling.pop_idx < ds) & (mt._freq_meta.pop == pop))
-                for ds in downsamplings for pop, pop_count in cut_data.get('pop', {}).items() if ds <= pop_count
-            ])
+        sample_group_filters.extend(
+            [
+                (
+                    {"downsampling": str(ds), "pop": "global"},
+                    mt.downsampling.global_idx < ds,
+                )
+                for ds in downsamplings
+            ]
+        )
+        if cut_data.get("pop"):
+            sample_group_filters.extend(
+                [
+                    (
+                        {"downsampling": str(ds), "pop": pop},
+                        (mt.downsampling.pop_idx < ds) & (mt._freq_meta.pop == pop),
+                    )
+                    for ds in downsamplings
+                    for pop, pop_count in cut_data.get("pop", {}).items()
+                    if ds <= pop_count
+                ]
+            )
 
     # Add all desired strata, starting with the full set and ending with downsamplings (if any)
-    sample_group_filters = [({}, True)] + [
-        ({'pop': pop}, mt._freq_meta.pop == pop) for pop in cut_data.get('pop', {})
-        ] + [
-           ({'sex': sex}, mt._freq_meta.sex == sex) for sex in cut_data.get('sex', {})
-       ] + [
-           ({'pop': pop, 'sex': sex}, (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop))
-           for sex in cut_data.get('sex', {}) for pop in cut_data.get('pop', {})
-       ] + [
-           ({'subpop': subpop.subpop, 'pop': subpop.pop}, (mt._freq_meta.pop == subpop.pop) & (mt._freq_meta.subpop == subpop.subpop))
-           for subpop in cut_data.get('subpop', {})
-       ] + [
-           ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
-           for strata in additional_strata_expr for s_value in cut_data.get(strata, {})
-       ] + sample_group_filters
+    sample_group_filters = (
+        [({}, True)]
+        + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
+        + [({"sex": sex}, mt._freq_meta.sex == sex) for sex in cut_data.get("sex", {})]
+        + [
+            (
+                {"pop": pop, "sex": sex},
+                (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop),
+            )
+            for sex in cut_data.get("sex", {})
+            for pop in cut_data.get("pop", {})
+        ]
+        + [
+            (
+                {"subpop": subpop.subpop, "pop": subpop.pop},
+                (mt._freq_meta.pop == subpop.pop)
+                & (mt._freq_meta.subpop == subpop.subpop),
+            )
+            for subpop in cut_data.get("subpop", {})
+        ]
+        + [
+            ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
+            for strata in additional_strata_expr
+            for s_value in cut_data.get(strata, {})
+        ]
+        + sample_group_filters
+    )
 
     # Annotate columns with group_membership
     mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
 
     # Create and annotate global expression with meta information
-    freq_meta_expr = [dict(**sample_group[0], group='adj') for sample_group in sample_group_filters]
-    freq_meta_expr.insert(1, {'group': 'raw'})
+    freq_meta_expr = [
+        dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
+    ]
+    freq_meta_expr.insert(1, {"group": "raw"})
     mt = mt.annotate_globals(freq_meta=freq_meta_expr)
 
     # Create frequency expression array from the sample groups
     freq_expr = hl.agg.array_agg(
-        lambda i: hl.agg.filter(mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)),
-        hl.range(len(sample_group_filters))
+        lambda i: hl.agg.filter(
+            mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)
+        ),
+        hl.range(len(sample_group_filters)),
     )
 
     # Insert raw as the second element of the array
-    freq_expr = freq_expr[:1].extend([
-        hl.agg.call_stats(mt.GT, mt.alleles)
-    ]).extend(
-        freq_expr[1:]
+    freq_expr = (
+        freq_expr[:1]
+        .extend([hl.agg.call_stats(mt.GT, mt.alleles)])
+        .extend(freq_expr[1:])
     )
 
     # Select non-ref allele (assumes bi-allelic)
     freq_expr = freq_expr.map(
         lambda cs: cs.annotate(
             AC=cs.AC[1],
-            AF=cs.AF[1], #TODO This is NA in case AC and AN are 0 -- should we set it to 0?
-            homozygote_count=cs.homozygote_count[1]
+            AF=cs.AF[
+                1
+            ],  # TODO This is NA in case AC and AN are 0 -- should we set it to 0?
+            homozygote_count=cs.homozygote_count[1],
         )
     )
 
     # Return MT with freq row annotation
-    return mt.annotate_rows(freq=freq_expr).drop('_freq_meta')
+    return mt.annotate_rows(freq=freq_expr).drop("_freq_meta")
 
 
 def get_lowqual_expr(
-        alleles: hl.expr.ArrayExpression,
-        qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
-        snv_phred_threshold: int = 30,
-        snv_phred_het_prior: int = 30,  # 1/1000
-        indel_phred_threshold: int = 30,
-        indel_phred_het_prior: int = 39  # 1/8,000
+    alleles: hl.expr.ArrayExpression,
+    qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
+    snv_phred_threshold: int = 30,
+    snv_phred_het_prior: int = 30,  # 1/1000
+    indel_phred_threshold: int = 30,
+    indel_phred_het_prior: int = 39,  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
@@ -446,16 +520,18 @@ def get_lowqual_expr(
     :param indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
     """
+
     def low_qual_expr(
-            ref: hl.expr.StringExpression,
-            alt: hl.expr.StringExpression,
-            qual_approx: hl.expr.NumericExpression
+        ref: hl.expr.StringExpression,
+        alt: hl.expr.StringExpression,
+        qual_approx: hl.expr.NumericExpression,
     ) -> BooleanExpression:
         return hl.cond(
             hl.is_snp(ref, alt),
             qual_approx < snv_phred_threshold + snv_phred_het_prior,
-            qual_approx < indel_phred_threshold + indel_phred_het_prior
+            qual_approx < indel_phred_threshold + indel_phred_het_prior,
         )
+
     if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):
         return hl.range(1, hl.len(alleles)).map(
             lambda ai: low_qual_expr(alleles[0], alleles[ai], qual_approx_expr[ai - 1])
@@ -465,11 +541,11 @@ def get_lowqual_expr(
 
 
 def generate_trio_stats_expr(
-        trio_mt: hl.MatrixTable,
-        transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
-        de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
-        ac_strata: Dict[str, hl.expr.BooleanExpression] = {'raw': True},
-        proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None
+    trio_mt: hl.MatrixTable,
+    transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the following counts:
@@ -522,7 +598,7 @@ def generate_trio_stats_expr(
         (hom_ref, hom_ref, het, hemi_x): (0, 1),
         (hom_ref, hom_var, het, hemi_x): (0, 1),
         (hom_var, hom_ref, het, hemi_x): (1, 0),
-        (hom_var, hom_var, het, hemi_x): (1, 0)
+        (hom_var, hom_var, het, hemi_x): (1, 0),
     }
 
     trans_count_map = hl.literal(trans_config_counts)
@@ -541,57 +617,59 @@ def generate_trio_stats_expr(
         )
 
     def _is_dnm(
-            proband_gt: hl.expr.CallExpression,
-            father_gt: hl.expr.CallExpression,
-            mother_gt: hl.expr.CallExpression,
-            locus: hl.expr.LocusExpression,
-            proband_is_female: Optional[hl.expr.BooleanExpression]
+        proband_gt: hl.expr.CallExpression,
+        father_gt: hl.expr.CallExpression,
+        mother_gt: hl.expr.CallExpression,
+        locus: hl.expr.LocusExpression,
+        proband_is_female: Optional[hl.expr.BooleanExpression],
     ) -> hl.expr.BooleanExpression:
         """
         Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
         """
         if proband_is_female is None:
-            logger.warning("Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted.")
+            logger.warning(
+                "Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted."
+            )
             return hl.or_missing(
                 locus.in_autosome(),
-                proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref()
-            )
-        return (
-            hl.cond(
-                locus.in_autosome_or_par() |
-                (proband_is_female & locus.in_x_nonpar()),
                 proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
-                hl.or_missing(
-                    ~proband_is_female,
-                    proband_gt.is_hom_var() & father_gt.is_hom_ref()
-                )
             )
+        return hl.cond(
+            locus.in_autosome_or_par() | (proband_is_female & locus.in_x_nonpar()),
+            proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
+            hl.or_missing(
+                ~proband_is_female, proband_gt.is_hom_var() & father_gt.is_hom_ref()
+            ),
         )
 
     def _ac_an_parent_child_count(
-            proband_gt: hl.expr.CallExpression,
-            father_gt: hl.expr.CallExpression,
-            mother_gt: hl.expr.CallExpression
+        proband_gt: hl.expr.CallExpression,
+        father_gt: hl.expr.CallExpression,
+        mother_gt: hl.expr.CallExpression,
     ) -> Dict[str, hl.expr.Int64Expression]:
         """
         Helper method to get AC and AN for parents and children
         """
-        ac_parent_expr = hl.agg.sum(father_gt.n_alt_alleles() + mother_gt.n_alt_alleles())
-        an_parent_expr = hl.agg.sum((hl.is_defined(father_gt) + hl.is_defined(mother_gt))*2)
+        ac_parent_expr = hl.agg.sum(
+            father_gt.n_alt_alleles() + mother_gt.n_alt_alleles()
+        )
+        an_parent_expr = hl.agg.sum(
+            (hl.is_defined(father_gt) + hl.is_defined(mother_gt)) * 2
+        )
         ac_child_expr = hl.agg.sum(proband_gt.n_alt_alleles())
-        an_child_expr = hl.agg.sum(hl.is_defined(proband_gt)*2)
+        an_child_expr = hl.agg.sum(hl.is_defined(proband_gt) * 2)
 
         return {
-            f'ac_parents': ac_parent_expr,
-            f'an_parents': an_parent_expr,
-            f'ac_children': ac_child_expr,
-            f'an_children': an_child_expr
+            f"ac_parents": ac_parent_expr,
+            f"an_parents": an_parent_expr,
+            f"ac_children": ac_child_expr,
+            f"an_children": an_child_expr,
         }
 
     # Create transmission counters
     trio_stats = hl.struct(
         **{
-            f'{name2}_{name}': hl.agg.filter(
+            f"{name2}_{name}": hl.agg.filter(
                 trio_mt.proband_entry.GT.is_non_ref() & expr,
                 hl.agg.sum(
                     trans_count_map.get(
@@ -599,19 +677,20 @@ def generate_trio_stats_expr(
                             trio_mt.proband_entry.GT.n_alt_alleles(),
                             trio_mt.father_entry.GT.n_alt_alleles(),
                             trio_mt.mother_entry.GT.n_alt_alleles(),
-                            _get_copy_state(trio_mt.locus)
+                            _get_copy_state(trio_mt.locus),
                         )
                     )[i]
-                )
-            ) for name, expr in transmitted_strata.items()
-            for i, name2 in enumerate(['n_transmitted', 'n_untransmitted'])
+                ),
+            )
+            for name, expr in transmitted_strata.items()
+            for i, name2 in enumerate(["n_transmitted", "n_untransmitted"])
         }
     )
 
     # Create de novo counters
     trio_stats = trio_stats.annotate(
         **{
-            f'n_de_novos_{name}': hl.agg.filter(
+            f"n_de_novos_{name}": hl.agg.filter(
                 _is_dnm(
                     trio_mt.proband_entry.GT,
                     trio_mt.father_entry.GT,
@@ -628,24 +707,23 @@ def generate_trio_stats_expr(
 
     trio_stats = trio_stats.annotate(
         **{
-            f'{name2}_{name}': hl.agg.filter(
+            f"{name2}_{name}": hl.agg.filter(
                 expr,
                 _ac_an_parent_child_count(
                     trio_mt.proband_entry.GT,
                     trio_mt.father_entry.GT,
-                    trio_mt.mother_entry.GT)[name2]
-            ) for name, expr in ac_strata.items()
-            for name2 in ['ac_parents', 'an_parents', 'ac_children', 'an_children']
+                    trio_mt.mother_entry.GT,
+                )[name2],
+            )
+            for name, expr in ac_strata.items()
+            for name2 in ["ac_parents", "an_parents", "ac_children", "an_children"]
         }
     )
 
     return trio_stats
 
 
-def filter_mt_to_trios(
-        mt: hl.MatrixTable,
-        fam_ht: hl.Table
-) -> hl.MatrixTable:
+def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
     """
     Filters a MatrixTable to a set of trios in `fam_ht`, filters to autosomes, and annotates with adj.
 
@@ -654,11 +732,9 @@ def filter_mt_to_trios(
     :return: A MT filtered to trios and adj annotated
     """
     # Filter MT to samples present in any of the trios
-    fam_ht = fam_ht.annotate(
-        fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id]
-    )
-    fam_ht = fam_ht.explode('fam_members', name='s')
-    fam_ht = fam_ht.key_by('s').select().distinct()
+    fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
+    fam_ht = fam_ht.explode("fam_members", name="s")
+    fam_ht = fam_ht.key_by("s").select().distinct()
 
     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
     mt = filter_to_autosomes(mt)
@@ -667,9 +743,7 @@ def filter_mt_to_trios(
     return mt
 
 
-def default_generate_trio_stats(
-        mt: hl.MatrixTable,
-    ) -> hl.Table:
+def default_generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
 
@@ -683,24 +757,15 @@ def default_generate_trio_stats(
     """
     mt = mt.filter_rows(hl.len(mt.alleles) == 2)
     logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
-    trio_adj = (mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj)
+    trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
 
     ht = mt.select_rows(
         **generate_trio_stats_expr(
             mt,
-            transmitted_strata={
-                'raw':  True,
-                'adj': trio_adj
-            },
-            de_novo_strata={
-                'raw': True,
-                'adj': trio_adj
-            },
-            ac_strata={
-                'raw': True,
-                'adj': trio_adj
-            },
-            proband_is_female_expr=mt.is_female
+            transmitted_strata={"raw": True, "adj": trio_adj},
+            de_novo_strata={"raw": True, "adj": trio_adj},
+            ac_strata={"raw": True, "adj": trio_adj},
+            proband_is_female_expr=mt.is_female,
         )
     ).rows()
 
@@ -708,12 +773,12 @@ def default_generate_trio_stats(
 
 
 def generate_sib_stats_expr(
-        mt: hl.MatrixTable,
-        sib_ht: hl.Table,
-        i_col: str = 'i',
-        j_col: str = 'j',
-        strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        is_female: Optional[hl.expr.BooleanExpression] = None
+    mt: hl.MatrixTable,
+    sib_ht: hl.Table,
+    i_col: str = "i",
+    j_col: str = "j",
+    strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    is_female: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
@@ -756,40 +821,50 @@ def generate_sib_stats_expr(
 
     # If a sample is in sib_ht more than one time, keep only one of the sibling pairs
     # First filter to only samples found in mt to keep as many pairs as possible
-    s_to_keep = hl.literal((set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect())) & set(mt.s.collect()))
-    sib_ht = sib_ht.filter(s_to_keep.contains(sib_ht[i_col].s) & s_to_keep.contains(sib_ht[j_col].s))
-    sib_ht = sib_ht.add_index('sib_idx')
+    s_to_keep = hl.literal(
+        (set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect()))
+        & set(mt.s.collect())
+    )
+    sib_ht = sib_ht.filter(
+        s_to_keep.contains(sib_ht[i_col].s) & s_to_keep.contains(sib_ht[j_col].s)
+    )
+    sib_ht = sib_ht.add_index("sib_idx")
     sib_ht = sib_ht.annotate(sib_idx=hl.str(sib_ht.sib_idx))
     sib_ht = sib_ht.annotate(sibs=[sib_ht[i_col].s, sib_ht[j_col].s])
-    sib_ht = sib_ht.explode('sibs').key_by('sibs').distinct()
+    sib_ht = sib_ht.explode("sibs").key_by("sibs").distinct()
     sib_ht = sib_ht.group_by(sib_ht.sib_idx).aggregate(sibs=hl.agg.collect(sib_ht.sibs))
     sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
-    logger.info(f"Generating sibling variant sharing counts using {sib_ht.count()} pairs.")
-    sib_ht = sib_ht.explode('sibs').key_by('sibs')[mt.s]
+    logger.info(
+        f"Generating sibling variant sharing counts using {sib_ht.count()} pairs."
+    )
+    sib_ht = sib_ht.explode("sibs").key_by("sibs")[mt.s]
 
     # Create sibling sharing counters
     sib_stats = hl.struct(
         **{
-            f"n_sib_shared_variants_{name}": hl.sum(hl.agg.filter(
-                expr,
-                hl.agg.group_by(
-                    sib_ht.sib_idx,
-                    hl.or_missing(
-                        ((is_female is not None) | mt.locus.in_autosome()) & (hl.agg.sum(hl.is_defined(mt.GT)) == 2),
-                        hl.agg.min(get_alt_count(mt.locus, mt.GT, mt.is_female))
-                    )
-                )
-            ).values())
+            f"n_sib_shared_variants_{name}": hl.sum(
+                hl.agg.filter(
+                    expr,
+                    hl.agg.group_by(
+                        sib_ht.sib_idx,
+                        hl.or_missing(
+                            ((is_female is not None) | mt.locus.in_autosome())
+                            & (hl.agg.sum(hl.is_defined(mt.GT)) == 2),
+                            hl.agg.min(get_alt_count(mt.locus, mt.GT, mt.is_female)),
+                        ),
+                    ),
+                ).values()
+            )
             for name, expr in strata.items()
         }
     )
 
     sib_stats = sib_stats.annotate(
         **{
-            f'ac_sibs_{name}': hl.agg.filter(
-                expr & hl.is_defined(sib_ht.sib_idx),
-                hl.agg.sum(mt.GT.n_alt_alleles())
-            ) for name, expr in strata.items()
+            f"ac_sibs_{name}": hl.agg.filter(
+                expr & hl.is_defined(sib_ht.sib_idx), hl.agg.sum(mt.GT.n_alt_alleles())
+            )
+            for name, expr in strata.items()
         }
     )
 
@@ -797,12 +872,12 @@ def generate_sib_stats_expr(
 
 
 def default_generate_sib_stats(
-        mt: hl.MatrixTable,
-        relatedness_ht: hl.Table,
-        sex_ht: hl.Table,
-        i_col: str = 'i',
-        j_col: str = 'j',
-        relationship_col: str = 'relationship'
+    mt: hl.MatrixTable,
+    relatedness_ht: hl.Table,
+    sex_ht: hl.Table,
+    i_col: str = "i",
+    j_col: str = "j",
+    relationship_col: str = "relationship",
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
@@ -823,20 +898,18 @@ def default_generate_sib_stats(
     """
     sex_ht = sex_ht.annotate(
         is_female=hl.case()
-            .when(sex_ht.sex_karyotype == "XX", True)
-            .when(sex_ht.sex_karyotype == "XY", False)
-            .or_missing()
+        .when(sex_ht.sex_karyotype == "XX", True)
+        .when(sex_ht.sex_karyotype == "XY", False)
+        .or_missing()
     )
 
     # TODO: Change to use SIBLINGS constant when relatedness PR goes in
-    sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == 'Siblings')
+    sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == "Siblings")
     s_to_keep = set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect())
     mt = mt.filter_cols(hl.literal(s_to_keep).contains(mt.s))
     mt = annotate_adj(mt)
 
-    mt = mt.annotate_cols(
-        is_female=sex_ht[mt.s].is_female
-    )
+    mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
 
     sib_stats_ht = mt.select_rows(
         **generate_sib_stats_expr(
@@ -844,11 +917,8 @@ def default_generate_sib_stats(
             sib_ht,
             i_col=i_col,
             j_col=j_col,
-            strata={
-                'raw': True,
-                'adj': mt.adj
-            },
-            is_female=mt.is_female
+            strata={"raw": True, "adj": mt.adj},
+            is_female=mt.is_female,
         )
     ).rows()
 

@@ -155,7 +155,7 @@ class PedigreeResource(BaseResource):
 
     :param path: The Pedigree path (typically ending in .fam or .ped)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
-    :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_args` dictionary as kwargs.
+    :param import_func: A function used to import the Pedigree. `import_func` will be passed the `import_args` dictionary as kwargs.
     :param quant_pheno: If ``True``, phenotype is interpreted as quantitative.
     :param delimiter: Field delimiter regex.
     :param missing: The string used to denote missing values. For case-control, 0, -9, and non-numeric are also treated as missing.
@@ -165,7 +165,7 @@ class PedigreeResource(BaseResource):
             self,
             path: Optional[str] = None,
             import_args: Optional[Dict[str, Any]] = None,
-            import_func: Optional[Callable[..., hl.MatrixTable]] = None,
+            import_func: Optional[Callable[..., hl.Pedigree]] = None,
             quant_pheno: bool = False,
             delimiter: str = r"\\s+",
             missing: str = 'NA'

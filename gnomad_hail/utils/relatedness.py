@@ -2,6 +2,7 @@ import hail as hl
 from gnomad_hail import logger
 from typing import Dict, List, Tuple, Set, Union, Iterable
 from collections import defaultdict
+import random
 
 UNRELATED = 'Unrelated'
 """
@@ -445,3 +446,51 @@ def infer_families(relationship_ht: hl.Table,
         trio for fam_index, parent_child_pairs in enumerate(parent_child_pairs_by_fam)
         for trio in get_trios(str(fam_index), parent_child_pairs, related_pairs)
     ])
+
+
+def create_fake_pedigree(
+    n: int, sample_list: List[str], real_pedigree: hl.Pedigree = None
+) -> hl.Pedigree:
+    """
+    Generates a pedigree made of trios created by sampling 3 random samples in the sample list.
+    If `real_pedigree` is given, then children from the real pedigrees won't be used as probands.
+    This functions insures that:
+    - All probands are unique
+    - All individuals in a trio are different
+
+    :param n: Number of fake trios desired in the pedigree
+    :param sample_list: List of samples
+    :param real_pedigree: Optional pedigree to exclude children from
+    :return: Fake pedigree
+    """
+
+    probands = set()
+    if real_pedigree is not None:
+        probands = {trio.s for trio in real_pedigree.trios}.intersection(
+            set(sample_list)
+        )
+        if len(probands) == len(sample_list):
+            raise ValueError(
+                "Full sample list for fake trios generation needs to include samples that aren't probands in the real trios."
+            )
+
+    fake_trios = []
+    for i in range(n):
+        mat_id, pat_id = random.sample(sample_list, 2)
+        s = random.choice(sample_list)
+        while s in probands.union({mat_id, pat_id}):
+            s = random.choice(sample_list)
+
+        probands.add(s)
+
+        fake_trios.append(
+            hl.Trio(
+                s=s,
+                pat_id=pat_id,
+                mat_id=mat_id,
+                fam_id=f"fake_{str(i+1)}",
+                is_female=True,
+            )
+        )
+
+    return hl.Pedigree(fake_trios)

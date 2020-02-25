@@ -512,6 +512,12 @@ def get_lowqual_expr(
     """
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
 
+    .. note::
+
+        This lowqual annotation differs from the GATK LowQual filter. GATK uses the SNV prior if the site has any SNV
+        so that SNVs are not penalized if there are also indels at those sites. This implementation will use the indel
+        threshold for indels and the SNV threshold for the SNVs therefore excluding more indels than the GATK filter.
+
     :param alleles: Array of alleles
     :param qual_approx_expr: QUALapprox or AS_QUALapprox
     :param snv_phred_threshold: Phred-scaled SNV "emission" threshold (similar to GATK emission threshold)

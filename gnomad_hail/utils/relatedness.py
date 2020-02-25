@@ -80,7 +80,7 @@ def get_duplicated_samples(
     return duplicated_samples
 
 
-def get_duplicate_samples_ht(
+def get_duplicated_samples_ht(
         duplicated_samples: List[Set[str]],
         samples_rankings_ht: hl.Table,
         rank_ann: str = 'rank'

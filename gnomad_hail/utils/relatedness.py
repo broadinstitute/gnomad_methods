@@ -89,7 +89,7 @@ def get_duplicate_samples_ht(
     Creates a HT with duplicated samples sets.
     Each row is indexed by the sample that is kept and also contains the set of duplicate samples that should be filtered.
 
-    `samples_rankings_ht` is a HT containing a global rank for each of the sample (smaller is better).
+    `samples_rankings_ht` is a HT containing a global rank for each of the samples (smaller is better).
 
     :param duplicated_samples: List of sets of duplicated samples
     :param samples_rankings_ht: HT with global rank for each sample
@@ -418,13 +418,15 @@ def infer_families(relationship_ht: hl.Table,
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
         logger.warning(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Expression will be converted to string in Pedigrees.")
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
-            logger.info(f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree.")
+            logger.warning(f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree.")
             relationship_ht = relationship_ht.key_by(
                 **{
                     i_col: hl.delimit(hl.array([hl.str(relationship_ht[i_col][x]) for x in relationship_ht[i_col]]), "_"),
                     j_col: hl.delimit(hl.array([hl.str(relationship_ht[j_col][x]) for x in relationship_ht[j_col]]), "_")
                 }
             )
+        else:
+            raise NotImplementedError("The `i_col` and `j_col` columns of the `relationship_ht` argument passed to infer_families are not of type StringExpression or Struct.")
 
     # If sex is a Table, extract sex information as a Dict
     if isinstance(sex, hl.Table):

@@ -40,6 +40,28 @@ def get_module_importable_resources(module, prefix: Optional[str] = None) -> Dic
     return resources
 
 
+def get_resources_descriptions(resources: Dict[str, Tuple[str, BaseResource]], width: Optional[int] = 100) -> str:
+    """
+    Returns a string listing all resources in the input dict along with the path from which they
+    are imported and the path at which they are stored.
+
+    :param resources: A dict returned from get_module_importable_resources
+    :param width: Maximum width of lines in the returned string
+    """
+    wrapper = textwrap.TextWrapper(width=width, initial_indent=" " * 2, subsequent_indent=" " * 4)
+    return "\n".join(
+        itertools.chain.from_iterable(
+            [
+                f"{resource_arg}:",
+                wrapper.fill(f"import {getattr(resource, 'import_args', {}).get('path', '???')}"),
+                wrapper.fill(f"to {resource.path}"),
+                "",
+            ]
+            for resource_arg, (resource_name, resource) in resources.items()
+        )
+    )
+
+
 grch37_resources = get_module_importable_resources(grch37, 'grch37')
 grch38_resources = get_module_importable_resources(grch38, 'grch38')
 all_resources = {**grch37_resources, **grch38_resources}
@@ -53,19 +75,13 @@ def main(args):
 
 
 if __name__ == "__main__":
-    wrapper = textwrap.TextWrapper(width=100, initial_indent=" " * 2, subsequent_indent=" " * 4)
-    resources_help = "Resource to import. Choices are:\n" + "\n".join(
-        itertools.chain.from_iterable(
-            [
-                f"\n{resource_arg}:",
-                wrapper.fill(f"import {getattr(resource, 'import_args', {}).get('path', '???')}"),
-                wrapper.fill(f"to {resource.path}"),
-            ]
-            for resource_arg, (resource_name, resource) in all_resources.items()
-        )
-    )
-
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("resources", choices=list(all_resources.keys()), metavar="resource", nargs="+", help=resources_help)
+    parser.add_argument(
+        "resources",
+        choices=list(all_resources.keys()),
+        metavar="resource",
+        nargs="+",
+        help="Resource to import. Choices are:\n\n" + get_resources_descriptions(all_resources),
+    )
     parser.add_argument("--overwrite", help="Overwrites existing files", action="store_true")
     main(parser.parse_args())

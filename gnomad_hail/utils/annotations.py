@@ -810,37 +810,39 @@ def generate_sib_stats_expr(
         """
         Helper method to calculate alt allele count with sex info if present
         """
+        if is_female is None:
+            return hl.or_missing(locus.in_autosome(), gt.n_alt_alleles())
         return (
             hl.case()
+            .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
             .when(
                 ~is_female & (locus.in_x_nonpar() | locus.in_y_nonpar()),
                 hl.min(1, gt.n_alt_alleles()),
             )
             .when(is_female & locus.in_y_nonpar(), 0)
-            .when(is_female | locus.in_autosome_or_par(), gt.n_alt_alleles())
             .default(0)
         )
 
     if is_female is None:
         logger.warning(
-            "Since no proband sex expression was given to generate_sib_stats_expr, only variants in autosomes will be counted."
+            "Since no sex expression was given to generate_sib_stats_expr, only variants in autosomes will be counted."
         )
 
     # If a sample is in sib_ht more than one time, keep only one of the sibling pairs
     # First filter to only samples found in mt to keep as many pairs as possible
-    s_to_keep = hl.literal(
-        (set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect()))
-        & set(mt.s.collect())
-    )
+    s_to_keep = mt.aggregate_cols(hl.agg.collect_as_set(mt.s), _localize=False)
     sib_ht = sib_ht.filter(
         s_to_keep.contains(sib_ht[i_col].s) & s_to_keep.contains(sib_ht[j_col].s)
     )
     sib_ht = sib_ht.add_index("sib_idx")
-    sib_ht = sib_ht.annotate(sib_idx=hl.str(sib_ht.sib_idx))
     sib_ht = sib_ht.annotate(sibs=[sib_ht[i_col].s, sib_ht[j_col].s])
-    sib_ht = sib_ht.explode("sibs").key_by("sibs").distinct()
+    sib_ht = sib_ht.explode("sibs")
+    sib_ht = sib_ht.group_by("sibs").aggregate(
+        sib_idx=(hl.agg.take(sib_ht.sib_idx, 1, ordering=sib_ht.sib_idx)[0])
+    )
     sib_ht = sib_ht.group_by(sib_ht.sib_idx).aggregate(sibs=hl.agg.collect(sib_ht.sibs))
     sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
+
     logger.info(
         f"Generating sibling variant sharing counts using {sib_ht.count()} pairs."
     )
@@ -855,9 +857,8 @@ def generate_sib_stats_expr(
                     hl.agg.group_by(
                         sib_ht.sib_idx,
                         hl.or_missing(
-                            ((is_female is not None) | mt.locus.in_autosome())
-                            & (hl.agg.sum(hl.is_defined(mt.GT)) == 2),
-                            hl.agg.min(get_alt_count(mt.locus, mt.GT, mt.is_female)),
+                            hl.agg.sum(hl.is_defined(mt.GT)) == 2,
+                            hl.agg.min(get_alt_count(mt.locus, mt.GT, is_female)),
                         ),
                     ),
                 ).values()
@@ -912,11 +913,16 @@ def default_generate_sib_stats(
 
     # TODO: Change to use SIBLINGS constant when relatedness PR goes in
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == "Siblings")
-    s_to_keep = set(sib_ht[i_col].s.collect()) | set(sib_ht[j_col].s.collect())
-    mt = mt.filter_cols(hl.literal(s_to_keep).contains(mt.s))
+    s_to_keep = sib_ht.aggregate(
+        hl.agg.explode(
+            lambda s: hl.agg.collect_as_set(s), [sib_ht[i_col].s, sib_ht[j_col].s]
+        ),
+        _localize=False,
+    )
+    mt = mt.filter_cols(s_to_keep.contains(mt.s))
     mt = annotate_adj(mt)
 
-    mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
+    # mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
 
     sib_stats_ht = mt.select_rows(
         **generate_sib_stats_expr(
@@ -925,7 +931,7 @@ def default_generate_sib_stats(
             i_col=i_col,
             j_col=j_col,
             strata={"raw": True, "adj": mt.adj},
-            is_female=mt.is_female,
+            # is_female=mt.is_female,
         )
     ).rows()
 

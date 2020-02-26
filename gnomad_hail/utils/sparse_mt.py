@@ -445,8 +445,8 @@ def split_info_annotation(
     """
     # Index AS annotations
     info_expr=info_expr.annotate(
-        **{f: info[f][a_index - 1] for f in info if f.startswith("AC") or (f.startswith("AS_") and not f == "AS_SB_TABLE")},
-        AS_SB_TABLE=info.AS_SB_TABLE[0].extend(info.AS_SB_TABLE[a_index])
+        **{f: info_expr[f][a_index - 1] for f in info_expr if f.startswith("AC") or (f.startswith("AS_") and not f == "AS_SB_TABLE")},
+        AS_SB_TABLE=info_expr.AS_SB_TABLE[0].extend(info_expr.AS_SB_TABLE[a_index])
         )
     return info_expr
 

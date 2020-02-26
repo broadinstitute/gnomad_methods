@@ -922,7 +922,7 @@ def default_generate_sib_stats(
     mt = mt.filter_cols(s_to_keep.contains(mt.s))
     mt = annotate_adj(mt)
 
-    # mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
+    mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
 
     sib_stats_ht = mt.select_rows(
         **generate_sib_stats_expr(
@@ -931,7 +931,7 @@ def default_generate_sib_stats(
             i_col=i_col,
             j_col=j_col,
             strata={"raw": True, "adj": mt.adj},
-            # is_female=mt.is_female,
+            is_female=mt.is_female,
         )
     ).rows()
 

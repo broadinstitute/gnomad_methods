@@ -1,4 +1,6 @@
+from .annotations import get_lowqual_expr
 from .generic import *
+from .gnomad_functions import get_adj_expr
 
 INFO_SUM_AGG_FIELDS= ['QUALapprox']
 INFO_INT32_SUM_AGG_FIELDS = ['VarDP']
@@ -361,6 +363,106 @@ def get_site_info_expr(
         )
 
     return info
+
+
+def default_compute_info(
+    mt: hl.MatrixTable,
+    site_annotations: bool = False,
+    n_partitions: int = 5000
+) -> hl.Table:
+    """
+    Computes a HT with the typical GATK allele-specific (AS) info fields 
+    as well as ACs and lowqual fields.
+    Note that this table doesn't split multi-allelic sites.
+
+    :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
+    :param site_annotations: Whether to also generate site level info fields. Default is False.
+    :param n_partitions: Number of desired partitions for output Table. Default is 5000.
+    :return: Table with info fields
+    :rtype: Table
+    """
+    # Move gvcf info entries out from nested struct
+    mt = mt.transmute_entries(**mt.gvcf_info)
+
+    # Compute AS info expr
+    info_expr = get_as_info_expr(mt)
+
+    if site_annotations:
+        info_expr = info_expr.annotate(
+            **get_site_info_expr(
+                mt
+            )
+        )
+
+    # Add AC and AC_raw:
+    # First compute ACs for each non-ref allele, grouped by adj
+    grp_ac_expr = hl.agg.array_agg(
+        lambda ai: hl.agg.filter(
+            mt.LA.contains(ai),
+            hl.agg.group_by(
+                get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD),
+                hl.agg.sum(
+                    mt.LGT.one_hot_alleles(mt.LA.map(lambda x: hl.str(x)))[mt.LA.index(ai)]
+                )
+            )
+        ),
+        hl.range(1, hl.len(mt.alleles))
+    )
+
+    # Then, for each non-ref allele, compute
+    # AC as the adj group
+    # AC_raw as the sum of adj and non-adj groups
+    info_expr = info_expr.annotate(
+        AC_raw=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))),
+        AC=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0)))
+    )
+
+    info_ht = mt.select_rows(
+        info=info_expr
+    ).rows()
+
+    # Add lowqual flag
+    info_ht = info_ht.annotate(
+        lowqual=get_lowqual_expr(
+            info_ht.alleles,
+            info_ht.info.QUALapprox
+        )
+    )
+
+    return info_ht.naive_coalesce(n_partitions)
+
+
+def split_info_annotation(
+    info_expr: hl.expr.StructExpression,
+    a_index: hl.expr.Int32Expression
+) -> hl.expr.StructExpression:
+    """
+    Splits multi-allelic allele-specific info fields.
+
+    :param info_expr: Field containing info struct.
+    :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
+    :return: Info struct with split annotations.
+    """
+    # Index AS annotations
+    info_expr=info_expr.annotate(
+        **{f: info_expr[f][a_index - 1] for f in info_expr if f.startswith("AC") or (f.startswith("AS_") and not f == "AS_SB_TABLE")},
+        AS_SB_TABLE=info_expr.AS_SB_TABLE[0].extend(info_expr.AS_SB_TABLE[a_index])
+        )
+    return info_expr
+
+
+def split_lowqual_annotation(
+    lowqual_expr: hl.expr.ArrayExpression,
+    a_index: hl.expr.Int32Expression
+) -> hl.expr.BooleanExpression:
+    """
+    Splits multi-allelic low QUAL annotation.
+
+    :param lowqual_expr: Field containing low QUAL annotation.
+    :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
+    :return: Low QUAL expression for particular allele.
+    """
+    return lowqual_expr[a_index - 1]
 
 
 def impute_sex_ploidy(

@@ -936,3 +936,86 @@ def default_generate_sib_stats(
     ).rows()
 
     return sib_stats_ht
+  
+ 
+def get_annotations_hists(
+    ht: hl.Table,
+    annotations_hists: Dict[str, Tuple],
+    log10_annotations: List[str] = ["DP"],
+) -> Dict[str, hl.expr.StructExpression]:
+    """
+    Creates histograms for variant metrics in ht.info.
+    Used when creating site quality distribution json files.
+
+    :param ht: Table with variant metrics
+    :param annotations_hists: Dictionary of metrics names and their histogram values (start, end, bins)
+    :param log10_annotations: List of metrics to log scale
+    :return: Dictionary of merics and their histograms
+    :rtype: Dict[str, hl.expr.StructExpression]
+    """
+    # Check all fields in ht.info and create histograms if they are in annotations_hists dict
+    return {
+        field: hl.agg.hist(
+            hl.log10(ht[field]) if field in log10_annotations else ht[field],
+            start,
+            end,
+            bin,
+        )
+        for field, (start, end, bins) in annotations_hists.items()
+        if field in ht.row.info
+    }
+
+
+def create_frequency_bins_expr(
+    AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
+) -> hl.expr.StringExpression:
+    """
+    Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
+
+    Bins: 
+        - singleton
+        - doubleton 
+        - 0.00005 
+        - 0.0001 
+        - 0.0002
+        - 0.0005
+        - 0.001, 
+        - 0.002
+        - 0.005
+        - 0.01
+        - 0.02
+        - 0.05
+        - 0.1
+        - 0.2
+        - 0.5
+        - 1
+    
+    NOTE: Frequencies should be frequencies from raw data.
+    Used when creating site quality distribution json files.
+
+    :param AC: Field in input that contains the allele count information
+    :param AF: Field in input that contains the allele frequency information
+    :return: Expression containing bin name
+    :rtype: hl.expr.StringExpression
+    """
+    bin_expr=(
+            hl.case()
+            .when(AC == 1, "binned_singleton")
+            .when(AC == 2, "binned_doubleton")
+            .when((AC > 2) & (AF < 0.00005), "binned_0.00005")
+            .when((AF >= 0.00005) & (AF < 0.0001), "binned_0.0001")
+            .when((AF >= 0.0001) & (AF < 0.0002), "binned_0.0002")
+            .when((AF >= 0.0002) & (AF < 0.0005), "binned_0.0005")
+            .when((AF >= 0.0005) & (AF < 0.001), "binned_0.001")
+            .when((AF >= 0.001) & (AF < 0.002), "binned_0.002")
+            .when((AF >= 0.002) & (AF < 0.005), "binned_0.005")
+            .when((AF >= 0.005) & (AF < 0.01), "binned_0.01")
+            .when((AF >= 0.01) & (AF < 0.02), "binned_0.02")
+            .when((AF >= 0.02) & (AF < 0.05), "binned_0.05")
+            .when((AF >= 0.05) & (AF < 0.1), "binned_0.1")
+            .when((AF >= 0.1) & (AF < 0.2), "binned_0.2")
+            .when((AF >= 0.2) & (AF < 0.5), "binned_0.5")
+            .when((AF >= 0.5) & (AF <= 1), "binned_1")
+            .default(hl.null(hl.tstr))
+        )
+    return bin_expr

@@ -434,17 +434,17 @@ def split_info(ht: hl.Table) -> hl.Table:
     :rtype: Table
     """
     # Split multiallelics
-    info_ht = hl.split_multi(info_ht)
+    ht = hl.split_multi(ht)
 
     # Index AS annotations
-    info_ht = info_ht.annotate(
-        info=info_ht.info.annotate(
-            **{f: info_ht.info[f][info_ht.a_index - 1] for f in info_ht.info if f.startswith("AC") or (f.startswith("AS_") and not f == 'AS_SB_TABLE')},
-            AS_SB_TABLE=info_ht.info.AS_SB_TABLE[0].extend(info_ht.info.AS_SB_TABLE[info_ht.a_index])
+    ht = ht.annotate(
+        info=ht.info.annotate(
+            **{f: ht.info[f][ht.a_index - 1] for f in ht.info if f.startswith("AC") or (f.startswith("AS_") and not f == 'AS_SB_TABLE')},
+            AS_SB_TABLE=ht.info.AS_SB_TABLE[0].extend(ht.info.AS_SB_TABLE[ht.a_index])
         ),
-        lowqual=info_ht.lowqual[info_ht.a_index - 1]
+        lowqual=ht.lowqual[ht.a_index - 1]
     )
-    return info_ht
+    return ht
 
 
 def impute_sex_ploidy(

@@ -1,6 +1,6 @@
+from .annotations import get_lowqual_expr
 from .generic import *
 from .gnomad_functions import get_adj_expr
-from .variant_qc import get_lowqual_expr
 
 INFO_SUM_AGG_FIELDS= ['QUALapprox']
 INFO_INT32_SUM_AGG_FIELDS = ['VarDP']
@@ -367,6 +367,7 @@ def get_site_info_expr(
 
 def default_compute_info(
     mt: hl.MatrixTable,
+    site_annotations: bool = False,
     n_partitions: int = 5000
 ) -> hl.Table:
     """
@@ -375,6 +376,7 @@ def default_compute_info(
     Note that this table doesn't split multi-allelic sites.
 
     :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
+    :param site_annotations: Whether to also generate site level info fields. Default is False.
     :param n_partitions: Number of desired partitions for output Table. Default is 5000.
     :return: Table with info fields
     :rtype: Table
@@ -384,6 +386,13 @@ def default_compute_info(
 
     # Compute AS info expr
     info_expr = get_as_info_expr(mt)
+
+    if site_annotations:
+        info_expr = info_expr.annotate(
+            **get_site_info_expr(
+                mt
+            )
+        )
 
     # Add AC and AC_raw:
     # First compute ACs for each non-ref allele, grouped by adj
@@ -416,37 +425,44 @@ def default_compute_info(
     info_ht = info_ht.annotate(
         lowqual=get_lowqual_expr(
             info_ht.alleles,
-            info_ht.info.QUALapprox,
-            # The indel het prior used for gnomad v3 was 1/10k bases (phred=40).
-            # This value is usually 1/8k bases (phred=39).
-            indel_phred_het_prior=40
+            info_ht.info.QUALapprox
         )
     )
 
     return info_ht.naive_coalesce(n_partitions)
 
 
-def split_info(ht: hl.Table) -> hl.Table:
+def split_info_annotation(
+    info_expr: hl.expr.StructExpression,
+    a_index: hl.expr.Int32Expression
+) -> hl.expr.StructExpression:
     """
-    Generates an info table that splits multi-allelic sites from
-    the multi-allelic info table.
+    Splits multi-allelic allele-specific info fields.
 
-    :param ht: Input unsplit info Table.
-    :return: Info table with split multi-allelics
-    :rtype: Table
+    :param info_expr: Field containing info struct.
+    :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
+    :return: Info struct with split annotations.
     """
-    # Split multiallelics
-    ht = hl.split_multi(ht)
-
     # Index AS annotations
-    ht = ht.annotate(
-        info=ht.info.annotate(
-            **{f: ht.info[f][ht.a_index - 1] for f in ht.info if f.startswith("AC") or (f.startswith("AS_") and not f == 'AS_SB_TABLE')},
-            AS_SB_TABLE=ht.info.AS_SB_TABLE[0].extend(ht.info.AS_SB_TABLE[ht.a_index])
-        ),
-        lowqual=ht.lowqual[ht.a_index - 1]
-    )
-    return ht
+    info_expr=info_expr.annotate(
+        **{f: info[f][a_index - 1] for f in info if f.startswith("AC") or (f.startswith("AS_") and not f == "AS_SB_TABLE")},
+        AS_SB_TABLE=info.AS_SB_TABLE[0].extend(info.AS_SB_TABLE[a_index])
+        )
+    return info_expr
+
+
+def split_lowqual_annotation(
+    lowqual_expr: hl.expr.ArrayExpression,
+    a_index: hl.expr.Int32Expression
+) -> hl.expr.BooleanExpression:
+    """
+    Splits multi-allelic low QUAL annotation.
+
+    :param lowqual_expr: Field containing low QUAL annotation.
+    :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
+    :return: Low QUAL expression for particular allele.
+    """
+    return lowqual_expr[a_index - 1]
 
 
 def impute_sex_ploidy(

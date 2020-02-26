@@ -52,14 +52,25 @@ def get_duplicated_samples(
     :return: List of sets of samples that are duplicates
     """
 
-    def get_all_dups(s, dups, samples_duplicates):
+    def get_all_dups(s: str, dups: Set[str], samples_duplicates: Dict[str, Set[str]]) -> Tuple[Set[str], Dict[str, Set[str]]]:
+        """
+        Creates the set of all duplicated samples corresponding to `s` that are found in `sample_duplicates`.
+        Also returns the remaining sample duplicates after removeing all duplicated samples corresponding to `s`.
+
+        Works by recursively adding duplicated samples to the set.
+
+        :param s: sample to identify duplicates for
+        :param dups: set of corresponding samples already identified
+        :param samples_duplicates: dict of sample -> duplicate-pair left to assign
+        :return: (set of duplicates corresponding to s found in samples_duplicates, remaining samples_duplicates)
+        """
         if s in samples_duplicates:
             dups.add(s)
             s_dups = samples_duplicates.pop(s)
             for s_dup in s_dups:
                 if s_dup not in dups:
-                    dups = get_all_dups(s_dup, dups, samples_duplicates)
-        return dups
+                    dups, samples_duplicates = get_all_dups(s_dup, dups, samples_duplicates)
+        return dups, samples_duplicates
 
     logger.info("Computing duplicate sets")
     dup_pairs = relationship_ht.aggregate(
@@ -76,7 +87,8 @@ def get_duplicated_samples(
 
     duplicated_samples = []
     while len(samples_duplicates) > 0:
-        duplicated_samples.append(get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates))
+        dup_set, samples_duplicates = get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates)
+        duplicated_samples.append(dup_set)
 
     return duplicated_samples
 
@@ -242,16 +254,15 @@ def infer_families(relationship_ht: hl.Table,
 
     def group_parent_child_pairs_by_fam(parent_child_pairs: Iterable[Tuple[str, str]]) -> List[List[Tuple[str, str]]]:
         """
-        Takes all parent-children pairs and groups them by family id.
-        A family here is defined as a list of sample-pairs, which all share at least one sample with at least one other sample-pair.
-        Family ids
+        Takes all parent-children pairs and groups them by family.
+        A family here is defined as a list of sample-pairs which all share at least one sample with at least one other sample-pair in the list.
 
         :param parent_child_pairs: All the parent-children pairs
-        :return: A list of families, where each element of the list a list of the parent-children pairs
+        :return: A list of families, where each element of the list is a list of the parent-children pairs
         """
         fam_id = 1  # stores the current family id
         s_fam = dict()  # stores the family id for each sample
-        fams = defaultdict(list)
+        fams = defaultdict(list)  # stores fam_id -> sample-pairs
         for pair in parent_child_pairs:
             if pair[0] in s_fam:
                 if pair[1] in s_fam:
@@ -262,13 +273,13 @@ def infer_families(relationship_ht: hl.Table,
                             if s_fam[s] == fam_id_to_merge:
                                 s_fam[s] = new_fam_id
                         fams[new_fam_id].extend(fams.pop(fam_id_to_merge))
-                else:
+                else:  # If only the 1st sample in the pair is already in a family, assign the 2nd sample in the pair to the same family
                     s_fam[pair[1]] = s_fam[pair[0]]
                 fams[s_fam[pair[0]]].append(pair)
-            elif pair[1] in s_fam:
+            elif pair[1] in s_fam:   # If only the 2nd sample in the pair is already in a family, assign the 1st sample in the pair to the same family
                 s_fam[pair[0]] = s_fam[pair[1]]
                 fams[s_fam[pair[1]]].append(pair)
-            else:
+            else:  # If none of the samples in the pair is already in a family, create a new family
                 s_fam[pair[0]] = fam_id
                 s_fam[pair[1]] = fam_id
                 fams[fam_id].append(pair)
@@ -316,23 +327,23 @@ def infer_families(relationship_ht: hl.Table,
 
         def get_children(possible_parents: Tuple[str, str]) -> List[str]:
             """
-            2. For each possible parent pair, a list of all children is constructed (each child in the list has a parent-offspring pair with each parent)
+            2. For a given possible parent pair, a list of all children is constructed (each child in the list has a parent-offspring pair with each parent)
 
             :param possible_parents: A pair of possible parents
             :return: The list of all children (if any) corresponding to the possible parents
             """
-            offsprings = defaultdict(list)
+            possible_offsprings = defaultdict(set)  # stores sample -> set of parents in the possible_parents where (sample, parent) is found in possible_child_pairs
             for pair in parent_child_pairs:
                 if possible_parents[0] == pair[0]:
-                    offsprings[pair[1]].append(possible_parents[0])
+                    possible_offsprings[pair[1]].add(possible_parents[0])
                 elif possible_parents[0] == pair[1]:
-                    offsprings[pair[0]].append(possible_parents[0])
+                    possible_offsprings[pair[0]].add(possible_parents[0])
                 elif possible_parents[1] == pair[0]:
-                    offsprings[pair[1]].append(possible_parents[1])
+                    possible_offsprings[pair[1]].add(possible_parents[1])
                 elif possible_parents[1] == pair[1]:
-                    offsprings[pair[0]].append(possible_parents[1])
+                    possible_offsprings[pair[0]].add(possible_parents[1])
 
-            return [s for s, parents in offsprings.items() if len(parents) == 2]
+            return [s for s, parents in possible_offsprings.items() if len(parents) == 2]
 
         def check_sibs(children: List[str]) -> bool:
             """
@@ -360,7 +371,7 @@ def infer_families(relationship_ht: hl.Table,
 
             for s, s_trios in children_trios.items():
                 if len(s_trios) > 1:
-                    logger.warn("Discarded duplicated child {0} found multiple in trios: {1}".format(
+                    logger.warning("Discarded duplicated child {0} found multiple in trios: {1}".format(
                         s,
                         ", ".join([str(trio) for trio in s_trios])
                     ))

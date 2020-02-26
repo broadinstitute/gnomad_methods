@@ -363,6 +363,90 @@ def get_site_info_expr(
     return info
 
 
+def default_compute_info(
+    mt: hl.MatrixTable,
+    n_partitions: int = 5000
+) -> hl.Table:
+    """
+    Computes a HT with the typical GATK allele-specific (AS) info fields 
+    as well as ACs and lowqual fields.
+    Note that this table doesn't split multi-allelic sites.
+
+    :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
+    :param n_partitions: Number of desired partitions for output Table. Default is 5000.
+    :return: Table with info fields
+    :rtype: Table
+    """
+    # Move gvcf info entries out from nested struct
+    mt = mt.transmute_entries(**mt.gvcf_info)
+
+    # Compute AS info expr
+    info_expr = get_as_info_expr(mt)
+
+    # Add AC and AC_raw:
+    # First compute ACs for each non-ref allele, grouped by adj
+    grp_ac_expr = hl.agg.array_agg(
+        lambda ai: hl.agg.filter(
+            mt.LA.contains(ai),
+            hl.agg.group_by(
+                get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD),
+                hl.agg.sum(
+                    mt.LGT.one_hot_alleles(mt.LA.map(lambda x: hl.str(x)))[mt.LA.index(ai)]
+                )
+            )
+        ),
+        hl.range(1, hl.len(mt.alleles))
+    )
+
+    # Then, for each non-ref allele, compute
+    # AC as the adj group
+    # AC_raw as the sum of adj and non-adj groups
+    info_expr = info_expr.annotate(
+        AC_raw=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))),
+        AC=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0)))
+    )
+
+    info_ht = mt.select_rows(
+        info=info_expr
+    ).rows()
+
+    # Add lowqual flag
+    info_ht = info_ht.annotate(
+        lowqual=get_lowqual_expr(
+            info_ht.alleles,
+            info_ht.info.QUALapprox,
+            # The indel het prior used for gnomad v3 was 1/10k bases (phred=40).
+            # This value is usually 1/8k bases (phred=39).
+            indel_phred_het_prior=40
+        )
+    )
+
+    return info_ht.naive_coalesce(n_partitions)
+
+
+def split_info(ht: hl.Table) -> hl.Table:
+    """
+    Generates an info table that splits multi-allelic sites from
+    the multi-allelic info table.
+
+    :param ht: Input unsplit info Table.
+    :return: Info table with split multi-allelics
+    :rtype: Table
+    """
+    # Split multiallelics
+    info_ht = hl.split_multi(info_ht)
+
+    # Index AS annotations
+    info_ht = info_ht.annotate(
+        info=info_ht.info.annotate(
+            **{f: info_ht.info[f][info_ht.a_index - 1] for f in info_ht.info if f.startswith("AC") or (f.startswith("AS_") and not f == 'AS_SB_TABLE')},
+            AS_SB_TABLE=info_ht.info.AS_SB_TABLE[0].extend(info_ht.info.AS_SB_TABLE[info_ht.a_index])
+        ),
+        lowqual=info_ht.lowqual[info_ht.a_index - 1]
+    )
+    return info_ht
+
+
 def impute_sex_ploidy(
         mt: hl.MatrixTable,
         excluded_intervals: Optional[hl.Table] = None,

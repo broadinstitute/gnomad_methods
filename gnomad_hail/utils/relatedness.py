@@ -1,6 +1,6 @@
 import hail as hl
 from gnomad_hail import logger
-from typing import Dict, List, Tuple, Set, Union, Iterable
+from typing import Dict, List, Tuple, Set, Union, Iterable, Optional
 from collections import defaultdict
 import random
 
@@ -460,48 +460,54 @@ def infer_families(relationship_ht: hl.Table,
 
 
 def create_fake_pedigree(
-    n: int, sample_list: List[str], real_pedigree: hl.Pedigree = None
+        n: int,
+        sample_list: List[str],
+        exclude_real_probands: bool = False,
+        max_tries: int = 10,
+        real_pedigree: Optional[hl.Pedigree] = None
 ) -> hl.Pedigree:
     """
     Generates a pedigree made of trios created by sampling 3 random samples in the sample list.
-    If `real_pedigree` is given, then children from the real pedigrees won't be used as probands.
-    This functions insures that:
-    - All probands are unique
-    - All individuals in a trio are different
+    If `real_pedigree` is given, then children the resulting fake trios will not include any trio with proband - parents that are in the real ones.
+    Each sample can be used only once as a proband in the resulting trios.
+    Sex of probands in fake trios is random.
 
     :param n: Number of fake trios desired in the pedigree
     :param sample_list: List of samples
+    :param exclude_real_probands: If set, then fake trios probands cannot be in the real trios probands.
+    :param max_tries: Maximum number of sampling to try before bailing out (preventing infinite loop if `n` is too large w.r.t. the number of samples)
     :param real_pedigree: Optional pedigree to exclude children from
     :return: Fake pedigree
     """
+    real_trios = {trio.s: trio for trio in real_pedigree.trios} if real_pedigree is not None else dict()
 
-    probands = set()
-    if real_pedigree is not None:
-        probands = {trio.s for trio in real_pedigree.trios}.intersection(
-            set(sample_list)
-        )
-        if len(probands) == len(sample_list):
-            raise ValueError(
-                "Full sample list for fake trios generation needs to include samples that aren't probands in the real trios."
-            )
+    if exclude_real_probands and len(real_trios) == len(set(sample_list)):
+        logger.warning("All samples are in the real probands list; cannot create any fake pedigrees with exclude_real_probands=True. Returning an empty Pedigree.")
+        return hl.Pedigree([])
 
-    fake_trios = []
-    for i in range(n):
-        mat_id, pat_id = random.sample(sample_list, 2)
-        s = random.choice(sample_list)
-        while s in probands.union({mat_id, pat_id}):
-            s = random.choice(sample_list)
-
-        probands.add(s)
-
-        fake_trios.append(
-            hl.Trio(
+    fake_trios = {}
+    tries = 0
+    while len(fake_trios) < n and tries < max_tries:
+        s, mat_id, pat_id = random.sample(sample_list, 3)
+        if (
+                (s in real_trios and (
+                        exclude_real_probands or
+                        {mat_id, pat_id} == {real_trios[s].mat_id, real_trios[s].pat_id}
+                )) or
+                s in fake_trios
+        ):
+            tries += 1
+        else:
+            tries = 0
+            fake_trios[s] = hl.Trio(
                 s=s,
                 pat_id=pat_id,
                 mat_id=mat_id,
-                fam_id=f"fake_{str(i+1)}",
-                is_female=True,
+                fam_id=f"fake_{str(len(fake_trios))}",
+                is_female=bool(random.getrandbits(1))
             )
-        )
 
-    return hl.Pedigree(fake_trios)
+    if tries == max_tries:
+        logger.warning(f"Only returning {len(fake_trios)} fake trios; random trio sampling stopped after reaching the maximum {max_tries} iterations")
+
+    return hl.Pedigree(list(fake_trios.values()))

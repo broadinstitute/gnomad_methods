@@ -36,6 +36,7 @@ def _import_purcell_5k(path) -> hl.Table:
 
 def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = import_sites_vcf(**kwargs)
+    clinvar = clinvar.filter(hl.len(clinvar.alleles)>1) # Get around problematic single entry in alleles array in the clinvar vcf
     clinvar = vep_or_lookup_vep(clinvar, reference='GRCh38')
     return clinvar
 

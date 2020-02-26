@@ -560,3 +560,81 @@ def impute_sex_ploidy(
             f'{chr_y}_ploidy': ht[f'{chr_y}_mean_dp'] / (ht[f'{normalization_contig}_mean_dp'] / 2)
         }
     )
+
+
+def compute_coverage_stats(
+        mt: hl.MatrixTable,
+        reference_ht: hl.Table,
+        coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100]
+) -> hl.Table:
+    """
+    Computes the following coverage statistics for every base of the `reference_ht` provided:
+        - mean
+        - median
+        - total DP
+        - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
+
+    The `reference_ht` can e.g. be created using `get_reference_ht`
+
+    :param mt: Input sparse MT
+    :param reference_ht: Input reference HT
+    :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :return: Table with per-base coverage stats
+    """
+
+    n_samples = mt.count_cols()
+    print(f"Computing coverage stats on {n_samples} samples.")
+
+    # Create an outer join with the reference Table
+    mt = mt.select_entries('END', 'DP')
+    col_key_fields = list(mt.col_key)
+    t = mt._localize_entries('__entries', '__cols')
+    t = t.join(reference_ht.annotate(_in_ref=True), how='outer')
+    t = t.annotate(__entries=hl.or_else(t.__entries, hl.range(n_samples).map(lambda x: hl.null(t.__entries.dtype.element_type))))
+    mt = t._unlocalize_entries('__entries', '__cols', col_key_fields)
+
+    # Densify
+    mt = hl.experimental.densify(mt)
+
+    # Filter rows where the reference is missing
+    mt = mt.filter_rows(mt._in_ref)
+
+    # Compute coverage stats
+    coverage_over_x_bins = sorted(coverage_over_x_bins)
+    max_coverage_bin = coverage_over_x_bins[-1]
+    hl_coverage_over_x_bins = hl.array(coverage_over_x_bins)
+
+    # This expression creates a counter DP -> number of samples for DP between 0 and max_coverage_bin
+    coverage_counter_expr = hl.agg.counter(hl.or_else(hl.min(max_coverage_bin, mt.DP), 0))
+
+    # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
+    # and computes the cumulative sum over them.
+    #  It needs to be in reverse order because we want the sum over samples covered by > X.
+    count_array_expr = hl.cumulative_sum(
+        hl.array(
+            [hl.int32(coverage_counter_expr.get(max_coverage_bin, 0))]  # The coverage was already floored to the max_coverage_bin, so no more aggregation is needed for the max bin
+        ).extend(  # For each of the other bins, coverage needs to be summed between the boundaries
+            hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
+                lambda i: hl.sum(
+                    hl.range(hl_coverage_over_x_bins[i - 1], hl_coverage_over_x_bins[i]).map(
+                        lambda j: hl.int32(coverage_counter_expr.get(j, 0))
+                    )
+                )
+            )
+        )
+    )
+    mean_expr = hl.agg.mean(mt.DP)
+
+    # Annotate rows now
+    return mt.select_rows(
+        mean=hl.cond(hl.is_nan(mean_expr), 0, mean_expr),
+        median=hl.or_else(hl.agg.approx_median(mt.DP), 0),
+        total_DP=hl.agg.sum(mt.DP),
+        **{
+            f'over_{x}': count_array_expr[i] / n_samples
+            for i, x in zip(
+                range(len(coverage_over_x_bins) - 1, -1, -1),  # Reverse the bin index as count_array_expr has the reverse order
+                coverage_over_x_bins
+            )
+        }
+    ).rows()

@@ -55,7 +55,7 @@ def get_duplicated_samples(
     def get_all_dups(s: str, dups: Set[str], samples_duplicates: Dict[str, Set[str]]) -> Tuple[Set[str], Dict[str, Set[str]]]:
         """
         Creates the set of all duplicated samples corresponding to `s` that are found in `sample_duplicates`.
-        Also returns the remaining sample duplicates after removeing all duplicated samples corresponding to `s`.
+        Also returns the remaining sample duplicates after removing all duplicated samples corresponding to `s`.
 
         Works by recursively adding duplicated samples to the set.
 

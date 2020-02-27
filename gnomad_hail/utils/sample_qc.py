@@ -1,6 +1,7 @@
 import numpy as np
 from .generic import *
 from .gnomad_functions import logger, filter_to_adj
+from gnomad_hail.utils.relatedness import get_duplicated_samples
 
 
 def filter_rows_for_qc(
@@ -469,50 +470,6 @@ def get_sex_expr(
     )
 
 
-def filter_duplicate_samples(
-        relatedness_ht: hl.Table,
-        samples_rankings_ht: hl.Table,
-        rank_ann: str = 'rank'
-):
-    """
-    Creates a HT with duplicated samples sets.
-    Each row is indexed by the sample that is kept and also contains the set of duplicate samples that should be filtered.
-
-    `samples_rankings_ht` is a HT containing a global rank for each of the sample (smaller is better).
-
-    :param relatedness_ht: Input relatedness HT
-    :param samples_rankings_ht: HT with global rank for each sample
-    :param rank_ann: Annotation in `samples_ranking_ht` containing each sample global rank (smaller is better).
-    :return: HT with duplicate sample sets, including which to keep/filter
-    """
-    logger.info("Getting duplicate samples")
-    dups = get_duplicated_samples(relatedness_ht)
-    logger.info(f"Found {len(dups)} duplicate sets.")
-    dups_ht = hl.Table.parallelize([hl.struct(dup_set=i, dups=dups[i]) for i in range(0, len(dups))])
-    dups_ht = dups_ht.explode(dups_ht.dups, name='_dup')
-    if isinstance(dups_ht._dup, hl.expr.StructExpression):
-        dups_ht = dups_ht.key_by(**dups_ht._dup)
-    else:
-        dups_ht = dups_ht.key_by('_dup')
-    dups_ht = dups_ht.annotate(rank=samples_rankings_ht[dups_ht.key][rank_ann])
-    dups_cols = hl.bind(
-        lambda x: hl.struct(
-            kept=x[0],
-            filtered=x[1:]
-        ),
-        hl.sorted(hl.agg.collect(hl.tuple([dups_ht._dup, dups_ht.rank])), key=lambda x: x[1]).map(lambda x: x[0])
-    )
-    dups_ht = dups_ht.group_by(dups_ht.dup_set).aggregate(
-        **dups_cols
-    )
-
-    if isinstance(dups_ht.kept, hl.expr.StructExpression):
-        dups_ht = dups_ht.key_by(**dups_ht.kept).drop('kept')
-    else:
-        dups_ht = dups_ht.key_by(s=dups_ht.kept)  # Since there is no defined name in the case of a non-struct type, use `s`
-    return dups_ht
-
-
 def compute_related_samples_to_drop(
         relatedness_ht: hl.Table,
         rank_ht: hl.Table,
@@ -810,26 +767,6 @@ def compute_qc_metrics_residuals(
     )
 
     return residuals_ht.persist()
-
-
-def flatten_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
-    """
-    Flattens the result of `filter_duplicate_samples`, so that each line contains a single sample.
-    An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
-
-    Note that this assumes that the type of the table key is the same as the type of the `filtered` array.
-
-    :param dups_ht: Input HT
-    :return: Flattened HT
-    """
-    dups_ht = dups_ht.annotate(
-        dups=hl.array([(dups_ht.key, False)]).extend(
-            dups_ht.filtered.map(lambda x: (x, True))
-        )
-    )
-    dups_ht = dups_ht.explode('dups')
-    dups_ht = dups_ht.key_by()
-    return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by('s')
 
 
 def add_filters_expr(

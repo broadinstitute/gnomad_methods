@@ -87,6 +87,38 @@ syndip_hc_intervals = TableResource(
 )
 
 # Versioned resources: versions should be listed from most recent to oldest
+syndip = VersionedMatrixTableResource(
+    default_version="20180222",
+    versions={
+        "20180222": MatrixTableResource(
+            path="gs://gnomad-public/resources/grch38/syndip/syndip.b38_20180222.mt",
+            import_func=hl.import_vcf,
+            import_args={
+                "path": "gs://gnomad-public/resources/grch38/syndip/full.38.20180222.vcf.gz",
+                "force_bgz": True,
+                "min_partitions": 100,
+                "reference_genome": "GRCh38"
+            }
+        )
+    },
+)
+
+syndip_hc_intervals = VersionedTableResource(
+    default_version="20180222",
+    versions={
+        "20180222": TableResource(
+            path='gs://gnomad-public/resources/grch38/syndip/syndip_b38_20180222_hc_regions.ht',
+            import_func=hl.import_bed,
+            import_args={
+                "path": 'gs://gnomad-public/resources/grch38/syndip/syndip.b38_20180222.bed',
+                "reference_genome": 'GRCh38',
+                "skip_invalid_intervals": True,
+                "min_partitions": 10
+            }
+        )
+    }
+)
+
 clinvar = VersionedTableResource(
     default_version="20190923",
     versions={

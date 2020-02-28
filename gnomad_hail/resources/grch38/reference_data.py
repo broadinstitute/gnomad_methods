@@ -71,21 +71,6 @@ na12878_giab_hc_intervals = TableResource(
     }
 )
 
-syndip = MatrixTableResource(
-    path="gs://gnomad-public/resources/grch38/syndip/gnomad_v3_syndip.b38.mt"
-)
-
-syndip_hc_intervals = TableResource(
-    path='gs://gnomad-public/resources/grch38/syndip/syndip_b38_hc_regions.ht',
-    import_func=hl.import_bed,
-    import_args={
-        "path": 'gs://gnomad-public/resources/grch38/syndip/syndip.b38.bed',
-        "reference_genome": 'GRCh38',
-        "skip_invalid_intervals": True,
-        "min_partitions": 10
-    }
-)
-
 # Versioned resources: versions should be listed from most recent to oldest
 syndip = VersionedMatrixTableResource(
     default_version="20180222",

@@ -10,68 +10,8 @@ DATA_TYPES = ["exomes", "genomes"]
 CURRENT_EXOME_RELEASE = "2.1.1"
 CURRENT_GENOME_RELEASE = "2.1.1"
 
-CURRENT_EXOME_META = "2018-10-11"
-CURRENT_GENOME_META = "2018-10-11"
-
-CURRENT_EXOME_FAM = "2018-04-12"
-CURRENT_GENOME_FAM = "2018-04-12"
-
 EXOME_RELEASES = ["2.1", "2.1.1"]
 GENOME_RELEASES = ["2.1", "2.1.1"]
-
-EXOME_META_DATES = [
-    "2018-03-29",
-    "2018-03-30",
-    "2018-04-03",
-    "2018-04-10",
-    "2018-04-11",
-    "2018-04-12",
-    "2018-04-13",
-    "2018-04-18",
-    "2018-04-19",
-    "2018-04-25",
-    "2018-05-11",
-    "2018-06-08",
-    "2018-06-10",
-    "2018-08-04",
-    "2018-08-16",
-    "2018-09-12",
-    "2018-10-10",
-    "2018-10-11",
-]
-GENOME_META_DATES = [
-    "2018-03-29",
-    "2018-03-30",
-    "2018-04-03",
-    "2018-04-10",
-    "2018-04-11",
-    "2018-04-12",
-    "2018-04-13",
-    "2018-04-18",
-    "2018-04-19",
-    "2018-04-25",
-    "2018-05-11",
-    "2018-06-08",
-    "2018-06-10",
-    "2018-08-04",
-    "2018-08-16",
-    "2018-09-12",
-    "2018-10-10",
-    "2018-10-11",
-]
-
-EXOME_FAM_DATES = [
-    "2017-10-03",
-    "2018-04-09",
-    "2018-04-12",
-    "2018-04-12.true_trios",
-]
-GEOME_FAM_DATES = [
-    "2017-10-03",
-    "2018-04-09",
-    "2018-04-12",
-    "2018-04-12.true_trios",
-]
 
 SUBPOPS = {
     "NFE": ["BGR", "EST", "NWE", "SEU", "SWE", "ONF"],
@@ -150,30 +90,6 @@ def _public_pca_ht_path(subpop: str) -> str:
     """
     subpop = f".{subpop}" if subpop else ""
     return f"gs://gnomad-public/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
-
-
-def _metadata_ht_path(data_type: str, date: str) -> str:
-    """
-    Metadata ht path for supplied date
-
-    :param data_type: One of "exomes" or "genomes"
-    :param date: One of the dates in data_types meta date array
-    :return: Path to metadata
-    """
-    return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.metadata.{date}.ht"
-
-
-def _fam_path(data_type: str, date: str, true_trios: bool = False) -> str:
-    """
-    Pedigree path for supplied date
-
-    :param data_type: One of "exomes" or "genomes"
-    :param date: Date from fam file generation
-    :param true_trios: Whether to include only true trios
-    :return:
-    """
-    true_trios = ".true_trios" if true_trios else ""
-    return f"gs://gnomad/metadata/{data_type}/gnomad.{data_type}.metadata.{date}{true_trios}.ht"
 
 
 def _liftover_data_path(data_type: str, version: str) -> str:
@@ -286,45 +202,3 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     """
     contig = f".{contig}" if contig else ""
     return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
-
-
-def metadata(data_type: str) -> VersionedTableResource:
-    """
-    Sample metadata associated with gnomAD release
-
-    :param data_type: One of "exomes" or "genomes"
-    :return: Versioned metadata Tables
-    """
-    if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}')
-
-    if data_type == "exomes":
-        current_meta = CURRENT_EXOME_META
-        dates = EXOME_META_DATES
-    else:
-        current_meta = CURRENT_GENOME_META
-        dates = GENOME_META_DATES
-
-    return VersionedTableResource(
-        current_meta,
-        {date: TableResource(path=_metadata_ht_path(data_type, date)) for date in dates},
-    )
-
-
-def fam(data_type: str, true_trios: bool = False) -> PedigreeResource:
-    """
-    Returns the path to gnomAD pedigree file.
-
-    :param data_type: One of 'exomes' or 'genomes'
-    :param true_trios: If set, removes all families with more than one offspring
-    :return: Path to fam file
-    """
-    if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}')
-
-    if data_type == "exomes":
-        current_fam = CURRENT_EXOME_FAM
-    else:
-        current_fam = CURRENT_GENOME_FAM
-
-    return PedigreeResource(path=_fam_path(data_type, current_fam, true_trios))

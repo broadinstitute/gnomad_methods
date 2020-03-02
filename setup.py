@@ -17,7 +17,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/broadinstitute/gnomad_methods",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_namespace_packages(include=["gnomad.*"]),
     project_urls={
         "Documentation": "https://broadinstitute.github.io/gnomad_methods/",
         "Source Code": "https://github.com/broadinstitute/gnomad_methods",

@@ -1,8 +1,16 @@
-from gnomad import *
-import itertools
+import logging
+from typing import Dict, List, Optional, Set, Tuple, Union
+
+import hail as hl
+
+from gnomad.utils.generic import filter_to_autosomes
+from gnomad.utils.gnomad_functions import annotate_adj
 
 # TODO: Use import below when relatedness PR goes in
 # from gnomad.utils.relatedness import SIBLINGS
+
+
+logger = logging.getLogger("gnomad.utils")
 
 
 def pop_max_expr(
@@ -531,7 +539,7 @@ def get_lowqual_expr(
         ref: hl.expr.StringExpression,
         alt: hl.expr.StringExpression,
         qual_approx: hl.expr.NumericExpression,
-    ) -> BooleanExpression:
+    ) -> hl.expr.BooleanExpression:
         return hl.cond(
             hl.is_snp(ref, alt),
             qual_approx < snv_phred_threshold + snv_phred_het_prior,

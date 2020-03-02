@@ -133,4 +133,14 @@ def write_package_doc(package_name):
 
 
 if __name__ == "__main__":
-    write_package_doc("gnomad")
+    packages = ["resources", "utils"]
+    for pkg in packages:
+        write_package_doc(f"gnomad.{pkg}")
+
+    root_doc = PACKAGE_DOC_TEMPLATE.format(
+        title=format_title("gnomad"),
+        package_doc="",
+        module_links="\n    ".join(f"{pkg} <{pkg}/index>" for pkg in packages),
+    )
+
+    write_file(os.path.join(DOCS_DIRECTORY, "api_reference", "index.rst"), root_doc)

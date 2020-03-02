@@ -1,5 +1,5 @@
-gnomad_hail
-===========
+gnomad
+======
 
 This package contains a number of `Hail <https://hail.is>`_ utility functions
 and scripts for the `gnomAD project <https://gnomad.broadinstitute.org>`_ and

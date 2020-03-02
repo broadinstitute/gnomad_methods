@@ -1,5 +1,5 @@
-from gnomad_hail.resources.resource_utils import TableResource, BlockMatrixResource
-from gnomad_hail.resources.grch37.gnomad import CURRENT_EXOME_RELEASE, CURRENT_GENOME_RELEASE
+from gnomad.resources.resource_utils import TableResource, BlockMatrixResource
+from gnomad.resources.grch37.gnomad import CURRENT_EXOME_RELEASE, CURRENT_GENOME_RELEASE
 from typing import Optional
 
 

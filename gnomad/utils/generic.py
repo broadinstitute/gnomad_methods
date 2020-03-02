@@ -11,7 +11,7 @@ import functools
 from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
-from gnomad_hail.resources.resource_utils import DataException
+from gnomad.resources.resource_utils import DataException
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']
 
@@ -245,9 +245,9 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     """
     build = get_reference_genome(mt.locus).name
     if build == "GRCh37":
-        import gnomad_hail.resources.grch37.reference_data as resources
+        import gnomad.resources.grch37.reference_data as resources
     elif build == "GRCh38":
-        import gnomad_hail.resources.grch38.reference_data as resources
+        import gnomad.resources.grch38.reference_data as resources
 
     criteria = []
     if filter_lcr:

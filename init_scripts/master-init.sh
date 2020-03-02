@@ -12,7 +12,7 @@ if [[ "${ROLE}" == 'Master' ]]; then
     git clone https://github.com/broadinstitute/gnomad_methods.git /home/gnomad_hail
 
     mkdir -p /home/hail/
-    ln -s ln -s /home/gnomad_hail/gnomad_hail /home/hail
+    ln -s ln -s /home/gnomad_hail/gnomad /home/hail
 
     cd /home/gnomad_hail/init_scripts
     chmod +x gnomad-init.sh sparklyr-init.sh

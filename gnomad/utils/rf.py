@@ -1,4 +1,4 @@
-from gnomad_hail import *
+from gnomad import *
 import pyspark.sql
 from pyspark.sql import SparkSession
 from pyspark.ml.feature import *

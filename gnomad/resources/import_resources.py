@@ -2,9 +2,9 @@ import itertools
 import textwrap
 from inspect import getmembers
 from typing import Dict, Tuple, Optional
-from gnomad_hail.resources.resource_utils import BaseResource, BaseVersionedResource
-import gnomad_hail.resources.grch37 as grch37
-import gnomad_hail.resources.grch38 as grch38
+from gnomad.resources.resource_utils import BaseResource, BaseVersionedResource
+import gnomad.resources.grch37 as grch37
+import gnomad.resources.grch38 as grch38
 import argparse
 
 
@@ -16,11 +16,11 @@ def get_module_importable_resources(module, prefix: Optional[str] = None) -> Dic
     keys: {prefix}.{resource_name}.{version} (with prefix only present if `prefix` is set, and `version` only present for versioned resources)
     values: ({resource_name}[ version {version}], resource) with resource_name set to the variable name in the module and the version present for versioned resources.
 
-     The following example will generate a dict with all the resources in gnomad_hail.resources.grch37 that can be imported:
+     The following example will generate a dict with all the resources in gnomad.resources.grch37 that can be imported:
 
     .. code-block:: python
 
-        import gnomad_hail.resources.grch37 as grch37
+        import gnomad.resources.grch37 as grch37
         grch37_resources = get_module_importable_resources(grch37, prefix='grch37')
     
     :param module: Input module

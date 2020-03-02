@@ -1,11 +1,11 @@
 # Documentation
 
-Documentation for gnomad_hail is generated using [Sphinx](https://www.sphinx-doc.org/en/master/).
+Documentation for gnomad is generated using [Sphinx](https://www.sphinx-doc.org/en/master/).
 
 To build the documentation, run:
 
 ```
-cd /path/to/gnomad_hail
+cd /path/to/gnomad
 pip install -r requirements.txt
 pip install -r docs/requirements.txt
 ./docs/build.sh

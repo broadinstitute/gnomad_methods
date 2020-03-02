@@ -1,4 +1,4 @@
-from gnomad_hail.resources.resource_utils import (
+from gnomad.resources.resource_utils import (
     MatrixTableResource,
     TableResource,
     VersionedMatrixTableResource,

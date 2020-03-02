@@ -165,7 +165,7 @@ def liftover_using_gnomad_map(ht, data_type):
     :param data_type: one of "exomes" or "genomes" which to map across
     :return: Lifted over table
     """
-    from gnomad_hail.resources.grch37.gnomad import liftover
+    from gnomad.resources.grch37.gnomad import liftover
     lift_ht = liftover(data_type).ht()
     ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
     return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')

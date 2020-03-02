@@ -1,5 +1,5 @@
 import hail as hl
-from gnomad_hail import logger
+from gnomad import logger
 from typing import Dict, List, Tuple, Set, Union, Iterable, Optional
 from collections import defaultdict
 import random

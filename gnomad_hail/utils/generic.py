@@ -243,23 +243,27 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     :param high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
     :return: MatrixTable or Table with low confidence regions removed
     """
-    from gnomad_hail.resources.grch37.reference_data import lcr_intervals, decoy_intervals, seg_dup_intervals, high_coverage_intervals
+    build = get_reference_genome(mt.locus).name
+    if build == "GRCh37":
+        import gnomad_hail.resources.grch37.reference_data as resources
+    elif build == "GRCh38":
+        import gnomad_hail.resources.grch38.reference_data as resources
 
     criteria = []
     if filter_lcr:
-        lcr = lcr_intervals.ht()
+        lcr = resources.lcr_intervals.ht()
         criteria.append(hl.is_missing(lcr[mt.locus]))
 
     if filter_decoy:
-        decoy = decoy_intervals.ht()
+        decoy = resources.decoy_intervals.ht()
         criteria.append(hl.is_missing(decoy[mt.locus]))
 
     if filter_segdup:
-        segdup = seg_dup_intervals.ht()
+        segdup = resources.seg_dup_intervals.ht()
         criteria.append(hl.is_missing(segdup[mt.locus]))
 
     if filter_exome_low_coverage_regions:
-        high_cov = high_coverage_intervals.ht()
+        high_cov = resources.high_coverage_intervals.ht()
         criteria.append(hl.is_missing(high_cov[mt.locus]))
 
     if high_conf_regions is not None:

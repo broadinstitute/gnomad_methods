@@ -574,6 +574,8 @@ def compute_coverage_stats(
         - total DP
         - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
 
+    The `reference_ht` is a table that contains row for each locus coverage should be computed on.
+    It needs to be keyed with the same keys as `mt`, typically either `locus` or `locus, alleles`.
     The `reference_ht` can e.g. be created using `get_reference_ht`
 
     :param mt: Input sparse MT

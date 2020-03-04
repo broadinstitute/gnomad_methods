@@ -16,12 +16,12 @@ setuptools.setup(
     description="Hail utilities for the Genome Aggregation Database",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/macarthur-lab/gnomad_hail",
+    url="https://github.com/broadinstitute/gnomad_methods",
     packages=setuptools.find_packages(),
     project_urls={
-        "Documentation": "https://macarthur-lab.github.io/gnomad_hail/",
-        "Source Code": "https://github.com/macarthur-lab/gnomad_hail",
-        "Issues": "https://github.com/macarthur-lab/gnomad_hail/issues",
+        "Documentation": "https://broadinstitute.github.io/gnomad_methods/",
+        "Source Code": "https://github.com/broadinstitute/gnomad_methods",
+        "Issues": "https://github.com/broadinstitute/gnomad_methods/issues",
     },
     classifiers=[
         "Topic :: Scientific/Engineering :: Bio-Informatics",

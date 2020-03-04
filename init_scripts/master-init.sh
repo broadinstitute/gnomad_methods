@@ -9,7 +9,7 @@ pip install numpy
 ROLE=$(/usr/share/google/get_metadata_value attributes/dataproc-role)
 if [[ "${ROLE}" == 'Master' ]]; then
 
-    git clone https://github.com/macarthur-lab/gnomad_hail.git /home/gnomad_hail
+    git clone https://github.com/broadinstitute/gnomad_methods.git /home/gnomad_hail
 
     mkdir -p /home/hail/
     ln -s ln -s /home/gnomad_hail/gnomad_hail /home/hail

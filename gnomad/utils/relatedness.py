@@ -1,8 +1,12 @@
 import hail as hl
-from gnomad_hail import logger
+import logging
 from typing import Dict, List, Tuple, Set, Union, Iterable, Optional
 from collections import defaultdict
 import random
+
+
+logger = logging.getLogger("gnomad.utils")
+
 
 UNRELATED = 'Unrelated'
 """

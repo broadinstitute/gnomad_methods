@@ -1,8 +1,8 @@
 import argparse
 from typing import Union
 import hail as hl
-from gnomad_hail.resources.grch37.gnomad import public_release
-from gnomad_hail.utils.generic import flip_base, get_reference_genome
+from gnomad.resources.grch37.gnomad import public_release
+from gnomad.utils.generic import flip_base, get_reference_genome
 import logging
 from os.path import dirname, basename
 import sys

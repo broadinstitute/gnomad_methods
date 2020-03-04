@@ -6,11 +6,11 @@ from sphinx.ext import autosummary
 
 from directives import AutoModuleSummary
 
-# Add gnomad_hail to import path.
+# Add gnomad to import path.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-project = "gnomad_hail"
+project = "gnomad"
 version = release = "master"
 
 extensions = [
@@ -113,4 +113,4 @@ sphinx_autodoc_typehints.get_annotation_module = get_annotation_module
 
 
 def setup(app):
-    app.add_directive("gnomadhail_automodulesummary", AutoModuleSummary)
+    app.add_directive("gnomad_automodulesummary", AutoModuleSummary)

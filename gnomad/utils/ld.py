@@ -1,5 +1,5 @@
-from gnomad_hail.resources.grch37.gnomad_ld import ld_index, ld_matrix
-from gnomad_hail.resources.grch37.gnomad import public_release
+from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
+from gnomad.resources.grch37.gnomad import public_release
 from hail.linalg import BlockMatrix
 import hail as hl
 

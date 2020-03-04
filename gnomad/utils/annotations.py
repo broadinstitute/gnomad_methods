@@ -1,8 +1,16 @@
-from gnomad_hail import *
-import itertools
+import logging
+from typing import Dict, List, Optional, Set, Tuple, Union
+
+import hail as hl
+
+from gnomad.utils.generic import filter_to_autosomes
+from gnomad.utils.gnomad_functions import annotate_adj
 
 # TODO: Use import below when relatedness PR goes in
-# from gnomad_hail.utils.relatedness import SIBLINGS
+# from gnomad.utils.relatedness import SIBLINGS
+
+
+logger = logging.getLogger("gnomad.utils")
 
 
 def pop_max_expr(
@@ -531,7 +539,7 @@ def get_lowqual_expr(
         ref: hl.expr.StringExpression,
         alt: hl.expr.StringExpression,
         qual_approx: hl.expr.NumericExpression,
-    ) -> BooleanExpression:
+    ) -> hl.expr.BooleanExpression:
         return hl.cond(
             hl.is_snp(ref, alt),
             qual_approx < snv_phred_threshold + snv_phred_het_prior,
@@ -893,7 +901,7 @@ def default_generate_sib_stats(
 
     This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
     The `relationship_col` should be a column specifying the relationship between each two samples as defined by
-    the constants in `gnomad_hail.utils.relatedness`. This relationship_col will be used to filter to only pairs of
+    the constants in `gnomad.utils.relatedness`. This relationship_col will be used to filter to only pairs of
     samples that are annotated as `SIBLINGS`.
 
     :param mt: Input Matrix table

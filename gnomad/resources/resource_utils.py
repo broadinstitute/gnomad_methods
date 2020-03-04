@@ -1,8 +1,11 @@
+import logging
 from typing import Optional, Dict, Any, Callable, List
-from gnomad_hail.utils.gnomad_functions import logger
 import hail as hl
 from hail.linalg import BlockMatrix
 from abc import ABC, abstractmethod
+
+
+logger = logging.getLogger("gnomad.resources")
 
 
 # Resource classes

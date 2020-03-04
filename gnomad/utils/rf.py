@@ -1,4 +1,7 @@
-from gnomad_hail import *
+import logging
+import pprint
+from typing import Dict, List, Tuple
+
 import pyspark.sql
 from pyspark.sql import SparkSession
 from pyspark.ml.feature import *
@@ -8,6 +11,10 @@ import hail as hl
 import pandas as pd
 from pyspark.sql.functions import udf, col  # pylint: disable=no-name-in-module
 from pyspark.sql.types import ArrayType, DoubleType
+
+
+logger = logging.getLogger("gnomad.utils")
+
 
 def run_rf_test(
         mt: hl.MatrixTable,
@@ -227,7 +234,7 @@ def test_model(
     # Print results
     df = pd.DataFrame(test_results)
     df = df.pivot(index=label, columns=prediction_col_name, values='n')
-    logger.info("Testing results:\n{}".format(pformat(df)))
+    logger.info("Testing results:\n{}".format(pprint.pformat(df)))
     logger.info("Accuracy: {}".format(
         sum([x.n for x in test_results if x[label] == x[prediction_col_name]]) /
         sum([x.n for x in test_results])

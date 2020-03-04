@@ -1,6 +1,6 @@
 from .generic import *
-import gnomad_hail.resources.grch37 as grch37_resources
-import gnomad_hail.resources.grch38 as grch38_resources
+import gnomad.resources.grch37 as grch37_resources
+import gnomad.resources.grch38 as grch38_resources
 
 
 def compute_quantile_bin(

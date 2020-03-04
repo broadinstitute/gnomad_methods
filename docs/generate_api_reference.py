@@ -11,11 +11,11 @@ import pkgutil
 import re
 import sys
 
-# Add gnomad_hail to import path.
+# Add gnomad to import path.
 sys.path.insert(0, str(pathlib.Path(os.path.abspath(__file__)).parent.parent))
 
 ROOT_PACKAGE_PATH = str(
-    pathlib.Path(os.path.abspath(__file__)).parent.parent / "gnomad_hail"
+    pathlib.Path(os.path.abspath(__file__)).parent.parent / "gnomad"
 )
 
 DOCS_DIRECTORY = str(pathlib.Path(os.path.abspath(__file__)).parent)
@@ -69,7 +69,7 @@ MODULE_DOC_TEMPLATE = """{title}
 
 {module_doc}
 
-.. gnomadhail_automodulesummary:: {module_name}
+.. gnomad_automodulesummary:: {module_name}
 
 .. automodule:: {module_name}
 """
@@ -133,4 +133,14 @@ def write_package_doc(package_name):
 
 
 if __name__ == "__main__":
-    write_package_doc("gnomad_hail")
+    packages = ["resources", "utils"]
+    for pkg in packages:
+        write_package_doc(f"gnomad.{pkg}")
+
+    root_doc = PACKAGE_DOC_TEMPLATE.format(
+        title=format_title("gnomad"),
+        package_doc="",
+        module_links="\n    ".join(f"{pkg} <{pkg}/index>" for pkg in packages),
+    )
+
+    write_file(os.path.join(DOCS_DIRECTORY, "api_reference", "index.rst"), root_doc)

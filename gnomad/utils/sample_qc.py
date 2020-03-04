@@ -2,7 +2,7 @@ import numpy as np
 from .generic import *
 from .gnomad_functions import logger, filter_to_adj
 from .sparse_mt import impute_sex_ploidy
-from gnomad_hail.utils.relatedness import get_duplicated_samples
+from gnomad.utils.relatedness import get_duplicated_samples
 
 
 def filter_rows_for_qc(

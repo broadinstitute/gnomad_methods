@@ -1331,9 +1331,9 @@ def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
     return hl.read_matrix_table(path, _intervals=intervals)
 
 
-def get_file_stats(url: str) -> Tuple[str, str]:
+def get_file_stats(url: str) -> Tuple[int, str, str]:
     """
-    Gets size and md5 for file at specified URL.
+    Gets size (as both int and str) and md5 for file at specified URL.
     Typically used to get stats on VCFs.
 
     :param url: Path to file of interest.
@@ -1361,4 +1361,4 @@ def get_file_stats(url: str) -> Tuple[str, str]:
         if label == "Hash (md5)":
             info["md5"] = base64.b64decode(value).hex()
 
-    return (info["size"], info["md5"])
+    return (int(info["size"]), info["size"], info["md5"])

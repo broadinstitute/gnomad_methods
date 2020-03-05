@@ -1,3 +1,4 @@
+import base64
 import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict, Counter
@@ -11,6 +12,7 @@ import functools
 from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
+import subprocess
 from gnomad.resources.resource_utils import DataException
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']
@@ -1393,3 +1395,36 @@ def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
     mt = hl.read_matrix_table(path)
     intervals = mt._calculate_new_partitions(n_partitions)
     return hl.read_matrix_table(path, _intervals=intervals)
+
+
+def get_file_stats(url: str) -> Tuple[int, str, str]:
+    """
+    Gets size (as both int and str) and md5 for file at specified URL.
+    Typically used to get stats on VCFs.
+
+    :param url: Path to file of interest.
+    :return: Tuple of file size and md5.
+    """
+    one_gibibyte = 2 ** 30
+    one_mebibyte = 2 ** 20
+
+    output = subprocess.check_output(["gsutil", "stat", url]).decode("utf8")
+    lines = output.split("\n")
+
+    info = {}
+    for line in lines:
+        if not line:
+            continue
+
+        label, value = [s.strip() for s in line.split(":", 1)]
+        if label == "Content-Length":
+            size = int(value)
+            if size >= one_gibibyte:
+                info["size"] = f"{round(size / one_gibibyte, 2)} GiB"
+            else:
+                info["size"] = f"{round(size / one_mebibyte, 2)} MiB"
+
+        if label == "Hash (md5)":
+            info["md5"] = base64.b64decode(value).hex()
+
+    return (size, info["size"], info["md5"])

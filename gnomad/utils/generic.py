@@ -1,3 +1,4 @@
+import base64
 import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict, Counter
@@ -11,6 +12,7 @@ import functools
 from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
+import subprocess
 from gnomad.resources.resource_utils import DataException
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']

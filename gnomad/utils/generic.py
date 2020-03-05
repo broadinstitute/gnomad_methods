@@ -1361,4 +1361,4 @@ def get_file_stats(url: str) -> Tuple[int, str, str]:
         if label == "Hash (md5)":
             info["md5"] = base64.b64decode(value).hex()
 
-    return (int(info["size"]), info["size"], info["md5"])
+    return (size, info["size"], info["md5"])

@@ -964,10 +964,10 @@ def get_annotations_hists(
     # Check all fields in ht.info and create histograms if they are in annotations_hists dict
     return {
         field: hl.agg.hist(
-            hl.log10(ht[field]) if field in log10_annotations else ht[field],
+            hl.log10(ht.info[field]) if field in log10_annotations else ht.info[field],
             start,
             end,
-            bin,
+            bins,
         )
         for field, (start, end, bins) in annotations_hists.items()
         if field in ht.row.info

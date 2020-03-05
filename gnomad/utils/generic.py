@@ -1327,3 +1327,36 @@ def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
     mt = hl.read_matrix_table(path)
     intervals = mt._calculate_new_partitions(n_partitions)
     return hl.read_matrix_table(path, _intervals=intervals)
+
+
+def get_file_stats(url: str) -> Tuple[str, str]:
+    """
+    Gets size and md5 for file at specified URL.
+    Typically used to get stats on VCFs.
+
+    :param url: Path to file of interest.
+    :return: Tuple of file size and md5.
+    """
+    one_gibibyte = 2 ** 30
+    one_mebibyte = 2 ** 20
+
+    output = subprocess.check_output(["gsutil", "stat", url]).decode("utf8")
+    lines = output.split("\n")
+
+    info = {}
+    for line in lines:
+        if not line:
+            continue
+
+        label, value = [s.strip() for s in line.split(":", 1)]
+        if label == "Content-Length":
+            size = int(value)
+            if size >= one_gibibyte:
+                info["size"] = f"{round(size / one_gibibyte, 2)} GiB"
+            else:
+                info["size"] = f"{round(size / one_mebibyte, 2)} MiB"
+
+        if label == "Hash (md5)":
+            info["md5"] = base64.b64decode(value).hex()
+
+    return (info["size"], info["md5"])

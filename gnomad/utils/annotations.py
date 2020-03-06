@@ -522,9 +522,9 @@ def get_lowqual_expr(
 
     .. note::
 
-        This lowqual annotation differs from the GATK LowQual filter. GATK uses the SNV prior if the site has any SNV
-        so that SNVs are not penalized if there are also indels at those sites. This implementation will use the indel
-        threshold for indels and the SNV threshold for the SNVs therefore excluding more indels than the GATK filter.
+        When running This lowqual annotation using AS_QUALapporx, it differs from the GATK LowQual filter.
+        This is because GATK computes this annotation at the site level, which uses the least stringent prior for mixed sites.
+        When run using AS_QUALapprox, this implementation can thus be more stringent for certain alleles at mixed sites.
 
     :param alleles: Array of alleles
     :param qual_approx_expr: QUALapprox or AS_QUALapprox
@@ -535,23 +535,25 @@ def get_lowqual_expr(
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
     """
 
-    def low_qual_expr(
-        ref: hl.expr.StringExpression,
-        alt: hl.expr.StringExpression,
-        qual_approx: hl.expr.NumericExpression,
-    ) -> hl.expr.BooleanExpression:
-        return hl.cond(
-            hl.is_snp(ref, alt),
-            qual_approx < snv_phred_threshold + snv_phred_het_prior,
-            qual_approx < indel_phred_threshold + indel_phred_het_prior,
-        )
+    min_snv_qual = snv_phred_threshold + snv_phred_het_prior
+    min_indel_qual = indel_phred_threshold + indel_phred_het_prior
+    min_mixed_qual = max(min_snv_qual, min_indel_qual)
 
     if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):
         return hl.range(1, hl.len(alleles)).map(
-            lambda ai: low_qual_expr(alleles[0], alleles[ai], qual_approx_expr[ai - 1])
+            lambda ai: hl.cond(
+                hl.is_snp(alleles[0], alleles[ai]),
+                qual_approx_expr[ai - 1] < min_snv_qual,
+                qual_approx_expr[ai - 1] < min_indel_qual
+            )
         )
     else:
-        return low_qual_expr(alleles[0], alleles[1], qual_approx_expr)
+        return(
+            hl.case()
+            .when(hl.range(1,hl.len(alleles)).all(lambda ai: hl.is_snp(alleles[0], alleles[ai])), qual_approx_expr < min_snv_qual)
+            .when(hl.range(1, hl.len(alleles)).all(lambda ai: hl.is_indel(alleles[0], alleles[ai])), qual_approx_expr < min_indel_qual)
+            .default(qual_approx_expr < min_mixed_qual)
+        )
 
 
 def generate_trio_stats_expr(

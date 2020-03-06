@@ -392,6 +392,14 @@ def default_compute_info(
             **get_site_info_expr(
                 mt
             )
+        )  
+    
+        # Add lowqual flag
+        info_ht = info_ht.annotate(
+            lowqual=get_lowqual_expr(
+                info_ht.alleles,
+                info_ht.info.QUALapprox
+            )
         )
 
     # Add AC and AC_raw:
@@ -423,9 +431,9 @@ def default_compute_info(
 
     # Add lowqual flag
     info_ht = info_ht.annotate(
-        lowqual=get_lowqual_expr(
+        AS_lowqual=get_lowqual_expr(
             info_ht.alleles,
-            info_ht.info.QUALapprox
+            info_ht.info.AS_QUALapprox
         )
     )
 

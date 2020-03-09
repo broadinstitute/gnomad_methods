@@ -13,11 +13,13 @@ from bokeh.layouts import gridplot, row, widgetbox
 from bokeh.plotting import figure, show, output_file
 from bokeh.io import output_notebook, push_notebook, export_png
 from bokeh.models.widgets import Tabs, Panel
-from bokeh.palettes import *
+from bokeh.palettes import d3, Spectral8, viridis  # pylint: disable=no-name-in-module
 from bokeh.models import *
 from typing import *
 from bokeh.plotting.helpers import stack
 from bokeh.transform import factor_cmap
+
+from .gnomad_functions import logger
 
 # Setting some defaults for Table.show
 if 'old_show' not in dir():
@@ -138,16 +140,15 @@ def plot_hail_hist(hist_data: hl.Struct,
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
-    :param Struct hist_data: Data to plot
-    :param str title: Plot title
-    :param bool log: Whether the y-axis should be log
-    :param str fill_color: Color to fill the histogram bars that fall within the hist boundaries
+    :param hist_data: Data to plot
+    :param title: Plot title
+    :param log: Whether the y-axis should be log
+    :param fill_color: Color to fill the histogram bars that fall within the hist boundaries
     :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
-    :param str line_color: Color of the lines around the histogram bars
-    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
-    :param bool hide_zeros: Remove hist bars with 0 count
+    :param line_color: Color of the lines around the histogram bars
+    :param hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param hide_zeros: Remove hist bars with 0 count
     :return: Histogram plot
-    :rtype: Figure
     """
 
     return plot_multi_hail_hist({'hist': hist_data},
@@ -175,19 +176,21 @@ def plot_multi_hail_hist(hist_data: Dict[str, hl.Struct],
     Each histogram can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     Example usage:
-    plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
 
-    :param dict of str -> Struct hist_data: Data to plot
-    :param str title: Plot title
-    :param bool log: Whether the y-axis should be log
-    :param dict of str ->str fill_color: Color to fill the histogram bars that fall within the hist boundaries
-    :param dict of str -> str outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
-    :param str line_color: Color of the lines around the histogram bars
-    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
-    :param bool hide_zeros: Remove hist bars with 0 count
-    :param float alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
+    .. code-block:: python
+
+        plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
+
+    :param hist_data: Data to plot
+    :param title: Plot title
+    :param log: Whether the y-axis should be log
+    :param fill_color: Color to fill the histogram bars that fall within the hist boundaries
+    :param outlier_fill_color: Color to fill the histogram bars that fall outside the hist boundaries
+    :param line_color: Color of the lines around the histogram bars
+    :param hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param hide_zeros: Remove hist bars with 0 count
+    :param alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
     :return: Histogram plot
-    :rtype: Figure
     """
 
     low = int(log)
@@ -196,7 +199,6 @@ def plot_multi_hail_hist(hist_data: Dict[str, hl.Struct],
         alpha = 1.0/len(hist_data)
 
     if fill_color is None:
-        from bokeh.palettes import d3
         color_palette = d3['Category10'][max(3, len(hist_data))]
         fill_color = {hist_name: color_palette[i] for i, hist_name in enumerate(hist_data.keys())}
 
@@ -249,15 +251,14 @@ def plot_hail_hist_cumulative(hist_data: hl.Struct, title: str = 'Plot', normali
     """
     hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
-    :param Struct hist_data: Data to plot
-    :param str title: Plot title
-    :param bool normalize: Whether to normalize the data (0,1)
-    :param str line_color: Color of the line
-    :param int line_width: Width of the line
-    :param bool log: Whether the y-axis should be log
-    :param str hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
+    :param hist_data: Data to plot
+    :param title: Plot title
+    :param normalize: Whether to normalize the data (0,1)
+    :param line_color: Color of the line
+    :param line_width: Width of the line
+    :param log: Whether the y-axis should be log
+    :param hover_mode: Hover mode; one of 'mouse' (default), 'vline' or 'hline'
     :return: Histogram plot
-    :rtype: Figure
     """
     cumulative_data = np.cumsum(hist_data.bin_freq) + hist_data.n_smaller
     np.append(cumulative_data, [cumulative_data[-1] + hist_data.n_larger])
@@ -303,9 +304,9 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
 
 def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
-    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively
-    Or if an unordered Table is provided, a Figure with file sizes is output
-    If metadata file or rows directory is missing, returns None
+    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively.
+    Or if an unordered Table is provided, a Figure with file sizes is output.
+    If metadata file or rows directory is missing, returns None.
     """
     panel_size = 600
     subpanel_size = 150
@@ -494,23 +495,22 @@ def pair_plot(
         tooltip_cols: List[str] = None
 ) -> Column:
     """
-
     Plots each column of `data` against each other and returns a grid of plots.
+
     The diagonal contains a histogram of each column, or a density plot if labels are provided.
     The lower diagonal contains scatter plots of each column against each other.
     The upper diagonal is empty.
+
     All columns should be numerical with the exception of the `label_col` if provided.
     If a color dict containing provided mapping labels to specific colors can be specified using `color_dict`
 
-    :param DataFrame data: Dataframe to plot
-    :param str label_col: Column of the DataFrame containing the labels
-    :param list of str or dict of str -> str colors: RGB hex colors. If a dict is provided, it should contain the mapping of label to colors.
-    :param str tools: Tools for the resulting plots
-    :param list of str tooltip_cols: Additional columns that should be displayed in tooltip
+    :param data: Dataframe to plot
+    :param label_col: Column of the DataFrame containing the labels
+    :param colors: RGB hex colors. If a dict is provided, it should contain the mapping of label to colors.
+    :param tools: Tools for the resulting plots
+    :param tooltip_cols: Additional columns that should be displayed in tooltip
     :return: Grid of plots (column of rows)
-    :rtype: Column
     """
-    from bokeh.palettes import viridis
 
     if tooltip_cols is None:
         tooltip_cols = [] if label_col is None else [label_col]

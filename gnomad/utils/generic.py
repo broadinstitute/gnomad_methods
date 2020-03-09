@@ -1,3 +1,4 @@
+import base64
 import hail as hl
 from hail.expr.expressions import *
 from collections import defaultdict, namedtuple, OrderedDict, Counter
@@ -11,8 +12,22 @@ import functools
 from hail.utils.misc import divide_null
 from .gnomad_functions import logger
 import os
+import subprocess
+from gnomad.resources.resource_utils import DataException
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'AS_RAW_MQ', 'AS_SB_TABLE']
+
+VEP_REFERENCE_DATA = {
+    'GRCh37': {
+        'vep_config': 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht',
+    },
+    'GRCh38': {
+        'vep_config': 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json',
+        'all_possible': 'gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht',
+    }
+}
+
 
 def file_exists(fname: str) -> bool:
     """
@@ -20,9 +35,8 @@ def file_exists(fname: str) -> bool:
     Supports either local or Google cloud (gs://) paths.
     If the file is a Hail file (.ht, .mt extensions), it checks that _SUCCESS is present.
 
-    :param str fname: File name
+    :param fname: File name
     :return: Whether the file exists
-    :rtype: bool
     """
     fext = os.path.splitext(fname)[1]
     if fext in ['.ht', '.mt']:
@@ -44,12 +58,78 @@ def unphase_mt(mt: hl.MatrixTable) -> hl.MatrixTable:
                                )
 
 
+def get_reference_ht(
+        ref: hl.ReferenceGenome,
+        contigs: Optional[List[str]] = None,
+        excluded_intervals: Optional[List[hl.Interval]] = None,
+        add_all_substitutions: bool = False,
+        filter_n: bool = True
+) -> hl.Table:
+    """
+    Creates a reference Table with locus and alleles (containing only the reference allele by default) from the given reference genome.
+
+    .. note::
+
+        If the `contigs` argument is not provided, all contigs (including obscure ones) will be added to the table.
+        This can be slow as contigs are added one by one.
+
+    :param ref: Input reference genome
+    :param contigs: An optional list of contigs that the Table should include
+    :param excluded_intervals: An optional list of intervals to exclude
+    :param add_all_substitutions: If set, then all possible substitutions are added in the alleles array
+    :param filter_n: If set, bases where the reference is unknown (n) are filtered.
+    :return:
+    """
+    if not ref.has_sequence():
+        add_reference_sequence(ref)
+
+    if not contigs:
+        contigs = ref.contigs
+
+    if add_all_substitutions:
+        SUBSTITUTIONS_TABLE = hl.literal({
+            'a': ['c', 'g', 't'],
+            'c': ['a', 'g', 't'],
+            'g': ['a', 'c', 't'],
+            't': ['a', 'c', 'g']
+        })
+
+    context = None
+    for contig in contigs:
+        _context = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 5000000))
+
+        locus_expr = hl.locus(contig=contig, pos=_context.idx + 1, reference_genome=ref)
+        ref_allele_expr = locus_expr.sequence_context().lower()
+        if add_all_substitutions:
+            alleles_expr = hl.array([ref_allele_expr]).extend(SUBSTITUTIONS_TABLE.get(ref_allele_expr, hl.empty_array(hl.tstr)))
+        else:
+            alleles_expr = [ref_allele_expr]
+
+        _context = _context.select(
+            locus=locus_expr,
+            alleles=alleles_expr
+        ).key_by('locus', 'alleles').drop('idx')
+
+        if excluded_intervals is not None:
+            _context = hl.filter_intervals(_context, excluded_intervals, keep=False)
+
+        if filter_n:
+            _context = _context.filter(_context.alleles[0] == 'n', keep=False)
+
+        if context is None:
+            context = _context
+        else:
+            context = context.union(_context)
+
+    return context
+
+
 def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
     """
     Adds the fasta sequence to a Hail reference genome.
     Only GRCh37 and GRCh38 references are supported.
 
-    :param ReferenceGenome ref: Input reference genome.
+    :param ref: Input reference genome.
     :return:
     """
     if not ref.has_sequence():
@@ -78,15 +158,15 @@ def get_reference_genome(
     """
     Returns the reference genome associated with the input Locus expression
 
-    :param LocusExpression or IntervalExpression locus: Input locus
-    :param  bool add_sequence: If set, the fasta sequence is added to the reference genome
+    :param locus: Input locus
+    :param add_sequence: If set, the fasta sequence is added to the reference genome
     :return: Reference genome
-    :rtype: ReferenceGenome
     """
     if isinstance(locus, hl.expr.LocusExpression):
-        return locus.dtype.reference_genome
-    assert (isinstance(locus, hl.expr.IntervalExpression))
-    ref = locus.dtype.point_type.reference_genome
+        ref = locus.dtype.reference_genome
+    else:
+        assert (isinstance(locus, hl.expr.IntervalExpression))
+        ref = locus.dtype.point_type.reference_genome
     if add_sequence:
         ref = add_reference_sequence(ref)
     return ref
@@ -96,9 +176,8 @@ def flip_base(base: str) -> str:
     """
     Returns the complement of a base
 
-    :param str base: Base to be flipped
+    :param base: Base to be flipped
     :return: Complement of input base
-    :rtype: str
     """
     return (hl.switch(base)
             .when('A', 'T')
@@ -112,9 +191,8 @@ def reverse_complement_bases(bases: hl.expr.StringExpression) -> hl.expr.StringE
     """
     Returns the reverse complement of a sequence
 
-    :param StringExpression bases: Sequence to be flipped
+    :param bases: Sequence to be flipped
     :return: Reverse complement of input sequence
-    :rtype: StringExpression
     """
     return hl.delimit(hl.range(bases.length() - 1, -1, -1).map(lambda i: flip_base(bases[i])), '')
 
@@ -124,9 +202,8 @@ def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTa
     Filters the Table or MatrixTable to autosomes only.
     This assumes that the input contains a field named `locus` of type Locus
 
-    :param MatrixTable or Table t: Input MT/HT
+    :param t: Input MT/HT
     :return:  MT/HT autosomes
-    :rtype: MatrixTable or Table
     """
     reference = get_reference_genome(t.locus)
     autosomes = hl.parse_locus_interval(f'{reference.contigs[0]}-{reference.contigs[21]}', reference_genome=reference)
@@ -146,12 +223,11 @@ def get_sample_data(mt: hl.MatrixTable, fields: List[hl.expr.StringExpression], 
     """
     Hail devs hate this one simple py4j trick to speed up sample queries
 
-    :param MatrixTable or Table mt: MT
-    :param list of StringExpression fields: fields
+    :param mt:
+    :param fields:
     :param sep: Separator to use (tab usually fine)
     :param delim: Delimiter to use (pipe usually fine)
     :return: Sample data
-    :rtype: list of list of str
     """
     field_expr = fields[0]
     for field in fields[1:]:
@@ -172,12 +248,11 @@ def pc_project(
     """
     Projects samples in `mt` on pre-computed PCs.
 
-    :param MatrixTable mt: MT containing the samples to project
-    :param Table loadings_ht: HT containing the PCA loadings and allele frequencies used for the PCA
-    :param str loading_location: Location of expression for loadings in `loadings_ht`
-    :param str af_location: Location of expression for allele frequency in `loadings_ht`
+    :param mt: MT containing the samples to project
+    :param loadings_ht: HT containing the PCA loadings and allele frequencies used for the PCA
+    :param loading_location: Location of expression for loadings in `loadings_ht`
+    :param af_location: Location of expression for allele frequency in `loadings_ht`
     :return: Table with scores calculated from loadings in column `scores`
-    :rtype: Table
     """
 
     n_variants = loadings_ht.count()
@@ -199,9 +274,13 @@ def pc_project(
 
 def sample_pcs_uniformly(scores_table: hl.Table, num_pcs: int = 5, num_bins: int = 10, num_per_bin: int = 20) -> hl.Table:
     """
-    Sample somewhat uniformly in num_pcs-dimensional PC space, by:
+    Sample somewhat uniformly in num_pcs-dimensional PC space.
+
+    Works by:
+
     1. Binning each PC axis into num_bins bins, creating an array of num_pcs with num_bins possible values (total of num_bins ^ num_pcs sectors)
     2. For each k-dimensional sector, take up to num_per_bin samples
+
     Max number of samples return is num_per_bin * num_bins ^ num_pcs, but in practice, typically much fewer (corners of PC space are sparse)
 
     Assumes your scores are in scores_table.scores (and sample stored in `s`)
@@ -224,32 +303,35 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     """
     Filters low-confidence regions
 
-    :param MatrixTable or Table mt: MatrixTable or Table to filter
-    :param bool filter_lcr: Whether to filter LCR regions
-    :param bool filter_decoy: Whether to filter decoy regions
-    :param bool filter_segdup: Whether to filter Segdup regions
-    :param bool filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
-    :param list of str high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
+    :param mt: MatrixTable or Table to filter
+    :param filter_lcr: Whether to filter LCR regions
+    :param filter_decoy: Whether to filter decoy regions
+    :param filter_segdup: Whether to filter Segdup regions
+    :param filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
+    :param high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
     :return: MatrixTable or Table with low confidence regions removed
-    :rtype: MatrixTable or Table
     """
-    from gnomad_hail.resources import lcr_intervals_path, decoy_intervals_path, segdup_intervals_path, high_coverage_intervals_path
+    build = get_reference_genome(mt.locus).name
+    if build == "GRCh37":
+        import gnomad.resources.grch37.reference_data as resources
+    elif build == "GRCh38":
+        import gnomad.resources.grch38.reference_data as resources
 
     criteria = []
     if filter_lcr:
-        lcr = hl.import_locus_intervals(lcr_intervals_path)
+        lcr = resources.lcr_intervals.ht()
         criteria.append(hl.is_missing(lcr[mt.locus]))
 
     if filter_decoy:
-        decoy = hl.import_bed(decoy_intervals_path)
+        decoy = resources.decoy_intervals.ht()
         criteria.append(hl.is_missing(decoy[mt.locus]))
 
     if filter_segdup:
-        segdup = hl.import_bed(segdup_intervals_path)
+        segdup = resources.seg_dup_intervals.ht()
         criteria.append(hl.is_missing(segdup[mt.locus]))
 
     if filter_exome_low_coverage_regions:
-        high_cov = hl.import_locus_intervals(high_coverage_intervals_path)
+        high_cov = resources.high_coverage_intervals.ht()
         criteria.append(hl.is_missing(high_cov[mt.locus]))
 
     if high_conf_regions is not None:
@@ -267,32 +349,37 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
+def vep_context_ht_path(ref: str = 'GRCh37'):
+    if ref not in VEP_REFERENCE_DATA.keys():
+        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
+    return VEP_REFERENCE_DATA[ref]['all_possible']
+
+
+def vep_config_path(ref: str = 'GRCh37'):
+    if ref not in VEP_REFERENCE_DATA.keys():
+        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
+    return VEP_REFERENCE_DATA[ref]['vep_config']
+
+
 def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
     """
     VEP a table, or lookup variants in a reference database
 
-    :param Table ht: Input Table
-    :param Table reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
-    :param ReferenceGenome reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
-    :param str vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
+    :param ht: Input Table
+    :param reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
+    :param reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
+    :param vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
     :return: VEPped Table
-    :rtype: Table
     """
-    from gnomad_hail.resources.basics import vep_config_path, context_ht_path
-
-    VEP_REFERENCES = {
-        'GRCh37': context_ht_path(),
-        'GRCh38': '',
-    }
-
+    if reference is None:
+        reference = hl.default_reference().name
     if reference_vep_ht is None:
-        if reference is None:
-            reference = hl.default_reference().name
 
-        if reference not in VEP_REFERENCES:
-            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(VEP_REFERENCES.keys())}')
+        possible_refs = ('GRCh37', 'GRCh38')
+        if reference not in possible_refs:
+            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}')
 
-        reference_vep_ht = hl.read_table(VEP_REFERENCES[reference])
+        reference_vep_ht = hl.read_table(vep_context_ht_path(reference))
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 
@@ -309,7 +396,8 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
 
 def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
     """
-    Add most_severe_consequence annotation to transcript consequences
+    Add most_severe_consequence annotation to transcript consequences.
+
     This is for a given transcript, as there are often multiple annotations for a single transcript:
     e.g. splice_region_variant&intron_variant -> splice_region_variant
     """
@@ -328,11 +416,10 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
     and worst_csq_by_gene, any_lof into [vep_root]
 
-    :param MatrixTable mt: Input MT
-    :param str vep_root: Root for vep annotation (probably vep)
-    :param bool penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them as equal to HC
+    :param mt: Input MT
+    :param vep_root: Root for vep annotation (probably vep)
+    :param penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them as equal to HC
     :return: MT with better formatted consequences
-    :rtype: MatrixTable
     """
     from .constants import CSQ_ORDER
 
@@ -403,9 +490,8 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
     Select only primitive types (string, int, float, bool) from a Table.
     Particularly useful for exporting a Table.
 
-    :param Table ht: Input Table
+    :param ht: Input Table
     :return: Table with only primitive types selected
-    :rtype: Table
     """
     return ht.select(**{x: v for x, v in ht.row_value.items() if
                         v.dtype in {hl.tstr, hl.tint32, hl.tfloat32, hl.tint64, hl.tfloat64, hl.tbool}})
@@ -415,9 +501,8 @@ def annotation_type_is_numeric(t: Any) -> bool:
     """
     Given an annotation type, returns whether it is a numerical type or not.
 
-    :param Type t: Type to test
+    :param t: Type to test
     :return: If the input type is numeric
-    :rtype: bool
     """
     return (isinstance(t, hl.tint32) or
             isinstance(t, hl.tint64) or
@@ -431,9 +516,8 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
     Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
     Note types that aren't natively exportable to VCF will be converted to String on export.
 
-    :param Type t: Type to test
+    :param t: Type to test
     :return: If the input type can be exported to VCF
-    :rtype: bool
     """
     return (annotation_type_is_numeric(t) or
             isinstance(t, hl.tstr) or
@@ -473,13 +557,12 @@ def phase_by_transmission(
     1. All mother genotype calls non-PAR region of Y
     2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
 
-    :param LocusExpression locus: Locus in the trio MatrixTable
-    :param ArrayExpression alleles: Alleles in the trio MatrixTable
-    :param CallExpression proband_call: Input proband genotype call
-    :param CallExpression father_call: Input father genotype call
-    :param CallExpression mother_call: Input mother genotype call
+    :param locus: Locus in the trio MatrixTable
+    :param alleles: Alleles in the trio MatrixTable
+    :param proband_call: Input proband genotype call
+    :param father_call: Input father genotype call
+    :param mother_call: Input mother genotype call
     :return: Array containing: phased proband call, phased father call, phased mother call
-    :rtype: ArrayExpression
     """
 
     def call_to_one_hot_alleles_array(call: hl.expr.CallExpression, alleles: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
@@ -488,10 +571,9 @@ def phase_by_transmission(
         It is returned as an ordered array where the first vector corresponds to the first allele,
         and the second vector (only present if het) the second allele.
 
-        :param CallExpression call: genotype
-        :param ArrayExpression alleles: Alleles at the site
+        :param call: genotype
+        :param alleles: Alleles at the site
         :return: Array of one-hot-encoded alleles
-        :rtype: ArrayExpression
         """
         return hl.cond(
             call.is_het(),
@@ -506,10 +588,9 @@ def phase_by_transmission(
         """
         Given a genotype and which allele was transmitted to the offspring, returns the parent phased genotype.
 
-        :param CallExpression call: Parent genotype
-        :param int transmitted_allele_index: index of transmitted allele (0 or 1)
+        :param call: Parent genotype
+        :param transmitted_allele_index: index of transmitted allele (0 or 1)
         :return: Phased parent genotype
-        :rtype: CallExpression
         """
         return hl.call(
             call[transmitted_allele_index],
@@ -528,13 +609,12 @@ def phase_by_transmission(
         Returns phased genotype calls in the case of a diploid proband
         (autosomes, PAR regions of sex chromosomes or non-PAR regions of a female proband)
 
-        :param LocusExpression locus: Locus in the trio MatrixTable
-        :param ArrayExpression alleles: Alleles in the trio MatrixTable
-        :param CallExpression proband_call: Input proband genotype call
-        :param CallExpression father_call: Input father genotype call
-        :param CallExpression mother_call: Input mother genotype call
+        :param locus: Locus in the trio MatrixTable
+        :param alleles: Alleles in the trio MatrixTable
+        :param proband_call: Input proband genotype call
+        :param father_call: Input father genotype call
+        :param mother_call: Input mother genotype call
         :return: Array containing: phased proband call, phased father call, phased mother call
-        :rtype: ArrayExpression
         """
 
         proband_v = proband_call.one_hot_alleles(alleles)
@@ -573,11 +653,10 @@ def phase_by_transmission(
         """
         Returns phased genotype calls in the case of a haploid proband in the non-PAR region of X
 
-        :param CallExpression proband_call: Input proband genotype call
-        :param CallExpression father_call: Input father genotype call
-        :param CallExpression mother_call: Input mother genotype call
+        :param proband_call: Input proband genotype call
+        :param father_call: Input father genotype call
+        :param mother_call: Input mother genotype call
         :return: Array containing: phased proband call, phased father call, phased mother call
-        :rtype: ArrayExpression
         """
 
         transmitted_allele = hl.zip_with_index(hl.array([mother_call[0], mother_call[1]])).find(lambda m: m[1] == proband_call[0])
@@ -598,10 +677,9 @@ def phase_by_transmission(
         """
         Returns phased genotype calls in the non-PAR region of Y (requires both father and proband to be haploid to return phase)
 
-        :param CallExpression proband_call: Input proband genotype call
-        :param CallExpression father_call: Input father genotype call
+        :param proband_call: Input proband genotype call
+        :param father_call: Input father genotype call
         :return: Array containing: phased proband call, phased father call, phased mother call
-        :rtype: ArrayExpression
         """
         return hl.cond(
             proband_call.is_haploid() & father_call.is_haploid() & (father_call[0] == proband_call[0]),
@@ -624,42 +702,40 @@ def phase_by_transmission(
 
 def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT', phased_call_field: str = 'PBT_GT') -> hl.MatrixTable:
     """
-        Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
-        Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
+    Adds a phased genoype entry to a trio MatrixTable based allele transmission in the trio.
+    Uses only a `Call` field to phase and only phases when all 3 members of the trio are present and have a call.
 
-        In the phased genotypes, the order is as follows:
-        * Proband: father_allele | mother_allele
-        * Parents: transmitted_allele | untransmitted_allele
+    In the phased genotypes, the order is as follows:
+    * Proband: father_allele | mother_allele
+    * Parents: transmitted_allele | untransmitted_allele
 
-        Phasing of sex chromosomes:
-        Sex chromosomes of male individuals should be haploid to be phased correctly.
-        If a proband is diploid on non-par regions of the sex chromosomes, it is assumed to be female.
+    Phasing of sex chromosomes:
+    Sex chromosomes of male individuals should be haploid to be phased correctly.
+    If a proband is diploid on non-par regions of the sex chromosomes, it is assumed to be female.
 
-        Genotypes that cannot be phased are set to `NA`.
-        The following genotype calls combinations cannot be phased by transmission (all trio members phased calls set to missing):
-        1. One of the calls in the trio is missing
-        2. The proband genotype cannot be obtained from the parents alleles (Mendelian violation)
-        3. All individuals of the trio are heterozygous for the same two alleles
-        4. Father is diploid on non-PAR region of X or Y
-        5. Proband is diploid on non-PAR region of Y
+    Genotypes that cannot be phased are set to `NA`.
+    The following genotype calls combinations cannot be phased by transmission (all trio members phased calls set to missing):
+    1. One of the calls in the trio is missing
+    2. The proband genotype cannot be obtained from the parents alleles (Mendelian violation)
+    3. All individuals of the trio are heterozygous for the same two alleles
+    4. Father is diploid on non-PAR region of X or Y
+    5. Proband is diploid on non-PAR region of Y
 
-        In addition, individual phased genotype calls are returned as missing in the following situations:
-        1. All mother genotype calls non-PAR region of Y
-        2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
+    In addition, individual phased genotype calls are returned as missing in the following situations:
+    1. All mother genotype calls non-PAR region of Y
+    2. Diploid father genotype calls on non-PAR region of X for a male proband (proband and mother are still phased as father doesn't participate in allele transmission)
 
 
-        Typical usage:
-        ```
-            trio_matrix = hl.trio_matrix(mt, ped)
-            phased_trio_matrix = phase_trio_matrix_by_transmission(trio_matrix)
-        ```
+    Typical usage::
 
-        :param MatrixTable tm: Trio MatrixTable (entries should be a Struct with `proband_entry`, `mother_entry` and `father_entry` present)
-        :param str call_field: genotype field name to phase
-        :param str phased_call_field: name for the phased genotype field
-        :return: trio MatrixTable entry with additional phased genotype field for each individual
-        :rtype: MatrixTable
-        """
+        trio_matrix = hl.trio_matrix(mt, ped)
+        phased_trio_matrix = phase_trio_matrix_by_transmission(trio_matrix)
+
+    :param tm: Trio MatrixTable (entries should be a Struct with `proband_entry`, `mother_entry` and `father_entry` present)
+    :param call_field: genotype field name to phase
+    :param phased_call_field: name for the phased genotype field
+    :return: trio MatrixTable entry with additional phased genotype field for each individual
+    """
 
     tm = tm.annotate_entries(
         __phased_GT=phase_by_transmission(
@@ -689,14 +765,11 @@ def phase_trio_matrix_by_transmission(tm: hl.MatrixTable, call_field: str = 'GT'
 
 def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.MatrixTable:
     """
-
     Splits a trio MatrixTable back into a sample MatrixTable.
-    It assumes that the input MatrixTable schema
 
-    :param MatrixTable tm: Input trio MatrixTable
-    :param list of str col_keys: Column keys for the sample MatrixTable
+    :param tm: Input trio MatrixTable
+    :param col_keys: Column keys for the sample MatrixTable
     :return: Sample MatrixTable
-    :rtype: MatrixTable
     """
     tm = tm.select_entries(
         __trio_entries=hl.array([tm.proband_entry, tm.father_entry, tm.mother_entry])
@@ -720,226 +793,6 @@ def explode_trio_matrix(tm: hl.MatrixTable, col_keys: List[str] = ['s']) -> hl.M
     return mt
 
 
-def get_duplicated_samples(
-        kin_ht: hl.Table,
-        i_col: str = 'i',
-        j_col: str = 'j',
-        kin_col: str = 'kin',
-        duplicate_threshold: float = 0.4
-) -> List[Set[str]]:
-    """
-    Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
-
-
-    :param Table kin_ht: pc_relate output table
-    :param str i_col: Column containing the 1st sample
-    :param str j_col: Column containing the 2nd sample
-    :param str kin_col: Column containing the kinship value
-    :param float duplicate_threshold: Kinship threshold to consider two samples duplicated
-    :return: List of samples that are duplicates
-    :rtype: list of set of str
-    """
-
-    def get_all_dups(s, dups, samples_duplicates):
-        if s in samples_duplicates:
-            dups.add(s)
-            s_dups = samples_duplicates.pop(s)
-            for s_dup in s_dups:
-                if s_dup not in dups:
-                    dups = get_all_dups(s_dup, dups, samples_duplicates)
-        return dups
-
-    dup_rows = kin_ht.filter(kin_ht[kin_col] > duplicate_threshold).collect()
-
-    samples_duplicates = defaultdict(set)
-    for row in dup_rows:
-        samples_duplicates[row[i_col]].add(row[j_col])
-        samples_duplicates[row[j_col]].add(row[i_col])
-
-    duplicated_samples = []
-    while len(samples_duplicates) > 0:
-        duplicated_samples.append(get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates))
-
-    return duplicated_samples
-
-
-def infer_families(relatedness_ht: hl.Table,
-                   sex: Union[hl.Table, Dict[str, bool]],
-                   duplicated_samples: Set[str],
-                   i_col: str = 'i',
-                   j_col: str = 'j',
-                   kin_col: str = 'kin',
-                   ibd2_col: str = 'ibd2',
-                   first_degree_threshold: Tuple[float, float] = (0.2, 0.4),
-                   second_degree_threshold: float = 0.05,
-                   ibd2_parent_offspring_threshold: float = 0.2
-                   ) -> hl.Pedigree:
-    """
-
-    Infers familial relationships from the results of pc_relate and sex information.
-    Note that both kinship and ibd2 are needed in the pc_relate output.
-
-    This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
-    trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
-
-    Note that this function only returns complete trios defined as:
-    one child, one father and one mother (sex is required for both parents)
-
-    :param Table relatedness_ht: pc_relate output table
-    :param Table or dict of str -> bool sex: Either a Table with the standard hail `is_female` annotation, or a dict containing the sex for each sample. True = female, False = male, None = unknown
-    :param set of str duplicated_samples: Duplicated samples to remove (If not provided, this function won't work as it assumes that each child has exactly two parents)
-    :param str i_col: Column containing the 1st sample id in the pc_relate table
-    :param str j_col: Column containing the 2nd sample id in the pc_relate table
-    :param str kin_col: Column containing the kinship in the pc_relate table
-    :param str ibd2_col: Column containing ibd2 in the pc_relate table
-    :param (float, float) first_degree_threshold: Lower/upper bounds for kin for 1st degree relatives
-    :param float second_degree_threshold: Lower bound for kin for 2nd degree relatives
-    :param float ibd2_parent_offspring_threshold: Upper bound on ibd2 for a parent/offspring
-    :return: Pedigree containing all trios in the data
-    :rtype: Pedigree
-    """
-
-    def get_fam_samples(sample: str,
-                        fam: Set[str],
-                        samples_rel: Dict[str, Set[str]],
-                        ) -> Set[str]:
-        """
-        Given a sample, its known family and a dict that links samples with their relatives, outputs the set of
-        samples that constitute this sample family.
-
-        :param str sample: sample
-        :param dict of str -> set of str samples_rel: dict(sample -> set(sample_relatives))
-        :param set of str fam: sample known family
-        :return: Family including the sample
-        :rtype: set of str
-        """
-        fam.add(sample)
-        for s2 in samples_rel[sample]:
-            if s2 not in fam:
-                fam = get_fam_samples(s2, fam, samples_rel)
-        return fam
-
-    def get_indexed_ibd2(
-            pc_relate_rows: List[hl.Struct]
-    ) -> Dict[Tuple[str, str], float]:
-        """
-        Given rows from a pc_relate table, creates a dict with:
-        keys: Pairs of individuals, lexically ordered
-        values: ibd2
-
-        :param list of hl.Struct pc_relate_rows: Rows from a pc_relate table
-        :return: Dict of lexically ordered pairs of individuals -> kinship
-        :rtype: dict of (str, str) -> float
-        """
-        ibd2 = dict()
-        for row in pc_relate_rows:
-            ibd2[tuple(sorted((row[i_col], row[j_col])))] = row[ibd2_col]
-        return ibd2
-
-    def get_parents(
-            possible_parents: List[str],
-            relative_pairs: List[Tuple[str, str]],
-            sex: Dict[str, bool]
-    ) -> Union[Tuple[str, str], None]:
-        """
-        Given a list of possible parents for a sample (first degree relatives with low ibd2),
-        looks for a single pair of samples that are unrelated with different sexes.
-        If a single pair is found, return the pair (father, mother)
-
-        :param list of str possible_parents: Possible parents
-        :param list of (str, str) relative_pairs: Pairs of relatives, used to check that parents aren't related with each other
-        :param dict of str -> bool sex: Dict mapping samples to their sex (True = female, False = male, None or missing = unknown)
-        :return: (father, mother) if found, `None` otherwise
-        :rtype: (str, str) or None
-        """
-
-        parents = []
-        while len(possible_parents) > 1:
-            p1 = possible_parents.pop()
-            for p2 in possible_parents:
-                if tuple(sorted((p1, p2))) not in relative_pairs:
-                    if sex.get(p1) is False and sex.get(p2):
-                        parents.append((p1, p2))
-                    elif sex.get(p1) and sex.get(p2) is False:
-                        parents.append((p2, p1))
-
-        if len(parents) == 1:
-            return parents[0]
-
-        return None
-
-    # Check relatedness table format
-    if not relatedness_ht[i_col].dtype == relatedness_ht[j_col].dtype:
-        logger.error("i_col and j_col of the relatedness table need to be of the same type.")
-
-    # If `relatedness_ht` is keyed by a Struct, attempt to extract `s` instead
-    if isinstance(relatedness_ht[i_col], hl.expr.StructExpression):
-        if 's' in relatedness_ht[i_col]:
-            logger.warning(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}. Attempting to use relatedness_ht[{i_col}].s")
-            relatedness_ht = relatedness_ht.key_by(  # Needed for familial inference at this point -- should be generalized
-                **{
-                    i_col: relatedness_ht[i_col].s,
-                    j_col: relatedness_ht[j_col].s
-                }
-            )
-        else:
-            logger.error(
-                f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relatedness_ht[i_col].dtype}.")
-
-    # If sex is a Table, extract sex information as a Dict
-    if isinstance(sex, hl.Table):
-        sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
-
-    # Get first degree relatives - exclude duplicate samples
-    dups = hl.literal(duplicated_samples)
-    first_degree_pairs = relatedness_ht.filter(
-        (relatedness_ht[kin_col] >= first_degree_threshold[0]) &
-        (relatedness_ht[kin_col] <= first_degree_threshold[1]) &  # We do not want to include twins/duplicate samples
-        ~dups.contains(relatedness_ht[i_col]) &
-        ~dups.contains(relatedness_ht[j_col])
-    ).collect()
-    first_degree_relatives = defaultdict(set)
-    for row in first_degree_pairs:
-        first_degree_relatives[row[i_col]].add(row[j_col])
-        first_degree_relatives[row[j_col]].add(row[i_col])
-
-    # Add second degree relatives for those samples
-    # This is needed to distinguish grandparent - child - parent from child - mother, father down the line
-    first_degree_samples = hl.literal(set(first_degree_relatives.keys()))
-    second_degree_samples = relatedness_ht.filter(
-        (first_degree_samples.contains(relatedness_ht[i_col]) | first_degree_samples.contains(relatedness_ht[j_col])) &
-        (relatedness_ht[kin_col] >= second_degree_threshold) &
-        (relatedness_ht[kin_col] <= first_degree_threshold[1])
-    ).collect()
-
-    ibd2 = get_indexed_ibd2(second_degree_samples)
-
-    fam_id = 1
-    trios = []
-    while len(first_degree_relatives) > 0:
-        s_fam = get_fam_samples(list(first_degree_relatives)[0], set(),
-                                first_degree_relatives)
-        for s in s_fam:
-            s_rel = first_degree_relatives.pop(s)
-            possible_parents = []
-            for rel in s_rel:
-                if ibd2[tuple(sorted((s, rel)))] < ibd2_parent_offspring_threshold:
-                    possible_parents.append(rel)
-
-            parents = get_parents(possible_parents, list(ibd2.keys()), sex)
-
-            if parents is not None:
-                trios.append(hl.Trio(s=s,
-                                     fam_id=str(fam_id),
-                                     pat_id=parents[0],
-                                     mat_id=parents[1],
-                                     is_female=sex.get(s)))
-
-        fam_id += 1
-
-    return hl.Pedigree(trios)
-
-
 def expand_pd_array_col(
         df: pd.DataFrame,
         array_col: str,
@@ -950,14 +803,13 @@ def expand_pd_array_col(
     """
     Expands a Dataframe column containing an array into multiple columns.
 
-    :param DataFrame df: input dataframe
-    :param str array_col: Column containing the array
-    :param int num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
+    :param df: input dataframe
+    :param array_col: Column containing the array
+    :param num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
                              If <1, the number of output columns is equal to the length of the shortest array in `array_col`
     :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)
-    :param bool out_1based_indexing: If set, the output column names indexes start at 1. Otherwise they start at 0.
+    :param out_1based_indexing: If set, the output column names indexes start at 1. Otherwise they start at 0.
     :return: dataframe with expanded columns
-    :rtype: DataFrame
     """
 
     if out_cols_prefix is None:
@@ -985,11 +837,11 @@ def assign_population_pcs(
         missing_label: str = 'oth'
 ) -> Tuple[Union[hl.Table, pd.DataFrame], Any]: # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     """
-
     This function uses a random forest model to assign population labels based on the results of PCA.
     Default values for model and assignment parameters are those used in gnomAD.
 
     As input, this function can either take:
+
     - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
         - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
         - A Hail Table will be returned as output
@@ -997,23 +849,22 @@ def assign_population_pcs(
         - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
         - A pandas DataFrame is returned as output
 
-    Note
-    ----
-    If you have a Pandas Dataframe and have all PCs as an array in a single column, the
-    `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
+    .. note::
 
-    :param Table or DataFrame pop_pc_pd: Input Hail Table or Pandas Dataframe
-    :param ArrayExpression or list of str pc_cols: Columns storing the PCs to use
-    :param str known_col: Column storing the known population labels
+        If you have a Pandas Dataframe and have all PCs as an array in a single column, the
+        `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
+
+    :param pop_pc_pd: Input Hail Table or Pandas Dataframe
+    :param pc_cols: Columns storing the PCs to use
+    :param known_col: Column storing the known population labels
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
-    :param int seed: Random seed
-    :param float prop_train: Proportion of known data used for training
-    :param int n_estimators: Number of trees to use in the RF model
-    :param float min_prob: Minimum probability of belonging to a given population for the population to be set (otherwise set to `None`)
-    :param str output_col: Output column storing the assigned population
-    :param str missing_label: Label for samples for which the assignment probability is smaller than `min_prob`
+    :param seed: Random seed
+    :param prop_train: Proportion of known data used for training
+    :param n_estimators: Number of trees to use in the RF model
+    :param min_prob: Minimum probability of belonging to a given population for the population to be set (otherwise set to `None`)
+    :param output_col: Output column storing the assigned population
+    :param missing_label: Label for samples for which the assignment probability is smaller than `min_prob`
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs and imputed population labels, trained random forest model
-    :rtype: (Table or DataFrame, RandomForestClassifier)
     """
     from sklearn.ensemble import RandomForestClassifier
     hail_input = isinstance(pop_pca_scores, hl.Table)
@@ -1083,24 +934,24 @@ def assign_population_pcs(
 def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
     """
     Merges multiple stats counters, assuming that they were computed on non-overlapping data.
+
     Examples:
+
     - Merge stats computed on indel and snv separately
     - Merge stats computed on bi-allelic and multi-allelic variants separately
     - Merge stats computed on autosomes and sex chromosomes separately
 
-    :param hl.expr.ArrayExpression stats: An array of stats counters to merge
+    :param stats: An array of stats counters to merge
     :return: Merged stats Struct
-    :rtype: hl.expr.StructExpression
     """
 
     def add_stats(i: hl.expr.StructExpression, j: hl.expr.StructExpression) -> hl.expr.StructExpression:
         """
         This merges two stast counters together. It assumes that all stats counter fields are present in the struct.
 
-        :param hl.expr.Tuple i: accumulator: struct with mean, n and variance
-        :param hl.expr.Tuple j: new element: stats_struct -- needs to contain mean, n and variance
+        :param i: accumulator: struct with mean, n and variance
+        :param j: new element: stats_struct -- needs to contain mean, n and variance
         :return: Accumulation over all elements: struct with mean, n and variance
-        :rtype: hl.expr.StructExpression
         """
         delta = j.mean - i.mean
         n_tot = i.n + j.n
@@ -1121,7 +972,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         dropped_metrics = dropped_metrics.union(stat_expr_metrics.difference(metrics))
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
-        logger.warning("The following metrics will be dropped during stats counter merging as they do not appear in all counters:".format(",".join(dropped_metrics)))
+        logger.warning(f"The following metrics will be dropped during stats counter merging as they do not appear in all counters: {', '.join(dropped_metrics)}")
 
     # Because merging standard deviation requires having the mean and n,
     # check that they are also present if `stdev` is. Otherwise remove stdev
@@ -1158,9 +1009,8 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
     Returns a boolean expression selecting bi-allelic sites only,
     accounting for whether the input MT/HT was split.
 
-    :param Table or MatrixTable t: Input HT/MT
+    :param t: Input HT/MT
     :return: Boolean expression selecting only bi-allelic sites
-    :rtype: BooleanExpression
     """
     return (~t.was_split if 'was_split' in t.row else (hl.len(t.alleles) == 2))
 
@@ -1168,16 +1018,16 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
 def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
+
     This is implemented based on the GATK InbreedingCoeff metric:
     https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
 
-    Note
-    ----
-    The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+    .. note::
 
-    :param CallExpression call: Expression giving the calls in the MT
+        The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+
+    :param call: Expression giving the calls in the MT
     :return: Site inbreeding coefficient expression
-    :rtype: Float32Expression
     """
 
     def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
@@ -1196,9 +1046,8 @@ def to_phred(linear_expr: hl.expr.NumericExpression) -> hl.expr.Float64Expressio
     """
     Computes the phred-scaled value of the linear-scale input
 
-    :param NumericExpression linear_expr: input
+    :param linear_expr: input
     :return: Phred-scaled value
-    :rtype: Float64Expression
     """
     return -10 * hl.log10(linear_expr)
 
@@ -1207,9 +1056,8 @@ def from_phred(phred_score_expr: hl.expr.NumericExpression) -> hl.expr.Float64Ex
     """
     Computes the linear-scale value of the phred-scaled input.
 
-    :param NumericExpression phred_score_expr: phred-scaled value
+    :param phred_score_expr: phred-scaled value
     :return: linear-scale value of the phred-scaled input.
-    :rtype: Float64Expression
     """
     return 10 ** -(phred_score_expr / 10)
 
@@ -1233,20 +1081,19 @@ def fs_from_sb(
     In addition to the default GATK behavior, setting `normalize` to `False` will perform a chi-squared test
     for large counts (> `min_cell_count`) instead of normalizing the cell values.
 
-    Note
-    ----
-    This function can either take
-    - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
-    - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+    .. note::
+
+        This function can either take
+        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
-    :param ArrayNumericExpression or ArrayExpression sb: Count of ref/alt reads on each strand
-    :param bool normalize: Whether to normalize counts is sum(counts) > min_cell_count (`normalize`=True), or use a chi sq instead of FET (`normalize`=False)
-    :param int min_cell_count: Maximum count for performing a FET
-    :param int min_count: Minimum total count to output `FS` (otherwise `null` it output)
+    :param sb: Count of ref/alt reads on each strand
+    :param normalize: Whether to normalize counts is sum(counts) > min_cell_count (normalize=True), or use a chi sq instead of FET (normalize=False)
+    :param min_cell_count: Maximum count for performing a FET
+    :param min_count: Minimum total count to output FS (otherwise null it output)
     :return: FS value
-    :rtype: Int64Expression
     """
     if not isinstance(sb, hl.expr.ArrayNumericExpression):
         sb = hl.bind(
@@ -1307,6 +1154,7 @@ def vep_struct_to_csq(
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
+
     The fields and their order will correspond to those passed in `csq_fields`, which corresponds to the
     VCF header that is required to interpret the VCF CSQ INFO field.
 
@@ -1319,7 +1167,6 @@ def vep_struct_to_csq(
     :param vep_expr: The input VEP Struct
     :param csq_fields: The | delimited list of fields to include in the CSQ (in that order)
     :return: The corresponding CSQ strings
-    :rtype: ArrayExpression
     """
 
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
@@ -1387,10 +1234,9 @@ def get_median_and_mad_expr(
     Computes the median and median absolute deviation (MAD) for the given expression.
     Note that the default value of k assumes normally distributed data.
 
-    :param ArrayNumericExpression metric_expr: Expression to compute median and MAD for
-    :param float k: The scaling factor for MAD calculation. Default assumes normally distributed data.
+    :param metric_expr: Expression to compute median and MAD for
+    :param k: The scaling factor for MAD calculation. Default assumes normally distributed data.
     :return: Struct with median and MAD
-    :rtype: StructExpression
     """
     return hl.bind(
         lambda x: hl.struct(
@@ -1403,14 +1249,13 @@ def get_median_and_mad_expr(
         )
     )
 
-                            
+
 def get_array_element_type(array_expr: hl.expr.ArrayExpression) -> hl.HailType:
     """
     Returns the type of an array element.
 
-    :param ArrayExpression array_expr: The array expression to get the element type
+    :param array_expr: The array expression to get the element type
     :return: Hail type
-    :rtype: HailType
     """
     return array_expr.dtype.element_type
 
@@ -1424,12 +1269,13 @@ def ht_to_vcf_mt(
     - All int64 are coerced to int32
     - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
 
-    Note: The MT returned has no cols.
+    .. note::
 
-    :param Table info_ht: Input HT
+        The MT returned has no cols.
+
+    :param info_ht: Input HT
     :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct)
     :return: MatrixTable ready for VCF export
-    :rtype: MatrixTable
     """
 
     def get_pipe_expr(array_expr: hl.expr.ArrayExpression) -> hl.expr.StringExpression:
@@ -1483,9 +1329,8 @@ def sort_intervals(intervals: List[hl.Interval]):
     Sorts an array of intervals by:
     start contig, then start position, then end contig, then end position
 
-    :param list of Interval intervals: Intervals to sort
+    :param intervals: Intervals to sort
     :return: Sorted interval list
-    :rtype: list of Interval
     """
     return sorted(
         intervals,
@@ -1502,10 +1347,9 @@ def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
     """
     Generates a list with the union of all intervals in the input list by merging overlapping intervals.
 
-    :param list of Interval intervals: Intervals to merge
-    :param bool is_sorted: If set, assumes intervals are already sorted, otherwise will sort.
+    :param intervals: Intervals to merge
+    :param is_sorted: If set, assumes intervals are already sorted, otherwise will sort.
     :return: List of merged intervals
-    :rtype: List of Interval
     """
     sorted_intervals = intervals if is_sorted else sort_intervals(intervals)
     merged_intervals = sorted_intervals[:1]
@@ -1526,9 +1370,8 @@ def interval_length(interval: hl.Interval) -> int:
     """
     Returns the total number of bases in an Interval
 
-    :param Interval interval: Input interval
+    :param interval: Input interval
     :return: Total length of the interval
-    :rtype: int
     """
     if interval.start.contig != interval.end.contig:
         ref = interval.start.reference_genome
@@ -1539,3 +1382,49 @@ def interval_length(interval: hl.Interval) -> int:
         )
     else:
         return interval.end.position - interval.start.position
+
+
+def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
+    """
+    Repartitions a MatrixTable on read. Currently the best way to increase the number of partitions in a MatrixTable.
+
+    :param path: Path to input MatrixTable
+    :param n_partitions: Number of desired partitions
+    :return: MatrixTable with the number of desired partitions
+    """
+    mt = hl.read_matrix_table(path)
+    intervals = mt._calculate_new_partitions(n_partitions)
+    return hl.read_matrix_table(path, _intervals=intervals)
+
+
+def get_file_stats(url: str) -> Tuple[int, str, str]:
+    """
+    Gets size (as both int and str) and md5 for file at specified URL.
+    Typically used to get stats on VCFs.
+
+    :param url: Path to file of interest.
+    :return: Tuple of file size and md5.
+    """
+    one_gibibyte = 2 ** 30
+    one_mebibyte = 2 ** 20
+
+    output = subprocess.check_output(["gsutil", "stat", url]).decode("utf8")
+    lines = output.split("\n")
+
+    info = {}
+    for line in lines:
+        if not line:
+            continue
+
+        label, value = [s.strip() for s in line.split(":", 1)]
+        if label == "Content-Length":
+            size = int(value)
+            if size >= one_gibibyte:
+                info["size"] = f"{round(size / one_gibibyte, 2)} GiB"
+            else:
+                info["size"] = f"{round(size / one_mebibyte, 2)} MiB"
+
+        if label == "Hash (md5)":
+            info["md5"] = base64.b64decode(value).hex()
+
+    return (size, info["size"], info["md5"])

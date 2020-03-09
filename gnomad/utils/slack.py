@@ -6,7 +6,7 @@ def get_slack_info():
     from slackclient import SlackClient
     # import os
     try:
-        from gnomad_hail.slack_creds import slack_token
+        from gnomad.slack_creds import slack_token  # pylint: disable=import-error,no-name-in-module
     except Exception:
         return None
 

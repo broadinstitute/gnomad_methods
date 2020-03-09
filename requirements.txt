@@ -1,0 +1,5 @@
+hail
+hdbscan
+ipywidgets
+scikit-learn
+slackclient==2.0.0

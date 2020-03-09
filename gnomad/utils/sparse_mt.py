@@ -1,4 +1,6 @@
+from .annotations import get_lowqual_expr
 from .generic import *
+from .gnomad_functions import get_adj_expr
 
 INFO_SUM_AGG_FIELDS= ['QUALapprox']
 INFO_INT32_SUM_AGG_FIELDS = ['VarDP']
@@ -9,13 +11,13 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
     This function takes a sparse MT and computes for each row the genomic position of the
     most upstream reference block overlapping that row.
+
     Note that since reference blocks do not extend beyond contig boundaries, only the position is kept.
 
     This function returns a Table with that annotation.  (`last_END_position`).
 
-    :param MatrixTable mt: Input MatrixTable
+    :param mt: Input MatrixTable
     :return: Output Table with `last_END_position` annotation
-    :rtype: Table
     """
     mt = mt.select_entries('END')
 
@@ -65,14 +67,14 @@ def densify_sites(
 ) -> hl.MatrixTable:
     """
     Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
+
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
 
-    :param MatrixTable mt: Input sparse MT
-    :param Table sites_ht: Desired sites to densify
-    :param Table last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
-    :param bool semi_join_rows: Whether to filter the MT rows based on semi-join (default, better if sites_ht is large) or based on filter_intervals (better if sites_ht only contains a few sites)
+    :param mt: Input sparse MT
+    :param sites_ht: Desired sites to densify
+    :param last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
+    :param semi_join_rows: Whether to filter the MT rows based on semi-join (default, better if sites_ht is large) or based on filter_intervals (better if sites_ht only contains a few sites)
     :return: Dense MT filtered to the sites in `sites_ht`
-    :rtype: MatrixTable
     """
     logger.info("Computing intervals to densify from sites Table.")
     sites_ht = sites_ht.key_by('locus')
@@ -117,7 +119,9 @@ def _get_info_agg_expr(
 ) -> Dict[str, hl.expr.Aggregation]:
     """
     Helper function containing code to create Aggregators for both site or AS info expression aggregations.
+
     Notes:
+
     1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
     2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
@@ -125,15 +129,14 @@ def _get_info_agg_expr(
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
-    :param MatrixTable mt: Input MT
-    :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
-    :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using element-wise summing over an array.
-    :param str prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
+    :param mt: Input MT
+    :param sum_agg_fields: Fields to aggregate using sum.
+    :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
+    :param median_agg_fields: Fields to aggregate using (approximate) median.
+    :param median_agg_fields: Fields to aggregate using element-wise summing over an array.
+    :param prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
 
     :return: Dictionary of expression names and their corresponding aggregation Expression
-    :rtype: dict of str -> Aggregation
     """
 
     def _agg_list_to_dict(mt: hl.MatrixTable, fields: List[str]) -> Dict[str, hl.expr.NumericExpression]:
@@ -236,7 +239,9 @@ def get_as_info_expr(
 ) -> hl.expr.StructExpression:
     """
     Returns an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
+
     Notes:
+
     1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
     2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
@@ -244,12 +249,11 @@ def get_as_info_expr(
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
-    :param MatrixTable mt: Input Matrix Table
-    :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
-    :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
+    :param mt: Input Matrix Table
+    :param sum_agg_fields: Fields to aggregate using sum.
+    :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
+    :param median_agg_fields: Fields to aggregate using (approximate) median.
     :return: Expression containing the AS info fields
-    :rtype: StructExpression
     """
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
@@ -316,18 +320,18 @@ def get_site_info_expr(
     Creates a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
     Notes:
+
     1. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     2. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
     3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
        then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
        Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
-    :param MatrixTable mt: Input Matrix Table
-    :param list of str or dict of str -> NumericExpression sum_agg_fields: Fields to aggregate using sum.
-    :param list of str or dict of str -> NumericExpression int32_sum_agg_fields: Fields to aggregate using sum using int32.
-    :param list of str or dict of str -> NumericExpression median_agg_fields: Fields to aggregate using (approximate) median.
+    :param mt: Input Matrix Table
+    :param sum_agg_fields: Fields to aggregate using sum.
+    :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
+    :param median_agg_fields: Fields to aggregate using (approximate) median.
     :return: Expression containing the site-level info fields
-    :rtype: StructExpression
     """
     if 'DP' in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning("`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr")
@@ -361,9 +365,118 @@ def get_site_info_expr(
     return info
 
 
+def default_compute_info(
+    mt: hl.MatrixTable,
+    site_annotations: bool = False,
+    n_partitions: int = 5000
+) -> hl.Table:
+    """
+    Computes a HT with the typical GATK allele-specific (AS) info fields 
+    as well as ACs and lowqual fields.
+    Note that this table doesn't split multi-allelic sites.
+
+    :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
+    :param site_annotations: Whether to also generate site level info fields. Default is False.
+    :param n_partitions: Number of desired partitions for output Table. Default is 5000.
+    :return: Table with info fields
+    :rtype: Table
+    """
+    # Move gvcf info entries out from nested struct
+    mt = mt.transmute_entries(**mt.gvcf_info)
+
+    # Compute AS info expr
+    info_expr = get_as_info_expr(mt)
+
+    if site_annotations:
+        info_expr = info_expr.annotate(
+            **get_site_info_expr(
+                mt
+            )
+        )  
+    
+        # Add lowqual flag
+        info_ht = info_ht.annotate(
+            lowqual=get_lowqual_expr(
+                info_ht.alleles,
+                info_ht.info.QUALapprox
+            )
+        )
+
+    # Add AC and AC_raw:
+    # First compute ACs for each non-ref allele, grouped by adj
+    grp_ac_expr = hl.agg.array_agg(
+        lambda ai: hl.agg.filter(
+            mt.LA.contains(ai),
+            hl.agg.group_by(
+                get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD),
+                hl.agg.sum(
+                    mt.LGT.one_hot_alleles(mt.LA.map(lambda x: hl.str(x)))[mt.LA.index(ai)]
+                )
+            )
+        ),
+        hl.range(1, hl.len(mt.alleles))
+    )
+
+    # Then, for each non-ref allele, compute
+    # AC as the adj group
+    # AC_raw as the sum of adj and non-adj groups
+    info_expr = info_expr.annotate(
+        AC_raw=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))),
+        AC=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0)))
+    )
+
+    info_ht = mt.select_rows(
+        info=info_expr
+    ).rows()
+
+    # Add lowqual flag
+    info_ht = info_ht.annotate(
+        AS_lowqual=get_lowqual_expr(
+            info_ht.alleles,
+            info_ht.info.AS_QUALapprox
+        )
+    )
+
+    return info_ht.naive_coalesce(n_partitions)
+
+
+def split_info_annotation(
+    info_expr: hl.expr.StructExpression,
+    a_index: hl.expr.Int32Expression
+) -> hl.expr.StructExpression:
+    """
+    Splits multi-allelic allele-specific info fields.
+
+    :param info_expr: Field containing info struct.
+    :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
+    :return: Info struct with split annotations.
+    """
+    # Index AS annotations
+    info_expr=info_expr.annotate(
+        **{f: info_expr[f][a_index - 1] for f in info_expr if f.startswith("AC") or (f.startswith("AS_") and not f == "AS_SB_TABLE")},
+        AS_SB_TABLE=info_expr.AS_SB_TABLE[0].extend(info_expr.AS_SB_TABLE[a_index])
+        )
+    return info_expr
+
+
+def split_lowqual_annotation(
+    lowqual_expr: hl.expr.ArrayExpression,
+    a_index: hl.expr.Int32Expression
+) -> hl.expr.BooleanExpression:
+    """
+    Splits multi-allelic low QUAL annotation.
+
+    :param lowqual_expr: Field containing low QUAL annotation.
+    :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
+    :return: Low QUAL expression for particular allele.
+    """
+    return lowqual_expr[a_index - 1]
+
+
 def impute_sex_ploidy(
         mt: hl.MatrixTable,
-        excluded_intervals: Optional[hl.Table],
+        excluded_intervals: Optional[hl.Table] = None,
+        included_intervals: Optional[hl.Table] = None,
         normalization_contig: str = 'chr20',
         chr_x: Optional[str] = None,
         chr_y: Optional[str] = None,
@@ -373,13 +486,13 @@ def impute_sex_ploidy(
     the coverage of an autosomal chromosome (by default chr20).
     Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
 
-    :param MatrixTable mt: Input sparse Matrix Table
-    :param Table excluded_intervals: An optional table of intervals to exclude from the computation.
-    :param str normalization_contig: Which chromosome to normalize by
-    :param str chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
-    :param str chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
+    :param mt: Input sparse Matrix Table
+    :param excluded_intervals: Optional table of intervals to exclude from the computation.
+    :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
+    :param normalization_contig: Which chromosome to normalize by
+    :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
+    :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
     :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
-    :rtype: Table
     """
 
     ref = get_reference_genome(mt.locus, add_sequence=True)
@@ -403,27 +516,41 @@ def impute_sex_ploidy(
         chr_y = ref.y_contigs[0]
 
     def get_contig_size(contig: str) -> int:
-        contig = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 500_000))
-        contig = contig.annotate(
-            locus=hl.locus(contig=contig, pos=contig.idx + 1, reference_genome=ref)
+        logger.info(f"Working on {contig}")
+        contig_ht = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 500_000))
+        contig_ht = contig_ht.annotate(
+            locus=hl.locus(contig=contig, pos=contig_ht.idx + 1, reference_genome=ref)
         )
-        contig = contig.filter(contig.locus.sequence_context().lower() != 'n')
+        contig_ht = contig_ht.filter(contig_ht.locus.sequence_context().lower() != 'n')
 
+        if contig in ref.x_contigs:
+            contig_ht = contig_ht.filter(contig_ht.locus.in_x_nonpar())
         if contig in ref.y_contigs:
-            contig = contig.filter(contig.locus.in_y_nonpar())
+            contig_ht = contig_ht.filter(contig_ht.locus.in_y_nonpar())
 
-        contig = contig.key_by('locus')
+        contig_ht = contig_ht.key_by('locus')
+        if included_intervals is not None:
+            contig_ht = contig_ht.filter(hl.is_defined(included_intervals[contig_ht.key]))
         if excluded_intervals is not None:
-            contig = contig.filter(hl.is_missing(excluded_intervals[contig.key]))
-        contig_size = contig.count()
+            contig_ht = contig_ht.filter(hl.is_missing(excluded_intervals[contig_ht.key]))
+        contig_size = contig_ht.count()
         logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
         return contig_size
 
-    def get_chr_dp_ann(chr: str) -> hl.Table:
-        contig_size = get_contig_size(chr)
-        chr_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(chr)])
+    def get_chr_dp_ann(chrom: str) -> hl.Table:
+        contig_size = get_contig_size(chrom)
+        chr_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(chrom)])
+
+        if chrom in ref.x_contigs:
+            chr_mt = chr_mt.filter_rows(chr_mt.locus.in_x_nonpar())
+        if chrom in ref.y_contigs:
+            chr_mt = chr_mt.filter_rows(chr_mt.locus.in_y_nonpar())
+
+        if included_intervals is not None:
+            chr_mt = chr_mt.filter_rows(hl.is_defined(included_intervals[chr_mt.locus]))
+
         return chr_mt.select_cols(**{
-            f'{chr}_mean_dp': hl.agg.sum(hl.cond(chr_mt.LGT.is_hom_ref(), chr_mt.DP * (chr_mt.END - chr_mt.locus.position), chr_mt.DP)) / contig_size
+            f'{chrom}_mean_dp': hl.agg.sum(hl.cond(chr_mt.LGT.is_hom_ref(), chr_mt.DP * (chr_mt.END - chr_mt.locus.position), chr_mt.DP)) / contig_size
         }).cols()
 
     normalization_chrom_dp = get_chr_dp_ann(normalization_contig)
@@ -441,3 +568,83 @@ def impute_sex_ploidy(
             f'{chr_y}_ploidy': ht[f'{chr_y}_mean_dp'] / (ht[f'{normalization_contig}_mean_dp'] / 2)
         }
     )
+
+
+def compute_coverage_stats(
+        mt: hl.MatrixTable,
+        reference_ht: hl.Table,
+        coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100]
+) -> hl.Table:
+    """
+    Computes the following coverage statistics for every base of the `reference_ht` provided:
+        - mean
+        - median
+        - total DP
+        - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
+
+    The `reference_ht` is a table that contains row for each locus coverage should be computed on.
+    It needs to be keyed with the same keys as `mt`, typically either `locus` or `locus, alleles`.
+    The `reference_ht` can e.g. be created using `get_reference_ht`
+
+    :param mt: Input sparse MT
+    :param reference_ht: Input reference HT
+    :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :return: Table with per-base coverage stats
+    """
+
+    n_samples = mt.count_cols()
+    print(f"Computing coverage stats on {n_samples} samples.")
+
+    # Create an outer join with the reference Table
+    mt = mt.select_entries('END', 'DP')
+    col_key_fields = list(mt.col_key)
+    t = mt._localize_entries('__entries', '__cols')
+    t = t.join(reference_ht.annotate(_in_ref=True), how='outer')
+    t = t.annotate(__entries=hl.or_else(t.__entries, hl.range(n_samples).map(lambda x: hl.null(t.__entries.dtype.element_type))))
+    mt = t._unlocalize_entries('__entries', '__cols', col_key_fields)
+
+    # Densify
+    mt = hl.experimental.densify(mt)
+
+    # Filter rows where the reference is missing
+    mt = mt.filter_rows(mt._in_ref)
+
+    # Compute coverage stats
+    coverage_over_x_bins = sorted(coverage_over_x_bins)
+    max_coverage_bin = coverage_over_x_bins[-1]
+    hl_coverage_over_x_bins = hl.array(coverage_over_x_bins)
+
+    # This expression creates a counter DP -> number of samples for DP between 0 and max_coverage_bin
+    coverage_counter_expr = hl.agg.counter(hl.or_else(hl.min(max_coverage_bin, mt.DP), 0))
+
+    # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
+    # and computes the cumulative sum over them.
+    #  It needs to be in reverse order because we want the sum over samples covered by > X.
+    count_array_expr = hl.cumulative_sum(
+        hl.array(
+            [hl.int32(coverage_counter_expr.get(max_coverage_bin, 0))]  # The coverage was already floored to the max_coverage_bin, so no more aggregation is needed for the max bin
+        ).extend(  # For each of the other bins, coverage needs to be summed between the boundaries
+            hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
+                lambda i: hl.sum(
+                    hl.range(hl_coverage_over_x_bins[i - 1], hl_coverage_over_x_bins[i]).map(
+                        lambda j: hl.int32(coverage_counter_expr.get(j, 0))
+                    )
+                )
+            )
+        )
+    )
+    mean_expr = hl.agg.mean(mt.DP)
+
+    # Annotate rows now
+    return mt.select_rows(
+        mean=hl.cond(hl.is_nan(mean_expr), 0, mean_expr),
+        median=hl.or_else(hl.agg.approx_median(mt.DP), 0),
+        total_DP=hl.agg.sum(mt.DP),
+        **{
+            f'over_{x}': count_array_expr[i] / n_samples
+            for i, x in zip(
+                range(len(coverage_over_x_bins) - 1, -1, -1),  # Reverse the bin index as count_array_expr has the reverse order
+                coverage_over_x_bins
+            )
+        }
+    ).rows()

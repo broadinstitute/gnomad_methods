@@ -66,3 +66,21 @@ CSQ_NON_CODING = [
 ]
 
 CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
+
+ANNOTATIONS_HISTS = {
+    'FS': (0, 50, 50),  # NOTE: in 2.0.2 release this was on (0,20)
+    'InbreedingCoeff': (-0.25, 0.25, 50),
+    'MQ': (0, 80, 40),
+    'RAW_MQ': (2, 13, 33),
+    'MQRankSum': (-15, 15, 60),
+    'QD': (0, 40, 40),
+    'ReadPosRankSum': (-15, 15, 60),
+    'SOR': (0, 10, 50),
+    'BaseQRankSum': (-15, 15, 60),
+    'ClippingRankSum': (-5, 5, 40),
+    'DP': (1, 9, 32),  # NOTE: in 2.0.2 release this was on (0,8)
+    'VQSLOD': (-30, 30, 60),  # NOTE: in 2.0.2 release this was on (-20,20)
+    'AS_VQSLOD': (-30, 30, 60),
+    'rf_tp_probability': (0, 1, 50),
+    'pab_max': (0, 1, 50)
+}

@@ -1,22 +1,18 @@
 import logging
 from typing import Dict, List, Optional, Set, Tuple, Union
-
 import hail as hl
-
 from gnomad.utils.generic import filter_to_autosomes
 from gnomad.utils.gnomad_functions import annotate_adj
-
-# TODO: Use import below when relatedness PR goes in
-# from gnomad.utils.relatedness import SIBLINGS
+from gnomad.utils.relatedness import SIBLINGS
 
 
 logger = logging.getLogger("gnomad.utils")
 
 
 def pop_max_expr(
-    freq: hl.expr.ArrayExpression,
-    freq_meta: hl.expr.ArrayExpression,
-    pops_to_exclude: Optional[Set[str]] = None,
+        freq: hl.expr.ArrayExpression,
+        freq_meta: hl.expr.ArrayExpression,
+        pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
     Creates an expression containing popmax: the frequency information about the population
@@ -41,8 +37,8 @@ def pop_max_expr(
     _pops_to_exclude = hl.literal(pops_to_exclude)
     popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (hl.set(freq_meta[i].keys()) == {"group", "pop"})
-        & (freq_meta[i]["group"] == "adj")
-        & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+                  & (freq_meta[i]["group"] == "adj")
+                  & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
     )
     freq_filtered = popmax_freq_indices.map(
         lambda i: freq[i].annotate(pop=freq_meta[i]["pop"])
@@ -53,10 +49,10 @@ def pop_max_expr(
 
 
 def project_max_expr(
-    project_expr: hl.expr.StringExpression,
-    gt_expr: hl.expr.CallExpression,
-    alleles_expr: hl.expr.ArrayExpression,
-    n_projects: int = 5,
+        project_expr: hl.expr.StringExpression,
+        gt_expr: hl.expr.CallExpression,
+        alleles_expr: hl.expr.ArrayExpression,
+        n_projects: int = 5,
 ) -> hl.expr.ArrayExpression:
     """
     Creates an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
@@ -96,7 +92,7 @@ def project_max_expr(
                 project_cs.filter(
                     # filter to projects with AF > 0
                     lambda x: x[1].AF[ai]
-                    > 0
+                              > 0
                 ),
                 # order the callstats computed by AF in decreasing order
                 lambda x: -x[1].AF[ai]
@@ -116,11 +112,11 @@ def project_max_expr(
 
 
 def faf_expr(
-    freq: hl.expr.ArrayExpression,
-    freq_meta: hl.expr.ArrayExpression,
-    locus: hl.expr.LocusExpression,
-    pops_to_exclude: Optional[Set[str]] = None,
-    faf_thresholds: List[float] = [0.95, 0.99],
+        freq: hl.expr.ArrayExpression,
+        freq_meta: hl.expr.ArrayExpression,
+        locus: hl.expr.LocusExpression,
+        pops_to_exclude: Optional[Set[str]] = None,
+        faf_thresholds: List[float] = [0.95, 0.99],
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
     Calculates the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
@@ -151,24 +147,24 @@ def faf_expr(
     )
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (freq_meta[i].get("group") == "adj")
-        & (
-            (freq_meta[i].size() == 1)
-            | (
-                (hl.set(freq_meta[i].keys()) == {"pop", "group"})
-                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
-            )
-        )
+                  & (
+                          (freq_meta[i].size() == 1)
+                          | (
+                                  (hl.set(freq_meta[i].keys()) == {"pop", "group"})
+                                  & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+                          )
+                  )
     )
     sex_faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (freq_meta[i].get("group") == "adj")
-        & (freq_meta[i].contains("sex"))
-        & (
-            (freq_meta[i].size() == 2)
-            | (
-                (hl.set(freq_meta[i].keys()) == {"pop", "group", "sex"})
-                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
-            )
-        )
+                  & (freq_meta[i].contains("sex"))
+                  & (
+                          (freq_meta[i].size() == 2)
+                          | (
+                                  (hl.set(freq_meta[i].keys()) == {"pop", "group", "sex"})
+                                  & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+                          )
+                  )
     )
 
     faf_expr = faf_freq_indices.map(
@@ -203,11 +199,11 @@ def faf_expr(
 
 
 def qual_hist_expr(
-    gt_expr: Optional[hl.expr.CallExpression] = None,
-    gq_expr: Optional[hl.expr.NumericExpression] = None,
-    dp_expr: Optional[hl.expr.NumericExpression] = None,
-    ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
-    adj_expr: Optional[hl.expr.BooleanExpression] = None,
+        gt_expr: Optional[hl.expr.CallExpression] = None,
+        gq_expr: Optional[hl.expr.NumericExpression] = None,
+        dp_expr: Optional[hl.expr.NumericExpression] = None,
+        ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
+        adj_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Returns a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
@@ -267,12 +263,12 @@ def qual_hist_expr(
 
 
 def age_hists_expr(
-    adj_expr: hl.expr.BooleanExpression,
-    gt_expr: hl.expr.CallExpression,
-    age_expr: hl.expr.NumericExpression,
-    lowest_boundary: int = 30,
-    highest_boundary: int = 80,
-    n_bins: int = 10,
+        adj_expr: hl.expr.BooleanExpression,
+        gt_expr: hl.expr.CallExpression,
+        age_expr: hl.expr.NumericExpression,
+        lowest_boundary: int = 30,
+        highest_boundary: int = 80,
+        n_bins: int = 10,
 ) -> hl.expr.StructExpression:
     """
     Returns a StructExpression with the age histograms for hets and homs.
@@ -298,12 +294,12 @@ def age_hists_expr(
 
 
 def annotate_freq(
-    mt: hl.MatrixTable,
-    sex_expr: Optional[hl.expr.StringExpression] = None,
-    pop_expr: Optional[hl.expr.StringExpression] = None,
-    subpop_expr: Optional[hl.expr.StringExpression] = None,
-    additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
-    downsamplings: Optional[List[int]] = None,
+        mt: hl.MatrixTable,
+        sex_expr: Optional[hl.expr.StringExpression] = None,
+        pop_expr: Optional[hl.expr.StringExpression] = None,
+        subpop_expr: Optional[hl.expr.StringExpression] = None,
+        additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
+        downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
     Adds a row annotation `freq` to the input `mt` with stratified allele frequencies,
@@ -442,31 +438,31 @@ def annotate_freq(
 
     # Add all desired strata, starting with the full set and ending with downsamplings (if any)
     sample_group_filters = (
-        [({}, True)]
-        + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
-        + [({"sex": sex}, mt._freq_meta.sex == sex) for sex in cut_data.get("sex", {})]
-        + [
-            (
-                {"pop": pop, "sex": sex},
-                (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop),
-            )
-            for sex in cut_data.get("sex", {})
-            for pop in cut_data.get("pop", {})
-        ]
-        + [
-            (
-                {"subpop": subpop.subpop, "pop": subpop.pop},
-                (mt._freq_meta.pop == subpop.pop)
-                & (mt._freq_meta.subpop == subpop.subpop),
-            )
-            for subpop in cut_data.get("subpop", {})
-        ]
-        + [
-            ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
-            for strata in additional_strata_expr
-            for s_value in cut_data.get(strata, {})
-        ]
-        + sample_group_filters
+            [({}, True)]
+            + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
+            + [({"sex": sex}, mt._freq_meta.sex == sex) for sex in cut_data.get("sex", {})]
+            + [
+                (
+                    {"pop": pop, "sex": sex},
+                    (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop),
+                )
+                for sex in cut_data.get("sex", {})
+                for pop in cut_data.get("pop", {})
+            ]
+            + [
+                (
+                    {"subpop": subpop.subpop, "pop": subpop.pop},
+                    (mt._freq_meta.pop == subpop.pop)
+                    & (mt._freq_meta.subpop == subpop.subpop),
+                )
+                for subpop in cut_data.get("subpop", {})
+            ]
+            + [
+                ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
+                for strata in additional_strata_expr
+                for s_value in cut_data.get(strata, {})
+            ]
+            + sample_group_filters
     )
 
     # Annotate columns with group_membership
@@ -490,8 +486,8 @@ def annotate_freq(
     # Insert raw as the second element of the array
     freq_expr = (
         freq_expr[:1]
-        .extend([hl.agg.call_stats(mt.GT, mt.alleles)])
-        .extend(freq_expr[1:])
+            .extend([hl.agg.call_stats(mt.GT, mt.alleles)])
+            .extend(freq_expr[1:])
     )
 
     # Select non-ref allele (assumes bi-allelic)
@@ -510,21 +506,21 @@ def annotate_freq(
 
 
 def get_lowqual_expr(
-    alleles: hl.expr.ArrayExpression,
-    qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
-    snv_phred_threshold: int = 30,
-    snv_phred_het_prior: int = 30,  # 1/1000
-    indel_phred_threshold: int = 30,
-    indel_phred_het_prior: int = 39,  # 1/8,000
+        alleles: hl.expr.ArrayExpression,
+        qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
+        snv_phred_threshold: int = 30,
+        snv_phred_het_prior: int = 30,  # 1/1000
+        indel_phred_threshold: int = 30,
+        indel_phred_het_prior: int = 39,  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
 
     .. note::
 
-        This lowqual annotation differs from the GATK LowQual filter. GATK uses the SNV prior if the site has any SNV
-        so that SNVs are not penalized if there are also indels at those sites. This implementation will use the indel
-        threshold for indels and the SNV threshold for the SNVs therefore excluding more indels than the GATK filter.
+        When running This lowqual annotation using QUALapprox, it differs from the GATK LowQual filter.
+        This is because GATK computes this annotation at the site level, which uses the least stringent prior for mixed sites.
+        When run using AS_QUALapprox, this implementation can thus be more stringent for certain alleles at mixed sites.
 
     :param alleles: Array of alleles
     :param qual_approx_expr: QUALapprox or AS_QUALapprox
@@ -535,31 +531,33 @@ def get_lowqual_expr(
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
     """
 
-    def low_qual_expr(
-        ref: hl.expr.StringExpression,
-        alt: hl.expr.StringExpression,
-        qual_approx: hl.expr.NumericExpression,
-    ) -> hl.expr.BooleanExpression:
-        return hl.cond(
-            hl.is_snp(ref, alt),
-            qual_approx < snv_phred_threshold + snv_phred_het_prior,
-            qual_approx < indel_phred_threshold + indel_phred_het_prior,
-        )
+    min_snv_qual = snv_phred_threshold + snv_phred_het_prior
+    min_indel_qual = indel_phred_threshold + indel_phred_het_prior
+    min_mixed_qual = max(min_snv_qual, min_indel_qual)
 
     if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):
         return hl.range(1, hl.len(alleles)).map(
-            lambda ai: low_qual_expr(alleles[0], alleles[ai], qual_approx_expr[ai - 1])
+            lambda ai: hl.cond(
+                hl.is_snp(alleles[0], alleles[ai]),
+                qual_approx_expr[ai - 1] < min_snv_qual,
+                qual_approx_expr[ai - 1] < min_indel_qual
+            )
         )
     else:
-        return low_qual_expr(alleles[0], alleles[1], qual_approx_expr)
+        return (
+            hl.case()
+                .when(hl.range(1, hl.len(alleles)).all(lambda ai: hl.is_snp(alleles[0], alleles[ai])), qual_approx_expr < min_snv_qual)
+                .when(hl.range(1, hl.len(alleles)).all(lambda ai: hl.is_indel(alleles[0], alleles[ai])), qual_approx_expr < min_indel_qual)
+                .default(qual_approx_expr < min_mixed_qual)
+        )
 
 
 def generate_trio_stats_expr(
-    trio_mt: hl.MatrixTable,
-    transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-    de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-    ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-    proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
+        trio_mt: hl.MatrixTable,
+        transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the following counts:
@@ -624,18 +622,18 @@ def generate_trio_stats_expr(
         """
         return (
             hl.case()
-            .when(locus.in_autosome_or_par(), auto_or_par)
-            .when(locus.in_x_nonpar(), hemi_x)
-            .when(locus.in_y_nonpar(), hemi_y)
-            .or_missing()
+                .when(locus.in_autosome_or_par(), auto_or_par)
+                .when(locus.in_x_nonpar(), hemi_x)
+                .when(locus.in_y_nonpar(), hemi_y)
+                .or_missing()
         )
 
     def _is_dnm(
-        proband_gt: hl.expr.CallExpression,
-        father_gt: hl.expr.CallExpression,
-        mother_gt: hl.expr.CallExpression,
-        locus: hl.expr.LocusExpression,
-        proband_is_female: Optional[hl.expr.BooleanExpression],
+            proband_gt: hl.expr.CallExpression,
+            father_gt: hl.expr.CallExpression,
+            mother_gt: hl.expr.CallExpression,
+            locus: hl.expr.LocusExpression,
+            proband_is_female: Optional[hl.expr.BooleanExpression],
     ) -> hl.expr.BooleanExpression:
         """
         Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
@@ -657,9 +655,9 @@ def generate_trio_stats_expr(
         )
 
     def _ac_an_parent_child_count(
-        proband_gt: hl.expr.CallExpression,
-        father_gt: hl.expr.CallExpression,
-        mother_gt: hl.expr.CallExpression,
+            proband_gt: hl.expr.CallExpression,
+            father_gt: hl.expr.CallExpression,
+            mother_gt: hl.expr.CallExpression,
     ) -> Dict[str, hl.expr.Int64Expression]:
         """
         Helper method to get AC and AN for parents and children
@@ -758,7 +756,7 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
     return mt
 
 
-def default_generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
+def default_generate_trio_stats(mt: hl.MatrixTable, ) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
 
@@ -788,12 +786,12 @@ def default_generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
 
 
 def generate_sib_stats_expr(
-    mt: hl.MatrixTable,
-    sib_ht: hl.Table,
-    i_col: str = "i",
-    j_col: str = "j",
-    strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-    is_female: Optional[hl.expr.BooleanExpression] = None,
+        mt: hl.MatrixTable,
+        sib_ht: hl.Table,
+        i_col: str = "i",
+        j_col: str = "j",
+        strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        is_female: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
@@ -822,13 +820,13 @@ def generate_sib_stats_expr(
             return hl.or_missing(locus.in_autosome(), gt.n_alt_alleles())
         return (
             hl.case()
-            .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
-            .when(
+                .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
+                .when(
                 ~is_female & (locus.in_x_nonpar() | locus.in_y_nonpar()),
                 hl.min(1, gt.n_alt_alleles()),
             )
-            .when(is_female & locus.in_y_nonpar(), 0)
-            .default(0)
+                .when(is_female & locus.in_y_nonpar(), 0)
+                .default(0)
         )
 
     if is_female is None:
@@ -888,12 +886,12 @@ def generate_sib_stats_expr(
 
 
 def default_generate_sib_stats(
-    mt: hl.MatrixTable,
-    relatedness_ht: hl.Table,
-    sex_ht: hl.Table,
-    i_col: str = "i",
-    j_col: str = "j",
-    relationship_col: str = "relationship",
+        mt: hl.MatrixTable,
+        relatedness_ht: hl.Table,
+        sex_ht: hl.Table,
+        i_col: str = "i",
+        j_col: str = "j",
+        relationship_col: str = "relationship",
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
@@ -914,13 +912,12 @@ def default_generate_sib_stats(
     """
     sex_ht = sex_ht.annotate(
         is_female=hl.case()
-        .when(sex_ht.sex_karyotype == "XX", True)
-        .when(sex_ht.sex_karyotype == "XY", False)
-        .or_missing()
+            .when(sex_ht.sex_karyotype == "XX", True)
+            .when(sex_ht.sex_karyotype == "XY", False)
+            .or_missing()
     )
 
-    # TODO: Change to use SIBLINGS constant when relatedness PR goes in
-    sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == "Siblings")
+    sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)
     s_to_keep = sib_ht.aggregate(
         hl.agg.explode(
             lambda s: hl.agg.collect_as_set(s), [sib_ht[i_col].s, sib_ht[j_col].s]
@@ -944,12 +941,12 @@ def default_generate_sib_stats(
     ).rows()
 
     return sib_stats_ht
-  
- 
+
+
 def get_annotations_hists(
-    ht: hl.Table,
-    annotations_hists: Dict[str, Tuple],
-    log10_annotations: List[str] = ["DP"],
+        ht: hl.Table,
+        annotations_hists: Dict[str, Tuple],
+        log10_annotations: List[str] = ["DP"],
 ) -> Dict[str, hl.expr.StructExpression]:
     """
     Creates histograms for variant metrics in ht.info.
@@ -975,7 +972,7 @@ def get_annotations_hists(
 
 
 def create_frequency_bins_expr(
-    AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
+        AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
 ) -> hl.expr.StringExpression:
     """
     Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
@@ -1006,8 +1003,8 @@ def create_frequency_bins_expr(
     :return: Expression containing bin name
     :rtype: hl.expr.StringExpression
     """
-    bin_expr=(
-            hl.case()
+    bin_expr = (
+        hl.case()
             .when(AC == 1, "binned_singleton")
             .when(AC == 2, "binned_doubleton")
             .when((AC > 2) & (AF < 0.00005), "binned_0.00005")
@@ -1025,5 +1022,5 @@ def create_frequency_bins_expr(
             .when((AF >= 0.2) & (AF < 0.5), "binned_0.5")
             .when((AF >= 0.5) & (AF <= 1), "binned_1")
             .default(hl.null(hl.tstr))
-        )
+    )
     return bin_expr

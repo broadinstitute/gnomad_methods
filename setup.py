@@ -4,8 +4,11 @@ import setuptools
 with open("README.md", "r") as readme_file:
     long_description = readme_file.read()
 
+install_requires = []
 with open("requirements.txt", "r") as requirements_file:
-    install_requires = [line.strip() for line in requirements_file if line.strip()]
+    for req in (line.strip() for line in requirements_file):
+        if req != "hail":
+            install_requires.append(req)
 
 
 setuptools.setup(

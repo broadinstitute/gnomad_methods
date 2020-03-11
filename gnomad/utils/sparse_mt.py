@@ -392,14 +392,6 @@ def default_compute_info(
             **get_site_info_expr(
                 mt
             )
-        )  
-    
-        # Add lowqual flag
-        info_ht = info_ht.annotate(
-            lowqual=get_lowqual_expr(
-                info_ht.alleles,
-                info_ht.info.QUALapprox
-            )
         )
 
     # Add AC and AC_raw:
@@ -429,13 +421,22 @@ def default_compute_info(
         info=info_expr
     ).rows()
 
-    # Add lowqual flag
+    # Add AS lowqual flag
     info_ht = info_ht.annotate(
         AS_lowqual=get_lowqual_expr(
             info_ht.alleles,
             info_ht.info.AS_QUALapprox
         )
     )
+
+    if site_annotations:
+        # Add lowqual flag
+        info_ht = info_ht.annotate(
+            lowqual=get_lowqual_expr(
+                info_ht.alleles,
+                info_ht.info.QUALapprox
+            )
+        )
 
     return info_ht.naive_coalesce(n_partitions)
 

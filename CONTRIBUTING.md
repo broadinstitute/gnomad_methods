@@ -29,7 +29,16 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
   python -m pip install --upgrade setuptools wheel twine
   ```
 
-- Update version in setup.py and commit.
+- Make sure that the [changelog](./CHANGELOG.md) is up to date.
+
+  To see changes since the last release, use:
+
+  ```
+  LAST_RELEASE_TAG=$(git tag --list --sort=-committerdate | head -n1)
+  git log $LAST_RELEASE_TAG..
+  ```
+
+- Update version in setup.py, replace "unreleased" heading in changelog with the version number, and commit.
   The new version number should be based on changes since the last release.
 
   https://semver.org/

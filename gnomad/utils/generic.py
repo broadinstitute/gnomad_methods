@@ -1475,5 +1475,5 @@ def subset_samples_and_variants(
         f"Finished subsetting samples. Kept {mt.count_cols()} "
         f"out of {full_count} samples in MT"
     )
-    
     return mt
+    

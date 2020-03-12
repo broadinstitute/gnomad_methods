@@ -1451,14 +1451,14 @@ def subset_samples_and_variants(
     """
     sample_ht = hl.import_table(sample_path, no_header=not header, key=table_key)
     sample_count = sample_ht.count()
-    anti_join_ht = sample_ht.anti_join(mt.cols())
-    anti_join_ht_count = anti_join_ht.count()
+    missing_ht = sample_ht.anti_join(mt.cols())
+    missing_ht_count = missing_ht.count()
     full_count = mt.count_cols()
 
-    if anti_join_ht_count != 0:
-        missing_samples = anti_join_ht.s.collect()
+    if missing_ht_count != 0:
+        missing_samples = missing_ht.s.collect()
         raise DataException(
-            f"Only {sample_count - anti_join_ht_count} out of {sample_count} "
+            f"Only {sample_count - missing_ht_count} out of {sample_count} "
             "subsetting-table IDs matched IDs in the MT.\n"
             f"IDs that aren't in the MT: {missing_samples}\n"
         )
@@ -1469,10 +1469,11 @@ def subset_samples_and_variants(
             hl.agg.any(mt[gt_expr].is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
         )
     else:
-        mt = mt.filter_rows((hl.agg.any(mt[gt_expr].is_non_ref())) > 0)
+        mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
 
     logger.info(
         f"Finished subsetting samples. Kept {mt.count_cols()} "
         f"out of {full_count} samples in MT"
     )
+    
     return mt

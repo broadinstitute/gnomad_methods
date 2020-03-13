@@ -335,6 +335,9 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
 
     def __init__(self, default_version: str, versions: Dict[str, PedigreeResource]):
         super().__init__(default_version, versions)
+        self.delimiter = versions[default_version].delimiter
+        self.missing = versions[default_version].missing
+        self.quant_pheno = versions[default_version].quant_pheno
 
 
 class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):

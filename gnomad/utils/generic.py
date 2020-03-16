@@ -1466,7 +1466,7 @@ def subset_samples_and_variants(
     mt = mt.semi_join_cols(sample_ht)
     if sparse:
         mt = mt.filter_rows(
-            hl.agg.any(mt[gt_expr].is_non_ref()) | hl.agg.any(hl.is_defined(mt.END))
+            hl.agg.any(mt[gt_expr].is_non_ref() | hl.is_defined(mt.END))
         )
     else:
         mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
@@ -1476,4 +1476,3 @@ def subset_samples_and_variants(
         f"out of {full_count} samples in MT"
     )
     return mt
-    

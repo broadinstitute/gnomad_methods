@@ -19,11 +19,11 @@ INFO_VCF_AS_PIPE_DELIMITED_FIELDS = ['AS_QUALapprox', 'AS_VarDP', 'AS_MQ_DP', 'A
 
 VEP_REFERENCE_DATA = {
     'GRCh37': {
-        'vep_config': 'gs://hail-common/vep/vep/vep85-loftee-gcloud.json',
+        'vep_config': 'gs://hail-us-vep/vep85-loftee-gcloud.json',
         'all_possible': 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht',
     },
     'GRCh38': {
-        'vep_config': 'gs://hail-common/vep/vep/vep95-GRCh38-loftee-gcloud.json',
+        'vep_config': 'gs://hail-us-vep/vep95-GRCh38-loftee-gcloud.json',
         'all_possible': 'gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht',
     }
 }
@@ -1428,3 +1428,51 @@ def get_file_stats(url: str) -> Tuple[int, str, str]:
             info["md5"] = base64.b64decode(value).hex()
 
     return (size, info["size"], info["md5"])
+
+
+def subset_samples_and_variants(
+    mt: hl.MatrixTable, 
+    sample_path: str, 
+    header: bool = True, 
+    table_key: str = "s", 
+    sparse: bool = False,
+    gt_expr: str = "GT"
+) -> hl.MatrixTable:
+    """
+    Subsets the MatrixTable to the provided list of samples and their variants
+
+    :param mt: Input MatrixTable
+    :param sample_path: Path to a file with list of samples
+    :param header: Whether file with samples has a header. Default is True
+    :param table_key: Key to sample Table. Default is "s"
+    :param sparse: Whether the MatrixTable is sparse. Default is False
+    :param gt_expr: Name of field in MatrixTable containing genotype expression. Default is "GT"
+    :return: MatrixTable subsetted to specified samples and their variants
+    """
+    sample_ht = hl.import_table(sample_path, no_header=not header, key=table_key)
+    sample_count = sample_ht.count()
+    missing_ht = sample_ht.anti_join(mt.cols())
+    missing_ht_count = missing_ht.count()
+    full_count = mt.count_cols()
+
+    if missing_ht_count != 0:
+        missing_samples = missing_ht.s.collect()
+        raise DataException(
+            f"Only {sample_count - missing_ht_count} out of {sample_count} "
+            "subsetting-table IDs matched IDs in the MT.\n"
+            f"IDs that aren't in the MT: {missing_samples}\n"
+        )
+
+    mt = mt.semi_join_cols(sample_ht)
+    if sparse:
+        mt = mt.filter_rows(
+            hl.agg.any(mt[gt_expr].is_non_ref() | hl.is_defined(mt.END))
+        )
+    else:
+        mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
+
+    logger.info(
+        f"Finished subsetting samples. Kept {mt.count_cols()} "
+        f"out of {full_count} samples in MT"
+    )
+    return mt

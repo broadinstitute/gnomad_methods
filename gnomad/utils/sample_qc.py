@@ -85,9 +85,9 @@ def filter_rows_for_qc(
 def get_qc_mt(
         mt: hl.MatrixTable,
         adj_only: bool = True,
-        min_af: float = 0.001,
-        min_callrate: float = 0.99,
-        min_inbreeding_coeff_threshold: float = -0.8,
+        min_af: Optional[float] = 0.001,
+        min_callrate: Optional[float] = 0.99,
+        min_inbreeding_coeff_threshold: Optional[float] = -0.8,
         min_hardy_weinberg_threshold: Optional[float] = 1e-8,
         apply_hard_filters: bool = True,
         ld_r2: Optional[float] = 0.1,
@@ -110,10 +110,10 @@ def get_qc_mt(
 
     :param mt: Input MT
     :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
-    :param min_af: Minimum allele frequency to keep
-    :param min_callrate: Minimum call rate to keep
-    :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep
-    :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep
+    :param min_af: Minimum allele frequency to keep. Not applied if set to ``None``.
+    :param min_callrate: Minimum call rate to keep. Not applied if set to ``None``.
+    :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
+    :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
     :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
     :param ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
     :param filter_lcr: Filter LCR regions
@@ -156,9 +156,10 @@ def get_qc_mt(
     qc_mt = qc_mt.annotate_globals(
         qc_mt_params=hl.struct(
             adj_only=adj_only,
-            min_af=min_af,
-            min_callrate=min_callrate,
-            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold,
+            min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
+            min_callrate=min_callrate if min_callrate is not None else hl.null(hl.tfloat32),
+            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold if min_inbreeding_coeff_threshold is not None else hl.null(hl.tfloat32),
+            min_hardy_weinberg_threshold = min_hardy_weinberg_threshold if min_hardy_weinberg_threshold is not None else hl.null(hl.tfloat32),
             apply_hard_filters=apply_hard_filters,
             ld_r2=ld_r2 if ld_r2 is not None else hl.null(hl.tfloat32),
             filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,

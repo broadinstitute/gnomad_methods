@@ -135,16 +135,28 @@ def get_duplicated_samples_ht(
     return dups_ht
 
 
-def explode_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
+def explode_duplicate_samples_ht(
+        dups_ht: hl.Table
+) -> hl.Table:
     """
     Explodes the result of `get_duplicated_samples_ht`, so that each line contains a single sample.
     An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
+    Requires a field `filtered` which type should be the same as the input duplicated samples Table key.
 
     :param dups_ht: Input HT
     :return: Flattened HT
     """
+    def get_dups_to_keep_expr():
+        if (dups_ht.filtered.dtype.element_type == dups_ht.key.dtype):
+            return (dups_ht.key, False)
+        elif (len(dups_ht.key) == 1) & (dups_ht.filtered.dtype.element_type == dups_ht.key[0].dtype):
+            return (dups_ht.key[0], False)
+        else:
+            raise TypeError(f"Cannot explode table as types of the filtered field ({dups_ht.filtered.dtype}) and the key ({dups_ht.key.dtype}) are incompatible.")
+
+
     dups_ht = dups_ht.annotate(
-        dups=hl.array([(dups_ht.key, False)]).extend(
+        dups=hl.array([get_dups_to_keep_expr()]).extend(
             dups_ht.filtered.map(lambda x: (x, True))
         )
     )

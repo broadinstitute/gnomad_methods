@@ -137,7 +137,7 @@ def get_duplicated_samples_ht(
 
 def explode_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
     """
-    Flattens the result of `filter_duplicate_samples`, so that each line contains a single sample.
+    Explodes the result of `get_duplicated_samples_ht`, so that each line contains a single sample.
     An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
 
     :param dups_ht: Input HT

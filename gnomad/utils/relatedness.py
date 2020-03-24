@@ -323,9 +323,9 @@ def infer_families(relationship_ht: hl.Table,
             for i in range(len(samples)):
                 for j in range(i + 1, len(samples)):
                     if related_pairs.get(tuple(sorted([samples[i], samples[j]]))) is None:
-                        if sex.get(samples[i]) is True and sex.get(samples[j]) is False:
+                        if sex.get(samples[i]) is False and sex.get(samples[j]) is True:
                             possible_parents.append((samples[i], samples[j]))
-                        elif sex.get(samples[i]) is False and sex.get(samples[j]) is True:
+                        elif sex.get(samples[i]) is True and sex.get(samples[j]) is False:
                             possible_parents.append((samples[j], samples[i]))
             return possible_parents
 

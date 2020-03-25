@@ -1,12 +1,30 @@
 import logging
-from typing import Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
 import hail as hl
-from gnomad.utils.generic import filter_to_autosomes
-from gnomad.utils.gnomad_functions import annotate_adj
-from gnomad.utils.relatedness import SIBLINGS
+from gnomad.utils.gen_stats import to_phred
 
+logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
-logger = logging.getLogger("gnomad.utils")
+ANNOTATIONS_HISTS = {
+    'FS': (0, 50, 50),  # NOTE: in 2.0.2 release this was on (0,20)
+    'InbreedingCoeff': (-0.25, 0.25, 50),
+    'MQ': (0, 80, 40),
+    'RAW_MQ': (2, 13, 33),
+    'MQRankSum': (-15, 15, 60),
+    'QD': (0, 40, 40),
+    'ReadPosRankSum': (-15, 15, 60),
+    'SOR': (0, 10, 50),
+    'BaseQRankSum': (-15, 15, 60),
+    'ClippingRankSum': (-5, 5, 40),
+    'DP': (1, 9, 32),  # NOTE: in 2.0.2 release this was on (0,8)
+    'VQSLOD': (-30, 30, 60),  # NOTE: in 2.0.2 release this was on (-20,20)
+    'AS_VQSLOD': (-30, 30, 60),
+    'rf_tp_probability': (0, 1, 50),
+    'pab_max': (0, 1, 50)
+}
 
 
 def pop_max_expr(
@@ -552,397 +570,6 @@ def get_lowqual_expr(
         )
 
 
-def generate_trio_stats_expr(
-        trio_mt: hl.MatrixTable,
-        transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
-) -> hl.expr.StructExpression:
-    """
-    Generates a row-wise expression containing the following counts:
-
-        - Number of alleles in het parents transmitted to the proband
-        - Number of alleles in het parents not transmitted to the proband
-        - Number of de novo mutations
-        - Parent allele count
-        - Proband allele count
-
-    Transmission and de novo mutation metrics and allele counts can be stratified using additional filters.
-    `transmitted_strata`, `de_novo_strata`, and `ac_strata` all expect a dictionary of filtering expressions keyed
-    by their desired suffix to append for labeling. The default will perform counts using all genotypes and append
-    'raw' to the label.
-
-    .. note::
-
-        Expects that `mt` is dense if dealing with a sparse MT `hl.experimental.densify` must be run first.
-
-    :param trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix)
-    :param transmitted_strata: Strata for the transmission counts
-    :param de_novo_strata: Strata for the de novo counts
-    :param ac_strata: Strata for the parent and child allele counts
-    :param proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
-    :return: An expression with the counts
-    """
-
-    # Create map for transmitted, untransmitted and DNM
-    hom_ref = 0
-    het = 1
-    hom_var = 2
-
-    auto_or_par = 2
-    hemi_x = 1
-    hemi_y = 0
-
-    trans_config_counts = {
-        # kid, dad, mom, copy -> t, u
-        (hom_ref, het, het, auto_or_par): (0, 2),
-        (hom_ref, hom_ref, het, auto_or_par): (0, 1),
-        (hom_ref, het, hom_ref, auto_or_par): (0, 1),
-        (het, het, het, auto_or_par): (1, 1),
-        (het, hom_ref, het, auto_or_par): (1, 0),
-        (het, het, hom_ref, auto_or_par): (1, 0),
-        (het, hom_var, het, auto_or_par): (0, 1),
-        (het, het, hom_var, auto_or_par): (0, 1),
-        (hom_var, het, het, auto_or_par): (2, 0),
-        (hom_var, het, hom_var, auto_or_par): (1, 0),
-        (hom_var, hom_var, het, auto_or_par): (1, 0),
-        (hom_ref, hom_ref, het, hemi_x): (0, 1),
-        (hom_ref, hom_var, het, hemi_x): (0, 1),
-        (hom_var, hom_ref, het, hemi_x): (1, 0),
-        (hom_var, hom_var, het, hemi_x): (1, 0),
-    }
-
-    trans_count_map = hl.literal(trans_config_counts)
-
-    def _get_copy_state(locus: hl.expr.LocusExpression) -> hl.expr.Int32Expression:
-        """
-        Helper method to go from LocusExpression to a copy-state int for indexing into the
-        trans_count_map.
-        """
-        return (
-            hl.case()
-                .when(locus.in_autosome_or_par(), auto_or_par)
-                .when(locus.in_x_nonpar(), hemi_x)
-                .when(locus.in_y_nonpar(), hemi_y)
-                .or_missing()
-        )
-
-    def _is_dnm(
-            proband_gt: hl.expr.CallExpression,
-            father_gt: hl.expr.CallExpression,
-            mother_gt: hl.expr.CallExpression,
-            locus: hl.expr.LocusExpression,
-            proband_is_female: Optional[hl.expr.BooleanExpression],
-    ) -> hl.expr.BooleanExpression:
-        """
-        Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
-        """
-        if proband_is_female is None:
-            logger.warning(
-                "Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted."
-            )
-            return hl.or_missing(
-                locus.in_autosome(),
-                proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
-            )
-        return hl.cond(
-            locus.in_autosome_or_par() | (proband_is_female & locus.in_x_nonpar()),
-            proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
-            hl.or_missing(
-                ~proband_is_female, proband_gt.is_hom_var() & father_gt.is_hom_ref()
-            ),
-        )
-
-    def _ac_an_parent_child_count(
-            proband_gt: hl.expr.CallExpression,
-            father_gt: hl.expr.CallExpression,
-            mother_gt: hl.expr.CallExpression,
-    ) -> Dict[str, hl.expr.Int64Expression]:
-        """
-        Helper method to get AC and AN for parents and children
-        """
-        ac_parent_expr = hl.agg.sum(
-            father_gt.n_alt_alleles() + mother_gt.n_alt_alleles()
-        )
-        an_parent_expr = hl.agg.sum(
-            (hl.is_defined(father_gt) + hl.is_defined(mother_gt)) * 2
-        )
-        ac_child_expr = hl.agg.sum(proband_gt.n_alt_alleles())
-        an_child_expr = hl.agg.sum(hl.is_defined(proband_gt) * 2)
-
-        return {
-            f"ac_parents": ac_parent_expr,
-            f"an_parents": an_parent_expr,
-            f"ac_children": ac_child_expr,
-            f"an_children": an_child_expr,
-        }
-
-    # Create transmission counters
-    trio_stats = hl.struct(
-        **{
-            f"{name2}_{name}": hl.agg.filter(
-                trio_mt.proband_entry.GT.is_non_ref() & expr,
-                hl.agg.sum(
-                    trans_count_map.get(
-                        (
-                            trio_mt.proband_entry.GT.n_alt_alleles(),
-                            trio_mt.father_entry.GT.n_alt_alleles(),
-                            trio_mt.mother_entry.GT.n_alt_alleles(),
-                            _get_copy_state(trio_mt.locus),
-                        ),
-                        default=0,
-                    )[i]
-                ),
-            )
-            for name, expr in transmitted_strata.items()
-            for i, name2 in enumerate(["n_transmitted", "n_untransmitted"])
-        }
-    )
-
-    # Create de novo counters
-    trio_stats = trio_stats.annotate(
-        **{
-            f"n_de_novos_{name}": hl.agg.filter(
-                _is_dnm(
-                    trio_mt.proband_entry.GT,
-                    trio_mt.father_entry.GT,
-                    trio_mt.mother_entry.GT,
-                    trio_mt.locus,
-                    proband_is_female_expr,
-                )
-                & expr,
-                hl.agg.count(),
-            )
-            for name, expr in de_novo_strata.items()
-        }
-    )
-
-    trio_stats = trio_stats.annotate(
-        **{
-            f"{name2}_{name}": hl.agg.filter(
-                expr,
-                _ac_an_parent_child_count(
-                    trio_mt.proband_entry.GT,
-                    trio_mt.father_entry.GT,
-                    trio_mt.mother_entry.GT,
-                )[name2],
-            )
-            for name, expr in ac_strata.items()
-            for name2 in ["ac_parents", "an_parents", "ac_children", "an_children"]
-        }
-    )
-
-    return trio_stats
-
-
-def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
-    """
-    Filters a MatrixTable to a set of trios in `fam_ht`, filters to autosomes, and annotates with adj.
-
-    :param mt: A Matrix Table to filter to only trios
-    :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
-    :return: A MT filtered to trios and adj annotated
-    """
-    # Filter MT to samples present in any of the trios
-    fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
-    fam_ht = fam_ht.explode("fam_members", name="s")
-    fam_ht = fam_ht.key_by("s").select().distinct()
-
-    mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
-    mt = filter_to_autosomes(mt)
-    mt = annotate_adj(mt)
-
-    return mt
-
-
-def default_generate_trio_stats(mt: hl.MatrixTable, ) -> hl.Table:
-    """
-    Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
-
-    .. note::
-
-        Expects that `mt` is it a trio matrix table that was annotated with adj and if dealing with
-        a sparse MT `hl.experimental.densify` must be run first.
-
-    :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
-    :return: Table with trio stats
-    """
-    mt = mt.filter_rows(hl.len(mt.alleles) == 2)
-    logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
-    trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
-
-    ht = mt.select_rows(
-        **generate_trio_stats_expr(
-            mt,
-            transmitted_strata={"raw": True, "adj": trio_adj},
-            de_novo_strata={"raw": True, "adj": trio_adj},
-            ac_strata={"raw": True, "adj": trio_adj},
-            proband_is_female_expr=mt.is_female,
-        )
-    ).rows()
-
-    return ht
-
-
-def generate_sib_stats_expr(
-        mt: hl.MatrixTable,
-        sib_ht: hl.Table,
-        i_col: str = "i",
-        j_col: str = "j",
-        strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        is_female: Optional[hl.expr.BooleanExpression] = None,
-) -> hl.expr.StructExpression:
-    """
-    Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
-
-    The sibling sharing counts can be stratified using additional filters using `stata`.
-
-    .. note::
-
-        This function expects that the `mt` has either been split or filtered to only bi-allelics
-        If a sample has multiple sibling pairs, only one pair will be counted
-
-    :param mt: Input matrix table
-    :param sib_ht: Table defining sibling pairs with one sample in a col (`i_col`) and the second in another col (`j_col`)
-    :param i_col: Column containing the 1st sample of the pair in the relationship table
-    :param j_col: Column containing the 2nd sample of the pair in the relationship table
-    :param strata: Dict with additional strata to use when computing shared sibling variant counts
-    :param is_female: An optional column in mt giving the sample sex. If not given, counts are only computed for autosomes.
-    :return: A Table with the sibling shared variant counts
-    """
-
-    def get_alt_count(locus, gt, is_female):
-        """
-        Helper method to calculate alt allele count with sex info if present
-        """
-        if is_female is None:
-            return hl.or_missing(locus.in_autosome(), gt.n_alt_alleles())
-        return (
-            hl.case()
-                .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
-                .when(
-                ~is_female & (locus.in_x_nonpar() | locus.in_y_nonpar()),
-                hl.min(1, gt.n_alt_alleles()),
-            )
-                .when(is_female & locus.in_y_nonpar(), 0)
-                .default(0)
-        )
-
-    if is_female is None:
-        logger.warning(
-            "Since no sex expression was given to generate_sib_stats_expr, only variants in autosomes will be counted."
-        )
-
-    # If a sample is in sib_ht more than one time, keep only one of the sibling pairs
-    # First filter to only samples found in mt to keep as many pairs as possible
-    s_to_keep = mt.aggregate_cols(hl.agg.collect_as_set(mt.s), _localize=False)
-    sib_ht = sib_ht.filter(
-        s_to_keep.contains(sib_ht[i_col].s) & s_to_keep.contains(sib_ht[j_col].s)
-    )
-    sib_ht = sib_ht.add_index("sib_idx")
-    sib_ht = sib_ht.annotate(sibs=[sib_ht[i_col].s, sib_ht[j_col].s])
-    sib_ht = sib_ht.explode("sibs")
-    sib_ht = sib_ht.group_by("sibs").aggregate(
-        sib_idx=(hl.agg.take(sib_ht.sib_idx, 1, ordering=sib_ht.sib_idx)[0])
-    )
-    sib_ht = sib_ht.group_by(sib_ht.sib_idx).aggregate(sibs=hl.agg.collect(sib_ht.sibs))
-    sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
-
-    logger.info(
-        f"Generating sibling variant sharing counts using {sib_ht.count()} pairs."
-    )
-    sib_ht = sib_ht.explode("sibs").key_by("sibs")[mt.s]
-
-    # Create sibling sharing counters
-    sib_stats = hl.struct(
-        **{
-            f"n_sib_shared_variants_{name}": hl.sum(
-                hl.agg.filter(
-                    expr,
-                    hl.agg.group_by(
-                        sib_ht.sib_idx,
-                        hl.or_missing(
-                            hl.agg.sum(hl.is_defined(mt.GT)) == 2,
-                            hl.agg.min(get_alt_count(mt.locus, mt.GT, is_female)),
-                        ),
-                    ),
-                ).values()
-            )
-            for name, expr in strata.items()
-        }
-    )
-
-    sib_stats = sib_stats.annotate(
-        **{
-            f"ac_sibs_{name}": hl.agg.filter(
-                expr & hl.is_defined(sib_ht.sib_idx), hl.agg.sum(mt.GT.n_alt_alleles())
-            )
-            for name, expr in strata.items()
-        }
-    )
-
-    return sib_stats
-
-
-def default_generate_sib_stats(
-        mt: hl.MatrixTable,
-        relatedness_ht: hl.Table,
-        sex_ht: hl.Table,
-        i_col: str = "i",
-        j_col: str = "j",
-        relationship_col: str = "relationship",
-) -> hl.Table:
-    """
-    This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
-    shared by pairs of siblings in `relatedness_ht`.
-
-    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
-    The `relationship_col` should be a column specifying the relationship between each two samples as defined by
-    the constants in `gnomad.utils.relatedness`. This relationship_col will be used to filter to only pairs of
-    samples that are annotated as `SIBLINGS`.
-
-    :param mt: Input Matrix table
-    :param relatedness_ht: Input relationship table
-    :param sex_ht: A Table containing sex information for the samples
-    :param i_col: Column containing the 1st sample of the pair in the relationship table
-    :param j_col: Column containing the 2nd sample of the pair in the relationship table
-    :param relationship_col: Column containing the relationship for the sample pair as defined in this module constants.
-    :return: A Table with the sibling shared variant counts
-    """
-    sex_ht = sex_ht.annotate(
-        is_female=hl.case()
-            .when(sex_ht.sex_karyotype == "XX", True)
-            .when(sex_ht.sex_karyotype == "XY", False)
-            .or_missing()
-    )
-
-    sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)
-    s_to_keep = sib_ht.aggregate(
-        hl.agg.explode(
-            lambda s: hl.agg.collect_as_set(s), [sib_ht[i_col].s, sib_ht[j_col].s]
-        ),
-        _localize=False,
-    )
-    mt = mt.filter_cols(s_to_keep.contains(mt.s))
-    mt = annotate_adj(mt)
-
-    mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
-
-    sib_stats_ht = mt.select_rows(
-        **generate_sib_stats_expr(
-            mt,
-            sib_ht,
-            i_col=i_col,
-            j_col=j_col,
-            strata={"raw": True, "adj": mt.adj},
-            is_female=mt.is_female,
-        )
-    ).rows()
-
-    return sib_stats_ht
-
-
 def get_annotations_hists(
         ht: hl.Table,
         annotations_hists: Dict[str, Tuple],
@@ -1024,3 +651,202 @@ def create_frequency_bins_expr(
             .default(hl.null(hl.tstr))
     )
     return bin_expr
+
+
+def get_adj_expr(
+        gt_expr: hl.expr.CallExpression,
+        gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+        dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+        ad_expr: hl.expr.ArrayNumericExpression,
+        adj_gq: int = 20,
+        adj_dp: int = 10,
+        adj_ab: float = 0.2,
+        haploid_adj_dp: int = 10
+) -> hl.expr.BooleanExpression:
+    """
+    Gets adj genotype annotation.
+    Defaults correspond to gnomAD values.
+    """
+    return (
+            (gq_expr >= adj_gq) &
+            hl.cond(
+                gt_expr.is_haploid(),
+                dp_expr >= haploid_adj_dp,
+                dp_expr >= adj_dp
+            ) &
+            (
+                hl.case()
+                .when(~gt_expr.is_het(), True)
+                .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+                .default((ad_expr[gt_expr[0]] / dp_expr >= adj_ab ) & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab ))
+            )
+    )
+
+
+def annotate_adj(
+        mt: hl.MatrixTable,
+        adj_gq: int = 20,
+        adj_dp: int = 10,
+        adj_ab: float = 0.2,
+        haploid_adj_dp: int = 10
+) -> hl.MatrixTable:
+    """
+    Annotate genotypes with adj criteria (assumes diploid)
+    Defaults correspond to gnomAD values.
+    """
+    return mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp))
+
+
+def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
+    """
+    Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)
+    """
+    ref = alt_alleles[0]
+    alts = alt_alleles[1:]
+    non_star_alleles = hl.filter(lambda a: a != '*', alts)
+    return hl.struct(variant_type=hl.cond(
+        hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
+        hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
+        hl.cond(
+            hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
+            hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
+            "mixed")
+    ), n_alt_alleles=hl.len(non_star_alleles))
+
+
+def annotation_type_is_numeric(t: Any) -> bool:
+    """
+    Given an annotation type, returns whether it is a numerical type or not.
+
+    :param t: Type to test
+    :return: If the input type is numeric
+    """
+    return (isinstance(t, hl.tint32) or
+            isinstance(t, hl.tint64) or
+            isinstance(t, hl.tfloat32) or
+            isinstance(t, hl.tfloat64)
+            )
+
+
+def annotation_type_in_vcf_info(t: Any) -> bool:
+    """
+    Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
+    Note types that aren't natively exportable to VCF will be converted to String on export.
+
+    :param t: Type to test
+    :return: If the input type can be exported to VCF
+    """
+    return (annotation_type_is_numeric(t) or
+            isinstance(t, hl.tstr) or
+            isinstance(t, hl.tarray) or
+            isinstance(t, hl.tset) or
+            isinstance(t, hl.tbool)
+            )
+
+
+def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
+    """
+    Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
+
+    This is implemented based on the GATK InbreedingCoeff metric:
+    https://software.broadinstitute.org/gatk/documentation/article.php?id=8032
+
+    .. note::
+
+        The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
+
+    :param call: Expression giving the calls in the MT
+    :return: Site inbreeding coefficient expression
+    """
+
+    def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
+        n = gt_counts.get(0, 0) + gt_counts.get(1, 0) + gt_counts.get(2, 0)
+        p = (2 * gt_counts.get(0, 0) + gt_counts.get(1, 0)) / (2 * n)
+        q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
+        return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
+
+    return hl.bind(
+        inbreeding_coeff,
+        hl.agg.counter(call.n_alt_alleles())
+    )
+
+
+def fs_from_sb(
+        sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
+        normalize: bool = True,
+        min_cell_count: int = 200,
+        min_count: int = 4,
+        min_p_value: float = 1e-320
+) -> hl.expr.Int64Expression:
+    """
+    Computes `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+    `FS` is the phred-scaled value of the double-sided Fisher exact test on strand balance.
+
+    Using default values will have the same behavior as the GATK implementation, that is:
+    - If sum(counts) > 2*`min_cell_count` (default to GATK value of 200), they are normalized
+    - If sum(counts) < `min_count` (default to GATK value of 4), returns missing
+    - Any p-value < `min_p_value` (default to GATK value of 1e-320) is truncated to that value
+
+    In addition to the default GATK behavior, setting `normalize` to `False` will perform a chi-squared test
+    for large counts (> `min_cell_count`) instead of normalizing the cell values.
+
+    .. note::
+
+        This function can either take
+        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+
+    GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
+
+    :param sb: Count of ref/alt reads on each strand
+    :param normalize: Whether to normalize counts is sum(counts) > min_cell_count (normalize=True), or use a chi sq instead of FET (normalize=False)
+    :param min_cell_count: Maximum count for performing a FET
+    :param min_count: Minimum total count to output FS (otherwise null it output)
+    :return: FS value
+    """
+    if not isinstance(sb, hl.expr.ArrayNumericExpression):
+        sb = hl.bind(
+            lambda x: hl.flatten(x),
+            sb
+        )
+
+    sb_sum = hl.bind(
+        lambda x: hl.sum(x),
+        sb
+    )
+
+    # Normalize table if counts get too large
+    if normalize:
+        fs_expr = hl.bind(
+            lambda sb, sb_sum: hl.cond(
+                sb_sum <= 2 * min_cell_count,
+                sb,
+                sb.map(lambda x: hl.int(x / (sb_sum / min_cell_count)))
+            ),
+            sb, sb_sum
+        )
+
+        # FET
+        fs_expr = to_phred(
+            hl.max(
+                hl.fisher_exact_test(
+                    fs_expr[0], fs_expr[1], fs_expr[2], fs_expr[3]
+                ).p_value,
+                min_p_value
+            )
+        )
+    else:
+        fs_expr = to_phred(
+            hl.max(
+                hl.contingency_table_test(
+                    sb[0], sb[1], sb[2], sb[3], min_cell_count=min_cell_count
+                ).p_value,
+                min_p_value
+            )
+        )
+
+    # Return null if counts <= `min_count`
+    return hl.or_missing(
+        sb_sum > min_count,
+        hl.max(0, fs_expr) # Needed to avoid -0.0 values
+    )

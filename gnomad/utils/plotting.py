@@ -1,25 +1,28 @@
 
-import hail as hl
-import numpy as np
-from ipywidgets import interact
-import math
-import pandas as pd
-from collections import OrderedDict
 import json
-from .constants import *
+import logging
+from typing import Callable, Dict, List, Optional, Union
 
 import bokeh
-from bokeh.layouts import gridplot, row, widgetbox
-from bokeh.plotting import figure, show, output_file
-from bokeh.io import output_notebook, push_notebook, export_png
-from bokeh.models.widgets import Tabs, Panel
-from bokeh.palettes import d3, Spectral8, viridis  # pylint: disable=no-name-in-module
-from bokeh.models import *
-from typing import *
-from bokeh.plotting.helpers import stack
+import hail as hl
+import numpy as np
+import pandas as pd
+from bokeh.layouts import gridplot
+from bokeh.models import (BooleanFilter, CDSView, Column, ColumnDataSource,
+                          DataRange1d, Div, Grid, HoverTool, Legend, Title,
+                          warnings)
+from bokeh.models.widgets import Panel, Tabs
+from bokeh.palettes import (Spectral8, d3,  # pylint: disable=no-name-in-module
+                            viridis)
+from bokeh.plotting import figure
 from bokeh.transform import factor_cmap
+from gnomad.utils.vep import (CSQ_CODING_HIGH_IMPACT, CSQ_CODING_LOW_IMPACT,
+                              CSQ_CODING_MEDIUM_IMPACT, CSQ_NON_CODING,
+                              CSQ_ORDER)
 
-from .gnomad_functions import logger
+logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # Setting some defaults for Table.show
 if 'old_show' not in dir():
@@ -518,7 +521,7 @@ def pair_plot(
         tooltip_cols.append(label_col)
 
     if label_col is None and colors is not None:
-        logger.warn('`colors_dict` ignored since no `label_col` specified')
+        logger.warning('`colors_dict` ignored since no `label_col` specified')
 
     colors_col = '__pair_plot_color'
 

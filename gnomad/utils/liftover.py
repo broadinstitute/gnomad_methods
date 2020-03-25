@@ -1,15 +1,12 @@
-import argparse
-from typing import Union
-import hail as hl
-from gnomad.resources.grch37.gnomad import public_release
-from gnomad.utils.generic import flip_base, get_reference_genome
 import logging
-from os.path import dirname, basename
-import sys
+from os.path import basename, dirname
+from typing import Union
 
+import hail as hl
+from gnomad.utils.reference_genome import get_reference_genome
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
-logger = logging.getLogger("liftover")
+logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
@@ -104,14 +101,13 @@ def lift_data(t: Union[hl.MatrixTable, hl.Table], gnomad: bool, data_type: str, 
     return t
 
 
-def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], data_type: str, rg: hl.genetics.ReferenceGenome) -> Union[hl.MatrixTable, hl.Table]:
+def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], rg: hl.genetics.ReferenceGenome) -> Union[hl.MatrixTable, hl.Table]:
     """
     Annotates mismatches between reference allele and allele in reference fasta
 
     Assumes input Table/MatrixTable has t.new_locus annotation
 
     :param t: Table/MatrixTable of SNPs to be annotated
-    :param data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
     :param rg: Reference genome with fasta sequence loaded
     :return: Table annotated with mismatches between reference allele and allele in fasta
     """
@@ -147,87 +143,30 @@ def check_mismatch(ht: hl.Table) -> hl.expr.expressions.StructExpression:
     return mismatch
 
 
-def main(args):
+def liftover_using_gnomad_map(ht, data_type):
+    """
+    Liftover a gnomAD table using already-established liftover file. Warning: shuffles!
 
-    hl.init(log='/liftover.log')
-    
-    if args.gnomad:
-        gnomad = True
-        path = None
-        
-        if args.exomes:
-            data_type = 'exomes'
-        if args.genomes:
-            data_type = 'genomes'
-
-        logger.info('Working on gnomAD {} release ht'.format(data_type))
-        logger.info('Reading in release ht')
-        t = public_release(data_type).ht()
-        logger.info('Variants in release ht: {}'.format(t.count()))
-
-    else:
-        data_type = None
-        gnomad = False
-   
-        if args.ht:
-            path = args.ht
-            t = hl.read_table(args.ht)
-        if args.mt:
-            path = args.mt
-            t = hl.read_matrix_table(args.mt)
-   
-    logger.info('Checking if input data has been split') 
-    if 'was_split' not in t.row:
-        t = hl.split_multi(t) if isinstance(t, hl.Table) else hl.split_multi_hts(t) 
-
-    logger.info('Preparing reference genomes for liftover')
-    source, target = get_liftover_genome(t)
-    
-    if args.test: 
-        logger.info('Filtering to chr21 for testing')
-        if source.name == 'GRCh38':
-            contig = 'chr21'
-        else:
-            contig = '21'
-        t = hl.filter_intervals(t, [hl.parse_locus_interval(contig, reference_genome=source.name)])
-
-    logger.info(f'Lifting data to {target.name}')
-    t = lift_data(t, gnomad, data_type, path, target, args.overwrite)
-        
-    logger.info('Checking SNPs for reference mismatches')
-    t = annotate_snp_mismatch(t, data_type, target)
-   
-    mismatch = check_mismatch(t) if isinstance(t, hl.Table) else check_mismatch(t.rows()) 
-    logger.info('{} total SNPs'.format(mismatch['total_variants']))
-    logger.info('{} SNPs on minus strand'.format(mismatch['negative_strand']))
-    logger.info('{} reference mismatches in SNPs'.format(mismatch['total_mismatch']))
-    logger.info('{} mismatches on minus strand'.format(mismatch['negative_strand_mismatch']))
+    :param ht: Input Hail table
+    :param data_type: one of "exomes" or "genomes" which to map across
+    :return: Lifted over table
+    """
+    from gnomad.resources.grch37.gnomad import liftover
+    lift_ht = liftover(data_type).ht()
+    ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
+    return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')
 
 
-if __name__ == '__main__':
+def flip_base(base: str) -> str:
+    """
+    Returns the complement of a base
 
-    parser = argparse.ArgumentParser(description='This script lifts a ht from one build to another')
-    parser.add_argument('--mt', help='Full path to MatrixTable to liftover. Specify only if not using --gnomad flag')
-    parser.add_argument('--ht', help='Full path to Table to liftover. Specify only if not using --gnomad flag.')
-    parser.add_argument('-g', '--gnomad', help='Liftover table is one of the gnomAD releases', action='store_true')
-    parser.add_argument('-o', '--overwrite', help='Overwrite all data from this subset (default: False)', action='store_true')
-    parser.add_argument(
-            '--exomes', 
-            help='Data type is exomes. One of --exomes or --genomes is required if --gnomad is specified.', 
-            action='store_true'
-            )
-    parser.add_argument(
-            '--genomes', 
-            help='Data type is genomes. One of --exomes or --genomes is required if --gnomad is specified.', 
-            action='store_true'
-            )
-    parser.add_argument('-t', '--test', help='Filter to chr21 (for code testing purposes)', action='store_true')
-    args = parser.parse_args()
-
-    if args.gnomad and (int(args.exomes) + int(args.genomes) != 1):
-        sys.exit('Error: One and only one of --exomes or --genomes must be specified with --gnomad flag')
-
-    if args.mt and args.ht:
-        sys.exit('Error: One and only one of --mt or --ht must be specified')
-
-    main(args)
+    :param base: Base to be flipped
+    :return: Complement of input base
+    """
+    return (hl.switch(base)
+            .when('A', 'T')
+            .when('T', 'A')
+            .when('G', 'C')
+            .when('C', 'G')
+            .default(base))

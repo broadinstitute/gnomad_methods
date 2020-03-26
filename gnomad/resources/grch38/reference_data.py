@@ -6,7 +6,7 @@ from gnomad.resources.resource_utils import (
     import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING
 )
-from gnomad.utils.generic import vep_or_lookup_vep
+from gnomad.utils.vep import vep_or_lookup_vep
 import hail as hl
 
 from hail import Table

@@ -11,14 +11,15 @@ import pkgutil
 import re
 import sys
 
-# Add gnomad to import path.
-sys.path.insert(0, str(pathlib.Path(os.path.abspath(__file__)).parent.parent))
+import setuptools
 
-ROOT_PACKAGE_PATH = str(
-    pathlib.Path(os.path.abspath(__file__)).parent.parent / "gnomad"
-)
+REPOSITORY_ROOT_PATH = str(pathlib.Path(os.path.abspath(__file__)).parent.parent)
 
-DOCS_DIRECTORY = str(pathlib.Path(os.path.abspath(__file__)).parent)
+sys.path.insert(0, REPOSITORY_ROOT_PATH)
+
+ROOT_PACKAGE_PATH = os.path.join(REPOSITORY_ROOT_PATH, "gnomad")
+
+DOCS_DIRECTORY = os.path.join(REPOSITORY_ROOT_PATH, "docs")
 
 EXCLUDE_PACKAGES = ["tests"]
 
@@ -133,14 +134,21 @@ def write_package_doc(package_name):
 
 
 if __name__ == "__main__":
-    packages = ["resources", "utils"]
-    for pkg in packages:
-        write_package_doc(f"gnomad.{pkg}")
+    packages = setuptools.find_namespace_packages(
+        where=REPOSITORY_ROOT_PATH, include=["gnomad.*"]
+    )
+    top_level_packages = [pkg for pkg in packages if pkg.count(".") == 1]
+
+    for pkg in top_level_packages:
+        write_package_doc(pkg)
 
     root_doc = PACKAGE_DOC_TEMPLATE.format(
         title=format_title("gnomad"),
         package_doc="",
-        module_links="\n    ".join(f"{pkg} <{pkg}/index>" for pkg in packages),
+        module_links="\n    ".join(
+            f"{pkg.split('.')[1]} <{pkg.split('.')[1]}/index>"
+            for pkg in top_level_packages
+        ),
     )
 
     write_file(os.path.join(DOCS_DIRECTORY, "api_reference", "index.rst"), root_doc)

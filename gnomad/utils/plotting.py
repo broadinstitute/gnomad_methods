@@ -9,8 +9,7 @@ import numpy as np
 import pandas as pd
 from bokeh.layouts import gridplot
 from bokeh.models import (BooleanFilter, CDSView, Column, ColumnDataSource,
-                          DataRange1d, Div, Grid, HoverTool, Legend, Title,
-                          warnings)
+                          DataRange1d, Div, Grid, HoverTool, Legend, Title)
 from bokeh.models.widgets import Panel, Tabs
 from bokeh.palettes import (Spectral8, d3,  # pylint: disable=no-name-in-module
                             viridis)
@@ -324,7 +323,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
 
     metadata_file = [x['path'] for x in files if x['path'].endswith('metadata.json.gz')]
     if not metadata_file:
-        warnings.warn('No metadata file found. Exiting...')
+        logger.warning('No metadata file found. Exiting...')
         return None
 
     with hl.hadoop_open(metadata_file[0], 'rb') as f:
@@ -332,7 +331,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
         rows_per_partition = overall_meta['components']['partition_counts']['counts']
 
     if not rows_file:
-        warnings.warn('No rows directory found. Exiting...')
+        logger.warning('No rows directory found. Exiting...')
         return None
     rows_files = hl.hadoop_ls(rows_file[0])
 
@@ -345,7 +344,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
     total_file_size, row_file_sizes, row_scale = scale_file_sizes(row_file_sizes)
 
     if not row_partition_bounds:
-        warnings.warn('Table is not partitioned. Only plotting file sizes')
+        logger.warning('Table is not partitioned. Only plotting file sizes')
         row_file_sizes_hist, row_file_sizes_edges = np.histogram(row_file_sizes, bins=50)
         p_file_size = figure(plot_width=panel_size, plot_height=panel_size)
         p_file_size.quad(right=row_file_sizes_hist, left=0, bottom=row_file_sizes_edges[:-1],

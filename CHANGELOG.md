@@ -12,6 +12,7 @@
 
 ### Changed
 
+* Repo restructured - imports may need to be updated [(#207)] (https://github.com/broadinstitute/gnomad_methods/pull/207)
 * Make some arguments to `get_qc_mt` optional [(#200)](https://github.com/broadinstitute/gnomad_methods/pull/200)
 * Fetch VEP configuration from new Hail requestor pays buckets [(#197)](https://github.com/broadinstitute/gnomad_methods/pull/197)
 * Hail must be installed separately [(#194)](https://github.com/broadinstitute/gnomad_methods/pull/194)

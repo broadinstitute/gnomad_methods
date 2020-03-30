@@ -11,4 +11,5 @@ Contents
 .. toctree::
    :maxdepth: 3
 
+   Getting Started <getting_started>
    API Reference <api_reference/index>

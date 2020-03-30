@@ -4,7 +4,6 @@ from typing import Any, Counter, List, Optional, Tuple, Union
 
 import hail as hl
 import pandas as pd
-from gnomad.utils.field_utils import expand_pd_array_col
 from gnomad.utils.filtering import filter_to_autosomes
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -100,6 +99,38 @@ def assign_population_pcs(
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs and imputed population labels, trained random forest model
     """
     from sklearn.ensemble import RandomForestClassifier
+
+    def expand_pd_array_col(
+            df: pd.DataFrame,
+            array_col: str,
+            num_out_cols: int = 0,
+            out_cols_prefix=None,
+            out_1based_indexing: bool = True
+    ) -> pd.DataFrame:
+        """
+        Expands a Dataframe column containing an array into multiple columns.
+
+        :param df: input dataframe
+        :param array_col: Column containing the array
+        :param num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
+                                 If <1, the number of output columns is equal to the length of the shortest array in `array_col`
+        :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)
+        :param out_1based_indexing: If set, the output column names indexes start at 1. Otherwise they start at 0.
+        :return: dataframe with expanded columns
+        """
+
+        if out_cols_prefix is None:
+            out_cols_prefix = array_col
+
+        if num_out_cols < 1:
+            num_out_cols = min([len(x) for x in df[array_col].values.tolist()])
+
+        cols = ['{}{}'.format(out_cols_prefix, i + out_1based_indexing) for i in range(num_out_cols)]
+        df[cols] = pd.DataFrame(df[array_col].values.tolist())[list(range(num_out_cols))]
+
+        return df
+
+
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
         pop_pc_pd = pop_pca_scores.select(

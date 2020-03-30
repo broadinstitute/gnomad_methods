@@ -850,3 +850,26 @@ def fs_from_sb(
         sb_sum > min_count,
         hl.max(0, fs_expr) # Needed to avoid -0.0 values
     )
+
+
+def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
+    """
+    Returns a boolean expression selecting bi-allelic sites only,
+    accounting for whether the input MT/HT was split.
+
+    :param t: Input HT/MT
+    :return: Boolean expression selecting only bi-allelic sites
+    """
+    return (~t.was_split if 'was_split' in t.row else (hl.len(t.alleles) == 2))
+
+
+def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpression:
+    """
+    Generate unphased version of MatrixTable (assumes call is in mt.GT and is diploid or haploid only)
+    """
+    return (
+        hl.case()
+            .when(call_expr.is_diploid(), hl.call(call_expr[0], call_expr[1], phased=False))
+            .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
+            .default(hl.null(hl.tcall))
+    )

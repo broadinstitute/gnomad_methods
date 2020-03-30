@@ -1,5 +1,4 @@
 from gnomad.utils.annotations import *
-from gnomad.utils.field_utils import *
 from gnomad.utils.file_utils import *
 from gnomad.utils.filtering import *
 from gnomad.utils.gen_stats import *

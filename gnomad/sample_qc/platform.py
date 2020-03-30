@@ -3,7 +3,7 @@ from typing import List, Optional, Tuple
 
 import hail as hl
 import numpy as np
-from gnomad.utils.field_utils import bi_allelic_expr
+from gnomad.utils.annotations import bi_allelic_expr
 from gnomad.utils.filtering import filter_to_autosomes
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")

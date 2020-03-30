@@ -4,8 +4,7 @@ import operator
 
 import hail as hl
 from gnomad.sample_qc.sex import get_ploidy_cutoffs, get_sex_expr
-from gnomad.utils.annotations import bi_allelic_site_inbreeding_expr
-from gnomad.utils.field_utils import bi_allelic_expr
+from gnomad.utils.annotations import bi_allelic_site_inbreeding_expr, bi_allelic_expr
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.sparse_mt import impute_sex_ploidy

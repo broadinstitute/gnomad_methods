@@ -865,7 +865,10 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
 
 def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpression:
     """
-    Generate unphased version of MatrixTable (assumes call is in mt.GT and is diploid or haploid only)
+    Generate unphased version of a call expression (which can be phased or not)
+
+    :param call_expr: Input call expression
+    :return: unphased call expression
     """
     return (
         hl.case()

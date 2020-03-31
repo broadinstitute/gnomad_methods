@@ -100,45 +100,18 @@ def assign_population_pcs(
     """
     from sklearn.ensemble import RandomForestClassifier
 
-    def expand_pd_array_col(
-            df: pd.DataFrame,
-            array_col: str,
-            num_out_cols: int = 0,
-            out_cols_prefix=None,
-            out_1based_indexing: bool = True
-    ) -> pd.DataFrame:
-        """
-        Expands a Dataframe column containing an array into multiple columns.
-
-        :param df: input dataframe
-        :param array_col: Column containing the array
-        :param num_out_cols: Number of output columns. If set, only the `n_out_cols` first elements of the array column are output.
-                                 If <1, the number of output columns is equal to the length of the shortest array in `array_col`
-        :param out_cols_prefix: Prefix for the output columns (uses `array_col` as the prefix unless set)
-        :param out_1based_indexing: If set, the output column names indexes start at 1. Otherwise they start at 0.
-        :return: dataframe with expanded columns
-        """
-
-        if out_cols_prefix is None:
-            out_cols_prefix = array_col
-
-        if num_out_cols < 1:
-            num_out_cols = min([len(x) for x in df[array_col].values.tolist()])
-
-        cols = ['{}{}'.format(out_cols_prefix, i + out_1based_indexing) for i in range(num_out_cols)]
-        df[cols] = pd.DataFrame(df[array_col].values.tolist())[list(range(num_out_cols))]
-
-        return df
-
-
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
         pop_pc_pd = pop_pca_scores.select(
             known_col,
             pca_scores=pc_cols
         ).to_pandas()
-        pop_pc_pd = expand_pd_array_col(pop_pc_pd, 'pca_scores', out_cols_prefix='PC')
-        pc_cols = [col for col in pop_pc_pd if col.startswith('PC')]
+
+        # Explode the PC array
+        num_out_cols = min([len(x) for x in pop_pc_pd['pca_scores'].values.tolist()])
+        pc_cols = [f'PC{i+1}' for i in range(num_out_cols)]
+        pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd['pca_scores'].values.tolist())[list(range(num_out_cols))]
+
     else:
         pop_pc_pd = pop_pca_scores
 

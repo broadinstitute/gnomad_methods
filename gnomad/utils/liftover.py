@@ -118,7 +118,7 @@ def annotate_snp_mismatch(t: Union[hl.MatrixTable, hl.Table], rg: hl.genetics.Re
 
     mismatch_expr = {
         'reference_mismatch': hl.cond(t.new_locus.is_negative_strand, 
-                                    (flip_base(t.alleles[0]) != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)),
+                                    (hl.reverse_complement(t.alleles[0]) != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)),
                                     (t.alleles[0] != hl.get_sequence(t.locus.contig, t.locus.position, reference_genome=rg)))
     }
     logger.info('Checking if reference allele matches what is in reference fasta')
@@ -155,18 +155,3 @@ def liftover_using_gnomad_map(ht, data_type):
     lift_ht = liftover(data_type).ht()
     ht = ht.key_by(original_locus=ht.locus, original_alleles=ht.alleles).drop('locus', 'alleles')
     return lift_ht.annotate(**ht[(lift_ht.original_locus, lift_ht.original_alleles)]).key_by('locus', 'alleles')
-
-
-def flip_base(base: str) -> str:
-    """
-    Returns the complement of a base
-
-    :param base: Base to be flipped
-    :return: Complement of input base
-    """
-    return (hl.switch(base)
-            .when('A', 'T')
-            .when('T', 'A')
-            .when('G', 'C')
-            .when('C', 'G')
-            .default(base))

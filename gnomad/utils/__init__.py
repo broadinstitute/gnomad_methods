@@ -1,11 +1,3 @@
-from gnomad.utils.annotations import *
-from gnomad.utils.file_utils import *
-from gnomad.utils.filtering import *
-from gnomad.utils.gen_stats import *
-from gnomad.utils.intervals import *
-from gnomad.utils.liftover import *
-from gnomad.utils.plotting import *
-from gnomad.utils.reference_genome import *
-from gnomad.utils.slack import *
-from gnomad.utils.sparse_mt import *
-from gnomad.utils.vep import *
+from gnomad.utils import (annotations, file_utils, filtering, gen_stats,
+                          intervals, plotting, reference_genome, slack,
+                          sparse_mt, vep)

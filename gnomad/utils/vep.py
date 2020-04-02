@@ -10,7 +10,8 @@ CSQ_CODING_HIGH_IMPACT = [
     "splice_donor_variant",
     "stop_gained",
     "frameshift_variant",
-    "stop_lost"]
+    "stop_lost",
+]
 
 CSQ_CODING_MEDIUM_IMPACT = [
     "start_lost",  # new in v81
@@ -20,7 +21,7 @@ CSQ_CODING_MEDIUM_IMPACT = [
     "inframe_deletion",
     "missense_variant",
     "protein_altering_variant",  # new in v79
-    "splice_region_variant"
+    "splice_region_variant",
 ]
 
 CSQ_CODING_LOW_IMPACT = [
@@ -28,7 +29,8 @@ CSQ_CODING_LOW_IMPACT = [
     "start_retained_variant",  # new in v92
     "stop_retained_variant",
     "synonymous_variant",
-    "coding_sequence_variant"]
+    "coding_sequence_variant",
+]
 
 CSQ_NON_CODING = [
     "mature_miRNA_variant",
@@ -50,33 +52,42 @@ CSQ_NON_CODING = [
     "feature_elongation",
     "regulatory_region_variant",
     "feature_truncation",
-    "intergenic_variant"
+    "intergenic_variant",
 ]
 
-CSQ_ORDER = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT + CSQ_NON_CODING
+CSQ_ORDER = (
+    CSQ_CODING_HIGH_IMPACT
+    + CSQ_CODING_MEDIUM_IMPACT
+    + CSQ_CODING_LOW_IMPACT
+    + CSQ_NON_CODING
+)
 
 VEP_REFERENCE_DATA = {
-    'GRCh37': {
-        'vep_config': 'gs://hail-us-vep/vep85-loftee-gcloud.json',
-        'all_possible': 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht',
+    "GRCh37": {
+        "vep_config": "gs://hail-us-vep/vep85-loftee-gcloud.json",
+        "all_possible": "gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht",
     },
-    'GRCh38': {
-        'vep_config': 'gs://hail-us-vep/vep95-GRCh38-loftee-gcloud.json',
-        'all_possible': 'gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht',
-    }
+    "GRCh38": {
+        "vep_config": "gs://hail-us-vep/vep95-GRCh38-loftee-gcloud.json",
+        "all_possible": "gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht",
+    },
 }
 
 
-def vep_context_ht_path(ref: str = 'GRCh37'):
+def vep_context_ht_path(ref: str = "GRCh37"):
     if ref not in VEP_REFERENCE_DATA.keys():
-        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
-    return VEP_REFERENCE_DATA[ref]['all_possible']
+        raise DataException(
+            "Select reference as one of: {}".format(",".join(VEP_REFERENCE_DATA.keys()))
+        )
+    return VEP_REFERENCE_DATA[ref]["all_possible"]
 
 
-def vep_config_path(ref: str = 'GRCh37'):
+def vep_config_path(ref: str = "GRCh37"):
     if ref not in VEP_REFERENCE_DATA.keys():
-        raise DataException("Select reference as one of: {}".format(','.join(VEP_REFERENCE_DATA.keys())))
-    return VEP_REFERENCE_DATA[ref]['vep_config']
+        raise DataException(
+            "Select reference as one of: {}".format(",".join(VEP_REFERENCE_DATA.keys()))
+        )
+    return VEP_REFERENCE_DATA[ref]["vep_config"]
 
 
 def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
@@ -93,9 +104,11 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
         reference = hl.default_reference().name
     if reference_vep_ht is None:
 
-        possible_refs = ('GRCh37', 'GRCh38')
+        possible_refs = ("GRCh37", "GRCh38")
         if reference not in possible_refs:
-            raise ValueError(f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}')
+            raise ValueError(
+                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}'
+            )
 
         reference_vep_ht = hl.read_table(vep_context_ht_path(reference))
 
@@ -112,7 +125,9 @@ def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None
     return vep_ht.union(revep_ht)
 
 
-def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> hl.expr.StructExpression:
+def add_most_severe_consequence_to_consequence(
+    tc: hl.expr.StructExpression,
+) -> hl.expr.StructExpression:
     """
     Add most_severe_consequence annotation to transcript consequences.
 
@@ -126,8 +141,11 @@ def add_most_severe_consequence_to_consequence(tc: hl.expr.StructExpression) -> 
     )
 
 
-def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'vep',
-                         penalize_flags: bool = True) -> Union[hl.MatrixTable, hl.Table]:
+def process_consequences(
+    mt: Union[hl.MatrixTable, hl.Table],
+    vep_root: str = "vep",
+    penalize_flags: bool = True,
+) -> Union[hl.MatrixTable, hl.Table]:
     """
     Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
     and worst_csq_by_gene, any_lof into [vep_root]
@@ -140,7 +158,9 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
     csqs = hl.literal(CSQ_ORDER)
     csq_dict = hl.literal(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
 
-    def find_worst_transcript_consequence(tcl: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
+    def find_worst_transcript_consequence(
+        tcl: hl.expr.ArrayExpression,
+    ) -> hl.expr.StructExpression:
         """
         Gets worst transcript_consequence from an array of em
         """
@@ -150,20 +170,33 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
         def csq_score(tc):
             return csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
 
-        tcl = tcl.map(lambda tc: tc.annotate(
-            csq_score=hl.case(missing_false=True)
-            .when((tc.lof == 'HC') & (tc.lof_flags == ''), csq_score(tc) - no_flag_score)
-            .when((tc.lof == 'HC') & (tc.lof_flags != ''), csq_score(tc) - flag_score)
-            .when(tc.lof == 'OS', csq_score(tc) - 20)
-            .when(tc.lof == 'LC', csq_score(tc) - 10)
-            .when(tc.polyphen_prediction == 'probably_damaging', csq_score(tc) - 0.5)
-            .when(tc.polyphen_prediction == 'possibly_damaging', csq_score(tc) - 0.25)
-            .when(tc.polyphen_prediction == 'benign', csq_score(tc) - 0.1)
-            .default(csq_score(tc))
-        ))
+        tcl = tcl.map(
+            lambda tc: tc.annotate(
+                csq_score=hl.case(missing_false=True)
+                .when(
+                    (tc.lof == "HC") & (tc.lof_flags == ""),
+                    csq_score(tc) - no_flag_score,
+                )
+                .when(
+                    (tc.lof == "HC") & (tc.lof_flags != ""), csq_score(tc) - flag_score
+                )
+                .when(tc.lof == "OS", csq_score(tc) - 20)
+                .when(tc.lof == "LC", csq_score(tc) - 10)
+                .when(
+                    tc.polyphen_prediction == "probably_damaging", csq_score(tc) - 0.5
+                )
+                .when(
+                    tc.polyphen_prediction == "possibly_damaging", csq_score(tc) - 0.25
+                )
+                .when(tc.polyphen_prediction == "benign", csq_score(tc) - 0.1)
+                .default(csq_score(tc))
+            )
+        )
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 
-    transcript_csqs = mt[vep_root].transcript_consequences.map(add_most_severe_consequence_to_consequence)
+    transcript_csqs = mt[vep_root].transcript_consequences.map(
+        add_most_severe_consequence_to_consequence
+    )
 
     gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
     worst_csq_gene = gene_dict.map_values(find_worst_transcript_consequence).values()
@@ -171,42 +204,73 @@ def process_consequences(mt: Union[hl.MatrixTable, hl.Table], vep_root: str = 'v
 
     canonical = transcript_csqs.filter(lambda csq: csq.canonical == 1)
     gene_canonical_dict = canonical.group_by(lambda tc: tc.gene_symbol)
-    worst_csq_gene_canonical = gene_canonical_dict.map_values(find_worst_transcript_consequence).values()
-    sorted_canonical_scores = hl.sorted(worst_csq_gene_canonical, key=lambda tc: tc.csq_score)
+    worst_csq_gene_canonical = gene_canonical_dict.map_values(
+        find_worst_transcript_consequence
+    ).values()
+    sorted_canonical_scores = hl.sorted(
+        worst_csq_gene_canonical, key=lambda tc: tc.csq_score
+    )
 
-    vep_data = mt[vep_root].annotate(transcript_consequences=transcript_csqs,
-                                     worst_consequence_term=csqs.find(lambda c: transcript_csqs.map(lambda csq: csq.most_severe_consequence).contains(c)),
-                                     worst_csq_by_gene=sorted_scores,
-                                     worst_csq_for_variant=hl.or_missing(hl.len(sorted_scores) > 0, sorted_scores[0]),
-                                     worst_csq_by_gene_canonical=sorted_canonical_scores,
-                                     worst_csq_for_variant_canonical=hl.or_missing(hl.len(sorted_canonical_scores) > 0, sorted_canonical_scores[0])
-                                     )
+    vep_data = mt[vep_root].annotate(
+        transcript_consequences=transcript_csqs,
+        worst_consequence_term=csqs.find(
+            lambda c: transcript_csqs.map(
+                lambda csq: csq.most_severe_consequence
+            ).contains(c)
+        ),
+        worst_csq_by_gene=sorted_scores,
+        worst_csq_for_variant=hl.or_missing(
+            hl.len(sorted_scores) > 0, sorted_scores[0]
+        ),
+        worst_csq_by_gene_canonical=sorted_canonical_scores,
+        worst_csq_for_variant_canonical=hl.or_missing(
+            hl.len(sorted_canonical_scores) > 0, sorted_canonical_scores[0]
+        ),
+    )
 
-    return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
+    return (
+        mt.annotate_rows(**{vep_root: vep_data})
+        if isinstance(mt, hl.MatrixTable)
+        else mt.annotate(**{vep_root: vep_data})
+    )
 
 
-def filter_vep_to_canonical_transcripts(mt: Union[hl.MatrixTable, hl.Table],
-                                        vep_root: str = 'vep') -> Union[hl.MatrixTable, hl.Table]:
-    canonical = mt[vep_root].transcript_consequences.filter(lambda csq: csq.canonical == 1)
+def filter_vep_to_canonical_transcripts(
+    mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
+) -> Union[hl.MatrixTable, hl.Table]:
+    canonical = mt[vep_root].transcript_consequences.filter(
+        lambda csq: csq.canonical == 1
+    )
     vep_data = mt[vep_root].annotate(transcript_consequences=canonical)
-    return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
+    return (
+        mt.annotate_rows(**{vep_root: vep_data})
+        if isinstance(mt, hl.MatrixTable)
+        else mt.annotate(**{vep_root: vep_data})
+    )
 
 
-def filter_vep_to_synonymous_variants(mt: Union[hl.MatrixTable, hl.Table],
-                                      vep_root: str = 'vep') -> Union[hl.MatrixTable, hl.Table]:
-    synonymous = mt[vep_root].transcript_consequences.filter(lambda csq: csq.most_severe_consequence == "synonymous_variant")
+def filter_vep_to_synonymous_variants(
+    mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
+) -> Union[hl.MatrixTable, hl.Table]:
+    synonymous = mt[vep_root].transcript_consequences.filter(
+        lambda csq: csq.most_severe_consequence == "synonymous_variant"
+    )
     vep_data = mt[vep_root].annotate(transcript_consequences=synonymous)
-    return mt.annotate_rows(**{vep_root: vep_data}) if isinstance(mt, hl.MatrixTable) else mt.annotate(**{vep_root: vep_data})
+    return (
+        mt.annotate_rows(**{vep_root: vep_data})
+        if isinstance(mt, hl.MatrixTable)
+        else mt.annotate(**{vep_root: vep_data})
+    )
 
 
 def vep_struct_to_csq(
-        vep_expr: hl.expr.StructExpression,
-        csq_fields: str = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|"
-                          "HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|"
-                          "ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|"
-                          "TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|"
-                          "HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|"
-                          "LoF_flags|LoF_info"
+    vep_expr: hl.expr.StructExpression,
+    csq_fields: str = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|"
+    "HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|"
+    "ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|"
+    "TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|"
+    "HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|"
+    "LoF_flags|LoF_info",
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
@@ -227,55 +291,91 @@ def vep_struct_to_csq(
 
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
 
-    def get_csq_from_struct(element: hl.expr.StructExpression, feature_type: str) -> hl.expr.StringExpression:
+    def get_csq_from_struct(
+        element: hl.expr.StructExpression, feature_type: str
+    ) -> hl.expr.StringExpression:
         # Most fields are 1-1, just lowercase
         fields = dict(element)
 
         # Add general exceptions
-        fields.update({
-            'allele': element.variant_allele,
-            'consequence': hl.delimit(element.consequence_terms, delimiter='&'),
-            'feature_type': feature_type,
-            'feature': (
-                element.transcript_id if 'transcript_id' in element else
-                element.regulatory_feature_id if 'regulatory_feature_id' in element else
-                element.motif_feature_id if 'motif_feature_id' in element else ''
-            ),
-            'variant_class': vep_expr.variant_class
-        })
+        fields.update(
+            {
+                "allele": element.variant_allele,
+                "consequence": hl.delimit(element.consequence_terms, delimiter="&"),
+                "feature_type": feature_type,
+                "feature": (
+                    element.transcript_id
+                    if "transcript_id" in element
+                    else element.regulatory_feature_id
+                    if "regulatory_feature_id" in element
+                    else element.motif_feature_id
+                    if "motif_feature_id" in element
+                    else ""
+                ),
+                "variant_class": vep_expr.variant_class,
+            }
+        )
 
         # Add exception for transcripts
-        if feature_type == 'Transcript':
-            fields.update({
-                'canonical': hl.cond(element.canonical == 1, 'YES', ''),
-                'ensp': element.protein_id,
-                'gene': element.gene_id,
-                'symbol': element.gene_symbol,
-                'symbol_source': element.gene_symbol_source,
-                'cdna_position': hl.str(element.cdna_start) + hl.cond(element.cdna_start == element.cdna_end, '', "-" + hl.str(element.cdna_end)),
-                'cds_position': hl.str(element.cds_start) + hl.cond(element.cds_start == element.cds_end, '', "-" + hl.str(element.cds_end)),
-                'protein_position': hl.str(element.protein_start) + hl.cond(element.protein_start == element.protein_end, '', "-" + hl.str(element.protein_end)),
-                'sift': element.sift_prediction + "(" + hl.format('%.3f', element.sift_score) + ")",
-                'polyphen': element.polyphen_prediction + "(" + hl.format('%.3f', element.polyphen_score) + ")",
-                'domains': hl.delimit(element.domains.map(lambda d: d.db + ":" + d.name), "&")
-            })
-        elif feature_type == 'MotifFeature':
-            fields['motif_score_change'] = hl.format('%.3f', element.motif_score_change)
+        if feature_type == "Transcript":
+            fields.update(
+                {
+                    "canonical": hl.cond(element.canonical == 1, "YES", ""),
+                    "ensp": element.protein_id,
+                    "gene": element.gene_id,
+                    "symbol": element.gene_symbol,
+                    "symbol_source": element.gene_symbol_source,
+                    "cdna_position": hl.str(element.cdna_start)
+                    + hl.cond(
+                        element.cdna_start == element.cdna_end,
+                        "",
+                        "-" + hl.str(element.cdna_end),
+                    ),
+                    "cds_position": hl.str(element.cds_start)
+                    + hl.cond(
+                        element.cds_start == element.cds_end,
+                        "",
+                        "-" + hl.str(element.cds_end),
+                    ),
+                    "protein_position": hl.str(element.protein_start)
+                    + hl.cond(
+                        element.protein_start == element.protein_end,
+                        "",
+                        "-" + hl.str(element.protein_end),
+                    ),
+                    "sift": element.sift_prediction
+                    + "("
+                    + hl.format("%.3f", element.sift_score)
+                    + ")",
+                    "polyphen": element.polyphen_prediction
+                    + "("
+                    + hl.format("%.3f", element.polyphen_score)
+                    + ")",
+                    "domains": hl.delimit(
+                        element.domains.map(lambda d: d.db + ":" + d.name), "&"
+                    ),
+                }
+            )
+        elif feature_type == "MotifFeature":
+            fields["motif_score_change"] = hl.format("%.3f", element.motif_score_change)
 
-        return hl.delimit([hl.or_else(hl.str(fields.get(f, '')), '') for f in _csq_fields], "|")
+        return hl.delimit(
+            [hl.or_else(hl.str(fields.get(f, "")), "") for f in _csq_fields], "|"
+        )
 
     csq = hl.empty_array(hl.tstr)
     for feature_field, feature_type in [
-        ('transcript_consequences', 'Transcript'),
-        ('regulatory_feature_consequences', 'RegulatoryFeature'),
-        ('motif_feature_consequences', 'MotifFeature'),
-        ('intergenic_consequences', 'Intergenic')]:
+        ("transcript_consequences", "Transcript"),
+        ("regulatory_feature_consequences", "RegulatoryFeature"),
+        ("motif_feature_consequences", "MotifFeature"),
+        ("intergenic_consequences", "Intergenic"),
+    ]:
         csq = csq.extend(
             hl.or_else(
                 vep_expr[feature_field].map(
                     lambda x: get_csq_from_struct(x, feature_type=feature_type)
                 ),
-                hl.empty_array(hl.tstr)
+                hl.empty_array(hl.tstr),
             )
         )
 

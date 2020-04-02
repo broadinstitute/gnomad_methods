@@ -17,14 +17,14 @@ logger.setLevel(logging.INFO)
 
 
 def filter_rows_for_qc(
-        mt: hl.MatrixTable,
-        min_af: Optional[float] = 0.001,
-        min_callrate: Optional[float] = 0.99,
-        min_inbreeding_coeff_threshold: Optional[float] = -0.8,
-        min_hardy_weinberg_threshold: Optional[float] = 1e-8,
-        apply_hard_filters: bool = True,
-        bi_allelic_only: bool = True,
-        snv_only: bool = True
+    mt: hl.MatrixTable,
+    min_af: Optional[float] = 0.001,
+    min_callrate: Optional[float] = 0.99,
+    min_inbreeding_coeff_threshold: Optional[float] = -0.8,
+    min_hardy_weinberg_threshold: Optional[float] = 1e-8,
+    apply_hard_filters: bool = True,
+    bi_allelic_only: bool = True,
+    snv_only: bool = True,
 ) -> hl.MatrixTable:
     """
     Annotates rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
@@ -48,13 +48,15 @@ def filter_rows_for_qc(
     annotation_expr = {}
 
     if min_af is not None:
-        annotation_expr['af'] = hl.agg.mean(mt.GT.n_alt_alleles()) / 2
+        annotation_expr["af"] = hl.agg.mean(mt.GT.n_alt_alleles()) / 2
     if min_callrate is not None:
-        annotation_expr['site_callrate'] = hl.agg.fraction(hl.is_defined(mt.GT))
+        annotation_expr["site_callrate"] = hl.agg.fraction(hl.is_defined(mt.GT))
     if min_inbreeding_coeff_threshold is not None:
-        annotation_expr['site_inbreeding_coeff'] = bi_allelic_site_inbreeding_expr(mt.GT)
+        annotation_expr["site_inbreeding_coeff"] = bi_allelic_site_inbreeding_expr(
+            mt.GT
+        )
     if min_hardy_weinberg_threshold is not None:
-        annotation_expr['hwe'] = hl.agg.hardy_weinberg_test(mt.GT)
+        annotation_expr["hwe"] = hl.agg.hardy_weinberg_test(mt.GT)
 
     if annotation_expr:
         mt = mt.annotate_rows(**annotation_expr)
@@ -74,39 +76,47 @@ def filter_rows_for_qc(
         filter_expr.append(bi_allelic_expr(mt))
 
     if apply_hard_filters:
-        if 'info' in mt.row_value:
-            if 'QD' in mt.info:
+        if "info" in mt.row_value:
+            if "QD" in mt.info:
                 filter_expr.append((mt.info.QD >= 2))
             else:
-                logger.warning("Could not apply QD hard filter, as `info.QD` not found in schema.")
-            if 'FS' in mt.info:
+                logger.warning(
+                    "Could not apply QD hard filter, as `info.QD` not found in schema."
+                )
+            if "FS" in mt.info:
                 filter_expr.append((mt.info.FS <= 60))
             else:
-                logger.warning("Could not apply FS hard filter, as `info.FS` not found in schema.")
-            if 'MQ' in mt.info:
+                logger.warning(
+                    "Could not apply FS hard filter, as `info.FS` not found in schema."
+                )
+            if "MQ" in mt.info:
                 filter_expr.append((mt.info.MQ >= 30))
             else:
-                logger.warning("Could not apply MQ hard filter, as `info.MQ` not found in schema.")
+                logger.warning(
+                    "Could not apply MQ hard filter, as `info.MQ` not found in schema."
+                )
         else:
-            logger.warning("Could not apply hard filters as `info` not found in schema.")
+            logger.warning(
+                "Could not apply hard filters as `info` not found in schema."
+            )
 
     return mt.filter_rows(functools.reduce(operator.iand, filter_expr))
 
 
 def get_qc_mt(
-        mt: hl.MatrixTable,
-        adj_only: bool = True,
-        min_af: Optional[float] = 0.001,
-        min_callrate: Optional[float] = 0.99,
-        min_inbreeding_coeff_threshold: Optional[float] = -0.8,
-        min_hardy_weinberg_threshold: Optional[float] = 1e-8,
-        apply_hard_filters: bool = True,
-        ld_r2: Optional[float] = 0.1,
-        filter_lcr: bool = True,
-        filter_decoy: bool = True,
-        filter_segdup: bool = True,
-        filter_exome_low_coverage_regions: bool = False,
-        high_conf_regions: Optional[List[str]] = None
+    mt: hl.MatrixTable,
+    adj_only: bool = True,
+    min_af: Optional[float] = 0.001,
+    min_callrate: Optional[float] = 0.99,
+    min_inbreeding_coeff_threshold: Optional[float] = -0.8,
+    min_hardy_weinberg_threshold: Optional[float] = 1e-8,
+    apply_hard_filters: bool = True,
+    ld_r2: Optional[float] = 0.1,
+    filter_lcr: bool = True,
+    filter_decoy: bool = True,
+    filter_segdup: bool = True,
+    filter_exome_low_coverage_regions: bool = False,
+    high_conf_regions: Optional[List[str]] = None,
 ) -> hl.MatrixTable:
     """
     Creates a QC-ready MT by keeping:
@@ -136,18 +146,23 @@ def get_qc_mt(
     """
     logger.info("Creating QC MatrixTable")
     if ld_r2 is not None:
-        logger.warning("The LD-prune step of this function requires non-preemptible workers only!")
+        logger.warning(
+            "The LD-prune step of this function requires non-preemptible workers only!"
+        )
 
     qc_mt = filter_low_conf_regions(
         mt,
         filter_lcr=filter_lcr,
         filter_decoy=filter_decoy,
         filter_segdup=filter_segdup,
-        filter_exome_low_coverage_regions=filter_exome_low_coverage_regions, high_conf_regions=high_conf_regions
+        filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,
+        high_conf_regions=high_conf_regions,
     )
 
     if adj_only:
-        qc_mt = filter_to_adj(qc_mt)  # TODO: Make sure that this works fine before call rate filtering
+        qc_mt = filter_to_adj(
+            qc_mt
+        )  # TODO: Make sure that this works fine before call rate filtering
 
     qc_mt = filter_rows_for_qc(
         qc_mt,
@@ -155,7 +170,7 @@ def get_qc_mt(
         min_callrate,
         min_inbreeding_coeff_threshold,
         min_hardy_weinberg_threshold,
-        apply_hard_filters
+        apply_hard_filters,
     )
 
     if ld_r2 is not None:
@@ -168,29 +183,37 @@ def get_qc_mt(
         qc_mt_params=hl.struct(
             adj_only=adj_only,
             min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
-            min_callrate=min_callrate if min_callrate is not None else hl.null(hl.tfloat32),
-            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold if min_inbreeding_coeff_threshold is not None else hl.null(hl.tfloat32),
-            min_hardy_weinberg_threshold = min_hardy_weinberg_threshold if min_hardy_weinberg_threshold is not None else hl.null(hl.tfloat32),
+            min_callrate=min_callrate
+            if min_callrate is not None
+            else hl.null(hl.tfloat32),
+            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold
+            if min_inbreeding_coeff_threshold is not None
+            else hl.null(hl.tfloat32),
+            min_hardy_weinberg_threshold=min_hardy_weinberg_threshold
+            if min_hardy_weinberg_threshold is not None
+            else hl.null(hl.tfloat32),
             apply_hard_filters=apply_hard_filters,
             ld_r2=ld_r2 if ld_r2 is not None else hl.null(hl.tfloat32),
             filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,
-            high_conf_regions=high_conf_regions if high_conf_regions is not None else hl.null(hl.tarray(hl.tstr))
+            high_conf_regions=high_conf_regions
+            if high_conf_regions is not None
+            else hl.null(hl.tarray(hl.tstr)),
         )
     )
     return qc_mt.annotate_cols(sample_callrate=hl.agg.fraction(hl.is_defined(qc_mt.GT)))
 
 
 def annotate_sex(
-        mt: hl.MatrixTable,
-        is_sparse: bool = True,
-        excluded_intervals: Optional[hl.Table] = None,
-        included_intervals: Optional[hl.Table] = None,
-        normalization_contig: str = 'chr20',
-        sites_ht: Optional[hl.Table] = None,
-        aaf_expr: Optional[str] = None,
-        gt_expr: str = 'GT',
-        f_stat_cutoff: float = 0.5,
-        aaf_threshold: float = 0.001
+    mt: hl.MatrixTable,
+    is_sparse: bool = True,
+    excluded_intervals: Optional[hl.Table] = None,
+    included_intervals: Optional[hl.Table] = None,
+    normalization_contig: str = "chr20",
+    sites_ht: Optional[hl.Table] = None,
+    aaf_expr: Optional[str] = None,
+    gt_expr: str = "GT",
+    f_stat_cutoff: float = 0.5,
+    aaf_threshold: float = 0.001,
 ) -> hl.Table:
     """
     Imputes sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
@@ -226,30 +249,43 @@ def annotate_sex(
     logger.info("Imputing sex chromosome ploidies...")
     if is_sparse:
         ploidy_ht = impute_sex_ploidy(
-                mt, excluded_intervals, included_intervals,
-                normalization_contig
+            mt, excluded_intervals, included_intervals, normalization_contig
         )
     else:
-        raise NotImplementedError("Imputing sex ploidy does not exist yet for dense data.")
+        raise NotImplementedError(
+            "Imputing sex ploidy does not exist yet for dense data."
+        )
 
     x_contigs = get_reference_genome(mt.locus).x_contigs
     logger.info(f"Filtering mt to biallelic SNPs in X contigs: {x_contigs}")
-    if 'was_split' in list(mt.row):
+    if "was_split" in list(mt.row):
         mt = mt.filter_rows((~mt.was_split) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
     else:
-        mt = mt.filter_rows((hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
-    mt = hl.filter_intervals(mt, [hl.parse_locus_interval(contig) for contig in x_contigs])
+        mt = mt.filter_rows(
+            (hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1])
+        )
+    mt = hl.filter_intervals(
+        mt, [hl.parse_locus_interval(contig) for contig in x_contigs]
+    )
 
     if sites_ht is not None:
         if aaf_expr == None:
-            logger.warning("sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele frequency is 'AF'.")
+            logger.warning(
+                "sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele frequency is 'AF'."
+            )
             aaf_expr = "AF"
         logger.info("Filtering to provided sites")
         mt = mt.annotate_rows(**sites_ht[mt.row_key])
         mt = mt.filter_rows(hl.is_defined(mt[aaf_expr]))
 
     logger.info("Calculating inbreeding coefficient on chrX")
-    sex_ht = hl.impute_sex(mt[gt_expr], aaf_threshold=aaf_threshold, male_threshold=f_stat_cutoff, female_threshold=f_stat_cutoff, aaf=aaf_expr)
+    sex_ht = hl.impute_sex(
+        mt[gt_expr],
+        aaf_threshold=aaf_threshold,
+        male_threshold=f_stat_cutoff,
+        female_threshold=f_stat_cutoff,
+        aaf=aaf_expr,
+    )
 
     logger.info("Annotating sex ht with sex chromosome ploidies")
     sex_ht = sex_ht.annotate(**ploidy_ht[sex_ht.key])
@@ -257,10 +293,7 @@ def annotate_sex(
     logger.info("Inferring sex karyotypes")
     x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(sex_ht, f_stat_cutoff)
     return sex_ht.annotate(
-            **get_sex_expr(
-                sex_ht.chrX_ploidy,
-                sex_ht.chrY_ploidy,
-                x_ploidy_cutoffs,
-                y_ploidy_cutoffs
+        **get_sex_expr(
+            sex_ht.chrX_ploidy, sex_ht.chrY_ploidy, x_ploidy_cutoffs, y_ploidy_cutoffs
         )
     )

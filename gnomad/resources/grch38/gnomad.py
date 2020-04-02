@@ -16,18 +16,23 @@ DATA_TYPES = ["genomes"]
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 
 gnomad_syndip = VersionedMatrixTableResource(
-    default_version='3.0',
+    default_version="3.0",
     versions={
-        "3.0": MatrixTableResource(path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt")
-    }
+        "3.0": MatrixTableResource(
+            path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
+        )
+    },
 )
 
 na12878 = VersionedMatrixTableResource(
-    default_version='3.0',
+    default_version="3.0",
     versions={
-        "3.0": MatrixTableResource(path='gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_na12878.mt')
-    }
+        "3.0": MatrixTableResource(
+            path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
+        )
+    },
 )
+
 
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """
@@ -60,7 +65,9 @@ def public_release(data_type: str) -> VersionedTableResource:
     """
 
     if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}')
+        raise DataException(
+            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+        )
 
     if data_type == "exomes":
         current_release = CURRENT_EXOME_RELEASE
@@ -71,7 +78,10 @@ def public_release(data_type: str) -> VersionedTableResource:
 
     return VersionedTableResource(
         current_release,
-        {release: TableResource(path=_public_release_ht_path(data_type, release)) for release in releases},
+        {
+            release: TableResource(path=_public_release_ht_path(data_type, release))
+            for release in releases
+        },
     )
 
 
@@ -83,7 +93,9 @@ def coverage(data_type: str) -> VersionedTableResource:
     :return: Coverage Table
     """
     if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}')
+        raise DataException(
+            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+        )
 
     if data_type == "exomes":
         current_release = CURRENT_EXOME_RELEASE
@@ -94,7 +106,10 @@ def coverage(data_type: str) -> VersionedTableResource:
 
     return VersionedTableResource(
         current_release,
-        {release: TableResource(path=_public_coverage_ht_path(data_type, release)) for release in releases},
+        {
+            release: TableResource(path=_public_coverage_ht_path(data_type, release))
+            for release in releases
+        },
     )
 
 
@@ -106,21 +121,26 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
     :return: Coverage Table
     """
     if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}')
-
+        raise DataException(
+            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+        )
 
     if data_type == "exomes":
         if version is None:
             version = CURRENT_EXOME_RELEASE
         elif version not in EXOME_RELEASES:
-            raise DataException(f'Version {version} of gnomAD exomes for GRCh38 does not exist')
+            raise DataException(
+                f"Version {version} of gnomAD exomes for GRCh38 does not exist"
+            )
     else:
         if version is None:
             version = CURRENT_GENOME_RELEASE
         elif version not in GENOME_RELEASES:
-            raise DataException(f'Version {version} of gnomAD genomes for GRCh38 does not exist')
+            raise DataException(
+                f"Version {version} of gnomAD genomes for GRCh38 does not exist"
+            )
 
-    return  f"gs://gnomad-public/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
+    return f"gs://gnomad-public/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:

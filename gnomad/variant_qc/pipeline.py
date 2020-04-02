@@ -4,8 +4,11 @@ from typing import Dict, Optional
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
 import hail as hl
-from gnomad.sample_qc.relatedness import (SIBLINGS, generate_sib_stats_expr,
-                                          generate_trio_stats_expr)
+from gnomad.sample_qc.relatedness import (
+    SIBLINGS,
+    generate_sib_stats_expr,
+    generate_trio_stats_expr,
+)
 from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_quantile_bin
@@ -16,12 +19,12 @@ logger.setLevel(logging.INFO)
 
 
 def create_binned_ht(
-        ht: hl.Table,
-        n_bins: int = 100,
-        singleton: bool = True,
-        biallelic: bool = True,
-        adj: bool = True,
-        add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None
+    ht: hl.Table,
+    n_bins: int = 100,
+    singleton: bool = True,
+    biallelic: bool = True,
+    adj: bool = True,
+    add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `compute_quantile_bin`. It annotates table with a bin, where variants are
@@ -51,10 +54,11 @@ def create_binned_ht(
     :param add_substrat: Any additional stratifications for adding bins
     :return: table with bin number for each variant
     """
+
     def update_bin_expr(
-            bin_expr: Dict[str, hl.expr.BooleanExpression],
-            new_expr: hl.expr.BooleanExpression,
-            new_id: str
+        bin_expr: Dict[str, hl.expr.BooleanExpression],
+        new_expr: hl.expr.BooleanExpression,
+        new_id: str,
     ) -> Dict[str, hl.expr.BooleanExpression]:
         """
         Updates a dictionary of expressions to add another stratification
@@ -66,26 +70,22 @@ def create_binned_ht(
         :return: Dictionary of `bin_expr` updated with `new_expr` added as an additional stratification to all
         expressions already in `bin_expr`
         """
-        bin_expr.update({
-            f'{new_id}_{bin_id}': bin_expr & new_expr
-            for bin_id, bin_expr in bin_expr.items()
-        })
+        bin_expr.update(
+            {
+                f"{new_id}_{bin_id}": bin_expr & new_expr
+                for bin_id, bin_expr in bin_expr.items()
+            }
+        )
         return bin_expr
 
     ht = ht.annotate(
-        singleton=ht.ac_raw == 1,
-        snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
-
+        singleton=ht.ac_raw == 1, snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
     )
 
-    ht = ht.filter(
-        ht.ac_raw > 0
-    ).persist()
+    ht = ht.filter(ht.ac_raw > 0).persist()
 
     # Desired bins and sub-bins
-    bin_expr = {
-        'bin': True
-    }
+    bin_expr = {"bin": True}
 
     if singleton:
         bin_expr = update_bin_expr(bin_expr, ht.singleton, "singleton")
@@ -101,19 +101,15 @@ def create_binned_ht(
             bin_expr = update_bin_expr(bin_expr, add_expr, add_id)
 
     bin_ht = compute_quantile_bin(
-        ht,
-        score_expr=ht.score,
-        bin_expr=bin_expr,
-        n_bins=n_bins
+        ht, score_expr=ht.score, bin_expr=bin_expr, n_bins=n_bins
     )
-    ht = ht.join(bin_ht, how='left')
+    ht = ht.join(bin_ht, how="left")
 
     return ht
 
 
 def score_bin_agg(
-        ht: hl.GroupedTable,
-        fam_stats_ht: hl.Table
+    ht: hl.GroupedTable, fam_stats_ht: hl.Table
 ) -> Dict[str, hl.expr.Aggregation]:
     """
     Default aggregation function to add aggregations for min/max of score, number of ClinVar variants, number of truth
@@ -189,7 +185,7 @@ def score_bin_agg(
     """
     # Annotate binned table with the evaluation data
     ht = ht._parent
-    indel_length=hl.abs(ht.alleles[0].length() - ht.alleles[1].length())
+    indel_length = hl.abs(ht.alleles[0].length() - ht.alleles[1].length())
     # Load external evaluation data
     build = get_reference_genome(ht.locus).name
     clinvar = (
@@ -215,24 +211,30 @@ def score_bin_agg(
         n_1bp_indel=hl.agg.count_where(indel_length == 1),
         n_mod3bp_indel=hl.agg.count_where((indel_length % 3) == 0),
         n_singleton=hl.agg.count_where(ht.singleton),
-        fail_hard_filters=hl.agg.count_where((ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)),
+        fail_hard_filters=hl.agg.count_where(
+            (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
+        ),
         n_vqsr_pos_train=hl.agg.count_where(ht.positive_train_site),
         n_vqsr_neg_train=hl.agg.count_where(ht.negative_train_site),
         n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
         n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
         n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
-        n_trans_singletons=hl.agg.filter(ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)),
-        n_untrans_singletons=hl.agg.filter((ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
-                                           hl.agg.sum(fam.tdt.u)),
+        n_trans_singletons=hl.agg.filter(
+            ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)
+        ),
+        n_untrans_singletons=hl.agg.filter(
+            (ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
+            hl.agg.sum(fam.tdt.u),
+        ),
         # n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
         n_omni=hl.agg.count_where(truth_data.omni),
         n_mills=hl.agg.count_where(truth_data.mills),
         n_hapmap=hl.agg.count_where(truth_data.hapmap),
-        n_kgp_phase1_hc=hl.agg.count_where(truth_data.kgp_phase1_hc)
+        n_kgp_phase1_hc=hl.agg.count_where(truth_data.kgp_phase1_hc),
     )
 
 
-def generate_trio_stats(mt: hl.MatrixTable, ) -> hl.Table:
+def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
 
@@ -262,12 +264,12 @@ def generate_trio_stats(mt: hl.MatrixTable, ) -> hl.Table:
 
 
 def generate_sib_stats(
-        mt: hl.MatrixTable,
-        relatedness_ht: hl.Table,
-        sex_ht: hl.Table,
-        i_col: str = "i",
-        j_col: str = "j",
-        relationship_col: str = "relationship",
+    mt: hl.MatrixTable,
+    relatedness_ht: hl.Table,
+    sex_ht: hl.Table,
+    i_col: str = "i",
+    j_col: str = "j",
+    relationship_col: str = "relationship",
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
@@ -288,9 +290,9 @@ def generate_sib_stats(
     """
     sex_ht = sex_ht.annotate(
         is_female=hl.case()
-            .when(sex_ht.sex_karyotype == "XX", True)
-            .when(sex_ht.sex_karyotype == "XY", False)
-            .or_missing()
+        .when(sex_ht.sex_karyotype == "XX", True)
+        .when(sex_ht.sex_karyotype == "XY", False)
+        .or_missing()
     )
 
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)

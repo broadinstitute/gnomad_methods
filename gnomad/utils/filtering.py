@@ -17,16 +17,23 @@ def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     """
     Filter genotypes to adj criteria
     """
-    if 'adj' not in list(mt.entry):
+    if "adj" not in list(mt.entry):
         mt = annotate_adj(mt)
     mt = mt.filter_entries(mt.adj)
     return mt.drop(mt.adj)
 
 
-def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
-                        frequency: float = None, allele_count: int = None,
-                        population: str = None, subpop: str = None, downsampling: int = None,
-                        keep: bool = True, adj: bool = True) -> Union[hl.MatrixTable, hl.Table]:
+def filter_by_frequency(
+    t: Union[hl.MatrixTable, hl.Table],
+    direction: str,
+    frequency: float = None,
+    allele_count: int = None,
+    population: str = None,
+    subpop: str = None,
+    downsampling: int = None,
+    keep: bool = True,
+    adj: bool = True,
+) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
     (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
@@ -47,42 +54,43 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
     :return: Filtered MatrixTable or Table
     """
     if frequency is None and allele_count is None:
-        raise ValueError('At least one of frequency or allele_count must be specified')
-    if direction not in ('above', 'below', 'equal'):
+        raise ValueError("At least one of frequency or allele_count must be specified")
+    if direction not in ("above", "below", "equal"):
         raise ValueError('direction needs to be one of "above", "below", or "equal"')
-    group = 'adj' if adj else 'raw'
-    criteria = [lambda f: f.meta.get('group', '') == group]
+    group = "adj" if adj else "raw"
+    criteria = [lambda f: f.meta.get("group", "") == group]
     if frequency is not None:
-        if direction == 'above':
+        if direction == "above":
             criteria.append(lambda f: f.AF[1] > frequency)
-        elif direction == 'below':
+        elif direction == "below":
             criteria.append(lambda f: f.AF[1] < frequency)
         else:
             criteria.append(lambda f: f.AF[1] == frequency)
     if allele_count is not None:
-        if direction == 'above':
+        if direction == "above":
             criteria.append(lambda f: f.AC[1] > allele_count)
-        elif direction == 'below':
+        elif direction == "below":
             criteria.append(lambda f: f.AC[1] < allele_count)
         else:
             criteria.append(lambda f: f.AC[1] == allele_count)
     size = 1
     if population:
-        criteria.append(lambda f: f.meta.get('pop', '') == population)
+        criteria.append(lambda f: f.meta.get("pop", "") == population)
         size += 1
     if subpop:
-        criteria.append(lambda f: f.meta.get('subpop', '') == subpop)
+        criteria.append(lambda f: f.meta.get("subpop", "") == subpop)
         size += 1
         # If one supplies a subpop but not a population, this will ensure this gets it right
-        if not population: size += 1
+        if not population:
+            size += 1
     if downsampling:
-        criteria.append(lambda f: f.meta.get('downsampling', '') == str(downsampling))
+        criteria.append(lambda f: f.meta.get("downsampling", "") == str(downsampling))
         size += 1
         if not population:
             size += 1
-            criteria.append(lambda f: f.meta.get('pop', '') == 'global')
+            criteria.append(lambda f: f.meta.get("pop", "") == "global")
         if subpop:
-            raise Exception('No downsampling data for subpopulations implemented')
+            raise Exception("No downsampling data for subpopulations implemented")
     criteria.append(lambda f: f.meta.size() == size)
 
     def combine_functions(func_list, x):
@@ -93,12 +101,21 @@ def filter_by_frequency(t: Union[hl.MatrixTable, hl.Table], direction: str,
 
     filt = lambda x: combine_functions(criteria, x)
     criteria = hl.any(filt, t.freq)
-    return t.filter_rows(criteria, keep=keep) if isinstance(t, hl.MatrixTable) else t.filter(criteria, keep=keep)
+    return (
+        t.filter_rows(criteria, keep=keep)
+        if isinstance(t, hl.MatrixTable)
+        else t.filter(criteria, keep=keep)
+    )
 
 
-def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: bool = True, filter_decoy: bool = True,
-                            filter_segdup: bool = True, filter_exome_low_coverage_regions: bool = False,
-                            high_conf_regions: Optional[List[str]] = None) -> Union[hl.MatrixTable, hl.Table]:
+def filter_low_conf_regions(
+    mt: Union[hl.MatrixTable, hl.Table],
+    filter_lcr: bool = True,
+    filter_decoy: bool = True,
+    filter_segdup: bool = True,
+    filter_exome_low_coverage_regions: bool = False,
+    high_conf_regions: Optional[List[str]] = None,
+) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filters low-confidence regions
 
@@ -148,7 +165,9 @@ def filter_low_conf_regions(mt: Union[hl.MatrixTable, hl.Table], filter_lcr: boo
     return mt
 
 
-def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, hl.Table]:
+def filter_to_autosomes(
+    t: Union[hl.MatrixTable, hl.Table]
+) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filters the Table or MatrixTable to autosomes only.
     This assumes that the input contains a field named `locus` of type Locus
@@ -157,13 +176,15 @@ def filter_to_autosomes(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTa
     :return:  MT/HT autosomes
     """
     reference = get_reference_genome(t.locus)
-    autosomes = hl.parse_locus_interval(f'{reference.contigs[0]}-{reference.contigs[21]}', reference_genome=reference)
+    autosomes = hl.parse_locus_interval(
+        f"{reference.contigs[0]}-{reference.contigs[21]}", reference_genome=reference
+    )
     return hl.filter_intervals(t, [autosomes])
 
 
 def add_filters_expr(
-        filters: Dict[str, hl.expr.BooleanExpression],
-        current_filters: hl.expr.SetExpression = None
+    filters: Dict[str, hl.expr.BooleanExpression],
+    current_filters: hl.expr.SetExpression = None,
 ) -> hl.expr.SetExpression:
     """
     Creates an expression to create or add filters.
@@ -185,17 +206,17 @@ def add_filters_expr(
         [
             hl.cond(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
             for filter_name, filter_condition in filters.items()
-        ]
+        ],
     )
 
 
 def subset_samples_and_variants(
-    mt: hl.MatrixTable, 
-    sample_path: str, 
-    header: bool = True, 
-    table_key: str = "s", 
+    mt: hl.MatrixTable,
+    sample_path: str,
+    header: bool = True,
+    table_key: str = "s",
     sparse: bool = False,
-    gt_expr: str = "GT"
+    gt_expr: str = "GT",
 ) -> hl.MatrixTable:
     """
     Subsets the MatrixTable to the provided list of samples and their variants

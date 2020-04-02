@@ -7,18 +7,15 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-SEXES = {
-    'Male': 'Male',
-    'Female': 'Female'
-}
+SEXES = {"Male": "Male", "Female": "Female"}
 
 
 def adjusted_sex_ploidy_expr(
-        locus_expr: hl.expr.LocusExpression,
-        gt_expr: hl.expr.CallExpression,
-        karyotype_expr: hl.expr.StringExpression,
-        xy_karyotype_str: str = 'XY',
-        xx_karyotype_str: str = 'XX'
+    locus_expr: hl.expr.LocusExpression,
+    gt_expr: hl.expr.CallExpression,
+    karyotype_expr: hl.expr.StringExpression,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
 ) -> hl.expr.CallExpression:
     """
     Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
@@ -37,15 +34,19 @@ def adjusted_sex_ploidy_expr(
     y_nonpar = locus_expr.in_y_nonpar()
     return (
         hl.case(missing_false=True)
-            .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
-            .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
-            .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
-            .default(gt_expr)
+        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
+        .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
+        .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
+        .default(gt_expr)
     )
 
 
-def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
-                      male_str: str = 'male', female_str: str = 'female') -> hl.MatrixTable:
+def adjust_sex_ploidy(
+    mt: hl.MatrixTable,
+    sex_expr: hl.expr.StringExpression,
+    male_str: str = "male",
+    female_str: str = "female",
+) -> hl.MatrixTable:
     """
     Converts males to haploid on non-PAR X/Y, sets females to missing on Y
 
@@ -56,21 +57,15 @@ def adjust_sex_ploidy(mt: hl.MatrixTable, sex_expr: hl.expr.StringExpression,
     :return: MatrixTable with fixed ploidy for sex chromosomes
     """
     return mt.annotate_entries(
-        GT=adjusted_sex_ploidy_expr(
-            mt.locus,
-            mt.GT,
-            sex_expr,
-            male_str,
-            female_str
-        )
+        GT=adjusted_sex_ploidy_expr(mt.locus, mt.GT, sex_expr, male_str, female_str)
     )
 
 
 def get_ploidy_cutoffs(
-    ht: hl.Table, 
-    f_stat_cutoff: float, 
-    normal_ploidy_cutoff: int = 5, 
-    aneuploidy_cutoff: int = 6
+    ht: hl.Table,
+    f_stat_cutoff: float,
+    normal_ploidy_cutoff: int = 5,
+    aneuploidy_cutoff: int = 6,
 ) -> Tuple[Tuple[float, Tuple[float, float], float], Tuple[Tuple[float, float], float]]:
     """
     Gets chromosome X and Y ploidy cutoffs for XY and XX samples. Note this assumes the input hail Table has the fields f_stat, chrX_ploidy, and chrY_ploidy.
@@ -93,28 +88,35 @@ def get_ploidy_cutoffs(
     sex_stats = ht.aggregate(
         hl.agg.group_by(
             hl.cond(ht.f_stat < f_stat_cutoff, "xx", "xy"),
-            hl.struct(
-                    x=hl.agg.stats(ht.chrX_ploidy),
-                    y=hl.agg.stats(ht.chrY_ploidy)
-            )
+            hl.struct(x=hl.agg.stats(ht.chrX_ploidy), y=hl.agg.stats(ht.chrY_ploidy)),
         )
     )
-    logger.info(f"XX stats: {sex_stats['xx']}") 
+    logger.info(f"XX stats: {sex_stats['xx']}")
     logger.info(f"XY stats: {sex_stats['xy']}")
 
     cutoffs = (
-                (
-                    sex_stats["xy"].x.mean + (normal_ploidy_cutoff * sex_stats["xy"].x.stdev),
-                    (sex_stats["xx"].x.mean - (normal_ploidy_cutoff * sex_stats["xx"].x.stdev), sex_stats["xx"].x.mean + (normal_ploidy_cutoff * sex_stats["xx"].x.stdev)),
-                    sex_stats["xx"].x.mean + (aneuploidy_cutoff * sex_stats["xx"].x.stdev)
-                ),
-                (
-                    (sex_stats["xx"].y.mean + (normal_ploidy_cutoff * sex_stats["xx"].y.stdev), sex_stats["xy"].y.mean + (normal_ploidy_cutoff * sex_stats["xy"].y.stdev)), 
-                    sex_stats["xy"].y.mean + (aneuploidy_cutoff * sex_stats["xy"].y.stdev)
-                )
-            )
- 
-    logger.info(f"X ploidy cutoffs: {cutoffs[0]}") 
+        (
+            sex_stats["xy"].x.mean + (normal_ploidy_cutoff * sex_stats["xy"].x.stdev),
+            (
+                sex_stats["xx"].x.mean
+                - (normal_ploidy_cutoff * sex_stats["xx"].x.stdev),
+                sex_stats["xx"].x.mean
+                + (normal_ploidy_cutoff * sex_stats["xx"].x.stdev),
+            ),
+            sex_stats["xx"].x.mean + (aneuploidy_cutoff * sex_stats["xx"].x.stdev),
+        ),
+        (
+            (
+                sex_stats["xx"].y.mean
+                + (normal_ploidy_cutoff * sex_stats["xx"].y.stdev),
+                sex_stats["xy"].y.mean
+                + (normal_ploidy_cutoff * sex_stats["xy"].y.stdev),
+            ),
+            sex_stats["xy"].y.mean + (aneuploidy_cutoff * sex_stats["xy"].y.stdev),
+        ),
+    )
+
+    logger.info(f"X ploidy cutoffs: {cutoffs[0]}")
     logger.info(f"Y ploidy cutoffs: {cutoffs[1]}")
     return cutoffs
 
@@ -142,35 +144,37 @@ def get_sex_expr(
     sex_expr = hl.struct(
         X_karyotype=(
             hl.case()
-                .when(
-                    chr_x_ploidy < x_ploidy_cutoffs[0], "X")
-                .when(
-                    ((chr_x_ploidy > x_ploidy_cutoffs[1][0]) &
-                    (chr_x_ploidy < x_ploidy_cutoffs[1][1])),
-                    "XX")
-                .when(
-                    (chr_x_ploidy >= x_ploidy_cutoffs[2]),
-                    "XXX")
-                .default("Ambiguous")
+            .when(chr_x_ploidy < x_ploidy_cutoffs[0], "X")
+            .when(
+                (
+                    (chr_x_ploidy > x_ploidy_cutoffs[1][0])
+                    & (chr_x_ploidy < x_ploidy_cutoffs[1][1])
+                ),
+                "XX",
+            )
+            .when((chr_x_ploidy >= x_ploidy_cutoffs[2]), "XXX")
+            .default("Ambiguous")
         ),
         Y_karyotype=(
             hl.case()
-                .when(chr_y_ploidy < y_ploidy_cutoffs[0][0], "")
-                .when(
-                    ((chr_y_ploidy > y_ploidy_cutoffs[0][0]) &
-                    (chr_y_ploidy < y_ploidy_cutoffs[0][1])),
-                    "Y")
-                .when(
-                     chr_y_ploidy >= y_ploidy_cutoffs[1],
-                    "YY")
-                .default("Ambiguous")
+            .when(chr_y_ploidy < y_ploidy_cutoffs[0][0], "")
+            .when(
+                (
+                    (chr_y_ploidy > y_ploidy_cutoffs[0][0])
+                    & (chr_y_ploidy < y_ploidy_cutoffs[0][1])
+                ),
+                "Y",
             )
+            .when(chr_y_ploidy >= y_ploidy_cutoffs[1], "YY")
+            .default("Ambiguous")
+        ),
     )
-    
+
     return sex_expr.annotate(
         sex_karyotype=hl.if_else(
-            (sex_expr.X_karyotype == "Ambiguous") |  (sex_expr.Y_karyotype == "Ambiguous"),
+            (sex_expr.X_karyotype == "Ambiguous")
+            | (sex_expr.Y_karyotype == "Ambiguous"),
             "Ambiguous",
-            sex_expr.X_karyotype + sex_expr.Y_karyotype
-            )
+            sex_expr.X_karyotype + sex_expr.Y_karyotype,
+        )
     )

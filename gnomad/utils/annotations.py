@@ -4,33 +4,36 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import hail as hl
 from gnomad.utils.gen_stats import to_phred
 
-logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 ANNOTATIONS_HISTS = {
-    'FS': (0, 50, 50),  # NOTE: in 2.0.2 release this was on (0,20)
-    'InbreedingCoeff': (-0.25, 0.25, 50),
-    'MQ': (0, 80, 40),
-    'RAW_MQ': (2, 13, 33),
-    'MQRankSum': (-15, 15, 60),
-    'QD': (0, 40, 40),
-    'ReadPosRankSum': (-15, 15, 60),
-    'SOR': (0, 10, 50),
-    'BaseQRankSum': (-15, 15, 60),
-    'ClippingRankSum': (-5, 5, 40),
-    'DP': (1, 9, 32),  # NOTE: in 2.0.2 release this was on (0,8)
-    'VQSLOD': (-30, 30, 60),  # NOTE: in 2.0.2 release this was on (-20,20)
-    'AS_VQSLOD': (-30, 30, 60),
-    'rf_tp_probability': (0, 1, 50),
-    'pab_max': (0, 1, 50)
+    "FS": (0, 50, 50),  # NOTE: in 2.0.2 release this was on (0,20)
+    "InbreedingCoeff": (-0.25, 0.25, 50),
+    "MQ": (0, 80, 40),
+    "RAW_MQ": (2, 13, 33),
+    "MQRankSum": (-15, 15, 60),
+    "QD": (0, 40, 40),
+    "ReadPosRankSum": (-15, 15, 60),
+    "SOR": (0, 10, 50),
+    "BaseQRankSum": (-15, 15, 60),
+    "ClippingRankSum": (-5, 5, 40),
+    "DP": (1, 9, 32),  # NOTE: in 2.0.2 release this was on (0,8)
+    "VQSLOD": (-30, 30, 60),  # NOTE: in 2.0.2 release this was on (-20,20)
+    "AS_VQSLOD": (-30, 30, 60),
+    "rf_tp_probability": (0, 1, 50),
+    "pab_max": (0, 1, 50),
 }
 
 
 def pop_max_expr(
-        freq: hl.expr.ArrayExpression,
-        freq_meta: hl.expr.ArrayExpression,
-        pops_to_exclude: Optional[Set[str]] = None,
+    freq: hl.expr.ArrayExpression,
+    freq_meta: hl.expr.ArrayExpression,
+    pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
     Creates an expression containing popmax: the frequency information about the population
@@ -55,8 +58,8 @@ def pop_max_expr(
     _pops_to_exclude = hl.literal(pops_to_exclude)
     popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (hl.set(freq_meta[i].keys()) == {"group", "pop"})
-                  & (freq_meta[i]["group"] == "adj")
-                  & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+        & (freq_meta[i]["group"] == "adj")
+        & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
     )
     freq_filtered = popmax_freq_indices.map(
         lambda i: freq[i].annotate(pop=freq_meta[i]["pop"])
@@ -67,10 +70,10 @@ def pop_max_expr(
 
 
 def project_max_expr(
-        project_expr: hl.expr.StringExpression,
-        gt_expr: hl.expr.CallExpression,
-        alleles_expr: hl.expr.ArrayExpression,
-        n_projects: int = 5,
+    project_expr: hl.expr.StringExpression,
+    gt_expr: hl.expr.CallExpression,
+    alleles_expr: hl.expr.ArrayExpression,
+    n_projects: int = 5,
 ) -> hl.expr.ArrayExpression:
     """
     Creates an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
@@ -110,7 +113,7 @@ def project_max_expr(
                 project_cs.filter(
                     # filter to projects with AF > 0
                     lambda x: x[1].AF[ai]
-                              > 0
+                    > 0
                 ),
                 # order the callstats computed by AF in decreasing order
                 lambda x: -x[1].AF[ai]
@@ -130,11 +133,11 @@ def project_max_expr(
 
 
 def faf_expr(
-        freq: hl.expr.ArrayExpression,
-        freq_meta: hl.expr.ArrayExpression,
-        locus: hl.expr.LocusExpression,
-        pops_to_exclude: Optional[Set[str]] = None,
-        faf_thresholds: List[float] = [0.95, 0.99],
+    freq: hl.expr.ArrayExpression,
+    freq_meta: hl.expr.ArrayExpression,
+    locus: hl.expr.LocusExpression,
+    pops_to_exclude: Optional[Set[str]] = None,
+    faf_thresholds: List[float] = [0.95, 0.99],
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
     Calculates the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
@@ -165,24 +168,24 @@ def faf_expr(
     )
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (freq_meta[i].get("group") == "adj")
-                  & (
-                          (freq_meta[i].size() == 1)
-                          | (
-                                  (hl.set(freq_meta[i].keys()) == {"pop", "group"})
-                                  & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
-                          )
-                  )
+        & (
+            (freq_meta[i].size() == 1)
+            | (
+                (hl.set(freq_meta[i].keys()) == {"pop", "group"})
+                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+            )
+        )
     )
     sex_faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (freq_meta[i].get("group") == "adj")
-                  & (freq_meta[i].contains("sex"))
-                  & (
-                          (freq_meta[i].size() == 2)
-                          | (
-                                  (hl.set(freq_meta[i].keys()) == {"pop", "group", "sex"})
-                                  & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
-                          )
-                  )
+        & (freq_meta[i].contains("sex"))
+        & (
+            (freq_meta[i].size() == 2)
+            | (
+                (hl.set(freq_meta[i].keys()) == {"pop", "group", "sex"})
+                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+            )
+        )
     )
 
     faf_expr = faf_freq_indices.map(
@@ -217,11 +220,11 @@ def faf_expr(
 
 
 def qual_hist_expr(
-        gt_expr: Optional[hl.expr.CallExpression] = None,
-        gq_expr: Optional[hl.expr.NumericExpression] = None,
-        dp_expr: Optional[hl.expr.NumericExpression] = None,
-        ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
-        adj_expr: Optional[hl.expr.BooleanExpression] = None,
+    gt_expr: Optional[hl.expr.CallExpression] = None,
+    gq_expr: Optional[hl.expr.NumericExpression] = None,
+    dp_expr: Optional[hl.expr.NumericExpression] = None,
+    ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
+    adj_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Returns a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
@@ -281,12 +284,12 @@ def qual_hist_expr(
 
 
 def age_hists_expr(
-        adj_expr: hl.expr.BooleanExpression,
-        gt_expr: hl.expr.CallExpression,
-        age_expr: hl.expr.NumericExpression,
-        lowest_boundary: int = 30,
-        highest_boundary: int = 80,
-        n_bins: int = 10,
+    adj_expr: hl.expr.BooleanExpression,
+    gt_expr: hl.expr.CallExpression,
+    age_expr: hl.expr.NumericExpression,
+    lowest_boundary: int = 30,
+    highest_boundary: int = 80,
+    n_bins: int = 10,
 ) -> hl.expr.StructExpression:
     """
     Returns a StructExpression with the age histograms for hets and homs.
@@ -312,12 +315,12 @@ def age_hists_expr(
 
 
 def annotate_freq(
-        mt: hl.MatrixTable,
-        sex_expr: Optional[hl.expr.StringExpression] = None,
-        pop_expr: Optional[hl.expr.StringExpression] = None,
-        subpop_expr: Optional[hl.expr.StringExpression] = None,
-        additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
-        downsamplings: Optional[List[int]] = None,
+    mt: hl.MatrixTable,
+    sex_expr: Optional[hl.expr.StringExpression] = None,
+    pop_expr: Optional[hl.expr.StringExpression] = None,
+    subpop_expr: Optional[hl.expr.StringExpression] = None,
+    additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
+    downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
     Adds a row annotation `freq` to the input `mt` with stratified allele frequencies,
@@ -456,31 +459,31 @@ def annotate_freq(
 
     # Add all desired strata, starting with the full set and ending with downsamplings (if any)
     sample_group_filters = (
-            [({}, True)]
-            + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
-            + [({"sex": sex}, mt._freq_meta.sex == sex) for sex in cut_data.get("sex", {})]
-            + [
-                (
-                    {"pop": pop, "sex": sex},
-                    (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop),
-                )
-                for sex in cut_data.get("sex", {})
-                for pop in cut_data.get("pop", {})
-            ]
-            + [
-                (
-                    {"subpop": subpop.subpop, "pop": subpop.pop},
-                    (mt._freq_meta.pop == subpop.pop)
-                    & (mt._freq_meta.subpop == subpop.subpop),
-                )
-                for subpop in cut_data.get("subpop", {})
-            ]
-            + [
-                ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
-                for strata in additional_strata_expr
-                for s_value in cut_data.get(strata, {})
-            ]
-            + sample_group_filters
+        [({}, True)]
+        + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
+        + [({"sex": sex}, mt._freq_meta.sex == sex) for sex in cut_data.get("sex", {})]
+        + [
+            (
+                {"pop": pop, "sex": sex},
+                (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop),
+            )
+            for sex in cut_data.get("sex", {})
+            for pop in cut_data.get("pop", {})
+        ]
+        + [
+            (
+                {"subpop": subpop.subpop, "pop": subpop.pop},
+                (mt._freq_meta.pop == subpop.pop)
+                & (mt._freq_meta.subpop == subpop.subpop),
+            )
+            for subpop in cut_data.get("subpop", {})
+        ]
+        + [
+            ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
+            for strata in additional_strata_expr
+            for s_value in cut_data.get(strata, {})
+        ]
+        + sample_group_filters
     )
 
     # Annotate columns with group_membership
@@ -504,8 +507,8 @@ def annotate_freq(
     # Insert raw as the second element of the array
     freq_expr = (
         freq_expr[:1]
-            .extend([hl.agg.call_stats(mt.GT, mt.alleles)])
-            .extend(freq_expr[1:])
+        .extend([hl.agg.call_stats(mt.GT, mt.alleles)])
+        .extend(freq_expr[1:])
     )
 
     # Select non-ref allele (assumes bi-allelic)
@@ -524,12 +527,12 @@ def annotate_freq(
 
 
 def get_lowqual_expr(
-        alleles: hl.expr.ArrayExpression,
-        qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
-        snv_phred_threshold: int = 30,
-        snv_phred_het_prior: int = 30,  # 1/1000
-        indel_phred_threshold: int = 30,
-        indel_phred_het_prior: int = 39,  # 1/8,000
+    alleles: hl.expr.ArrayExpression,
+    qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
+    snv_phred_threshold: int = 30,
+    snv_phred_het_prior: int = 30,  # 1/1000
+    indel_phred_threshold: int = 30,
+    indel_phred_het_prior: int = 39,  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
     Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
@@ -558,22 +561,32 @@ def get_lowqual_expr(
             lambda ai: hl.cond(
                 hl.is_snp(alleles[0], alleles[ai]),
                 qual_approx_expr[ai - 1] < min_snv_qual,
-                qual_approx_expr[ai - 1] < min_indel_qual
+                qual_approx_expr[ai - 1] < min_indel_qual,
             )
         )
     else:
         return (
             hl.case()
-                .when(hl.range(1, hl.len(alleles)).all(lambda ai: hl.is_snp(alleles[0], alleles[ai])), qual_approx_expr < min_snv_qual)
-                .when(hl.range(1, hl.len(alleles)).all(lambda ai: hl.is_indel(alleles[0], alleles[ai])), qual_approx_expr < min_indel_qual)
-                .default(qual_approx_expr < min_mixed_qual)
+            .when(
+                hl.range(1, hl.len(alleles)).all(
+                    lambda ai: hl.is_snp(alleles[0], alleles[ai])
+                ),
+                qual_approx_expr < min_snv_qual,
+            )
+            .when(
+                hl.range(1, hl.len(alleles)).all(
+                    lambda ai: hl.is_indel(alleles[0], alleles[ai])
+                ),
+                qual_approx_expr < min_indel_qual,
+            )
+            .default(qual_approx_expr < min_mixed_qual)
         )
 
 
 def get_annotations_hists(
-        ht: hl.Table,
-        annotations_hists: Dict[str, Tuple],
-        log10_annotations: List[str] = ["DP"],
+    ht: hl.Table,
+    annotations_hists: Dict[str, Tuple],
+    log10_annotations: List[str] = ["DP"],
 ) -> Dict[str, hl.expr.StructExpression]:
     """
     Creates histograms for variant metrics in ht.info.
@@ -599,7 +612,7 @@ def get_annotations_hists(
 
 
 def create_frequency_bins_expr(
-        AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
+    AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
 ) -> hl.expr.StringExpression:
     """
     Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
@@ -632,69 +645,72 @@ def create_frequency_bins_expr(
     """
     bin_expr = (
         hl.case()
-            .when(AC == 1, "binned_singleton")
-            .when(AC == 2, "binned_doubleton")
-            .when((AC > 2) & (AF < 0.00005), "binned_0.00005")
-            .when((AF >= 0.00005) & (AF < 0.0001), "binned_0.0001")
-            .when((AF >= 0.0001) & (AF < 0.0002), "binned_0.0002")
-            .when((AF >= 0.0002) & (AF < 0.0005), "binned_0.0005")
-            .when((AF >= 0.0005) & (AF < 0.001), "binned_0.001")
-            .when((AF >= 0.001) & (AF < 0.002), "binned_0.002")
-            .when((AF >= 0.002) & (AF < 0.005), "binned_0.005")
-            .when((AF >= 0.005) & (AF < 0.01), "binned_0.01")
-            .when((AF >= 0.01) & (AF < 0.02), "binned_0.02")
-            .when((AF >= 0.02) & (AF < 0.05), "binned_0.05")
-            .when((AF >= 0.05) & (AF < 0.1), "binned_0.1")
-            .when((AF >= 0.1) & (AF < 0.2), "binned_0.2")
-            .when((AF >= 0.2) & (AF < 0.5), "binned_0.5")
-            .when((AF >= 0.5) & (AF <= 1), "binned_1")
-            .default(hl.null(hl.tstr))
+        .when(AC == 1, "binned_singleton")
+        .when(AC == 2, "binned_doubleton")
+        .when((AC > 2) & (AF < 0.00005), "binned_0.00005")
+        .when((AF >= 0.00005) & (AF < 0.0001), "binned_0.0001")
+        .when((AF >= 0.0001) & (AF < 0.0002), "binned_0.0002")
+        .when((AF >= 0.0002) & (AF < 0.0005), "binned_0.0005")
+        .when((AF >= 0.0005) & (AF < 0.001), "binned_0.001")
+        .when((AF >= 0.001) & (AF < 0.002), "binned_0.002")
+        .when((AF >= 0.002) & (AF < 0.005), "binned_0.005")
+        .when((AF >= 0.005) & (AF < 0.01), "binned_0.01")
+        .when((AF >= 0.01) & (AF < 0.02), "binned_0.02")
+        .when((AF >= 0.02) & (AF < 0.05), "binned_0.05")
+        .when((AF >= 0.05) & (AF < 0.1), "binned_0.1")
+        .when((AF >= 0.1) & (AF < 0.2), "binned_0.2")
+        .when((AF >= 0.2) & (AF < 0.5), "binned_0.5")
+        .when((AF >= 0.5) & (AF <= 1), "binned_1")
+        .default(hl.null(hl.tstr))
     )
     return bin_expr
 
 
 def get_adj_expr(
-        gt_expr: hl.expr.CallExpression,
-        gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
-        dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
-        ad_expr: hl.expr.ArrayNumericExpression,
-        adj_gq: int = 20,
-        adj_dp: int = 10,
-        adj_ab: float = 0.2,
-        haploid_adj_dp: int = 10
+    gt_expr: hl.expr.CallExpression,
+    gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    ad_expr: hl.expr.ArrayNumericExpression,
+    adj_gq: int = 20,
+    adj_dp: int = 10,
+    adj_ab: float = 0.2,
+    haploid_adj_dp: int = 10,
 ) -> hl.expr.BooleanExpression:
     """
     Gets adj genotype annotation.
     Defaults correspond to gnomAD values.
     """
     return (
-            (gq_expr >= adj_gq) &
-            hl.cond(
-                gt_expr.is_haploid(),
-                dp_expr >= haploid_adj_dp,
-                dp_expr >= adj_dp
-            ) &
-            (
-                hl.case()
-                .when(~gt_expr.is_het(), True)
-                .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
-                .default((ad_expr[gt_expr[0]] / dp_expr >= adj_ab ) & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab ))
+        (gq_expr >= adj_gq)
+        & hl.cond(gt_expr.is_haploid(), dp_expr >= haploid_adj_dp, dp_expr >= adj_dp)
+        & (
+            hl.case()
+            .when(~gt_expr.is_het(), True)
+            .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+            .default(
+                (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
+                & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
             )
+        )
     )
 
 
 def annotate_adj(
-        mt: hl.MatrixTable,
-        adj_gq: int = 20,
-        adj_dp: int = 10,
-        adj_ab: float = 0.2,
-        haploid_adj_dp: int = 10
+    mt: hl.MatrixTable,
+    adj_gq: int = 20,
+    adj_dp: int = 10,
+    adj_ab: float = 0.2,
+    haploid_adj_dp: int = 10,
 ) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid)
     Defaults correspond to gnomAD values.
     """
-    return mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp))
+    return mt.annotate_entries(
+        adj=get_adj_expr(
+            mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp
+        )
+    )
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
@@ -703,15 +719,19 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     """
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
-    non_star_alleles = hl.filter(lambda a: a != '*', alts)
-    return hl.struct(variant_type=hl.cond(
-        hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
-        hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
-        hl.cond(
-            hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
-            hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
-            "mixed")
-    ), n_alt_alleles=hl.len(non_star_alleles))
+    non_star_alleles = hl.filter(lambda a: a != "*", alts)
+    return hl.struct(
+        variant_type=hl.cond(
+            hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
+            hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
+            hl.cond(
+                hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
+                hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
+                "mixed",
+            ),
+        ),
+        n_alt_alleles=hl.len(non_star_alleles),
+    )
 
 
 def annotation_type_is_numeric(t: Any) -> bool:
@@ -721,11 +741,12 @@ def annotation_type_is_numeric(t: Any) -> bool:
     :param t: Type to test
     :return: If the input type is numeric
     """
-    return (isinstance(t, hl.tint32) or
-            isinstance(t, hl.tint64) or
-            isinstance(t, hl.tfloat32) or
-            isinstance(t, hl.tfloat64)
-            )
+    return (
+        isinstance(t, hl.tint32)
+        or isinstance(t, hl.tint64)
+        or isinstance(t, hl.tfloat32)
+        or isinstance(t, hl.tfloat64)
+    )
 
 
 def annotation_type_in_vcf_info(t: Any) -> bool:
@@ -736,15 +757,18 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
     :param t: Type to test
     :return: If the input type can be exported to VCF
     """
-    return (annotation_type_is_numeric(t) or
-            isinstance(t, hl.tstr) or
-            isinstance(t, hl.tarray) or
-            isinstance(t, hl.tset) or
-            isinstance(t, hl.tbool)
-            )
+    return (
+        annotation_type_is_numeric(t)
+        or isinstance(t, hl.tstr)
+        or isinstance(t, hl.tarray)
+        or isinstance(t, hl.tset)
+        or isinstance(t, hl.tbool)
+    )
 
 
-def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Float32Expression:
+def bi_allelic_site_inbreeding_expr(
+    call: hl.expr.CallExpression,
+) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
 
@@ -759,24 +783,23 @@ def bi_allelic_site_inbreeding_expr(call: hl.expr.CallExpression) -> hl.expr.Flo
     :return: Site inbreeding coefficient expression
     """
 
-    def inbreeding_coeff(gt_counts: hl.expr.DictExpression) -> hl.expr.Float32Expression:
+    def inbreeding_coeff(
+        gt_counts: hl.expr.DictExpression,
+    ) -> hl.expr.Float32Expression:
         n = gt_counts.get(0, 0) + gt_counts.get(1, 0) + gt_counts.get(2, 0)
         p = (2 * gt_counts.get(0, 0) + gt_counts.get(1, 0)) / (2 * n)
         q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
-    return hl.bind(
-        inbreeding_coeff,
-        hl.agg.counter(call.n_alt_alleles())
-    )
+    return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
 
 
 def fs_from_sb(
-        sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
-        normalize: bool = True,
-        min_cell_count: int = 200,
-        min_count: int = 4,
-        min_p_value: float = 1e-320
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
+    normalize: bool = True,
+    min_cell_count: int = 200,
+    min_count: int = 4,
+    min_p_value: float = 1e-320,
 ) -> hl.expr.Int64Expression:
     """
     Computes `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
@@ -805,15 +828,9 @@ def fs_from_sb(
     :return: FS value
     """
     if not isinstance(sb, hl.expr.ArrayNumericExpression):
-        sb = hl.bind(
-            lambda x: hl.flatten(x),
-            sb
-        )
+        sb = hl.bind(lambda x: hl.flatten(x), sb)
 
-    sb_sum = hl.bind(
-        lambda x: hl.sum(x),
-        sb
-    )
+    sb_sum = hl.bind(lambda x: hl.sum(x), sb)
 
     # Normalize table if counts get too large
     if normalize:
@@ -821,9 +838,10 @@ def fs_from_sb(
             lambda sb, sb_sum: hl.cond(
                 sb_sum <= 2 * min_cell_count,
                 sb,
-                sb.map(lambda x: hl.int(x / (sb_sum / min_cell_count)))
+                sb.map(lambda x: hl.int(x / (sb_sum / min_cell_count))),
             ),
-            sb, sb_sum
+            sb,
+            sb_sum,
         )
 
         # FET
@@ -832,7 +850,7 @@ def fs_from_sb(
                 hl.fisher_exact_test(
                     fs_expr[0], fs_expr[1], fs_expr[2], fs_expr[3]
                 ).p_value,
-                min_p_value
+                min_p_value,
             )
         )
     else:
@@ -841,14 +859,13 @@ def fs_from_sb(
                 hl.contingency_table_test(
                     sb[0], sb[1], sb[2], sb[3], min_cell_count=min_cell_count
                 ).p_value,
-                min_p_value
+                min_p_value,
             )
         )
 
     # Return null if counts <= `min_count`
     return hl.or_missing(
-        sb_sum > min_count,
-        hl.max(0, fs_expr) # Needed to avoid -0.0 values
+        sb_sum > min_count, hl.max(0, fs_expr)  # Needed to avoid -0.0 values
     )
 
 
@@ -860,7 +877,7 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
     :param t: Input HT/MT
     :return: Boolean expression selecting only bi-allelic sites
     """
-    return (~t.was_split if 'was_split' in t.row else (hl.len(t.alleles) == 2))
+    return ~t.was_split if "was_split" in t.row else (hl.len(t.alleles) == 2)
 
 
 def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpression:
@@ -872,7 +889,8 @@ def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpressi
     """
     return (
         hl.case()
-            .when(call_expr.is_diploid(), hl.call(call_expr[0], call_expr[1], phased=False))
-            .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
-            .default(hl.null(hl.tcall))
+        .when(call_expr.is_diploid(), hl.call(call_expr[0], call_expr[1], phased=False))
+        .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
+        .default(hl.null(hl.tcall))
     )
+

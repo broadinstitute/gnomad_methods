@@ -23,20 +23,28 @@ def file_exists(fname: str) -> bool:
     :return: Whether the file exists
     """
     fext = os.path.splitext(fname)[1]
-    if fext in ['.ht', '.mt']:
-        fname += '/_SUCCESS'
-    if fname.startswith('gs://'):
+    if fext in [".ht", ".mt"]:
+        fname += "/_SUCCESS"
+    if fname.startswith("gs://"):
         return hl.hadoop_exists(fname)
     else:
         return os.path.isfile(fname)
 
 
-def write_temp_gcs(t: Union[hl.MatrixTable, hl.Table], gcs_path: str,
-                   overwrite: bool = False, temp_path: Optional[str] = None) -> None:
+def write_temp_gcs(
+    t: Union[hl.MatrixTable, hl.Table],
+    gcs_path: str,
+    overwrite: bool = False,
+    temp_path: Optional[str] = None,
+) -> None:
     if not temp_path:
-        temp_path = f'/tmp_{uuid.uuid4()}.h'
+        temp_path = f"/tmp_{uuid.uuid4()}.h"
     t.write(temp_path, overwrite=True)
-    t = hl.read_matrix_table(temp_path) if isinstance(t, hl.MatrixTable) else hl.read_table(temp_path)
+    t = (
+        hl.read_matrix_table(temp_path)
+        if isinstance(t, hl.MatrixTable)
+        else hl.read_table(temp_path)
+    )
     t.write(gcs_path, overwrite=overwrite)
 
 
@@ -48,8 +56,14 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
     :param ht: Input Table
     :return: Table with only primitive types selected
     """
-    return ht.select(**{x: v for x, v in ht.row_value.items() if
-                        v.dtype in {hl.tstr, hl.tint32, hl.tfloat32, hl.tint64, hl.tfloat64, hl.tbool}})
+    return ht.select(
+        **{
+            x: v
+            for x, v in ht.row_value.items()
+            if v.dtype
+            in {hl.tstr, hl.tint32, hl.tfloat32, hl.tint64, hl.tfloat64, hl.tbool}
+        }
+    )
 
 
 def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
@@ -63,7 +77,6 @@ def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
     mt = hl.read_matrix_table(path)
     intervals = mt._calculate_new_partitions(n_partitions)
     return hl.read_matrix_table(path, _intervals=intervals)
-
 
 
 def get_file_stats(url: str) -> Tuple[int, str, str]:
@@ -107,11 +120,19 @@ def read_list_data(input_file_path: str) -> List[str]:
     :param input_file_path: File path
     :return: List of lines
     """
-    if input_file_path.startswith('gs://'):
-        hl.hadoop_copy(input_file_path, 'file:///' + input_file_path.split("/")[-1])
-        f = gzip.open("/" + os.path.basename(input_file_path)) if input_file_path.endswith('gz') else open("/" + os.path.basename(input_file_path))
+    if input_file_path.startswith("gs://"):
+        hl.hadoop_copy(input_file_path, "file:///" + input_file_path.split("/")[-1])
+        f = (
+            gzip.open("/" + os.path.basename(input_file_path))
+            if input_file_path.endswith("gz")
+            else open("/" + os.path.basename(input_file_path))
+        )
     else:
-        f = gzip.open(input_file_path) if input_file_path.endswith('gz') else open(input_file_path)
+        f = (
+            gzip.open(input_file_path)
+            if input_file_path.endswith("gz")
+            else open(input_file_path)
+        )
     output = []
     for line in f:
         output.append(line.strip())

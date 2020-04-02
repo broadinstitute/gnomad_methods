@@ -17,8 +17,8 @@ def sort_intervals(intervals: List[hl.Interval]):
             interval.start.reference_genome.contigs.index(interval.start.contig),
             interval.start.position,
             interval.end.reference_genome.contigs.index(interval.end.contig),
-            interval.end.position
-        )
+            interval.end.position,
+        ),
     )
 
 
@@ -34,9 +34,11 @@ def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
     merged_intervals = sorted_intervals[:1]
     for interval in sorted_intervals[1:]:
         if merged_intervals[-1].start.contig == interval.start.contig:
-            if (merged_intervals[-1].end.position < interval.end.position):
+            if merged_intervals[-1].end.position < interval.end.position:
                 if interval.start.position <= merged_intervals[-1].end.position:
-                    merged_intervals[-1] = hl.Interval(merged_intervals[-1].start, interval.end)
+                    merged_intervals[-1] = hl.Interval(
+                        merged_intervals[-1].start, interval.end
+                    )
                 else:
                     merged_intervals.append(interval)
         else:
@@ -55,9 +57,16 @@ def interval_length(interval: hl.Interval) -> int:
     if interval.start.contig != interval.end.contig:
         ref = interval.start.reference_genome
         return (
-                ref.contig_length(interval.start.contig) - interval.start.position +
-                sum(ref.contig_length(contig) for contig in ref.contigs[ref.contigs.index(interval.start.contig)+1:ref.contigs.index(interval.end.contig)]) +
-                interval.end.position
+            ref.contig_length(interval.start.contig)
+            - interval.start.position
+            + sum(
+                ref.contig_length(contig)
+                for contig in ref.contigs[
+                    ref.contigs.index(interval.start.contig)
+                    + 1 : ref.contigs.index(interval.end.contig)
+                ]
+            )
+            + interval.end.position
         )
     else:
         return interval.end.position - interval.start.position

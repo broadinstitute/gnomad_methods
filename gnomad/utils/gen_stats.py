@@ -17,7 +17,9 @@ def to_phred(linear_expr: hl.expr.NumericExpression) -> hl.expr.Float64Expressio
     return -10 * hl.log10(linear_expr)
 
 
-def from_phred(phred_score_expr: hl.expr.NumericExpression) -> hl.expr.Float64Expression:
+def from_phred(
+    phred_score_expr: hl.expr.NumericExpression,
+) -> hl.expr.Float64Expression:
     """
     Computes the linear-scale value of the phred-scaled input.
 
@@ -28,8 +30,7 @@ def from_phred(phred_score_expr: hl.expr.NumericExpression) -> hl.expr.Float64Ex
 
 
 def get_median_and_mad_expr(
-        metric_expr: hl.expr.ArrayNumericExpression,
-        k: float = 1.4826
+    metric_expr: hl.expr.ArrayNumericExpression, k: float = 1.4826
 ) -> hl.expr.StructExpression:
     """
     Computes the median and median absolute deviation (MAD) for the given expression.
@@ -40,18 +41,14 @@ def get_median_and_mad_expr(
     :return: Struct with median and MAD
     """
     return hl.bind(
-        lambda x: hl.struct(
-            median=x[1],
-            mad=k * hl.median(hl.abs(x[0] - x[1]))
-        ),
-        hl.bind(
-            lambda x: hl.tuple([x, hl.median(x)]),
-            hl.agg.collect(metric_expr)
-        )
+        lambda x: hl.struct(median=x[1], mad=k * hl.median(hl.abs(x[0] - x[1]))),
+        hl.bind(lambda x: hl.tuple([x, hl.median(x)]), hl.agg.collect(metric_expr)),
     )
 
 
-def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
+def merge_stats_counters_expr(
+    stats: hl.expr.ArrayExpression,
+) -> hl.expr.StructExpression:
     """
     Merges multiple stats counters, assuming that they were computed on non-overlapping data.
 
@@ -65,7 +62,9 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
     :return: Merged stats Struct
     """
 
-    def add_stats(i: hl.expr.StructExpression, j: hl.expr.StructExpression) -> hl.expr.StructExpression:
+    def add_stats(
+        i: hl.expr.StructExpression, j: hl.expr.StructExpression
+    ) -> hl.expr.StructExpression:
         """
         This merges two stast counters together. It assumes that all stats counter fields are present in the struct.
 
@@ -81,7 +80,7 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
             mean=(i.mean * i.n + j.mean * j.n) / n_tot,
             variance=i.variance + j.variance + (delta * delta * i.n * j.n) / n_tot,
             n=n_tot,
-            sum=i.sum + j.sum
+            sum=i.sum + j.sum,
         )
 
     # Gather all metrics present in all stats counters
@@ -92,27 +91,33 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
         dropped_metrics = dropped_metrics.union(stat_expr_metrics.difference(metrics))
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
-        logger.warning(f"The following metrics will be dropped during stats counter merging as they do not appear in all counters: {', '.join(dropped_metrics)}")
+        logger.warning(
+            f"The following metrics will be dropped during stats counter merging as they do not appear in all counters: {', '.join(dropped_metrics)}"
+        )
 
     # Because merging standard deviation requires having the mean and n,
     # check that they are also present if `stdev` is. Otherwise remove stdev
-    if 'stdev' in metrics:
-        missing_fields = [x for x in ['n', 'mean'] if x not in metrics]
+    if "stdev" in metrics:
+        missing_fields = [x for x in ["n", "mean"] if x not in metrics]
         if missing_fields:
-            logger.warning(f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}')
-            metrics.remove('stdev')
+            logger.warning(
+                f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}'
+            )
+            metrics.remove("stdev")
 
     # Create a struct with all possible stats for merging.
     # This step helps when folding because we can rely on the struct schema
     # Note that for intermediate merging, we compute the variance rather than the stdev
-    all_stats = hl.array(stats).map(lambda x: hl.struct(
-        min=x.min if 'min' in metrics else hl.null(hl.tfloat64),
-        max=x.max if 'max' in metrics else hl.null(hl.tfloat64),
-        mean=x.mean if 'mean' in metrics else hl.null(hl.tfloat64),
-        variance=x.stdev * x.stdev if 'stdev' in metrics else hl.null(hl.tfloat64),
-        n=x.n if 'n' in metrics else hl.null(hl.tfloat64),
-        sum=x.sum if 'sum' in metrics else hl.null(hl.tfloat64)
-    ))
+    all_stats = hl.array(stats).map(
+        lambda x: hl.struct(
+            min=x.min if "min" in metrics else hl.null(hl.tfloat64),
+            max=x.max if "max" in metrics else hl.null(hl.tfloat64),
+            mean=x.mean if "mean" in metrics else hl.null(hl.tfloat64),
+            variance=x.stdev * x.stdev if "stdev" in metrics else hl.null(hl.tfloat64),
+            n=x.n if "n" in metrics else hl.null(hl.tfloat64),
+            sum=x.sum if "sum" in metrics else hl.null(hl.tfloat64),
+        )
+    )
 
     # Merge the stats
     agg_stats = all_stats[1:].fold(add_stats, all_stats[0])
@@ -120,5 +125,10 @@ def merge_stats_counters_expr(stats: hl.expr.ArrayExpression) -> hl.expr.StructE
     # Return only the metrics that were present in all independent stats counters
     # If `stdev` is present, then compute it from the variance
     return agg_stats.select(
-        **{metric: agg_stats[metric] if metric != 'stdev' else hl.sqrt(agg_stats.variance) for metric in metrics}
+        **{
+            metric: agg_stats[metric]
+            if metric != "stdev"
+            else hl.sqrt(agg_stats.variance)
+            for metric in metrics
+        }
     )

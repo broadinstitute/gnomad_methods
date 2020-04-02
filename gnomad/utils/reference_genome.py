@@ -3,17 +3,20 @@ from typing import List, Optional, Union
 
 import hail as hl
 
-logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
 def get_reference_ht(
-        ref: hl.ReferenceGenome,
-        contigs: Optional[List[str]] = None,
-        excluded_intervals: Optional[List[hl.Interval]] = None,
-        add_all_substitutions: bool = False,
-        filter_n: bool = True
+    ref: hl.ReferenceGenome,
+    contigs: Optional[List[str]] = None,
+    excluded_intervals: Optional[List[hl.Interval]] = None,
+    add_all_substitutions: bool = False,
+    filter_n: bool = True,
 ) -> hl.Table:
     """
     Creates a reference Table with locus and alleles (containing only the reference allele by default) from the given reference genome.
@@ -37,34 +40,42 @@ def get_reference_ht(
         contigs = ref.contigs
 
     if add_all_substitutions:
-        SUBSTITUTIONS_TABLE = hl.literal({
-            'a': ['c', 'g', 't'],
-            'c': ['a', 'g', 't'],
-            'g': ['a', 'c', 't'],
-            't': ['a', 'c', 'g']
-        })
+        SUBSTITUTIONS_TABLE = hl.literal(
+            {
+                "a": ["c", "g", "t"],
+                "c": ["a", "g", "t"],
+                "g": ["a", "c", "t"],
+                "t": ["a", "c", "g"],
+            }
+        )
 
     context = None
     for contig in contigs:
-        _context = hl.utils.range_table(ref.contig_length(contig), n_partitions=int(ref.contig_length(contig) / 5000000))
+        _context = hl.utils.range_table(
+            ref.contig_length(contig),
+            n_partitions=int(ref.contig_length(contig) / 5000000),
+        )
 
         locus_expr = hl.locus(contig=contig, pos=_context.idx + 1, reference_genome=ref)
         ref_allele_expr = locus_expr.sequence_context().lower()
         if add_all_substitutions:
-            alleles_expr = hl.array([ref_allele_expr]).extend(SUBSTITUTIONS_TABLE.get(ref_allele_expr, hl.empty_array(hl.tstr)))
+            alleles_expr = hl.array([ref_allele_expr]).extend(
+                SUBSTITUTIONS_TABLE.get(ref_allele_expr, hl.empty_array(hl.tstr))
+            )
         else:
             alleles_expr = [ref_allele_expr]
 
-        _context = _context.select(
-            locus=locus_expr,
-            alleles=alleles_expr
-        ).key_by('locus', 'alleles').drop('idx')
+        _context = (
+            _context.select(locus=locus_expr, alleles=alleles_expr)
+            .key_by("locus", "alleles")
+            .drop("idx")
+        )
 
         if excluded_intervals is not None:
             _context = hl.filter_intervals(_context, excluded_intervals, keep=False)
 
         if filter_n:
-            _context = _context.filter(_context.alleles[0] == 'n', keep=False)
+            _context = _context.filter(_context.alleles[0] == "n", keep=False)
 
         if context is None:
             context = _context
@@ -83,27 +94,31 @@ def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
     :return:
     """
     if not ref.has_sequence():
-        if ref.name == 'GRCh38':
+        if ref.name == "GRCh38":
             ref.add_sequence(
-                'gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz',
-                'gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai'
+                "gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz",
+                "gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai",
             )
-        elif ref.name == 'GRCh37':
+        elif ref.name == "GRCh37":
             ref.add_sequence(
-                'gs://hail-common/references/human_g1k_v37.fasta.gz',
-                'gs://hail-common/references/human_g1k_v37.fasta.fai'
+                "gs://hail-common/references/human_g1k_v37.fasta.gz",
+                "gs://hail-common/references/human_g1k_v37.fasta.fai",
             )
         else:
-            raise NotImplementedError(f'No known location for the fasta/fai files for genome {ref.name}. Only GRCh37 and GRCh38 are supported at this time.')
+            raise NotImplementedError(
+                f"No known location for the fasta/fai files for genome {ref.name}. Only GRCh37 and GRCh38 are supported at this time."
+            )
     else:
-        logger.info("Reference genome sequence already present. Ignoring add_reference_sequence.")
+        logger.info(
+            "Reference genome sequence already present. Ignoring add_reference_sequence."
+        )
 
     return ref
 
 
 def get_reference_genome(
-        locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression],
-        add_sequence: bool = False
+    locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression],
+    add_sequence: bool = False,
 ) -> hl.ReferenceGenome:
     """
     Returns the reference genome associated with the input Locus expression
@@ -115,7 +130,7 @@ def get_reference_genome(
     if isinstance(locus, hl.expr.LocusExpression):
         ref = locus.dtype.reference_genome
     else:
-        assert (isinstance(locus, hl.expr.IntervalExpression))
+        assert isinstance(locus, hl.expr.IntervalExpression)
         ref = locus.dtype.point_type.reference_genome
     if add_sequence:
         ref = add_reference_sequence(ref)

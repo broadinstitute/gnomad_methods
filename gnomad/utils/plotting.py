@@ -73,63 +73,10 @@ variant_annotation_names['stop_gained'] = 'nonsense'
 variant_annotation_names['5_prime_UTR_variant'] = "5' UTR"
 variant_annotation_names['3_prime_UTR_variant'] = "3' UTR"
 
-COLOR_EXAC = '#4682B4'
-COLOR_GNOMAD = '#73AB3D'
-
 dataset_colors = {
-    'ExAC': COLOR_EXAC,
-    'gnomAD': COLOR_GNOMAD
+    'ExAC': '#4682B4',
+    'gnomAD': '#73AB3D'
 }
-
-COLOR_AMR = '#ED1E24'
-COLOR_AMI = '#FFC0CB'
-COLOR_EUR = '#6AA5CD'
-COLOR_AFR = '#941494'
-COLOR_SAS = '#FF9912'
-COLOR_EAS = '#108C44'
-COLOR_OTH = '#ABB9B9'
-COLOR_MDE = '#33CC33'
-COLOR_ASJ = '#FF7F50'
-COLOR_NFE = COLOR_EUR
-COLOR_FIN = '#002F6C'
-
-
-pop_colors = {'afr': COLOR_AFR,
-              'ami': COLOR_AMI,
-              'amr': COLOR_AMR,
-              'eas': COLOR_EAS,
-              'fin': COLOR_FIN,
-              'eur': COLOR_NFE,
-              'nfe': COLOR_NFE,
-              'oth': COLOR_OTH,
-              'sas': COLOR_SAS,
-              'mde': COLOR_MDE,
-              'asj': COLOR_ASJ,
-              'uniform': 'pink',
-              'consanguineous': 'pink',
-              'sas_non_consang': 'orange',
-              'exac': 'gray',
-              'bgr': '#66C2A5',
-              'deu': 'black',
-              'est': '#4891D9',
-              'esp': '#FFC400',
-              'nwe': '#C60C30',
-              'seu': '#009246',
-              'gbr': '#C60C30',
-              'ita': '#009246',
-              'swe': 'purple',
-              'chn': '#FFC400',
-              'kor': '#4891D9',
-              'nka': '#009246',
-              'hkg': '#C60C30',
-              'sgp': 'darkred',
-              'twn': '#009246',
-              'jpn': '#BC002D',
-              'onf': COLOR_NFE,
-              'oeu': COLOR_NFE,
-              'unk': COLOR_OTH,
-              '': COLOR_OTH}
-
 
 def plot_hail_hist(hist_data: hl.Struct,
                    title: str = 'Plot',

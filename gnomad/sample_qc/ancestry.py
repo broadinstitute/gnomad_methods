@@ -22,6 +22,42 @@ POP_NAMES = {
     'SAS': "South Asian"
 }
 
+POP_COLORS = {'afr': '#941494',
+              'ami': '#FFC0CB',
+              'amr': '#ED1E24',
+              'eas': '#108C44',
+              'fin': '#002F6C',
+              'eur': '#6AA5CD',
+              'nfe': '#6AA5CD',
+              'oth': '#ABB9B9',
+              'sas': '#FF9912',
+              'mde': '#33CC33',
+              'asj': '#FF7F50',
+              'uniform': 'pink',
+              'consanguineous': 'pink',
+              'sas_non_consang': 'orange',
+              'exac': 'gray',
+              'bgr': '#66C2A5',
+              'deu': 'black',
+              'est': '#4891D9',
+              'esp': '#FFC400',
+              'nwe': '#C60C30',
+              'seu': '#009246',
+              'gbr': '#C60C30',
+              'ita': '#009246',
+              'swe': 'purple',
+              'chn': '#FFC400',
+              'kor': '#4891D9',
+              'nka': '#009246',
+              'hkg': '#C60C30',
+              'sgp': 'darkred',
+              'twn': '#009246',
+              'jpn': '#BC002D',
+              'onf': '#6AA5CD',
+              'oeu': '#6AA5CD',
+              'unk': '#ABB9B9',
+              '': '#ABB9B9'}
+
 
 def pc_project(
         mt: hl.MatrixTable,

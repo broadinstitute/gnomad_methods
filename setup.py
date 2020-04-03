@@ -13,7 +13,7 @@ with open("requirements.txt", "r") as requirements_file:
 
 setuptools.setup(
     name="gnomad",
-    version="0.1.0",
+    version="0.2.0",
     author="The Genome Aggregation Database",
     author_email="exomeconsortium@gmail.com",
     description="Hail utilities for the Genome Aggregation Database",

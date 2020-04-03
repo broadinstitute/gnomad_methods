@@ -1,25 +1,27 @@
 
-import hail as hl
-import numpy as np
-from ipywidgets import interact
-import math
-import pandas as pd
-from collections import OrderedDict
 import json
-from .constants import *
+import logging
+from typing import Callable, Dict, List, Optional, Union
 
 import bokeh
-from bokeh.layouts import gridplot, row, widgetbox
-from bokeh.plotting import figure, show, output_file
-from bokeh.io import output_notebook, push_notebook, export_png
-from bokeh.models.widgets import Tabs, Panel
-from bokeh.palettes import d3, Spectral8, viridis  # pylint: disable=no-name-in-module
-from bokeh.models import *
-from typing import *
-from bokeh.plotting.helpers import stack
+import hail as hl
+import numpy as np
+import pandas as pd
+from bokeh.layouts import gridplot
+from bokeh.models import (BooleanFilter, CDSView, Column, ColumnDataSource,
+                          DataRange1d, Div, Grid, HoverTool, Legend, Title)
+from bokeh.models.widgets import Panel, Tabs
+from bokeh.palettes import (Spectral8, d3,  # pylint: disable=no-name-in-module
+                            viridis)
+from bokeh.plotting import figure
 from bokeh.transform import factor_cmap
+from gnomad.utils.vep import (CSQ_CODING_HIGH_IMPACT, CSQ_CODING_LOW_IMPACT,
+                              CSQ_CODING_MEDIUM_IMPACT, CSQ_NON_CODING,
+                              CSQ_ORDER)
 
-from .gnomad_functions import logger
+logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # Setting some defaults for Table.show
 if 'old_show' not in dir():
@@ -71,63 +73,10 @@ variant_annotation_names['stop_gained'] = 'nonsense'
 variant_annotation_names['5_prime_UTR_variant'] = "5' UTR"
 variant_annotation_names['3_prime_UTR_variant'] = "3' UTR"
 
-COLOR_EXAC = '#4682B4'
-COLOR_GNOMAD = '#73AB3D'
-
 dataset_colors = {
-    'ExAC': COLOR_EXAC,
-    'gnomAD': COLOR_GNOMAD
+    'ExAC': '#4682B4',
+    'gnomAD': '#73AB3D'
 }
-
-COLOR_AMR = '#ED1E24'
-COLOR_AMI = '#FFC0CB'
-COLOR_EUR = '#6AA5CD'
-COLOR_AFR = '#941494'
-COLOR_SAS = '#FF9912'
-COLOR_EAS = '#108C44'
-COLOR_OTH = '#ABB9B9'
-COLOR_MDE = '#33CC33'
-COLOR_ASJ = '#FF7F50'
-COLOR_NFE = COLOR_EUR
-COLOR_FIN = '#002F6C'
-
-
-pop_colors = {'afr': COLOR_AFR,
-              'ami': COLOR_AMI,
-              'amr': COLOR_AMR,
-              'eas': COLOR_EAS,
-              'fin': COLOR_FIN,
-              'eur': COLOR_NFE,
-              'nfe': COLOR_NFE,
-              'oth': COLOR_OTH,
-              'sas': COLOR_SAS,
-              'mde': COLOR_MDE,
-              'asj': COLOR_ASJ,
-              'uniform': 'pink',
-              'consanguineous': 'pink',
-              'sas_non_consang': 'orange',
-              'exac': 'gray',
-              'bgr': '#66C2A5',
-              'deu': 'black',
-              'est': '#4891D9',
-              'esp': '#FFC400',
-              'nwe': '#C60C30',
-              'seu': '#009246',
-              'gbr': '#C60C30',
-              'ita': '#009246',
-              'swe': 'purple',
-              'chn': '#FFC400',
-              'kor': '#4891D9',
-              'nka': '#009246',
-              'hkg': '#C60C30',
-              'sgp': 'darkred',
-              'twn': '#009246',
-              'jpn': '#BC002D',
-              'onf': COLOR_NFE,
-              'oeu': COLOR_NFE,
-              'unk': COLOR_OTH,
-              '': COLOR_OTH}
-
 
 def plot_hail_hist(hist_data: hl.Struct,
                    title: str = 'Plot',
@@ -321,7 +270,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
 
     metadata_file = [x['path'] for x in files if x['path'].endswith('metadata.json.gz')]
     if not metadata_file:
-        warnings.warn('No metadata file found. Exiting...')
+        logger.warning('No metadata file found. Exiting...')
         return None
 
     with hl.hadoop_open(metadata_file[0], 'rb') as f:
@@ -329,7 +278,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
         rows_per_partition = overall_meta['components']['partition_counts']['counts']
 
     if not rows_file:
-        warnings.warn('No rows directory found. Exiting...')
+        logger.warning('No rows directory found. Exiting...')
         return None
     rows_files = hl.hadoop_ls(rows_file[0])
 
@@ -342,7 +291,7 @@ def plot_hail_file_metadata(t_path: str) -> Optional[Union[Grid, Tabs, bokeh.plo
     total_file_size, row_file_sizes, row_scale = scale_file_sizes(row_file_sizes)
 
     if not row_partition_bounds:
-        warnings.warn('Table is not partitioned. Only plotting file sizes')
+        logger.warning('Table is not partitioned. Only plotting file sizes')
         row_file_sizes_hist, row_file_sizes_edges = np.histogram(row_file_sizes, bins=50)
         p_file_size = figure(plot_width=panel_size, plot_height=panel_size)
         p_file_size.quad(right=row_file_sizes_hist, left=0, bottom=row_file_sizes_edges[:-1],
@@ -518,7 +467,7 @@ def pair_plot(
         tooltip_cols.append(label_col)
 
     if label_col is None and colors is not None:
-        logger.warn('`colors_dict` ignored since no `label_col` specified')
+        logger.warning('`colors_dict` ignored since no `label_col` specified')
 
     colors_col = '__pair_plot_color'
 

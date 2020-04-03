@@ -9,7 +9,9 @@ import argparse
 
 
 # Generate a dictionary of resource available for import for a given genome build
-def get_module_importable_resources(module, prefix: Optional[str] = None) -> Dict[str, Tuple[str, BaseResource]]:
+def get_module_importable_resources(
+    module, prefix: Optional[str] = None
+) -> Dict[str, Tuple[str, BaseResource]]:
     """
     This takes a module that was imported and generates a list of all resources in this module that can be imported (i.e. with a path and import_func).
     The dict produced is as follows:
@@ -27,20 +29,24 @@ def get_module_importable_resources(module, prefix: Optional[str] = None) -> Dic
     :param prefix: 
     :return: 
     """
-    _prefix = f'{prefix}.' if prefix else ''
+    _prefix = f"{prefix}." if prefix else ""
     resources = {}
-    for resource_name, resource in getmembers(module, lambda x: isinstance(x, BaseResource)):
+    for resource_name, resource in getmembers(
+        module, lambda x: isinstance(x, BaseResource)
+    ):
         if resource.path and resource.import_func:
-            arg_name = f'{_prefix}{resource_name}'
+            arg_name = f"{_prefix}{resource_name}"
             if isinstance(resource, BaseVersionedResource):
                 for version in resource.versions:
-                    arg_name += f'.{version}'
-                    resource_name = f'{resource_name} version {version}'
+                    arg_name += f".{version}"
+                    resource_name = f"{resource_name} version {version}"
             resources[arg_name] = (resource_name, resource)
     return resources
 
 
-def get_resources_descriptions(resources: Dict[str, Tuple[str, BaseResource]], width: Optional[int] = 100) -> str:
+def get_resources_descriptions(
+    resources: Dict[str, Tuple[str, BaseResource]], width: Optional[int] = 100
+) -> str:
     """
     Returns a string listing all resources in the input dict along with the path from which they
     are imported and the path at which they are stored.
@@ -48,12 +54,16 @@ def get_resources_descriptions(resources: Dict[str, Tuple[str, BaseResource]], w
     :param resources: A dict returned from get_module_importable_resources
     :param width: Maximum width of lines in the returned string
     """
-    wrapper = textwrap.TextWrapper(width=width, initial_indent=" " * 2, subsequent_indent=" " * 4)
+    wrapper = textwrap.TextWrapper(
+        width=width, initial_indent=" " * 2, subsequent_indent=" " * 4
+    )
     return "\n".join(
         itertools.chain.from_iterable(
             [
                 f"{resource_arg}:",
-                wrapper.fill(f"import {getattr(resource, 'import_args', {}).get('path', '???')}"),
+                wrapper.fill(
+                    f"import {getattr(resource, 'import_args', {}).get('path', '???')}"
+                ),
                 wrapper.fill(f"to {resource.path}"),
                 "",
             ]
@@ -62,8 +72,8 @@ def get_resources_descriptions(resources: Dict[str, Tuple[str, BaseResource]], w
     )
 
 
-grch37_resources = get_module_importable_resources(grch37, 'grch37')
-grch38_resources = get_module_importable_resources(grch38, 'grch38')
+grch37_resources = get_module_importable_resources(grch37, "grch37")
+grch38_resources = get_module_importable_resources(grch38, "grch38")
 all_resources = {**grch37_resources, **grch38_resources}
 
 
@@ -81,7 +91,10 @@ if __name__ == "__main__":
         choices=list(all_resources.keys()),
         metavar="resource",
         nargs="+",
-        help="Resource to import. Choices are:\n\n" + get_resources_descriptions(all_resources),
+        help="Resource to import. Choices are:\n\n"
+        + get_resources_descriptions(all_resources),
     )
-    parser.add_argument("--overwrite", help="Overwrites existing files", action="store_true")
+    parser.add_argument(
+        "--overwrite", help="Overwrites existing files", action="store_true"
+    )
     main(parser.parse_args())

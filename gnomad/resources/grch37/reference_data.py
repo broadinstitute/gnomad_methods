@@ -3,7 +3,7 @@ from gnomad.resources.resource_utils import (
     TableResource,
     VersionedMatrixTableResource,
     VersionedTableResource,
-    import_sites_vcf
+    import_sites_vcf,
 )
 import hail as hl
 
@@ -258,10 +258,15 @@ def get_truth_ht() -> hl.Table:
     :return: A table with the latest version of popular truth data annotations
     """
 
-    return hapmap.ht().select(hapmap=True).join(
-        kgp_omni.ht().select(omni=True), how="outer"
-    ).join(
-        kgp.versions['phase_1_hc'].mt().rows().select(kgp_phase1_hc=True), how="outer"
-    ).join(
-        mills.ht().select(mills=True), how="outer"
-    ).repartition(200, shuffle=False).persist()
+    return (
+        hapmap.ht()
+        .select(hapmap=True)
+        .join(kgp_omni.ht().select(omni=True), how="outer")
+        .join(
+            kgp.versions["phase_1_hc"].mt().rows().select(kgp_phase1_hc=True),
+            how="outer",
+        )
+        .join(mills.ht().select(mills=True), how="outer")
+        .repartition(200, shuffle=False)
+        .persist()
+    )

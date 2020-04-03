@@ -1,12 +1,16 @@
-import hail as hl
+
 import logging
-from typing import Dict, List, Tuple, Set, Union, Iterable, Optional
-from collections import defaultdict
 import random
+from collections import defaultdict
+from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
+import hail as hl
+from gnomad.utils.annotations import annotate_adj
+from gnomad.utils.filtering import filter_to_autosomes
 
-logger = logging.getLogger("gnomad.utils")
-
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 UNRELATED = 'Unrelated'
 """
@@ -39,7 +43,6 @@ AMBIGUOUS_RELATIONSHIP = 'Ambiguous'
 String representation for a pair of samples whose relationship is ambiguous.
 This is used in the case of a pair of samples which kinship/IBD values do not correspond to any biological relationship between two individuals.
 """
-
 
 def get_duplicated_samples(
         relationship_ht: hl.Table,
@@ -412,7 +415,7 @@ def infer_families(relationship_ht: hl.Table,
                     for s in children
                 ])
             else:
-                logger.warn(
+                logger.warning(
                     "Discarded family with same parents, and multiple offspring that weren't siblings:"
                     "\nMother: {}\nFather:{}\nChildren:{}".format(
                         possible_parents[0],
@@ -527,3 +530,407 @@ def create_fake_pedigree(
         logger.warning(f"Only returning {len(fake_trios)} fake trios; random trio sampling stopped after reaching the maximum {max_tries} iterations")
 
     return hl.Pedigree(list(fake_trios.values()))
+
+
+def compute_related_samples_to_drop(
+        relatedness_ht: hl.Table,
+        rank_ht: hl.Table,
+        kin_threshold: float,
+        filtered_samples: Optional[hl.expr.SetExpression] = None,
+        min_related_hard_filter: Optional[int] = None
+ ) -> hl.Table:
+    """
+    Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
+
+    .. note::
+
+        - `relatedness_ht` should be keyed by exactly two fields of the same type, identifying the pair of samples for each row.
+        - `rank_ht` should be keyed by a single key of the same type as a single sample identifier in `relatedness_ht`.
+
+    :param relatedness_ht: relatedness HT, as produced by e.g. pc-relate
+    :param kin_threshold: Kinship threshold to consider two samples as related
+    :param rank_ht: Table with a global rank for each sample (smaller is preferred)
+    :param filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
+    :param min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
+    :return: A Table with the list of the samples to drop along with their rank.
+    """
+
+    # Make sure that the key types are valid
+    assert(len(list(relatedness_ht.key))== 2)
+    assert(relatedness_ht.key[0].dtype == relatedness_ht.key[1].dtype)
+    assert (len(list(rank_ht.key)) == 1)
+    assert (relatedness_ht.key[0].dtype == rank_ht.key[0].dtype)
+
+    logger.info(f"Filtering related samples using a kin threshold of {kin_threshold}")
+    relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kin_threshold)
+
+    filtered_samples_rel = set()
+    if min_related_hard_filter is not None:
+        logger.info(f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion")
+        gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
+        gbi = gbi.explode(gbi.s)
+        gbi = gbi.group_by(gbi.s).aggregate(n=hl.agg.count())
+        filtered_samples_rel = gbi.aggregate(hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s)))
+        logger.info(f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded.")
+
+    if filtered_samples is not None:
+        filtered_samples_rel = filtered_samples_rel.union(
+            relatedness_ht.aggregate(
+                hl.agg.explode(
+                    lambda s: hl.agg.collect_as_set(s),
+                    hl.array(list(relatedness_ht.key)).filter(lambda s: filtered_samples.contains(s))
+                )
+            )
+        )
+
+    if len(filtered_samples_rel) > 0:
+        filtered_samples_lit = hl.literal(filtered_samples_rel)
+        relatedness_ht = relatedness_ht.filter(
+            filtered_samples_lit.contains(relatedness_ht.key[0]) |
+            filtered_samples_lit.contains(relatedness_ht.key[1]),
+            keep=False
+        )
+
+    logger.info("Annotating related sample pairs with rank.")
+    i, j = list(relatedness_ht.key)
+    relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[i])
+    relatedness_ht = relatedness_ht.annotate(
+        **{i: hl.struct(
+            s=relatedness_ht.s,
+            rank=rank_ht[relatedness_ht.key].rank
+        )}
+    )
+    relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[j])
+    relatedness_ht = relatedness_ht.annotate(
+        **{j: hl.struct(
+            s=relatedness_ht.s,
+            rank=rank_ht[relatedness_ht.key].rank
+        )}
+    )
+    relatedness_ht = relatedness_ht.key_by(i, j)
+    relatedness_ht = relatedness_ht.drop('s')
+    relatedness_ht = relatedness_ht.persist()
+
+    related_samples_to_drop_ht = hl.maximal_independent_set(
+        relatedness_ht[i],
+        relatedness_ht[j],
+        keep=False,
+        tie_breaker=lambda l,r: l.rank - r.rank
+    )
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+    related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
+
+    if len(filtered_samples_rel) > 0:
+        related_samples_to_drop_ht = related_samples_to_drop_ht.union(
+            hl.Table.parallelize(
+                [hl.struct(s=s, rank=hl.null(hl.tint64)) for s in filtered_samples_rel],
+                key='s'
+            )
+        )
+
+    return related_samples_to_drop_ht
+
+
+def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
+    """
+    Filters a MatrixTable to a set of trios in `fam_ht`, filters to autosomes, and annotates with adj.
+
+    :param mt: A Matrix Table to filter to only trios
+    :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
+    :return: A MT filtered to trios and adj annotated
+    """
+    # Filter MT to samples present in any of the trios
+    fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
+    fam_ht = fam_ht.explode("fam_members", name="s")
+    fam_ht = fam_ht.key_by("s").select().distinct()
+
+    mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
+    mt = filter_to_autosomes(mt)
+    mt = annotate_adj(mt)
+
+    return mt
+
+
+def generate_trio_stats_expr(
+        trio_mt: hl.MatrixTable,
+        transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
+) -> hl.expr.StructExpression:
+    """
+    Generates a row-wise expression containing the following counts:
+
+        - Number of alleles in het parents transmitted to the proband
+        - Number of alleles in het parents not transmitted to the proband
+        - Number of de novo mutations
+        - Parent allele count
+        - Proband allele count
+
+    Transmission and de novo mutation metrics and allele counts can be stratified using additional filters.
+    `transmitted_strata`, `de_novo_strata`, and `ac_strata` all expect a dictionary of filtering expressions keyed
+    by their desired suffix to append for labeling. The default will perform counts using all genotypes and append
+    'raw' to the label.
+
+    .. note::
+
+        Expects that `mt` is dense if dealing with a sparse MT `hl.experimental.densify` must be run first.
+
+    :param trio_mt: A trio standard trio MT (with the format as produced by hail.methods.trio_matrix)
+    :param transmitted_strata: Strata for the transmission counts
+    :param de_novo_strata: Strata for the de novo counts
+    :param ac_strata: Strata for the parent and child allele counts
+    :param proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
+    :return: An expression with the counts
+    """
+
+    # Create map for transmitted, untransmitted and DNM
+    hom_ref = 0
+    het = 1
+    hom_var = 2
+
+    auto_or_par = 2
+    hemi_x = 1
+    hemi_y = 0
+
+    trans_config_counts = {
+        # kid, dad, mom, copy -> t, u
+        (hom_ref, het, het, auto_or_par): (0, 2),
+        (hom_ref, hom_ref, het, auto_or_par): (0, 1),
+        (hom_ref, het, hom_ref, auto_or_par): (0, 1),
+        (het, het, het, auto_or_par): (1, 1),
+        (het, hom_ref, het, auto_or_par): (1, 0),
+        (het, het, hom_ref, auto_or_par): (1, 0),
+        (het, hom_var, het, auto_or_par): (0, 1),
+        (het, het, hom_var, auto_or_par): (0, 1),
+        (hom_var, het, het, auto_or_par): (2, 0),
+        (hom_var, het, hom_var, auto_or_par): (1, 0),
+        (hom_var, hom_var, het, auto_or_par): (1, 0),
+        (hom_ref, hom_ref, het, hemi_x): (0, 1),
+        (hom_ref, hom_var, het, hemi_x): (0, 1),
+        (hom_var, hom_ref, het, hemi_x): (1, 0),
+        (hom_var, hom_var, het, hemi_x): (1, 0),
+    }
+
+    trans_count_map = hl.literal(trans_config_counts)
+
+    def _get_copy_state(locus: hl.expr.LocusExpression) -> hl.expr.Int32Expression:
+        """
+        Helper method to go from LocusExpression to a copy-state int for indexing into the
+        trans_count_map.
+        """
+        return (
+            hl.case()
+                .when(locus.in_autosome_or_par(), auto_or_par)
+                .when(locus.in_x_nonpar(), hemi_x)
+                .when(locus.in_y_nonpar(), hemi_y)
+                .or_missing()
+        )
+
+    def _is_dnm(
+            proband_gt: hl.expr.CallExpression,
+            father_gt: hl.expr.CallExpression,
+            mother_gt: hl.expr.CallExpression,
+            locus: hl.expr.LocusExpression,
+            proband_is_female: Optional[hl.expr.BooleanExpression],
+    ) -> hl.expr.BooleanExpression:
+        """
+        Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
+        """
+        if proband_is_female is None:
+            logger.warning(
+                "Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted."
+            )
+            return hl.or_missing(
+                locus.in_autosome(),
+                proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
+            )
+        return hl.cond(
+            locus.in_autosome_or_par() | (proband_is_female & locus.in_x_nonpar()),
+            proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
+            hl.or_missing(
+                ~proband_is_female, proband_gt.is_hom_var() & father_gt.is_hom_ref()
+            ),
+        )
+
+    def _ac_an_parent_child_count(
+            proband_gt: hl.expr.CallExpression,
+            father_gt: hl.expr.CallExpression,
+            mother_gt: hl.expr.CallExpression,
+    ) -> Dict[str, hl.expr.Int64Expression]:
+        """
+        Helper method to get AC and AN for parents and children
+        """
+        ac_parent_expr = hl.agg.sum(
+            father_gt.n_alt_alleles() + mother_gt.n_alt_alleles()
+        )
+        an_parent_expr = hl.agg.sum(
+            (hl.is_defined(father_gt) + hl.is_defined(mother_gt)) * 2
+        )
+        ac_child_expr = hl.agg.sum(proband_gt.n_alt_alleles())
+        an_child_expr = hl.agg.sum(hl.is_defined(proband_gt) * 2)
+
+        return {
+            f"ac_parents": ac_parent_expr,
+            f"an_parents": an_parent_expr,
+            f"ac_children": ac_child_expr,
+            f"an_children": an_child_expr,
+        }
+
+    # Create transmission counters
+    trio_stats = hl.struct(
+        **{
+            f"{name2}_{name}": hl.agg.filter(
+                trio_mt.proband_entry.GT.is_non_ref() & expr,
+                hl.agg.sum(
+                    trans_count_map.get(
+                        (
+                            trio_mt.proband_entry.GT.n_alt_alleles(),
+                            trio_mt.father_entry.GT.n_alt_alleles(),
+                            trio_mt.mother_entry.GT.n_alt_alleles(),
+                            _get_copy_state(trio_mt.locus),
+                        ),
+                        default=0,
+                    )[i]
+                ),
+            )
+            for name, expr in transmitted_strata.items()
+            for i, name2 in enumerate(["n_transmitted", "n_untransmitted"])
+        }
+    )
+
+    # Create de novo counters
+    trio_stats = trio_stats.annotate(
+        **{
+            f"n_de_novos_{name}": hl.agg.filter(
+                _is_dnm(
+                    trio_mt.proband_entry.GT,
+                    trio_mt.father_entry.GT,
+                    trio_mt.mother_entry.GT,
+                    trio_mt.locus,
+                    proband_is_female_expr,
+                )
+                & expr,
+                hl.agg.count(),
+            )
+            for name, expr in de_novo_strata.items()
+        }
+    )
+
+    trio_stats = trio_stats.annotate(
+        **{
+            f"{name2}_{name}": hl.agg.filter(
+                expr,
+                _ac_an_parent_child_count(
+                    trio_mt.proband_entry.GT,
+                    trio_mt.father_entry.GT,
+                    trio_mt.mother_entry.GT,
+                )[name2],
+            )
+            for name, expr in ac_strata.items()
+            for name2 in ["ac_parents", "an_parents", "ac_children", "an_children"]
+        }
+    )
+
+    return trio_stats
+
+
+def generate_sib_stats_expr(
+        mt: hl.MatrixTable,
+        sib_ht: hl.Table,
+        i_col: str = "i",
+        j_col: str = "j",
+        strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+        is_female: Optional[hl.expr.BooleanExpression] = None,
+) -> hl.expr.StructExpression:
+    """
+    Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
+
+    The sibling sharing counts can be stratified using additional filters using `stata`.
+
+    .. note::
+
+        This function expects that the `mt` has either been split or filtered to only bi-allelics
+        If a sample has multiple sibling pairs, only one pair will be counted
+
+    :param mt: Input matrix table
+    :param sib_ht: Table defining sibling pairs with one sample in a col (`i_col`) and the second in another col (`j_col`)
+    :param i_col: Column containing the 1st sample of the pair in the relationship table
+    :param j_col: Column containing the 2nd sample of the pair in the relationship table
+    :param strata: Dict with additional strata to use when computing shared sibling variant counts
+    :param is_female: An optional column in mt giving the sample sex. If not given, counts are only computed for autosomes.
+    :return: A Table with the sibling shared variant counts
+    """
+
+    def get_alt_count(locus, gt, is_female):
+        """
+        Helper method to calculate alt allele count with sex info if present
+        """
+        if is_female is None:
+            return hl.or_missing(locus.in_autosome(), gt.n_alt_alleles())
+        return (
+            hl.case()
+                .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
+                .when(
+                ~is_female & (locus.in_x_nonpar() | locus.in_y_nonpar()),
+                hl.min(1, gt.n_alt_alleles()),
+            )
+                .when(is_female & locus.in_y_nonpar(), 0)
+                .default(0)
+        )
+
+    if is_female is None:
+        logger.warning(
+            "Since no sex expression was given to generate_sib_stats_expr, only variants in autosomes will be counted."
+        )
+
+    # If a sample is in sib_ht more than one time, keep only one of the sibling pairs
+    # First filter to only samples found in mt to keep as many pairs as possible
+    s_to_keep = mt.aggregate_cols(hl.agg.collect_as_set(mt.s), _localize=False)
+    sib_ht = sib_ht.filter(
+        s_to_keep.contains(sib_ht[i_col].s) & s_to_keep.contains(sib_ht[j_col].s)
+    )
+    sib_ht = sib_ht.add_index("sib_idx")
+    sib_ht = sib_ht.annotate(sibs=[sib_ht[i_col].s, sib_ht[j_col].s])
+    sib_ht = sib_ht.explode("sibs")
+    sib_ht = sib_ht.group_by("sibs").aggregate(
+        sib_idx=(hl.agg.take(sib_ht.sib_idx, 1, ordering=sib_ht.sib_idx)[0])
+    )
+    sib_ht = sib_ht.group_by(sib_ht.sib_idx).aggregate(sibs=hl.agg.collect(sib_ht.sibs))
+    sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
+
+    logger.info(
+        f"Generating sibling variant sharing counts using {sib_ht.count()} pairs."
+    )
+    sib_ht = sib_ht.explode("sibs").key_by("sibs")[mt.s]
+
+    # Create sibling sharing counters
+    sib_stats = hl.struct(
+        **{
+            f"n_sib_shared_variants_{name}": hl.sum(
+                hl.agg.filter(
+                    expr,
+                    hl.agg.group_by(
+                        sib_ht.sib_idx,
+                        hl.or_missing(
+                            hl.agg.sum(hl.is_defined(mt.GT)) == 2,
+                            hl.agg.min(get_alt_count(mt.locus, mt.GT, is_female)),
+                        ),
+                    ),
+                ).values()
+            )
+            for name, expr in strata.items()
+        }
+    )
+
+    sib_stats = sib_stats.annotate(
+        **{
+            f"ac_sibs_{name}": hl.agg.filter(
+                expr & hl.is_defined(sib_ht.sib_idx), hl.agg.sum(mt.GT.n_alt_alleles())
+            )
+            for name, expr in strata.items()
+        }
+    )
+
+    return sib_stats

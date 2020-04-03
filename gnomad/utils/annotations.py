@@ -893,4 +893,3 @@ def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpressi
         .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
         .default(hl.null(hl.tcall))
     )
-

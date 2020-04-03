@@ -207,4 +207,3 @@ def liftover_using_gnomad_map(ht, data_type):
     return lift_ht.annotate(
         **ht[(lift_ht.original_locus, lift_ht.original_alleles)]
     ).key_by("locus", "alleles")
-

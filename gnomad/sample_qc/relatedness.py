@@ -1,4 +1,3 @@
-
 import logging
 import random
 from collections import defaultdict
@@ -12,43 +11,44 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-UNRELATED = 'Unrelated'
+UNRELATED = "Unrelated"
 """
 String representation for a pair of unrelated individuals in this module.
 Typically >2nd degree relatives, but the threshold is user-dependant.
 """
 
-SECOND_DEGREE_RELATIVES = '2nd degree relatives'
+SECOND_DEGREE_RELATIVES = "2nd degree relatives"
 """
 String representation for a pair of 2nd degree relatives in this module.
 """
 
-PARENT_CHILD = 'Parent-child'
+PARENT_CHILD = "Parent-child"
 """
 String representation for a parent-child pair in this module.
 """
 
-SIBLINGS = 'Siblings'
+SIBLINGS = "Siblings"
 """
 String representation for a sibling pair in this module.
 """
 
-DUPLICATE_OR_TWINS = 'Duplicate/twins'
+DUPLICATE_OR_TWINS = "Duplicate/twins"
 """
 String representation for a pair of samples who are identical (either MZ twins of duplicate) in this module.
 """
 
-AMBIGUOUS_RELATIONSHIP = 'Ambiguous'
+AMBIGUOUS_RELATIONSHIP = "Ambiguous"
 """
 String representation for a pair of samples whose relationship is ambiguous.
 This is used in the case of a pair of samples which kinship/IBD values do not correspond to any biological relationship between two individuals.
 """
 
+
 def get_duplicated_samples(
-        relationship_ht: hl.Table,
-        i_col: str = 'i',
-        j_col: str = 'j',
-        rel_col: str = 'relationship'
+    relationship_ht: hl.Table,
+    i_col: str = "i",
+    j_col: str = "j",
+    rel_col: str = "relationship",
 ) -> List[Set[str]]:
     """
     Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
@@ -59,7 +59,9 @@ def get_duplicated_samples(
     :return: List of sets of samples that are duplicates
     """
 
-    def get_all_dups(s: str, dups: Set[str], samples_duplicates: Dict[str, Set[str]]) -> Tuple[Set[str], Dict[str, Set[str]]]:
+    def get_all_dups(
+        s: str, dups: Set[str], samples_duplicates: Dict[str, Set[str]]
+    ) -> Tuple[Set[str], Dict[str, Set[str]]]:
         """
         Creates the set of all duplicated samples corresponding to `s` that are found in `sample_duplicates`.
         Also returns the remaining sample duplicates after removing all duplicated samples corresponding to `s`.
@@ -76,14 +78,16 @@ def get_duplicated_samples(
             s_dups = samples_duplicates.pop(s)
             for s_dup in s_dups:
                 if s_dup not in dups:
-                    dups, samples_duplicates = get_all_dups(s_dup, dups, samples_duplicates)
+                    dups, samples_duplicates = get_all_dups(
+                        s_dup, dups, samples_duplicates
+                    )
         return dups, samples_duplicates
 
     logger.info("Computing duplicate sets")
     dup_pairs = relationship_ht.aggregate(
         hl.agg.filter(
             relationship_ht[rel_col] == DUPLICATE_OR_TWINS,
-            hl.agg.collect(hl.tuple([relationship_ht[i_col], relationship_ht[j_col]]))
+            hl.agg.collect(hl.tuple([relationship_ht[i_col], relationship_ht[j_col]])),
         )
     )
 
@@ -94,16 +98,18 @@ def get_duplicated_samples(
 
     duplicated_samples = []
     while len(samples_duplicates) > 0:
-        dup_set, samples_duplicates = get_all_dups(list(samples_duplicates)[0], set(), samples_duplicates)
+        dup_set, samples_duplicates = get_all_dups(
+            list(samples_duplicates)[0], set(), samples_duplicates
+        )
         duplicated_samples.append(dup_set)
 
     return duplicated_samples
 
 
 def get_duplicated_samples_ht(
-        duplicated_samples: List[Set[str]],
-        samples_rankings_ht: hl.Table,
-        rank_ann: str = 'rank'
+    duplicated_samples: List[Set[str]],
+    samples_rankings_ht: hl.Table,
+    rank_ann: str = "rank",
 ):
     """
     Creates a HT with duplicated samples sets.
@@ -116,31 +122,33 @@ def get_duplicated_samples_ht(
     :param rank_ann: Annotation in `samples_ranking_ht` containing each sample global rank (smaller is better).
     :return: HT with duplicate sample sets, including which to keep/filter
     """
-    dups_ht = hl.Table.parallelize([hl.struct(dup_set=i, dups=duplicated_samples[i]) for i in range(0, len(duplicated_samples))])
-    dups_ht = dups_ht.explode(dups_ht.dups, name='_dup')
-    dups_ht = dups_ht.key_by('_dup')
+    dups_ht = hl.Table.parallelize(
+        [
+            hl.struct(dup_set=i, dups=duplicated_samples[i])
+            for i in range(0, len(duplicated_samples))
+        ]
+    )
+    dups_ht = dups_ht.explode(dups_ht.dups, name="_dup")
+    dups_ht = dups_ht.key_by("_dup")
     dups_ht = dups_ht.annotate(rank=samples_rankings_ht[dups_ht.key][rank_ann])
     dups_cols = hl.bind(
-        lambda x: hl.struct(
-            kept=x[0],
-            filtered=x[1:]
-        ),
-        hl.sorted(hl.agg.collect(hl.tuple([dups_ht._dup, dups_ht.rank])), key=lambda x: x[1]).map(lambda x: x[0])
+        lambda x: hl.struct(kept=x[0], filtered=x[1:]),
+        hl.sorted(
+            hl.agg.collect(hl.tuple([dups_ht._dup, dups_ht.rank])), key=lambda x: x[1]
+        ).map(lambda x: x[0]),
     )
-    dups_ht = dups_ht.group_by(dups_ht.dup_set).aggregate(
-        **dups_cols
-    )
+    dups_ht = dups_ht.group_by(dups_ht.dup_set).aggregate(**dups_cols)
 
     if isinstance(dups_ht.kept, hl.expr.StructExpression):
-        dups_ht = dups_ht.key_by(**dups_ht.kept).drop('kept')
+        dups_ht = dups_ht.key_by(**dups_ht.kept).drop("kept")
     else:
-        dups_ht = dups_ht.key_by(s=dups_ht.kept)  # Since there is no defined name in the case of a non-struct type, use `s`
+        dups_ht = dups_ht.key_by(
+            s=dups_ht.kept
+        )  # Since there is no defined name in the case of a non-struct type, use `s`
     return dups_ht
 
 
-def explode_duplicate_samples_ht(
-        dups_ht: hl.Table
-) -> hl.Table:
+def explode_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
     """
     Explodes the result of `get_duplicated_samples_ht`, so that each line contains a single sample.
     An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
@@ -149,43 +157,47 @@ def explode_duplicate_samples_ht(
     :param dups_ht: Input HT
     :return: Flattened HT
     """
+
     def get_dups_to_keep_expr():
-        if (dups_ht.filtered.dtype.element_type == dups_ht.key.dtype):
+        if dups_ht.filtered.dtype.element_type == dups_ht.key.dtype:
             return (dups_ht.key, False)
-        elif (len(dups_ht.key) == 1) & (dups_ht.filtered.dtype.element_type == dups_ht.key[0].dtype):
+        elif (len(dups_ht.key) == 1) & (
+            dups_ht.filtered.dtype.element_type == dups_ht.key[0].dtype
+        ):
             return (dups_ht.key[0], False)
         else:
-            raise TypeError(f"Cannot explode table as types of the filtered field ({dups_ht.filtered.dtype}) and the key ({dups_ht.key.dtype}) are incompatible.")
-
+            raise TypeError(
+                f"Cannot explode table as types of the filtered field ({dups_ht.filtered.dtype}) and the key ({dups_ht.key.dtype}) are incompatible."
+            )
 
     dups_ht = dups_ht.annotate(
         dups=hl.array([get_dups_to_keep_expr()]).extend(
             dups_ht.filtered.map(lambda x: (x, True))
         )
     )
-    dups_ht = dups_ht.explode('dups')
+    dups_ht = dups_ht.explode("dups")
     dups_ht = dups_ht.key_by()
-    return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by('s')
+    return dups_ht.select(s=dups_ht.dups[0], dup_filtered=dups_ht.dups[1]).key_by("s")
 
 
 def get_relationship_expr(  # TODO: The threshold detection could be easily automated by fitting distributions over the data.
-        kin_expr: hl.expr.NumericExpression,
-        ibd0_expr: hl.expr.NumericExpression,
-        ibd1_expr: hl.expr.NumericExpression,
-        ibd2_expr: hl.expr.NumericExpression,
-        first_degree_kin_thresholds: Tuple[float, float] = (0.19, 0.4),
-        second_degree_min_kin: float = 0.1,
-        ibd0_0_max: float = 0.025,
-        ibd0_25_thresholds: Tuple[float, float] = (0.1, 0.425),
-        # ibd0_50_thresholds = [0.37, 0.625], Not useful for relationship inference
-        # ibd0_100_threshold = 0.625  , Not useful for relationship inference
-        ibd1_0_thresholds: Tuple[float, float] = (-0.15, 0.1),
-        # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37), Not useful for relationship inference
-        ibd1_50_thresholds: Tuple[float, float] = (0.275, 0.75),
-        ibd1_100_min: float = 0.75,
-        ibd2_0_max: float = 0.125,
-        ibd2_25_thresholds: Tuple[float, float] = (0.1, 0.5),
-        ibd2_100_thresholds: Tuple[float, float] = (0.75, 1.25)
+    kin_expr: hl.expr.NumericExpression,
+    ibd0_expr: hl.expr.NumericExpression,
+    ibd1_expr: hl.expr.NumericExpression,
+    ibd2_expr: hl.expr.NumericExpression,
+    first_degree_kin_thresholds: Tuple[float, float] = (0.19, 0.4),
+    second_degree_min_kin: float = 0.1,
+    ibd0_0_max: float = 0.025,
+    ibd0_25_thresholds: Tuple[float, float] = (0.1, 0.425),
+    # ibd0_50_thresholds = [0.37, 0.625], Not useful for relationship inference
+    # ibd0_100_threshold = 0.625  , Not useful for relationship inference
+    ibd1_0_thresholds: Tuple[float, float] = (-0.15, 0.1),
+    # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37), Not useful for relationship inference
+    ibd1_50_thresholds: Tuple[float, float] = (0.275, 0.75),
+    ibd1_100_min: float = 0.75,
+    ibd2_0_max: float = 0.125,
+    ibd2_25_thresholds: Tuple[float, float] = (0.1, 0.5),
+    ibd2_100_thresholds: Tuple[float, float] = (0.75, 1.25),
 ) -> hl.expr.StringExpression:
     """
     Returns an expression that gives the relationship between a pair of samples given their kin coefficient and IBDO, IBD1, IBD2 values.
@@ -209,48 +221,46 @@ def get_relationship_expr(  # TODO: The threshold detection could be easily auto
     """
     return (
         hl.case()
-            .when(kin_expr < second_degree_min_kin, UNRELATED)
-            .when(
-            (kin_expr < first_degree_kin_thresholds[0]),
-            SECOND_DEGREE_RELATIVES
+        .when(kin_expr < second_degree_min_kin, UNRELATED)
+        .when((kin_expr < first_degree_kin_thresholds[0]), SECOND_DEGREE_RELATIVES)
+        .when(
+            (kin_expr < first_degree_kin_thresholds[1])
+            & (ibd0_expr <= ibd0_0_max)
+            & (ibd1_expr >= ibd1_100_min)
+            & (ibd2_expr <= ibd2_0_max),
+            PARENT_CHILD,
         )
-            .when(
-            (kin_expr < first_degree_kin_thresholds[1]) &
-            (ibd0_expr <= ibd0_0_max) &
-            (ibd1_expr >= ibd1_100_min) &
-            (ibd2_expr <= ibd2_0_max),
-            PARENT_CHILD
+        .when(
+            (kin_expr < first_degree_kin_thresholds[1])
+            & (ibd0_expr >= ibd0_25_thresholds[0])
+            & (ibd0_expr <= ibd0_25_thresholds[1])
+            & (ibd1_expr >= ibd1_50_thresholds[0])
+            & (ibd1_expr <= ibd1_50_thresholds[1])
+            & (ibd2_expr >= ibd2_25_thresholds[0])
+            & (ibd2_expr <= ibd2_25_thresholds[1]),
+            SIBLINGS,
         )
-            .when(
-            (kin_expr < first_degree_kin_thresholds[1]) &
-            (ibd0_expr >= ibd0_25_thresholds[0]) &
-            (ibd0_expr <= ibd0_25_thresholds[1]) &
-            (ibd1_expr >= ibd1_50_thresholds[0]) &
-            (ibd1_expr <= ibd1_50_thresholds[1]) &
-            (ibd2_expr >= ibd2_25_thresholds[0]) &
-            (ibd2_expr <= ibd2_25_thresholds[1]),
-            SIBLINGS
+        .when(
+            (kin_expr > first_degree_kin_thresholds[1])
+            & (ibd0_expr < ibd0_0_max)
+            & (ibd1_expr >= ibd1_0_thresholds[0])
+            & (ibd1_expr <= ibd1_0_thresholds[1])
+            & (ibd2_expr >= ibd2_100_thresholds[0])
+            & (ibd2_expr <= ibd2_100_thresholds[1]),
+            DUPLICATE_OR_TWINS,
         )
-            .when(
-            (kin_expr > first_degree_kin_thresholds[1]) &
-            (ibd0_expr < ibd0_0_max) &
-            (ibd1_expr >= ibd1_0_thresholds[0]) &
-            (ibd1_expr <= ibd1_0_thresholds[1]) &
-            (ibd2_expr >= ibd2_100_thresholds[0]) &
-            (ibd2_expr <= ibd2_100_thresholds[1]),
-            DUPLICATE_OR_TWINS
-        )
-            .default(AMBIGUOUS_RELATIONSHIP)
+        .default(AMBIGUOUS_RELATIONSHIP)
     )
 
 
-def infer_families(relationship_ht: hl.Table,
-                   sex: Union[hl.Table, Dict[str, bool]],
-                   duplicate_samples_ht: hl.Table,
-                   i_col: str = 'i',
-                   j_col: str = 'j',
-                   relationship_col: str = 'relationship'
-                   ) -> hl.Pedigree:
+def infer_families(
+    relationship_ht: hl.Table,
+    sex: Union[hl.Table, Dict[str, bool]],
+    duplicate_samples_ht: hl.Table,
+    i_col: str = "i",
+    j_col: str = "j",
+    relationship_col: str = "relationship",
+) -> hl.Pedigree:
     """
     This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
     The `relationship_col` should be a column specifying the relationship between each two samples as defined in this module's constants.
@@ -271,7 +281,9 @@ def infer_families(relationship_ht: hl.Table,
     :return: Pedigree of complete trios
     """
 
-    def group_parent_child_pairs_by_fam(parent_child_pairs: Iterable[Tuple[str, str]]) -> List[List[Tuple[str, str]]]:
+    def group_parent_child_pairs_by_fam(
+        parent_child_pairs: Iterable[Tuple[str, str]]
+    ) -> List[List[Tuple[str, str]]]:
         """
         Takes all parent-children pairs and groups them by family.
         A family here is defined as a list of sample-pairs which all share at least one sample with at least one other sample-pair in the list.
@@ -285,7 +297,9 @@ def infer_families(relationship_ht: hl.Table,
         for pair in parent_child_pairs:
             if pair[0] in s_fam:
                 if pair[1] in s_fam:
-                    if s_fam[pair[0]] != s_fam[pair[1]]:  # If both samples are in different families, merge the families
+                    if (
+                        s_fam[pair[0]] != s_fam[pair[1]]
+                    ):  # If both samples are in different families, merge the families
                         new_fam_id = s_fam[pair[0]]
                         fam_id_to_merge = s_fam[pair[1]]
                         for s in s_fam:
@@ -295,7 +309,9 @@ def infer_families(relationship_ht: hl.Table,
                 else:  # If only the 1st sample in the pair is already in a family, assign the 2nd sample in the pair to the same family
                     s_fam[pair[1]] = s_fam[pair[0]]
                 fams[s_fam[pair[0]]].append(pair)
-            elif pair[1] in s_fam:   # If only the 2nd sample in the pair is already in a family, assign the 1st sample in the pair to the same family
+            elif (
+                pair[1] in s_fam
+            ):  # If only the 2nd sample in the pair is already in a family, assign the 1st sample in the pair to the same family
                 s_fam[pair[0]] = s_fam[pair[1]]
                 fams[s_fam[pair[1]]].append(pair)
             else:  # If none of the samples in the pair is already in a family, create a new family
@@ -307,9 +323,9 @@ def infer_families(relationship_ht: hl.Table,
         return list(fams.values())
 
     def get_trios(
-            fam_id: str,
-            parent_child_pairs: List[Tuple[str, str]],
-            related_pairs: Dict[Tuple[str, str], str]
+        fam_id: str,
+        parent_child_pairs: List[Tuple[str, str]],
+        related_pairs: Dict[Tuple[str, str], str],
     ) -> List[hl.Trio]:
         """
         Generates trios based from the list of parent-child pairs in the family and
@@ -337,10 +353,15 @@ def infer_families(relationship_ht: hl.Table,
             possible_parents = []
             for i in range(len(samples)):
                 for j in range(i + 1, len(samples)):
-                    if related_pairs.get(tuple(sorted([samples[i], samples[j]]))) is None:
+                    if (
+                        related_pairs.get(tuple(sorted([samples[i], samples[j]])))
+                        is None
+                    ):
                         if sex.get(samples[i]) is False and sex.get(samples[j]) is True:
                             possible_parents.append((samples[i], samples[j]))
-                        elif sex.get(samples[i]) is True and sex.get(samples[j]) is False:
+                        elif (
+                            sex.get(samples[i]) is True and sex.get(samples[j]) is False
+                        ):
                             possible_parents.append((samples[j], samples[i]))
             return possible_parents
 
@@ -351,7 +372,9 @@ def infer_families(relationship_ht: hl.Table,
             :param possible_parents: A pair of possible parents
             :return: The list of all children (if any) corresponding to the possible parents
             """
-            possible_offsprings = defaultdict(set)  # stores sample -> set of parents in the possible_parents where (sample, parent) is found in possible_child_pairs
+            possible_offsprings = defaultdict(
+                set
+            )  # stores sample -> set of parents in the possible_parents where (sample, parent) is found in possible_child_pairs
             for pair in parent_child_pairs:
                 if possible_parents[0] == pair[0]:
                     possible_offsprings[pair[1]].add(possible_parents[0])
@@ -362,7 +385,9 @@ def infer_families(relationship_ht: hl.Table,
                 elif possible_parents[1] == pair[1]:
                     possible_offsprings[pair[0]].add(possible_parents[1])
 
-            return [s for s, parents in possible_offsprings.items() if len(parents) == 2]
+            return [
+                s for s, parents in possible_offsprings.items() if len(parents) == 2
+            ]
 
         def check_sibs(children: List[str]) -> bool:
             """
@@ -373,7 +398,10 @@ def infer_families(relationship_ht: hl.Table,
             """
             for i in range(len(children)):
                 for j in range(i + 1, len(children)):
-                    if related_pairs[tuple(sorted([children[i], children[j]]))] != SIBLINGS:
+                    if (
+                        related_pairs[tuple(sorted([children[i], children[j]]))]
+                        != SIBLINGS
+                    ):
                         return False
             return True
 
@@ -390,37 +418,40 @@ def infer_families(relationship_ht: hl.Table,
 
             for s, s_trios in children_trios.items():
                 if len(s_trios) > 1:
-                    logger.warning("Discarded duplicated child {0} found multiple in trios: {1}".format(
-                        s,
-                        ", ".join([str(trio) for trio in s_trios])
-                    ))
+                    logger.warning(
+                        "Discarded duplicated child {0} found multiple in trios: {1}".format(
+                            s, ", ".join([str(trio) for trio in s_trios])
+                        )
+                    )
 
             return [trios[0] for trios in children_trios.values() if len(trios) == 1]
 
         # Get all possible pairs of parents in (father, mother) order
-        all_possible_parents = get_possible_parents(list({s for pair in parent_child_pairs for s in pair}))
+        all_possible_parents = get_possible_parents(
+            list({s for pair in parent_child_pairs for s in pair})
+        )
 
         trios = []
         for possible_parents in all_possible_parents:
             children = get_children(possible_parents)
             if check_sibs(children):
-                trios.extend([
-                    hl.Trio(
-                        s=s,
-                        fam_id=fam_id,
-                        pat_id=possible_parents[0],
-                        mat_id=possible_parents[1],
-                        is_female=sex.get(s)
-                    )
-                    for s in children
-                ])
+                trios.extend(
+                    [
+                        hl.Trio(
+                            s=s,
+                            fam_id=fam_id,
+                            pat_id=possible_parents[0],
+                            mat_id=possible_parents[1],
+                            is_female=sex.get(s),
+                        )
+                        for s in children
+                    ]
+                )
             else:
                 logger.warning(
                     "Discarded family with same parents, and multiple offspring that weren't siblings:"
                     "\nMother: {}\nFather:{}\nChildren:{}".format(
-                        possible_parents[0],
-                        possible_parents[1],
-                        ", ".join(children)
+                        possible_parents[0], possible_parents[1], ", ".join(children)
                     )
                 )
 
@@ -430,34 +461,57 @@ def infer_families(relationship_ht: hl.Table,
     # => Remove unrelateds and duplicates
     dups = duplicate_samples_ht.aggregate(
         hl.agg.explode(
-            lambda dup: hl.agg.collect_as_set(dup),
-            duplicate_samples_ht.filtered
+            lambda dup: hl.agg.collect_as_set(dup), duplicate_samples_ht.filtered
         ),
-        _localize=False
+        _localize=False,
     )
     relationship_ht = relationship_ht.filter(
-        ~dups.contains(relationship_ht[i_col]) &
-        ~dups.contains(relationship_ht[j_col]) &
-        (relationship_ht[relationship_col] != UNRELATED)
+        ~dups.contains(relationship_ht[i_col])
+        & ~dups.contains(relationship_ht[j_col])
+        & (relationship_ht[relationship_col] != UNRELATED)
     )
 
     # Check relatedness table format
     if not relationship_ht[i_col].dtype == relationship_ht[j_col].dtype:
-        logger.error("i_col and j_col of the relatedness table need to be of the same type.")
+        logger.error(
+            "i_col and j_col of the relatedness table need to be of the same type."
+        )
 
     # If i_col and j_col aren't str, then convert them
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
-        logger.warning(f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Expression will be converted to string in Pedigrees.")
+        logger.warning(
+            f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Expression will be converted to string in Pedigrees."
+        )
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
-            logger.warning(f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree.")
+            logger.warning(
+                f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree."
+            )
             relationship_ht = relationship_ht.key_by(
                 **{
-                    i_col: hl.delimit(hl.array([hl.str(relationship_ht[i_col][x]) for x in relationship_ht[i_col]]), "_"),
-                    j_col: hl.delimit(hl.array([hl.str(relationship_ht[j_col][x]) for x in relationship_ht[j_col]]), "_")
+                    i_col: hl.delimit(
+                        hl.array(
+                            [
+                                hl.str(relationship_ht[i_col][x])
+                                for x in relationship_ht[i_col]
+                            ]
+                        ),
+                        "_",
+                    ),
+                    j_col: hl.delimit(
+                        hl.array(
+                            [
+                                hl.str(relationship_ht[j_col][x])
+                                for x in relationship_ht[j_col]
+                            ]
+                        ),
+                        "_",
+                    ),
                 }
             )
         else:
-            raise NotImplementedError("The `i_col` and `j_col` columns of the `relationship_ht` argument passed to infer_families are not of type StringExpression or Struct.")
+            raise NotImplementedError(
+                "The `i_col` and `j_col` columns of the `relationship_ht` argument passed to infer_families are not of type StringExpression or Struct."
+            )
 
     # If sex is a Table, extract sex information as a Dict
     if isinstance(sex, hl.Table):
@@ -467,23 +521,30 @@ def infer_families(relationship_ht: hl.Table,
     # create a dictionnary with pairs as keys and relationships as values
     # Sample-pairs are tuples ordered by sample name
     related_pairs = {
-        tuple(sorted([i, j])): rel for i, j, rel in
-        hl.tuple([relationship_ht.i, relationship_ht.j, relationship_ht.relationship]).collect()
+        tuple(sorted([i, j])): rel
+        for i, j, rel in hl.tuple(
+            [relationship_ht.i, relationship_ht.j, relationship_ht.relationship]
+        ).collect()
     }
 
-    parent_child_pairs_by_fam = group_parent_child_pairs_by_fam([pair for pair, rel in related_pairs.items() if rel == PARENT_CHILD])
-    return hl.Pedigree([
-        trio for fam_index, parent_child_pairs in enumerate(parent_child_pairs_by_fam)
-        for trio in get_trios(str(fam_index), parent_child_pairs, related_pairs)
-    ])
+    parent_child_pairs_by_fam = group_parent_child_pairs_by_fam(
+        [pair for pair, rel in related_pairs.items() if rel == PARENT_CHILD]
+    )
+    return hl.Pedigree(
+        [
+            trio
+            for fam_index, parent_child_pairs in enumerate(parent_child_pairs_by_fam)
+            for trio in get_trios(str(fam_index), parent_child_pairs, related_pairs)
+        ]
+    )
 
 
 def create_fake_pedigree(
-        n: int,
-        sample_list: List[str],
-        exclude_real_probands: bool = False,
-        max_tries: int = 10,
-        real_pedigree: Optional[hl.Pedigree] = None
+    n: int,
+    sample_list: List[str],
+    exclude_real_probands: bool = False,
+    max_tries: int = 10,
+    real_pedigree: Optional[hl.Pedigree] = None,
 ) -> hl.Pedigree:
     """
     Generates a pedigree made of trios created by sampling 3 random samples in the sample list.
@@ -498,10 +559,16 @@ def create_fake_pedigree(
     :param real_pedigree: Optional pedigree to exclude children from
     :return: Fake pedigree
     """
-    real_trios = {trio.s: trio for trio in real_pedigree.trios} if real_pedigree is not None else dict()
+    real_trios = (
+        {trio.s: trio for trio in real_pedigree.trios}
+        if real_pedigree is not None
+        else dict()
+    )
 
     if exclude_real_probands and len(real_trios) == len(set(sample_list)):
-        logger.warning("All samples are in the real probands list; cannot create any fake pedigrees with exclude_real_probands=True. Returning an empty Pedigree.")
+        logger.warning(
+            "All samples are in the real probands list; cannot create any fake pedigrees with exclude_real_probands=True. Returning an empty Pedigree."
+        )
         return hl.Pedigree([])
 
     fake_trios = {}
@@ -509,12 +576,12 @@ def create_fake_pedigree(
     while len(fake_trios) < n and tries < max_tries:
         s, mat_id, pat_id = random.sample(sample_list, 3)
         if (
-                (s in real_trios and (
-                        exclude_real_probands or
-                        {mat_id, pat_id} == {real_trios[s].mat_id, real_trios[s].pat_id}
-                )) or
-                s in fake_trios
-        ):
+            s in real_trios
+            and (
+                exclude_real_probands
+                or {mat_id, pat_id} == {real_trios[s].mat_id, real_trios[s].pat_id}
+            )
+        ) or s in fake_trios:
             tries += 1
         else:
             tries = 0
@@ -523,22 +590,24 @@ def create_fake_pedigree(
                 pat_id=pat_id,
                 mat_id=mat_id,
                 fam_id=f"fake_{str(len(fake_trios))}",
-                is_female=bool(random.getrandbits(1))
+                is_female=bool(random.getrandbits(1)),
             )
 
     if tries == max_tries:
-        logger.warning(f"Only returning {len(fake_trios)} fake trios; random trio sampling stopped after reaching the maximum {max_tries} iterations")
+        logger.warning(
+            f"Only returning {len(fake_trios)} fake trios; random trio sampling stopped after reaching the maximum {max_tries} iterations"
+        )
 
     return hl.Pedigree(list(fake_trios.values()))
 
 
 def compute_related_samples_to_drop(
-        relatedness_ht: hl.Table,
-        rank_ht: hl.Table,
-        kin_threshold: float,
-        filtered_samples: Optional[hl.expr.SetExpression] = None,
-        min_related_hard_filter: Optional[int] = None
- ) -> hl.Table:
+    relatedness_ht: hl.Table,
+    rank_ht: hl.Table,
+    kin_threshold: float,
+    filtered_samples: Optional[hl.expr.SetExpression] = None,
+    min_related_hard_filter: Optional[int] = None,
+) -> hl.Table:
     """
     Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
 
@@ -556,29 +625,37 @@ def compute_related_samples_to_drop(
     """
 
     # Make sure that the key types are valid
-    assert(len(list(relatedness_ht.key))== 2)
-    assert(relatedness_ht.key[0].dtype == relatedness_ht.key[1].dtype)
-    assert (len(list(rank_ht.key)) == 1)
-    assert (relatedness_ht.key[0].dtype == rank_ht.key[0].dtype)
+    assert len(list(relatedness_ht.key)) == 2
+    assert relatedness_ht.key[0].dtype == relatedness_ht.key[1].dtype
+    assert len(list(rank_ht.key)) == 1
+    assert relatedness_ht.key[0].dtype == rank_ht.key[0].dtype
 
     logger.info(f"Filtering related samples using a kin threshold of {kin_threshold}")
     relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kin_threshold)
 
     filtered_samples_rel = set()
     if min_related_hard_filter is not None:
-        logger.info(f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion")
+        logger.info(
+            f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion"
+        )
         gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
         gbi = gbi.explode(gbi.s)
         gbi = gbi.group_by(gbi.s).aggregate(n=hl.agg.count())
-        filtered_samples_rel = gbi.aggregate(hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s)))
-        logger.info(f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded.")
+        filtered_samples_rel = gbi.aggregate(
+            hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s))
+        )
+        logger.info(
+            f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded."
+        )
 
     if filtered_samples is not None:
         filtered_samples_rel = filtered_samples_rel.union(
             relatedness_ht.aggregate(
                 hl.agg.explode(
                     lambda s: hl.agg.collect_as_set(s),
-                    hl.array(list(relatedness_ht.key)).filter(lambda s: filtered_samples.contains(s))
+                    hl.array(list(relatedness_ht.key)).filter(
+                        lambda s: filtered_samples.contains(s)
+                    ),
                 )
             )
         )
@@ -586,46 +663,42 @@ def compute_related_samples_to_drop(
     if len(filtered_samples_rel) > 0:
         filtered_samples_lit = hl.literal(filtered_samples_rel)
         relatedness_ht = relatedness_ht.filter(
-            filtered_samples_lit.contains(relatedness_ht.key[0]) |
-            filtered_samples_lit.contains(relatedness_ht.key[1]),
-            keep=False
+            filtered_samples_lit.contains(relatedness_ht.key[0])
+            | filtered_samples_lit.contains(relatedness_ht.key[1]),
+            keep=False,
         )
 
     logger.info("Annotating related sample pairs with rank.")
     i, j = list(relatedness_ht.key)
     relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[i])
     relatedness_ht = relatedness_ht.annotate(
-        **{i: hl.struct(
-            s=relatedness_ht.s,
-            rank=rank_ht[relatedness_ht.key].rank
-        )}
+        **{i: hl.struct(s=relatedness_ht.s, rank=rank_ht[relatedness_ht.key].rank)}
     )
     relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[j])
     relatedness_ht = relatedness_ht.annotate(
-        **{j: hl.struct(
-            s=relatedness_ht.s,
-            rank=rank_ht[relatedness_ht.key].rank
-        )}
+        **{j: hl.struct(s=relatedness_ht.s, rank=rank_ht[relatedness_ht.key].rank)}
     )
     relatedness_ht = relatedness_ht.key_by(i, j)
-    relatedness_ht = relatedness_ht.drop('s')
+    relatedness_ht = relatedness_ht.drop("s")
     relatedness_ht = relatedness_ht.persist()
 
     related_samples_to_drop_ht = hl.maximal_independent_set(
         relatedness_ht[i],
         relatedness_ht[j],
         keep=False,
-        tie_breaker=lambda l,r: l.rank - r.rank
+        tie_breaker=lambda l, r: l.rank - r.rank,
     )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
-    related_samples_to_drop_ht = related_samples_to_drop_ht.select(**related_samples_to_drop_ht.node)
-    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by('s')
+    related_samples_to_drop_ht = related_samples_to_drop_ht.select(
+        **related_samples_to_drop_ht.node
+    )
+    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")
 
     if len(filtered_samples_rel) > 0:
         related_samples_to_drop_ht = related_samples_to_drop_ht.union(
             hl.Table.parallelize(
                 [hl.struct(s=s, rank=hl.null(hl.tint64)) for s in filtered_samples_rel],
-                key='s'
+                key="s",
             )
         )
 
@@ -653,11 +726,11 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
 
 
 def generate_trio_stats_expr(
-        trio_mt: hl.MatrixTable,
-        transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
+    trio_mt: hl.MatrixTable,
+    transmitted_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    de_novo_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    ac_strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the following counts:
@@ -722,18 +795,18 @@ def generate_trio_stats_expr(
         """
         return (
             hl.case()
-                .when(locus.in_autosome_or_par(), auto_or_par)
-                .when(locus.in_x_nonpar(), hemi_x)
-                .when(locus.in_y_nonpar(), hemi_y)
-                .or_missing()
+            .when(locus.in_autosome_or_par(), auto_or_par)
+            .when(locus.in_x_nonpar(), hemi_x)
+            .when(locus.in_y_nonpar(), hemi_y)
+            .or_missing()
         )
 
     def _is_dnm(
-            proband_gt: hl.expr.CallExpression,
-            father_gt: hl.expr.CallExpression,
-            mother_gt: hl.expr.CallExpression,
-            locus: hl.expr.LocusExpression,
-            proband_is_female: Optional[hl.expr.BooleanExpression],
+        proband_gt: hl.expr.CallExpression,
+        father_gt: hl.expr.CallExpression,
+        mother_gt: hl.expr.CallExpression,
+        locus: hl.expr.LocusExpression,
+        proband_is_female: Optional[hl.expr.BooleanExpression],
     ) -> hl.expr.BooleanExpression:
         """
         Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
@@ -755,9 +828,9 @@ def generate_trio_stats_expr(
         )
 
     def _ac_an_parent_child_count(
-            proband_gt: hl.expr.CallExpression,
-            father_gt: hl.expr.CallExpression,
-            mother_gt: hl.expr.CallExpression,
+        proband_gt: hl.expr.CallExpression,
+        father_gt: hl.expr.CallExpression,
+        mother_gt: hl.expr.CallExpression,
     ) -> Dict[str, hl.expr.Int64Expression]:
         """
         Helper method to get AC and AN for parents and children
@@ -837,12 +910,12 @@ def generate_trio_stats_expr(
 
 
 def generate_sib_stats_expr(
-        mt: hl.MatrixTable,
-        sib_ht: hl.Table,
-        i_col: str = "i",
-        j_col: str = "j",
-        strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
-        is_female: Optional[hl.expr.BooleanExpression] = None,
+    mt: hl.MatrixTable,
+    sib_ht: hl.Table,
+    i_col: str = "i",
+    j_col: str = "j",
+    strata: Dict[str, hl.expr.BooleanExpression] = {"raw": True},
+    is_female: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
     Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
@@ -871,13 +944,13 @@ def generate_sib_stats_expr(
             return hl.or_missing(locus.in_autosome(), gt.n_alt_alleles())
         return (
             hl.case()
-                .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
-                .when(
+            .when(locus.in_autosome_or_par(), gt.n_alt_alleles())
+            .when(
                 ~is_female & (locus.in_x_nonpar() | locus.in_y_nonpar()),
                 hl.min(1, gt.n_alt_alleles()),
             )
-                .when(is_female & locus.in_y_nonpar(), 0)
-                .default(0)
+            .when(is_female & locus.in_y_nonpar(), 0)
+            .default(0)
         )
 
     if is_female is None:

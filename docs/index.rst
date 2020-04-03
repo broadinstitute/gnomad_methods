@@ -12,4 +12,5 @@ Contents
    :maxdepth: 3
 
    Getting Started <getting_started>
+   Examples <examples/index>
    API Reference <api_reference/index>

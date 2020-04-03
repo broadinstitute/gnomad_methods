@@ -7,9 +7,9 @@ def get_slack_info():
 
     # import os
     try:
-        from gnomad.slack_creds import (
+        from gnomad.slack_creds import (  # pylint: disable=import-error,no-name-in-module
             slack_token,
-        )  # pylint: disable=import-error,no-name-in-module
+        )
     except Exception:
         return None
 
@@ -149,4 +149,3 @@ def try_slack(target, func, *args):
         except ImportError as f:
             print("ERROR: missing slackclient. But here's the original error:")
             raise e
-

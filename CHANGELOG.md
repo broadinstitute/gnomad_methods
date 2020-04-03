@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## Version 0.2.0 - April 3rd, 2020
+
 ### Added 
 
 * Function to subset a `MatrixTable` based on a list of samples [(#196)](https://github.com/broadinstitute/gnomad_methods/pull/196)

@@ -5,7 +5,7 @@
 Use [Pylint](https://www.pylint.org/) to check for some types of errors.
 
 ```
-python -m pip install pylint
+python -m pip install -r requirements-dev.txt
 ./lint
 ```
 
@@ -13,6 +13,15 @@ To disable warnings, use:
 
 ```
 ./lint --disable=W
+```
+
+## Running Black
+
+Use [Black](https://black.readthedocs.io/) to format code.
+
+```
+python -m pip install -r requirements-dev.txt
+black gnomad
 ```
 
 ## Building documentation

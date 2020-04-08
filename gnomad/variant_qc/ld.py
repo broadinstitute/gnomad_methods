@@ -1,26 +1,28 @@
-from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
-from gnomad.resources.grch37.gnomad import public_release
-from hail.linalg import BlockMatrix
 import hail as hl
+from gnomad.resources.grch37.gnomad import public_release
+from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
+from hail.linalg import BlockMatrix
 
 
-
-def get_r_human_readable(pop: str, var1: str, var2: str, ref_genome: str = 'GRCh37'):
+def get_r_human_readable(pop: str, var1: str, var2: str, ref_genome: str = "GRCh37"):
     bm = ld_matrix(pop).bm()
     ht = ld_index(pop).ht()
-    chrom, pos, ref, alt = var1.split('-')
-    var1 = (hl.parse_locus(f'{chrom}:{pos}', ref_genome), [ref, alt])
-    chrom, pos, ref, alt = var2.split('-')
-    var2 = (hl.parse_locus(f'{chrom}:{pos}', ref_genome), [ref, alt])
+    chrom, pos, ref, alt = var1.split("-")
+    var1 = (hl.parse_locus(f"{chrom}:{pos}", ref_genome), [ref, alt])
+    chrom, pos, ref, alt = var2.split("-")
+    var2 = (hl.parse_locus(f"{chrom}:{pos}", ref_genome), [ref, alt])
     return get_r_for_pair_of_variants(bm, ht, var1, var2)
 
 
 # TODO: find LD proxies
 
 
-def get_r_for_pair_of_variants(bm: BlockMatrix, ld_index: hl.Table,
-                               var1: (hl.tlocus, hl.tarray(hl.tstr)),
-                               var2: (hl.tlocus, hl.tarray(hl.tstr))):
+def get_r_for_pair_of_variants(
+    bm: BlockMatrix,
+    ld_index: hl.Table,
+    var1: (hl.tlocus, hl.tarray(hl.tstr)),
+    var2: (hl.tlocus, hl.tarray(hl.tstr)),
+):
     """
     Get `r` value (LD) for pair of variants `var1` and `var2`.
 
@@ -39,8 +41,12 @@ def get_r_for_pair_of_variants(bm: BlockMatrix, ld_index: hl.Table,
     :param var2: Tuple of locus and alleles
     :return: Correlation (r) between two variants
     """
-    idx1 = ld_index.filter((ld_index.locus == var1[0]) & (ld_index.alleles == var1[1])).idx.collect()[0]
-    idx2 = ld_index.filter((ld_index.locus == var2[0]) & (ld_index.alleles == var2[1])).idx.collect()[0]
+    idx1 = ld_index.filter(
+        (ld_index.locus == var1[0]) & (ld_index.alleles == var1[1])
+    ).idx.collect()[0]
+    idx2 = ld_index.filter(
+        (ld_index.locus == var2[0]) & (ld_index.alleles == var2[1])
+    ).idx.collect()[0]
 
     if idx1 > idx2:
         temp = idx1
@@ -60,10 +66,18 @@ def get_r_within_gene_in_pop(pop: str, gene: str):
     :param gene: Gene symbol as string
     :return: Table with pairs of variants
     """
-    return get_r_within_gene(ld_matrix(pop).bm(), ld_index(pop).ht(), gene, None, 'GRCh37')
+    return get_r_within_gene(
+        ld_matrix(pop).bm(), ld_index(pop).ht(), gene, None, "GRCh37"
+    )
 
 
-def get_r_within_gene(bm: BlockMatrix, ld_index: hl.Table, gene: str, vep_ht: hl.Table = None, reference_genome: str = None):
+def get_r_within_gene(
+    bm: BlockMatrix,
+    ld_index: hl.Table,
+    gene: str,
+    vep_ht: hl.Table = None,
+    reference_genome: str = None,
+):
     """
     Gets LD information (`r`) for all pairs of variants within `gene`.
 
@@ -77,17 +91,20 @@ def get_r_within_gene(bm: BlockMatrix, ld_index: hl.Table, gene: str, vep_ht: hl
     :return: Table with pairs of variants
     """
     if vep_ht is None:
-        vep_ht = public_release('exomes').ht()
+        vep_ht = public_release("exomes").ht()
     if reference_genome is None:
         reference_genome = hl.default_reference().name
-    intervals = hl.experimental.get_gene_intervals(gene_symbols=[gene], reference_genome=reference_genome)
+    intervals = hl.experimental.get_gene_intervals(
+        gene_symbols=[gene], reference_genome=reference_genome
+    )
     ld_index = hl.filter_intervals(ld_index, intervals)
     ld_index = ld_index.annotate(vep=vep_ht[ld_index.key].vep)
-    ld_index = ld_index.filter(hl.any(lambda tc: tc.gene_symbol == gene, ld_index.vep.transcript_consequences))
+    ld_index = ld_index.filter(
+        hl.any(lambda tc: tc.gene_symbol == gene, ld_index.vep.transcript_consequences)
+    )
 
     indices_to_keep = ld_index.idx.collect()
     filt_bm = bm.filter(indices_to_keep, indices_to_keep)
     ht = filt_bm.entries()
-    ld_index = ld_index.add_index('new_idx').key_by('new_idx')
+    ld_index = ld_index.add_index("new_idx").key_by("new_idx")
     return ht.transmute(r=ht.entry, i_variant=ld_index[ht.i], j_variant=ld_index[ht.j])
-

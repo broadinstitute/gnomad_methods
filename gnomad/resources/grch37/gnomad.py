@@ -112,7 +112,7 @@ def public_release(data_type: str) -> VersionedTableResource:
     """
 
     if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}')
+        raise DataException(f"{data_type} not in {DATA_TYPES}")
 
     if data_type == "exomes":
         current_release = CURRENT_EXOME_RELEASE
@@ -123,7 +123,10 @@ def public_release(data_type: str) -> VersionedTableResource:
 
     return VersionedTableResource(
         current_release,
-        {release: TableResource(path=_public_release_ht_path(data_type, release)) for release in releases},
+        {
+            release: TableResource(path=_public_release_ht_path(data_type, release))
+            for release in releases
+        },
     )
 
 
@@ -135,7 +138,7 @@ def coverage(data_type: str) -> VersionedTableResource:
     :return: Coverage Table
     """
     if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}')
+        raise DataException(f"{data_type} not in {DATA_TYPES}")
 
     if data_type == "exomes":
         current_release = "2.1"
@@ -147,7 +150,10 @@ def coverage(data_type: str) -> VersionedTableResource:
 
     return VersionedTableResource(
         current_release,
-        {release: TableResource(path=_public_coverage_ht_path(data_type, release)) for release in releases},
+        {
+            release: TableResource(path=_public_coverage_ht_path(data_type, release))
+            for release in releases
+        },
     )
 
 
@@ -159,7 +165,7 @@ def liftover(data_type: str) -> VersionedTableResource:
     :return: Release Table
     """
     if data_type not in DATA_TYPES:
-        raise DataException(f'{data_type} not in {DATA_TYPES}')
+        raise DataException(f"{data_type} not in {DATA_TYPES}")
 
     if data_type == "exomes":
         current_release = CURRENT_EXOME_RELEASE
@@ -171,7 +177,10 @@ def liftover(data_type: str) -> VersionedTableResource:
 
     return VersionedTableResource(
         current_release,
-        {release: TableResource(path=_liftover_data_path(data_type, release)) for release in releases},
+        {
+            release: TableResource(path=_liftover_data_path(data_type, release))
+            for release in releases
+        },
     )
 
 

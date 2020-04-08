@@ -21,32 +21,36 @@ class BaseResource(ABC):
 
     @abstractmethod
     def __init__(
-            self,
-            path: Optional[str] = None,
-            import_args: Optional[Dict[str, Any]] = None,
-            import_func: Optional[Callable] = None,
-            expected_file_extensions: Optional[List[str]] = None
+        self,
+        path: Optional[str] = None,
+        import_args: Optional[Dict[str, Any]] = None,
+        import_func: Optional[Callable] = None,
+        expected_file_extensions: Optional[List[str]] = None,
     ):
         if path is None and import_func is None:
-            raise ValueError(f"{self.__class__.__name__} requires at least one of path or import_func arguments.")
+            raise ValueError(
+                f"{self.__class__.__name__} requires at least one of path or import_func arguments."
+            )
 
         self.path = path
         self.import_args = import_args
         self.import_func = import_func
 
-        if path is not None and expected_file_extensions and not any(path.endswith(ext) for ext in expected_file_extensions):
+        if (
+            path is not None
+            and expected_file_extensions
+            and not any(path.endswith(ext) for ext in expected_file_extensions)
+        ):
             logger.warning(
                 "Created the following {} with a path that doesn't end with {}: {}".format(
-                    self.__class__.__name__,
-                    " or ".join(expected_file_extensions),
-                    self
+                    self.__class__.__name__, " or ".join(expected_file_extensions), self
                 )
             )
 
     def __repr__(self):
-        attr_str = [f'path={self.path}']
+        attr_str = [f"path={self.path}"]
         if self.import_args is not None:
-            attr_str.append(f'import_args={self.import_args}')
+            attr_str.append(f"import_args={self.import_args}")
         return f'{self.__class__.__name__}({",".join(attr_str)})'
 
     @abstractmethod
@@ -70,16 +74,16 @@ class TableResource(BaseResource):
     """
 
     def __init__(
-            self,
-            path: Optional[str] = None,
-            import_args: Optional[Dict[str, Any]] = None,
-            import_func: Optional[Callable[..., hl.Table]] = None
+        self,
+        path: Optional[str] = None,
+        import_args: Optional[Dict[str, Any]] = None,
+        import_func: Optional[Callable[..., hl.Table]] = None,
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
-            expected_file_extensions=['.ht']
+            expected_file_extensions=[".ht"],
         )
 
     def ht(self, force_import: bool = False) -> hl.Table:
@@ -102,9 +106,7 @@ class TableResource(BaseResource):
         :return: Nothing
         """
         self.import_func(**self.import_args).write(
-            self.path,
-            overwrite=overwrite,
-            **kwargs
+            self.path, overwrite=overwrite, **kwargs
         )
 
 
@@ -118,16 +120,16 @@ class MatrixTableResource(BaseResource):
     """
 
     def __init__(
-            self,
-            path: Optional[str] = None,
-            import_args: Optional[Dict[str, Any]] = None,
-            import_func: Optional[Callable[..., hl.MatrixTable]] = None
+        self,
+        path: Optional[str] = None,
+        import_args: Optional[Dict[str, Any]] = None,
+        import_func: Optional[Callable[..., hl.MatrixTable]] = None,
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
-            expected_file_extensions=['.mt']
+            expected_file_extensions=[".mt"],
         )
 
     def mt(self, force_import: bool = False) -> hl.MatrixTable:
@@ -149,7 +151,9 @@ class MatrixTableResource(BaseResource):
         :param kwargs: Any other parameters to be passed to hl.MatrixTable.write
         :return: Nothing
         """
-        self.import_func(**self.import_args).write(self.path, overwrite=overwrite, **kwargs)
+        self.import_func(**self.import_args).write(
+            self.path, overwrite=overwrite, **kwargs
+        )
 
 
 class PedigreeResource(BaseResource):
@@ -165,19 +169,19 @@ class PedigreeResource(BaseResource):
     """
 
     def __init__(
-            self,
-            path: Optional[str] = None,
-            import_args: Optional[Dict[str, Any]] = None,
-            import_func: Optional[Callable[..., hl.Pedigree]] = None,
-            quant_pheno: bool = False,
-            delimiter: str = r"\\s+",
-            missing: str = 'NA'
+        self,
+        path: Optional[str] = None,
+        import_args: Optional[Dict[str, Any]] = None,
+        import_func: Optional[Callable[..., hl.Pedigree]] = None,
+        quant_pheno: bool = False,
+        delimiter: str = r"\\s+",
+        missing: str = "NA",
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
-            expected_file_extensions=['.fam', '.ped']
+            expected_file_extensions=[".fam", ".ped"],
         )
 
         self.quant_pheno = quant_pheno
@@ -190,7 +194,12 @@ class PedigreeResource(BaseResource):
 
         :return: Family table
         """
-        return hl.import_fam(self.path, quant_pheno=self.quant_pheno, delimiter=self.delimiter, missing=self.missing)
+        return hl.import_fam(
+            self.path,
+            quant_pheno=self.quant_pheno,
+            delimiter=self.delimiter,
+            missing=self.missing,
+        )
 
     def pedigree(self) -> hl.Pedigree:
         """
@@ -225,16 +234,16 @@ class BlockMatrixResource(BaseResource):
     """
 
     def __init__(
-            self,
-            path: Optional[str] = None,
-            import_args: Optional[Dict[str, Any]] = None,
-            import_func: Optional[Callable[..., BlockMatrix]] = None
+        self,
+        path: Optional[str] = None,
+        import_args: Optional[Dict[str, Any]] = None,
+        import_func: Optional[Callable[..., BlockMatrix]] = None,
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
-            expected_file_extensions=[".bm"]
+            expected_file_extensions=[".bm"],
         )
 
     def bm(self) -> BlockMatrix:
@@ -273,11 +282,14 @@ class BaseVersionedResource(BaseResource, ABC):
 
         if default_version not in versions:
             raise KeyError(
-                f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}.")
+                f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}."
+            )
 
         for version_name, version_resource in versions.items():
             if version_resource.__class__ not in self.__class__.__bases__:
-                raise TypeError(f"Cannot create a {self.__class__.__name__} resource with version {version_name} of type {version_resource.__class__.__name__}")
+                raise TypeError(
+                    f"Cannot create a {self.__class__.__name__} resource with version {version_name} of type {version_resource.__class__.__name__}"
+                )
 
         self.default_version = default_version
         self.versions = versions
@@ -285,12 +297,11 @@ class BaseVersionedResource(BaseResource, ABC):
         super().__init__(
             path=versions[default_version].path,
             import_args=versions[default_version].import_args,
-            import_func=versions[default_version].import_func
+            import_func=versions[default_version].import_func,
         )
 
-
     def __repr__(self):
-        return f'{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})'
+        return f"{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})"
 
 
 class VersionedTableResource(BaseVersionedResource, TableResource):
@@ -303,6 +314,7 @@ class VersionedTableResource(BaseVersionedResource, TableResource):
     :param default_version: The default version of this Table resource (must to be in the `versions` dict)
     :param versions: A dict of version name -> TableResource.
     """
+
     def __init__(self, default_version: str, versions: Dict[str, TableResource]):
         super().__init__(default_version, versions)
 
@@ -335,6 +347,9 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
 
     def __init__(self, default_version: str, versions: Dict[str, PedigreeResource]):
         super().__init__(default_version, versions)
+        self.delimiter = versions[default_version].delimiter
+        self.missing = versions[default_version].missing
+        self.quant_pheno = versions[default_version].quant_pheno
 
 
 class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
@@ -357,33 +372,33 @@ class DataException(Exception):
 
 
 NO_CHR_TO_CHR_CONTIG_RECODING = {
-    '1': 'chr1',
-    '2': 'chr2',
-    '3': 'chr3',
-    '4': 'chr4',
-    '5': 'chr5',
-    '6': 'chr6',
-    '7': 'chr7',
-    '8': 'chr8',
-    '9': 'chr9',
-    '10': 'chr10',
-    '11': 'chr11',
-    '12': 'chr12',
-    '13': 'chr13',
-    '14': 'chr14',
-    '15': 'chr15',
-    '16': 'chr16',
-    '17': 'chr17',
-    '18': 'chr18',
-    '19': 'chr19',
-    '20': 'chr20',
-    '21': 'chr21',
-    '22': 'chr22',
-    'X': 'chrX',
-    'Y': 'chrY',
-    'MT': 'chrM'
+    "1": "chr1",
+    "2": "chr2",
+    "3": "chr3",
+    "4": "chr4",
+    "5": "chr5",
+    "6": "chr6",
+    "7": "chr7",
+    "8": "chr8",
+    "9": "chr9",
+    "10": "chr10",
+    "11": "chr11",
+    "12": "chr12",
+    "13": "chr13",
+    "14": "chr14",
+    "15": "chr15",
+    "16": "chr16",
+    "17": "chr17",
+    "18": "chr18",
+    "19": "chr19",
+    "20": "chr20",
+    "21": "chr21",
+    "22": "chr22",
+    "X": "chrX",
+    "Y": "chrY",
+    "MT": "chrM",
 }
+
 
 def import_sites_vcf(**kwargs) -> hl.Table:
     return hl.import_vcf(**kwargs).rows()
-

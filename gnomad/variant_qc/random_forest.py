@@ -1,24 +1,25 @@
 import logging
 import pprint
+from pprint import pformat
 from typing import Dict, List, Tuple
 
-import pyspark.sql
-from pyspark.sql import SparkSession
-from pyspark.ml.feature import *
-from pyspark.ml.classification import *
-from pyspark.ml import *
 import hail as hl
 import pandas as pd
-from pyspark.sql.functions import udf, col  # pylint: disable=no-name-in-module
+import pyspark.sql
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import RandomForestClassifier, json
+from pyspark.ml.feature import IndexToString, StringIndexer, VectorAssembler
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, udf  # pylint: disable=no-name-in-module
 from pyspark.sql.types import ArrayType, DoubleType
 
-
-logger = logging.getLogger("gnomad.utils")
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def run_rf_test(
-        mt: hl.MatrixTable,
-        output: str = '/tmp'
+    mt: hl.MatrixTable, output: str = "/tmp"
 ) -> Tuple[pyspark.ml.PipelineModel, hl.MatrixTable]:
     """
     Runs a dummy test RF on a given MT.
@@ -36,44 +37,52 @@ def run_rf_test(
     mt = mt.annotate_rows(
         feature1=hl.rand_bool(0.1),
         feature2=hl.rand_norm(0.0, 1.0),
-        feature3=hl.or_missing(hl.rand_bool(0.5), hl.rand_norm(0.0, 1.0)))
+        feature3=hl.or_missing(hl.rand_bool(0.5), hl.rand_norm(0.0, 1.0)),
+    )
 
-    mt = mt.annotate_rows(label=hl.cond(mt['feature1'] & (mt['feature2'] > 0), "TP", "FP"))
+    mt = mt.annotate_rows(
+        label=hl.cond(mt["feature1"] & (mt["feature2"] > 0), "TP", "FP")
+    )
     ht = mt.rows()
 
     def f3stats(ht):
-        return ht.aggregate(hl.struct(
-            n=hl.agg.count_where(hl.is_defined(ht['feature3'])),
-            med=hl.median(hl.agg.collect(ht['feature3']))
-        )
+        return ht.aggregate(
+            hl.struct(
+                n=hl.agg.count_where(hl.is_defined(ht["feature3"])),
+                med=hl.median(hl.agg.collect(ht["feature3"])),
+            )
         )
 
     f3_before_imputation = f3stats(ht)
-    logger.info('Feature3 defined values before imputation: {}'.format(f3_before_imputation.n))
-    logger.info('Feature3 median: {}'.format(f3_before_imputation.med))
+    logger.info(
+        "Feature3 defined values before imputation: {}".format(f3_before_imputation.n)
+    )
+    logger.info("Feature3 median: {}".format(f3_before_imputation.med))
 
-    features_to_impute = ['feature3']
+    features_to_impute = ["feature3"]
     quantiles = get_columns_quantiles(ht, features_to_impute, [0.5])
     quantiles = {k: v[0] for k, v in quantiles.items()}
 
-    logger.info('Features median:\n{}'.format(f'{k}: {v}\n' for k, v in quantiles.items()))
-    ht = ht.annotate(
-        **{f: hl.or_else(ht[f], quantiles[f]) for f in features_to_impute}
+    logger.info(
+        "Features median:\n{}".format(f"{k}: {v}\n" for k, v in quantiles.items())
     )
+    ht = ht.annotate(**{f: hl.or_else(ht[f], quantiles[f]) for f in features_to_impute})
     ht = ht.annotate_globals(medians=quantiles)
 
     f3_after_imputation = f3stats(ht)
-    logger.info('Feature3 defined values after imputation: {}'.format(f3_after_imputation.n))
-    logger.info('Feature3 median: {}'.format(f3_after_imputation.med))
+    logger.info(
+        "Feature3 defined values after imputation: {}".format(f3_after_imputation.n)
+    )
+    logger.info("Feature3 median: {}".format(f3_after_imputation.med))
 
-    ht = ht.select('label', 'feature1', 'feature2', 'feature3')
+    ht = ht.select("label", "feature1", "feature2", "feature3")
 
-    label = 'label'
-    features = ['feature1', 'feature2', 'feature3']
+    label = "label"
+    features = ["feature1", "feature2", "feature3"]
 
     rf_model = train_rf(ht, features, label)
-    save_model(rf_model, out_path=output + '/rf.model', overwrite=True)
-    rf_model = load_model(output + '/rf.model')
+    save_model(rf_model, out_path=output + "/rf.model", overwrite=True)
+    rf_model = load_model(output + "/rf.model")
 
     return rf_model, apply_rf_model(ht, rf_model, features, label)
 
@@ -87,26 +96,39 @@ def check_ht_fields_for_spark(ht: hl.Table, fields: List[str]) -> None:
     :return: None
     """
 
-    allowed_types = [hl.tfloat, hl.tfloat32, hl.tfloat64, hl.tint, hl.tint32, hl.tint64, hl.tstr, hl.tbool]
+    allowed_types = [
+        hl.tfloat,
+        hl.tfloat32,
+        hl.tfloat64,
+        hl.tint,
+        hl.tint32,
+        hl.tint64,
+        hl.tstr,
+        hl.tbool,
+    ]
 
-    bad_field_names = [c for c in fields if '.' in c]
+    bad_field_names = [c for c in fields if "." in c]
 
-    bad_types = [c[0] for c in ht.key_by().select(*fields).row.items() if c[1].dtype not in allowed_types]
+    bad_types = [
+        c[0]
+        for c in ht.key_by().select(*fields).row.items()
+        if c[1].dtype not in allowed_types
+    ]
 
     if bad_field_names or bad_types:
-        raise ValueError('Only basic type fields can be converted from Hail to Spark. In addition, `.` are not allowed in field names in Spark.\n' +
-                         'Offending fields (non basic type): {}'.format(bad_types) +
-                         'Offending fields (bad field name): {}\n'.format(','.join(bad_field_names))
-                         )
+        raise ValueError(
+            "Only basic type fields can be converted from Hail to Spark. In addition, `.` are not allowed in field names in Spark.\n"
+            + "Offending fields (non basic type): {}".format(bad_types)
+            + "Offending fields (bad field name): {}\n".format(
+                ",".join(bad_field_names)
+            )
+        )
 
     return
 
 
 def get_columns_quantiles(
-        ht: hl.Table,
-        fields: List[str],
-        quantiles: List[float],
-        relative_error: int = 0.001
+    ht: hl.Table, fields: List[str], quantiles: List[float], relative_error: int = 0.001
 ) -> Dict[str, List[float]]:
     """
     Computes approximate quantiles of specified numeric fields from non-missing values. Non-numeric fields are ignored.
@@ -138,10 +160,7 @@ def get_columns_quantiles(
 
 
 def ht_to_rf_df(
-        ht: hl.Table,
-        features: List[str],
-        label: str,
-        index: str = None
+    ht: hl.Table, features: List[str], label: str, index: str = None
 ) -> pyspark.sql.DataFrame:
     """
     Creates a Spark dataframe ready for RF from a HT.
@@ -164,15 +183,13 @@ def ht_to_rf_df(
         cols_to_keep.append(index)
 
     df = ht.key_by().select(*cols_to_keep).to_spark()
-    df = df.dropna(subset=features).fillna('NA', subset=label)
+    df = df.dropna(subset=features).fillna("NA", subset=label)
 
     return df
 
 
 def get_features_importance(
-        rf_pipeline: pyspark.ml.PipelineModel,
-        rf_index: int = -2,
-        assembler_index: int =-3
+    rf_pipeline: pyspark.ml.PipelineModel, rf_index: int = -2, assembler_index: int = -3
 ) -> Dict[str, float]:
     """
     Extract the features importance from a Pipeline model containing a RandomForestClassifier stage.
@@ -183,15 +200,15 @@ def get_features_importance(
     :return: feature importance for each feature in the RF model
     """
 
-    feature_names = [x[:-len("_indexed")] if x.endswith("_indexed") else x for x in
-                     rf_pipeline.stages[assembler_index].getInputCols()]
+    feature_names = [
+        x[: -len("_indexed")] if x.endswith("_indexed") else x
+        for x in rf_pipeline.stages[assembler_index].getInputCols()
+    ]
 
     return dict(zip(feature_names, rf_pipeline.stages[rf_index].featureImportances))
 
 
-def get_labels(
-        rf_pipeline: pyspark.ml.PipelineModel
-) -> List[str]:
+def get_labels(rf_pipeline: pyspark.ml.PipelineModel) -> List[str]:
     """
     Returns the labels from the StringIndexer stage at index 0 from an RF pipeline model
 
@@ -202,11 +219,11 @@ def get_labels(
 
 
 def test_model(
-        ht: hl.Table,
-        rf_model: pyspark.ml.PipelineModel,
-        features: List[str],
-        label: str,
-        prediction_col_name: str = 'rf_prediction'
+    ht: hl.Table,
+    rf_model: pyspark.ml.PipelineModel,
+    features: List[str],
+    label: str,
+    prediction_col_name: str = "rf_prediction",
 ) -> List[hl.tstruct]:
     """
     A wrapper to test a model on a set of examples with known labels.
@@ -223,33 +240,41 @@ def test_model(
     :return: A list containing structs with {label, prediction, n}
     """
 
-    ht = apply_rf_model(ht.filter(hl.is_defined(ht[label])),
-                        rf_model,
-                        features,
-                        label,
-                        prediction_col_name=prediction_col_name)
+    ht = apply_rf_model(
+        ht.filter(hl.is_defined(ht[label])),
+        rf_model,
+        features,
+        label,
+        prediction_col_name=prediction_col_name,
+    )
 
-    test_results = ht.group_by(ht[prediction_col_name], ht[label]).aggregate(n=hl.agg.count()).collect()
+    test_results = (
+        ht.group_by(ht[prediction_col_name], ht[label])
+        .aggregate(n=hl.agg.count())
+        .collect()
+    )
 
     # Print results
     df = pd.DataFrame(test_results)
-    df = df.pivot(index=label, columns=prediction_col_name, values='n')
+    df = df.pivot(index=label, columns=prediction_col_name, values="n")
     logger.info("Testing results:\n{}".format(pprint.pformat(df)))
-    logger.info("Accuracy: {}".format(
-        sum([x.n for x in test_results if x[label] == x[prediction_col_name]]) /
-        sum([x.n for x in test_results])
-    ))
+    logger.info(
+        "Accuracy: {}".format(
+            sum([x.n for x in test_results if x[label] == x[prediction_col_name]])
+            / sum([x.n for x in test_results])
+        )
+    )
 
     return test_results
 
 
 def apply_rf_model(
-        ht: hl.Table,
-        rf_model: pyspark.ml.PipelineModel,
-        features: List[str],
-        label: str,
-        probability_col_name: str = 'rf_probability',
-        prediction_col_name: str = 'rf_prediction'
+    ht: hl.Table,
+    rf_model: pyspark.ml.PipelineModel,
+    features: List[str],
+    label: str,
+    probability_col_name: str = "rf_probability",
+    prediction_col_name: str = "rf_prediction",
 ) -> hl.Table:
     """
     Applies a Random Forest (RF) pipeline model to a Table and annotate the RF probabilities and predictions.
@@ -267,9 +292,9 @@ def apply_rf_model(
 
     check_ht_fields_for_spark(ht, features + [label])
 
-    index_name = 'rf_idx'
+    index_name = "rf_idx"
     while index_name in ht.row:
-        index_name += '_tmp'
+        index_name += "_tmp"
     ht = ht.add_index(name=index_name)
 
     ht_keys = ht.key
@@ -287,16 +312,21 @@ def apply_rf_model(
 
     # Note: SparkSession is needed to write DF to disk before converting to HT; hail currently fails without intermediate write
     spark = SparkSession.builder.getOrCreate()
-    rf_df.withColumn("probability", to_array(col("probability"))).select([index_name, 'probability', 'predictedLabel']).write.mode('overwrite').save('rf_probs.parquet')
-    rf_df = spark.read.format("parquet").load('rf_probs.parquet')
+    rf_df.withColumn("probability", to_array(col("probability"))).select(
+        [index_name, "probability", "predictedLabel"]
+    ).write.mode("overwrite").save("rf_probs.parquet")
+    rf_df = spark.read.format("parquet").load("rf_probs.parquet")
     rf_ht = hl.Table.from_spark(rf_df)
-    rf_ht = rf_ht.checkpoint('/tmp/rf_raw_pred.ht', overwrite=True)
+    rf_ht = rf_ht.checkpoint("/tmp/rf_raw_pred.ht", overwrite=True)
     rf_ht = rf_ht.key_by(index_name)
 
     ht = ht.annotate(
         **{
-            probability_col_name: {label: rf_ht[ht[index_name]]["probability"][i] for i, label in enumerate(get_labels(rf_model))},
-            prediction_col_name: rf_ht[ht[index_name]]["predictedLabel"]
+            probability_col_name: {
+                label: rf_ht[ht[index_name]]["probability"][i]
+                for i, label in enumerate(get_labels(rf_model))
+            },
+            prediction_col_name: rf_ht[ht[index_name]]["predictedLabel"],
         }
     )
 
@@ -307,9 +337,7 @@ def apply_rf_model(
 
 
 def save_model(
-        rf_pipeline: pyspark.ml.PipelineModel,
-        out_path: str,
-        overwrite: bool = False
+    rf_pipeline: pyspark.ml.PipelineModel, out_path: str, overwrite: bool = False
 ) -> None:
     """
     Saves a Random Forest pipeline model.
@@ -326,9 +354,7 @@ def save_model(
         rf_pipeline.save(out_path)
 
 
-def load_model(
-        input_path: str
-) -> pyspark.ml.PipelineModel:
+def load_model(input_path: str) -> pyspark.ml.PipelineModel:
     """
     Loads a Random Forest pipeline model.
 
@@ -340,11 +366,11 @@ def load_model(
 
 
 def train_rf(
-        ht: hl.Table,
-        features: List[str],
-        label: str,
-        num_trees: int = 500,
-        max_depth: int = 5
+    ht: hl.Table,
+    features: List[str],
+    label: str,
+    num_trees: int = 500,
+    max_depth: int = 5,
 ) -> pyspark.ml.PipelineModel:
     """
     Trains a Random Forest (RF) pipeline model.
@@ -357,38 +383,61 @@ def train_rf(
     :return: Random Forest pipeline model
     """
 
-    logger.info("Training RF model using:\n"
-                "features: {}\n"
-                "labels: {}\n"
-                "num_trees: {}\n"
-                "max_depth: {}".format(",".join(features),
-                                       label, num_trees, max_depth))
+    logger.info(
+        "Training RF model using:\n"
+        "features: {}\n"
+        "labels: {}\n"
+        "num_trees: {}\n"
+        "max_depth: {}".format(",".join(features), label, num_trees, max_depth)
+    )
 
     check_ht_fields_for_spark(ht, features + [label])
 
     df = ht_to_rf_df(ht, features, label)
 
-    label_indexer = StringIndexer(inputCol=label, outputCol=label + "_indexed").setHandleInvalid("keep").fit(df)
+    label_indexer = (
+        StringIndexer(inputCol=label, outputCol=label + "_indexed")
+        .setHandleInvalid("keep")
+        .fit(df)
+    )
     labels = label_indexer.labels
     logger.info("Found labels: {}".format(labels))
 
-    string_features = [x[0] for x in df.dtypes if x[0] != label and x[1] == 'string']
+    string_features = [x[0] for x in df.dtypes if x[0] != label and x[1] == "string"]
     if string_features:
         logger.info("Indexing string features: {}".format(",".join(string_features)))
-    string_features_indexers = [StringIndexer(inputCol=x, outputCol=x + "_indexed").setHandleInvalid("keep").fit(df)
-                                for x in string_features]
+    string_features_indexers = [
+        StringIndexer(inputCol=x, outputCol=x + "_indexed")
+        .setHandleInvalid("keep")
+        .fit(df)
+        for x in string_features
+    ]
 
-    assembler = VectorAssembler(inputCols=[x[0] + "_indexed" if x[1] == 'string' else x[0]
-                                           for x in df.dtypes if x[0] != label],
-                                outputCol="features")
+    assembler = VectorAssembler(
+        inputCols=[
+            x[0] + "_indexed" if x[1] == "string" else x[0]
+            for x in df.dtypes
+            if x[0] != label
+        ],
+        outputCol="features",
+    )
 
-    rf = RandomForestClassifier(labelCol=label + "_indexed", featuresCol="features",
-                                maxDepth=max_depth, numTrees=num_trees)
+    rf = RandomForestClassifier(
+        labelCol=label + "_indexed",
+        featuresCol="features",
+        maxDepth=max_depth,
+        numTrees=num_trees,
+    )
 
-    label_converter = IndexToString(inputCol='prediction', outputCol='predictedLabel', labels=labels)
+    label_converter = IndexToString(
+        inputCol="prediction", outputCol="predictedLabel", labels=labels
+    )
 
-    pipeline = Pipeline(stages=[label_indexer] + string_features_indexers +
-                               [assembler, rf, label_converter])
+    pipeline = Pipeline(
+        stages=[label_indexer]
+        + string_features_indexers
+        + [assembler, rf, label_converter]
+    )
 
     # Train model
     logger.info("Training RF model")
@@ -403,3 +452,31 @@ def train_rf(
     )
 
     return rf_model
+
+
+def pretty_print_runs(
+    runs: Dict, label_col: str = "rf_label", prediction_col_name: str = "rf_prediction"
+) -> None:
+    """
+    Prints the information for the RF runs loaded from the json file storing the RF run hashes -> info
+
+    :param runs: Dictionary containing JSON input loaded from RF run file
+    :param label_col: Name of the RF label column
+    :param prediction_col_name: Name of the RF prediction column
+    :return: Nothing -- only prints information
+    """
+
+    for run_hash, run_data in runs.items():
+        print(f"\n=== {run_hash} ===")
+        testing_results = (
+            run_data.pop("test_results") if "test_results" in run_data else None
+        )
+        # print(testing_results)
+        print(json.dumps(run_data, sort_keys=True, indent=4, separators=(",", ": ")))
+        if testing_results is not None:
+            # Print results
+            res_pd = pd.DataFrame(testing_results)
+            res_pd = res_pd.pivot(
+                index=label_col, columns=prediction_col_name, values="n"
+            )
+            logger.info("Testing results:\n{}".format(pformat(res_pd)))

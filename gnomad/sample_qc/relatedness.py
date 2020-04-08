@@ -864,7 +864,7 @@ def generate_trio_stats_expr(
                             trio_mt.mother_entry.GT.n_alt_alleles(),
                             _get_copy_state(trio_mt.locus),
                         ),
-                        default=0,
+                        default=(0, 0),
                     )[i]
                 ),
             )

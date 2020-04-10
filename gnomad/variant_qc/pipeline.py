@@ -214,8 +214,8 @@ def score_bin_agg(
         fail_hard_filters=hl.agg.count_where(
             (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
         ),
-        n_vqsr_pos_train=hl.agg.count_where(ht.positive_train_site),
-        n_vqsr_neg_train=hl.agg.count_where(ht.negative_train_site),
+        n_pos_train=hl.agg.count_where(ht.positive_train_site),
+        n_neg_train=hl.agg.count_where(ht.negative_train_site),
         n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
         n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
         n_de_novo=hl.agg.sum(fam.n_de_novos_raw),

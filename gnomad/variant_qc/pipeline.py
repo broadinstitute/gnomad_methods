@@ -303,7 +303,8 @@ def generate_sib_stats(
         _localize=False,
     )
     mt = mt.filter_cols(s_to_keep.contains(mt.s))
-    mt = annotate_adj(mt)
+    if "adj" not in list(mt.entry):
+        mt = annotate_adj(mt)
 
     mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
 

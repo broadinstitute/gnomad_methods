@@ -127,7 +127,7 @@ def score_bin_agg(
 
         binned_ht = create_binned_ht(...)
         grouped_binned_ht = compute_grouped_binned_ht(binned_ht)
-        agg_ht = grouped_binned_ht.aggregate(default_score_bin_agg(**grouped_binned_ht, ...))
+        agg_ht = grouped_binned_ht.aggregate(score_bin_agg(**grouped_binned_ht, ...))
 
     .. note::
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Updated capitalization in relatedness constants [(#217)](https://github.com/broadinstitute/gnomad_methods/pull/217)
+
 ## Version 0.2.0 - April 3rd, 2020
 
 ### Added 

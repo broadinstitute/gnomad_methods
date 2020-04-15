@@ -720,7 +720,7 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
 
     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
     mt = filter_to_autosomes(mt)
-    if "adj" not in list(mt.entry):
+    if "adj" not in mt.entry:
         mt = annotate_adj(mt)
 
     return mt

@@ -720,7 +720,8 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
 
     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
     mt = filter_to_autosomes(mt)
-    mt = annotate_adj(mt)
+    if "adj" not in mt.entry:
+        mt = annotate_adj(mt)
 
     return mt
 
@@ -864,7 +865,7 @@ def generate_trio_stats_expr(
                             trio_mt.mother_entry.GT.n_alt_alleles(),
                             _get_copy_state(trio_mt.locus),
                         ),
-                        default=0,
+                        default=(0, 0),
                     )[i]
                 ),
             )

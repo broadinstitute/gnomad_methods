@@ -515,20 +515,23 @@ def split_lowqual_annotation(
 
 def impute_sex_ploidy(
     mt: hl.MatrixTable,
-    excluded_intervals: Optional[hl.Table] = None,
-    included_intervals: Optional[hl.Table] = None,
+    excluded_calling_intervals: Optional[hl.Table] = None,
+    included_calling_intervals: Optional[hl.Table] = None,
     normalization_contig: str = "chr20",
     chr_x: Optional[str] = None,
     chr_y: Optional[str] = None,
-) -> hl.Table:  # TODO: For exomes, calling intervals need to be added
+) -> hl.Table:
     """
     Imputes sex ploidy from a sparse Matrix Table by normalizing the coverage of chromosomes X and Y using
     the coverage of an autosomal chromosome (by default chr20).
+
     Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
 
     :param mt: Input sparse Matrix Table
-    :param excluded_intervals: Optional table of intervals to exclude from the computation.
-    :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
+    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation. 
+        Used only when determining contig size (not used when computing chromosome depth).
+    :param included_calling_intervals: Optional table of intervals to use in the computation. 
+        Used only when determining contig size (not used when computing chromosome depth).
     :param normalization_contig: Which chromosome to normalize by
     :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
@@ -570,13 +573,13 @@ def impute_sex_ploidy(
             contig_ht = contig_ht.filter(contig_ht.locus.in_y_nonpar())
 
         contig_ht = contig_ht.key_by("locus")
-        if included_intervals is not None:
+        if included_calling_intervals is not None:
             contig_ht = contig_ht.filter(
-                hl.is_defined(included_intervals[contig_ht.key])
+                hl.is_defined(included_calling_intervals[contig_ht.key])
             )
-        if excluded_intervals is not None:
+        if excluded_calling_intervals is not None:
             contig_ht = contig_ht.filter(
-                hl.is_missing(excluded_intervals[contig_ht.key])
+                hl.is_missing(excluded_calling_intervals[contig_ht.key])
             )
         contig_size = contig_ht.count()
         logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
@@ -590,9 +593,6 @@ def impute_sex_ploidy(
             chr_mt = chr_mt.filter_rows(chr_mt.locus.in_x_nonpar())
         if chrom in ref.y_contigs:
             chr_mt = chr_mt.filter_rows(chr_mt.locus.in_y_nonpar())
-
-        if included_intervals is not None:
-            chr_mt = chr_mt.filter_rows(hl.is_defined(included_intervals[chr_mt.locus]))
 
         return chr_mt.select_cols(
             **{

@@ -3,6 +3,8 @@
 ## Unreleased
 
 * Updated capitalization of ambiguous sex annotation [(#208)](https://github.com/broadinstitute/gnomad_methods/pull/208)
+* Updated usage of included intervals in imputing sex ploidy, also updated interval parameter names [(#209)](https://github.com/broadinstitute/gnomad_methods/pull/209)
+* Updated capitalization in relatedness constants [(#217)](https://github.com/broadinstitute/gnomad_methods/pull/217)
 
 ## Version 0.2.0 - April 3rd, 2020
 

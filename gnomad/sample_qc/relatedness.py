@@ -11,33 +11,33 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-UNRELATED = "Unrelated"
+UNRELATED = "unrelated"
 """
 String representation for a pair of unrelated individuals in this module.
 Typically >2nd degree relatives, but the threshold is user-dependant.
 """
 
-SECOND_DEGREE_RELATIVES = "2nd degree relatives"
+SECOND_DEGREE_RELATIVES = "second degree relatives"
 """
 String representation for a pair of 2nd degree relatives in this module.
 """
 
-PARENT_CHILD = "Parent-child"
+PARENT_CHILD = "parent-child"
 """
 String representation for a parent-child pair in this module.
 """
 
-SIBLINGS = "Siblings"
+SIBLINGS = "siblings"
 """
 String representation for a sibling pair in this module.
 """
 
-DUPLICATE_OR_TWINS = "Duplicate/twins"
+DUPLICATE_OR_TWINS = "duplicate/twins"
 """
 String representation for a pair of samples who are identical (either MZ twins of duplicate) in this module.
 """
 
-AMBIGUOUS_RELATIONSHIP = "Ambiguous"
+AMBIGUOUS_RELATIONSHIP = "ambiguous"
 """
 String representation for a pair of samples whose relationship is ambiguous.
 This is used in the case of a pair of samples which kinship/IBD values do not correspond to any biological relationship between two individuals.
@@ -720,7 +720,8 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
 
     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
     mt = filter_to_autosomes(mt)
-    mt = annotate_adj(mt)
+    if "adj" not in mt.entry:
+        mt = annotate_adj(mt)
 
     return mt
 
@@ -864,7 +865,7 @@ def generate_trio_stats_expr(
                             trio_mt.mother_entry.GT.n_alt_alleles(),
                             _get_copy_state(trio_mt.locus),
                         ),
-                        default=0,
+                        default=(0, 0),
                     )[i]
                 ),
             )

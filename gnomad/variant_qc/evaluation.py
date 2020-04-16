@@ -240,12 +240,12 @@ def compute_grouped_binned_ht(
 ) -> hl.GroupedTable:
     """
     Groups a Table that has been annotated with bins based on quantiles (`compute_quantile_bin` or
-    `default_create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
+    `create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
     singleton.
 
     .. note::
 
-        If performing an aggregation following this grouping (such as `default_score_bin_agg`) then the aggregation
+        If performing an aggregation following this grouping (such as `score_bin_agg`) then the aggregation
         function will need to use `ht._parent` to get the origin Table from the GroupedTable for the aggregation
 
     :param bin_ht: Input Table with a `bin_id` annotation

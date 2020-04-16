@@ -517,10 +517,10 @@ def impute_sex_ploidy(
     mt: hl.MatrixTable,
     excluded_calling_intervals: Optional[hl.Table] = None,
     included_calling_intervals: Optional[hl.Table] = None,
-    normalization_contig: str = 'chr20',
+    normalization_contig: str = "chr20",
     chr_x: Optional[str] = None,
     chr_y: Optional[str] = None,
-) -> hl.Table: 
+) -> hl.Table:
     """
     Imputes sex ploidy from a sparse Matrix Table by normalizing the coverage of chromosomes X and Y using
     the coverage of an autosomal chromosome (by default chr20).
@@ -572,11 +572,15 @@ def impute_sex_ploidy(
         if contig in ref.y_contigs:
             contig_ht = contig_ht.filter(contig_ht.locus.in_y_nonpar())
 
-        contig_ht = contig_ht.key_by('locus')
+        contig_ht = contig_ht.key_by("locus")
         if included_calling_intervals is not None:
-            contig_ht = contig_ht.filter(hl.is_defined(included_calling_intervals[contig_ht.key]))
+            contig_ht = contig_ht.filter(
+                hl.is_defined(included_calling_intervals[contig_ht.key])
+            )
         if excluded_calling_intervals is not None:
-            contig_ht = contig_ht.filter(hl.is_missing(excluded_calling_intervals[contig_ht.key]))
+            contig_ht = contig_ht.filter(
+                hl.is_missing(excluded_calling_intervals[contig_ht.key])
+            )
         contig_size = contig_ht.count()
         logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
         return contig_size

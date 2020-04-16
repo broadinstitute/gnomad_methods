@@ -153,7 +153,7 @@ def get_sex_expr(
                 "XX",
             )
             .when((chr_x_ploidy >= x_ploidy_cutoffs[2]), "XXX")
-            .default("Ambiguous")
+            .default("ambiguous")
         ),
         Y_karyotype=(
             hl.case()
@@ -166,15 +166,15 @@ def get_sex_expr(
                 "Y",
             )
             .when(chr_y_ploidy >= y_ploidy_cutoffs[1], "YY")
-            .default("Ambiguous")
+            .default("ambiguous")
         ),
     )
 
     return sex_expr.annotate(
         sex_karyotype=hl.if_else(
-            (sex_expr.X_karyotype == "Ambiguous")
-            | (sex_expr.Y_karyotype == "Ambiguous"),
-            "Ambiguous",
+            (sex_expr.X_karyotype == "ambiguous")
+            | (sex_expr.Y_karyotype == "ambiguous"),
+            "ambiguous",
             sex_expr.X_karyotype + sex_expr.Y_karyotype,
         )
     )

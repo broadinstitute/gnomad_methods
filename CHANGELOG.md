@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Updated capitalization of ambiguous sex annotation [(#208)](https://github.com/broadinstitute/gnomad_methods/pull/208)
+
 ## Version 0.2.0 - April 3rd, 2020
 
 ### Added 

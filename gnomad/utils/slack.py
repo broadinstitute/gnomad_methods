@@ -1,151 +1,153 @@
-import io
+import os
+import sys
+import time
+import traceback
+import typing
+from contextlib import contextmanager
 
 
-def get_slack_info():
-    import getpass
-    from slackclient import SlackClient
-
-    # import os
-    try:
-        from gnomad.slack_creds import (  # pylint: disable=import-error,no-name-in-module
-            slack_token,
-        )
-    except Exception:
-        return None
-
-    # slack_token = os.environ["SLACK_API_TOKEN"]
-    sc = SlackClient(slack_token)
-    user = getpass.getuser()
-    if user.startswith("konrad"):
-        user = "konradjk"
-    users = [x["name"] for x in sc.api_call("users.list")["members"]]
-    default_channel = "#gnomad" if user not in users else "@" + user
-    return sc, default_channel
+from slack import WebClient
 
 
-def get_slack_channel_id(sc, channel):
-    channel_id = [
-        x for x in sc.api_call("channels.list")["channels"] if x["name"] == channel
-    ]
-    return channel_id[0]["id"] if len(channel_id) and "id" in channel_id[0] else None
+class SlackClient:
+    def __init__(self, token: str):
+        self._client = WebClient(token=token)
+        self._display_name_map = None
 
+    def _load_display_name_map(self):
+        display_name_map = {}
+        response = self._client.users_list(limit=100)
+        for user in response["members"]:
+            if not (user["deleted"] or user["is_bot"]):
+                display_name_map[user["profile"]["display_name"]] = user["id"]
 
-def get_slack_user_id(sc, user):
-    channel_id = [x for x in sc.api_call("users.list")["members"] if x["name"] == user]
-    return channel_id[0]["id"] if len(channel_id) and "id" in channel_id[0] else None
+        while response["response_metadata"]["next_cursor"]:
+            next_cursor = response["response_metadata"]["next_cursor"]
+            response = self._client.users_list(cursor=next_cursor, limit=100)
+            for user in response["members"]:
+                if not (user["deleted"] or user["is_bot"]):
+                    display_name_map[user["profile"]["display_name"]] = user["id"]
 
+        self._display_name_map = display_name_map
 
-def send_message(channels=None, message="Your job is done!", icon_emoji=":woohoo:"):
-    sc, default_channel = get_slack_info()
+    def _get_direct_message_channel(self, user: str):
+        if not self._display_name_map:
+            self._load_display_name_map()
 
-    if not isinstance(channels, list):
-        channels = [channels]
-    for channel in channels:
-        sc.api_call(
-            "chat.postMessage",
-            channel=channel,
-            text=message,
-            icon_emoji=icon_emoji,
-            parse="full",
-        )
-
-
-def send_snippet(channels=None, content="", filename="data.txt"):
-    sc, default_channel = get_slack_info()
-
-    if isinstance(channels, str):
-        channels = [channels]
-    elif channels is None:
-        channels = [default_channel]
-
-    for channel in channels:
-        if channel.startswith("@"):
-            channel_id = get_slack_user_id(sc, channel.lstrip("@"))
-        else:
-            channel_id = get_slack_channel_id(sc, channel.lstrip("#"))
+        if user.startswith("@"):
+            user = user[1:]
 
         try:
-            return sc.api_call(
-                "files.upload", channels=channel_id, content=content, filename=filename
+            user_id = self._display_name_map[user]
+        except KeyError:
+            raise ValueError(f"User '{user}' not found in this workspace")
+        else:
+            response = self._client.conversations_open(users=[user_id])
+            return response["channel"]["id"]
+
+    def send_file(
+        self,
+        to: typing.Union[str, typing.Iterable[str]],
+        file: typing.Optional[str] = None,
+        content: typing.Optional[str] = None,
+        filename: str = "data.txt",
+        filetype: str = "text",
+        comment: typing.Optional[str] = None,
+    ):
+        """
+        Send a file to Slack channel(s) and/or user(s).
+
+        :param to: Channel(s) (prefixed with '#') and/or user(s) (prefixed with '@') to send message to
+        :param file: Path of file to upload
+        :param content: File content to upload
+        :param filename: Filename of file
+        :param filetype: File type identifier
+        :param comment: Text for message sharing file
+        """
+        if not (content or file) or (content and file):
+            raise ValueError(
+                "One, but not both, of 'content' or 'file' must be provided"
             )
-        except Exception:
-            print("Slack connection fail. Was going to send:")
-            print(content)
+
+        if isinstance(to, str):
+            to = [to]
+
+        for channel_or_user in to:
+            if channel_or_user.startswith("@"):
+                channel = self._get_direct_message_channel(channel_or_user)
+            else:
+                channel = channel_or_user
+
+            optional_args = {}
+            if file:
+                optional_args["file"] = file
+            else:
+                optional_args["content"] = content
+
+            if comment:
+                optional_args["initial_comment"] = comment
+
+            self._client.files_upload(
+                channels=channel, filename=filename, filetype=filetype, **optional_args,
+            )
+
+    def send_message(
+        self,
+        to: typing.Union[str, typing.Iterable[str]],
+        message: str,
+        icon_emoji: typing.Optional[str] = None,
+    ):
+        """
+        Send a message to Slack channel(s) and/or user(s).
+
+        :param to: Channel(s) (prefixed with '#') and/or user(s) (prefixed with '@') to send message to
+        :param message: Message content (long messages will be converted to snippets)
+        :icon_emoji: Emoji to use as icon for message
+        """
+        if isinstance(to, str):
+            to = [to]
+
+        for channel_or_user in to:
+            if channel_or_user.startswith("@"):
+                channel = self._get_direct_message_channel(channel_or_user)
+            else:
+                channel = channel_or_user
+
+            if len(message) > 4000:
+                self._client.files_upload(
+                    channels=channel,
+                    content=message,
+                    filename="message.txt",
+                    filetype="text",
+                )
+            else:
+                optional_args = {}
+                if icon_emoji:
+                    optional_args["icon_emoji"] = icon_emoji
+
+                self._client.chat_postMessage(
+                    channel=channel, text=message, parse="full", **optional_args
+                )
 
 
-def send_file(p, channel, filename="plot.png", tfile_name="/home/hail/plot.png"):
-    from bokeh.io import export_png
-
-    sc, default_channel = get_slack_info()
-    if channel.startswith("@"):
-        channel_id = get_slack_user_id(sc, channel.lstrip("@"))
-    else:
-        channel_id = get_slack_channel_id(sc, channel.lstrip("#"))
-
-    export_png(p, filename=tfile_name)
-    with open(tfile_name, "rb") as f:
-        sc.api_call(
-            "files.upload",
-            channels=channel_id,
-            file=io.BytesIO(f.read()),
-            filename=filename,
-        )
-
-
-def try_slack(target, func, *args):
-    import sys
-    import os
-    import traceback
-    import time
-
+@contextmanager
+def slack_notifications(token: str, to: typing.Union[str, typing.Iterable[str]]):
     process = os.path.basename(sys.argv[0])
     try:
-        func(*args)
-        send_message(target, "Success! {} finished!".format(process))
+        yield
+
+        slack_client = SlackClient(token)
+        slack_client.send_message(
+            to, f":white_check_mark: Success! {process} finished!"
+        )
     except Exception as e:
-        try:
-            emoji = ":white_frowning_face:"
-            if (
-                len(str(e)) > 3500
-            ):  # Slack message length limit (from https://api.slack.com/methods/chat.postMessage)
-                filename = "error_{}_{}.txt".format(
-                    process, time.strftime("%Y-%m-%d_%H:%M")
-                )
-                snippet = send_snippet(
-                    target, traceback.format_exc(), filename=filename
-                )
-                if "file" in snippet:
-                    if "SparkContext was shut down" in str(
-                        e
-                    ) or "connect to the Java server" in str(e):
-                        send_message(
-                            target,
-                            "Job ({}) cancelled - see {} for error log".format(
-                                process, snippet["file"]["url_private"]
-                            ),
-                            ":beaker:",
-                        )
-                    else:
-                        send_message(
-                            target,
-                            "Job ({}) failed :white_frowning_face: - see {} for error log".format(
-                                process, snippet["file"]["url_private"]
-                            ),
-                            emoji,
-                        )
-                else:
-                    send_message(
-                        target, "Snippet failed to upload: {}".format(snippet), emoji
-                    )
-            else:
-                send_message(
-                    target,
-                    "Job ({}) failed :white_frowning_face:\n```{}```".format(
-                        process, traceback.format_exc()
-                    ),
-                    emoji,
-                )
-            raise e
-        except ImportError as f:
-            print("ERROR: missing slackclient. But here's the original error:")
-            raise e
+        slack_client = SlackClient(token)
+        slack_client.send_file(
+            to,
+            content=traceback.format_exc(),
+            filename=f"error_{process}_{time.strftime('%Y-%m-%d_%H:%M')}.log",
+            filetype="text",
+            comment=f":x: Error in {process}",
+        )
+
+        raise

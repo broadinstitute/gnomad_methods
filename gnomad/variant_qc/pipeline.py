@@ -317,11 +317,7 @@ def generate_sib_stats(
 
     sib_stats_ht = mt.select_rows(
         **generate_sib_stats_expr(
-            mt,
-            sib_ht,
-            i_col=i_col,
-            j_col=j_col,
-            strata={"raw": True, "adj": mt.adj},
+            mt, sib_ht, i_col=i_col, j_col=j_col, strata={"raw": True, "adj": mt.adj},
         )
     ).rows()
 

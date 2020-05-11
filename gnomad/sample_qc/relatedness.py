@@ -4,6 +4,7 @@ from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import hail as hl
+
 from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.filtering import filter_to_autosomes
 

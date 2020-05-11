@@ -232,7 +232,7 @@ def score_bin_agg(
         ),
         n_untrans_singletons=hl.agg.filter(
             (ht.ac_raw < 3) & (ht.ac_qc_samples_unrelated_raw == 1),
-            hl.agg.sum(fam.tdt.u),
+            hl.agg.sum(fam.n_untransmitted_raw),
         ),
         n_train_trans_singletons=hl.agg.filter(
             (ht.ac_raw == 2) & ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)

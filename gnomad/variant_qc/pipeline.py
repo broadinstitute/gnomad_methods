@@ -172,8 +172,10 @@ def score_bin_agg(
         - `n_vqsr_pos_train` - count of variants that were a VQSR positive train site per group
         - `n_vqsr_neg_train` - count of variants that were a VQSR negative train site per group
         - `n_clinvar` - count of clinvar variants
-        - `n_de_novos_adj` - count of adj filtered de dovo variants
-        - `n_de_novos` - count of raw unfilterd filtered de dovo variants
+        - `n_de_novos_singleton_adj` - count of singleton de novo variants after adj filtration
+        - `n_de_novo_singleton` - count of raw unfiltered singleton de novo variants
+        - `n_de_novos_adj` - count of adj filtered de novo variants
+        - `n_de_novos` - count of raw unfiltered de novo variants
         - `n_trans_singletons` - count of transmitted singletons
         - `n_untrans_singletons` - count of untransmitted singletons
         - `n_omni` - count of omni truth variants
@@ -276,7 +278,6 @@ def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
 def generate_sib_stats(
     mt: hl.MatrixTable,
     relatedness_ht: hl.Table,
-    sex_ht: hl.Table,
     i_col: str = "i",
     j_col: str = "j",
     relationship_col: str = "relationship",
@@ -290,22 +291,18 @@ def generate_sib_stats(
     the constants in `gnomad.utils.relatedness`. This relationship_col will be used to filter to only pairs of
     samples that are annotated as `SIBLINGS`.
 
+    .. note::
+
+        As part of the pipeline this filters to only autosomes.
+
     :param mt: Input Matrix table
     :param relatedness_ht: Input relationship table
-    :param sex_ht: A Table containing sex information for the samples
     :param i_col: Column containing the 1st sample of the pair in the relationship table
     :param j_col: Column containing the 2nd sample of the pair in the relationship table
     :param relationship_col: Column containing the relationship for the sample pair as defined in this module constants.
     :return: A Table with the sibling shared variant counts
     """
     mt = filter_to_autosomes(mt)
-
-    sex_ht = sex_ht.annotate(
-        is_female=hl.case()
-        .when(sex_ht.sex_karyotype == "XX", True)
-        .when(sex_ht.sex_karyotype == "XY", False)
-        .or_missing()
-    )
 
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)
     s_to_keep = sib_ht.aggregate(
@@ -318,8 +315,6 @@ def generate_sib_stats(
     if "adj" not in mt.entry:
         mt = annotate_adj(mt)
 
-    mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
-
     sib_stats_ht = mt.select_rows(
         **generate_sib_stats_expr(
             mt,
@@ -327,7 +322,6 @@ def generate_sib_stats(
             i_col=i_col,
             j_col=j_col,
             strata={"raw": True, "adj": mt.adj},
-            is_female=mt.is_female,
         )
     ).rows()
 

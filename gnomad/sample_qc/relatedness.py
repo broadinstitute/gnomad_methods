@@ -937,7 +937,7 @@ def generate_sib_stats_expr(
     :return: A Table with the sibling shared variant counts
     """
 
-    def get_alt_count(locus, gt, is_female):
+    def _get_alt_count(locus, gt, is_female):
         """
         Helper method to calculate alt allele count with sex info if present
         """
@@ -989,7 +989,7 @@ def generate_sib_stats_expr(
                         sib_ht.sib_idx,
                         hl.or_missing(
                             hl.agg.sum(hl.is_defined(mt.GT)) == 2,
-                            hl.agg.min(get_alt_count(mt.locus, mt.GT, is_female)),
+                            hl.agg.min(_get_alt_count(mt.locus, mt.GT, is_female)),
                         ),
                     ),
                 ).values()

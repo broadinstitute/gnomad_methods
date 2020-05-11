@@ -1,15 +1,16 @@
 import logging
 from typing import Dict, Optional
 
+import hail as hl
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
-import hail as hl
 from gnomad.sample_qc.relatedness import (
     SIBLINGS,
     generate_sib_stats_expr,
     generate_trio_stats_expr,
 )
 from gnomad.utils.annotations import annotate_adj
+from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_quantile_bin
 
@@ -139,6 +140,8 @@ def score_bin_agg(
             - positive_train_site
             - negative_train_site
             - ac_raw - expected that this is the raw allele count before adj filtering
+            - ac - expected that this is the allele count after adj filtering
+            - ac_qc_samples_unrelated_raw - allele count before adj filtering for unrelated samples passing sample QC
             - info - struct that includes QD, FS, and MQ in order to add an annotation for fail_hard_filters
 
         In truth_ht:
@@ -151,8 +154,7 @@ def score_bin_agg(
             - n_de_novos_adj
             - n_de_novos_raw
             - n_transmitted_raw
-            - unrelated_qc_callstats
-            - tdt
+            - n_untransmitted_raw
 
     Automatic aggregations that will be done are:
         - `min_score` - minimun of score annotation per group
@@ -217,16 +219,24 @@ def score_bin_agg(
         n_pos_train=hl.agg.count_where(ht.positive_train_site),
         n_neg_train=hl.agg.count_where(ht.negative_train_site),
         n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
+        n_de_novos_singleton_adj=hl.agg.filter(
+            ht.ac == 1, hl.agg.sum(fam.n_de_novos_adj)
+        ),
+        n_de_novo_singleton=hl.agg.filter(
+            ht.ac_raw == 1, hl.agg.sum(fam.n_de_novos_raw)
+        ),
         n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
         n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
         n_trans_singletons=hl.agg.filter(
             ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)
         ),
         n_untrans_singletons=hl.agg.filter(
-            (ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
+            (ht.ac_raw < 3) & (ht.ac_qc_samples_unrelated_raw == 1),
             hl.agg.sum(fam.tdt.u),
         ),
-        # n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
+        n_train_trans_singletons=hl.agg.filter(
+            (ht.ac_raw == 2) & ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)
+        ),
         n_omni=hl.agg.count_where(truth_data.omni),
         n_mills=hl.agg.count_where(truth_data.mills),
         n_hapmap=hl.agg.count_where(truth_data.hapmap),
@@ -288,6 +298,8 @@ def generate_sib_stats(
     :param relationship_col: Column containing the relationship for the sample pair as defined in this module constants.
     :return: A Table with the sibling shared variant counts
     """
+    mt = filter_to_autosomes(mt)
+
     sex_ht = sex_ht.annotate(
         is_female=hl.case()
         .when(sex_ht.sex_karyotype == "XX", True)

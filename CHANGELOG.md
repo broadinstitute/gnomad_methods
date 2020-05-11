@@ -10,6 +10,8 @@
 * Updated usage of included intervals in imputing sex ploidy, also updated interval parameter names [(#209)](https://github.com/broadinstitute/gnomad_methods/pull/209)
 * Updated capitalization in relatedness constants [(#217)](https://github.com/broadinstitute/gnomad_methods/pull/217)
 * Changed interface for Slack notifications [(#219)](https://github.com/broadinstitute/gnomad_methods/pull/219)
+* Modified variant QC pipeline function `generate_sib_stats` to filter to autosomes [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223)
+* Added singleton de novo counts to variant QC pipeline function `score_bin_agg` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
 
 ## Version 0.2.0 - April 3rd, 2020
 

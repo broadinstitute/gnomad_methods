@@ -247,7 +247,9 @@ def score_bin_agg(
     )
 
 
-def generate_trio_stats(mt: hl.MatrixTable) -> hl.Table:
+def generate_trio_stats(
+    mt: hl.MatrixTable, autosomes_only: bool = True, bi_allelic_only: bool = True
+) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
 
@@ -256,13 +258,17 @@ def generate_trio_stats(mt: hl.MatrixTable) -> hl.Table:
         Expects that `mt` is it a trio matrix table that was annotated with adj and if dealing with
         a sparse MT `hl.experimental.densify` must be run first.
 
-        This pipeline function will filter `mt` to only autosomes and bi-allelic sites.
+        By default this pipeline function will filter `mt` to only autosomes and bi-allelic sites.
 
     :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
+    :param autosomes_only: If set, only autosomal intervals are used.
+    :param bi_allelic_only: If set, only bi-allelic sites are used for the computation
     :return: Table with trio stats
     """
-    mt = filter_to_autosomes(mt)
-    mt = mt.filter_rows(bi_allelic_expr(mt))
+    if autosomes_only:
+        mt = filter_to_autosomes(mt)
+    if bi_allelic_only:
+        mt = mt.filter_rows(bi_allelic_expr(mt))
 
     logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
     trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
@@ -285,6 +291,8 @@ def generate_sib_stats(
     i_col: str = "i",
     j_col: str = "j",
     relationship_col: str = "relationship",
+    autosomes_only: bool = True,
+    bi_allelic_only: bool = True,
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
@@ -297,17 +305,21 @@ def generate_sib_stats(
 
     .. note::
 
-        This pipeline function will filter `mt` to only autosomes and bi-allelic sites.
+        By default this pipeline function will filter `mt` to only autosomes and bi-allelic sites.
 
     :param mt: Input Matrix table
     :param relatedness_ht: Input relationship table
     :param i_col: Column containing the 1st sample of the pair in the relationship table
     :param j_col: Column containing the 2nd sample of the pair in the relationship table
     :param relationship_col: Column containing the relationship for the sample pair as defined in this module constants.
+    :param autosomes_only: If set, only autosomal intervals are used.
+    :param bi_allelic_only: If set, only bi-allelic sites are used for the computation
     :return: A Table with the sibling shared variant counts
     """
-    mt = filter_to_autosomes(mt)
-    mt = mt.filter_rows(bi_allelic_expr(mt))
+    if autosomes_only:
+        mt = filter_to_autosomes(mt)
+    if bi_allelic_only:
+        mt = mt.filter_rows(bi_allelic_expr(mt))
 
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)
     s_to_keep = sib_ht.aggregate(

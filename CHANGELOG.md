@@ -6,6 +6,7 @@
 * `score_bin_agg` now requires additional annotations `ac` and `ac_qc_samples_unrelated_raw` and no longer needs `tdt` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
 * Changed `score_bin_agg` to use `ac_qc_samples_unrelated_raw` annotation instead of `unrelated_qc_callstats` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
 * Added singleton de novo counts to variant QC pipeline function `score_bin_agg` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
+* Modified `filter_mt_to_trios` to no longer filter to trios as this should be handled during the variant QC pipeline [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
 
 ## Version 0.3.0 - April 28th, 2020
 

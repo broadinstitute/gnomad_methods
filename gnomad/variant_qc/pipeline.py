@@ -246,7 +246,7 @@ def score_bin_agg(
     )
 
 
-def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
+def generate_trio_stats(mt: hl.MatrixTable) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
 
@@ -255,10 +255,14 @@ def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
         Expects that `mt` is it a trio matrix table that was annotated with adj and if dealing with
         a sparse MT `hl.experimental.densify` must be run first.
 
+        This pipeline function will filter `mt` to only autosomes.
+
     :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
     :return: Table with trio stats
     """
+    mt = filter_to_autosomes(mt)
     mt = mt.filter_rows(hl.len(mt.alleles) == 2)
+
     logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
     trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
 
@@ -268,7 +272,6 @@ def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
             transmitted_strata={"raw": True, "adj": trio_adj},
             de_novo_strata={"raw": True, "adj": trio_adj},
             ac_strata={"raw": True, "adj": trio_adj},
-            proband_is_female_expr=mt.is_female,
         )
     ).rows()
 
@@ -293,7 +296,7 @@ def generate_sib_stats(
 
     .. note::
 
-        As part of the pipeline this filters to only autosomes.
+        This pipeline function will filter `mt` to only autosomes.
 
     :param mt: Input Matrix table
     :param relatedness_ht: Input relationship table

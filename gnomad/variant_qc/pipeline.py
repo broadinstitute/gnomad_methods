@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Optional
 
 import hail as hl
+
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
 from gnomad.sample_qc.relatedness import (
@@ -9,7 +10,7 @@ from gnomad.sample_qc.relatedness import (
     generate_sib_stats_expr,
     generate_trio_stats_expr,
 )
-from gnomad.utils.annotations import annotate_adj
+from gnomad.utils.annotations import annotate_adj, bi_allelic_expr
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_quantile_bin
@@ -255,13 +256,13 @@ def generate_trio_stats(mt: hl.MatrixTable) -> hl.Table:
         Expects that `mt` is it a trio matrix table that was annotated with adj and if dealing with
         a sparse MT `hl.experimental.densify` must be run first.
 
-        This pipeline function will filter `mt` to only autosomes.
+        This pipeline function will filter `mt` to only autosomes and bi-allelic sites.
 
     :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
     :return: Table with trio stats
     """
     mt = filter_to_autosomes(mt)
-    mt = mt.filter_rows(hl.len(mt.alleles) == 2)
+    mt = mt.filter_rows(bi_allelic_expr(mt))
 
     logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
     trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
@@ -296,7 +297,7 @@ def generate_sib_stats(
 
     .. note::
 
-        This pipeline function will filter `mt` to only autosomes.
+        This pipeline function will filter `mt` to only autosomes and bi-allelic sites.
 
     :param mt: Input Matrix table
     :param relatedness_ht: Input relationship table
@@ -306,6 +307,7 @@ def generate_sib_stats(
     :return: A Table with the sibling shared variant counts
     """
     mt = filter_to_autosomes(mt)
+    mt = mt.filter_rows(bi_allelic_expr(mt))
 
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)
     s_to_keep = sib_ht.aggregate(

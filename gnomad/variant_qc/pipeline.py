@@ -14,7 +14,11 @@ from gnomad.sample_qc.relatedness import (
 from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_quantile_bin
-from gnomad.variant_qc.random_forest import get_features_importance, test_model, train_rf
+from gnomad.variant_qc.random_forest import (
+    get_features_importance,
+    test_model,
+    train_rf,
+)
 from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
 
 
@@ -328,17 +332,17 @@ def generate_sib_stats(
 
 
 def generate_rf_training(
-        ht: hl.Table,
-        rf_features: List[str],
-        tp_expr: hl.expr.BooleanExpression,
-        fp_expr: hl.expr.BooleanExpression,
-        fp_to_tp: float = 1.0,
-        num_trees: int = 500,
-        max_depth: int = 5,
-        label_col: str = "rf_label",
-        train_col: str = "rf_train",
-        test_intervals: Union[str, List[str]] = 'chr20',
-        filter_expr: Optional[hl.expr.BooleanExpression] = None,
+    ht: hl.Table,
+    rf_features: List[str],
+    tp_expr: hl.expr.BooleanExpression,
+    fp_expr: hl.expr.BooleanExpression,
+    fp_to_tp: float = 1.0,
+    num_trees: int = 500,
+    max_depth: int = 5,
+    label_col: str = "rf_label",
+    train_col: str = "rf_train",
+    test_intervals: Union[str, List[str]] = "chr20",
+    filter_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> Tuple[hl.Table, pyspark.ml.PipelineModel]:
     """
     Perform random forest (RF) training using a Table annotated with features and training data.
@@ -374,14 +378,19 @@ def generate_rf_training(
         ht = ht.annotate_globals(test_intervals=test_intervals_locus)
 
     ht = sample_rf_training_examples(
-        ht, tp_col="tp", fp_col='fp', fp_to_tp=fp_to_tp, label_col=label_col, train_col=train_col
+        ht,
+        tp_col="tp",
+        fp_col="fp",
+        fp_to_tp=fp_to_tp,
+        label_col=label_col,
+        train_col=train_col,
     )
     ht = ht.persist()
 
     rf_ht = ht
 
     if filter_expr is not None:
-        logger.info('Filtering training set using filter_expr')
+        logger.info("Filtering training set using filter_expr")
         rf_ht = rf_ht.filter(rf_ht._filter)
     rf_ht.drop("_filter")
 
@@ -395,10 +404,7 @@ def generate_rf_training(
 
     logger.info(
         "Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}\nTest intervals: {}".format(
-            ",".join(rf_features),
-            num_trees,
-            max_depth,
-            ",".join(test_intervals_str),
+            ",".join(rf_features), num_trees, max_depth, ",".join(test_intervals_str),
         )
     )
 
@@ -412,9 +418,7 @@ def generate_rf_training(
 
     test_results = None
     if test_intervals:
-        logger.info(
-            f"Testing model on intervals {','.join(test_intervals_str)}"
-        )
+        logger.info(f"Testing model on intervals {','.join(test_intervals_str)}")
         test_ht = hl.filter_intervals(ht, test_intervals_locus, keep=True)
         test_ht = test_ht.filter(hl.is_defined(test_ht[label_col]))
         test_results = test_model(
@@ -479,12 +483,13 @@ def generate_final_rf_ht(
         snp_cutoff_global = hl.struct(bin=snp_cutoff, min_score=snp_rf_cutoff)
         indel_cutoff_global = hl.struct(bin=indel_cutoff, min_score=indel_rf_cutoff)
 
-        logger.info(f'Using a SNP RF probability cutoff of {snp_rf_cutoff} and an indel RF probability cutoff of {indel_rf_cutoff}.')
+        logger.info(
+            f"Using a SNP RF probability cutoff of {snp_rf_cutoff} and an indel RF probability cutoff of {indel_rf_cutoff}."
+        )
 
     # Add filters to RF HT
     rf_result_ht = rf_result_ht.annotate_globals(
-        rf_snv_cutoff=snp_cutoff_global,
-        rf_indel_cutoff=indel_cutoff_global,
+        rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global,
     )
     rf_filter_criteria = (
         hl.is_snp(rf_result_ht.alleles[0], rf_result_ht.alleles[1])
@@ -512,7 +517,9 @@ def generate_final_rf_ht(
     )
 
     rf_result_ht = rf_result_ht.annotate(
-        filters=hl.cond(ac0_filter_expr, rf_result_ht.filters.add("AC0"), rf_result_ht.filters)
+        filters=hl.cond(
+            ac0_filter_expr, rf_result_ht.filters.add("AC0"), rf_result_ht.filters
+        )
     )
 
     # Fix annotations for release

@@ -21,7 +21,6 @@ from gnomad.variant_qc.random_forest import (
     test_model,
     train_rf,
 )
-from gnomad_qc.v2.variant_qc.variantqc import sample_rf_training_examples
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -487,12 +486,12 @@ def generate_rf_training(
     :param rf_features: List of column names to use as features in the RF training
     :param tp_expr: True positive (TP) training expression
     :param fp_expr: False positive (FP) training expression
-    :param fp_to_tp Ratio of FPs to TPs for creating the RF model. If set to 0, all training examples are used
+    :param fp_to_tp: Ratio of FPs to TPs for creating the RF model. If set to 0, all training examples are used
     :param num_trees: Number of trees in the RF model
     :param max_depth: Maxmimum tree depth in the RF model
-    :param str label_col: Name of column to store the training label
-    :param str train_col: Name of column to store whether the site is used for training or not
-    :param test_intervals: The specified interval(s) will be held out for testing and used for evaluation only.
+    :param label_col: Name of column to store the training label
+    :param train_col: Name of column to store whether the site is used for training or not
+    :param test_intervals: The specified interval(s) will be held out for testing and used for evaluation only
     :param filter_expr: Can be used to filter to specified intervals before training
     :return: Table annotated with TP and FP training sets used in the RF training and the resulting RF model
     """

@@ -2,7 +2,9 @@ import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
+from pprint import pformat
 import pyspark.sql
+
 
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
@@ -329,6 +331,140 @@ def generate_sib_stats(
     ).rows()
 
     return sib_stats_ht
+
+
+def sample_rf_training_examples(
+    ht: hl.Table,
+    tp_col: str,
+    fp_col: str,
+    fp_to_tp: float = 1.0,
+    label_col: str = "rf_label",
+    train_col: str = "rf_train",
+) -> hl.Table:
+    """
+    Adds an annotation to a Hail Table that defines which rows should be used for RF training, given
+    a set of positive and negative training examples and a TP to FP ratio.
+
+    Examples that are both TP and FP are never kept.
+
+    .. note::
+
+        Expects this Table to be from a split MT.
+
+    :param Table ht: Input Table
+    :param tp_col: TP examples column
+    :param fp_col: FP examples column
+    :param fp_to_tp: FP to TP ratio. If set to <= 0, all training examples are used.
+    :param label_col: Name of column to store the training label
+    :param train_col: Name of column to store whether the site is used for training or not
+    :return: Table subset with corresponding TP and FP examples with desired FP to TP ratio.
+    """
+
+    def get_train_counts(ht: hl.Table) -> Tuple[int, int]:
+
+        if "test_intervals" in ht.globals:
+            interval_list = hl.eval(ht.globals.test_intervals)
+            ht = hl.filter_intervals(ht, interval_list, keep=False)
+
+        # Get stats about TP / FP sets
+        train_stats = hl.struct(n=hl.agg.count())
+
+        if "alleles" in ht.row and ht.row.alleles.dtype == hl.tarray(hl.tstr):
+            train_stats = train_stats.annotate(
+                ti=hl.agg.count_where(
+                    hl.expr.is_transition(ht.alleles[0], ht.alleles[1])
+                ),
+                tv=hl.agg.count_where(
+                    hl.expr.is_transversion(ht.alleles[0], ht.alleles[1])
+                ),
+                indel=hl.agg.count_where(
+                    hl.expr.is_indel(ht.alleles[0], ht.alleles[1])
+                ),
+            )
+
+        # Sample training examples
+        pd_stats = (
+            ht.group_by(
+                **{"contig": ht.locus.contig, tp_col: ht[tp_col], fp_col: ht[fp_col]}
+            )
+            .aggregate(**train_stats)
+            .to_pandas()
+        )
+        logger.info(pformat(pd_stats))
+        pd_stats = pd_stats.fillna(False)
+
+        n_tp = pd_stats[pd_stats[tp_col] & ~pd_stats[fp_col]]["n"].sum()
+        n_fp = pd_stats[~pd_stats[tp_col] & pd_stats[fp_col]]["n"].sum()
+
+        return n_tp, n_fp
+
+    n_tp, n_fp = get_train_counts(ht)
+
+    if fp_to_tp > 0:
+
+        desired_fp = fp_to_tp * n_tp
+        if desired_fp < n_fp:
+            prob_tp = 1.0
+            prob_fp = desired_fp / n_fp
+        else:
+            prob_tp = n_fp / desired_fp
+            prob_fp = 1.0
+
+        logger.info(
+            f"Training examples sampling: tp={prob_tp}*{n_tp}, fp={prob_fp}*{n_fp}"
+        )
+
+        # Due to hail bug, run in two passes!
+        if prob_fp < 1.0:
+            ht = ht.annotate(
+                **{
+                    train_col: hl.cond(
+                        hl.or_else(ht[tp_col], False),
+                        hl.or_else(~ht[fp_col], True),
+                        ht[fp_col],
+                    )
+                }
+            )
+            train_expr = hl.cond(
+                ht[fp_col] & hl.or_else(~ht[tp_col], True),
+                hl.rand_bool(prob_fp),
+                ht[train_col],
+            )
+        elif prob_tp < 1.0:
+            ht = ht.annotate(
+                **{
+                    train_col: hl.cond(
+                        hl.or_else(ht[fp_col], False),
+                        hl.or_else(~ht[tp_col], True),
+                        ht[tp_col],
+                    )
+                }
+            )
+            train_expr = hl.cond(
+                ht[tp_col] & hl.or_else(~ht[fp_col], True),
+                hl.rand_bool(prob_tp),
+                ht[train_col],
+            )
+        else:
+            train_expr = ht[tp_col] ^ ht[fp_col]
+    else:
+        logger.info(f"Using all {n_tp} TP and {n_fp} FP training examples.")
+        train_expr = ht[tp_col] ^ ht[fp_col]
+
+    label_expr = (
+        hl.case(missing_false=True)
+        .when(ht[tp_col] & hl.or_else(~ht[fp_col], True), "TP")
+        .when(ht[fp_col] & hl.or_else(~ht[tp_col], True), "FP")
+        .default(hl.null(hl.tstr))
+    )
+
+    if "test_intervals" in ht.globals:
+        train_expr = (
+            ~ht.globals.test_intervals.any(lambda interval: interval.contains(ht.locus))
+            & train_expr
+        )
+
+    return ht.annotate(**{label_col: label_expr, train_col: train_expr})
 
 
 def generate_rf_training(

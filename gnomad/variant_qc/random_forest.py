@@ -159,6 +159,93 @@ def get_columns_quantiles(
     return res
 
 
+def median_impute_features(
+    ht: hl.Table,
+    impute_features_by_variant_type: bool = False,
+    n_variants_median: int = 50000,
+) -> hl.Table:
+    """
+    Numerical features are median-imputed by Hail's `approx_median`. If `impute_features_by_variant_type` is set,
+    imputation is done based on the median of the variant type.
+
+    ..note::
+
+        If `impute_features_by_variant_type` is True then `ht` needs `variant_type` annotation
+
+    :param ht: Table containing all samples and features for median imputation.
+    :param impute_features_by_variant_type: Whether to impute features median by variant type (default False).
+    :param n_variants_median: Number of variants to use for median computation.
+    :return: Feature Table imputed using approximate median values.
+    """
+    logger.info("Computing feature medians for imputation of missing values")
+    numerical_features = [
+        k for k, v in ht.row.dtype.items() if v == hl.tint or v == hl.tfloat
+    ]
+
+    if impute_features_by_variant_type:
+        logger.info("Annotating variants by type (e.g. for downsampling purpose)")
+        variants_by_type = ht.aggregate(hl.agg.counter(ht.variant_type))
+        logger.info(
+            "Variants by type:\n{}".format(
+                "\n".join(["{}: {}".format(k, v) for k, v in variants_by_type.items()])
+            )
+        )
+
+        ht = ht.annotate_globals(variants_by_type=variants_by_type)
+        ht = ht.repartition(5000, shuffle=False)
+        ht = ht.persist()
+
+        prob_sample = hl.literal(
+            {v: min([n, n_variants_median]) / n for v, n in variants_by_type.items()}
+        )
+        ht_by_variant = ht.group_by(ht.variant_type).partition_hint(1)
+        medians = ht_by_variant.aggregate(
+            **{
+                feature: hl.agg.filter(
+                    hl.rand_bool(prob_sample[ht.variant_type]),
+                    hl.agg.approx_median(ht[feature]),
+                )
+                for feature in numerical_features
+            }
+        ).collect()
+
+        ht = ht.annotate_globals(feature_medians={x.variant_type: x for x in medians})
+        ht = ht.annotate(
+            **{
+                f: hl.or_else(ht[f], ht.globals.feature_medians[ht.variant_type][f])
+                for f in numerical_features
+            },
+            feature_imputed=hl.struct(
+                **{f: hl.is_missing(ht[f]) for f in numerical_features}
+            ),
+        )
+    else:
+        variant_count = ht.count()
+        prob_sample = min([variant_count, n_variants_median]) / variant_count
+        medians = ht.aggregate(
+            hl.struct(
+                **{
+                    feature: hl.agg.filter(
+                        hl.rand_bool(prob_sample), hl.agg.approx_median(ht[feature])
+                    )
+                    for feature in numerical_features
+                }
+            )
+        )
+        ht = ht.annotate_globals(features_median=medians)
+        ht = ht.annotate(
+            **{
+                f: hl.or_else(ht[f], ht.globals.features_median[f])
+                for f in numerical_features
+            },
+            feature_imputed=hl.struct(
+                **{f: hl.is_missing(ht[f]) for f in numerical_features}
+            ),
+        )
+
+    return ht
+
+
 def ht_to_rf_df(
     ht: hl.Table, features: List[str], label: str, index: str = None
 ) -> pyspark.sql.DataFrame:

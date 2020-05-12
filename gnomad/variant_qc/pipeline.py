@@ -545,7 +545,7 @@ def generate_rf_training(
 
     rf_model = train_rf(
         rf_ht,
-        rf_features=rf_features,
+        features=rf_features,
         label=label_col,
         num_trees=num_trees,
         max_depth=max_depth,

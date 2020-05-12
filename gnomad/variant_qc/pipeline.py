@@ -55,7 +55,7 @@ def create_binned_ht(
     :return: table with bin number for each variant
     """
 
-    def update_bin_expr(
+    def _update_bin_expr(
         bin_expr: Dict[str, hl.expr.BooleanExpression],
         new_expr: hl.expr.BooleanExpression,
         new_id: str,
@@ -78,31 +78,29 @@ def create_binned_ht(
         )
         return bin_expr
 
-    ht = ht.annotate(
-        singleton=ht.ac_raw == 1, snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
-    )
-
     ht = ht.filter(ht.ac_raw > 0).persist()
 
     # Desired bins and sub-bins
     bin_expr = {"bin": True}
 
     if singleton:
-        bin_expr = update_bin_expr(bin_expr, ht.singleton, "singleton")
+        bin_expr = _update_bin_expr(bin_expr, ht.ac_raw == 1, "singleton")
 
     if biallelic:
-        bin_expr = update_bin_expr(bin_expr, ~ht.was_split, "biallelic")
+        bin_expr = _update_bin_expr(bin_expr, ~ht.was_split, "biallelic")
 
     if adj:
-        bin_expr = update_bin_expr(bin_expr, (ht.ac > 0), "adj")
+        bin_expr = _update_bin_expr(bin_expr, (ht.ac > 0), "adj")
 
     if add_substrat:
         for add_id, add_expr in add_substrat.items():
-            bin_expr = update_bin_expr(bin_expr, add_expr, add_id)
+            bin_expr = _update_bin_expr(bin_expr, add_expr, add_id)
 
     bin_ht = compute_quantile_bin(
         ht, score_expr=ht.score, bin_expr=bin_expr, n_bins=n_bins
     )
+
+    ht = ht.select_globals()
     ht = ht.join(bin_ht, how="left")
 
     return ht

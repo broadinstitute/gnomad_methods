@@ -1,15 +1,17 @@
 import logging
 from typing import Dict, Optional
 
+import hail as hl
+
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
-import hail as hl
 from gnomad.sample_qc.relatedness import (
     SIBLINGS,
     generate_sib_stats_expr,
     generate_trio_stats_expr,
 )
-from gnomad.utils.annotations import annotate_adj
+from gnomad.utils.annotations import annotate_adj, bi_allelic_expr
+from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_quantile_bin
 
@@ -139,6 +141,8 @@ def score_bin_agg(
             - positive_train_site
             - negative_train_site
             - ac_raw - expected that this is the raw allele count before adj filtering
+            - ac - expected that this is the allele count after adj filtering
+            - ac_qc_samples_unrelated_raw - allele count before adj filtering for unrelated samples passing sample QC
             - info - struct that includes QD, FS, and MQ in order to add an annotation for fail_hard_filters
 
         In truth_ht:
@@ -151,8 +155,7 @@ def score_bin_agg(
             - n_de_novos_adj
             - n_de_novos_raw
             - n_transmitted_raw
-            - unrelated_qc_callstats
-            - tdt
+            - n_untransmitted_raw
 
     Automatic aggregations that will be done are:
         - `min_score` - minimun of score annotation per group
@@ -170,8 +173,10 @@ def score_bin_agg(
         - `n_vqsr_pos_train` - count of variants that were a VQSR positive train site per group
         - `n_vqsr_neg_train` - count of variants that were a VQSR negative train site per group
         - `n_clinvar` - count of clinvar variants
-        - `n_de_novos_adj` - count of adj filtered de dovo variants
-        - `n_de_novos` - count of raw unfilterd filtered de dovo variants
+        - `n_de_novos_singleton_adj` - count of singleton de novo variants after adj filtration
+        - `n_de_novo_singleton` - count of raw unfiltered singleton de novo variants
+        - `n_de_novos_adj` - count of adj filtered de novo variants
+        - `n_de_novos` - count of raw unfiltered de novo variants
         - `n_trans_singletons` - count of transmitted singletons
         - `n_untrans_singletons` - count of untransmitted singletons
         - `n_omni` - count of omni truth variants
@@ -217,16 +222,24 @@ def score_bin_agg(
         n_pos_train=hl.agg.count_where(ht.positive_train_site),
         n_neg_train=hl.agg.count_where(ht.negative_train_site),
         n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
+        n_de_novos_singleton_adj=hl.agg.filter(
+            ht.ac == 1, hl.agg.sum(fam.n_de_novos_adj)
+        ),
+        n_de_novo_singleton=hl.agg.filter(
+            ht.ac_raw == 1, hl.agg.sum(fam.n_de_novos_raw)
+        ),
         n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
         n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
         n_trans_singletons=hl.agg.filter(
             ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)
         ),
         n_untrans_singletons=hl.agg.filter(
-            (ht.ac_raw < 3) & (fam.unrelated_qc_callstats.AC[1] == 1),
-            hl.agg.sum(fam.tdt.u),
+            (ht.ac_raw < 3) & (ht.ac_qc_samples_unrelated_raw == 1),
+            hl.agg.sum(fam.n_untransmitted_raw),
         ),
-        # n_train_trans_singletons=hl.agg.filter((ht.ac_raw == 2) & rank_ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)),
+        n_train_trans_singletons=hl.agg.filter(
+            (ht.ac_raw == 2) & ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)
+        ),
         n_omni=hl.agg.count_where(truth_data.omni),
         n_mills=hl.agg.count_where(truth_data.mills),
         n_hapmap=hl.agg.count_where(truth_data.hapmap),
@@ -234,7 +247,9 @@ def score_bin_agg(
     )
 
 
-def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
+def generate_trio_stats(
+    mt: hl.MatrixTable, autosomes_only: bool = True, bi_allelic_only: bool = True
+) -> hl.Table:
     """
     Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
 
@@ -243,10 +258,18 @@ def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
         Expects that `mt` is it a trio matrix table that was annotated with adj and if dealing with
         a sparse MT `hl.experimental.densify` must be run first.
 
+        By default this pipeline function will filter `mt` to only autosomes and bi-allelic sites.
+
     :param mt: A Trio Matrix Table returned from `hl.trio_matrix`. Must be dense
+    :param autosomes_only: If set, only autosomal intervals are used.
+    :param bi_allelic_only: If set, only bi-allelic sites are used for the computation
     :return: Table with trio stats
     """
-    mt = mt.filter_rows(hl.len(mt.alleles) == 2)
+    if autosomes_only:
+        mt = filter_to_autosomes(mt)
+    if bi_allelic_only:
+        mt = mt.filter_rows(bi_allelic_expr(mt))
+
     logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
     trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
 
@@ -256,7 +279,6 @@ def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
             transmitted_strata={"raw": True, "adj": trio_adj},
             de_novo_strata={"raw": True, "adj": trio_adj},
             ac_strata={"raw": True, "adj": trio_adj},
-            proband_is_female_expr=mt.is_female,
         )
     ).rows()
 
@@ -266,10 +288,11 @@ def generate_trio_stats(mt: hl.MatrixTable,) -> hl.Table:
 def generate_sib_stats(
     mt: hl.MatrixTable,
     relatedness_ht: hl.Table,
-    sex_ht: hl.Table,
     i_col: str = "i",
     j_col: str = "j",
     relationship_col: str = "relationship",
+    autosomes_only: bool = True,
+    bi_allelic_only: bool = True,
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
@@ -280,20 +303,23 @@ def generate_sib_stats(
     the constants in `gnomad.utils.relatedness`. This relationship_col will be used to filter to only pairs of
     samples that are annotated as `SIBLINGS`.
 
+    .. note::
+
+        By default this pipeline function will filter `mt` to only autosomes and bi-allelic sites.
+
     :param mt: Input Matrix table
     :param relatedness_ht: Input relationship table
-    :param sex_ht: A Table containing sex information for the samples
     :param i_col: Column containing the 1st sample of the pair in the relationship table
     :param j_col: Column containing the 2nd sample of the pair in the relationship table
     :param relationship_col: Column containing the relationship for the sample pair as defined in this module constants.
+    :param autosomes_only: If set, only autosomal intervals are used.
+    :param bi_allelic_only: If set, only bi-allelic sites are used for the computation
     :return: A Table with the sibling shared variant counts
     """
-    sex_ht = sex_ht.annotate(
-        is_female=hl.case()
-        .when(sex_ht.sex_karyotype == "XX", True)
-        .when(sex_ht.sex_karyotype == "XY", False)
-        .or_missing()
-    )
+    if autosomes_only:
+        mt = filter_to_autosomes(mt)
+    if bi_allelic_only:
+        mt = mt.filter_rows(bi_allelic_expr(mt))
 
     sib_ht = relatedness_ht.filter(relatedness_ht[relationship_col] == SIBLINGS)
     s_to_keep = sib_ht.aggregate(
@@ -306,16 +332,9 @@ def generate_sib_stats(
     if "adj" not in mt.entry:
         mt = annotate_adj(mt)
 
-    mt = mt.annotate_cols(is_female=sex_ht[mt.s].is_female)
-
     sib_stats_ht = mt.select_rows(
         **generate_sib_stats_expr(
-            mt,
-            sib_ht,
-            i_col=i_col,
-            j_col=j_col,
-            strata={"raw": True, "adj": mt.adj},
-            is_female=mt.is_female,
+            mt, sib_ht, i_col=i_col, j_col=j_col, strata={"raw": True, "adj": mt.adj},
         )
     ).rows()
 

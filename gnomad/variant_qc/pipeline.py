@@ -482,6 +482,11 @@ def generate_rf_training(
     """
     Perform random forest (RF) training using a Table annotated with features and training data.
 
+    This function uses `train_rf` and extends it by:
+        - Adding an option to apply the resulting model to test intervals which are withheld from training
+        - An option to exclude variants from training
+        - Uses a FP to TP ratio to determine what variants should be used for RF training
+
     :param ht: Table annotated with features for the RF model and the positive and negative training data
     :param rf_features: List of column names to use as features in the RF training
     :param tp_expr: True positive (TP) training expression
@@ -559,7 +564,7 @@ def generate_rf_training(
         test_results = test_model(
             test_ht, rf_model, features=rf_features, label=label_col
         )
-    logger.info("Writing RF training HT")
+
     features_importance = get_features_importance(rf_model)
     ht = ht.annotate_globals(
         features_importance=features_importance,

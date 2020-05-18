@@ -292,6 +292,20 @@ def annotate_sex(
 
     logger.info("Inferring sex karyotypes")
     x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(sex_ht, f_stat_cutoff)
+    sex_ht = sex_ht.annotate_globals(
+        x_ploidy_cutoffs=hl.struct(
+            upper_cutoff_X=x_ploidy_cutoffs[0],
+            lower_cutoff_XX=x_ploidy_cutoffs[1][0],
+            upper_cutoff_XX=x_ploidy_cutoffs[1][1],
+            lower_cutoff_XXX=x_ploidy_cutoffs[2],
+        ),
+        y_ploidy_cutoffs=hl.struct(
+            lower_cutoff_Y=y_ploidy_cutoffs[0][0],
+            upper_cutoff_Y=y_ploidy_cutoffs[0][1],
+            lower_cutoff_YY=y_ploidy_cutoffs[1],
+        ),
+        f_stat_cutoff=f_stat_cutoff,
+    )
     return sex_ht.annotate(
         **get_sex_expr(
             sex_ht.chrX_ploidy, sex_ht.chrY_ploidy, x_ploidy_cutoffs, y_ploidy_cutoffs

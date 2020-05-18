@@ -10,6 +10,12 @@ from slack import WebClient
 
 
 class SlackClient:
+    """
+    Slack API client.
+
+    :param token: Slack API token
+    """
+
     def __init__(self, token: str):
         self._client = WebClient(token=token)
         self._display_name_map = None
@@ -102,7 +108,7 @@ class SlackClient:
 
         :param to: Channel(s) (prefixed with '#') and/or user(s) (prefixed with '@') to send message to
         :param message: Message content (long messages will be converted to snippets)
-        :icon_emoji: Emoji to use as icon for message
+        :param icon_emoji: Emoji to use as icon for message
         """
         if isinstance(to, str):
             to = [to]
@@ -132,6 +138,21 @@ class SlackClient:
 
 @contextmanager
 def slack_notifications(token: str, to: typing.Union[str, typing.Iterable[str]]):
+    """
+    Send a Slack notification after some code runs.
+
+    If the wrapped code block raises an exception, the notification will include the exception and stack trace.
+
+    Example usage:
+
+    .. code-block:: python
+
+        with slack_notifications(token, "@username"):
+            run_analysis()
+
+    :param token: Slack API token
+    :param to: Channel(s) (prefixed with '#') and/or user(s) (prefixed with '@') to send notification to
+    """
     process = os.path.basename(sys.argv[0])
     try:
         yield

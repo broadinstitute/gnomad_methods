@@ -2,9 +2,7 @@ import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
-from pprint import pformat
 import pyspark.sql
-
 
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
@@ -21,7 +19,7 @@ from gnomad.variant_qc.random_forest import (
     test_model,
     train_rf,
 )
-
+from gnomad.variant_qc.training import sample_training_examples
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -332,141 +330,7 @@ def generate_sib_stats(
     return sib_stats_ht
 
 
-def sample_rf_training_examples(
-    ht: hl.Table,
-    tp_col: str,
-    fp_col: str,
-    fp_to_tp: float = 1.0,
-    label_col: str = "rf_label",
-    train_col: str = "rf_train",
-) -> hl.Table:
-    """
-    Adds an annotation to a Hail Table that defines which rows should be used for RF training, given
-    a set of positive and negative training examples and a TP to FP ratio.
-
-    Examples that are both TP and FP are never kept.
-
-    .. note::
-
-        Expects this Table to be from a split MT.
-
-    :param Table ht: Input Table
-    :param tp_col: TP examples column
-    :param fp_col: FP examples column
-    :param fp_to_tp: FP to TP ratio. If set to <= 0, all training examples are used.
-    :param label_col: Name of column to store the training label
-    :param train_col: Name of column to store whether the site is used for training or not
-    :return: Table subset with corresponding TP and FP examples with desired FP to TP ratio.
-    """
-
-    def get_train_counts(ht: hl.Table) -> Tuple[int, int]:
-
-        if "test_intervals" in ht.globals:
-            interval_list = hl.eval(ht.globals.test_intervals)
-            ht = hl.filter_intervals(ht, interval_list, keep=False)
-
-        # Get stats about TP / FP sets
-        train_stats = hl.struct(n=hl.agg.count())
-
-        if "alleles" in ht.row and ht.row.alleles.dtype == hl.tarray(hl.tstr):
-            train_stats = train_stats.annotate(
-                ti=hl.agg.count_where(
-                    hl.expr.is_transition(ht.alleles[0], ht.alleles[1])
-                ),
-                tv=hl.agg.count_where(
-                    hl.expr.is_transversion(ht.alleles[0], ht.alleles[1])
-                ),
-                indel=hl.agg.count_where(
-                    hl.expr.is_indel(ht.alleles[0], ht.alleles[1])
-                ),
-            )
-
-        # Sample training examples
-        pd_stats = (
-            ht.group_by(
-                **{"contig": ht.locus.contig, tp_col: ht[tp_col], fp_col: ht[fp_col]}
-            )
-            .aggregate(**train_stats)
-            .to_pandas()
-        )
-        logger.info(pformat(pd_stats))
-        pd_stats = pd_stats.fillna(False)
-
-        n_tp = pd_stats[pd_stats[tp_col] & ~pd_stats[fp_col]]["n"].sum()
-        n_fp = pd_stats[~pd_stats[tp_col] & pd_stats[fp_col]]["n"].sum()
-
-        return n_tp, n_fp
-
-    n_tp, n_fp = get_train_counts(ht)
-
-    if fp_to_tp > 0:
-
-        desired_fp = fp_to_tp * n_tp
-        if desired_fp < n_fp:
-            prob_tp = 1.0
-            prob_fp = desired_fp / n_fp
-        else:
-            prob_tp = n_fp / desired_fp
-            prob_fp = 1.0
-
-        logger.info(
-            f"Training examples sampling: tp={prob_tp}*{n_tp}, fp={prob_fp}*{n_fp}"
-        )
-
-        # Due to hail bug, run in two passes!
-        if prob_fp < 1.0:
-            ht = ht.annotate(
-                **{
-                    train_col: hl.cond(
-                        hl.or_else(ht[tp_col], False),
-                        hl.or_else(~ht[fp_col], True),
-                        ht[fp_col],
-                    )
-                }
-            )
-            train_expr = hl.cond(
-                ht[fp_col] & hl.or_else(~ht[tp_col], True),
-                hl.rand_bool(prob_fp),
-                ht[train_col],
-            )
-        elif prob_tp < 1.0:
-            ht = ht.annotate(
-                **{
-                    train_col: hl.cond(
-                        hl.or_else(ht[fp_col], False),
-                        hl.or_else(~ht[tp_col], True),
-                        ht[tp_col],
-                    )
-                }
-            )
-            train_expr = hl.cond(
-                ht[tp_col] & hl.or_else(~ht[fp_col], True),
-                hl.rand_bool(prob_tp),
-                ht[train_col],
-            )
-        else:
-            train_expr = ht[tp_col] ^ ht[fp_col]
-    else:
-        logger.info(f"Using all {n_tp} TP and {n_fp} FP training examples.")
-        train_expr = ht[tp_col] ^ ht[fp_col]
-
-    label_expr = (
-        hl.case(missing_false=True)
-        .when(ht[tp_col] & hl.or_else(~ht[fp_col], True), "TP")
-        .when(ht[fp_col] & hl.or_else(~ht[tp_col], True), "FP")
-        .default(hl.null(hl.tstr))
-    )
-
-    if "test_intervals" in ht.globals:
-        train_expr = (
-            ~ht.globals.test_intervals.any(lambda interval: interval.contains(ht.locus))
-            & train_expr
-        )
-
-    return ht.annotate(**{label_col: label_expr, train_col: train_expr})
-
-
-def generate_rf_training(
+def train_rf_model(
     ht: hl.Table,
     rf_features: List[str],
     tp_expr: hl.expr.BooleanExpression,
@@ -474,210 +338,87 @@ def generate_rf_training(
     fp_to_tp: float = 1.0,
     num_trees: int = 500,
     max_depth: int = 5,
-    label_col: str = "rf_label",
-    train_col: str = "rf_train",
-    test_intervals: Union[str, List[str]] = "chr20",
-    filter_expr: Optional[hl.expr.BooleanExpression] = None,
+    test_expr: Optional[
+        Union[hl.expr.BooleanExpression, List[hl.expr.IntervalExpression]]
+    ] = None,
 ) -> Tuple[hl.Table, pyspark.ml.PipelineModel]:
     """
     Perform random forest (RF) training using a Table annotated with features and training data.
 
-    This function uses `train_rf` and extends it by:
-        - Adding an option to apply the resulting model to test intervals which are withheld from training
-        - An option to exclude variants from training
-        - Uses a FP to TP ratio to determine what variants should be used for RF training
+    .. note::
 
-    :param ht: Table annotated with features for the RF model and the positive and negative training data
-    :param rf_features: List of column names to use as features in the RF training
-    :param tp_expr: True positive (TP) training expression
-    :param fp_expr: False positive (FP) training expression
-    :param fp_to_tp: Ratio of FPs to TPs for creating the RF model. If set to 0, all training examples are used
-    :param num_trees: Number of trees in the RF model
-    :param max_depth: Maxmimum tree depth in the RF model
-    :param label_col: Name of column to store the training label
-    :param train_col: Name of column to store whether the site is used for training or not
-    :param test_intervals: The specified interval(s) will be held out for testing and used for evaluation only
-    :param filter_expr: Can be used to filter to specified intervals before training
-    :return: Table annotated with TP and FP training sets used in the RF training and the resulting RF model
+        This function uses `train_rf` and extends it by:
+            - Adding an option to apply the resulting model to test intervals which are withheld from training.
+            - An option to exclude variants from training.
+            - Uses a false positive (FP) to true positive (TP) ratio to determine what variants to use for RF training.
+
+    The returned Table includes the following annotations:
+        - rf_train: indicates if the variant was used for training of the RF model.
+        - rf_label: indicates if the variant is a TP or FP.
+        - rf_test: indicates if the variant was used in testing of the RF model.
+        - features: global annotation of the features used for the RF model.
+        - features_importance: global annotation of the importance of each feature in the model.
+        - test_results: results from testing the model on variants/intervals defined by `test_expr`.
+
+    :param ht: Table annotated with features for the RF model and the positive and negative training data.
+    :param rf_features: List of column names to use as features in the RF training.
+    :param tp_expr: TP training expression.
+    :param fp_expr: FP training expression.
+    :param fp_to_tp: Ratio of FPs to TPs for creating the RF model. If set to 0, all training examples are used.
+    :param num_trees: Number of trees in the RF model.
+    :param max_depth: Maxmimum tree depth in the RF model.
+    :param test_expr: An expression specifying variants or a list of intervals to hold out for testing and use for evaluation only.
+    :return: Table with TP and FP training sets used in the RF training and the resulting RF model.
     """
-    ht = ht.annotate(tp=tp_expr, fp=fp_expr, _filter=filter_expr)
+    if isinstance(test_expr, list):
+        rf_test_expr = hl.literal(test_expr).any(
+            lambda interval: interval.contains(ht.locus)
+        )
+    elif isinstance(test_expr, hl.expr.BooleanExpression):
+        rf_test_expr = test_expr
+    else:
+        rf_test_expr = False
 
-    test_intervals_str = (
-        []
-        if not test_intervals
-        else [test_intervals]
-        if isinstance(test_intervals, str)
-        else test_intervals
+    ht = ht.annotate(tp=tp_expr, fp=fp_expr, rf_test=rf_test_expr,)
+
+    rf_ht = sample_training_examples(
+        ht, tp_expr=ht.tp, fp_expr=ht.fp, fp_to_tp=fp_to_tp, test_expr=ht.rf_test,
     )
-    test_intervals_locus = [
-        hl.parse_locus_interval(x, reference_genome=get_reference_genome(ht.locus).name)
-        for x in test_intervals_str
-    ]
+    ht = ht.annotate(rf_train=rf_ht[ht.key].train, rf_label=rf_ht[ht.key].label,)
 
-    if test_intervals_locus:
-        ht = ht.annotate_globals(test_intervals=test_intervals_locus)
-
-    ht = sample_rf_training_examples(
-        ht,
-        tp_col="tp",
-        fp_col="fp",
-        fp_to_tp=fp_to_tp,
-        label_col=label_col,
-        train_col=train_col,
-    )
-    ht = ht.persist()
-
-    rf_ht = ht
-
-    if filter_expr is not None:
-        logger.info("Filtering training set using filter_expr")
-        rf_ht = rf_ht.filter(rf_ht._filter)
-    rf_ht.drop("_filter")
-
-    summary = rf_ht.group_by("tp", "fp", train_col, label_col).aggregate(
+    summary = ht.group_by("tp", "fp", "rf_train", "rf_label", "rf_test").aggregate(
         n=hl.agg.count()
     )
-    logger.info("Summary of TP/FP and RF training labels:")
+    logger.info("Summary of TP/FP and RF training data:")
     summary.show(n=20)
 
-    rf_ht = rf_ht.filter(rf_ht[train_col])
-
     logger.info(
-        "Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}\nTest intervals: {}".format(
-            ",".join(rf_features), num_trees, max_depth, ",".join(test_intervals_str),
+        "Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}".format(
+            ",".join(rf_features), num_trees, max_depth,
         )
     )
 
     rf_model = train_rf(
-        rf_ht,
+        ht.filter(ht.rf_train),
         features=rf_features,
-        label=label_col,
+        label="rf_label",
         num_trees=num_trees,
         max_depth=max_depth,
     )
 
     test_results = None
-    if test_intervals:
-        logger.info(f"Testing model on intervals {','.join(test_intervals_str)}")
-        test_ht = hl.filter_intervals(ht, test_intervals_locus, keep=True)
-        test_ht = test_ht.filter(hl.is_defined(test_ht[label_col]))
+    if test_expr is not None:
+        logger.info(f"Testing model on specified variants or intervals...")
+        test_ht = ht.filter(hl.is_defined(ht.rf_label) & ht.rf_test)
         test_results = test_model(
-            test_ht, rf_model, features=rf_features, label=label_col
+            test_ht, rf_model, features=rf_features, label="rf_label"
         )
 
     features_importance = get_features_importance(rf_model)
-    ht = ht.annotate_globals(
+    ht = ht.select_globals(
         features_importance=features_importance,
         features=rf_features,
-        test_intervals=test_intervals_str,
         test_results=test_results,
     )
 
-    return ht, rf_model
-
-
-def generate_final_rf_ht(
-    rf_result_ht: hl.Table,
-    ac0_filter_expr: hl.expr.BooleanExpression,
-    ts_ac_filter_expr: hl.expr.BooleanExpression,
-    snp_cutoff: Union[int, float],
-    indel_cutoff: Union[int, float],
-    determine_cutoff_from_bin: bool = False,
-    aggregated_bin_ht: Optional[hl.Table] = None,
-    inbreeding_coeff_cutoff: float = -0.3,
-) -> hl.Table:
-    """
-    Prepares finalized RF model given an RF result table from `rf.apply_rf_model` and cutoffs for filtering.
-
-    If `determine_cutoff_from_bin` is True a `aggregated_bin_ht` must be supplied to determine the SNP and indel RF
-    probabilities to use as cutoffs from an aggregated quantile bin Table like one created by
-    `compute_grouped_binned_ht` in combination with `score_bin_agg`.
-
-    :param rf_result_ht: RF result table from `rf.apply_rf_model` to prepare as the final RF Table
-    :param ac0_filter_expr: Expression that indicates if a variant should be filtered as allele count 0 (AC0)
-    :param ts_ac_filter_expr: Expression in `rf_result_ht` that indicates if a variant is a transmitted singleton
-    :param snp_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for SNP variant QC filter
-    :param indel_cutoff: RF probability or bin (if `determine_cutoff_from_bin` True) to use for indel variant QC filter
-    :param determine_cutoff_from_bin: If True the RF probability will be determined using bin info in `aggregated_bin_ht`
-    :param aggregated_bin_ht: File with aggregate counts of variants based on quantile bins
-    :param inbreeding_coeff_cutoff: InbreedingCoeff hard filter to use for variants
-    :return: Finalized random forest Table annotated with variant filters
-    """
-    # Determine SNP and indel RF cutoffs if given bin instead of RF probability
-    if determine_cutoff_from_bin:
-        snp_cutoff_global = hl.struct(min_score=snp_cutoff)
-        indel_cutoff_global = hl.struct(min_score=indel_cutoff)
-    else:
-        snp_rf_cutoff, indel_rf_cutoff = aggregated_bin_ht.aggregate(
-            [
-                hl.agg.filter(
-                    aggregated_bin_ht.snv & (aggregated_bin_ht.bin == snp_cutoff),
-                    hl.agg.min(aggregated_bin_ht.min_score),
-                ),
-                hl.agg.filter(
-                    ~aggregated_bin_ht.snv & (aggregated_bin_ht.bin == indel_cutoff),
-                    hl.agg.min(aggregated_bin_ht.min_score),
-                ),
-            ]
-        )
-        snp_cutoff_global = hl.struct(bin=snp_cutoff, min_score=snp_rf_cutoff)
-        indel_cutoff_global = hl.struct(bin=indel_cutoff, min_score=indel_rf_cutoff)
-
-        logger.info(
-            f"Using a SNP RF probability cutoff of {snp_rf_cutoff} and an indel RF probability cutoff of {indel_rf_cutoff}."
-        )
-
-    # Add filters to RF HT
-    rf_result_ht = rf_result_ht.annotate_globals(
-        rf_snv_cutoff=snp_cutoff_global, rf_indel_cutoff=indel_cutoff_global,
-    )
-    rf_filter_criteria = (
-        hl.is_snp(rf_result_ht.alleles[0], rf_result_ht.alleles[1])
-        & (rf_result_ht.rf_probability["TP"] < rf_result_ht.rf_snv_cutoff.min_score)
-    ) | (
-        ~hl.is_snp(rf_result_ht.alleles[0], rf_result_ht.alleles[1])
-        & (rf_result_ht.rf_probability["TP"] < rf_result_ht.rf_indel_cutoff.min_score)
-    )
-    rf_result_ht = rf_result_ht.annotate(
-        filters=hl.case()
-        .when(rf_filter_criteria, {"RF"})
-        .when(~rf_filter_criteria, hl.empty_set(hl.tstr))
-        .or_error("Missing RF probability!")
-    )
-
-    inbreeding_coeff_filter_criteria = hl.is_defined(rf_result_ht.inbreeding_coeff) & (
-        rf_result_ht.inbreeding_coeff < inbreeding_coeff_cutoff
-    )
-    rf_result_ht = rf_result_ht.annotate(
-        filters=hl.cond(
-            inbreeding_coeff_filter_criteria,
-            rf_result_ht.filters.add("InbreedingCoeff"),
-            rf_result_ht.filters,
-        )
-    )
-
-    rf_result_ht = rf_result_ht.annotate(
-        filters=hl.cond(
-            ac0_filter_expr, rf_result_ht.filters.add("AC0"), rf_result_ht.filters
-        )
-    )
-
-    # Fix annotations for release
-    annotations_expr = {
-        "tp": hl.or_else(rf_result_ht.tp, False),
-        "transmitted_singleton": hl.or_missing(
-            ts_ac_filter_expr, rf_result_ht.transmitted_singleton
-        ),
-        "rf_probability": rf_result_ht.rf_probability["TP"],
-    }
-    if "feature_imputed" in rf_result_ht.row:
-        annotations_expr.update(
-            {
-                x: hl.or_missing(~rf_result_ht.feature_imputed[x], rf_result_ht[x])
-                for x in [f for f in rf_result_ht.row.feature_imputed]
-            }
-        )
-
-    rf_result_ht = rf_result_ht.transmute(**annotations_expr)
-
-    return rf_result_ht
+    return ht.select("rf_train", "rf_label", "rf_test"), rf_model

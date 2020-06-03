@@ -21,10 +21,8 @@ def sample_training_examples(
     should be used for training given a true positive (TP) to false positive (FP) ratio.
 
     The returned Table has the following annotations:
-        - train: indicates if the variant should be used for training. A row is given False for the annotation if:
-            - True for `test_expr`.
-            - True for both `tp_expr and fp_expr`.
-            - It is pruned out to obtain the desired `fp_to_tp` ratio.
+        - train: indicates if the variant should be used for training. A row is given False for the annotation if True
+          for `test_expr`, True for both `tp_expr and fp_expr`, or it is pruned out to obtain the desired `fp_to_tp` ratio.
         - label: indicates if a variant is a 'TP' or 'FP' and will also be labeled as such for variants defined by `test_expr`.
 
     .. note::

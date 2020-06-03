@@ -338,9 +338,7 @@ def train_rf_model(
     fp_to_tp: float = 1.0,
     num_trees: int = 500,
     max_depth: int = 5,
-    test_expr: Optional[
-        Union[hl.expr.BooleanExpression, List[hl.expr.IntervalExpression]]
-    ] = None,
+    test_expr: hl.expr.BooleanExpression = False,
 ) -> Tuple[hl.Table, pyspark.ml.PipelineModel]:
     """
     Perform random forest (RF) training using a Table annotated with features and training data.
@@ -348,8 +346,7 @@ def train_rf_model(
     .. note::
 
         This function uses `train_rf` and extends it by:
-            - Adding an option to apply the resulting model to test intervals which are withheld from training.
-            - An option to exclude variants from training.
+            - Adding an option to apply the resulting model to test variants which are withheld from training.
             - Uses a false positive (FP) to true positive (TP) ratio to determine what variants to use for RF training.
 
     The returned Table includes the following annotations:
@@ -358,7 +355,7 @@ def train_rf_model(
         - rf_test: indicates if the variant was used in testing of the RF model.
         - features: global annotation of the features used for the RF model.
         - features_importance: global annotation of the importance of each feature in the model.
-        - test_results: results from testing the model on variants/intervals defined by `test_expr`.
+        - test_results: results from testing the model on variants defined by `test_expr`.
 
     :param ht: Table annotated with features for the RF model and the positive and negative training data.
     :param rf_features: List of column names to use as features in the RF training.
@@ -367,26 +364,18 @@ def train_rf_model(
     :param fp_to_tp: Ratio of FPs to TPs for creating the RF model. If set to 0, all training examples are used.
     :param num_trees: Number of trees in the RF model.
     :param max_depth: Maxmimum tree depth in the RF model.
-    :param test_expr: An expression specifying variants or a list of intervals to hold out for testing and use for evaluation only.
+    :param test_expr: An expression specifying variants to hold out for testing and use for evaluation only.
     :return: Table with TP and FP training sets used in the RF training and the resulting RF model.
     """
-    if isinstance(test_expr, list):
-        rf_test_expr = hl.literal(test_expr).any(
-            lambda interval: interval.contains(ht.locus)
-        )
-    elif isinstance(test_expr, hl.expr.BooleanExpression):
-        rf_test_expr = test_expr
-    else:
-        rf_test_expr = False
 
-    ht = ht.annotate(tp=tp_expr, fp=fp_expr, rf_test=rf_test_expr,)
+    ht = ht.annotate(_tp=tp_expr, _fp=fp_expr, rf_test=test_expr)
 
     rf_ht = sample_training_examples(
-        ht, tp_expr=ht.tp, fp_expr=ht.fp, fp_to_tp=fp_to_tp, test_expr=ht.rf_test,
+        ht, tp_expr=ht._tp, fp_expr=ht._fp, fp_to_tp=fp_to_tp, test_expr=ht.rf_test
     )
-    ht = ht.annotate(rf_train=rf_ht[ht.key].train, rf_label=rf_ht[ht.key].label,)
+    ht = ht.annotate(rf_train=rf_ht[ht.key].train, rf_label=rf_ht[ht.key].label)
 
-    summary = ht.group_by("tp", "fp", "rf_train", "rf_label", "rf_test").aggregate(
+    summary = ht.group_by("_tp", "_fp", "rf_train", "rf_label", "rf_test").aggregate(
         n=hl.agg.count()
     )
     logger.info("Summary of TP/FP and RF training data:")
@@ -394,7 +383,7 @@ def train_rf_model(
 
     logger.info(
         "Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}".format(
-            ",".join(rf_features), num_trees, max_depth,
+            ",".join(rf_features), num_trees, max_depth
         )
     )
 

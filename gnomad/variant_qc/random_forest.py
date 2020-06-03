@@ -168,10 +168,11 @@ def median_impute_features(
     If a `strata` dict is given, imputation is done based on the median of of each stratification.
 
     The annotations that are added to the Table are
-        - feature_imputed - A variant annotation indicating if each numerical feature was imputed or not.
+        - feature_imputed - A row annotation indicating if each numerical feature was imputed or not.
         - features_median - A global annotation containing the median of the numerical features. If `strata` is given,
           this struct will also be broken down by the given strata.
-        - variants_by_strata - An additional annotation that will only be added if imputing by a given `strata`.
+        - variants_by_strata - An additional global annotation with the variant counts by strata that will only be
+          added if imputing by a given `strata`.
 
     :param ht: Table containing all samples and features for median imputation.
     :param strata: Whether to impute features median by specific strata (default False).

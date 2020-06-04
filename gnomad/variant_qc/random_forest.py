@@ -1,7 +1,7 @@
 import logging
 import pprint
 from pprint import pformat
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import hail as hl
 import pandas as pd
@@ -157,6 +157,73 @@ def get_columns_quantiles(
             res[f] = None
 
     return res
+
+
+def median_impute_features(
+    ht: hl.Table, strata: Optional[Dict[str, hl.expr.Expression]] = None
+) -> hl.Table:
+    """
+    Numerical features in the Table are median-imputed by Hail's `approx_median`.
+
+    If a `strata` dict is given, imputation is done based on the median of of each stratification.
+
+    The annotations that are added to the Table are
+        - feature_imputed - A row annotation indicating if each numerical feature was imputed or not.
+        - features_median - A global annotation containing the median of the numerical features. If `strata` is given,
+          this struct will also be broken down by the given strata.
+        - variants_by_strata - An additional global annotation with the variant counts by strata that will only be
+          added if imputing by a given `strata`.
+
+    :param ht: Table containing all samples and features for median imputation.
+    :param strata: Whether to impute features median by specific strata (default False).
+    :return: Feature Table imputed using approximate median values.
+    """
+
+    logger.info("Computing feature medians for imputation of missing numeric values")
+    numerical_features = [
+        k for k, v in ht.row.dtype.items() if v == hl.tint or v == hl.tfloat
+    ]
+
+    median_agg_expr = hl.struct(
+        **{feature: hl.agg.approx_median(ht[feature]) for feature in numerical_features}
+    )
+
+    if strata:
+        ht = ht.annotate_globals(
+            feature_medians=ht.aggregate(
+                hl.agg.group_by(hl.tuple([ht[x] for x in strata]), median_agg_expr),
+                _localize=False,
+            ),
+            variants_by_strata=ht.aggregate(
+                hl.agg.counter(hl.tuple([ht[x] for x in strata])), _localize=False
+            ),
+        )
+        feature_median_expr = ht.feature_medians[hl.tuple([ht[x] for x in strata])]
+        logger.info(
+            "Variant count by strata:\n{}".format(
+                "\n".join(
+                    [
+                        "{}: {}".format(k, v)
+                        for k, v in hl.eval(ht.variants_by_strata).items()
+                    ]
+                )
+            )
+        )
+
+    else:
+        ht = ht.annotate_globals(
+            feature_medians=ht.aggregate(median_agg_expr, _localize=False)
+        )
+        feature_median_expr = ht.feature_medians
+
+    ht = ht.annotate(
+        **{f: hl.or_else(ht[f], feature_median_expr[f]) for f in numerical_features},
+        feature_imputed=hl.struct(
+            **{f: hl.is_missing(ht[f]) for f in numerical_features}
+        ),
+    )
+
+    return ht
 
 
 def ht_to_rf_df(

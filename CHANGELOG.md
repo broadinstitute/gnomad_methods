@@ -3,7 +3,8 @@
 ## Unreleased
 
 * Added `median_impute_features` to variant QC random forest module [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
-* Added variant QC pipeline functions (`sample_rf_training_examples`, `generate_rf_training`, `generate_final_rf_ht`) from gnomad_qc code [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
+* Created `training.py` in variant QC and added `sample_training_examples` [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
+* Added variant QC pipeline function `train_rf_model` [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
 
 ## Version 0.3.0 - April 28th, 2020
 

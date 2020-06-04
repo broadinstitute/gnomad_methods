@@ -4,8 +4,8 @@ from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import hail as hl
+
 from gnomad.utils.annotations import annotate_adj
-from gnomad.utils.filtering import filter_to_autosomes
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -707,7 +707,7 @@ def compute_related_samples_to_drop(
 
 def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
     """
-    Filters a MatrixTable to a set of trios in `fam_ht`, filters to autosomes, and annotates with adj.
+    Filters a MatrixTable to a set of trios in `fam_ht` and annotates with adj.
 
     :param mt: A Matrix Table to filter to only trios
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
@@ -719,7 +719,6 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
     fam_ht = fam_ht.key_by("s").select().distinct()
 
     mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
-    mt = filter_to_autosomes(mt)
     if "adj" not in mt.entry:
         mt = annotate_adj(mt)
 
@@ -937,7 +936,7 @@ def generate_sib_stats_expr(
     :return: A Table with the sibling shared variant counts
     """
 
-    def get_alt_count(locus, gt, is_female):
+    def _get_alt_count(locus, gt, is_female):
         """
         Helper method to calculate alt allele count with sex info if present
         """
@@ -989,7 +988,7 @@ def generate_sib_stats_expr(
                         sib_ht.sib_idx,
                         hl.or_missing(
                             hl.agg.sum(hl.is_defined(mt.GT)) == 2,
-                            hl.agg.min(get_alt_count(mt.locus, mt.GT, is_female)),
+                            hl.agg.min(_get_alt_count(mt.locus, mt.GT, is_female)),
                         ),
                     ),
                 ).values()

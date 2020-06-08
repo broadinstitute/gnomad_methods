@@ -64,11 +64,11 @@ CSQ_ORDER = (
 
 VEP_REFERENCE_DATA = {
     "GRCh37": {
-        "vep_config": "gs://hail-us-vep/vep85-loftee-gcloud.json",
+        "vep_config": "file:///vep_data/vep-gcloud.json",
         "all_possible": "gs://gnomad-public/papers/2019-flagship-lof/v1.0/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht",
     },
     "GRCh38": {
-        "vep_config": "gs://hail-us-vep/vep95-GRCh38-loftee-gcloud.json",
+        "vep_config": "file:///vep_data/vep-gcloud.json",
         "all_possible": "gs://gnomad-public/resources/context/grch38_context_vep_annotated.ht",
     },
 }

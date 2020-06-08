@@ -12,6 +12,7 @@
 * Added `median_impute_features` to variant QC random forest module [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
 * Created `training.py` in variant QC and added `sample_training_examples` [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
 * Added variant QC pipeline function `train_rf_model` [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
+* Use local copy of VEP config instead of reading from bucket [(#231)](https://github.com/broadinstitute/gnomad_methods/pull/231)
 
 ## Version 0.3.0 - April 28th, 2020
 

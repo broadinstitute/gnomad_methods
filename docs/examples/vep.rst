@@ -7,7 +7,7 @@ tied to a specific reference genome.
 
 .. code-block:: shell
 
-   hailctl dataproc start cluster-name --vep GRCh37 --requester-pays-allow-buckets hail-us-vep --packages gnomad
+   hailctl dataproc start cluster-name --vep GRCh37 --packages gnomad
 
 .. note::
 

@@ -9,6 +9,7 @@
 * Modified `filter_mt_to_trios` to no longer filter to autosomes as this should be handled during the variant QC pipeline [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
 * Updated `annotate_sex` to add globals to `sex_ht` [(#227)](https://github.com/broadinstitute/gnomad_methods/pull/227)
 * Document `slack_notifications` function [(#228)](https://github.com/broadinstitute/gnomad_methods/pull/228)
+* Updated gnomAD resources paths for hail tables to requester pays buckets [(#233)](https://github.com/broadinstitute/gnomad_methods/pull/233)
 
 ## Version 0.3.0 - April 28th, 2020
 

@@ -1,6 +1,5 @@
 from gnomad.resources.resource_utils import (
     DataException,
-    PedigreeResource,
     TableResource,
     VersionedTableResource,
 )
@@ -67,7 +66,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh37
     :return: Path to release Table
     """
-    return f"gs://gnomad-public/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
+    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
 
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
@@ -78,7 +77,7 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh37
     :return: path to coverage Table
     """
-    return f"gs://gnomad-public/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
+    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
 
 
 def _public_pca_ht_path(subpop: str) -> str:
@@ -100,7 +99,7 @@ def _liftover_data_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh37
     :return: Path to chosen Table
     """
-    return f"gs://gnomad-public/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
+    return f"gs://gnomad-public-requester-pays/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

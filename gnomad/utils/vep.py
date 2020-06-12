@@ -64,14 +64,25 @@ CSQ_ORDER = (
 
 VEP_REFERENCE_DATA = {
     "GRCh37": {
-        "vep_config": "gs://hail-us-vep/vep85-loftee-gcloud.json",
+        "vep_config": "file:///vep_data/vep-gcloud.json",
         "all_possible": "gs://gnomad-public-requester-pays/resources/context/grch37_context_vep_annotated.ht",
     },
     "GRCh38": {
-        "vep_config": "gs://hail-us-vep/vep95-GRCh38-loftee-gcloud.json",
+        "vep_config": "file:///vep_data/vep-gcloud.json",
         "all_possible": "gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",
     },
 }
+
+
+VEP_CSQ_FIELDS = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info"
+"""
+Constant that defines the order of VEP annotations used in VCF export.
+"""
+
+VEP_CSQ_HEADER = f"Consequence annotations from Ensembl VEP. Format: {VEP_CSQ_FIELDS}"
+"""
+Constant that contains description for VEP used in VCF export.
+"""
 
 
 def vep_context_ht_path(ref: str = "GRCh37"):
@@ -264,13 +275,7 @@ def filter_vep_to_synonymous_variants(
 
 
 def vep_struct_to_csq(
-    vep_expr: hl.expr.StructExpression,
-    csq_fields: str = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|"
-    "HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|"
-    "ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|"
-    "TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|"
-    "HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|"
-    "LoF_flags|LoF_info",
+    vep_expr: hl.expr.StructExpression, csq_fields: str = VEP_CSQ_FIELDS
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).

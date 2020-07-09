@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## Version 0.4.0 - July 9th, 2020
+
+**Note** gnomAD resources have been moved to a [requester pays bucket](https://cloud.google.com/storage/docs/requester-pays).
+Dataproc clusters must be [configured to allow reading from it](https://hail.is/docs/0.2/cloud/google_cloud.html#requester-pays).
+
 * Added `VEP_CSQ_HEADER` to generate vep description necessary for VCF export. [(#230)](https://github.com/broadinstitute/gnomad_methods/pull/230)
 * Modified variant QC pipeline functions `generate_trio_stats` and `generate_sib_stats` to add filter parameter for autosomes and bi-allelic sites [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223)
 * `score_bin_agg` now requires additional annotations `ac` and `ac_qc_samples_unrelated_raw` and no longer needs `tdt` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 

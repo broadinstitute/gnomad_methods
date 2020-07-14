@@ -4,8 +4,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import hail as hl
 import pyspark.sql
 
-import hail as hl
-
 import gnomad.resources.grch37 as grch37_resources
 import gnomad.resources.grch38 as grch38_resources
 from gnomad.sample_qc.relatedness import (

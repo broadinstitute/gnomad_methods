@@ -80,8 +80,6 @@ def create_binned_ht(
         )
         return bin_expr
 
-    ht = ht.filter(ht.ac_raw > 0).persist()
-
     # Desired bins and sub-bins
     bin_expr = {"bin": True}
 

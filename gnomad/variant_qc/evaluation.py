@@ -191,7 +191,7 @@ def compute_quantile_bin(
         **{
             bin_id: hl.cond(
                 bin_ht.bin_stats[bin_id].merged_bins.contains(bin_ht[bin_id]),
-                bin_ht[bin_id]
+                bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]]
                 + hl.int(
                     hl.rand_unif(
                         0, bin_ht.bin_stats[bin_id].merged_bins[bin_ht[bin_id]] + 1

@@ -855,7 +855,12 @@ def generate_trio_stats_expr(
     trio_stats = hl.struct(
         **{
             f"{name2}_{name}": hl.agg.filter(
-                trio_mt.proband_entry.GT.is_non_ref() & expr,
+                (
+                    trio_mt.proband_entry.GT.is_non_ref()
+                    | trio_mt.father_entry.GT.is_non_ref()
+                    | trio_mt.mother_entry.GT.is_non_ref()
+                )
+                & expr,
                 hl.agg.sum(
                     trans_count_map.get(
                         (

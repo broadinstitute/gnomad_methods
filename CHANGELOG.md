@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* Fix for error in `generate_trio_stats_expr` that led to an incorrect untransmitted count. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlapped multiple bins. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Removed assumption of `snv` annotation from `compute_quantile_bin`. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+
 ## Version 0.4.0 - July 9th, 2020
 
 **Note** gnomAD resources have been moved to a [requester pays bucket](https://cloud.google.com/storage/docs/requester-pays).

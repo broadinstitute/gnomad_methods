@@ -110,12 +110,16 @@ def compute_quantile_bin(
         bin_expr = {
             f"{bin_id}_{snv}": (bin_expr & snv_expr)
             for bin_id, bin_expr in bin_expr.items()
-            for snv, snv_expr in [("snv", ht.snv), ("indel", ~ht.snv)]
+            for snv, snv_expr in [
+                ("snv", hl.is_snp(ht.alleles[0], ht.alleles[1])),
+                ("indel", ~hl.is_snp(ht.alleles[0], ht.alleles[1])),
+            ]
         }
 
     bin_ht = ht.annotate(
         **{f"_filter_{bin_id}": bin_expr for bin_id, bin_expr in bin_expr.items()},
         _score=score_expr,
+        snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
     )
 
     logger.info(
@@ -183,10 +187,11 @@ def compute_quantile_bin(
     # If a value falls in a bin that needs expansion, assign it randomly to one of the expanded bins
     # Otherwise, simply modify the bin to its global index (with expanded bins that is)
     bin_ht = bin_ht.select(
+        "snv",
         **{
-            bin_id: hl.cond(
+            bin_id: hl.if_else(
                 bin_ht.bin_stats[bin_id].merged_bins.contains(bin_ht[bin_id]),
-                bin_ht[bin_id]
+                bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]]
                 + hl.int(
                     hl.rand_unif(
                         0, bin_ht.bin_stats[bin_id].merged_bins[bin_ht[bin_id]] + 1
@@ -195,7 +200,7 @@ def compute_quantile_bin(
                 bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]],
             )
             for bin_id in bin_expr
-        }
+        },
     )
 
     if desc:
@@ -223,10 +228,8 @@ def compute_quantile_bin(
 
         bin_ht = bin_ht.transmute(
             **{
-                bin_id: hl.cond(
-                    ht[bin_ht.key].snv,
-                    bin_ht[f"{bin_id}_snv"],
-                    bin_ht[f"{bin_id}_indel"],
+                bin_id: hl.if_else(
+                    bin_ht.snv, bin_ht[f"{bin_id}_snv"], bin_ht[f"{bin_id}_indel"],
                 )
                 for bin_id in bin_expr_no_snv
             }
@@ -435,7 +438,7 @@ def add_rank(
 
     rank_ht = rank_ht.key_by("_score").persist()
     scan_expr = {
-        "rank": hl.cond(
+        "rank": hl.if_else(
             rank_ht.is_snv,
             hl.scan.count_where(rank_ht.is_snv),
             hl.scan.count_where(~rank_ht.is_snv),
@@ -445,7 +448,7 @@ def add_rank(
         {
             name: hl.or_missing(
                 rank_ht[f"_{name}"],
-                hl.cond(
+                hl.if_else(
                     rank_ht.is_snv,
                     hl.scan.count_where(rank_ht.is_snv & rank_ht[f"_{name}"]),
                     hl.scan.count_where(~rank_ht.is_snv & rank_ht[f"_{name}"]),

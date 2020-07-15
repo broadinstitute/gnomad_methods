@@ -3,7 +3,7 @@
 ## Unreleased
 
 * Fix for error in `generate_trio_stats_expr` that led to an incorrect untransmitted count. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
-* Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlaped multiple bins. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlapped multiple bins. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Removed assumption of `snv` annotation from `compute_quantile_bin`. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 

@@ -189,7 +189,7 @@ def compute_quantile_bin(
     bin_ht = bin_ht.select(
         "snv",
         **{
-            bin_id: hl.cond(
+            bin_id: hl.if_else(
                 bin_ht.bin_stats[bin_id].merged_bins.contains(bin_ht[bin_id]),
                 bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]]
                 + hl.int(
@@ -228,7 +228,7 @@ def compute_quantile_bin(
 
         bin_ht = bin_ht.transmute(
             **{
-                bin_id: hl.cond(
+                bin_id: hl.if_else(
                     bin_ht.snv, bin_ht[f"{bin_id}_snv"], bin_ht[f"{bin_id}_indel"],
                 )
                 for bin_id in bin_expr_no_snv
@@ -438,7 +438,7 @@ def add_rank(
 
     rank_ht = rank_ht.key_by("_score").persist()
     scan_expr = {
-        "rank": hl.cond(
+        "rank": hl.if_else(
             rank_ht.is_snv,
             hl.scan.count_where(rank_ht.is_snv),
             hl.scan.count_where(~rank_ht.is_snv),
@@ -448,7 +448,7 @@ def add_rank(
         {
             name: hl.or_missing(
                 rank_ht[f"_{name}"],
-                hl.cond(
+                hl.if_else(
                     rank_ht.is_snv,
                     hl.scan.count_where(rank_ht.is_snv & rank_ht[f"_{name}"]),
                     hl.scan.count_where(~rank_ht.is_snv & rank_ht[f"_{name}"]),

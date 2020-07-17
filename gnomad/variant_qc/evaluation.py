@@ -291,7 +291,7 @@ def compute_binned_truth_sample_concordance(
     ht: hl.Table,
     binned_score_ht: hl.Table,
     n_bins: int = 100,
-    add_bins: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
+    add_bins: Dict[str, hl.expr.BooleanExpression] = {},
 ) -> hl.Table:
     """
     Determines the concordance (TP, FP, FN) between a truth sample within the callset and the samples truth data

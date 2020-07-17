@@ -288,53 +288,76 @@ def compute_grouped_binned_ht(
 
 
 def compute_binned_truth_sample_concordance(
-    ht: hl.Table, binned_score_ht: hl.Table, n_bins: int = 100
+    ht: hl.Table,
+    binned_score_ht: hl.Table,
+    n_bins: int = 100,
+    add_bins: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
     Determines the concordance (TP, FP, FN) between a truth sample within the callset and the samples truth data
     grouped by bins computed using `compute_quantile_bin`.
 
     .. note::
-
         The input 'ht` should contain three row fields:
             - score: value to use for quantile binning
             - GT: a CallExpression containing the genotype of the evaluation data for the sample
             - truth_GT: a CallExpression containing the genotype of the truth sample
-
         The input `binned_score_ht` should contain:
              - score: value used to bin the full callset
              - bin: the full callset quantile bin
 
+    'add_bins` can be used to add additional global and truth sample binning to the final binned truth sample
+    concordance HT. The keys in `add_bins` must be present in `indexed_binned_score_ht` and the values in `add_bins`
+    should be expressions on `ht` that define a subset of variants to bin in the truth sample. An example is if we want
+    to look at the global and truth sample binning on only bi-allelic variants. `add_bins` could be set to
+    {'biallelic_bin': ht.biallelic}.
 
     The table is grouped by global/truth sample bin and variant type and contains TP, FP and FN.
 
     :param ht: Input HT
     :param binned_score_ht: Table with the an annotation for quantile bin for each variant
     :param n_bins: Number of bins to bin the data into
+    :param add_bins: Dictionary of additional global bin columns (key) and the expr to use for binning the truth sample (value)
     :return: Binned truth sample concordance HT
     """
     # Annotate score and global bin
     indexed_binned_score_ht = binned_score_ht[ht.key]
     ht = ht.annotate(
-        score=indexed_binned_score_ht.score, global_bin=indexed_binned_score_ht.bin
+        **{f"global_{bin_id}": indexed_binned_score_ht[bin_id] for bin_id in add_bins},
+        **{f"_{bin_id}": bin_expr for bin_id, bin_expr in add_bins.items()},
+        score=indexed_binned_score_ht.score,
+        snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
+        global_bin=indexed_binned_score_ht.bin,
     )
 
     # Annotate the truth sample quantile bin
     bin_ht = compute_quantile_bin(
         ht,
         score_expr=ht.score,
-        bin_expr={"truth_sample_bin": hl.expr.bool(True)},
+        bin_expr={
+            "truth_sample_bin": hl.expr.bool(True),
+            **{f"truth_sample_{bin_id}": ht[f"_{bin_id}"] for bin_id in add_bins},
+        },
         n_bins=n_bins,
     )
     ht = ht.join(bin_ht, how="left")
 
-    # Explode the global and truth sample bins
-    ht = ht.annotate(
-        bin=[
-            hl.tuple(["global_bin", ht.global_bin]),
-            hl.tuple(["truth_sample_bin", ht.truth_sample_bin]),
+    bin_list = [
+        hl.tuple(["global_bin", ht.global_bin]),
+        hl.tuple(["truth_sample_bin", ht.truth_sample_bin]),
+    ]
+    bin_list.extend(
+        [hl.tuple([f"global_{bin_id}", ht[f"global_{bin_id}"]]) for bin_id in add_bins]
+    )
+    bin_list.extend(
+        [
+            hl.tuple([f"truth_sample_{bin_id}", ht[f"truth_sample_{bin_id}"]])
+            for bin_id in add_bins
         ]
     )
+
+    # Explode the global and truth sample bins
+    ht = ht.annotate(bin=bin_list)
 
     ht = ht.explode(ht.bin)
     ht = ht.annotate(bin_id=ht.bin[0], bin=hl.int(ht.bin[1]))

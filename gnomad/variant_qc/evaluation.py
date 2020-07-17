@@ -307,7 +307,7 @@ def compute_binned_truth_sample_concordance(
              - bin: the full callset quantile bin
 
     'add_bins` can be used to add additional global and truth sample binning to the final binned truth sample
-    concordance HT. The keys in `add_bins` must be present in `indexed_binned_score_ht` and the values in `add_bins`
+    concordance HT. The keys in `add_bins` must be present in `binned_score_ht` and the values in `add_bins`
     should be expressions on `ht` that define a subset of variants to bin in the truth sample. An example is if we want
     to look at the global and truth sample binning on only bi-allelic variants. `add_bins` could be set to
     {'biallelic_bin': ht.biallelic}.
@@ -326,7 +326,6 @@ def compute_binned_truth_sample_concordance(
         **{f"global_{bin_id}": indexed_binned_score_ht[bin_id] for bin_id in add_bins},
         **{f"_{bin_id}": bin_expr for bin_id, bin_expr in add_bins.items()},
         score=indexed_binned_score_ht.score,
-        snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
         global_bin=indexed_binned_score_ht.bin,
     )
 

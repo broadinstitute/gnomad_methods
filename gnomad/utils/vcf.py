@@ -73,7 +73,14 @@ SITE_FIELDS = [
 Site level variant annotations.
 """
 
-ALLELE_TYPE_FIELDS = ["allele_type", "has_star", "n_alt_alleles", "original_alleles", "variant_type", "was_mixed"]
+ALLELE_TYPE_FIELDS = [
+    "allele_type",
+    "has_star",
+    "n_alt_alleles",
+    "original_alleles",
+    "variant_type",
+    "was_mixed",
+]
 """
 Allele-type annotations.
 """
@@ -189,6 +196,28 @@ INFO_DICT = {
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.
+"""
+
+ENTRIES = ["GT", "GQ", "DP", "AD", "MIN_DP", "PGT", "PID", "PL", "SB"]
+"""
+Densified entries to be selected during VCF export.
+"""
+
+SPARSE_ENTRIES = [
+    "DP",
+    "GQ",
+    "LA",
+    "LAD",
+    "LGT",
+    "LPGT",
+    "LPL",
+    "MIN_DP",
+    "PID",
+    "RGQ",
+    "SB",
+]
+"""
+Sparse entries to be selected and densified during VCF export.
 """
 
 FORMAT_DICT = {

@@ -428,6 +428,131 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
     return filters_dict
 
 
+def make_info_dict(
+    prefix: str,
+    label_groups: Dict[str, str] = None,
+    bin_edges: Dict[str, str] = None,
+    faf: bool = False,
+    popmax: bool = False,
+    description_text: str = "",
+    age_hist_data: str = None,
+) -> Dict[str, Dict[str, str]]:
+    """
+    Generate dictionary of Number and Description attributes of VCF INFO fields.
+
+    Used to populate the VCF header during export.
+    
+    :param str prefix: gnomAD or empty string.
+    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :param dict bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
+    :param bool faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
+    :param bool popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
+    :param bool description_text: Optinal text to append to the end of age and popmax descriptions. 
+    :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
+    :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
+    :rtype: Dict[str, Dict[str, str]]
+    """
+    if prefix != "":
+        prefix = f"{prefix}_"
+
+    info_dict = dict()
+
+    if age_hist_data:
+        age_hist_dict = {
+            f"{prefix}age_hist_het_bin_freq": {
+                "Number": "A",
+                "Description": f"Histogram of ages of heterozygous individuals{description_test}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
+            },
+            f"{prefix}age_hist_het_n_smaller": {
+                "Number": "A",
+                "Description": f"Count of age values falling below lowest histogram bin edge for heterozygous individuals{description_test}",
+            },
+            f"{prefix}age_hist_het_n_larger": {
+                "Number": "A",
+                "Description": f"Count of age values falling above highest histogram bin edge for heterozygous individuals{description_test}",
+            },
+            f"{prefix}age_hist_hom_bin_freq": {
+                "Number": "A",
+                "Description": f"Histogram of ages of homozygous alternate individuals{description_test}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
+            },
+            f"{prefix}age_hist_hom_n_smaller": {
+                "Number": "A",
+                "Description": f"Count of age values falling below lowest histogram bin edge for homozygous alternate individuals{description_test}",
+            },
+            f"{prefix}age_hist_hom_n_larger": {
+                "Number": "A",
+                "Description": f"Count of age values falling above highest histogram bin edge for homozygous alternate individuals{description_test}",
+            },
+        }
+        info_dict.update(age_hist_dict)
+
+    if popmax:
+        popmax_dict = {
+            f"{prefix}popmax": {
+                "Number": "A",
+                "Description": f"Population with maximum AF{description_test}",
+            },
+            f"{prefix}AC_popmax": {
+                "Number": "A",
+                "Description": f"Allele count in the population with the maximum AF{description_test}",
+            },
+            f"{prefix}AN_popmax": {
+                "Number": "A",
+                "Description": f"Total number of alleles in the population with the maximum AF{description_test}",
+            },
+            f"{prefix}AF_popmax": {
+                "Number": "A",
+                "Description": f"Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){description_test}",
+            },
+            f"{prefix}nhomalt_popmax": {
+                "Number": "A",
+                "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_test}",
+            },
+        }
+        info_dict.update(popmax_dict)
+
+    else:
+        group_types = sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
+        combos = make_label_combos(label_groups)
+
+        for combo in combos:
+            combo_fields = combo.split("_")
+
+            if not faf:
+                combo_dict = {
+                    f"{prefix}AC_{combo}": {
+                        "Number": "A",
+                        "Description": f"Alternate allele count{make_combo_header_text('for', group_types, combo_fields, prefix)}",
+                    },
+                    f"{prefix}AN_{combo}": {
+                        "Number": "1",
+                        "Description": f"Total number of alleles{make_combo_header_text('in', group_types, combo_fields, prefix)}",
+                    },
+                    f"{prefix}AF_{combo}": {
+                        "Number": "A",
+                        "Description": f"Alternate allele frequency{make_combo_header_text('in', group_types, combo_fields, prefix)}",
+                    },
+                    f"{prefix}nhomalt_{combo}": {
+                        "Number": "A",
+                        "Description": f"Count of homozygous individuals{make_combo_header_text('in', group_types, combo_fields, prefix)}",
+                    },
+                }
+            else:
+                combo_dict = {
+                    f"{prefix}faf95_{combo}": {
+                        "Number": "A",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
+                    },
+                    f"{prefix}faf99_{combo}": {
+                        "Number": "A",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
+                    },
+                }
+            info_dict.update(combo_dict)
+    return info_dict
+
+
 def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
     """
     Updates info dictionary with allele-specific terms and their descriptions.

@@ -73,6 +73,33 @@ SITE_FIELDS = [
 Site level variant annotations.
 """
 
+ALLELE_TYPE_FIELDS = ["allele_type", "has_star", "n_alt_alleles", "original_alleles", "variant_type", "was_mixed"]
+"""
+Allele-type annotations.
+"""
+
+REGION_TYPE_FIELDS = ["lcr", "nonpar"]
+"""
+Annotations about variant region type.
+"""
+
+RF_FIELDS = [
+    "fail_hard_filters",
+    "filters",
+    "rf_label",
+    "rf_train",
+    "rf_probability",
+    "tp",
+]
+"""
+Annotations specific to the random forest model.
+"""
+
+VQSR_FIELDS = ["AS_VQSLOD", "AS_culprit", "NEGATIVE_TRAIN_SITE", "POSITIVE_TRAIN_SITE"]
+"""
+Annotations specific to VQSR.
+"""
+
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = [
     "AS_QUALapprox",
     "AS_VarDP",
@@ -372,14 +399,14 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
     return filters_dict
 
 
-def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> None:
+def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
     """
     Updates info dictionary with allele-specific terms and their descriptions.
 
     Used in VCF export.
 
     :param INFO_DICT: Dictionary containing site-level annotations and their descriptions.
-    :return: None
+    :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
     """
     prefix_text = "Allele-specific"
     AS_DICT = {}
@@ -394,7 +421,7 @@ def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> None:
             "Description"
         ] = f"{prefix_text} {INFO_DICT[site_field]['Description'][0].lower()}{INFO_DICT[site_field]['Description'][1:]}"
 
-    INFO_DICT.update(AS_DICT)
+    return AS_DICT
 
 
 def make_vcf_filter_dict(

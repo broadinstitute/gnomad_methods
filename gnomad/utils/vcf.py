@@ -42,6 +42,36 @@ SEXES = ["male", "female"]
 Sample sexes used in VCF export.
 """
 
+AS_FIELDS = [
+    "AS_BaseQRankSum",
+    "AS_FS",
+    "AS_MQ",
+    "AS_MQRankSum",
+    "AS_pab_max",
+    "AS_QD",
+    "AS_ReadPosRankSum",
+    "AS_SOR",
+    "AS_VarDP",
+]
+"""
+Allele-specific variant annotations.
+"""
+
+SITE_FIELDS = [
+    "FS",
+    "InbreedingCoeff",
+    "MQ",
+    "MQRankSum",
+    "QD",
+    "ReadPosRankSum",
+    "sibling_singleton",
+    "SOR",
+    "transmitted_singleton",
+    "VarDP",
+]
+"""
+Site level variant annotations.
+"""
 
 INFO_VCF_AS_PIPE_DELIMITED_FIELDS = [
     "AS_QUALapprox",
@@ -77,20 +107,11 @@ INFO_DICT = {
     "VQSR_NEGATIVE_TRAIN_SITE": {
         "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
     },
-    "AS_BaseQRankSum": {
-        "Number": "A",
-        "Description": "Allele-specific Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities",
-    },
-    "ClippingRankSum": {
-        "Number": "A",
-        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference number of hard clipped bases",
+    "BaseQRankSum": {
+        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities",
     },
     "VarDP": {
         "Description": "Depth over variant genotypes (does not include depth of reference samples)"
-    },
-    "AS_VarDP": {
-        "Number": "A",
-        "Description": "Allele-specific depth over variant genotypes (does not include depth of reference samples)",
     },
     "AS_VQSLOD": {
         "Number": "A",
@@ -101,9 +122,6 @@ INFO_DICT = {
         "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model",
     },
     "lcr": {"Description": "Variant falls within a low complexity region"},
-    "fail_interval_qc": {
-        "Description": f"Variant falls within a region where less than {INTERVAL_QC_PARAMETERS[0]}% of samples had a mean coverage of {INTERVAL_QC_PARAMETERS[1]}X"
-    },
     "nonpar": {
         "Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region"
     },
@@ -352,6 +370,31 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
         / hl.agg.count(),
     }
     return filters_dict
+
+
+def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> None:
+    """
+    Updates info dictionary with allele-specific terms and their descriptions.
+
+    Used in VCF export.
+
+    :param INFO_DICT: Dictionary containing site-level annotations and their descriptions.
+    :return: None
+    """
+    prefix_text = "Allele-specific"
+    AS_DICT = {}
+
+    for field in AS_FIELDS:
+        # Strip AS_ from field name
+        site_field = field[3:]
+
+        AS_DICT[field] = {}
+        AS_DICT[field]["Number"] = "A"
+        AS_DICT[field][
+            "Description"
+        ] = f"{prefix_text} {INFO_DICT[site_field]['Description'][0].lower()}{INFO_DICT[site_field]['Description'][1:]}"
+
+    INFO_DICT.update(AS_DICT)
 
 
 def make_vcf_filter_dict(

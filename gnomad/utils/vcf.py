@@ -639,13 +639,13 @@ def make_vcf_filter_dict(
     return filter_dict
 
 
-def make_hist_bin_edges_expr(ht: hl.Table, prefix: str = "gnomad_") -> Dict[str, str]:
+def make_hist_bin_edges_expr(ht: hl.Table, prefix: str) -> Dict[str, str]:
     """
     Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
     separated by pipe delimiters.
 
     :param ht: Table containing histogram variant annotations.
-    :param prefix: Prefix text for age histogram bin edges. Default is gnomad_.
+    :param prefix: Prefix text for age histogram bin edges. 
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
     """
     edges_dict = {

@@ -1,11 +1,15 @@
 import hail as hl
-from typing import List
+from typing import Dict, List
 import logging
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+SORT_ORDER = ["popmax", "group", "pop", "subpop", "sex"]
+"""
+Order to sort subgroupings during VCF export.
+"""
 
 GROUPS = ["adj", "raw"]
 """
@@ -445,27 +449,27 @@ def make_info_dict(
         age_hist_dict = {
             f"{prefix}age_hist_het_bin_freq": {
                 "Number": "A",
-                "Description": f"Histogram of ages of heterozygous individuals{description_test}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
+                "Description": f"Histogram of ages of heterozygous individuals{description_text}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
             },
             f"{prefix}age_hist_het_n_smaller": {
                 "Number": "A",
-                "Description": f"Count of age values falling below lowest histogram bin edge for heterozygous individuals{description_test}",
+                "Description": f"Count of age values falling below lowest histogram bin edge for heterozygous individuals{description_text}",
             },
             f"{prefix}age_hist_het_n_larger": {
                 "Number": "A",
-                "Description": f"Count of age values falling above highest histogram bin edge for heterozygous individuals{description_test}",
+                "Description": f"Count of age values falling above highest histogram bin edge for heterozygous individuals{description_text}",
             },
             f"{prefix}age_hist_hom_bin_freq": {
                 "Number": "A",
-                "Description": f"Histogram of ages of homozygous alternate individuals{description_test}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
+                "Description": f"Histogram of ages of homozygous alternate individuals{description_text}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
             },
             f"{prefix}age_hist_hom_n_smaller": {
                 "Number": "A",
-                "Description": f"Count of age values falling below lowest histogram bin edge for homozygous alternate individuals{description_test}",
+                "Description": f"Count of age values falling below lowest histogram bin edge for homozygous alternate individuals{description_text}",
             },
             f"{prefix}age_hist_hom_n_larger": {
                 "Number": "A",
-                "Description": f"Count of age values falling above highest histogram bin edge for homozygous alternate individuals{description_test}",
+                "Description": f"Count of age values falling above highest histogram bin edge for homozygous alternate individuals{description_text}",
             },
         }
         info_dict.update(age_hist_dict)
@@ -474,23 +478,23 @@ def make_info_dict(
         popmax_dict = {
             f"{prefix}popmax": {
                 "Number": "A",
-                "Description": f"Population with maximum AF{description_test}",
+                "Description": f"Population with maximum AF{description_text}",
             },
             f"{prefix}AC_popmax": {
                 "Number": "A",
-                "Description": f"Allele count in the population with the maximum AF{description_test}",
+                "Description": f"Allele count in the population with the maximum AF{description_text}",
             },
             f"{prefix}AN_popmax": {
                 "Number": "A",
-                "Description": f"Total number of alleles in the population with the maximum AF{description_test}",
+                "Description": f"Total number of alleles in the population with the maximum AF{description_text}",
             },
             f"{prefix}AF_popmax": {
                 "Number": "A",
-                "Description": f"Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){description_test}",
+                "Description": f"Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){description_text}",
             },
             f"{prefix}nhomalt_popmax": {
                 "Number": "A",
-                "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_test}",
+                "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_text}",
             },
         }
         info_dict.update(popmax_dict)
@@ -670,3 +674,73 @@ def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str,
         header_hist_dict.update(hist_dict)
 
     return header_hist_dict
+
+
+def sample_sum_check(
+    ht: hl.Table,
+    prefix: str,
+    label_groups: Dict[str, List[str]],
+    verbose: bool,
+    subpop: bool = None,
+) -> None:
+    """
+    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
+    display results from checking the sum of the specified annotations in the terminal.
+
+    :param Table ht: Table containing annotations to be summed.
+    :param str prefix: String indicating sample subset.
+    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
+    :rtype: None
+    """
+    combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in make_label_combos(label_groups)]
+    combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in make_label_combos(label_groups)]
+    combo_nhomalt = [
+        ht.info[f"{prefix}nhomalt_{x}"] for x in make_label_combos(label_groups)
+    ]
+
+    group = label_groups.pop("group")[0]
+    alt_groups = "_".join(
+        sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
+    )
+
+    annot_dict = {
+        f"sum_AC_{group}_{alt_groups}": hl.sum(combo_AC),
+        f"sum_AN_{group}_{alt_groups}": hl.sum(combo_AN),
+        f"sum_nhomalt_{group}_{alt_groups}": hl.sum(combo_nhomalt),
+    }
+
+    ht = ht.annotate(**annot_dict)
+
+    for subfield in ["AC", "AN", "nhomalt"]:
+        if not subpop:
+            generic_field_check(
+                ht,
+                (
+                    ht.info[f"{prefix}{subfield}_{group}"]
+                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
+                ),
+                f"{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})",
+                [
+                    f"info.{prefix}{subfield}_{group}",
+                    f"sum_{subfield}_{group}_{alt_groups}",
+                ],
+                verbose,
+            )
+        else:
+            generic_field_check(
+                ht,
+                (
+                    ht.info[f"{prefix}{subfield}_{group}_{subpop}"]
+                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
+                ),
+                f"{prefix}{subfield}_{group}_{subpop} = sum({subfield}_{group}_{alt_groups})",
+                [
+                    f"info.{prefix}{subfield}_{group}_{subpop}",
+                    f"sum_{subfield}_{group}_{alt_groups}",
+                ],
+                verbose,
+            )

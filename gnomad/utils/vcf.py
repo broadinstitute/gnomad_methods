@@ -334,11 +334,11 @@ def ht_to_vcf_mt(
 
 def make_label_combos(label_groups: Dict[str, List[str]]) -> List[str]:
     """
-    Make combinations of all possible labels for a supplied dictionary of label groups
+    Make combinations of all possible labels for a supplied dictionary of label groups.
+
     :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
-    :return: list of all possible combinations of values for the supplied label groupings
-    :rtype: list[str]
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :return: list of all possible combinations of values for the supplied label groupings.
     """
     copy_label_groups = copy.deepcopy(label_groups)
     if len(copy_label_groups) == 1:
@@ -358,13 +358,14 @@ def generic_field_check(
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal
-    :param ht: Table containing annotations to be checked
-    :param cond_expr: logical expression referring to annotations in ht to be checked
-    :param check_description: String describing the condition being checked; is displayed in terminal summary message
+
+    :param ht: Table containing annotations to be checked.
+    :param cond_expr: logical expression referring to annotations in ht to be checked.
+    :param check_description: String describing the condition being checked; is displayed in terminal summary message.
     :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
-        these fields are also displayed if verbose is True
+        these fields are also displayed if verbose is True.
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks
+        show only top values of annotations that fail checks.
     """
     ht_orig = ht
     ht = ht.filter(cond_expr)
@@ -382,9 +383,9 @@ def generic_field_check(
 
 def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
     """
-    Make Hail Expressions to measure % variants filtered under varying conditions of interest
-    :param ht: Hail Table containing 'filter' annotation to be examined
-    :return: Dictionary containing Hail aggregation expressions to measure filter flags
+    Make Hail Expressions to measure % variants filtered under varying conditions of interest.
+    :param ht: Hail Table containing 'filter' annotation to be examined.
+    :return: Dictionary containing Hail aggregation expressions to measure filter flags.
     """
     filters_dict = {
         "n": hl.agg.count(),
@@ -625,3 +626,47 @@ def make_hist_bin_edges_expr(ht: hl.Table, prefix: str = "gnomad_") -> Dict[str,
                 )
             )
     return edges_dict
+
+
+def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str, str]:
+    """
+    Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
+
+    :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
+    :param adj: Whether to create a header dict for raw or adj quality histograms.
+    :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
+    """
+    header_hist_dict = {}
+    for hist in HISTS:
+
+        # Get hists for both raw and adj data
+        if adj:
+            hist = f"{hist}_adj"
+
+        edges = bin_edges[hist]
+        hist_fields = hist.split("_")
+        hist_text = hist_fields[0].upper()
+
+        if hist_fields[2] == "alt":
+            hist_text = hist_text + " in heterozygous individuals"
+        if adj:
+            hist_text = hist_text + " calculated on high quality genotypes"
+
+        hist_dict = {
+            f"{hist}_bin_freq": {
+                "Number": "A",
+                "Description": f"Histogram for {hist_text}; bin edges are: {edges}",
+            },
+            f"{hist}_n_smaller": {
+                "Number": "A",
+                "Description": f"Count of {hist_fields[0].upper()} values falling below lowest histogram bin edge {hist_text}",
+            },
+            f"{hist}_n_larger": {
+                "Number": "A",
+                "Description": f"Count of {hist_fields[0].upper()} values falling above highest histogram bin edge {hist_text}",
+            },
+        }
+
+        header_hist_dict.update(hist_dict)
+
+    return header_hist_dict

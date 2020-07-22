@@ -355,17 +355,16 @@ def make_label_combos(label_groups: Dict[str, List[str]]) -> List[str]:
 
 def generic_field_check(
     ht: hl.Table, cond_expr, check_description, display_fields, verbose
-):
+) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal
-    :param Table ht: Table containing annotations to be checked
-    :param Expression cond_expr: logical expression referring to annotations in ht to be checked
-    :param str check_description: String describing the condition being checked; is displayed in terminal summary message
-    :param list of str display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
+    :param ht: Table containing annotations to be checked
+    :param cond_expr: logical expression referring to annotations in ht to be checked
+    :param check_description: String describing the condition being checked; is displayed in terminal summary message
+    :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
         these fields are also displayed if verbose is True
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks
-    :rtype: None
     """
     ht_orig = ht
     ht = ht.filter(cond_expr)
@@ -384,9 +383,8 @@ def generic_field_check(
 def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
     """
     Make Hail Expressions to measure % variants filtered under varying conditions of interest
-    :param Table ht: Hail Table containing 'filter' annotation to be examined
+    :param ht: Hail Table containing 'filter' annotation to be examined
     :return: Dictionary containing Hail aggregation expressions to measure filter flags
-    :rtype: Dict of str: Expression
     """
     filters_dict = {
         "n": hl.agg.count(),
@@ -427,16 +425,15 @@ def make_info_dict(
 
     Used to populate the VCF header during export.
     
-    :param str prefix: gnomAD or empty string.
-    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+    :param prefix: gnomAD or empty string.
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
-    :param dict bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
-    :param bool faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
-    :param bool popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
-    :param bool description_text: Optinal text to append to the end of age and popmax descriptions. 
+    :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
+    :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
+    :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
+    :param description_text: Optinal text to append to the end of age and popmax descriptions. 
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
-    :rtype: Dict[str, Dict[str, str]]
     """
     if prefix != "":
         prefix = f"{prefix}_"
@@ -569,12 +566,11 @@ def make_vcf_filter_dict(
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
 
-    :param Table ht: Table containing global annotations of the Random Forests SNP and indel cutoffs.
-    :param float snp_cutoff: Minimum SNP cutoff score from random forest model.
-    :param float indel_cutoff: Minimum indel cutoff score from random forest model.
-    :param float inbreeding_cutoff: Inbreeding coefficient hard cutoff.
+    :param ht: Table containing global annotations of the Random Forests SNP and indel cutoffs.
+    :param snp_cutoff: Minimum SNP cutoff score from random forest model.
+    :param indel_cutoff: Minimum indel cutoff score from random forest model.
+    :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
-    :rtype: Dict[str, str]
     """
     filter_dict = {
         "AC0": {
@@ -587,3 +583,45 @@ def make_vcf_filter_dict(
         "PASS": {"Description": "Passed all variant filters"},
     }
     return filter_dict
+
+
+def make_hist_bin_edges_expr(ht: hl.Table, prefix: str = "gnomad_") -> Dict[str, str]:
+    """
+    Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
+    separated by pipe delimiters.
+
+    :param ht: Table containing histogram variant annotations.
+    :param prefix: Prefix text for age histogram bin edges. Default is gnomad_.
+    :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
+    """
+    edges_dict = {
+        "het": "|".join(
+            map(lambda x: f"{x:.1f}", ht.head(1).age_hist_het.collect()[0].bin_edges)
+        ),
+        "hom": "|".join(
+            map(lambda x: f"{x:.1f}", ht.head(1).age_hist_hom.collect()[0].bin_edges)
+        ),
+    }
+    for hist in HISTS:
+
+        # Parse hists calculated on both raw and adj-filtered data
+        for hist_type in ["adj_qual_hists", "qual_hists"]:
+            hist_name = hist
+            if "adj" in hist_type:
+                hist_name = f"{hist}_adj"
+            edges_dict[hist_name] = (
+                "|".join(
+                    map(
+                        lambda x: f"{x:.2f}",
+                        ht.head(1)[hist_type][hist].collect()[0].bin_edges,
+                    )
+                )
+                if "ab" in hist
+                else "|".join(
+                    map(
+                        lambda x: str(int(x)),
+                        ht.head(1)[hist_type][hist].collect()[0].bin_edges,
+                    )
+                )
+            )
+    return edges_dict

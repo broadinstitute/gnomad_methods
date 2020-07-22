@@ -17,21 +17,6 @@ HISTS = ["gq_hist_alt", "gq_hist_all", "dp_hist_alt", "dp_hist_all", "ab_hist_al
 Quality histograms used in VCF export.
 """
 
-POPS = ["afr", "amr", "asj", "eas", "fin", "nfe", "oth", "sas"]
-"""
-Continental population names used in VCF export.
-"""
-
-NFE_SUBPOPS = ["onf", "bgr", "swe", "nwe", "seu", "est"]
-"""
-gnomAD subpopulations for NFE population. Used in VCF export.
-"""
-
-EAS_SUBPOPS = ["kor", "oea", "jpn"]
-"""
-gnomAD subpopulations for EAS population. Used in VCF export.
-"""
-
 FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
 """
 Populations that are included in filtering allele frequency calculations. Used in VCF export.

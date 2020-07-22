@@ -799,11 +799,10 @@ def set_female_y_metrics_to_na(
     t: Union[hl.Table, hl.MatrixTable], faf: bool = True,
 ) -> Dict[str, hl.expr.Int32Expression]:
     """
-    Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0).
+    Set AC, AN, and nhomalt chrY variant annotations for females to NA (instead of 0).
 
-    :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations.
+    :param t: Table/MatrixTable containing female variant annotations.
     :return: Dictionary with reset annotations
-    :rtype: Dict[str, hl.expr.Int32Expression]
     """
     metrics = list(t.row.info)
     female_metrics = [x for x in metrics if "_female" in x]

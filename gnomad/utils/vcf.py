@@ -1,7 +1,7 @@
 import copy
 import itertools
 import logging
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -793,3 +793,35 @@ def sample_sum_check(
                 ],
                 verbose,
             )
+
+
+def set_female_y_metrics_to_na(
+    t: Union[hl.Table, hl.MatrixTable], faf: bool = True,
+) -> Dict[str, hl.expr.Int32Expression]:
+    """
+    Set AC, AN, and nhomalt Y variant annotations for females to NA (instead of 0).
+
+    :param Table/MatrixTable t: Table/MatrixTable containing female variant annotations.
+    :return: Dictionary with reset annotations
+    :rtype: Dict[str, hl.expr.Int32Expression]
+    """
+    metrics = list(t.row.info)
+    female_metrics = [x for x in metrics if "_female" in x]
+    female_metrics = [
+        x for x in female_metrics if ("nhomalt" in x) or ("AC" in x) or ("AN" in x)
+    ]
+
+    if faf:
+        female_metrics.extend([x for x in female_metrics if "faf" in x])
+
+    female_metrics_dict = {}
+    for metric in female_metrics:
+        female_metrics_dict.update(
+            {
+                f"{metric}": hl.or_missing(
+                    (t.locus.contig.in_y_nonpar() | t.locus.contig.in_y_par()),
+                    t.info[f"{metric}"],
+                )
+            }
+        )
+    return female_metrics_dict

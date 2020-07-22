@@ -1,3 +1,5 @@
+import copy
+import itertools
 import logging
 from typing import Dict, List
 
@@ -420,10 +422,7 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
 
 
 def make_combo_header_text(
-    preposition: str,
-    group_types: List[str],
-    combo_fields: List[str],
-    prefix: str,
+    preposition: str, group_types: List[str], combo_fields: List[str], prefix: str,
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -616,7 +615,7 @@ def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str
 
 
 def make_vcf_filter_dict(
-    ht: hl.Table, snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
+    snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
 ) -> Dict[str, str]:
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -650,10 +649,10 @@ def make_hist_bin_edges_expr(ht: hl.Table, prefix: str = "gnomad_") -> Dict[str,
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
     """
     edges_dict = {
-        "het": "|".join(
+        f"{prefix}het": "|".join(
             map(lambda x: f"{x:.1f}", ht.head(1).age_hist_het.collect()[0].bin_edges)
         ),
-        "hom": "|".join(
+        f"{prefix}hom": "|".join(
             map(lambda x: f"{x:.1f}", ht.head(1).age_hist_hom.collect()[0].bin_edges)
         ),
     }

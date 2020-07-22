@@ -1,6 +1,9 @@
-import hail as hl
-from typing import Dict, List
 import logging
+from typing import Dict, List
+
+import hail as hl
+
+from gnomad.sample_qc.ancestry import POP_NAMES
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -416,6 +419,53 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
     return filters_dict
 
 
+def make_combo_header_text(
+    preposition: str,
+    group_types: List[str],
+    combo_fields: List[str],
+    prefix: str,
+) -> str:
+    """
+    Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
+
+    For example, if preposition is "for", group_types is ["group", "pop", "sex"], and combo_fields is ["adj", "afr", "female"],
+    this function will return the string " for female samples of African-American/African ancestry".
+
+    :param preposition: Relevant preposition to precede automatically generated text.
+    :param group_types: List of grouping types, e.g. "sex" or "pop".
+    :param combo_fields: List of the specific values for each grouping type, for which the text is being generated.
+    :param prefix: Prefix string indicating sample subset.
+    :return: String with automatically generated description text for a given set of combo fields.
+    """
+    combo_dict = dict(zip(group_types, combo_fields))
+    header_text = " " + preposition
+
+    if len(combo_dict.keys()) == 1:
+        if combo_dict["group"] == "adj":
+            return ""
+
+    if "sex" in combo_dict.keys():
+        header_text = header_text + " " + combo_dict["sex"]
+
+    header_text = header_text + " samples"
+
+    if "subpop" in combo_dict.keys():
+        header_text = header_text + f" of {POP_NAMES[combo_dict['subpop']]} ancestry"
+        combo_dict.pop("pop")
+
+    if "pop" in combo_dict.keys():
+        header_text = header_text + f" of {POP_NAMES[combo_dict['pop']]} ancestry"
+
+    if "gnomad" in prefix:
+        header_text = header_text + " in gnomAD"
+
+    if "group" in group_types:
+        if combo_dict["group"] == "raw":
+            header_text = header_text + ", before removing low-confidence genotypes"
+
+    return header_text
+
+
 def make_info_dict(
     prefix: str,
     label_groups: Dict[str, str] = None,
@@ -529,11 +579,11 @@ def make_info_dict(
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_types, combo_fields, prefix)}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_types, combo_fields, prefix, faf=True)}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_types, combo_fields, prefix)}",
                     },
                 }
             info_dict.update(combo_dict)

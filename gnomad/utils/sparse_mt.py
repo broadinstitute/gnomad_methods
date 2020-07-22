@@ -626,9 +626,9 @@ def impute_sex_ploidy(
 
 
 def compute_coverage_stats(
-        mt: hl.MatrixTable,
-        reference_ht: hl.Table,
-        coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
+    mt: hl.MatrixTable,
+    reference_ht: hl.Table,
+    coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
 ) -> hl.Table:
     """
     Computes the following coverage statistics for every base of the `reference_ht` provided:
@@ -654,7 +654,7 @@ def compute_coverage_stats(
     mt = mt.select_entries("END", "DP")
     col_key_fields = list(mt.col_key)
     t = mt._localize_entries("__entries", "__cols")
-    t = t.join(reference_ht.select(_in_ref=True).key_by('locus'), how="outer")
+    t = t.join(reference_ht.select(_in_ref=True).key_by("locus"), how="outer")
     t = t.annotate(
         __entries=hl.or_else(
             t.__entries,

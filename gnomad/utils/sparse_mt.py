@@ -654,7 +654,7 @@ def compute_coverage_stats(
     mt = mt.select_entries("END", "DP")
     col_key_fields = list(mt.col_key)
     t = mt._localize_entries("__entries", "__cols")
-    t = t.join(reference_ht.select(_in_ref=True).key_by("locus"), how="outer")
+    t = t.join(reference_ht.select(_in_ref=True).key_by(*mt.row_key), how="outer")
     t = t.annotate(
         __entries=hl.or_else(
             t.__entries,

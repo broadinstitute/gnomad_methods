@@ -14,6 +14,7 @@ logger.setLevel(logging.INFO)
 SORT_ORDER = ["popmax", "group", "pop", "subpop", "sex"]
 """
 Order to sort subgroupings during VCF export.
+Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
 """
 
 GROUPS = ["adj", "raw"]
@@ -28,12 +29,13 @@ Quality histograms used in VCF export.
 
 FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
 """
-Populations that are included in filtering allele frequency calculations. Used in VCF export.
+Global populations that are included in filtering allele frequency (faf) calculations. Used in VCF export.
 """
 
 SEXES = ["male", "female"]
 """
 Sample sexes used in VCF export.
+Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
 AS_FIELDS = [
@@ -77,9 +79,12 @@ ALLELE_TYPE_FIELDS = [
 Allele-type annotations.
 """
 
-REGION_TYPE_FIELDS = ["lcr", "nonpar"]
+REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "segdup"]
 """
 Annotations about variant region type.
+
+.. note::
+    decoy and segdup resource files do not currently exist for GrCh38/hg38.
 """
 
 RF_FIELDS = [
@@ -91,7 +96,7 @@ RF_FIELDS = [
     "tp",
 ]
 """
-Annotations specific to the random forest model.
+Annotations specific to the variant QC using a random forest model.
 """
 
 VQSR_FIELDS = ["AS_VQSLOD", "AS_culprit", "NEGATIVE_TRAIN_SITE", "POSITIVE_TRAIN_SITE"]
@@ -147,10 +152,12 @@ INFO_DICT = {
         "Number": "A",
         "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model",
     },
+    "decoy": {"Description": "Variant falls within a reference decoy region"},
     "lcr": {"Description": "Variant falls within a low complexity region"},
     "nonpar": {
         "Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region"
     },
+    "segdup": {"Description": "Variant falls within a segmental duplication region"},
     "rf_positive_label": {
         "Description": "Variant was labelled as a positive example for training of random forest model"
     },
@@ -339,18 +346,24 @@ def ht_to_vcf_mt(
     return info_mt.filter_cols(False)
 
 
-def make_label_combos(label_groups: Dict[str, List[str]]) -> List[str]:
+def make_label_combos(
+    label_groups: Dict[str, List[str]], sort_order: List[str] = SORT_ORDER,
+) -> List[str]:
     """
     Make combinations of all possible labels for a supplied dictionary of label groups.
 
-    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+    For example, if label_groups is `{"sex": ["male", "female"], "pop": ["afr", "nfe", "amr"]}`,
+    this function will return `["afr_male", "afr_female", "nfe_male", "nfe_female", "amr_male", "amr_female']`
+
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: list of all possible combinations of values for the supplied label groupings.
     """
     copy_label_groups = copy.deepcopy(label_groups)
     if len(copy_label_groups) == 1:
         return [item for sublist in copy_label_groups.values() for item in sublist]
-    anchor_group = sorted(copy_label_groups.keys(), key=lambda x: SORT_ORDER.index(x))[
+    anchor_group = sorted(copy_label_groups.keys(), key=lambda x: sort_order.index(x))[
         0
     ]
     anchor_val = copy_label_groups.pop(anchor_group)

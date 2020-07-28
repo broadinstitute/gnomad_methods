@@ -374,17 +374,23 @@ def make_label_combos(
 
 
 def generic_field_check(
-    ht: hl.Table, cond_expr, check_description, display_fields, verbose
+    ht: hl.Table,
+    cond_expr: hl.expr.BooleanExpression,
+    check_description: str,
+    display_fields: List[str],
+    verbose: bool,
 ) -> None:
     """
-    Check a generic logical condition involving annotations in a Hail Table and print the results to terminal
+    Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
+
+    Displays the number of rows in the Table that return False for a condition.
 
     :param ht: Table containing annotations to be checked.
-    :param cond_expr: logical expression referring to annotations in ht to be checked.
+    :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
     :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
         these fields are also displayed if verbose is True.
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     """
     ht_orig = ht

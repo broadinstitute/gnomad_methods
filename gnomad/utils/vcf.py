@@ -409,32 +409,37 @@ def generic_field_check(
 
 def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
     """
-    Make Hail Expressions to measure % variants filtered under varying conditions of interest.
+    Make Hail expressions to measure % variants filtered under varying conditions of interest.
+
+    Checks for:
+        - Total number of variants
+        - Fraction of variants removed by any filter
+        - Fraction of variants removed because of InbreedingCoefficient filter in combination with any other filter
+        - Fraction of varinats removed because of AC0 filter in combination with any other filter
+        - Fraction of variants removed because of random forest filtering in combination with any other filter
+        - Fraction of variants removed only because of InbreedingCoefficient filter
+        - Fraction of variants removed only because of AC0 filter
+        - Fraction of variants removed only because of random forest filtering
+
 
     :param ht: Table containing 'filter' annotation to be examined.
     :return: Dictionary containing Hail aggregation expressions to measure filter flags.
     """
     filters_dict = {
         "n": hl.agg.count(),
-        "frac_any_filter": hl.agg.count_where(ht.is_filtered) / hl.agg.count(),
-        "frac_inbreed_coeff": hl.agg.count_where(
-            ht.filters.contains("inbreeding_coeff")
-        )
-        / hl.agg.count(),
-        "frac_ac0": hl.agg.count_where(ht.filters.contains("AC0")) / hl.agg.count(),
-        "frac_rf": hl.agg.count_where(ht.filters.contains("rf")) / hl.agg.count(),
-        "frac_inbreed_coeff_only": hl.agg.count_where(
+        "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) == 0),
+        "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("inbreeding_coeff")),
+        "frac_ac0": hl.agg.fraction(ht.filters.contains("AC0")),
+        "frac_rf": hl.agg.fraction(ht.filters.contains("rf")),
+        "frac_inbreed_coeff_only": hl.agg.fraction(
             ht.filters.contains("inbreeding_coeff") & (ht.filters.length() == 1)
-        )
-        / hl.agg.count(),
-        "frac_ac0_only": hl.agg.count_where(
+        ),
+        "frac_ac0_only": hl.agg.fraction(
             ht.filters.contains("AC0") & (ht.filters.length() == 1)
-        )
-        / hl.agg.count(),
-        "frac_rf_only": hl.agg.count_where(
+        ),
+        "frac_rf_only": hl.agg.fraction(
             ht.filters.contains("rf") & (ht.filters.length() == 1)
-        )
-        / hl.agg.count(),
+        ),
     }
     return filters_dict
 

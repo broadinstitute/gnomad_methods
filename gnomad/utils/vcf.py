@@ -445,7 +445,7 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
 
 
 def make_combo_header_text(
-    preposition: str, group_types: List[str], combo_fields: List[str], prefix: str,
+    preposition: str, combo_dict: Dict[str, str], prefix: str,
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -454,12 +454,12 @@ def make_combo_header_text(
     this function will return the string " for female samples of African-American/African ancestry".
 
     :param preposition: Relevant preposition to precede automatically generated text.
-    :param group_types: List of grouping types. Possible values in this list are: "group", "pop", "sex", "subpop".
-    :param combo_fields: List of the specific values for each grouping type, for which the text is being generated.
+    :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
+        Possible grouping types are: "group", "pop", "sex", and "subpop". 
+        Example input: {"pop": "afr", "sex": "female"}
     :param prefix: Prefix string indicating sample subset.
     :return: String with automatically generated description text for a given set of combo fields.
     """
-    combo_dict = dict(zip(group_types, combo_fields))
     header_text = " " + preposition
 
     if len(combo_dict) == 1:
@@ -471,17 +471,17 @@ def make_combo_header_text(
 
     header_text = header_text + " samples"
 
-    if "subpop" in combo_dict.keys():
+    if "subpop" in combo_dict:
         header_text = header_text + f" of {POP_NAMES[combo_dict['subpop']]} ancestry"
         combo_dict.pop("pop")
 
-    if "pop" in combo_dict.keys():
+    if "pop" in combo_dict:
         header_text = header_text + f" of {POP_NAMES[combo_dict['pop']]} ancestry"
 
     if "gnomad" in prefix:
         header_text = header_text + " in gnomAD"
 
-    if "group" in group_types:
+    if "group" in combo_dict:
         if combo_dict["group"] == "raw":
             header_text = header_text + ", before removing low-confidence genotypes"
 
@@ -489,7 +489,7 @@ def make_combo_header_text(
 
 
 def make_info_dict(
-    prefix: str,
+    prefix: str = "",
     label_groups: Dict[str, str] = None,
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
@@ -508,7 +508,7 @@ def make_info_dict(
         - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
         - INFO fields for filtering allele frequency (faf) annotations 
     
-    :param prefix: gnomAD or empty string.
+    :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
@@ -583,35 +583,36 @@ def make_info_dict(
 
         for combo in combos:
             combo_fields = combo.split("_")
+            group_dict = dict(zip(group_types, combo_fields))
 
             if not faf:
                 combo_dict = {
                     f"{prefix}AC_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele count{make_combo_header_text('for', group_types, combo_fields, prefix)}",
+                        "Description": f"Alternate allele count{make_combo_header_text('for', group_dict, prefix)}",
                     },
                     f"{prefix}AN_{combo}": {
                         "Number": "1",
-                        "Description": f"Total number of alleles{make_combo_header_text('in', group_types, combo_fields, prefix)}",
+                        "Description": f"Total number of alleles{make_combo_header_text('in', group_dict, prefix)}",
                     },
                     f"{prefix}AF_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{make_combo_header_text('in', group_types, combo_fields, prefix)}",
+                        "Description": f"Alternate allele frequency{make_combo_header_text('in', group_dict, prefix)}",
                     },
                     f"{prefix}nhomalt_{combo}": {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{make_combo_header_text('in', group_types, combo_fields, prefix)}",
+                        "Description": f"Count of homozygous individuals{make_combo_header_text('in', group_dict, prefix)}",
                     },
                 }
             else:
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_types, combo_fields, prefix)}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_dict, prefix)}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_types, combo_fields, prefix)}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_dict, prefix)}",
                     },
                 }
             info_dict.update(combo_dict)

@@ -500,7 +500,13 @@ def make_info_dict(
     """
     Generate dictionary of Number and Description attributes of VCF INFO fields.
 
-    Used to populate the VCF header during export.
+    Used to populate the INFO fields of the VCF header during export.
+
+    Creates:
+        - INFO fields for age histograms (bin freq, n_smaller, and n_larger for heterozygous and homozygous variant carriers)
+        - INFO fields for popmax AC, AN, AF, nhomalt, and popmax population
+        - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
+        - INFO fields for filtering allele frequency (faf) annotations 
     
     :param prefix: gnomAD or empty string.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,

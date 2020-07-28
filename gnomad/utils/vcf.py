@@ -58,9 +58,7 @@ SITE_FIELDS = [
     "MQRankSum",
     "QD",
     "ReadPosRankSum",
-    "sibling_singleton",
     "SOR",
-    "transmitted_singleton",
     "VarDP",
 ]
 """

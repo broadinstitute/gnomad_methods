@@ -454,7 +454,7 @@ def make_combo_header_text(
     this function will return the string " for female samples of African-American/African ancestry".
 
     :param preposition: Relevant preposition to precede automatically generated text.
-    :param group_types: List of grouping types, e.g. "sex" or "pop".
+    :param group_types: List of grouping types. Possible values in this list are: "group", "pop", "sex", "subpop".
     :param combo_fields: List of the specific values for each grouping type, for which the text is being generated.
     :param prefix: Prefix string indicating sample subset.
     :return: String with automatically generated description text for a given set of combo fields.
@@ -462,11 +462,11 @@ def make_combo_header_text(
     combo_dict = dict(zip(group_types, combo_fields))
     header_text = " " + preposition
 
-    if len(combo_dict.keys()) == 1:
+    if len(combo_dict) == 1:
         if combo_dict["group"] == "adj":
             return ""
 
-    if "sex" in combo_dict.keys():
+    if "sex" in combo_dict:
         header_text = header_text + " " + combo_dict["sex"]
 
     header_text = header_text + " samples"

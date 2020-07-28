@@ -496,6 +496,7 @@ def make_info_dict(
     popmax: bool = False,
     description_text: str = "",
     age_hist_data: str = None,
+    sort_order: List[str] = SORT_ORDER,
 ) -> Dict[str, Dict[str, str]]:
     """
     Generate dictionary of Number and Description attributes of VCF INFO fields.
@@ -514,8 +515,9 @@ def make_info_dict(
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
-    :param description_text: Optinal text to append to the end of age and popmax descriptions. 
+    :param description_text: Optional text to append to the end of age and popmax descriptions. Needs to start with a space if specified.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
+    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     """
     if prefix != "":
@@ -578,7 +580,7 @@ def make_info_dict(
         info_dict.update(popmax_dict)
 
     else:
-        group_types = sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
+        group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
         combos = make_label_combos(label_groups)
 
         for combo in combos:

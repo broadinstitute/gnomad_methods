@@ -410,7 +410,8 @@ def generic_field_check(
 def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
     """
     Make Hail Expressions to measure % variants filtered under varying conditions of interest.
-    :param ht: Hail Table containing 'filter' annotation to be examined.
+
+    :param ht: Table containing 'filter' annotation to be examined.
     :return: Dictionary containing Hail aggregation expressions to measure filter flags.
     """
     filters_dict = {

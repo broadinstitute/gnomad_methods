@@ -621,29 +621,41 @@ def make_info_dict(
     return info_dict
 
 
-def add_as_info_dict(INFO_DICT: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+def add_as_info_dict(
+    info_dict: Dict[str, Dict[str, str]] = INFO_DICT, as_fields: List[str] = AS_FIELDS
+) -> Dict[str, Dict[str, str]]:
     """
     Updates info dictionary with allele-specific terms and their descriptions.
 
     Used in VCF export.
 
-    :param INFO_DICT: Dictionary containing site-level annotations and their descriptions.
+    :param info_dict: Dictionary containing site-level annotations and their descriptions. Default is INFO_DICT.
+    :param as_fields: List containing allele-specific fields to be added to info_dict. Default is AS_FIELDS.
     :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
     """
     prefix_text = "Allele-specific"
-    AS_DICT = {}
+    as_dict = {}
 
-    for field in AS_FIELDS:
-        # Strip AS_ from field name
-        site_field = field[3:]
+    for field in as_fields:
 
-        AS_DICT[field] = {}
-        AS_DICT[field]["Number"] = "A"
-        AS_DICT[field][
-            "Description"
-        ] = f"{prefix_text} {INFO_DICT[site_field]['Description'][0].lower()}{INFO_DICT[site_field]['Description'][1:]}"
+        try:
+            # Strip AS_ from field name
+            site_field = field[3:]
 
-    return AS_DICT
+            # Get site description from info dictionary and make first letter lower case
+            first_letter = info_dict[site_field]["Description"][0].lower()
+            rest_of_description = info_dict[site_field]["Description"][1:]
+
+            as_dict[field] = {}
+            as_dict[field]["Number"] = "A"
+            as_dict[field][
+                "Description"
+            ] = f"{prefix_text} {first_letter}{rest_of_description}"
+
+        except KeyError:
+            raise ValueError(f"{field} is not present in input info dictionary!")
+
+    return as_dict
 
 
 def make_vcf_filter_dict(
@@ -652,7 +664,12 @@ def make_vcf_filter_dict(
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
 
-    :param ht: Table containing global annotations of the Random Forests SNP and indel cutoffs.
+    Generates descriptions for:
+        - AC0 filter
+        - InbreedingCoeff filter
+        - RF filter
+        - PASS (passed all variant filters)
+
     :param snp_cutoff: Minimum SNP cutoff score from random forest model.
     :param indel_cutoff: Minimum indel cutoff score from random forest model.
     :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
@@ -671,43 +688,45 @@ def make_vcf_filter_dict(
     return filter_dict
 
 
-def make_hist_bin_edges_expr(ht: hl.Table, prefix: str) -> Dict[str, str]:
+def make_hist_bin_edges_expr(
+    ht: hl.Table, hists: List[str] = HISTS, prefix: str = ""
+) -> Dict[str, str]:
     """
     Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
     separated by pipe delimiters.
 
     :param ht: Table containing histogram variant annotations.
-    :param prefix: Prefix text for age histogram bin edges. 
+    :param hists: List of variant histogram annotations. Default is HISTS.
+    :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
     """
+    # Add underscore to prefix if it isn't empty
+    if prefix != "":
+        prefix += "_"
+
     edges_dict = {
-        f"{prefix}het": "|".join(
-            map(lambda x: f"{x:.1f}", ht.head(1).age_hist_het.collect()[0].bin_edges)
-        ),
-        f"{prefix}hom": "|".join(
-            map(lambda x: f"{x:.1f}", ht.head(1).age_hist_hom.collect()[0].bin_edges)
-        ),
+        f"{prefix}{call_type}": "|".join(
+            map(
+                lambda x: f"{x:.1f}",
+                ht.head(1)[f"age_hist_{call_type}"].collect()[0].bin_edges,
+            )
+        )
+        for call_type in ["het", "hom"]
     }
-    for hist in HISTS:
+
+    for hist in hists:
+
+        hist_name = hist
 
         # Parse hists calculated on both raw and adj-filtered data
         for hist_type in ["adj_qual_hists", "qual_hists"]:
-            hist_name = hist
+
             if "adj" in hist_type:
                 hist_name = f"{hist}_adj"
-            edges_dict[hist_name] = (
-                "|".join(
-                    map(
-                        lambda x: f"{x:.2f}",
-                        ht.head(1)[hist_type][hist].collect()[0].bin_edges,
-                    )
-                )
-                if "ab" in hist
-                else "|".join(
-                    map(
-                        lambda x: str(int(x)),
-                        ht.head(1)[hist_type][hist].collect()[0].bin_edges,
-                    )
+            edges_dict[hist_name] = "|".join(
+                map(
+                    lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
+                    ht.head(1)[hist_type][hist].collect()[0].bin_edges,
                 )
             )
     return edges_dict
@@ -763,6 +782,7 @@ def sample_sum_check(
     label_groups: Dict[str, List[str]],
     verbose: bool,
     subpop: bool = None,
+    sort_order: List[str] = SORT_ORDER,
 ) -> None:
     """
     Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
@@ -775,6 +795,7 @@ def sample_sum_check(
     :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
+    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :rtype: None
     """
     combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in make_label_combos(label_groups)]
@@ -785,7 +806,7 @@ def sample_sum_check(
 
     group = label_groups.pop("group")[0]
     alt_groups = "_".join(
-        sorted(label_groups.keys(), key=lambda x: SORT_ORDER.index(x))
+        sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
 
     annot_dict = {

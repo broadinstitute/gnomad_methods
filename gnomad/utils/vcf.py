@@ -85,7 +85,7 @@ REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "segdup"]
 Annotations about variant region type.
 
 .. note::
-    decoy and segdup resource files do not currently exist for GrCh38/hg38.
+    decoy and segdup resource files do not currently exist for GRCh38/hg38.
 """
 
 RF_FIELDS = [
@@ -145,13 +145,11 @@ INFO_DICT = {
     "VarDP": {
         "Description": "Depth over variant genotypes (does not include depth of reference samples)"
     },
-    "AS_VQSLOD": {
-        "Number": "A",
-        "Description": "Allele-specific log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
+    "VQSLOD": {
+        "Description": "Log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
     },
-    "AS_VQSR_culprit": {
-        "Number": "A",
-        "Description": "Allele-specific worst-performing annotation in the VQSR Gaussian mixture model",
+    "VQSR_culprit": {
+        "Description": "Worst-performing annotation in the VQSR Gaussian mixture model",
     },
     "decoy": {"Description": "Variant falls within a reference decoy region"},
     "lcr": {"Description": "Variant falls within a low complexity region"},
@@ -177,19 +175,16 @@ INFO_DICT = {
     "variant_type": {
         "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"
     },
-    "allele_type": {
-        "Number": "A",
-        "Description": "Allele type (snv, insertion, deletion, or mixed)",
-    },
+    "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)",},
     "n_alt_alleles": {
-        "Number": "A",
+        "Number": 1,
         "Description": "Total number of alternate alleles observed at variant locus",
     },
     "was_mixed": {"Description": "Variant type was mixed"},
     "has_star": {
         "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"
     },
-    "pab_max": {
+    "AS_pab_max": {
         "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
@@ -384,7 +379,12 @@ def generic_field_check(
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
-    Displays the number of rows in the Table that return False for a condition.
+    Displays the number of rows in the Table that return False for a condition (`cond_expr`). 
+
+    .. note::
+        This function checks for the number of rows that violate the `cond_expr` and prints the desired condition (`check_description`) to the terminal.
+        `cond_expr` and `check_description` are opposites and should never be the same.
+
 
     :param ht: Table containing annotations to be checked.
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
@@ -428,7 +428,7 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
     """
     filters_dict = {
         "n": hl.agg.count(),
-        "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) == 0),
+        "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) != 0),
         "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("inbreeding_coeff")),
         "frac_ac0": hl.agg.fraction(ht.filters.contains("AC0")),
         "frac_rf": hl.agg.fraction(ht.filters.contains("rf")),
@@ -542,7 +542,7 @@ def make_info_dict(
             },
             f"{prefix}age_hist_hom_bin_freq": {
                 "Number": "A",
-                "Description": f"Histogram of ages of homozygous alternate individuals{description_text}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
+                "Description": f"Histogram of ages of homozygous alternate individuals{description_text}; bin edges are: {bin_edges['hom']}; total number of individuals of any genotype bin: {age_hist_data}",
             },
             f"{prefix}age_hist_hom_n_smaller": {
                 "Number": "A",
@@ -571,7 +571,7 @@ def make_info_dict(
             },
             f"{prefix}AF_popmax": {
                 "Number": "A",
-                "Description": f"Maximum allele frequency across populations (excluding samples of Ashkenazi, Finnish, and indeterminate ancestry){description_text}",
+                "Description": f"Maximum allele frequency across populations{description_text}",
             },
             f"{prefix}nhomalt_popmax": {
                 "Number": "A",
@@ -634,7 +634,6 @@ def add_as_info_dict(
     :param as_fields: List containing allele-specific fields to be added to info_dict. Default is AS_FIELDS.
     :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
     """
-    prefix_text = "Allele-specific"
     as_dict = {}
 
     for field in as_fields:
@@ -651,7 +650,7 @@ def add_as_info_dict(
             as_dict[field]["Number"] = "A"
             as_dict[field][
                 "Description"
-            ] = f"{prefix_text} {first_letter}{rest_of_description}"
+            ] = f"Allele-specific {first_letter}{rest_of_description}"
 
         except KeyError:
             raise ValueError(f"{field} is not present in input info dictionary!")
@@ -850,7 +849,7 @@ def sample_sum_check(
 
 
 def set_female_y_metrics_to_na(
-    t: Union[hl.Table, hl.MatrixTable], faf: bool = True,
+    t: Union[hl.Table, hl.MatrixTable],
 ) -> Dict[str, hl.expr.Int32Expression]:
     """
     Set AC, AN, and nhomalt chrY variant annotations for females to NA (instead of 0).
@@ -860,19 +859,13 @@ def set_female_y_metrics_to_na(
     """
     metrics = list(t.row.info)
     female_metrics = [x for x in metrics if "_female" in x]
-    female_metrics = [
-        x for x in female_metrics if ("nhomalt" in x) or ("AC" in x) or ("AN" in x)
-    ]
-
-    if faf:
-        female_metrics.extend([x for x in female_metrics if "faf" in x])
 
     female_metrics_dict = {}
     for metric in female_metrics:
         female_metrics_dict.update(
             {
                 f"{metric}": hl.or_missing(
-                    (t.locus.contig.in_y_nonpar() | t.locus.contig.in_y_par()),
+                    (~t.locus.contig.in_y_nonpar() | ~t.locus.contig.in_y_par()),
                     t.info[f"{metric}"],
                 )
             }

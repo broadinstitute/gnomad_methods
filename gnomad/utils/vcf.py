@@ -54,6 +54,7 @@ Allele-specific variant annotations.
 """
 
 SITE_FIELDS = [
+    "BaseQRankSum",
     "FS",
     "InbreedingCoeff",
     "MQ",

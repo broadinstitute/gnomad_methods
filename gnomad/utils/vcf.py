@@ -788,15 +788,15 @@ def sample_sum_check(
     Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     display results from checking the sum of the specified annotations in the terminal.
 
-    :param Table ht: Table containing annotations to be summed.
-    :param str prefix: String indicating sample subset.
-    :param dict label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+    :param ht: Table containing annotations to be summed.
+    :param prefix: String indicating sample subset.
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
-    :param str subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
+    :param subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :rtype: None
+    :return: None
     """
     combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in make_label_combos(label_groups)]
     combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in make_label_combos(label_groups)]

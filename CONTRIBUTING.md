@@ -79,3 +79,5 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
   ```
   twine upload dist/*
   ```
+
+- Announce new release on Slack.

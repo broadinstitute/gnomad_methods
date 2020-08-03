@@ -22,13 +22,13 @@ def generic_field_check(
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
     Displays the number of rows in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`). 
+    If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
 
     .. note::
         `cond_expr` and `check_description` are opposites and should never be the same. 
         E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC, 
         then it is checking sites that fail to be the desired condition (`check_description`) 
         of having a raw AC greater than or equal to the adj AC.
-
 
     :param ht: Table containing annotations to be checked.
     :param cond_expr: Logical expression referring to annotations in ht to be checked.

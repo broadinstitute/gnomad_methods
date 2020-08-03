@@ -48,6 +48,7 @@ AS_FIELDS = [
     "AS_ReadPosRankSum",
     "AS_SOR",
     "AS_VarDP",
+    "InbreedingCoeff",
 ]
 """
 Allele-specific variant annotations.
@@ -56,7 +57,6 @@ Allele-specific variant annotations.
 SITE_FIELDS = [
     "BaseQRankSum",
     "FS",
-    "InbreedingCoeff",
     "MQ",
     "MQRankSum",
     "QD",
@@ -379,11 +379,13 @@ def generic_field_check(
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
-    Displays the number of rows in the Table that return False for a condition (`cond_expr`). 
+    Displays the number of rows in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`). 
 
     .. note::
-        This function checks for the number of rows that violate the `cond_expr` and prints the desired condition (`check_description`) to the terminal.
-        `cond_expr` and `check_description` are opposites and should never be the same.
+        `cond_expr` and `check_description` are opposites and should never be the same. 
+        E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC, 
+        then it is checking sites that fail to be the desired condition (`check_description`) 
+        of having a raw AC greater than or equal to the adj AC.
 
 
     :param ht: Table containing annotations to be checked.
@@ -414,39 +416,41 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
 
     Checks for:
         - Total number of variants
-        - Fraction of variants removed by any filter
-        - Fraction of variants removed because of InbreedingCoefficient filter in combination with any other filter
-        - Fraction of varinats removed because of AC0 filter in combination with any other filter
-        - Fraction of variants removed because of random forest filtering in combination with any other filter
-        - Fraction of variants removed only because of InbreedingCoefficient filter
-        - Fraction of variants removed only because of AC0 filter
-        - Fraction of variants removed only because of random forest filtering
-
+        - Fraction of variants removed due to:
+            - Any filter
+            - Inbreeding coefficient filter in combination with any other filter
+            - AC0 filter in combination with any other filter
+            - Random forest filtering in combination with any other filter
+            - Only inbreeding coefficient filter
+            - Only AC0 filter
+            - Only random forest filtering
 
     :param ht: Table containing 'filter' annotation to be examined.
-    :return: Dictionary containing Hail aggregation expressions to measure filter flags.
+    :return: Dictionary containing Hail aggregation expressions to examine filter flags.
     """
-    filters_dict = {
+    return {
         "n": hl.agg.count(),
         "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) != 0),
-        "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("inbreeding_coeff")),
+        "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("InbreedingCoeff")),
         "frac_ac0": hl.agg.fraction(ht.filters.contains("AC0")),
-        "frac_rf": hl.agg.fraction(ht.filters.contains("rf")),
+        "frac_rf": hl.agg.fraction(ht.filters.contains("RF")),
         "frac_inbreed_coeff_only": hl.agg.fraction(
-            ht.filters.contains("inbreeding_coeff") & (ht.filters.length() == 1)
+            ht.filters.contains("InbreedingCoeff") & (ht.filters.length() == 1)
         ),
         "frac_ac0_only": hl.agg.fraction(
             ht.filters.contains("AC0") & (ht.filters.length() == 1)
         ),
         "frac_rf_only": hl.agg.fraction(
-            ht.filters.contains("rf") & (ht.filters.length() == 1)
+            ht.filters.contains("RF") & (ht.filters.length() == 1)
         ),
     }
-    return filters_dict
 
 
 def make_combo_header_text(
-    preposition: str, combo_dict: Dict[str, str], prefix: str,
+    preposition: str,
+    combo_dict: Dict[str, str],
+    prefix: str,
+    pop_names: Dict[str, str] = POP_NAMES,
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -459,6 +463,7 @@ def make_combo_header_text(
         Possible grouping types are: "group", "pop", "sex", and "subpop". 
         Example input: {"pop": "afr", "sex": "female"}
     :param prefix: Prefix string indicating sample subset.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :return: String with automatically generated description text for a given set of combo fields.
     """
     header_text = " " + preposition
@@ -473,11 +478,11 @@ def make_combo_header_text(
     header_text = header_text + " samples"
 
     if "subpop" in combo_dict:
-        header_text = header_text + f" of {POP_NAMES[combo_dict['subpop']]} ancestry"
+        header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
         combo_dict.pop("pop")
 
     if "pop" in combo_dict:
-        header_text = header_text + f" of {POP_NAMES[combo_dict['pop']]} ancestry"
+        header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
 
     if "gnomad" in prefix:
         header_text = header_text + " in gnomAD"
@@ -588,34 +593,37 @@ def make_info_dict(
             combo_fields = combo.split("_")
             group_dict = dict(zip(group_types, combo_fields))
 
+            for_combo = make_combo_header_text("for", group_dict, prefix)
+            in_combo = make_combo_header_text("in", group_dict, prefix)
+
             if not faf:
                 combo_dict = {
                     f"{prefix}AC_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele count{make_combo_header_text('for', group_dict, prefix)}",
+                        "Description": f"Alternate allele count{for_combo}",
                     },
                     f"{prefix}AN_{combo}": {
                         "Number": "1",
-                        "Description": f"Total number of alleles{make_combo_header_text('in', group_dict, prefix)}",
+                        "Description": f"Total number of alleles{in_combo}",
                     },
                     f"{prefix}AF_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{make_combo_header_text('in', group_dict, prefix)}",
+                        "Description": f"Alternate allele frequency{in_combo}",
                     },
                     f"{prefix}nhomalt_{combo}": {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{make_combo_header_text('in', group_dict, prefix)}",
+                        "Description": f"Count of homozygous individuals{in_combo}",
                     },
                 }
             else:
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {make_combo_header_text('for', group_dict, prefix)}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {for_combo}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {make_combo_header_text('for', group_dict, prefix)}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {for_combo}",
                     },
                 }
             info_dict.update(combo_dict)
@@ -798,11 +806,10 @@ def sample_sum_check(
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: None
     """
-    combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in make_label_combos(label_groups)]
-    combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in make_label_combos(label_groups)]
-    combo_nhomalt = [
-        ht.info[f"{prefix}nhomalt_{x}"] for x in make_label_combos(label_groups)
-    ]
+    label_combos = make_label_combos(label_groups)
+    combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in label_combos]
+    combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in label_combos]
+    combo_nhomalt = [ht.info[f"{prefix}nhomalt_{x}"] for x in label_combos]
 
     group = label_groups.pop("group")[0]
     alt_groups = "_".join(

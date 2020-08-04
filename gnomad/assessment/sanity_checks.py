@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import hail as hl
 
@@ -52,7 +52,9 @@ def generic_field_check(
             ht_orig.select(*display_fields).show()
 
 
-def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression]:
+def make_filters_sanity_check_expr(
+    ht: hl.Table, extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None
+) -> Dict[str, hl.expr.Expression]:
     """
     Make Hail expressions to measure % variants filtered under varying conditions of interest.
 
@@ -68,9 +70,10 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
             - Only random forest filtering
 
     :param ht: Table containing 'filter' annotation to be examined.
+    :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
     :return: Dictionary containing Hail aggregation expressions to examine filter flags.
     """
-    return {
+    filters_dict = {
         "n": hl.agg.count(),
         "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) != 0),
         "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("InbreedingCoeff")),
@@ -86,6 +89,10 @@ def make_filters_sanity_check_expr(ht: hl.Table) -> Dict[str, hl.expr.Expression
             ht.filters.contains("RF") & (ht.filters.length() == 1)
         ),
     }
+    if extra_filter_checks:
+        filters_dict.update(extra_filter_checks)
+
+    return filters_dict
 
 
 def sample_sum_check(

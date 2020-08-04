@@ -7,6 +7,7 @@
 * Removed assumption of `snv` annotation from `compute_quantile_bin`. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Added constants and functions relevant to VCF export [(#241)](https://github.com/broadinstitute/gnomad_methods/pull/241)
+* Updated liftover functions to be more generic [(#246)](https://github.com/broadinstitute/gnomad_methods/pull/246)
 
 ## Version 0.4.0 - July 9th, 2020
 

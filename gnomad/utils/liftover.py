@@ -1,9 +1,10 @@
 import logging
 from os.path import basename, dirname
-from typing import Union
+from typing import Tuple, Union
 
 import hail as hl
-from gnomad.utils.reference_genome import get_reference_genome
+
+from gnomad.utils.reference_genome import add_reference_sequence, get_reference_genome
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -13,58 +14,47 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def get_checkpoint_path(gnomad: bool, data_type: str, path: str, is_table: bool) -> str:
+GRCH37_to_GRCH38_CHAIN = "gs://hail-common/references/grch37_to_grch38.over.chain.gz"
+"""
+Path to chain file required to lift data from GRCh37 to GRCh38.
+"""
+
+GRCH38_TO_GRCH37_CHAIN = "gs://hail-common/references/grch38_to_grch37.over.chain.gz"
+"""
+Path to chain file required to lift data from GRCh38 to GRCh37.
+"""
+
+
+def get_liftover_genome(
+    t: Union[hl.MatrixTable, hl.Table]
+) -> Tuple[hl.genetics.ReferenceGenome, hl.genetics.ReferenceGenome]:
     """
-    Creates a checkpoint path for Table
+    Infers reference genome build of input data and assumes destination reference genome build. 
 
-    :param gnomad: Whether data is gnomAD data
-    :param data_type: Data type (exomes or genomes for gnomAD; not used otherwise)
-    :param path: Path to input Table/MatrixTable (if data is not gnomAD data)
-    :param is_table: Whether data is a Table
-    :return: Output checkpoint path
-    """
+    Adds liftover chain to source reference genome and sequence to destination reference genome.
+    Returns tuple containing both reference genomes in preparation for liftover.
 
-    if gnomad:
-        return f"gs://gnomad/liftover/release/2.1.1/ht/{data_type}/gnomad.{data_type}.r2.1.1.liftover.ht"
-    else:
-        out_name = basename(path).split(".")[0]
-        out = f"{dirname(path)}/{out_name}_lift"
-        return f"{out}.ht" if is_table else f"{out}.mt"
-
-
-def get_liftover_genome(t: Union[hl.MatrixTable, hl.Table]) -> list:
-    """
-    Infers genome build of input data and assumes destination build. Prepares to liftover to destination genome build
-
-    :param t: Input Table or MatrixTable
-    :return: List of source build (with liftover chain added) and destination build (with sequence loaded)
+    :param t: Input Table or MatrixTable.
+    :return: Tuple of source reference genome (with liftover chain added) 
+        and destination reference genome (with sequence loaded)
     """
 
-    logger.info("Inferring build of input")
-    build = get_reference_genome(t.locus).name
+    logger.info("Inferring reference genome of input...")
+    input_build = get_reference_genome(t.locus).name
+    source = hl.get_reference(input_build)
 
     logger.info(
-        "Loading reference genomes, adding chain file, and loading fasta sequence for destination build"
+        "Adding chain file to source build and loading fasta sequence for destination build..."
     )
-    if build == "GRCh38":
-        source = hl.get_reference("GRCh38")
+    if input_build == "GRCh38":
         target = hl.get_reference("GRCh37")
-        chain = "gs://hail-common/references/grch38_to_grch37.over.chain.gz"
-        target.add_sequence(
-            "gs://hail-common/references/human_g1k_v37.fasta.gz",
-            "gs://hail-common/references/human_g1k_v37.fasta.fai",
-        )
-    else:
-        source = hl.get_reference("GRCh37")
-        target = hl.get_reference("GRCh38")
-        chain = "gs://hail-common/references/grch37_to_grch38.over.chain.gz"
-        target.add_sequence(
-            "gs://hail-common/references/Homo_sapiens_assembly38.fasta.gz",
-            "gs://hail-common/references/Homo_sapiens_assembly38.fasta.fai",
-        )
+        chain = GRCH38_TO_GRCH37_CHAIN
 
-    source.add_liftover(chain, target)
-    return [source, target]
+    else:
+        target = hl.get_reference("GRCh38")
+        chain = GRCH37_to_GRCH38_CHAIN
+
+    return (source.add_liftover(chain, target), add_reference_sequence(target))
 
 
 def lift_data(

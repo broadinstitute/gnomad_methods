@@ -42,9 +42,7 @@ def get_liftover_genome(
     input_build = get_reference_genome(t.locus).name
     source = hl.get_reference(input_build)
 
-    logger.info(
-        "Adding chain file to source build and loading fasta sequence for destination build..."
-    )
+    logger.info("Loading fasta sequence for destination build...")
     if input_build == "GRCh38":
         target = hl.get_reference("GRCh37")
         chain = GRCH38_TO_GRCH37_CHAIN
@@ -53,7 +51,16 @@ def get_liftover_genome(
         target = hl.get_reference("GRCh38")
         chain = GRCH37_to_GRCH38_CHAIN
 
-    return (source.add_liftover(chain, target), add_reference_sequence(target))
+    logger.info("Adding liftover chain to input build...")
+    if source.has_liftover():
+        logger.warning(
+            f"Source reference build {source.name} already has a chain file!\
+            Using whichever chain has already been added."
+        )
+    else:
+        source.add_liftover(chain, target)
+
+    return (source, add_reference_sequence(target))
 
 
 def liftover_expr(

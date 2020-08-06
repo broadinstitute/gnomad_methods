@@ -183,8 +183,7 @@ INFO_DICT = {
     "has_star": {
         "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"
     },
-    "AS_pab_max": {
-        "Number": "A",
+    "pab_max": {
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
 }

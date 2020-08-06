@@ -563,9 +563,15 @@ def add_as_info_dict(
     :param as_fields: List containing allele-specific fields to be added to info_dict. Default is AS_FIELDS.
     :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
     """
-    as_dict = {}
+    # Add description for pab_max (pab_max is only allele-specific)
+    PAB_MAX_DESCRIPTION = "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5"
 
+    as_dict = {}
     for field in as_fields:
+
+        if field == "AS_pab_max":
+            as_dict[field]["Number"] = "A"
+            as_dict[field]["Description"] = PAB_MAX_DESCRIPTION
 
         try:
             # Strip AS_ from field name

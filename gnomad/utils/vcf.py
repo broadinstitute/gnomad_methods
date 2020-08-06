@@ -649,10 +649,10 @@ def make_hist_bin_edges_expr(
         hist_name = hist
 
         # Parse hists calculated on both raw and adj-filtered data
-        for hist_type in ["adj_qual_hists", "qual_hists"]:
+        for hist_type in ["raw_qual_hists", "qual_hists"]:
 
-            if "adj" in hist_type:
-                hist_name = f"{hist}_adj"
+            if "raw" in hist_type:
+                hist_name = f"{hist}_raw"
             edges_dict[hist_name] = "|".join(
                 map(
                     lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),

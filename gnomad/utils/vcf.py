@@ -48,7 +48,7 @@ AS_FIELDS = [
     "AS_ReadPosRankSum",
     "AS_SOR",
     "AS_VarDP",
-    "InbreedingCoeff",
+    "AS_InbreedingCoeff",
 ]
 """
 Allele-specific variant annotations.
@@ -398,12 +398,14 @@ def make_combo_header_text(
 
     header_text = header_text + " samples"
 
-    if "subpop" in combo_dict:
-        header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
-        combo_dict.pop("pop")
+    if "subpop" in combo_dict or "pop" in combo_dict:
+        if "subpop" in combo_dict:
+            header_text = (
+                header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
+            )
 
-    if "pop" in combo_dict:
-        header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
+        else:
+            header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
 
     if "gnomad" in prefix:
         header_text = header_text + " in gnomAD"
@@ -442,7 +444,7 @@ def make_info_dict(
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
-    :param description_text: Optional text to append to the end of age and popmax descriptions. Needs to start with a space if specified.
+    :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
@@ -521,30 +523,30 @@ def make_info_dict(
                 combo_dict = {
                     f"{prefix}AC_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele count{for_combo}",
+                        "Description": f"Alternate allele count{for_combo}{description_text}",
                     },
                     f"{prefix}AN_{combo}": {
                         "Number": "1",
-                        "Description": f"Total number of alleles{in_combo}",
+                        "Description": f"Total number of alleles{in_combo}{description_text}",
                     },
                     f"{prefix}AF_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{in_combo}",
+                        "Description": f"Alternate allele frequency{in_combo}{description_text}",
                     },
                     f"{prefix}nhomalt_{combo}": {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{in_combo}",
+                        "Description": f"Count of homozygous individuals{in_combo}{description_text}",
                     },
                 }
             else:
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {for_combo}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {for_combo}{description_text}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {for_combo}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {for_combo}{description_text}",
                     },
                 }
             info_dict.update(combo_dict)
@@ -570,8 +572,10 @@ def add_as_info_dict(
     for field in as_fields:
 
         if field == "AS_pab_max":
+            as_dict[field] = {}
             as_dict[field]["Number"] = "A"
             as_dict[field]["Description"] = PAB_MAX_DESCRIPTION
+            continue
 
         try:
             # Strip AS_ from field name

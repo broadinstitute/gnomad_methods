@@ -373,7 +373,7 @@ def make_combo_header_text(
     preposition: str,
     combo_dict: Dict[str, str],
     prefix: str,
-    pop_names: Dict[str, str] = POP_NAMES,
+    pop_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -386,7 +386,7 @@ def make_combo_header_text(
         Possible grouping types are: "group", "pop", "sex", and "subpop". 
         Example input: {"pop": "afr", "sex": "female"}
     :param prefix: Prefix string indicating sample subset.
-    :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values).
     :return: String with automatically generated description text for a given set of combo fields.
     """
     header_text = " " + preposition
@@ -421,6 +421,7 @@ def make_combo_header_text(
 
 def make_info_dict(
     prefix: str = "",
+    pop_names: Dict[str, str] = POP_NAMES,
     label_groups: Dict[str, str] = None,
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
@@ -441,6 +442,7 @@ def make_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
     
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
@@ -518,8 +520,8 @@ def make_info_dict(
             combo_fields = combo.split("_")
             group_dict = dict(zip(group_types, combo_fields))
 
-            for_combo = make_combo_header_text("for", group_dict, prefix)
-            in_combo = make_combo_header_text("in", group_dict, prefix)
+            for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
+            in_combo = make_combo_header_text("in", group_dict, prefix, pop_names)
 
             if not faf:
                 combo_dict = {

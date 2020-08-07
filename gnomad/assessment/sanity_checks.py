@@ -117,6 +117,9 @@ def sample_sum_check(
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: None
     """
+    if prefix != "":
+        prefix = f"{prefix}_"
+
     label_combos = make_label_combos(label_groups)
     combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in label_combos]
     combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in label_combos]

@@ -48,7 +48,7 @@ AS_FIELDS = [
     "AS_ReadPosRankSum",
     "AS_SOR",
     "AS_VarDP",
-    "AS_InbreedingCoeff",
+    "InbreedingCoeff",
 ]
 """
 Allele-specific variant annotations.
@@ -117,7 +117,8 @@ INFO_DICT = {
         "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
     },
     "InbreedingCoeff": {
-        "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
+        "Number": "A",
+        "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)",
     },
     "MQ": {
         "Description": "Root mean square of the mapping quality of reads across all samples"
@@ -183,7 +184,8 @@ INFO_DICT = {
     "has_star": {
         "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"
     },
-    "pab_max": {
+    "AS_pab_max": {
+        "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
 }
@@ -542,11 +544,11 @@ def make_info_dict(
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
                     },
                 }
             info_dict.update(combo_dict)
@@ -565,17 +567,8 @@ def add_as_info_dict(
     :param as_fields: List containing allele-specific fields to be added to info_dict. Default is AS_FIELDS.
     :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
     """
-    # Add description for pab_max (pab_max is only allele-specific)
-    PAB_MAX_DESCRIPTION = "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5"
-
     as_dict = {}
     for field in as_fields:
-
-        if field == "AS_pab_max":
-            as_dict[field] = {}
-            as_dict[field]["Number"] = "A"
-            as_dict[field]["Description"] = PAB_MAX_DESCRIPTION
-            continue
 
         try:
             # Strip AS_ from field name
@@ -592,7 +585,7 @@ def add_as_info_dict(
             ] = f"Allele-specific {first_letter}{rest_of_description}"
 
         except KeyError:
-            raise ValueError(f"{field} is not present in input info dictionary!")
+            logger.warning(f"{field} is not present in input info dictionary!")
 
     return as_dict
 

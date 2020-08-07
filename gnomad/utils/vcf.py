@@ -11,7 +11,13 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-SORT_ORDER = ["popmax", "group", "pop", "subpop", "sex"]
+SORT_ORDER = [
+    "popmax",
+    "pop",
+    "subpop",
+    "sex",
+    "group",
+]
 """
 Order to sort subgroupings during VCF export.
 Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).

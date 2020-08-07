@@ -734,8 +734,7 @@ def set_female_y_metrics_to_na(
         female_metrics_dict.update(
             {
                 f"{metric}": hl.or_missing(
-                    (~t.locus.contig.in_y_nonpar() | ~t.locus.contig.in_y_par()),
-                    t.info[f"{metric}"],
+                    (~t.locus.in_y_nonpar() | ~t.locus.in_y_par()), t.info[f"{metric}"],
                 )
             }
         )

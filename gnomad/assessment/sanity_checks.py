@@ -157,12 +157,12 @@ def sample_sum_check(
             generic_field_check(
                 ht,
                 (
-                    ht.info[f"{prefix}{subfield}_{group}_{subpop}"]
+                    ht.info[f"{prefix}{subfield}_{subpop}_{group}"]
                     != ht[f"sum_{subfield}_{group}_{alt_groups}"]
                 ),
-                f"{prefix}{subfield}_{group}_{subpop} = sum({subfield}_{group}_{alt_groups})",
+                f"{prefix}{subfield}_{subpop}_{group} = sum({subfield}_{group}_{alt_groups})",
                 [
-                    f"info.{prefix}{subfield}_{group}_{subpop}",
+                    f"info.{prefix}{subfield}_{subpop}_{group}",
                     f"sum_{subfield}_{group}_{alt_groups}",
                 ],
                 verbose,

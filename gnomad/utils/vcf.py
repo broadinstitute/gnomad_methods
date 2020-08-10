@@ -154,7 +154,7 @@ INFO_DICT = {
     "VQSLOD": {
         "Description": "Log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
     },
-    "VQSR_culprit": {
+    "culprit": {
         "Description": "Worst-performing annotation in the VQSR Gaussian mixture model",
     },
     "decoy": {"Description": "Variant falls within a reference decoy region"},

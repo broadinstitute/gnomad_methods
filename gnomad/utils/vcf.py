@@ -95,11 +95,11 @@ Annotations about variant region type.
 """
 
 RF_FIELDS = [
-    "fail_hard_filters",
+    "rf_positive_label",
+    "rf_negative_label",
     "rf_label",
     "rf_train",
     "rf_tp_probability",
-    "tp",
 ]
 """
 Annotations specific to the variant QC using a random forest model.
@@ -139,10 +139,10 @@ INFO_DICT = {
         "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read position bias"
     },
     "SOR": {"Description": "Strand bias estimated by the symmetric odds ratio test"},
-    "VQSR_POSITIVE_TRAIN_SITE": {
+    "POSITIVE_TRAIN_SITE": {
         "Description": "Variant was used to build the positive training set of high-quality variants for VQSR"
     },
-    "VQSR_NEGATIVE_TRAIN_SITE": {
+    "NEGATIVE_TRAIN_SITE": {
         "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
     },
     "BaseQRankSum": {

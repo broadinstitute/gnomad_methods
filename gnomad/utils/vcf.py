@@ -183,7 +183,7 @@ INFO_DICT = {
     },
     "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)",},
     "n_alt_alleles": {
-        "Number": 1,
+        "Number": "1",
         "Description": "Total number of alternate alleles observed at variant locus",
     },
     "was_mixed": {"Description": "Variant type was mixed"},

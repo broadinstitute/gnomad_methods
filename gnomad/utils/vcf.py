@@ -205,6 +205,7 @@ Densified entries to be selected during VCF export.
 """
 
 SPARSE_ENTRIES = [
+    "END",
     "DP",
     "GQ",
     "LA",

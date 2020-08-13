@@ -8,6 +8,7 @@
 * Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Added constants and functions relevant to VCF export [(#241)](https://github.com/broadinstitute/gnomad_methods/pull/241)
 * Updated liftover functions to be more generic [(#246)](https://github.com/broadinstitute/gnomad_methods/pull/246)
+* Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
 
 ## Version 0.4.0 - July 9th, 2020
 

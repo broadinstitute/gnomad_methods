@@ -90,10 +90,9 @@ Annotations about variant region type.
 
 RF_FIELDS = [
     "fail_hard_filters",
-    "filters",
     "rf_label",
     "rf_train",
-    "rf_probability",
+    "rf_tp_probability",
     "tp",
 ]
 """
@@ -675,8 +674,9 @@ def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str,
     for hist in HISTS:
 
         # Get hists for both raw and adj data
-        if adj:
-            hist = f"{hist}_adj"
+        # Add "_raw" to quality histograms calculated on raw data
+        if not adj:
+            hist = f"{hist}_raw"
 
         edges = bin_edges[hist]
         hist_fields = hist.split("_")

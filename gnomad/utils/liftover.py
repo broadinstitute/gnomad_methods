@@ -54,7 +54,7 @@ def get_liftover_genome(
     logger.info("Adding liftover chain to input build...")
     if source.has_liftover():
         logger.warning(
-            f"Source reference build {source.name} already has a chain file!\
+            f"Source reference build {source.name} already has a chain file: {source._liftovers}!\
             Using whichever chain has already been added."
         )
     else:
@@ -98,13 +98,13 @@ def liftover_expr(
         original_locus=locus,
         original_alleles=alleles,
         locus_fail_liftover=hl.is_missing(lifted_over_locus),
-        ref_allele_mismatch=lifted_over_locus.sequence_context()
+        ref_allele_mismatch=lifted_over_locus.result.sequence_context()
         != lifted_over_alleles[0],
     )
 
 
 def default_lift_data(
-    t: Union[hl.MatrixTable, hl.Table],
+    t: Union[hl.MatrixTable, hl.Table], remove_failed_sites: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Lifts input Table or MatrixTable from one reference build to another.
@@ -129,9 +129,10 @@ def default_lift_data(
         else t.aggregate_rows(no_target_expr)
     )
 
-    logger.info(f"Filtering out {num_no_target} sites that failed to liftover...")
-    keep_expr = ~t.locus_fail_liftover
-    t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
+    if remove_failed_sites:
+        logger.info(f"Filtering out {num_no_target} sites that failed to liftover...")
+        keep_expr = ~t.locus_fail_liftover
+        t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
 
     row_key_expr = {"locus": t.new_locus.result, "alleles": t.new_alleles}
     return (
@@ -143,7 +144,7 @@ def default_lift_data(
 
 def liftover_using_gnomad_map(ht: hl.Table, data_type: str):
     """
-    Liftover a gnomAD table using already-established liftover file.
+    Liftover a gnomAD v2 table using already-established liftover file.
 
     .. note::
         This function shuffles! 

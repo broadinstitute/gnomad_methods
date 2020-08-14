@@ -9,6 +9,7 @@
 * Added constants and functions relevant to VCF export [(#241)](https://github.com/broadinstitute/gnomad_methods/pull/241)
 * Updated liftover functions to be more generic [(#246)](https://github.com/broadinstitute/gnomad_methods/pull/246)
 * Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
+* Updated some VCF export constants [(#249)](https://github.com/broadinstitute/gnomad_methods/pull/249)
 
 ## Version 0.4.0 - July 9th, 2020
 

@@ -11,7 +11,13 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-SORT_ORDER = ["popmax", "group", "pop", "subpop", "sex"]
+SORT_ORDER = [
+    "popmax",
+    "pop",
+    "subpop",
+    "sex",
+    "group",
+]
 """
 Order to sort subgroupings during VCF export.
 Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
@@ -89,11 +95,11 @@ Annotations about variant region type.
 """
 
 RF_FIELDS = [
-    "fail_hard_filters",
+    "rf_positive_label",
+    "rf_negative_label",
     "rf_label",
     "rf_train",
     "rf_tp_probability",
-    "tp",
 ]
 """
 Annotations specific to the variant QC using a random forest model.
@@ -117,7 +123,8 @@ INFO_DICT = {
         "Description": "Phred-scaled p-value of Fisher's exact test for strand bias"
     },
     "InbreedingCoeff": {
-        "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
+        "Number": "A",
+        "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)",
     },
     "MQ": {
         "Description": "Root mean square of the mapping quality of reads across all samples"
@@ -132,10 +139,10 @@ INFO_DICT = {
         "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read position bias"
     },
     "SOR": {"Description": "Strand bias estimated by the symmetric odds ratio test"},
-    "VQSR_POSITIVE_TRAIN_SITE": {
+    "POSITIVE_TRAIN_SITE": {
         "Description": "Variant was used to build the positive training set of high-quality variants for VQSR"
     },
-    "VQSR_NEGATIVE_TRAIN_SITE": {
+    "NEGATIVE_TRAIN_SITE": {
         "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
     },
     "BaseQRankSum": {
@@ -147,7 +154,7 @@ INFO_DICT = {
     "VQSLOD": {
         "Description": "Log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
     },
-    "VQSR_culprit": {
+    "culprit": {
         "Description": "Worst-performing annotation in the VQSR Gaussian mixture model",
     },
     "decoy": {"Description": "Variant falls within a reference decoy region"},
@@ -176,7 +183,7 @@ INFO_DICT = {
     },
     "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)",},
     "n_alt_alleles": {
-        "Number": 1,
+        "Number": "1",
         "Description": "Total number of alternate alleles observed at variant locus",
     },
     "was_mixed": {"Description": "Variant type was mixed"},
@@ -198,6 +205,7 @@ Densified entries to be selected during VCF export.
 """
 
 SPARSE_ENTRIES = [
+    "END",
     "DP",
     "GQ",
     "LA",
@@ -372,7 +380,7 @@ def make_combo_header_text(
     preposition: str,
     combo_dict: Dict[str, str],
     prefix: str,
-    pop_names: Dict[str, str] = POP_NAMES,
+    pop_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -385,7 +393,7 @@ def make_combo_header_text(
         Possible grouping types are: "group", "pop", "sex", and "subpop". 
         Example input: {"pop": "afr", "sex": "female"}
     :param prefix: Prefix string indicating sample subset.
-    :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values).
     :return: String with automatically generated description text for a given set of combo fields.
     """
     header_text = " " + preposition
@@ -399,12 +407,14 @@ def make_combo_header_text(
 
     header_text = header_text + " samples"
 
-    if "subpop" in combo_dict:
-        header_text = header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
-        combo_dict.pop("pop")
+    if "subpop" in combo_dict or "pop" in combo_dict:
+        if "subpop" in combo_dict:
+            header_text = (
+                header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
+            )
 
-    if "pop" in combo_dict:
-        header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
+        else:
+            header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
 
     if "gnomad" in prefix:
         header_text = header_text + " in gnomAD"
@@ -418,6 +428,7 @@ def make_combo_header_text(
 
 def make_info_dict(
     prefix: str = "",
+    pop_names: Dict[str, str] = POP_NAMES,
     label_groups: Dict[str, str] = None,
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
@@ -438,12 +449,13 @@ def make_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations 
     
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
-    :param description_text: Optional text to append to the end of age and popmax descriptions. Needs to start with a space if specified.
+    :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
@@ -515,37 +527,37 @@ def make_info_dict(
             combo_fields = combo.split("_")
             group_dict = dict(zip(group_types, combo_fields))
 
-            for_combo = make_combo_header_text("for", group_dict, prefix)
-            in_combo = make_combo_header_text("in", group_dict, prefix)
+            for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
+            in_combo = make_combo_header_text("in", group_dict, prefix, pop_names)
 
             if not faf:
                 combo_dict = {
                     f"{prefix}AC_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele count{for_combo}",
+                        "Description": f"Alternate allele count{for_combo}{description_text}",
                     },
                     f"{prefix}AN_{combo}": {
                         "Number": "1",
-                        "Description": f"Total number of alleles{in_combo}",
+                        "Description": f"Total number of alleles{in_combo}{description_text}",
                     },
                     f"{prefix}AF_{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{in_combo}",
+                        "Description": f"Alternate allele frequency{in_combo}{description_text}",
                     },
                     f"{prefix}nhomalt_{combo}": {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{in_combo}",
+                        "Description": f"Count of homozygous individuals{in_combo}{description_text}",
                     },
                 }
             else:
                 combo_dict = {
                     f"{prefix}faf95_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI) {for_combo}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
                     },
                     f"{prefix}faf99_{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI) {for_combo}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
                     },
                 }
             info_dict.update(combo_dict)
@@ -565,7 +577,6 @@ def add_as_info_dict(
     :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
     """
     as_dict = {}
-
     for field in as_fields:
 
         try:
@@ -583,7 +594,7 @@ def add_as_info_dict(
             ] = f"Allele-specific {first_letter}{rest_of_description}"
 
         except KeyError:
-            raise ValueError(f"{field} is not present in input info dictionary!")
+            logger.warning(f"{field} is not present in input info dictionary!")
 
     return as_dict
 
@@ -611,7 +622,7 @@ def make_vcf_filter_dict(
         },
         "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
         "RF": {
-            "Description": f"Failed random forest filtering thresholds of {snp_cutoff}, {indel_cutoff} (probabilities of being a true positive variant) for SNPs, indels"
+            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },
         "PASS": {"Description": "Passed all variant filters"},
     }
@@ -646,13 +657,13 @@ def make_hist_bin_edges_expr(
 
     for hist in hists:
 
-        hist_name = hist
-
         # Parse hists calculated on both raw and adj-filtered data
-        for hist_type in ["adj_qual_hists", "qual_hists"]:
+        for hist_type in ["raw_qual_hists", "qual_hists"]:
 
-            if "adj" in hist_type:
-                hist_name = f"{hist}_adj"
+            hist_name = hist
+            if "raw" in hist_type:
+                hist_name = f"{hist}_raw"
+
             edges_dict[hist_name] = "|".join(
                 map(
                     lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
@@ -724,8 +735,7 @@ def set_female_y_metrics_to_na(
         female_metrics_dict.update(
             {
                 f"{metric}": hl.or_missing(
-                    (~t.locus.contig.in_y_nonpar() | ~t.locus.contig.in_y_par()),
-                    t.info[f"{metric}"],
+                    (~t.locus.in_y_nonpar() | ~t.locus.in_y_par()), t.info[f"{metric}"],
                 )
             }
         )

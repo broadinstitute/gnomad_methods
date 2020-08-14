@@ -622,7 +622,7 @@ def make_vcf_filter_dict(
         },
         "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
         "RF": {
-            "Description": f"Failed random forest filtering thresholds of {snp_cutoff}, {indel_cutoff} for SNPs, indels (probabilities of being a true positive variant)"
+            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },
         "PASS": {"Description": "Passed all variant filters"},
     }

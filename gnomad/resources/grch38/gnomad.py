@@ -9,8 +9,10 @@ from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
 CURRENT_GENOME_RELEASE = "3.0"
+CURRENT_GENOME_COVERAGE_RELEASE= "3.0.1"
 EXOME_RELEASES = []
 GENOME_RELEASES = ["3.0"]
+GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
@@ -101,8 +103,8 @@ def coverage(data_type: str) -> VersionedTableResource:
         current_release = CURRENT_EXOME_RELEASE
         releases = EXOME_RELEASES
     else:
-        current_release = CURRENT_GENOME_RELEASE
-        releases = GENOME_RELEASES
+        current_release = CURRENT_GENOME_COVERAGE_RELEASE
+        releases = GENOME_COVERAGE_RELEASES
 
     return VersionedTableResource(
         current_release,
@@ -134,8 +136,8 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
             )
     else:
         if version is None:
-            version = CURRENT_GENOME_RELEASE
-        elif version not in GENOME_RELEASES:
+            version = CURRENT_GENOME_COVERAGE_RELEASE
+        elif version not in GENOME_COVERAGE_RELEASES:
             raise DataException(
                 f"Version {version} of gnomAD genomes for GRCh38 does not exist"
             )

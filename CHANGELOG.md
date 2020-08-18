@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+* Updated coverage resources to version 3.0.1 [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
 * Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
 * Modified variant QC pipeline functions `generate_trio_stats` and `generate_sib_stats` to add filter parameter for autosomes and bi-allelic sites [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223)
 * `score_bin_agg` now requires additional annotations `ac` and `ac_qc_samples_unrelated_raw` and no longer needs `tdt` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 

@@ -728,7 +728,7 @@ def set_female_y_metrics_to_na(
     :return: Dictionary with reset annotations
     """
     metrics = list(t.row.info)
-    female_metrics = [x for x in metrics if "_female" in x]
+    female_metrics = [x for x in metrics if "_female" in x or "_XX" in x]
 
     female_metrics_dict = {}
     for metric in female_metrics:

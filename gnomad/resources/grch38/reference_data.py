@@ -197,6 +197,15 @@ lcr_intervals = TableResource(
     },
 )
 
+seg_dup_intervals = TableResource(
+    path="gs://gnomad-public/resources/grch38/seg_dup_intervals/GRCh38_segdups.ht",
+    import_func=hl.import_bed,
+    import_args={
+        "path": "gs://gnomad-public/resources/grch38/seg_dup_intervals/GRCh38_segdups.bed",
+        "reference_genome": "GRCh38",
+    },
+)
+
 telomeres_and_centromeres = TableResource(
     path="gs://gnomad-public/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.ht",
     import_func=hl.import_bed,

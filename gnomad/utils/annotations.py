@@ -674,7 +674,7 @@ def get_adj_expr(
     adj_gq: int = 20,
     adj_dp: int = 10,
     adj_ab: float = 0.2,
-    haploid_adj_dp: int = 10,
+    haploid_adj_dp: int = 5,
 ) -> hl.expr.BooleanExpression:
     """
     Gets adj genotype annotation.
@@ -700,7 +700,7 @@ def annotate_adj(
     adj_gq: int = 20,
     adj_dp: int = 10,
     adj_ab: float = 0.2,
-    haploid_adj_dp: int = 10,
+    haploid_adj_dp: int = 5,
 ) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid)

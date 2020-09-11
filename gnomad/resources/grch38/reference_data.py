@@ -42,6 +42,33 @@ def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = vep_or_lookup_vep(clinvar, reference="GRCh38")
     return clinvar
 
+def _import_clinvar_pathogenic(**kwargs) -> hl.Table:
+    clinvar_pathogenic = import_sites_vcf(**kwargs)
+    no_star_assertions = hl.literal(
+        {
+            "no_assertion_provided",
+            "no_assertion_criteria_provided",
+            "no_interpretation_for_the_single_variant",
+        }
+    )
+    clinvar_pathogenic = clinvar_pathogenic.filter(
+        hl.set(clinvar_pathogenic.info.CLNREVSTAT).intersection(no_star_assertions).length()
+        > 0,
+        keep=False,
+    )
+    clinvar_pathogenic = clinvar_pathogenic.filter(
+        clinvar_pathogenic.info.CLNSIG.map(lambda x: x.lower())
+        .map(lambda x: x.contains("pathogenic"))
+        .any(lambda x: x),
+        keep=True,
+    )
+    clinvar_pathogenic = clinvar_pathogenic.filter(
+        hl.is_defined(clinvar_pathogenic.info.CLNSIGCONF), keep=False
+    )
+    return clinvar_pathogenic
+
+
+
 
 # Resources with no versioning needed
 purcell_5k_intervals = TableResource(
@@ -123,6 +150,24 @@ clinvar = VersionedTableResource(
         )
     },
 )
+
+""" clinvar_pathogenic = VersionedTableResource(
+    default_version="20190923",
+    versions={
+        "20190923": TableResource(
+            path="gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.ht",
+            import_func=_import_clinvar,
+            import_args={
+                "path": "gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
+                "force_bgz": True,
+                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
+            },
+        )
+    },
+) """
 
 dbsnp = VersionedTableResource(
     default_version="b154",

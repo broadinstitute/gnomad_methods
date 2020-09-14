@@ -44,27 +44,7 @@ def _import_clinvar(**kwargs) -> hl.Table:
 
 def _import_clinvar_pathogenic(**kwargs) -> hl.Table:
     clinvar_pathogenic = import_sites_vcf(**kwargs)
-    no_star_assertions = hl.literal(
-        {
-            "no_assertion_provided",
-            "no_assertion_criteria_provided",
-            "no_interpretation_for_the_single_variant",
-        }
-    )
-    clinvar_pathogenic = clinvar_pathogenic.filter(
-        hl.set(clinvar_pathogenic.info.CLNREVSTAT).intersection(no_star_assertions).length()
-        > 0,
-        keep=False,
-    )
-    clinvar_pathogenic = clinvar_pathogenic.filter(
-        clinvar_pathogenic.info.CLNSIG.map(lambda x: x.lower())
-        .map(lambda x: x.contains("pathogenic"))
-        .any(lambda x: x),
-        keep=True,
-    )
-    clinvar_pathogenic = clinvar_pathogenic.filter(
-        hl.is_defined(clinvar_pathogenic.info.CLNSIGCONF), keep=False
-    )
+    clinvar_pathogenic = vep_or_lookup_vep(clinvar_pathogenic, reference="GRCh38")
     return clinvar_pathogenic
 
 
@@ -151,14 +131,14 @@ clinvar = VersionedTableResource(
     },
 )
 
-""" clinvar_pathogenic = VersionedTableResource(
+clinvar_pathogenic = VersionedTableResource(
     default_version="20190923",
     versions={
         "20190923": TableResource(
-            path="gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.ht",
-            import_func=_import_clinvar,
+            path="gs://gnomad-wphu/grch38/clinvar_pathogenic_20190923.ht",
+            import_func=_import_clinvar_pathogenic,
             import_args={
-                "path": "gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
+                "path": "gs://gnomad-wphu/grch38/clinvar_pathogenic_20190923.vcf.bgz",
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -167,7 +147,7 @@ clinvar = VersionedTableResource(
             },
         )
     },
-) """
+)
 
 dbsnp = VersionedTableResource(
     default_version="b154",

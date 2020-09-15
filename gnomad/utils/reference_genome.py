@@ -52,10 +52,11 @@ def get_reference_ht(
     context = []
     for contig in contigs:
         n_partitions = max(1, int(ref.contig_length(contig) / 5000000))
-        logger.info(f"Creating reference contig {contig} with {n_partitions} partitions.")
+        logger.info(
+            f"Creating reference contig {contig} with {n_partitions} partitions."
+        )
         _context = hl.utils.range_table(
-            ref.contig_length(contig),
-            n_partitions=n_partitions
+            ref.contig_length(contig), n_partitions=n_partitions
         )
 
         locus_expr = hl.locus(contig=contig, pos=_context.idx + 1, reference_genome=ref)

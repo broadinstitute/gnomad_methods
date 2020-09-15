@@ -12,6 +12,8 @@
 * Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
 * Updated some VCF export constants [(#249)](https://github.com/broadinstitute/gnomad_methods/pull/249)
 * Changed default DP threshold to 5 for hemi genotype calls in `annotate_adj` and `get_adj_expr` [(#252)](https://github.com/broadinstitute/gnomad_methods/pull/252)
+* Updated coverage resources to version 3.0.1 [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
+* Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
 
 ## Version 0.4.0 - July 9th, 2020
 

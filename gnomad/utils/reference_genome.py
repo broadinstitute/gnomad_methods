@@ -49,11 +49,14 @@ def get_reference_ht(
             }
         )
 
-    context = None
+    context = []
     for contig in contigs:
+        n_partitions = max(1, int(ref.contig_length(contig) / 5000000))
+        logger.info(
+            f"Creating reference contig {contig} with {n_partitions} partitions."
+        )
         _context = hl.utils.range_table(
-            ref.contig_length(contig),
-            n_partitions=int(ref.contig_length(contig) / 5000000),
+            ref.contig_length(contig), n_partitions=n_partitions
         )
 
         locus_expr = hl.locus(contig=contig, pos=_context.idx + 1, reference_genome=ref)
@@ -77,12 +80,9 @@ def get_reference_ht(
         if filter_n:
             _context = _context.filter(_context.alleles[0] == "n", keep=False)
 
-        if context is None:
-            context = _context
-        else:
-            context = context.union(_context)
+        context.append(_context)
 
-    return context
+    return context.pop().union(*context)
 
 
 def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:

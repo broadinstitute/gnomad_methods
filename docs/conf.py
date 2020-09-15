@@ -19,7 +19,11 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
+    "recommonmark",
 ]
+
+# README.md contains developer documentation for building docs
+exclude_patterns = ["README.md"]
 
 master_doc = "index"
 

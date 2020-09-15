@@ -2,8 +2,25 @@
 
 ## Unreleased
 
+* Fix for error in `generate_trio_stats_expr` that led to an incorrect untransmitted count. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlapped multiple bins. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Removed assumption of `snv` annotation from `compute_quantile_bin`. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Modified `compute_binned_truth_sample_concordance` to handle additional binning for subsets of variants. [(#240)](https://github.com/broadinstitute/gnomad_methods/pull/240)
+* Added constants and functions relevant to VCF export [(#241)](https://github.com/broadinstitute/gnomad_methods/pull/241)
+* Updated liftover functions to be more generic [(#246)](https://github.com/broadinstitute/gnomad_methods/pull/246)
+* Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
+* Updated some VCF export constants [(#249)](https://github.com/broadinstitute/gnomad_methods/pull/249)
+* Changed default DP threshold to 5 for hemi genotype calls in `annotate_adj` and `get_adj_expr` [(#252)](https://github.com/broadinstitute/gnomad_methods/pull/252)
 * Updated coverage resources to version 3.0.1 [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
 * Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
+
+## Version 0.4.0 - July 9th, 2020
+
+**Note** gnomAD resources have been moved to a [requester pays bucket](https://cloud.google.com/storage/docs/requester-pays).
+Dataproc clusters must be [configured to allow reading from it](https://hail.is/docs/0.2/cloud/google_cloud.html#requester-pays).
+
+* Added `VEP_CSQ_HEADER` to generate vep description necessary for VCF export. [(#230)](https://github.com/broadinstitute/gnomad_methods/pull/230)
 * Modified variant QC pipeline functions `generate_trio_stats` and `generate_sib_stats` to add filter parameter for autosomes and bi-allelic sites [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223)
 * `score_bin_agg` now requires additional annotations `ac` and `ac_qc_samples_unrelated_raw` and no longer needs `tdt` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
 * Changed `score_bin_agg` to use `ac_qc_samples_unrelated_raw` annotation instead of `unrelated_qc_callstats` [(#223)](https://github.com/broadinstitute/gnomad_methods/pull/223) 
@@ -15,6 +32,7 @@
 * Created `training.py` in variant QC and added `sample_training_examples` [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
 * Added variant QC pipeline function `train_rf_model` [(224)](https://github.com/broadinstitute/gnomad_methods/pull/224)
 * Use local copy of VEP config instead of reading from bucket [(#231)](https://github.com/broadinstitute/gnomad_methods/pull/231)
+* Updated gnomAD resources paths for hail tables to requester pays buckets [(#233)](https://github.com/broadinstitute/gnomad_methods/pull/233)
 
 ## Version 0.3.0 - April 28th, 2020
 

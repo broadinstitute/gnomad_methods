@@ -599,7 +599,7 @@ def impute_sex_ploidy(
                 f"{chrom}_mean_dp": hl.agg.sum(
                     hl.cond(
                         chr_mt.LGT.is_hom_ref(),
-                        chr_mt.DP * (chr_mt.END - chr_mt.locus.position),
+                        chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
                         chr_mt.DP,
                     )
                 )

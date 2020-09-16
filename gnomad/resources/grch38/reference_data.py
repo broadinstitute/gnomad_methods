@@ -135,10 +135,10 @@ clinvar_pathogenic = VersionedTableResource(
     default_version="20190923",
     versions={
         "20190923": TableResource(
-            path="gs://gnomad-wphu/grch38/clinvar_pathogenic_20190923.ht",
+            path="gs://gnomad-public/resources/grch38/clinvar/clinvar_pathogenic_20190923.ht",
             import_func=_import_clinvar_pathogenic,
             import_args={
-                "path": "gs://gnomad-wphu/grch38/clinvar_pathogenic_20190923.vcf.bgz",
+                "path": "gs://gnomad-public/resources/grch38/clinvar/clinvar_pathogenic_20190923.vcf.bgz",
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,

@@ -100,10 +100,10 @@ clinvar_pathogenic = VersionedTableResource(
     default_version="20181028",
     versions={
         "20181028": TableResource(
-            path="gs://gnomad-wphu/grch37/clinvar_pathogenic_20181028.ht",
+            path="gs://gnomad-public/resources/grch37/clinvar/clinvar_pathogenic_20181028.ht",
             import_func=import_sites_vcf,
             import_args={
-                "path": "gs://gnomad-wphu/grch37/clinvar_pathogenic_20181028.vcf.bgz",
+                "path": "gs://gnomad-public/resources/grch37/clinvar/clinvar_pathogenic_20181028.vcf.bgz",
                 "force_bgz": True,
                 "skip_invalid_loci": True,
                 "min_partitions": 100,

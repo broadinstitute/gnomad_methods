@@ -319,11 +319,16 @@ def get_as_info_expr(
     if "AS_SB" in agg_expr:
         agg_expr["AS_SB_TABLE"] = agg_expr.pop("AS_SB")
 
+    if 'alt_alleles_range_array' not in mt.row or mt['alt_alleles_range_array'].dtype != hl.dtype('array<int32>'):
+        msg = f"'get_as_info_expr' expects a row field 'alt_alleles_range_array' of type array<int32>"
+        logger.error(msg)
+        raise RuntimeError(msg)
+
     # Modify aggregations to aggregate per allele
     agg_expr = {
         f: hl.agg.array_agg(
             lambda ai: hl.agg.filter(mt.LA.contains(ai), expr),
-            hl.range(1, hl.len(mt.alleles)),
+            mt.alt_alleles_range_array,
         )
         for f, expr in agg_expr.items()
     }
@@ -430,6 +435,7 @@ def default_compute_info(
     """
     # Move gvcf info entries out from nested struct
     mt = mt.transmute_entries(**mt.gvcf_info)
+    mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
 
     # Compute AS info expr
     info_expr = get_as_info_expr(mt)

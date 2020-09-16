@@ -52,7 +52,7 @@ def get_liftover_genome(
         chain = GRCH37_to_GRCH38_CHAIN
 
     logger.info("Adding liftover chain to input build...")
-    if source.has_liftover():
+    if source.has_liftover(input_build):
         logger.warning(
             f"Source reference build {source.name} already has a chain file: {source._liftovers}!\
             Using whichever chain has already been added."

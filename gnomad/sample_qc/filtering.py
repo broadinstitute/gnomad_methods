@@ -185,11 +185,11 @@ def compute_stratified_sample_qc(
     mt: hl.MatrixTable,
     strata: Dict[str, hl.expr.BooleanExpression],
     tmp_ht_prefix: Optional[str],
-    gt_expr: Optional[hl.expr.CallExpression],
+    gt_expr: Optional[hl.expr.CallExpression] = None,
 ) -> hl.Table:
     """
     Runs hl.sample_qc on different strata and then also merge the results into a single expression.
-    Note that strata should be non-overlapping,  e.g. SNV vs indels or bi-allelic vs multi-allelic
+    Note that strata should be non-overlapping, e.g. SNV vs indels or bi-allelic vs multi-allelic
 
     :param mt: Input MT
     :param strata: Strata names and filtering expressions
@@ -258,6 +258,7 @@ def merge_sample_qc_expr(
     additive_metrics = [
         "n_called",
         "n_not_called",
+        "n_filtered",
         "n_hom_ref",
         "n_het",
         "n_hom_var",
@@ -313,7 +314,7 @@ def merge_sample_qc_expr(
                         for sample_qc_expr in sample_qc_exprs
                     ]
                 ).drop("n")
-                for metric in stats_metrics
+                for metric in stats_metrics if metric in sample_qc_fields
             }
         )
 

@@ -314,7 +314,8 @@ def merge_sample_qc_expr(
                         for sample_qc_expr in sample_qc_exprs
                     ]
                 ).drop("n")
-                for metric in stats_metrics if metric in sample_qc_fields
+                for metric in stats_metrics
+                if metric in sample_qc_fields
             }
         )
 

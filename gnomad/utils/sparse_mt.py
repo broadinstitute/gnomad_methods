@@ -599,7 +599,7 @@ def impute_sex_ploidy(
                 f"{chrom}_mean_dp": hl.agg.sum(
                     hl.cond(
                         chr_mt.LGT.is_hom_ref(),
-                        chr_mt.DP * (chr_mt.END - chr_mt.locus.position),
+                        chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
                         chr_mt.DP,
                     )
                 )
@@ -651,10 +651,10 @@ def compute_coverage_stats(
     print(f"Computing coverage stats on {n_samples} samples.")
 
     # Create an outer join with the reference Table
-    mt = mt.select_entries("END", "DP")
+    mt = mt.select_entries("END", "DP").select_cols().select_rows()
     col_key_fields = list(mt.col_key)
     t = mt._localize_entries("__entries", "__cols")
-    t = t.join(reference_ht.annotate(_in_ref=True), how="outer")
+    t = t.join(reference_ht.key_by(*mt.row_key).select(_in_ref=True), how="outer")
     t = t.annotate(
         __entries=hl.or_else(
             t.__entries,
@@ -669,6 +669,9 @@ def compute_coverage_stats(
     # Filter rows where the reference is missing
     mt = mt.filter_rows(mt._in_ref)
 
+    # Unfilter entries so that entries with no ref block overlap aren't null
+    mt = mt.unfilter_entries()
+
     # Compute coverage stats
     coverage_over_x_bins = sorted(coverage_over_x_bins)
     max_coverage_bin = coverage_over_x_bins[-1]
@@ -676,7 +679,7 @@ def compute_coverage_stats(
 
     # This expression creates a counter DP -> number of samples for DP between 0 and max_coverage_bin
     coverage_counter_expr = hl.agg.counter(
-        hl.or_else(hl.min(max_coverage_bin, mt.DP), 0)
+        hl.min(max_coverage_bin, hl.or_else(mt.DP, 0))
     )
 
     # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
@@ -697,12 +700,12 @@ def compute_coverage_stats(
             )
         )
     )
-    mean_expr = hl.agg.mean(mt.DP)
+    mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
 
     # Annotate rows now
     return mt.select_rows(
         mean=hl.cond(hl.is_nan(mean_expr), 0, mean_expr),
-        median=hl.or_else(hl.agg.approx_median(mt.DP), 0),
+        median_approx=hl.or_else(hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0),
         total_DP=hl.agg.sum(mt.DP),
         **{
             f"over_{x}": count_array_expr[i] / n_samples

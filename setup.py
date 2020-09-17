@@ -15,7 +15,7 @@ setuptools.setup(
     name="gnomad",
     version="0.4.0",
     author="The Genome Aggregation Database",
-    author_email="exomeconsortium@gmail.com",
+    author_email="gnomad@broadinstitute.org",
     description="Hail utilities for the Genome Aggregation Database",
     long_description=long_description,
     long_description_content_type="text/markdown",

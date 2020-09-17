@@ -14,6 +14,8 @@
 * Changed default DP threshold to 5 for hemi genotype calls in `annotate_adj` and `get_adj_expr` [(#252)](https://github.com/broadinstitute/gnomad_methods/pull/252)
 * Updated coverage resources to version 3.0.1 [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
 * Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
+* Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
+* Add reference genome to call of `has_liftover` in `get_liftover_genome` [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 
 ## Version 0.4.0 - July 9th, 2020
 

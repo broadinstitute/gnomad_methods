@@ -12,8 +12,8 @@
 * Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
 * Updated some VCF export constants [(#249)](https://github.com/broadinstitute/gnomad_methods/pull/249)
 * Changed default DP threshold to 5 for hemi genotype calls in `annotate_adj` and `get_adj_expr` [(#252)](https://github.com/broadinstitute/gnomad_methods/pull/252)
-* Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error
-* Add reference genome to call of `has_liftover` in `get_liftover_genome`
+* Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
+* Add reference genome to call of `has_liftover` in `get_liftover_genome` [(259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 
 ## Version 0.4.0 - July 9th, 2020
 

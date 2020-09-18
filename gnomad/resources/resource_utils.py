@@ -367,6 +367,21 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
         super().__init__(default_version, versions)
 
 
+class VersionedVersionedTableResource(VersionedTableResource):
+    """
+    Versioned Versioned Table resource
+
+    The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
+    In addition, all versions of the resource are stored in the `versions` attribute.
+
+    :param default_version: The default version of this Versioned Table resource (must to be in the `versions` dict)
+    :param versions: A dict of version name -> VersionedTableResource.
+    """
+
+    def __init__(self, default_version: str, versions: Dict[str, VersionedTableResource]):
+        super().__init__(default_version, versions)
+
+
 class DataException(Exception):
     pass
 

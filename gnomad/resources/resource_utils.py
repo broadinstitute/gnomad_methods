@@ -378,7 +378,9 @@ class VersionedVersionedTableResource(VersionedTableResource):
     :param versions: A dict of version name -> VersionedTableResource.
     """
 
-    def __init__(self, default_version: str, versions: Dict[str, VersionedTableResource]):
+    def __init__(
+        self, default_version: str, versions: Dict[str, VersionedTableResource]
+    ):
         super().__init__(default_version, versions)
 
 

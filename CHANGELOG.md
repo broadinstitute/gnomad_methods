@@ -12,6 +12,7 @@
 * Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
 * Updated some VCF export constants [(#249)](https://github.com/broadinstitute/gnomad_methods/pull/249)
 * Changed default DP threshold to 5 for hemi genotype calls in `annotate_adj` and `get_adj_expr` [(#252)](https://github.com/broadinstitute/gnomad_methods/pull/252)
+* Add Clinvar Pathogenic variants as importable resource (clinvar_pathogenic) for grch37 and grch38 [(#257)](https://github.com/broadinstitute/gnomad_methods/pull/257)
 
 ## Version 0.4.0 - July 9th, 2020
 

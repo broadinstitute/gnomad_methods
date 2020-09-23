@@ -238,10 +238,10 @@ def _get_info_agg_expr(
         mq_tuple = agg_expr.pop(f"{prefix}RAW_MQandDP")
     elif f"{prefix}RAW_MQ" in agg_expr and f"{prefix}MQ_DP" in agg_expr:
         logger.info(
-            f"Computing {prefix}MQ as sqrt({prefix}MQ_DP/{prefix}RAW_MQ). "
+            f"Computing {prefix}MQ as sqrt({prefix}RAW_MQ/{prefix}MQ_DP). "
             f"Note that MQ will be set to 0 if {prefix}RAW_MQ == 0."
         )
-        mq_tuple = (agg_expr.pop(f"{prefix}MQ_DP"), agg_expr.pop(f"{prefix}RAW_MQ"))
+        mq_tuple = (agg_expr.pop(f"{prefix}RAW_MQ"), agg_expr.pop(f"{prefix}MQ_DP"))
 
     if mq_tuple is not None:
         agg_expr[f"{prefix}MQ"] = hl.cond(

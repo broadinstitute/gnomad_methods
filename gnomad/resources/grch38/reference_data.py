@@ -41,12 +41,11 @@ def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = vep_or_lookup_vep(clinvar, reference="GRCh38")
     return clinvar
 
+
 def _import_clinvar_pathogenic(**kwargs) -> hl.Table:
     clinvar_pathogenic = import_sites_vcf(**kwargs)
     clinvar_pathogenic = vep_or_lookup_vep(clinvar_pathogenic, reference="GRCh38")
     return clinvar_pathogenic
-
-
 
 
 # Resources with no versioning needed

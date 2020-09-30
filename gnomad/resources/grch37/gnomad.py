@@ -66,7 +66,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh37
     :return: Path to release Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
+    return f"/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
 
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
@@ -77,7 +77,7 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh37
     :return: path to coverage Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
+    return f"/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
 
 
 def _public_pca_ht_path(subpop: str) -> str:
@@ -88,7 +88,7 @@ def _public_pca_ht_path(subpop: str) -> str:
     :return: Path to release Table
     """
     subpop = f".{subpop}" if subpop else ""
-    return f"gs://gnomad-public/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
+    return f"/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
 
 
 def _liftover_data_path(data_type: str, version: str) -> str:
@@ -99,7 +99,7 @@ def _liftover_data_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh37
     :return: Path to chosen Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
+    return f"/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

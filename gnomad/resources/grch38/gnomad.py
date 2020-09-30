@@ -144,18 +144,14 @@ DOWNSAMPLINGS = [
 gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
-        "3.0": MatrixTableResource(
-            path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
-        )
+        "3.0": MatrixTableResource(path="/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt")
     },
 )
 
 na12878 = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
-        "3.0": MatrixTableResource(
-            path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
-        )
+        "3.0": MatrixTableResource(path="/truth-sets/hail-0.2/gnomad_v3_na12878.mt")
     },
 )
 
@@ -168,7 +164,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh38
     :return: Path to release Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
+    return f"/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
 
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
@@ -179,7 +175,7 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh38
     :return: path to coverage Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
+    return f"/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

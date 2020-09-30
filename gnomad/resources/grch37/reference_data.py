@@ -8,7 +8,7 @@ from gnomad.resources.resource_utils import (
 import hail as hl
 
 na12878_giab = MatrixTableResource(
-    path="gs://gnomad-public/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt",
+    path="/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt",
     import_func=hl.import_vcf,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.vcf.bgz",
@@ -19,7 +19,7 @@ na12878_giab = MatrixTableResource(
 )
 
 hapmap = TableResource(
-    path="gs://gnomad-public/resources/grch37/hapmap/hapmap_3.3.b37.ht",
+    path="/resources/grch37/hapmap/hapmap_3.3.b37.ht",
     import_func=import_sites_vcf,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/hapmap/hapmap_3.3.b37.vcf.bgz",
@@ -30,7 +30,7 @@ hapmap = TableResource(
 )
 
 kgp_omni = TableResource(
-    path="gs://gnomad-public/resources/grch37/kgp/1000G_omni2.5.b37.ht",
+    path="/resources/grch37/kgp/1000G_omni2.5.b37.ht",
     import_func=import_sites_vcf,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/kgp/1000G_omni2.5.b37.vcf.bgz",
@@ -41,7 +41,7 @@ kgp_omni = TableResource(
 )
 
 mills = TableResource(
-    path="gs://gnomad-public/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.ht",
+    path="/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.ht",
     import_func=import_sites_vcf,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/mills/Mills_and_1000G_gold_standard.indels.b37.vcf.bgz",
@@ -52,7 +52,7 @@ mills = TableResource(
 )
 
 syndip = MatrixTableResource(
-    path="gs://gnomad-public/resources/grch37/syndip/hybrid.m37m.mt",
+    path="/resources/grch37/syndip/hybrid.m37m.mt",
     import_func=hl.import_vcf,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/syndip/hybrid.m37m.vcf.bgz",
@@ -66,7 +66,8 @@ vep_context = VersionedTableResource(
     default_version="85",
     versions={
         "85": TableResource(
-            path="gs://gnomad-public-requester-pays/resources/context/grch37_context_vep_annotated.ht",
+            path="/resources/context/grch37_context_vep_annotated.ht",
+            gnomad_bucket="gnomad-public-requester-pays",
         )
     },
 )
@@ -75,7 +76,7 @@ dbsnp = VersionedTableResource(
     default_version="20180423",
     versions={
         "20180423": TableResource(
-            path="gs://gnomad-public/resources/grch37/dbsnp/All_20180423.ht",
+            path="/resources/grch37/dbsnp/All_20180423.ht",
             import_func=import_sites_vcf,
             import_args={
                 "path": "gs://gnomad-public/resources/grch37/dbsnp/All_20180423.vcf.bgz",
@@ -92,7 +93,7 @@ clinvar = VersionedTableResource(
     default_version="20181028",
     versions={
         "20181028": TableResource(
-            path="gs://gnomad-public/resources/grch37/clinvar/clinvar_20181028.vep.ht",
+            path="/resources/grch37/clinvar/clinvar_20181028.vep.ht",
             import_func=import_sites_vcf,
             import_args={
                 "path": "gs://gnomad-public/resources/grch37/clinvar/clinvar_20181028.vcf.bgz",
@@ -109,7 +110,7 @@ kgp_phase_3 = VersionedMatrixTableResource(
     default_version="phase_3_split",
     versions={
         "phase_3_split": MatrixTableResource(
-            path="gs://gnomad-public/resources/grch37/kgp/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.split.mt",
+            path="/resources/grch37/kgp/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.split.mt",
             import_func=hl.import_vcf,
             import_args={
                 "path": "gs://genomics-public-data/1000-genomes-phase-3/vcf-20150220/ALL.chr*.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf",
@@ -120,7 +121,7 @@ kgp_phase_3 = VersionedMatrixTableResource(
             },
         ),
         "phase_3": MatrixTableResource(
-            path="gs://gnomad-public/resources/grch37/kgp/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.mt",
+            path="/resources/grch37/kgp/1000Genomes_phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.mt",
             import_func=hl.import_vcf,
             import_args={
                 "path": "gs://genomics-public-data/1000-genomes-phase-3/vcf-20150220/ALL.chr*.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf",
@@ -137,7 +138,7 @@ kgp = VersionedTableResource(
     default_version="phase_1_hc",
     versions={
         "phase_1_hc": TableResource(
-            path="gs://gnomad-public/resources/grch37/kgp/1000G_phase1.snps.high_confidence.b37.ht",
+            path="/resources/grch37/kgp/1000G_phase1.snps.high_confidence.b37.ht",
             import_func=import_sites_vcf,
             import_args={
                 "path": "gs://gnomad-public/resources/grch37/kgp/1000G_phase1.snps.high_confidence.b37.vcf.bgz",
@@ -150,14 +151,14 @@ kgp = VersionedTableResource(
     },
 )
 
-cpg_sites = TableResource(path="gs://gnomad-public/resources/grch37/cpg_sites/cpg.ht")
+cpg_sites = TableResource(path="/resources/grch37/cpg_sites/cpg.ht")
 
 methylation_sites = TableResource(
-    path="gs://gnomad-public/resources/grch37/methylation_sites/methylation.ht"
+    path="/resources/grch37/methylation_sites/methylation.ht"
 )
 
 lcr_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/lcr_intervals/LCR.GRCh37_compliant.interval_list.ht",
+    path="/resources/grch37/lcr_intervals/LCR.GRCh37_compliant.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/lcr_intervals/LCR.GRCh37_compliant.interval_list",
@@ -166,7 +167,7 @@ lcr_intervals = TableResource(
 )
 
 decoy_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/decoy_intervals/mm-2-merged.GRCh37_compliant.ht",
+    path="/resources/grch37/decoy_intervals/mm-2-merged.GRCh37_compliant.ht",
     import_func=hl.import_bed,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/decoy_intervals/mm-2-merged.GRCh37_compliant.bed",
@@ -175,7 +176,7 @@ decoy_intervals = TableResource(
 )
 
 purcell_5k_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/purcell_5k_intervals/purcell5k.ht",
+    path="/resources/grch37/purcell_5k_intervals/purcell5k.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/purcell_5k_intervals/purcell5k.interval_list",
@@ -184,7 +185,7 @@ purcell_5k_intervals = TableResource(
 )
 
 seg_dup_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/seg_dup_intervals/hg19_self_chain_split_both.ht",
+    path="/resources/grch37/seg_dup_intervals/hg19_self_chain_split_both.ht",
     import_func=hl.import_bed,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/seg_dup_intervals/hg19_self_chain_split_both.bed",
@@ -193,7 +194,7 @@ seg_dup_intervals = TableResource(
 )
 
 exome_hc_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/broad_intervals/exomes_high_coverage.auto.interval_list.ht",
+    path="/resources/grch37/broad_intervals/exomes_high_coverage.auto.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/broad_intervals/exomes_high_coverage.auto.interval_list",
@@ -202,7 +203,7 @@ exome_hc_intervals = TableResource(
 )
 
 high_coverage_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/broad_intervals/high_coverage.auto.interval_list.ht",
+    path="/resources/grch37/broad_intervals/high_coverage.auto.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/broad_intervals/high_coverage.auto.interval_list",
@@ -211,7 +212,7 @@ high_coverage_intervals = TableResource(
 )
 
 exome_calling_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/broad_intervals/exome_calling_regions.v1.interval_list.ht",
+    path="/resources/grch37/broad_intervals/exome_calling_regions.v1.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/broad_intervals/exome_calling_regions.v1.interval_list",
@@ -220,7 +221,7 @@ exome_calling_intervals = TableResource(
 )
 
 exome_evaluation_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/broad_intervals/exome_evaluation_regions.v1.noheader.interval_list.ht",
+    path="/resources/grch37/broad_intervals/exome_evaluation_regions.v1.noheader.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/broad_intervals/exome_evaluation_regions.v1.noheader.interval_list",
@@ -229,7 +230,7 @@ exome_evaluation_intervals = TableResource(
 )
 
 genome_evaluation_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/broad_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list.ht",
+    path="/resources/grch37/broad_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list.ht",
     import_func=hl.import_locus_intervals,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/broad_intervals/hg19-v0-wgs_evaluation_regions.v1.interval_list",
@@ -238,7 +239,7 @@ genome_evaluation_intervals = TableResource(
 )
 
 na12878_hc_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/na12878/NA12878_GIAB_highconf_intervals.ht",
+    path="/resources/grch37/na12878/NA12878_GIAB_highconf_intervals.ht",
     import_func=hl.import_bed,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.bed",
@@ -247,7 +248,7 @@ na12878_hc_intervals = TableResource(
 )
 
 syndip_hc_intervals = TableResource(
-    path="gs://gnomad-public/resources/grch37/syndip/syndip_highconf_genome_intervals.ht",
+    path="/resources/grch37/syndip/syndip_highconf_genome_intervals.ht",
     import_func=hl.import_bed,
     import_args={
         "path": "gs://gnomad-public/resources/grch37/syndip/hybrid.m37m.bed",

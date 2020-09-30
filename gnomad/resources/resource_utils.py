@@ -8,6 +8,22 @@ from hail.linalg import BlockMatrix
 logger = logging.getLogger("gnomad.resources")
 
 
+def get_resource_url(
+    path, resources_root: Optional[str] = None, gnomad_bucket: str = "gnomad-public"
+) -> str:
+    """
+    Get URL for a source.
+
+    :param resources_root: URL for the root of the resources tree.
+    :param path: Path to resource
+    :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
+    """
+    if resources_root:
+        return f"{resources_root}{path}"
+
+    return f"gs://{gnomad_bucket}{path}"
+
+
 # Resource classes
 class BaseResource(ABC):
     """
@@ -57,11 +73,14 @@ class BaseResource(ABC):
         return f'{self.__class__.__name__}({",".join(attr_str)})'
 
     @abstractmethod
-    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
+    def import_resource(
+        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+    ) -> None:
         """
         Abstract method to import the resource using its import_func and writes it in its path.
 
         :param overwrite: If ``True``, overwrite an existing file at the destination.
+        :param resources_root: URL for the root of the resources tree.
         :param kwargs: Any other parameters to be passed to the underlying hail write function (acceptable parameters depend on specific resource types)
         """
         pass
@@ -92,27 +111,35 @@ class TableResource(BaseResource):
             gnomad_bucket=gnomad_bucket,
         )
 
-    def ht(self, force_import: bool = False) -> hl.Table:
+    def ht(
+        self, force_import: bool = False, resources_root: Optional[str] = None
+    ) -> hl.Table:
         """
         Read and return the Hail Table resource
 
+        :param resources_root: URL for the root of the resources tree.
         :return: Hail Table resource
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.read_table(self.path)
+            url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+            return hl.read_table(url)
 
-    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
+    def import_resource(
+        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+    ) -> None:
         """
         Imports the TableResource using its import_func and writes it in its path.
 
         :param overwrite: If ``True``, overwrite an existing file at the destination.
+        :param resources_root: URL for the root of the resources tree.
         :param kwargs: Any other parameters to be passed to hl.Table.write
         :return: Nothing
         """
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
         self.import_func(**self.import_args).write(
-            self.path, overwrite=overwrite, **kwargs
+            url, overwrite=overwrite, **kwargs,
         )
 
 
@@ -141,27 +168,35 @@ class MatrixTableResource(BaseResource):
             gnomad_bucket=gnomad_bucket,
         )
 
-    def mt(self, force_import: bool = False) -> hl.MatrixTable:
+    def mt(
+        self, force_import: bool = False, resources_root: Optional[str] = None
+    ) -> hl.MatrixTable:
         """
         Read and return the Hail MatrixTable resource
 
+        :param resources_root: URL for the root of the resources tree.
         :return: Hail MatrixTable resource
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.read_matrix_table(self.path)
+            url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+            return hl.read_matrix_table(url)
 
-    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
+    def import_resource(
+        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+    ) -> None:
         """
         Imports the MatrixTable resource using its import_func and writes it in its path.
 
         :param overwrite: If set, existing file(s) will be overwritten
+        :param resources_root: URL for the root of the resources tree.
         :param kwargs: Any other parameters to be passed to hl.MatrixTable.write
         :return: Nothing
         """
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
         self.import_func(**self.import_args).write(
-            self.path, overwrite=overwrite, **kwargs
+            url, overwrite=overwrite, **kwargs,
         )
 
 
@@ -200,40 +235,47 @@ class PedigreeResource(BaseResource):
         self.delimiter = delimiter
         self.missing = missing
 
-    def ht(self) -> hl.Table:
+    def ht(self, resources_root: Optional[str] = None) -> hl.Table:
         """
         Reads the pedigree into a family HT using hl.import_fam().
 
+        :param resources_root: URL for the root of the resources tree.
         :return: Family table
         """
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
         return hl.import_fam(
-            self.path,
+            url,
             quant_pheno=self.quant_pheno,
             delimiter=self.delimiter,
             missing=self.missing,
         )
 
-    def pedigree(self) -> hl.Pedigree:
+    def pedigree(self, resources_root: Optional[str] = None) -> hl.Pedigree:
         """
         Reads the pedigree into an hl.Pedigree using hl.Pedigree.read().
 
-        :param delimiter: Delimiter used in the ped file
+        :param resources_root: URL for the root of the resources tree.
         :return: pedigree
         """
-        return hl.Pedigree.read(self.path, delimiter=self.delimiter)
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        return hl.Pedigree.read(url, delimiter=self.delimiter)
 
-    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
+    def import_resource(
+        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+    ) -> None:
         """
         Imports the Pedigree resource using its import_func and writes it in its path.
 
         :param overwrite: If set, existing file(s) will be overwritten. IMPORTANT: Currently there is no implementation of this method when `overwrite` is set the `False`
+        :param resources_root: URL for the root of the resources tree.
         :param kwargs: Any other parameters to be passed to hl.Pedigree.write
         :return: Nothing
         """
         if not overwrite:
             raise NotImplementedError
 
-        self.import_func(**self.import_args).write(self.path)
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        self.import_func(**self.import_args).write(url)
 
 
 class BlockMatrixResource(BaseResource):
@@ -261,23 +303,31 @@ class BlockMatrixResource(BaseResource):
             gnomad_bucket=gnomad_bucket,
         )
 
-    def bm(self) -> BlockMatrix:
+    def bm(self, resources_root: Optional[str] = None) -> BlockMatrix:
         """
         Read and return the Hail MatrixTable resource
 
+        :param resources_root: URL for the root of the resources tree.
         :return: Hail MatrixTable resource
         """
-        return BlockMatrix.read(self.path)
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        return BlockMatrix.read(url)
 
-    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
+    def import_resource(
+        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+    ) -> None:
         """
         Imports the BlockMatrixResource using its import_func and writes it in its path.
 
         :param overwrite: If ``True``, overwrite an existing file at the destination.
+        :param resources_root: URL for the root of the resources tree.
         :param kwargs: Any additional parameters to be passed to BlockMatrix.write
         :return: Nothing
         """
-        self.import_func(**self.import_args).write(self.path, overwrite=False, **kwargs)
+        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        self.import_func(**self.import_args).write(
+            url, overwrite=False, **kwargs,
+        )
 
 
 class BaseVersionedResource(BaseResource, ABC):

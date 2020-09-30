@@ -66,12 +66,21 @@ def _ld_scores_path(
 
 
 def ld_matrix(pop: str) -> BlockMatrixResource:
-    return BlockMatrixResource(path=_ld_matrix_path("genomes", pop))
+    return BlockMatrixResource(
+        path=_ld_matrix_path("genomes", pop),
+        gnomad_bucket="gnomad-public-requester-pays",
+    )
 
 
 def ld_index(pop: str) -> TableResource:
-    return TableResource(path=_ld_index_path("genomes", pop))
+    return TableResource(
+        path=_ld_index_path("genomes", pop),
+        gnomad_bucket="gnomad-public-requester-pays",
+    )
 
 
 def ld_scores(pop: str) -> TableResource:
-    return TableResource(path=_ld_scores_path("genomes", pop))
+    return TableResource(
+        path=_ld_scores_path("genomes", pop),
+        gnomad_bucket="gnomad-public-requester-pays",
+    )

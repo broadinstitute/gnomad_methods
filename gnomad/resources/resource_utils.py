@@ -17,6 +17,7 @@ class BaseResource(ABC):
     :param import_args: Any sources that are required for the import and need to be kept track of (e.g. .vcf path for an imported VCF)
     :param import_func: A function used to import the resource. `import_func` will be passed the `import_args` dictionary as kwargs.
     :param expected_file_extensions: A list of all expected file extensions. If path doesn't end with one of these, a warning if emitted.
+    :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
     """
 
     @abstractmethod
@@ -26,6 +27,7 @@ class BaseResource(ABC):
         import_args: Optional[Dict[str, Any]] = None,
         import_func: Optional[Callable] = None,
         expected_file_extensions: Optional[List[str]] = None,
+        gnomad_bucket: str = "gnomad-public",
     ):
         if path is None and import_func is None:
             raise ValueError(
@@ -35,6 +37,7 @@ class BaseResource(ABC):
         self.path = path
         self.import_args = import_args
         self.import_func = import_func
+        self.gnomad_bucket = gnomad_bucket
 
         if (
             path is not None
@@ -71,6 +74,7 @@ class TableResource(BaseResource):
     :param path: The Table path (typically ending in .ht)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
     :param import_func: A function used to import the Table. `import_func` will be passed the `import_args` dictionary as kwargs.
+    :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
     """
 
     def __init__(
@@ -78,12 +82,14 @@ class TableResource(BaseResource):
         path: Optional[str] = None,
         import_args: Optional[Dict[str, Any]] = None,
         import_func: Optional[Callable[..., hl.Table]] = None,
+        gnomad_bucket: str = "gnomad-public",
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
             expected_file_extensions=[".ht"],
+            gnomad_bucket=gnomad_bucket,
         )
 
     def ht(self, force_import: bool = False) -> hl.Table:
@@ -117,6 +123,7 @@ class MatrixTableResource(BaseResource):
     :param path: The MatrixTable path (typically ending in .mt)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
     :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_args` dictionary as kwargs.
+    :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
     """
 
     def __init__(
@@ -124,12 +131,14 @@ class MatrixTableResource(BaseResource):
         path: Optional[str] = None,
         import_args: Optional[Dict[str, Any]] = None,
         import_func: Optional[Callable[..., hl.MatrixTable]] = None,
+        gnomad_bucket: str = "gnomad-public",
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
             expected_file_extensions=[".mt"],
+            gnomad_bucket=gnomad_bucket,
         )
 
     def mt(self, force_import: bool = False) -> hl.MatrixTable:
@@ -166,6 +175,7 @@ class PedigreeResource(BaseResource):
     :param quant_pheno: If ``True``, phenotype is interpreted as quantitative.
     :param delimiter: Field delimiter regex.
     :param missing: The string used to denote missing values. For case-control, 0, -9, and non-numeric are also treated as missing.
+    :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
     """
 
     def __init__(
@@ -176,12 +186,14 @@ class PedigreeResource(BaseResource):
         quant_pheno: bool = False,
         delimiter: str = r"\\s+",
         missing: str = "NA",
+        gnomad_bucket: str = "gnomad-public",
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
             expected_file_extensions=[".fam", ".ped"],
+            gnomad_bucket=gnomad_bucket,
         )
 
         self.quant_pheno = quant_pheno
@@ -231,6 +243,7 @@ class BlockMatrixResource(BaseResource):
     :param path: The BlockMatrix path (typically ending in .bm)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func.
     :param import_func: A function used to import the BlockMatrix. `import_func` will be passed the `import_args` dictionary as kwargs.
+    :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
     """
 
     def __init__(
@@ -238,12 +251,14 @@ class BlockMatrixResource(BaseResource):
         path: Optional[str] = None,
         import_args: Optional[Dict[str, Any]] = None,
         import_func: Optional[Callable[..., BlockMatrix]] = None,
+        gnomad_bucket: str = "gnomad-public",
     ):
         super().__init__(
             path=path,
             import_args=import_args,
             import_func=import_func,
             expected_file_extensions=[".bm"],
+            gnomad_bucket=gnomad_bucket,
         )
 
     def bm(self) -> BlockMatrix:
@@ -298,6 +313,7 @@ class BaseVersionedResource(BaseResource, ABC):
             path=versions[default_version].path,
             import_args=versions[default_version].import_args,
             import_func=versions[default_version].import_func,
+            gnomad_bucket=versions[default_version].gnomad_bucket,
         )
 
     def __repr__(self):

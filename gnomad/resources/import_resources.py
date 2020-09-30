@@ -81,7 +81,9 @@ def main(args):
     for resource_arg in args.resources:
         resource_name, resource = all_resources[resource_arg]
         print(f"Importing {resource_name}...")
-        resource.import_resource(args.overwrite)
+        resource.import_resource(
+            overwrite=args.overwrite, resources_root="gs://gnomad-public"
+        )
 
 
 if __name__ == "__main__":

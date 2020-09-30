@@ -4,6 +4,7 @@ from gnomad.resources.resource_utils import (
     MatrixTableResource,
     VersionedTableResource,
     DataException,
+    get_resource_url,
 )
 from typing import Optional
 
@@ -268,7 +269,8 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
                 f"Version {version} of gnomAD genomes for GRCh38 does not exist"
             )
 
-    return f"gs://gnomad-public/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
+    path = f"/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
+    return get_resource_url(path, gnomad_bucket="gnomad-public")
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:
@@ -282,4 +284,5 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     :return: Path to VCF
     """
     contig = f".{contig}" if contig else ""
-    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    path = f"/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    return get_resource_url(path, gnomad_bucket="gnomad-public")

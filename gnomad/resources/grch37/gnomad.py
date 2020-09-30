@@ -2,6 +2,7 @@ from gnomad.resources.resource_utils import (
     DataException,
     TableResource,
     VersionedTableResource,
+    get_resource_url,
 )
 
 DATA_TYPES = ["exomes", "genomes"]
@@ -218,4 +219,5 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     :return: Path to VCF
     """
     contig = f".{contig}" if contig else ""
-    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    path = f"/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    return get_resource_url(path, gnomad_bucket="gnomad-public")

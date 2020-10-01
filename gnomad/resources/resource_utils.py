@@ -5,6 +5,9 @@ from typing import Any, Callable, Dict, List, Optional
 import hail as hl
 from hail.linalg import BlockMatrix
 
+from .config import GnomadResourceProvider, gnomad_resource_configuration
+
+
 logger = logging.getLogger("gnomad.resources")
 
 
@@ -19,9 +22,14 @@ def get_resource_url(
     :param gnomad_bucket: Which of the gnomAD project's GCS buckets the resource is stored in.
     """
     if resources_root:
-        return f"{resources_root}{path}"
+        return f"{resources_root.rstrip('/')}{path}"
 
-    return f"gs://{gnomad_bucket}{path}"
+    resource_provider = gnomad_resource_configuration.default_resource_provider
+
+    if resource_provider == GnomadResourceProvider.GNOMAD:
+        return f"gs://{gnomad_bucket}{path}"
+
+    raise RuntimeError("Unknown resource provider")
 
 
 # Resource classes

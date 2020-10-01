@@ -6,10 +6,10 @@ Getting Started
     pip install hail
 
 2. Use ``hailctl`` to start a `Google Dataproc <https://cloud.google.com/dataproc/>`_ cluster with the
-   ``gnomad`` package installed and allow reading from the ``gnomad-public-requester-pays`` storage bucket
-   (see `Hail on the Cloud <https://hail.is/docs/0.2/hail_on_the_cloud.html>`_ for more detail on hailctl)::
+   ``gnomad`` package installed (see `Hail on the Cloud <https://hail.is/docs/0.2/hail_on_the_cloud.html>`_
+   for more detail on hailctl)::
 
-    hailctl dataproc start cluster-name --packages gnomad --requester-pays-allow-buckets gnomad-public-requester-pays
+    hailctl dataproc start cluster-name --packages gnomad
 
 3. Connect to a `Jupyter Notebook <https://jupyter-notebook.readthedocs.io/en/stable/notebook.html>`_ on the cluster::
 

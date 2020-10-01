@@ -4,6 +4,7 @@ from enum import Enum
 
 class GnomadResourceProvider(Enum):
     GNOMAD = "gnomAD"
+    GOOGLE_CLOUD_PUBLIC_DATASETS = "Google Cloud Public Datasets"
 
 
 class GnomadResourceConfiguration:

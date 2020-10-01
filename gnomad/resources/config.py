@@ -12,7 +12,7 @@ class GnomadResourceConfiguration:
     Configuration for gnomAD resources.
     """
 
-    __default_resource_provider = GnomadResourceProvider.GNOMAD
+    __default_resource_provider = GnomadResourceProvider.GOOGLE_CLOUD_PUBLIC_DATASETS
 
     @property
     def default_resource_provider(self) -> GnomadResourceProvider:

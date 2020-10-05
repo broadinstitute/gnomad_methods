@@ -152,7 +152,7 @@ dbsnp = VersionedTableResource(
                 "min_partitions": 400,
                 "reference_genome": "GRCh38",
             },
-        )
+        ),
     },
 )
 

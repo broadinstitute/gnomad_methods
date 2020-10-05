@@ -1,4 +1,5 @@
 from gnomad.resources.resource_utils import (
+    DBSNP_B154_CHR_CONTIG_RECODING,
     TableResource,
     VersionedTableResource,
     MatrixTableResource,
@@ -124,8 +125,21 @@ clinvar = VersionedTableResource(
 )
 
 dbsnp = VersionedTableResource(
-    default_version="b151",
+    default_version="b154",
     versions={
+        "b154": TableResource(
+            path="gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
+            import_func=import_sites_vcf,
+            import_args={
+                "path": "gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz",
+                "header_file": "gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header",
+                "force_bgz": True,
+                "contig_recoding": DBSNP_B154_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 400,
+                "reference_genome": "GRCh38",
+            },
+        ),
         "b151": TableResource(
             path="gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.ht",
             import_func=import_sites_vcf,
@@ -138,7 +152,7 @@ dbsnp = VersionedTableResource(
                 "min_partitions": 400,
                 "reference_genome": "GRCh38",
             },
-        )
+        ),
     },
 )
 

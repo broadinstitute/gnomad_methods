@@ -32,6 +32,8 @@
 * Added function, `default_generate_gene_lof_matrix`, to generate gene matrix [(#290)](https://github.com/broadinstitute/gnomad_methods/pull/290)
 * Added function `default_generate_gene_lof_summary` to summarize gene matrix results [(#292)](https://github.com/broadinstitute/gnomad_methods/pull/292)
 * Modified `create_truth_sample_ht` to add adj annotation information in the returned Table if present in the supplied MatrixTables [(#300)](https://github.com/broadinstitute/gnomad_methods/pull/300)
+* Added support for loading resources from alternate sources [(#265)](https://github.com/broadinstitute/gnomad_methods/pull/265)
+* Default to loading resources from Google Cloud Public Datasets [(#265)](https://github.com/broadinstitute/gnomad_methods/pull/265)
 
 ## Version 0.4.0 - July 9th, 2020
 

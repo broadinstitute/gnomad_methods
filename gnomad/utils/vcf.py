@@ -372,7 +372,7 @@ def make_label_combos(
     anchor_val = copy_label_groups.pop(anchor_group)
     combos = []
     for x, y in itertools.product(anchor_val, make_label_combos(copy_label_groups)):
-        combos.append("{0}_{1}".format(x, y))
+        combos.append("{0}-{1}".format(x, y))
     return combos
 
 
@@ -524,7 +524,7 @@ def make_info_dict(
         combos = make_label_combos(label_groups)
 
         for combo in combos:
-            combo_fields = combo.split("_")
+            combo_fields = combo.split("-")
             group_dict = dict(zip(group_types, combo_fields))
 
             for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
@@ -600,7 +600,7 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
+    snp_cutoff: float, indel_cutoff: float #, inbreeding_cutoff: float
 ) -> Dict[str, str]:
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -620,7 +620,7 @@ def make_vcf_filter_dict(
         "AC0": {
             "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
         },
-        "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
+        #"InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
         "RF": {
             "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },

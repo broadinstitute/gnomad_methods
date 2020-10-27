@@ -597,6 +597,7 @@ def add_as_info_dict(
     for field in as_fields:
 
         try:
+            site_field = field[3:]
             # Get site description from info dictionary and make first letter lower case
             first_letter = info_dict[field]["Description"][0].lower()
             rest_of_description = info_dict[field]["Description"][1:]

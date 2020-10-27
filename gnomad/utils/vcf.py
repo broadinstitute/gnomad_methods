@@ -38,7 +38,7 @@ FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
 Global populations that are included in filtering allele frequency (faf) calculations. Used in VCF export.
 """
 
-SEXES = ["male", "female"]
+SEXES = ["XY", "XX"]
 """
 Sample sexes used in VCF export.
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
@@ -69,6 +69,7 @@ SITE_FIELDS = [
     "ReadPosRankSum",
     "SOR",
     "VarDP",
+    "monoallelic"
 ]
 """
 Site level variant annotations.
@@ -194,6 +195,7 @@ INFO_DICT = {
         "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
+    "monoallelic": {"Description": "All individuals in gnomAD are homozygous alternate"}
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.
@@ -268,6 +270,21 @@ FORMAT_DICT = {
 """
 Dictionary used during VCF export to export MatrixTable entries.
 """
+
+def remove_fields_from_globals(global_field: List[str], fields_to_remove: List[str]):
+    """
+    Removes fields from the pre-defined global field variables.
+
+    :param global_field: Global list of fields
+    :param fields_to_remove: List of fields to remove from global (they must be in the global list)
+    """
+    for field in fields_to_remove:
+        if field in global_field:
+            global_field.remove(field)
+        else:
+            logger.info(f"'{field}'' missing from {global_field}")
+
+
 
 
 def ht_to_vcf_mt(
@@ -461,7 +478,7 @@ def make_info_dict(
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     """
     if prefix != "":
-        prefix = f"{prefix}_"
+        prefix = f"{prefix}-"
 
     info_dict = dict()
 
@@ -532,30 +549,30 @@ def make_info_dict(
 
             if not faf:
                 combo_dict = {
-                    f"{prefix}AC_{combo}": {
+                    f"{prefix}AC-{combo}": {
                         "Number": "A",
                         "Description": f"Alternate allele count{for_combo}{description_text}",
                     },
-                    f"{prefix}AN_{combo}": {
+                    f"{prefix}AN-{combo}": {
                         "Number": "1",
                         "Description": f"Total number of alleles{in_combo}{description_text}",
                     },
-                    f"{prefix}AF_{combo}": {
+                    f"{prefix}AF-{combo}": {
                         "Number": "A",
                         "Description": f"Alternate allele frequency{in_combo}{description_text}",
                     },
-                    f"{prefix}nhomalt_{combo}": {
+                    f"{prefix}nhomalt-{combo}": {
                         "Number": "A",
                         "Description": f"Count of homozygous individuals{in_combo}{description_text}",
                     },
                 }
             else:
                 combo_dict = {
-                    f"{prefix}faf95_{combo}": {
+                    f"{prefix}faf95-{combo}": {
                         "Number": "A",
                         "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
                     },
-                    f"{prefix}faf99_{combo}": {
+                    f"{prefix}faf99-{combo}": {
                         "Number": "A",
                         "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
                     },
@@ -580,12 +597,9 @@ def add_as_info_dict(
     for field in as_fields:
 
         try:
-            # Strip AS_ from field name
-            site_field = field[3:]
-
             # Get site description from info dictionary and make first letter lower case
-            first_letter = info_dict[site_field]["Description"][0].lower()
-            rest_of_description = info_dict[site_field]["Description"][1:]
+            first_letter = info_dict[field]["Description"][0].lower()
+            rest_of_description = info_dict[field]["Description"][1:]
 
             as_dict[field] = {}
             as_dict[field]["Number"] = "A"
@@ -600,7 +614,7 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float, indel_cutoff: float #, inbreeding_cutoff: float
+    snp_cutoff: float, indel_cutoff: float , inbreeding_cutoff: float
 ) -> Dict[str, str]:
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -608,23 +622,20 @@ def make_vcf_filter_dict(
     Generates descriptions for:
         - AC0 filter
         - InbreedingCoeff filter
-        - RF filter
-        - PASS (passed all variant filters)
+        - AS_VQSR filter
 
     :param snp_cutoff: Minimum SNP cutoff score from random forest model.
     :param indel_cutoff: Minimum indel cutoff score from random forest model.
-    :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
     """
     filter_dict = {
         "AC0": {
             "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
         },
-        #"InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
-        "RF": {
-            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
+        "InbreedingCoeff": {"Description": f"GATK InbreedingCoeff < {inbreeding_cutoff}"},
+        "AS_VQSR": {
+            "Description": f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },
-        "PASS": {"Description": "Passed all variant filters"},
     }
     return filter_dict
 

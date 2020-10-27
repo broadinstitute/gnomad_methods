@@ -364,13 +364,13 @@ def ht_to_vcf_mt(
             info_ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
         )
 
-    # Annotate with new expression and add 's' empty string field required to cast HT to MT
-    info_ht = info_ht.annotate(
-        info=info_ht.info.annotate(**info_expr), s=hl.null(hl.tstr)
-    )
-
     info_t = info_ht
+
     if create_mt:
+        # Annotate with new expression and add 's' empty string field required to cast HT to MT
+        info_t = info_t.annotate(
+            info=info_t.info.annotate(**info_expr), s=hl.null(hl.tstr)
+        )
         # Create an MT with no cols so that we can export to VCF
         info_t = info_t.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
         info_t = info_t.filter_cols(False)

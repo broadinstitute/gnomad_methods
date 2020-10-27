@@ -545,6 +545,10 @@ def make_info_dict(
                 "Number": "A",
                 "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_text}",
             },
+            f"{prefix}faf95_popmax": {
+                "Number": "A",
+                "Description": f"Filtering allele frequency (using Poisson 95% CI) for the population with the maximum allele frequency{description_text}",
+            },
         }
         info_dict.update(popmax_dict)
 

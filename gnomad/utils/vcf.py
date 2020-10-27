@@ -198,6 +198,7 @@ INFO_DICT = {
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
     "monoallelic": {"Description": "All samples are all homozygous alternate for the variant"},
+    'QUALapprox': {"Number": "1", "Description": "Sum of PL[0] values; used to approximate the QUAL score"},
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.
@@ -551,30 +552,30 @@ def make_info_dict(
 
             if not faf:
                 combo_dict = {
-                    f"{prefix}AC-{combo}": {
+                    f"AC-{prefix}{combo}": {
                         "Number": "A",
                         "Description": f"Alternate allele count{for_combo}{description_text}",
                     },
-                    f"{prefix}AN-{combo}": {
+                    f"AN-{prefix}{combo}": {
                         "Number": "1",
                         "Description": f"Total number of alleles{in_combo}{description_text}",
                     },
-                    f"{prefix}AF-{combo}": {
+                    f"AF-{prefix}{combo}": {
                         "Number": "A",
                         "Description": f"Alternate allele frequency{in_combo}{description_text}",
                     },
-                    f"{prefix}nhomalt-{combo}": {
+                    f"nhomalt-{prefix}{combo}": {
                         "Number": "A",
                         "Description": f"Count of homozygous individuals{in_combo}{description_text}",
                     },
                 }
             else:
                 combo_dict = {
-                    f"{prefix}faf95-{combo}": {
+                    f"faf95-{prefix}{combo}": {
                         "Number": "A",
                         "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
                     },
-                    f"{prefix}faf99-{combo}": {
+                    f"faf99-{prefix}{combo}": {
                         "Number": "A",
                         "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
                     },

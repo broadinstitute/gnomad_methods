@@ -601,8 +601,8 @@ def add_as_info_dict(
         try:
             site_field = field[3:]
             # Get site description from info dictionary and make first letter lower case
-            first_letter = info_dict[field]["Description"][0].lower()
-            rest_of_description = info_dict[field]["Description"][1:]
+            first_letter = info_dict[site_field]["Description"][0].lower()
+            rest_of_description = info_dict[site_field]["Description"][1:]
 
             as_dict[field] = {}
             as_dict[field]["Number"] = "A"
@@ -687,17 +687,17 @@ def make_hist_bin_edges_expr(
     return edges_dict
 
 
-def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str, str]:
+def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool, dict_hists: List[str] = HISTS) -> Dict[str, str]: # Remove default HIST?
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
 
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
+    :param dict_hists: List of hists to build hist info dict for
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
-    for hist in HISTS:
-
+    for hist in dict_hists:
         # Get hists for both raw and adj data
         # Add "_raw" to quality histograms calculated on raw data
         if not adj:

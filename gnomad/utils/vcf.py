@@ -69,7 +69,9 @@ SITE_FIELDS = [
     "ReadPosRankSum",
     "SOR",
     "VarDP",
-    "monoallelic"
+    "monoallelic",
+    "QUALapprox",
+    "transmitted_singleton"
 ]
 """
 Site level variant annotations.
@@ -195,7 +197,7 @@ INFO_DICT = {
         "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
-    "monoallelic": {"Description": "All samples are all homozygous alternate for the variant"}
+    "monoallelic": {"Description": "All samples are all homozygous alternate for the variant"},
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.

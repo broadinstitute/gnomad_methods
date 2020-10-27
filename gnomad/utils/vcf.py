@@ -71,7 +71,7 @@ SITE_FIELDS = [
     "VarDP",
     "monoallelic",
     "QUALapprox",
-    "transmitted_singleton"
+    "transmitted_singleton",
 ]
 """
 Site level variant annotations.
@@ -197,8 +197,13 @@ INFO_DICT = {
         "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
-    "monoallelic": {"Description": "All samples are all homozygous alternate for the variant"},
-    'QUALapprox': {"Number": "1", "Description": "Sum of PL[0] values; used to approximate the QUAL score"},
+    "monoallelic": {
+        "Description": "All samples are all homozygous alternate for the variant"
+    },
+    "QUALapprox": {
+        "Number": "1",
+        "Description": "Sum of PL[0] values; used to approximate the QUAL score",
+    },
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.
@@ -274,6 +279,7 @@ FORMAT_DICT = {
 Dictionary used during VCF export to export MatrixTable entries.
 """
 
+
 def remove_fields_from_globals(global_field: List[str], fields_to_remove: List[str]):
     """
     Removes fields from the pre-defined global field variables.
@@ -288,10 +294,9 @@ def remove_fields_from_globals(global_field: List[str], fields_to_remove: List[s
             logger.info(f"'{field}'' missing from {global_field}")
 
 
-
-
 def ht_to_vcf_mt(
     info_ht: hl.Table,
+    create_mt: hl.bool = False,
     pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
 ) -> hl.MatrixTable:
     """
@@ -364,9 +369,13 @@ def ht_to_vcf_mt(
         info=info_ht.info.annotate(**info_expr), s=hl.null(hl.tstr)
     )
 
-    # Create an MT with no cols so that we acn export to VCF
-    info_mt = info_ht.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-    return info_mt.filter_cols(False)
+    info_t = info_ht
+    if create_mt:
+        # Create an MT with no cols so that we can export to VCF
+        info_t = info_t.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
+        info_t = info_t.filter_cols(False)
+
+    return info_t
 
 
 def make_label_combos(
@@ -618,7 +627,7 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float, indel_cutoff: float , inbreeding_cutoff: float
+    snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
 ) -> Dict[str, str]:
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -636,7 +645,9 @@ def make_vcf_filter_dict(
         "AC0": {
             "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
         },
-        "InbreedingCoeff": {"Description": f"GATK InbreedingCoeff < {inbreeding_cutoff}"},
+        "InbreedingCoeff": {
+            "Description": f"GATK InbreedingCoeff < {inbreeding_cutoff}"
+        },
         "AS_VQSR": {
             "Description": f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },
@@ -688,7 +699,9 @@ def make_hist_bin_edges_expr(
     return edges_dict
 
 
-def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool, dict_hists: List[str] = HISTS) -> Dict[str, str]: # Remove default HIST?
+def make_hist_dict(
+    bin_edges: Dict[str, Dict[str, str]], adj: bool, dict_hists: List[str] = HISTS
+) -> Dict[str, str]:  # Remove default HIST?
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
 

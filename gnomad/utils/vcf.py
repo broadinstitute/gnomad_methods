@@ -557,6 +557,7 @@ def make_info_dict(
         combos = make_label_combos(label_groups)
 
         for combo in combos:
+            loop_description_text = description_text
             combo_fields = combo.split("-")
             group_dict = dict(zip(group_types, combo_fields))
 
@@ -567,32 +568,32 @@ def make_info_dict(
                 combo_dict = {
                     f"AC-{prefix}{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele count{for_combo}{description_text}",
+                        "Description": f"Alternate allele count{for_combo}{loop_description_text}",
                     },
                     f"AN-{prefix}{combo}": {
                         "Number": "1",
-                        "Description": f"Total number of alleles{in_combo}{description_text}",
+                        "Description": f"Total number of alleles{in_combo}{loop_description_text}",
                     },
                     f"AF-{prefix}{combo}": {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{in_combo}{description_text}",
+                        "Description": f"Alternate allele frequency{in_combo}{loop_description_text}",
                     },
                     f"nhomalt-{prefix}{combo}": {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{in_combo}{description_text}",
+                        "Description": f"Count of homozygous individuals{in_combo}{loop_description_text}",
                     },
                 }
             else:
                 if ("XX" in combo_fields) | ("XY" in combo_fields):
-                    description_text = description_text + " in non-PAR regions of sex chromosomes only"
+                    loop_description_text = loop_description_text + " in non-PAR regions of sex chromosomes only"
                 combo_dict = {
                     f"faf95-{prefix}{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{loop_description_text}",
                     },
                     f"faf99-{prefix}{combo}": {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{loop_description_text}",
                     },
                 }
             info_dict.update(combo_dict)

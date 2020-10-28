@@ -583,6 +583,8 @@ def make_info_dict(
                     },
                 }
             else:
+                if ("XX" in combo_fields) | ("XY" in combo_fields):
+                    description_text = description_text + " in non-PAR regions of sex chromosomes only"
                 combo_dict = {
                     f"faf95-{prefix}{combo}": {
                         "Number": "A",

@@ -655,6 +655,7 @@ def make_vcf_filter_dict(
         "AS_VQSR": {
             "Description": f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },
+        "PASS": {"Description": "Passed all variant filters"},
     }
     return filter_dict
 

@@ -379,14 +379,14 @@ def make_label_combos(
 
 
 def index_globals(
-    globals_array: List[str], label_groups: Dict[str, List[str]]
+    globals_array: List[Dict[str, str]], label_groups: Dict[str, List[str]]
 ) -> Dict[str, int]:
     """
     Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry
     in the meta_array annotation
 
-    :param globals_aray: Ordered list containing string entries describing all the grouping combinations contained in the
-        globals_array annotation
+    :param globals_array: Ordered list containing dictionary entries describing all the grouping combinations contained in the globals_array annotation.
+       Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
     :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index

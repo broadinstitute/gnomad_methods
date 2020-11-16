@@ -17,6 +17,7 @@
 * Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Add reference genome to call of `has_liftover` in `get_liftover_genome` [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Added fix for MQ calculation in `_get_info_agg_expr`, switched `RAW_MQ` and `MQ_DP` in calculation [(#262)](https://github.com/broadinstitute/gnomad_methods/pull/262)
+* Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)
 
 ## Version 0.4.0 - July 9th, 2020
 

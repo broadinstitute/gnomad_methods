@@ -98,7 +98,9 @@ def liftover_expr(
         original_locus=locus,
         original_alleles=alleles,
         locus_fail_liftover=hl.is_missing(lifted_over_locus),
-        ref_allele_mismatch=lifted_over_locus.result.sequence_context()
+        ref_allele_mismatch=lifted_over_locus.result.sequence_context(
+            after=hl.len(alleles[0]) - 1
+        )
         != lifted_over_alleles[0],
     )
 

@@ -8,14 +8,137 @@ from gnomad.resources.resource_utils import (
 from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
-CURRENT_GENOME_RELEASE = "3.0"
+CURRENT_GENOME_RELEASE = "3.1"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 EXOME_RELEASES = []
-GENOME_RELEASES = ["3.0"]
+GENOME_RELEASES = ["3.0", "3.1"]
 GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
+SUBSETS = [
+    "non_v2",
+    "non_topmed",
+    "non_cancer",
+    "controls_and_biobanks",
+    "non_neuro",
+    "tgp",
+    "hgdp",
+]
+GROUPS = ["adj", "raw"]
+SEXES = ["XX", "XY"]
+POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
+KG_POPS = [
+    "esn",
+    "pur",
+    "pjl",
+    "clm",
+    "jpt",
+    "chb",
+    "stu",
+    "itu",
+    "tsi",
+    "mxl",
+    "ceu",
+    "msl",
+    "yri",
+    "beb",
+    "fin",
+    "khv",
+    "cdx",
+    "lwk",
+    "acb",
+    "asw",
+    "ibs",
+    "gbr",
+    "pel",
+    "gih",
+    "chs",
+    "gwd",
+]
+HGDP_POPS = [
+    "japanese",
+    "papuan",
+    "adygei",
+    "orcadian",
+    "biakapygmy",
+    "yakut",
+    "han",
+    "uygur",
+    "miaozu",
+    "mongola",
+    "balochi",
+    "bedouin",
+    "russian",
+    "daur",
+    "pima",
+    "hezhen",
+    "sindhi",
+    "yizu",
+    "oroqen",
+    "san",
+    "tuscan",
+    "tu",
+    "palestinian",
+    "tujia",
+    "druze",
+    "pathan",
+    "basque",
+    "makrani",
+    "italian",
+    "naxi",
+    "karitiana",
+    "sardinian",
+    "mbutipygmy",
+    "mozabite",
+    "yoruba",
+    "lahu",
+    "dai",
+    "cambodian",
+    "melanesian",
+    "french",
+    "brahui",
+    "hazara",
+    "bantusafrica",
+    "surui",
+    "mandenka",
+    "kalash",
+    "xibo",
+    "colombian",
+    "bantukenya",
+    "she",
+    "burusho",
+    "maya",
+]
+POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
+DOWNSAMPLINGS = [
+    10,
+    20,
+    50,
+    100,
+    200,
+    500,
+    1000,
+    2000,
+    5000,
+    10000,
+    15000,
+    20000,
+    25000,
+    30000,
+    40000,
+    50000,
+    60000,
+    70000,
+    75000,
+    80000,
+    85000,
+    90000,
+    95000,
+    100000,
+    110000,
+    120000,
+]
 
 gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",

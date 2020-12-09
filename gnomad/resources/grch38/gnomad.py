@@ -16,17 +16,101 @@ GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
-
-SUBSETS = ['non_v2', 'non_topmed', 'non_cancer', 'controls_and_biobanks', 'non_neuro', 'tgp', 'hgdp']
-GROUPS = ['adj', 'raw']
-SEXES = ['XX', 'XY']
-POPS = ['afr', 'ami', 'amr', 'asj', 'eas', 'fin', 'nfe', 'oth', 'sas', 'mid']
-KG_POPS = ['esn', 'pur', 'pjl', 'clm', 'jpt', 'chb', 'stu', 'itu', 'tsi', 'mxl', 'ceu', 'msl', 'yri', 'beb', 'fin', 'khv', 'cdx', 'lwk', 'acb', 'asw', 'ibs', 'gbr', 'pel', 'gih', 'chs', 'gwd']
-HGDP_POPS = ['japanese', 'papuan', 'adygei', 'orcadian', 'biakapygmy', 'yakut', 'han', 'uygur', 'miaozu', 'mongola', 'balochi', 'bedouin', 'russian', 'daur', 'pima', 'hezhen', 'sindhi', 'yizu', 'oroqen', 'san', 'tuscan', 'tu', 'palestinian', 'tujia', 'druze', 'pathan', 'basque', 'makrani', 'italian', 'naxi', 'karitiana', 'sardinian', 'mbutipygmy', 'mozabite', 'yoruba', 'lahu', 'dai', 'cambodian', 'melanesian', 'french', 'brahui', 'hazara', 'bantusafrica', 'surui', 'mandenka', 'kalash', 'xibo', 'colombian', 'bantukenya', 'she', 'burusho', 'maya']
-
+SUBSETS = [
+    "non_v2",
+    "non_topmed",
+    "non_cancer",
+    "controls_and_biobanks",
+    "non_neuro",
+    "tgp",
+    "hgdp",
+]
+GROUPS = ["adj", "raw"]
+SEXES = ["XX", "XY"]
+POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
+KG_POPS = [
+    "esn",
+    "pur",
+    "pjl",
+    "clm",
+    "jpt",
+    "chb",
+    "stu",
+    "itu",
+    "tsi",
+    "mxl",
+    "ceu",
+    "msl",
+    "yri",
+    "beb",
+    "fin",
+    "khv",
+    "cdx",
+    "lwk",
+    "acb",
+    "asw",
+    "ibs",
+    "gbr",
+    "pel",
+    "gih",
+    "chs",
+    "gwd",
+]
+HGDP_POPS = [
+    "japanese",
+    "papuan",
+    "adygei",
+    "orcadian",
+    "biakapygmy",
+    "yakut",
+    "han",
+    "uygur",
+    "miaozu",
+    "mongola",
+    "balochi",
+    "bedouin",
+    "russian",
+    "daur",
+    "pima",
+    "hezhen",
+    "sindhi",
+    "yizu",
+    "oroqen",
+    "san",
+    "tuscan",
+    "tu",
+    "palestinian",
+    "tujia",
+    "druze",
+    "pathan",
+    "basque",
+    "makrani",
+    "italian",
+    "naxi",
+    "karitiana",
+    "sardinian",
+    "mbutipygmy",
+    "mozabite",
+    "yoruba",
+    "lahu",
+    "dai",
+    "cambodian",
+    "melanesian",
+    "french",
+    "brahui",
+    "hazara",
+    "bantusafrica",
+    "surui",
+    "mandenka",
+    "kalash",
+    "xibo",
+    "colombian",
+    "bantukenya",
+    "she",
+    "burusho",
+    "maya",
+]
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
-
-
 DOWNSAMPLINGS = [
     10,
     20,

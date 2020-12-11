@@ -13,6 +13,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, udf  # pylint: disable=no-name-in-module
 from pyspark.sql.types import ArrayType, DoubleType
 
+from gnomad.utils.file_utils import file_exists
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -519,6 +521,59 @@ def train_rf(
     )
 
     return rf_model
+
+
+def get_rf_runs(rf_json_fp: str) -> Dict:
+    """
+    Loads RF run data from JSON file.
+
+    :param rf_json_fp: File path to rf json file.
+    :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
+    """
+    if file_exists(rf_json_fp):
+        with hl.hadoop_open(rf_json_fp) as f:
+            return json.load(f)
+    else:
+        logger.warning(
+            f"File {rf_json_fp} could not be found. Returning empty RF run hash dict."
+        )
+        return {}
+
+
+def get_run_data(
+    input_args: Dict[str, bool],
+    test_intervals: List[str],
+    features_importance: Dict[str, float],
+    test_results: List[hl.tstruct],
+) -> Dict:
+    """
+    Creates a Dict containing information about the RF input arguments and feature importance
+
+    :param Dict of bool keyed by str input_args: Dictionary of model input arguments
+    :param List of str test_intervals: Intervals withheld from training to be used in testing
+    :param Dict of float keyed by str features_importance: Feature importance returned by the RF
+    :param List of struct test_results: Accuracy results from applying RF model to the test intervals
+    :return: Dict of RF information
+    """
+    run_data = {
+        "input_args": input_args,
+        "features_importance": features_importance,
+        "test_intervals": test_intervals,
+    }
+
+    if test_results is not None:
+        tps = 0
+        total = 0
+        for row in test_results:
+            values = list(row.values())
+            # Note: values[0] is the TP/FP label and values[1] is the prediction
+            if values[0] == values[1]:
+                tps += values[2]
+            total += values[2]
+        run_data["test_results"] = [dict(x) for x in test_results]
+        run_data["test_accuracy"] = tps / total
+
+    return run_data
 
 
 def pretty_print_runs(

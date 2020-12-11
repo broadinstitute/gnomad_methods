@@ -40,7 +40,7 @@ FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
 Global populations that are included in filtering allele frequency (faf) calculations. Used in VCF export.
 """
 
-SEXES = ["XY", "XX"]
+SEXES = ["male", "female"]
 """
 Sample sexes used in VCF export.
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
@@ -71,9 +71,6 @@ SITE_FIELDS = [
     "ReadPosRankSum",
     "SOR",
     "VarDP",
-    "monoallelic",
-    "QUALapprox",
-    "transmitted_singleton",
 ]
 """
 Site level variant annotations.
@@ -94,7 +91,6 @@ Allele-type annotations.
 REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "segdup"]
 """
 Annotations about variant region type.
-
 .. note::
     decoy and segdup resource files do not currently exist for GRCh38/hg38.
 """
@@ -186,7 +182,7 @@ INFO_DICT = {
     "variant_type": {
         "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"
     },
-    "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)",},
+    "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)", },
     "n_alt_alleles": {
         "Number": "1",
         "Description": "Total number of alternate alleles observed at variant locus",
@@ -198,13 +194,6 @@ INFO_DICT = {
     "AS_pab_max": {
         "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
-    },
-    "monoallelic": {
-        "Description": "All samples are all homozygous alternate for the variant"
-    },
-    "QUALapprox": {
-        "Number": "1",
-        "Description": "Sum of PL[0] values; used to approximate the QUAL score",
     },
 }
 """
@@ -282,34 +271,16 @@ Dictionary used during VCF export to export MatrixTable entries.
 """
 
 
-def remove_fields_from_globals(global_field: List[str], fields_to_remove: List[str]):
-    """
-    Removes fields from the pre-defined global field variables.
-
-    :param global_field: Global list of fields
-    :param fields_to_remove: List of fields to remove from global (they must be in the global list)
-    """
-    for field in fields_to_remove:
-        if field in global_field:
-            global_field.remove(field)
-        else:
-            logger.info(f"'{field}'' missing from {global_field}")
-
-
 def ht_to_vcf_mt(
-    info_ht: hl.Table,
-    create_mt: hl.bool = False,
-    pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
+        info_ht: hl.Table,
+        pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
 ) -> hl.MatrixTable:
     """
     Creates a MT ready for vcf export from a HT. In particular, the following conversions are done:
     - All int64 are coerced to int32
     - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
-
     .. note::
-
         The MT returned has no cols.
-
     :param info_ht: Input HT
     :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct)
     :return: MatrixTable ready for VCF export
@@ -357,7 +328,7 @@ def ht_to_vcf_mt(
 
     # Flatten SB if it is an array of arrays
     if "SB" in info_ht.info and not isinstance(
-        info_ht.info.SB, hl.expr.ArrayNumericExpression
+            info_ht.info.SB, hl.expr.ArrayNumericExpression
     ):
         info_expr["SB"] = info_ht.info.SB[0].extend(info_ht.info.SB[1])
 
@@ -366,29 +337,23 @@ def ht_to_vcf_mt(
             info_ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
         )
 
-    info_t = info_ht
+    # Annotate with new expression and add 's' empty string field required to cast HT to MT
+    info_ht = info_ht.annotate(
+        info=info_ht.info.annotate(**info_expr), s=hl.null(hl.tstr)
+    )
 
-    if create_mt:
-        # Annotate with new expression and add 's' empty string field required to cast HT to MT
-        info_t = info_t.annotate(
-            info=info_t.info.annotate(**info_expr), s=hl.null(hl.tstr)
-        )
-        # Create an MT with no cols so that we can export to VCF
-        info_t = info_t.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-        info_t = info_t.filter_cols(False)
-
-    return info_t
+    # Create an MT with no cols so that we acn export to VCF
+    info_mt = info_ht.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
+    return info_mt.filter_cols(False)
 
 
 def make_label_combos(
-    label_groups: Dict[str, List[str]], sort_order: List[str] = SORT_ORDER,
+        label_groups: Dict[str, List[str]], sort_order: List[str] = SORT_ORDER,
 ) -> List[str]:
     """
     Make combinations of all possible labels for a supplied dictionary of label groups.
-
     For example, if label_groups is `{"sex": ["male", "female"], "pop": ["afr", "nfe", "amr"]}`,
     this function will return `["afr_male", "afr_female", "nfe_male", "nfe_female", "amr_male", "amr_female']`
-
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -408,12 +373,11 @@ def make_label_combos(
 
 
 def index_globals(
-    globals_array: List[Dict[str, str]], label_groups: Dict[str, List[str]]
+        globals_array: List[Dict[str, str]], label_groups: Dict[str, List[str]]
 ) -> Dict[str, int]:
     """
     Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry
     in the meta_array annotation
-
     :param globals_array: Ordered list containing dictionary entries describing all the grouping combinations contained in the globals_array annotation.
        Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
@@ -433,20 +397,18 @@ def index_globals(
 
 
 def make_combo_header_text(
-    preposition: str,
-    combo_dict: Dict[str, str],
-    prefix: str,
-    pop_names: Dict[str, str],
+        preposition: str,
+        combo_dict: Dict[str, str],
+        prefix: str,
+        pop_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
-
     For example, if preposition is "for", group_types is ["group", "pop", "sex"], and combo_fields is ["adj", "afr", "female"],
     this function will return the string " for female samples of African-American/African ancestry".
-
     :param preposition: Relevant preposition to precede automatically generated text.
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
-        Possible grouping types are: "group", "pop", "sex", and "subpop". 
+        Possible grouping types are: "group", "pop", "sex", and "subpop".
         Example input: {"pop": "afr", "sex": "female"}
     :param prefix: Prefix string indicating sample subset.
     :param pop_names: Dict with global population names (keys) and population descriptions (values).
@@ -466,7 +428,7 @@ def make_combo_header_text(
     if "subpop" in combo_dict or "pop" in combo_dict:
         if "subpop" in combo_dict:
             header_text = (
-                header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
+                    header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
             )
 
         else:
@@ -483,27 +445,25 @@ def make_combo_header_text(
 
 
 def make_info_dict(
-    prefix: str = "",
-    pop_names: Dict[str, str] = POP_NAMES,
-    label_groups: Dict[str, str] = None,
-    bin_edges: Dict[str, str] = None,
-    faf: bool = False,
-    popmax: bool = False,
-    description_text: str = "",
-    age_hist_data: str = None,
-    sort_order: List[str] = SORT_ORDER,
+        prefix: str = "",
+        pop_names: Dict[str, str] = POP_NAMES,
+        label_groups: Dict[str, str] = None,
+        bin_edges: Dict[str, str] = None,
+        faf: bool = False,
+        popmax: bool = False,
+        description_text: str = "",
+        age_hist_data: str = None,
+        sort_order: List[str] = SORT_ORDER,
 ) -> Dict[str, Dict[str, str]]:
     """
     Generate dictionary of Number and Description attributes of VCF INFO fields.
-
     Used to populate the INFO fields of the VCF header during export.
-
     Creates:
         - INFO fields for age histograms (bin freq, n_smaller, and n_larger for heterozygous and homozygous variant carriers)
         - INFO fields for popmax AC, AN, AF, nhomalt, and popmax population
         - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
-        - INFO fields for filtering allele frequency (faf) annotations 
-    
+        - INFO fields for filtering allele frequency (faf) annotations
+
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
@@ -517,7 +477,7 @@ def make_info_dict(
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     """
     if prefix != "":
-        prefix = f"{prefix}-"
+        prefix = f"{prefix}_"
 
     info_dict = dict()
 
@@ -572,10 +532,6 @@ def make_info_dict(
                 "Number": "A",
                 "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_text}",
             },
-            f"{prefix}faf95_popmax": {
-                "Number": "A",
-                "Description": f"Filtering allele frequency (using Poisson 95% CI) for the population with the maximum allele frequency{description_text}",
-            },
         }
         info_dict.update(popmax_dict)
 
@@ -584,7 +540,7 @@ def make_info_dict(
         combos = make_label_combos(label_groups)
 
         for combo in combos:
-            combo_fields = combo.split("-")
+            combo_fields = combo.split("_")
             group_dict = dict(zip(group_types, combo_fields))
 
             for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
@@ -592,30 +548,30 @@ def make_info_dict(
 
             if not faf:
                 combo_dict = {
-                    f"AC-{prefix}{combo}": {
+                    f"{prefix}AC_{combo}": {
                         "Number": "A",
                         "Description": f"Alternate allele count{for_combo}{description_text}",
                     },
-                    f"AN-{prefix}{combo}": {
+                    f"{prefix}AN_{combo}": {
                         "Number": "1",
                         "Description": f"Total number of alleles{in_combo}{description_text}",
                     },
-                    f"AF-{prefix}{combo}": {
+                    f"{prefix}AF_{combo}": {
                         "Number": "A",
                         "Description": f"Alternate allele frequency{in_combo}{description_text}",
                     },
-                    f"nhomalt-{prefix}{combo}": {
+                    f"{prefix}nhomalt_{combo}": {
                         "Number": "A",
                         "Description": f"Count of homozygous individuals{in_combo}{description_text}",
                     },
                 }
             else:
                 combo_dict = {
-                    f"faf95-{prefix}{combo}": {
+                    f"{prefix}faf95_{combo}": {
                         "Number": "A",
                         "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
                     },
-                    f"faf99-{prefix}{combo}": {
+                    f"{prefix}faf99_{combo}": {
                         "Number": "A",
                         "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
                     },
@@ -625,13 +581,11 @@ def make_info_dict(
 
 
 def add_as_info_dict(
-    info_dict: Dict[str, Dict[str, str]] = INFO_DICT, as_fields: List[str] = AS_FIELDS
+        info_dict: Dict[str, Dict[str, str]] = INFO_DICT, as_fields: List[str] = AS_FIELDS
 ) -> Dict[str, Dict[str, str]]:
     """
     Updates info dictionary with allele-specific terms and their descriptions.
-
     Used in VCF export.
-
     :param info_dict: Dictionary containing site-level annotations and their descriptions. Default is INFO_DICT.
     :param as_fields: List containing allele-specific fields to be added to info_dict. Default is AS_FIELDS.
     :return: Dictionary with allele specific annotations, their descriptions, and their VCF number field.
@@ -640,7 +594,9 @@ def add_as_info_dict(
     for field in as_fields:
 
         try:
+            # Strip AS_ from field name
             site_field = field[3:]
+
             # Get site description from info dictionary and make first letter lower case
             first_letter = info_dict[site_field]["Description"][0].lower()
             rest_of_description = info_dict[site_field]["Description"][1:]
@@ -658,29 +614,27 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
+        snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
 ) -> Dict[str, str]:
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
-
     Generates descriptions for:
         - AC0 filter
         - InbreedingCoeff filter
-        - AS_VQSR filter
-
+        - RF filter
+        - PASS (passed all variant filters)
     :param snp_cutoff: Minimum SNP cutoff score from random forest model.
     :param indel_cutoff: Minimum indel cutoff score from random forest model.
+    :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
     """
     filter_dict = {
         "AC0": {
             "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
         },
-        "InbreedingCoeff": {
-            "Description": f"GATK InbreedingCoeff < {inbreeding_cutoff}"
-        },
-        "AS_VQSR": {
-            "Description": f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
+        "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
+        "RF": {
+            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
         },
         "PASS": {"Description": "Passed all variant filters"},
     }
@@ -688,12 +642,11 @@ def make_vcf_filter_dict(
 
 
 def make_hist_bin_edges_expr(
-    ht: hl.Table, hists: List[str] = HISTS, prefix: str = ""
+        ht: hl.Table, hists: List[str] = HISTS, prefix: str = ""
 ) -> Dict[str, str]:
     """
     Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
     separated by pipe delimiters.
-
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
@@ -731,19 +684,16 @@ def make_hist_bin_edges_expr(
     return edges_dict
 
 
-def make_hist_dict(
-    bin_edges: Dict[str, Dict[str, str]], adj: bool, dict_hists: List[str] = HISTS
-) -> Dict[str, str]:  # Remove default HIST?
+def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
-
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
-    :param dict_hists: List of hists to build hist info dict for
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
-    for hist in dict_hists:
+    for hist in HISTS:
+
         # Get hists for both raw and adj data
         # Add "_raw" to quality histograms calculated on raw data
         if not adj:
@@ -779,11 +729,10 @@ def make_hist_dict(
 
 
 def set_female_y_metrics_to_na(
-    t: Union[hl.Table, hl.MatrixTable],
+        t: Union[hl.Table, hl.MatrixTable],
 ) -> Dict[str, hl.expr.Int32Expression]:
     """
     Set AC, AN, and nhomalt chrY variant annotations for females to NA (instead of 0).
-
     :param t: Table/MatrixTable containing female variant annotations.
     :return: Dictionary with reset annotations
     """

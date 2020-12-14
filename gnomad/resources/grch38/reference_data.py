@@ -43,10 +43,45 @@ def _import_clinvar(**kwargs) -> hl.Table:
     return clinvar
 
 
-def _import_clinvar_pathogenic(**kwargs) -> hl.Table:
-    clinvar_pathogenic = import_sites_vcf(**kwargs)
-    clinvar_pathogenic = vep_or_lookup_vep(clinvar_pathogenic, reference="GRCh38")
-    return clinvar_pathogenic
+""" def _import_clinvar_pathogenic(**kwargs) -> hl.Table:
+    clinvar = import_sites_vcf(**kwargs)
+    print(
+        f"Filtering ClinVar version {clinvar} to only pathogenic variants"
+    )
+    clinvar_ht = clinvar
+    print(f"Found {clinvar_ht.count()} variants before filtering")
+    no_star_assertions = hl.literal(
+        {
+            "no_assertion_provided",
+            "no_assertion_criteria_provided",
+            "no_interpretation_for_the_single_variant",
+        }
+    )
+    clinvar_ht = clinvar_ht.filter(
+        hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length()
+        > 0,
+        keep=False,
+    )
+    print(
+        f"Found {clinvar_ht.count()} variants after removing variants without assertions"
+    )
+    clinvar_ht = clinvar_ht.filter(
+        clinvar_ht.info.CLNSIG.map(lambda x: x.lower())
+        .map(lambda x: x.contains("pathogenic"))
+        .any(lambda x: x),
+        keep=True,
+    )
+    print(
+        f"Found {clinvar_ht.count()} variants after filtering to (likely) pathogenic variants"
+    )
+    clinvar_ht = clinvar_ht.filter(
+        hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False
+    )
+    print(
+        f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical \
+        interpretations)"
+    )
+    return clinvar_ht """
 
 
 # Resources with no versioning needed
@@ -120,24 +155,6 @@ clinvar = VersionedTableResource(
             import_func=_import_clinvar,
             import_args={
                 "path": "gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
-                "force_bgz": True,
-                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
-                "skip_invalid_loci": True,
-                "min_partitions": 100,
-                "reference_genome": "GRCh38",
-            },
-        )
-    },
-)
-
-clinvar_pathogenic = VersionedTableResource(
-    default_version="20190923",
-    versions={
-        "20190923": TableResource(
-            path="gs://gnomad-public/resources/grch38/clinvar/clinvar_pathogenic_20190923.ht",
-            import_func=_import_clinvar_pathogenic,
-            import_args={
-                "path": "gs://gnomad-public/resources/grch38/clinvar/clinvar_pathogenic_20190923.vcf.bgz",
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -275,3 +292,55 @@ def get_truth_ht() -> Table:
         .repartition(200, shuffle=False)
         .persist()
     )
+
+def get_clinvar_pathogenic(version: str = None) -> Table:
+    """
+    Returns a table that filters the clinvar data to pathogenic and likely pathogenic variants.
+    Accepts an optional string corresponding to the version of clinvar. If no value is given, defaults to the default version of clinvar.
+
+    return: A table with the corresponding version of clinvar filtered.
+    """
+    if version:
+        if not(isinstance(version, str)):
+            raise TypeError("Incompatible type for variable version. Expected " + str(type(clinvar.default_version)) + ", " + "given " + str(type(version)) + ".")
+        if version in clinvar.versions:
+            clinvar_ht = clinvar.versions[version].ht()
+        else:
+            raise ValueError(version + " is not a supported version.")
+    else:
+        print("Using default clinvar version: " + clinvar.default_version + ".")
+        clinvar_ht = clinvar.ht()
+
+    print(f"Found {clinvar_ht.count()} variants before filtering")
+    no_star_assertions = hl.literal(
+        {
+            "no_assertion_provided",
+            "no_assertion_criteria_provided",
+            "no_interpretation_for_the_single_variant",
+        }
+    )
+    clinvar_ht = clinvar_ht.filter(
+        hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length()
+        > 0,
+        keep=False,
+    )
+    print(
+        f"Found {clinvar_ht.count()} variants after removing variants without assertions"
+    )
+    clinvar_ht = clinvar_ht.filter(
+        clinvar_ht.info.CLNSIG.map(lambda x: x.lower())
+        .map(lambda x: x.contains("pathogenic"))
+        .any(lambda x: x),
+        keep=True,
+    )
+    print(
+        f"Found {clinvar_ht.count()} variants after filtering to (likely) pathogenic variants"
+    )
+    clinvar_ht = clinvar_ht.filter(
+        hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False
+    )
+    print(
+        f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical interpretations)"
+    )
+    return clinvar_ht
+    

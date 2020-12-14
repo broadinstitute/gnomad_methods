@@ -134,7 +134,7 @@ def default_lift_data(
         keep_expr = ~t.locus_fail_liftover
         t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
 
-    row_key_expr = {"locus": t.new_locus.result, "alleles": t.new_alleles}
+    row_key_expr = {"locus": t.new_locus, "alleles": t.new_alleles}
     return (
         t.key_by(**row_key_expr)
         if isinstance(t, hl.Table)

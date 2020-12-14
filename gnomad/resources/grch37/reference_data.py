@@ -271,6 +271,7 @@ def get_truth_ht() -> hl.Table:
         .persist()
     )
 
+
 def get_clinvar_pathogenic(version: str = None) -> hl.Table:
     """
     Returns a table that filters the clinvar data to pathogenic and likely pathogenic variants.
@@ -279,8 +280,15 @@ def get_clinvar_pathogenic(version: str = None) -> hl.Table:
     return: A table with the corresponding version of clinvar filtered.
     """
     if version:
-        if not(isinstance(version, str)):
-            raise TypeError("Incompatible type for variable version. Expected " + str(type(clinvar.default_version)) + ", " + "given " + str(type(version)) + ".")
+        if not (isinstance(version, str)):
+            raise TypeError(
+                "Incompatible type for variable version. Expected "
+                + str(type(clinvar.default_version))
+                + ", "
+                + "given "
+                + str(type(version))
+                + "."
+            )
         if version in clinvar.versions:
             clinvar_ht = clinvar.versions[version].ht()
         else:

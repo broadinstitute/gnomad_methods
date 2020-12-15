@@ -43,47 +43,6 @@ def _import_clinvar(**kwargs) -> hl.Table:
     return clinvar
 
 
-""" def _import_clinvar_pathogenic(**kwargs) -> hl.Table:
-    clinvar = import_sites_vcf(**kwargs)
-    print(
-        f"Filtering ClinVar version {clinvar} to only pathogenic variants"
-    )
-    clinvar_ht = clinvar
-    print(f"Found {clinvar_ht.count()} variants before filtering")
-    no_star_assertions = hl.literal(
-        {
-            "no_assertion_provided",
-            "no_assertion_criteria_provided",
-            "no_interpretation_for_the_single_variant",
-        }
-    )
-    clinvar_ht = clinvar_ht.filter(
-        hl.set(clinvar_ht.info.CLNREVSTAT).intersection(no_star_assertions).length()
-        > 0,
-        keep=False,
-    )
-    print(
-        f"Found {clinvar_ht.count()} variants after removing variants without assertions"
-    )
-    clinvar_ht = clinvar_ht.filter(
-        clinvar_ht.info.CLNSIG.map(lambda x: x.lower())
-        .map(lambda x: x.contains("pathogenic"))
-        .any(lambda x: x),
-        keep=True,
-    )
-    print(
-        f"Found {clinvar_ht.count()} variants after filtering to (likely) pathogenic variants"
-    )
-    clinvar_ht = clinvar_ht.filter(
-        hl.is_defined(clinvar_ht.info.CLNSIGCONF), keep=False
-    )
-    print(
-        f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical \
-        interpretations)"
-    )
-    return clinvar_ht """
-
-
 # Resources with no versioning needed
 purcell_5k_intervals = TableResource(
     path="gs://gnomad-public/resources/grch38/purcell_5k_intervals/purcell5k.ht",

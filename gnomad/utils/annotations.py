@@ -892,7 +892,10 @@ def sor_from_sb(
 
     sb = sb.map(lambda x: hl.float64(x) + 1)
 
-    (ref_fw, ref_rv, alt_fw, alt_rv) = sb
+    ref_fw = sb[0]
+    ref_rv = sb[1]
+    alt_fw = sb[2]
+    alt_rv = sb[3]
     symmetrical_ratio = ((ref_fw * alt_rv) / (alt_fw * ref_rv)) + (
         (alt_fw * ref_rv) / (ref_fw * alt_rv)
     )

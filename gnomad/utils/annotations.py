@@ -869,6 +869,40 @@ def fs_from_sb(
     )
 
 
+def sor_from_sb(
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
+) -> hl.expr.Float64Expression:
+    """
+    Computes `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
+
+    .. note::
+
+        This function can either take
+        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+        - an array containing 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+
+    GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/StrandOddsRatio.java
+
+    :param sb: Count of ref/alt reads on each strand
+    :return: SOR value
+    """
+
+    if not isinstance(sb, hl.expr.ArrayNumericExpression):
+        sb = hl.bind(lambda x: hl.flatten(x), sb)
+
+    sb = sb.map(lambda x: hl.float64(x) + 1)
+
+    (ref_fw, ref_rv, alt_fw, alt_rv) = sb
+    symmetrical_ratio = ((ref_fw * alt_rv) / (alt_fw * ref_rv)) + (
+        (alt_fw * ref_rv) / (ref_fw * alt_rv)
+    )
+    ref_ratio = hl.min(ref_rv, ref_fw) / hl.max(ref_rv, ref_fw)
+    alt_ratio = hl.min(alt_fw, alt_rv) / hl.max(alt_fw, alt_rv)
+    sor = hl.log(symmetrical_ratio) + hl.log(ref_ratio) - hl.log(alt_ratio)
+
+    return sor
+
+
 def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
     """
     Returns a boolean expression selecting bi-allelic sites only,

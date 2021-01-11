@@ -84,7 +84,9 @@ def densify_sites(
     """
     Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
 
-    Note that only rows that appear both in `mt` and `sites_ht` are returned.
+    Note that only rows that appear both in `mt` and `sites_ht` are returned. 
+
+    Assumes that `sites_ht` and `last_END_positions_ht` have the same key type.
 
     :param mt: Input sparse MT
     :param sites_ht: Desired sites to densify
@@ -93,7 +95,6 @@ def densify_sites(
     :return: Dense MT filtered to the sites in `sites_ht`
     """
     logger.info("Computing intervals to densify from sites Table.")
-    sites_ht = sites_ht.key_by("locus")
     sites_ht = sites_ht.annotate(
         interval=hl.locus_interval(
             sites_ht.locus.contig,

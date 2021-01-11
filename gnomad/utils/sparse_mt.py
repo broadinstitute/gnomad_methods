@@ -80,6 +80,7 @@ def densify_sites(
     sites_ht: hl.Table,
     last_END_positions_ht: hl.Table,
     semi_join_rows: bool = True,
+    key_by_locus: bool = False,
 ) -> hl.MatrixTable:
     """
     Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
@@ -92,8 +93,11 @@ def densify_sites(
     :param sites_ht: Desired sites to densify
     :param last_END_positions_ht: Table storing positions of the furthest ref block (END tag)
     :param semi_join_rows: Whether to filter the MT rows based on semi-join (default, better if sites_ht is large) or based on filter_intervals (better if sites_ht only contains a few sites)
+    :param key_by_locus: Whether to re-key the sites HT by locus. This assumes that the last END HT is keyed by locus. Default is False.
     :return: Dense MT filtered to the sites in `sites_ht`
     """
+    if key_by_locus:
+        sites_ht = sites_ht.key_by("locus")
     logger.info("Computing intervals to densify from sites Table.")
     sites_ht = sites_ht.annotate(
         interval=hl.locus_interval(

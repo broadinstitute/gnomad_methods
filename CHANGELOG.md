@@ -18,6 +18,7 @@
 * Add reference genome to call of `has_liftover` in `get_liftover_genome` [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Added fix for MQ calculation in `_get_info_agg_expr`, switched `RAW_MQ` and `MQ_DP` in calculation [(#262)](https://github.com/broadinstitute/gnomad_methods/pull/262)
 * Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)
+* Add calculation for the strand odds ratio (SOR) to `get_site_info_expr` and `def get_as_info_expr` [(#281)](https://github.com/broadinstitute/gnomad_methods/pull/281)
 
 ## Version 0.4.0 - July 9th, 2020
 

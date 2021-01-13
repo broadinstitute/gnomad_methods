@@ -322,7 +322,9 @@ def get_as_info_expr(
     if "AS_SB" in agg_expr:
         agg_expr["AS_SB_TABLE"] = agg_expr.pop("AS_SB")
 
-    if alt_alleles_range_array_field not in mt.row or mt[alt_alleles_range_array_field].dtype != hl.dtype("array<int32>"):
+    if alt_alleles_range_array_field not in mt.row or mt[
+        alt_alleles_range_array_field
+    ].dtype != hl.dtype("array<int32>"):
         msg = f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}' of type array<int32>"
         logger.error(msg)
         raise ValueError(msg)

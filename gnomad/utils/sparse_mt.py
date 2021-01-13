@@ -77,7 +77,7 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
             ht.locus.position,
         )
     )
-    return ht.select_globals()
+    return ht.select_globals().key_by("locus")
 
 
 def densify_sites(

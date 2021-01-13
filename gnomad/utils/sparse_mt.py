@@ -280,7 +280,7 @@ def get_as_info_expr(
     array_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
     ] = INFO_ARRAY_SUM_AGG_FIELDS,
-    alt_alleles_range_array: str = "alt_alleles_range_array",
+    alt_alleles_range_array_field: str = "alt_alleles_range_array",
 ) -> hl.expr.StructExpression:
     """
     Returns an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
@@ -299,7 +299,7 @@ def get_as_info_expr(
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
     :param median_agg_fields: Fields to aggregate using (approximate) median.
     :param array_sum_agg_fields: Fields to aggregate using array sum.
-    :param alt_alleles_range_array: Annotation containing an array of the range of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
+    :param alt_alleles_range_array_field: Annotation containing an array of the range of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
     :return: Expression containing the AS info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -322,18 +322,16 @@ def get_as_info_expr(
     if "AS_SB" in agg_expr:
         agg_expr["AS_SB_TABLE"] = agg_expr.pop("AS_SB")
 
-    if alt_alleles_range_array not in mt.row or mt[
-        alt_alleles_range_array
-    ].dtype != hl.dtype("array<int32>"):
-        msg = f"'get_as_info_expr' expected a row field '{alt_alleles_range_array}' of type array<int32>"
+    if alt_alleles_range_array_field not in mt.row or mt[alt_alleles_range_array_field].dtype != hl.dtype("array<int32>"):
+        msg = f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}' of type array<int32>"
         logger.error(msg)
-        raise RuntimeError(msg)
+        raise ValueError(msg)
 
     # Modify aggregations to aggregate per allele
     agg_expr = {
         f: hl.agg.array_agg(
             lambda ai: hl.agg.filter(mt.LA.contains(ai), expr),
-            mt.alt_alleles_range_array,
+            mt[alt_alleles_range_array_field],
         )
         for f, expr in agg_expr.items()
     }

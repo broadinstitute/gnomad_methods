@@ -7,6 +7,7 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.resources.grch38.reference_data import clinvar as clinvar_grch38
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -256,3 +257,53 @@ def subset_samples_and_variants(
         f"out of {full_count} samples in MT"
     )
     return mt
+
+def filter_to_clinvar_pathogenic(
+    mt: Union[hl.MatrixTable, hl.Table] = clinvar_grch38.ht(),
+    clnrevstat: str = "CLNREVSTAT", 
+    clnsig: str = "CLNSIG", 
+    clnsigconf: str = "CLNSIGCONF",
+    remove_no_assertion: bool = True,
+    remove_conflicting: bool = True,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Returns a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
+
+    :param: mt: Input dataset that contains clinvar data, could either be a MatrixTable or Table. Defaults to gnomad's grch38 clinvar version.
+    :param clnrevstat: 
+    :param clnsig:
+    :param clnsigconf: 
+    :param remove_no_assertion: Flag for removing entries 
+    :param remove_conflicting: Flag for removing entries with conflicting clinical interpretations.
+    :return: Filtered MatrixTable or Table
+    """
+    logger.info(f"Found {mt.count_rows() if isinstance(mt, hl.MatrixTable) else mt.count()} variants before filtering")
+    path_expr = mt.info[clnsig].map(lambda x: x.lower()).map(lambda x: x.contains("pathogenic")).any(lambda x: x)
+    
+    if remove_no_assertion:
+        logger.info("Variants without assertions will be removed.") 
+        no_star_assertions = hl.literal(
+            {
+                "no_assertion_provided",
+                "no_assertion_criteria_provided",
+                "no_interpretation_for_the_single_variant",
+            }
+        
+        )
+        path_expr = path_expr & (hl.set(mt.info[clnrevstat]).intersection(no_star_assertions).length() == 0)
+    
+    if remove_conflicting:
+        path_expr = path_expr & hl.is_missing(mt.info[clnsigconf])
+        logger.info(f"Variants with conflicting clinical interpretations will be removed.")
+
+    if isinstance(mt, hl.MatrixTable):
+        mt = mt.filter_rows(path_expr)
+    else:
+        mt = mt.filter(path_expr)
+
+    logger.info(
+        f"Found {mt.count_rows() if isinstance(mt, hl.MatrixTable) else mt.count()} variants after filtering to clinvar pathogenic variants."
+    )
+    return mt
+
+

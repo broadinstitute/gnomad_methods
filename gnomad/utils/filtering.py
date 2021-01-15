@@ -279,6 +279,7 @@ def filter_to_clinvar_pathogenic(
     """
     if mt is None:
         from gnomad.resources.grch38.reference_data import clinvar
+
         mt = clinvar.ht()
     logger.info(
         f"Found {mt.count_rows() if isinstance(mt, hl.MatrixTable) else mt.count()} variants before filtering"

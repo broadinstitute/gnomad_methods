@@ -7,7 +7,6 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome
-from gnomad.resources.grch38.reference_data import clinvar as clinvar_grch38
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -260,7 +259,7 @@ def subset_samples_and_variants(
 
 
 def filter_to_clinvar_pathogenic(
-    mt: Union[hl.MatrixTable, hl.Table] = clinvar_grch38.ht(),
+    mt: Union[hl.MatrixTable, hl.Table] = None,
     clnrevstat: str = "CLNREVSTAT",
     clnsig: str = "CLNSIG",
     clnsigconf: str = "CLNSIGCONF",
@@ -278,6 +277,9 @@ def filter_to_clinvar_pathogenic(
     :param remove_conflicting: Flag for removing entries with conflicting clinical interpretations.
     :return: Filtered MatrixTable or Table
     """
+    if mt is None:
+        from gnomad.resources.grch38.reference_data import clinvar
+        mt = clinvar.ht()
     logger.info(
         f"Found {mt.count_rows() if isinstance(mt, hl.MatrixTable) else mt.count()} variants before filtering"
     )

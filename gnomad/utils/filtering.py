@@ -294,7 +294,7 @@ def filter_to_clinvar_pathogenic(
             {
                 "no_assertion_provided",
                 "no_assertion_criteria_provided",
-                "no_interpretation_for_the_single_variant",
+                "no_interpretation_for_the_individual_variant",
             }
         )
         path_expr = path_expr & (

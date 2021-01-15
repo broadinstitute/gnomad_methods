@@ -405,12 +405,11 @@ def get_site_info_expr(
         array_sum_agg_fields=array_sum_agg_fields,
     )
 
-    # Add FS if SB is present
+    # Add FS and SOR if SB is present
     # This is done outside of _get_info_agg_expr as the behavior is different in site vs allele-specific versions
-    agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
-
-    # Add SOR if SB is present
-    agg_expr["SOR"] = sor_from_sb(agg_expr["SB"])
+    if "SB" in agg_expr:
+        agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
+        agg_expr["SOR"] = sor_from_sb(agg_expr["SB"])
 
     # Run aggregator on non-ref genotypes
     info = hl.agg.filter(

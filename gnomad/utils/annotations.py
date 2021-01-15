@@ -816,8 +816,10 @@ def fs_from_sb(
     .. note::
 
         This function can either take
-        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
-        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+        - an array of length four containing the forward and reverse strands' counts of ref and alt alleles:
+            [ref fwd, ref rev, alt fwd, alt rev]
+        - a two dimensional array with arrays of length two, containing the counts:
+            [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
@@ -878,7 +880,7 @@ def sor_from_sb(
     .. note::
 
         This function can either take
-        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
+        - an array of length four containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
         - an array containing 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/StrandOddsRatio.java

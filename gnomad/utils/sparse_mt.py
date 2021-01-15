@@ -2,7 +2,12 @@ import logging
 from typing import Dict, List, Optional, Union
 
 import hail as hl
-from gnomad.utils.annotations import fs_from_sb, get_adj_expr, get_lowqual_expr
+from gnomad.utils.annotations import (
+    fs_from_sb,
+    get_adj_expr,
+    get_lowqual_expr,
+    sor_from_sb,
+)
 from gnomad.utils.intervals import interval_length, union_intervals
 from gnomad.utils.reference_genome import get_reference_genome
 
@@ -357,6 +362,9 @@ def get_as_info_expr(
             AS_FS=hl.range(1, hl.len(mt.alleles)).map(
                 lambda i: fs_from_sb(as_sb_table[0].extend(as_sb_table[i]))
             ),
+            AS_SOR=hl.range(1, hl.len(mt.alleles)).map(
+                lambda i: sor_from_sb(as_sb_table[0].extend(as_sb_table[i]))
+            ),
         )
 
     return info
@@ -407,9 +415,11 @@ def get_site_info_expr(
         array_sum_agg_fields=array_sum_agg_fields,
     )
 
-    # Add FS if SB is present
+    # Add FS and SOR if SB is present
     # This is done outside of _get_info_agg_expr as the behavior is different in site vs allele-specific versions
-    agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
+    if "SB" in agg_expr:
+        agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
+        agg_expr["SOR"] = sor_from_sb(agg_expr["SB"])
 
     # Run aggregator on non-ref genotypes
     info = hl.agg.filter(

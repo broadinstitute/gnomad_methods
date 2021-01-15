@@ -21,6 +21,7 @@
 * Update to `compute_last_ref_block_end`, removing assumption that sparse MatrixTables are keyed only by `locus` by default [(#279)] (https://github.com/broadinstitute/gnomad_methods/pull/279)
 * Added common variant QC functions `get_rf_runs` and `get_run_data` to `random_forest.py` [(#278)](https://github.com/broadinstitute/gnomad_methods/pull/278)
 * Add calculation for the strand odds ratio (SOR) to `get_site_info_expr` and `get_as_info_expr` [(#281)](https://github.com/broadinstitute/gnomad_methods/pull/281)
+* Update `generic_field_check` to have option to show percentage of sites that fail checks. [(#284)](https://github.com/broadinstitute/gnomad_methods/pull/284)
 
 ## Version 0.4.0 - July 9th, 2020
 

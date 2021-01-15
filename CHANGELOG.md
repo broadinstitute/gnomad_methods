@@ -19,6 +19,7 @@
 * Added fix for MQ calculation in `_get_info_agg_expr`, switched `RAW_MQ` and `MQ_DP` in calculation [(#262)](https://github.com/broadinstitute/gnomad_methods/pull/262)
 * Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)
 * Update to `compute_last_ref_block_end`, removing assumption that sparse MatrixTables are keyed only by `locus` by default [(#279)] (https://github.com/broadinstitute/gnomad_methods/pull/279)
+* Update to `rep_on_read` to allow function to repartition Tables in addition to MatrixTables [(#283)](https://github.com/broadinstitute/gnomad_methods/pull/283)
 
 ## Version 0.4.0 - July 9th, 2020
 

@@ -66,17 +66,26 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
     )
 
 
-def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
+def rep_on_read(
+    path: str, n_partitions: int, is_mt: bool
+) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Repartitions a MatrixTable on read. Currently the best way to increase the number of partitions in a MatrixTable.
+    Repartitions a MatrixTable/Table on read. 
 
-    :param path: Path to input MatrixTable
+    Currently the best way to increase the number of partitions.
+
+    :param path: Path to input MatrixTable or Table
     :param n_partitions: Number of desired partitions
-    :return: MatrixTable with the number of desired partitions
+    :param bool is_mt: Whether the path is to a MatrixTable or Table. 
+    :return: MatrixTable or Table with the number of desired partitions
     """
-    mt = hl.read_matrix_table(path)
-    intervals = mt._calculate_new_partitions(n_partitions)
-    return hl.read_matrix_table(path, _intervals=intervals)
+    t = hl.read_matrix_table(path) if is_mt else hl.read_table(path)
+    intervals = t._calculate_new_partitions(n_partitions)
+    return (
+        hl.read_matrix_table(path, _intervals=intervals)
+        if is_mt
+        else hl.read_table(path, _intervals=intervals)
+    )
 
 
 def get_file_stats(url: str) -> Tuple[int, str, str]:

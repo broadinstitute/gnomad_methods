@@ -84,7 +84,7 @@ Constant that contains description for VEP used in VCF export.
 """
 
 
-def vep_context_resource(ref: str = "GRCh37") -> VersionedTableResource:
+def get_vep_context(ref: str = "GRCh37") -> VersionedTableResource:
     """
     Get VEP context resource for the genome build `ref`
 
@@ -94,8 +94,8 @@ def vep_context_resource(ref: str = "GRCh37") -> VersionedTableResource:
     import gnomad.resources.grch37.reference_data as grch37
     import gnomad.resources.grch38.reference_data as grch38
 
-    vep_context_res = grch37.vep_context if ref == "GRCh37" else grch38.vep_context
-    return vep_context_res
+    vep_context = grch37.vep_context if ref == "GRCh37" else grch38.vep_context
+    return vep_context
 
 
 def vep_or_lookup_vep(
@@ -108,8 +108,8 @@ def vep_or_lookup_vep(
     :param reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
     :param reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
     :param vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
-    :param vep_version: Version of VEPed context Table to use, if none is supplied the default `vep_context` resource will be used
-    :return: VEPped Table
+    :param vep_version: Version of VEPed context Table to use (if None, the default `vep_context` resource will be used)
+    :return: VEPed Table
     """
     if reference is None:
         reference = hl.default_reference().name
@@ -125,7 +125,7 @@ def vep_or_lookup_vep(
                 f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}'
             )
 
-        reference_vep_res = vep_context_resource(reference)
+        reference_vep_res = get_vep_context(reference)
         if vep_version is None:
             vep_version = reference_vep_res.default_version
 

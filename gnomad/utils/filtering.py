@@ -270,10 +270,10 @@ def filter_to_clinvar_pathogenic(
     Returns a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
 
     :param: mt: Input dataset that contains clinvar data, could either be a MatrixTable or Table. Defaults to gnomad's grch38 clinvar version.
-    :param clnrevstat: 
-    :param clnsig:
-    :param clnsigconf: 
-    :param remove_no_assertion: Flag for removing entries 
+    :param clnrevstat: The field string for the expression that contains the review status of the clinical significance of clinvar variants.
+    :param clnsig: The field string for the expression that contains the clinical signifcance of the clinvar variant.
+    :param clnsigconf: The field string for the expression that contains if there is conflicting clinical significance for the variant. Undefined if there is no conflicting signficance. 
+    :param remove_no_assertion: Flag for removing entries in which the clnrevstat (clinical significance) has no assertions.
     :param remove_conflicting: Flag for removing entries with conflicting clinical interpretations.
     :return: Filtered MatrixTable or Table
     """

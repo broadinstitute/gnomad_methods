@@ -253,7 +253,7 @@ def get_truth_ht() -> Table:
     )
 
 
-def get_clinvar_pathogenic(version: str = None) -> Table:
+""" def get_clinvar_pathogenic(version: str = None) -> Table:
     """
     Returns a table that filters the clinvar data to pathogenic and likely pathogenic variants.
     Accepts an optional string corresponding to the version of clinvar. If no value is given, defaults to the default version of clinvar.
@@ -309,4 +309,4 @@ def get_clinvar_pathogenic(version: str = None) -> Table:
     print(
         f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical interpretations)"
     )
-    return clinvar_ht
+    return clinvar_ht """

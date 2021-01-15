@@ -270,7 +270,7 @@ def get_truth_ht() -> hl.Table:
         .repartition(200, shuffle=False)
         .persist()
     )
-
+""" 
 
 def get_clinvar_pathogenic(version: str = None) -> hl.Table:
     """
@@ -329,3 +329,4 @@ def get_clinvar_pathogenic(version: str = None) -> hl.Table:
         f"Found {clinvar_ht.count()} variants after filtering to variants without CLNSIGCONF (conflicting clinical interpretations)"
     )
     return clinvar_ht
+ """

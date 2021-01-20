@@ -17,11 +17,12 @@ def generic_field_check(
     check_description: str,
     display_fields: List[str],
     verbose: bool,
+    show_percent_sites: bool = False,
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
-    Displays the number of rows in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`). 
+    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`). 
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
 
     .. note::
@@ -37,12 +38,16 @@ def generic_field_check(
         these fields are also displayed if verbose is True.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :return: None
     """
     ht_orig = ht
     ht = ht.filter(cond_expr)
     n_fail = ht.count()
     if n_fail > 0:
         logger.info(f"Found {n_fail} sites that fail {check_description} check:")
+        if show_percent_sites:
+            logger.info(f"Percentage of sites that fail: {n_fail / ht_orig.count()}")
         ht = ht.flatten()
         ht.select("locus", "alleles", *display_fields).show()
     else:

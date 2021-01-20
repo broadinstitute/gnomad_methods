@@ -23,6 +23,9 @@
 * Added common variant QC functions `get_rf_runs` and `get_run_data` to `random_forest.py` [(#278)](https://github.com/broadinstitute/gnomad_methods/pull/278)
 * Add calculation for the strand odds ratio (SOR) to `get_site_info_expr` and `get_as_info_expr` [(#281)](https://github.com/broadinstitute/gnomad_methods/pull/281)
 * Update `generic_field_check` to have option to show percentage of sites that fail checks. [(#284)](https://github.com/broadinstitute/gnomad_methods/pull/284)
+* Added VEPed context HT to resource files and included support for versioning [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
+* Modified `vep_or_lookup_vep` to support the use of different VEP versions [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
+
 
 ## Version 0.4.0 - July 9th, 2020
 

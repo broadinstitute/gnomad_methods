@@ -269,6 +269,14 @@ def filter_to_clinvar_pathogenic(
     """
     Returns a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
 
+    Example use:
+
+    .. code-block:: python
+
+        from gnomad.resources.grch38.reference_data import clinvar
+        clinvar_ht = clinvar.ht()
+        clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
+
     :param: t: Input dataset that contains clinvar data, could either be a MatrixTable or Table.
     :param clnrevstat_field: The field string for the expression that contains the review status of the clinical significance of clinvar variants.
     :param clnsig_field: The field string for the expression that contains the clinical signifcance of the clinvar variant.
@@ -276,10 +284,6 @@ def filter_to_clinvar_pathogenic(
     :param remove_no_assertion: Flag for removing entries in which the clnrevstat (clinical significance) has no assertions (zero stars).
     :param remove_conflicting: Flag for removing entries with conflicting clinical interpretations.
     :return: Filtered MatrixTable or Table
-
-    from gnomad.resources.grch38.reference_data import clinvar
-    clinvar_ht = clinvar.ht()
-    clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
     """
     logger.info(
         f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants before filtering"

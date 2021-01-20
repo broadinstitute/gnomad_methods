@@ -17,7 +17,7 @@
 * Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Add reference genome to call of `has_liftover` in `get_liftover_genome` [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Added fix for MQ calculation in `_get_info_agg_expr`, switched `RAW_MQ` and `MQ_DP` in calculation [(#262)](https://github.com/broadinstitute/gnomad_methods/pull/262)
-* Add importable method for filtering clinvar to pathogenic sites for grch37 and grch38 [(#257)](https://github.com/broadinstitute/gnomad_methods/pull/257)
+* Add importable method for filtering clinvar to pathogenic sites [(#257)](https://github.com/broadinstitute/gnomad_methods/pull/257)
 * Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)
 * Update to `compute_last_ref_block_end`, removing assumption that sparse MatrixTables are keyed only by `locus` by default [(#279)] (https://github.com/broadinstitute/gnomad_methods/pull/279)
 

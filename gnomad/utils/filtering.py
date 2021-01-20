@@ -301,7 +301,8 @@ def filter_to_clinvar_pathogenic(
             }
         )
         path_expr = path_expr & (
-            hl.set(t.info[clnrevstat_field]).intersection(no_star_assertions).length() == 0
+            hl.set(t.info[clnrevstat_field]).intersection(no_star_assertions).length()
+            == 0
         )
 
     if remove_conflicting:

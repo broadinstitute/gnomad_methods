@@ -63,9 +63,9 @@ syndip = MatrixTableResource(
 
 # Versioned resources: versions should be listed from most recent to oldest
 vep_context = VersionedTableResource(
-    default_version="95",
+    default_version="85",
     versions={
-        "95": TableResource(
+        "85": TableResource(
             path="gs://gnomad-public-requester-pays/resources/context/grch37_context_vep_annotated.ht",
         )
     },

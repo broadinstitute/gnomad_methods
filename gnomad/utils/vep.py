@@ -141,6 +141,10 @@ def vep_or_lookup_vep(
     """
     VEP a table, or lookup variants in a reference database
 
+    .. warning::
+        If `reference_vep_ht` is supplied, no check is performed to confirm `reference_vep_ht` was
+        generated with the same version of VEP / VEP configuration as the VEP referenced in `vep_config_path`.
+
     :param ht: Input Table
     :param reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
     :param reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)

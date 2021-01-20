@@ -259,33 +259,33 @@ def subset_samples_and_variants(
 
 
 def filter_to_clinvar_pathogenic(
-    mt: Union[hl.MatrixTable, hl.Table] = None,
-    clnrevstat: str = "CLNREVSTAT",
-    clnsig: str = "CLNSIG",
-    clnsigconf: str = "CLNSIGCONF",
+    t: Union[hl.MatrixTable, hl.Table],
+    clnrevstat_field: str = "CLNREVSTAT",
+    clnsig_field: str = "CLNSIG",
+    clnsigconf_field: str = "CLNSIGCONF",
     remove_no_assertion: bool = True,
     remove_conflicting: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Returns a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
 
-    :param: mt: Input dataset that contains clinvar data, could either be a MatrixTable or Table. Defaults to gnomad's grch38 clinvar version.
-    :param clnrevstat: The field string for the expression that contains the review status of the clinical significance of clinvar variants.
-    :param clnsig: The field string for the expression that contains the clinical signifcance of the clinvar variant.
-    :param clnsigconf: The field string for the expression that contains if there is conflicting clinical significance for the variant. Undefined if there is no conflicting signficance.
+    :param: t: Input dataset that contains clinvar data, could either be a MatrixTable or Table.
+    :param clnrevstat_field: The field string for the expression that contains the review status of the clinical significance of clinvar variants.
+    :param clnsig_field: The field string for the expression that contains the clinical signifcance of the clinvar variant.
+    :param clnsigconf_field: The field string for the expression that contains the conflicting clinical significance values for the variant. For variants with no conflicting significance, this field should be undefined.
     :param remove_no_assertion: Flag for removing entries in which the clnrevstat (clinical significance) has no assertions (zero stars).
     :param remove_conflicting: Flag for removing entries with conflicting clinical interpretations.
     :return: Filtered MatrixTable or Table
-    """
-    if mt is None:
-        from gnomad.resources.grch38.reference_data import clinvar
 
-        mt = clinvar.ht()
+    from gnomad.resources.grch38.reference_data import clinvar
+    clinvar_ht = clinvar.ht()
+    clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
+    """
     logger.info(
-        f"Found {mt.count_rows() if isinstance(mt, hl.MatrixTable) else mt.count()} variants before filtering"
+        f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants before filtering"
     )
     path_expr = (
-        mt.info[clnsig]
+        t.info[clnsig_field]
         .map(lambda x: x.lower())
         .map(lambda x: x.contains("pathogenic"))
         .any(lambda x: x)
@@ -301,21 +301,21 @@ def filter_to_clinvar_pathogenic(
             }
         )
         path_expr = path_expr & (
-            hl.set(mt.info[clnrevstat]).intersection(no_star_assertions).length() == 0
+            hl.set(t.info[clnrevstat_field]).intersection(no_star_assertions).length() == 0
         )
 
     if remove_conflicting:
-        path_expr = path_expr & hl.is_missing(mt.info[clnsigconf])
         logger.info(
             f"Variants with conflicting clinical interpretations will be removed."
         )
+        path_expr = path_expr & hl.is_missing(t.info[clnsigconf_field])
 
-    if isinstance(mt, hl.MatrixTable):
-        mt = mt.filter_rows(path_expr)
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows(path_expr)
     else:
-        mt = mt.filter(path_expr)
+        t = t.filter(path_expr)
 
     logger.info(
-        f"Found {mt.count_rows() if isinstance(mt, hl.MatrixTable) else mt.count()} variants after filtering to clinvar pathogenic variants."
+        f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants after filtering to clinvar pathogenic variants."
     )
-    return mt
+    return t

@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import subprocess
-from typing import Union
+from typing import Optional, Union
 
 import hail as hl
 
@@ -71,6 +71,11 @@ CSQ_ORDER = (
     + CSQ_NON_CODING
 )
 
+POSSIBLE_REFS = ("GRCh37", "GRCh38")
+"""
+Constant containing supported references
+"""
+
 VEP_CONFIG_PATH = "file:///vep_data/vep-gcloud.json"
 """
 Constant that contains the local path to the VEP config file
@@ -87,30 +92,44 @@ Constant that contains description for VEP used in VCF export.
 """
 
 
-def get_vep_help():
+def get_vep_help(vep_config_path: Optional[str] = None):
     """
     Returns the output of vep --help which includes the VEP version.
 
     .. warning::
-        This function will work for Dataproc clusters created with `hailctl dataproc start --vep`.
-        It assumes that the command is `/path/to/vep`.
+        If no `vep_config_path` is supplied, this function will only work for Dataproc clusters
+        created with `hailctl dataproc start --vep`. It assumes that the command is `/path/to/vep`.
+
+    :param vep_config_path: Optional path to use as the VEP config file. If None, `VEP_CONFIG_URI` environment variable is used
+    :return: VEP help string
     """
-    with hl.hadoop_open(os.environ["VEP_CONFIG_URI"]) as vep_config_file:
+    if vep_config_path is None:
+        vep_config_path = os.environ["VEP_CONFIG_URI"]
+
+    with hl.hadoop_open(vep_config_path) as vep_config_file:
         vep_config = json.load(vep_config_file)
         vep_command = vep_config["command"]
         vep_help = subprocess.check_output([vep_command[0]]).decode("utf-8")
         return vep_help
 
 
-def get_vep_context(ref: str = "GRCh37") -> VersionedTableResource:
+def get_vep_context(ref: Optional[str] = None) -> VersionedTableResource:
     """
     Get VEP context resource for the genome build `ref`
 
-    :param ref: Genome build
+    :param ref: Genome build. If None, `hl.default_reference` is used
     :return: VEPed context resource
     """
     import gnomad.resources.grch37.reference_data as grch37
     import gnomad.resources.grch38.reference_data as grch38
+
+    if ref is None:
+        ref = hl.default_reference().name
+
+    if ref not in POSSIBLE_REFS:
+        raise ValueError(
+            f'get_vep_context passed {ref}. Expected one of {", ".join(POSSIBLE_REFS)}'
+        )
 
     vep_context = grch37.vep_context if ref == "GRCh37" else grch38.vep_context
     return vep_context
@@ -129,7 +148,7 @@ def vep_or_lookup_vep(
     :param vep_version: Version of VEPed context Table to use (if None, the default `vep_context` resource will be used)
     :return: VEPed Table
     """
-    vep_help = get_vep_help()
+    vep_help = get_vep_help(vep_config_path)
 
     if reference is None:
         reference = hl.default_reference().name
@@ -142,10 +161,9 @@ def vep_or_lookup_vep(
 
     if reference_vep_ht is None:
 
-        possible_refs = ("GRCh37", "GRCh38")
-        if reference not in possible_refs:
+        if reference not in POSSIBLE_REFS:
             raise ValueError(
-                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}'
+                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(POSSIBLE_REFS)}'
             )
 
         vep_context = get_vep_context(reference)

@@ -152,13 +152,14 @@ def vep_or_lookup_vep(
     :param vep_version: Version of VEPed context Table to use (if None, the default `vep_context` resource will be used)
     :return: VEPed Table
     """
-    vep_help = get_vep_help(vep_config_path)
 
     if reference is None:
         reference = hl.default_reference().name
 
     if vep_config_path is None:
         vep_config_path = VEP_CONFIG_PATH
+
+    vep_help = get_vep_help(vep_config_path)
 
     with hl.hadoop_open(vep_config_path) as vep_config_file:
         vep_config = vep_config_file.read()

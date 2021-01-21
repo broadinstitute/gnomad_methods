@@ -816,8 +816,8 @@ def fs_from_sb(
     .. note::
 
         This function can either take
-        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
-        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+        - an array of length four containing the forward and reverse strands' counts of ref and alt alleles: [ref fwd, ref rev, alt fwd, alt rev]
+        - a two dimensional array with arrays of length two, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
@@ -867,6 +867,43 @@ def fs_from_sb(
     return hl.or_missing(
         sb_sum > min_count, hl.max(0, fs_expr)  # Needed to avoid -0.0 values
     )
+
+
+def sor_from_sb(
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
+) -> hl.expr.Float64Expression:
+    """
+    Computes `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
+
+    .. note::
+
+        This function can either take
+        - an array of length four containing the forward and reverse strands' counts of ref and alt alleles: [ref fwd, ref rev, alt fwd, alt rev]
+        - a two dimensional array with arrays of length two, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+
+    GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/StrandOddsRatio.java
+
+    :param sb: Count of ref/alt reads on each strand
+    :return: SOR value
+    """
+
+    if not isinstance(sb, hl.expr.ArrayNumericExpression):
+        sb = hl.bind(lambda x: hl.flatten(x), sb)
+
+    sb = sb.map(lambda x: hl.float64(x) + 1)
+
+    ref_fw = sb[0]
+    ref_rv = sb[1]
+    alt_fw = sb[2]
+    alt_rv = sb[3]
+    symmetrical_ratio = ((ref_fw * alt_rv) / (alt_fw * ref_rv)) + (
+        (alt_fw * ref_rv) / (ref_fw * alt_rv)
+    )
+    ref_ratio = hl.min(ref_rv, ref_fw) / hl.max(ref_rv, ref_fw)
+    alt_ratio = hl.min(alt_fw, alt_rv) / hl.max(alt_fw, alt_rv)
+    sor = hl.log(symmetrical_ratio) + hl.log(ref_ratio) - hl.log(alt_ratio)
+
+    return sor
 
 
 def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:

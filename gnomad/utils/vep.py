@@ -1,7 +1,16 @@
-from typing import Union
+import json
+import logging
+import os
+import subprocess
+from typing import Optional, Union
 
 import hail as hl
-from gnomad.resources.resource_utils import DataException
+
+from gnomad.resources.resource_utils import VersionedTableResource
+
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [
@@ -62,17 +71,15 @@ CSQ_ORDER = (
     + CSQ_NON_CODING
 )
 
-VEP_REFERENCE_DATA = {
-    "GRCh37": {
-        "vep_config": "file:///vep_data/vep-gcloud.json",
-        "all_possible": "gs://gnomad-public-requester-pays/resources/context/grch37_context_vep_annotated.ht",
-    },
-    "GRCh38": {
-        "vep_config": "file:///vep_data/vep-gcloud.json",
-        "all_possible": "gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",
-    },
-}
+POSSIBLE_REFS = ("GRCh37", "GRCh38")
+"""
+Constant containing supported references
+"""
 
+VEP_CONFIG_PATH = "file:///vep_data/vep-gcloud.json"
+"""
+Constant that contains the local path to the VEP config file
+"""
 
 VEP_CSQ_FIELDS = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info"
 """
@@ -85,53 +92,119 @@ Constant that contains description for VEP used in VCF export.
 """
 
 
-def vep_context_ht_path(ref: str = "GRCh37"):
-    if ref not in VEP_REFERENCE_DATA.keys():
-        raise DataException(
-            "Select reference as one of: {}".format(",".join(VEP_REFERENCE_DATA.keys()))
+def get_vep_help(vep_config_path: Optional[str] = None):
+    """
+    Returns the output of vep --help which includes the VEP version.
+
+    .. warning::
+        If no `vep_config_path` is supplied, this function will only work for Dataproc clusters
+        created with `hailctl dataproc start --vep`. It assumes that the command is `/path/to/vep`.
+
+    :param vep_config_path: Optional path to use as the VEP config file. If None, `VEP_CONFIG_URI` environment variable is used
+    :return: VEP help string
+    """
+    if vep_config_path is None:
+        vep_config_path = os.environ["VEP_CONFIG_URI"]
+
+    with hl.hadoop_open(vep_config_path) as vep_config_file:
+        vep_config = json.load(vep_config_file)
+        vep_command = vep_config["command"]
+        vep_help = subprocess.check_output([vep_command[0]]).decode("utf-8")
+        return vep_help
+
+
+def get_vep_context(ref: Optional[str] = None) -> VersionedTableResource:
+    """
+    Get VEP context resource for the genome build `ref`
+
+    :param ref: Genome build. If None, `hl.default_reference` is used
+    :return: VEPed context resource
+    """
+    import gnomad.resources.grch37.reference_data as grch37
+    import gnomad.resources.grch38.reference_data as grch38
+
+    if ref is None:
+        ref = hl.default_reference().name
+
+    if ref not in POSSIBLE_REFS:
+        raise ValueError(
+            f'get_vep_context passed {ref}. Expected one of {", ".join(POSSIBLE_REFS)}'
         )
-    return VEP_REFERENCE_DATA[ref]["all_possible"]
+
+    vep_context = grch37.vep_context if ref == "GRCh37" else grch38.vep_context
+    return vep_context
 
 
-def vep_config_path(ref: str = "GRCh37"):
-    if ref not in VEP_REFERENCE_DATA.keys():
-        raise DataException(
-            "Select reference as one of: {}".format(",".join(VEP_REFERENCE_DATA.keys()))
-        )
-    return VEP_REFERENCE_DATA[ref]["vep_config"]
-
-
-def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
+def vep_or_lookup_vep(
+    ht, reference_vep_ht=None, reference=None, vep_config_path=None, vep_version=None
+):
     """
     VEP a table, or lookup variants in a reference database
+
+    .. warning::
+        If `reference_vep_ht` is supplied, no check is performed to confirm `reference_vep_ht` was
+        generated with the same version of VEP / VEP configuration as the VEP referenced in `vep_config_path`.
 
     :param ht: Input Table
     :param reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
     :param reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
-    :param vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
-    :return: VEPped Table
+    :param vep_config_path: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
+    :param vep_version: Version of VEPed context Table to use (if None, the default `vep_context` resource will be used)
+    :return: VEPed Table
     """
+
     if reference is None:
         reference = hl.default_reference().name
+
+    if vep_config_path is None:
+        vep_config_path = VEP_CONFIG_PATH
+
+    vep_help = get_vep_help(vep_config_path)
+
+    with hl.hadoop_open(vep_config_path) as vep_config_file:
+        vep_config = vep_config_file.read()
+
     if reference_vep_ht is None:
 
-        possible_refs = ("GRCh37", "GRCh38")
-        if reference not in possible_refs:
+        if reference not in POSSIBLE_REFS:
             raise ValueError(
-                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}'
+                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(POSSIBLE_REFS)}'
             )
 
-        reference_vep_ht = hl.read_table(vep_context_ht_path(reference))
+        vep_context = get_vep_context(reference)
+        if vep_version is None:
+            vep_version = vep_context.default_version
+
+        if vep_version not in vep_context.versions:
+            logger.warning(
+                f"No VEPed context Table available for genome build {reference} and VEP version {vep_version}, "
+                f"all variants will be VEPed using the following VEP:\n{vep_help}"
+            )
+            return hl.vep(ht, vep_config_path)
+
+        logger.info(
+            f"Using VEPed context Table from genome build {reference} and VEP version {vep_version}"
+        )
+
+        reference_vep_ht = vep_context.versions[vep_version].ht()
+        vep_context_help = hl.eval(reference_vep_ht.vep_help)
+        vep_context_config = hl.eval(reference_vep_ht.vep_config)
+
+        assert vep_help == vep_context_help, (
+            f"The VEP context HT version does not match the version referenced in the VEP config file."
+            f"\nVEP context:\n{vep_context_help}\n\n VEP config:\n{vep_help}"
+        )
+
+        assert vep_config == vep_context_config, (
+            f"The VEP context HT configuration does not match the configuration in {vep_config_path}."
+            f"\nVEP context:\n{vep_context_config}\n\n Current config:\n{vep_config}"
+        )
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 
     vep_ht = ht.filter(hl.is_defined(ht.vep))
     revep_ht = ht.filter(hl.is_missing(ht.vep))
-
-    if vep_config is None:
-        vep_config = vep_config_path(reference)
-
-    revep_ht = hl.vep(revep_ht, vep_config)
+    revep_ht = hl.vep(revep_ht, vep_config_path)
 
     return vep_ht.union(revep_ht)
 

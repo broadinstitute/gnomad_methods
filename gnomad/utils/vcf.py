@@ -417,7 +417,7 @@ def make_combo_header_text(
 
     :param preposition: Relevant preposition to precede automatically generated text.
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
-        Possible grouping types are: "group", "pop", "sex", and "subpop". 
+        Possible grouping types are: "group", "pop", "sex", and "subpop".
         Example input: {"pop": "afr", "sex": "female"}
     :param prefix: Prefix string indicating sample subset.
     :param pop_names: Dict with global population names (keys) and population descriptions (values).
@@ -473,8 +473,8 @@ def make_info_dict(
         - INFO fields for age histograms (bin freq, n_smaller, and n_larger for heterozygous and homozygous variant carriers)
         - INFO fields for popmax AC, AN, AF, nhomalt, and popmax population
         - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
-        - INFO fields for filtering allele frequency (faf) annotations 
-    
+        - INFO fields for filtering allele frequency (faf) annotations
+
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,

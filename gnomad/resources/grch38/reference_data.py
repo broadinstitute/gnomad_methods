@@ -74,6 +74,15 @@ na12878_giab_hc_intervals = TableResource(
 )
 
 # Versioned resources: versions should be listed from most recent to oldest
+vep_context = VersionedTableResource(
+    default_version="95",
+    versions={
+        "95": TableResource(
+            path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",
+        )
+    },
+)
+
 syndip = VersionedMatrixTableResource(
     default_version="20180222",
     versions={

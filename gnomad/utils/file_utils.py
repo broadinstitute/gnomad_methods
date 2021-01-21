@@ -66,19 +66,6 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
     )
 
 
-def rep_on_read(path: str, n_partitions: int) -> hl.MatrixTable:
-    """
-    Repartitions a MatrixTable on read. Currently the best way to increase the number of partitions in a MatrixTable.
-
-    :param path: Path to input MatrixTable
-    :param n_partitions: Number of desired partitions
-    :return: MatrixTable with the number of desired partitions
-    """
-    mt = hl.read_matrix_table(path)
-    intervals = mt._calculate_new_partitions(n_partitions)
-    return hl.read_matrix_table(path, _intervals=intervals)
-
-
 def get_file_stats(url: str) -> Tuple[int, str, str]:
     """
     Gets size (as both int and str) and md5 for file at specified URL.

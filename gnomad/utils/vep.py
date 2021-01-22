@@ -480,7 +480,7 @@ def get_worst_consequence_for_summary(
         - lof
         - no_lof_flags
 
-    Assumes input Table is annotated with VEP.
+    Assumes input Table is annotated with VEP and that VEP annotations have been filtered to canonical transcripts.
 
     :param ht: Input Table.
     :param csq_order: Order of VEP consequences, sorted from high to low impact. Default is CSQ_ORDER.

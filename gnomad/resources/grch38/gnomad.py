@@ -28,6 +28,7 @@ SUBSETS = [
 GROUPS = ["adj", "raw"]
 SEXES = ["XX", "XY"]
 POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
+COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
 KG_POPS = [
     "esn",
     "pur",

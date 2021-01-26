@@ -63,7 +63,7 @@ def get_summary_counts_dict(
 		- Number of LoF variants that fail LOFTEE
 
 	..warning:: 
-		Assumes allele_expr contains only two variants (multi-allelics have been split).
+		Assumes `allele_expr` contains only two variants (multi-allelics have been split).
 
 	:param allele_expr: ArrayExpression containing alleles.
 	:param lof_expr: StringExpression containing LOFTEE annotation.

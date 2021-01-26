@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import subprocess
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import hail as hl
 
@@ -89,6 +89,11 @@ Constant that defines the order of VEP annotations used in VCF export.
 VEP_CSQ_HEADER = f"Consequence annotations from Ensembl VEP. Format: {VEP_CSQ_FIELDS}"
 """
 Constant that contains description for VEP used in VCF export.
+"""
+
+LOFTEE_LABELS = ["HC", "LC", "OS"]
+"""
+Constant that contains annotations added by LOFTEE.
 """
 
 
@@ -458,3 +463,81 @@ def vep_struct_to_csq(
         )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
+
+
+def get_most_severe_consequence_for_summary(
+    ht: hl.Table,
+    csq_order: List[str] = CSQ_ORDER,
+    loftee_labels: List[str] = LOFTEE_LABELS,
+) -> hl.Table:
+    """
+    Prepares hail Table for summary statistics generation 
+    (number of variants by functional class, number of variants by functional class per sample).
+
+    Adds the following annotations:
+        - most_severe_csq: Most severe consequence for variant
+        - protein_coding: Whether the variant is present on a protein-coding transcript
+        - lof: Whether the variant is a loss-of-function variant
+        - no_lof_flags: Whether the variant has any LOFTEE flags (True if no flags)
+
+    Assumes input Table is annotated with VEP and that VEP annotations have been filtered to canonical transcripts.
+
+    :param ht: Input Table.
+    :param csq_order: Order of VEP consequences, sorted from high to low impact. Default is CSQ_ORDER.
+    :param loftee_labels: Annotations added by LOFTEE. Default is LOFTEE_LABELS.
+    :return: Table annotated with VEP summary annotations.
+    """
+
+    def _get_most_severe_csq(
+        csq_list: hl.expr.ArrayExpression, protein_coding: bool
+    ) -> hl.expr.StructExpression:
+        """
+        Processes VEP consequences to generate summary annotations.
+
+        :param csq_list: VEP consequences list to be processed.
+        :param protein_coding: Whether variant is in a protein-coding transcript.
+        :return: Struct containing summary annotations.
+        """
+        lof = hl.null(hl.tstr)
+        no_lof_flags = hl.null(hl.tbool)
+        if protein_coding:
+            all_lofs = csq_list.map(lambda x: x.lof)
+            lof = hl.literal(loftee_labels).find(lambda x: all_lofs.contains(x))
+            csq_list = hl.if_else(
+                hl.is_defined(lof), csq_list.filter(lambda x: x.lof == lof), csq_list
+            )
+            no_lof_flags = hl.or_missing(
+                hl.is_defined(lof),
+                csq_list.any(lambda x: (x.lof == lof) & hl.is_missing(x.lof_flags)),
+            )
+        all_csq_terms = csq_list.flatmap(lambda x: x.consequence_terms)
+        most_severe_csq = hl.literal(csq_order).find(
+            lambda x: all_csq_terms.contains(x)
+        )
+        return hl.struct(
+            most_severe_csq=most_severe_csq,
+            protein_coding=protein_coding,
+            lof=lof,
+            no_lof_flags=no_lof_flags,
+        )
+
+    protein_coding = ht.vep.transcript_consequences.filter(
+        lambda x: x.biotype == "protein_coding"
+    )
+    return ht.annotate(
+        **hl.case(missing_false=True)
+        .when(hl.len(protein_coding) > 0, _get_most_severe_csq(protein_coding, True))
+        .when(
+            hl.len(ht.vep.transcript_consequences) > 0,
+            _get_most_severe_csq(ht.vep.transcript_consequences, False),
+        )
+        .when(
+            hl.len(ht.vep.regulatory_feature_consequences) > 0,
+            _get_most_severe_csq(ht.vep.regulatory_feature_consequences, False),
+        )
+        .when(
+            hl.len(ht.vep.motif_feature_consequences) > 0,
+            _get_most_severe_csq(ht.vep.motif_feature_consequences, False),
+        )
+        .default(_get_most_severe_csq(ht.vep.intergenic_consequences, False))
+    )

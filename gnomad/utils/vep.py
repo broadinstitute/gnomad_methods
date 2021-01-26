@@ -465,7 +465,7 @@ def vep_struct_to_csq(
     return hl.or_missing(hl.len(csq) > 0, csq)
 
 
-def get_worst_consequence_for_summary(
+def get_most_severe_consequence_for_summary(
     ht: hl.Table,
     csq_order: List[str] = CSQ_ORDER,
     loftee_labels: List[str] = LOFTEE_LABELS,
@@ -475,10 +475,10 @@ def get_worst_consequence_for_summary(
     (number of variants by functional class, number of variants by functional class per sample).
 
     Adds the following annotations:
-        - most_severe_csq 
-        - protein_coding 
-        - lof
-        - no_lof_flags
+        - most_severe_csq: Most severe consequence for variant
+        - protein_coding: Whether the variant is present on a protein-coding transcript
+        - lof: Whether the variant is a loss-of-function variant
+        - no_lof_flags: Whether the variant has any LOFTEE flags (True if no flags)
 
     Assumes input Table is annotated with VEP and that VEP annotations have been filtered to canonical transcripts.
 
@@ -488,7 +488,7 @@ def get_worst_consequence_for_summary(
     :return: Table annotated with VEP summary annotations.
     """
 
-    def _get_worst_csq(
+    def _get_most_severe_csq(
         csq_list: hl.expr.ArrayExpression, protein_coding: bool
     ) -> hl.expr.StructExpression:
         """
@@ -526,18 +526,18 @@ def get_worst_consequence_for_summary(
     )
     return ht.annotate(
         **hl.case(missing_false=True)
-        .when(hl.len(protein_coding) > 0, _get_worst_csq(protein_coding, True))
+        .when(hl.len(protein_coding) > 0, _get_most_severe_csq(protein_coding, True))
         .when(
             hl.len(ht.vep.transcript_consequences) > 0,
-            _get_worst_csq(ht.vep.transcript_consequences, False),
+            _get_most_severe_csq(ht.vep.transcript_consequences, False),
         )
         .when(
             hl.len(ht.vep.regulatory_feature_consequences) > 0,
-            _get_worst_csq(ht.vep.regulatory_feature_consequences, False),
+            _get_most_severe_csq(ht.vep.regulatory_feature_consequences, False),
         )
         .when(
             hl.len(ht.vep.motif_feature_consequences) > 0,
-            _get_worst_csq(ht.vep.motif_feature_consequences, False),
+            _get_most_severe_csq(ht.vep.motif_feature_consequences, False),
         )
-        .default(_get_worst_csq(ht.vep.intergenic_consequences, False))
+        .default(_get_most_severe_csq(ht.vep.intergenic_consequences, False))
     )

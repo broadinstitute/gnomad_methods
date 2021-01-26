@@ -6,7 +6,7 @@ import hail as hl
 from gnomad.utils.filtering import filter_low_conf_regions
 from gnomad.utils.vep import (
     filter_vep_to_canonical_transcripts,
-    get_worst_consequence_for_summary,
+    get_most_severe_consequence_for_summary,
 )
 
 
@@ -15,15 +15,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def freq_criteria(
+def freq_bin_expr(
     freq_expr: hl.expr.ArrayExpression, index: int = 0
-) -> hl.expr.builders.CaseBuilder:
+) -> hl.expr.StringExpression:
     """
 	Returns case statement adding frequency string annotations based on input AC or AF.
 
 	:param freq_expr: Array of structs containing frequency information.
-	:param index: Which index of freq_expr to use for annotation. Default is 0 (all pops calculated on adj genotypes only).
-	:return: Case statement adding string expressions based on input AC or AF.
+	:param index: Which index of freq_expr to use for annotation. Default is 0. 
+		Assumes freq_expr was calculated with `annotate_freq`.
+		Frequency index 0 from `annotate_freq` is frequency for all
+		pops calculated on adj genotypes only.
+	:return: StringExpression containing bin name based on input AC or AF.
 	"""
     return (
         hl.case(missing_false=True)
@@ -47,9 +50,20 @@ def get_summary_counts_dict(
     prefix_str: str = "",
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
-	Returns dictionary containing desired categories and their counts.
+	Returns dictionary containing containing counts of multiple variant categories.
 
-	Assumes allele_expr contains only two variants (multi-allelics have been split).
+	Categories are:
+		- Number of variants
+		- Number of indels
+		- Number of SNVs
+		- Number of LoF variants
+		- Number of LoF variants that pass LOFTEE
+		- Number of LoF variants that pass LOFTEE without any flgs
+		- Number of LoF variants annotated as "other splice" (OS) by LOFTEE
+		- Number of LoF variants that fail LOFTEE
+
+	..warning:: 
+		Assumes allele_expr contains only two variants (multi-allelics have been split).
 
 	:param allele_expr: ArrayExpression containing alleles.
 	:param lof_expr: StringExpression containing LOFTEE annotation.
@@ -57,6 +71,7 @@ def get_summary_counts_dict(
 	:param prefix_str: Desired prefix string for category names. Default is empty str.
 	:return: Dict of categories and counts per category.
 	"""
+    logger.warning("This function expects that multi-allelic variants have been split!")
     return {
         f"{prefix_str}num_variants": hl.agg.count(),
         f"{prefix_str}indels": hl.agg.count_where(
@@ -75,57 +90,64 @@ def get_summary_counts_dict(
     }
 
 
-def get_summary_per_variant(
-    ht: hl.Table, freq_str: str = "freq", filter_field: str = "filters"
+def get_summary_counts(
+    ht: hl.Table,
+    freq_field: str = "freq",
+    filter_field: str = "filters",
+    filter_decoy: bool = False,
 ) -> hl.Table:
     """
-	Generates a struct with summary counts per variant.
-
-	Annotates Table's globals with total variant counts.
+	Generates a struct with summary counts across variant categories.
 
 	Summary counts:
 		- Number of variants
 		- Number of indels
-		- Number of SNPs
+		- Number of SNVs
 		- Number of LoF variants
 		- Number of LoF variants that pass LOFTEE (including with LoF flags)
 		- Number of LoF variants that pass LOFTEE without LoF flags
 		- Number of OS (other splice) variants annotated by LOFTEE
-		- Number of loF variants that fail LOFTEE filters
+		- Number of LoF variants that fail LOFTEE filters
+
+	Also annotates Table's globals with total variant counts.
+
+	Before calculating summary counts, function:
+		- Filters out low confidence regions
+		- Filters to canonical transcripts
+		- Uses the most severe consequence 
 
 	Assumes that:
 		- Input HT is annotated with VEP.
 		- Multiallelic variants have been split and/or input HT contains bi-allelic variants only.
 
 	:param ht: Input Table.
-	:param freq: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
+	:param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
 	:param filter_field: Name of field in HT containing variant filter information. Default is "filters".
+	:param filter_decoy: Whether to filter decoy regions. Default is False.
 	:return: Table grouped by frequency bin and aggregated across summary count categories. 
 	"""
     logger.info("Filtering to PASS variants in high confidence regions...")
     ht = ht.filter((hl.len(ht[filter_field]) == 0))
-    ht = filter_low_conf_regions(ht)
+    ht = filter_low_conf_regions(ht, filter_decoy=filter_decoy)
 
     logger.info(
         "Filtering to canonical transcripts and getting VEP summary annotations..."
     )
     ht = filter_vep_to_canonical_transcripts(ht)
-    ht = get_worst_consequence_for_summary(ht)
+    ht = get_most_severe_consequence_for_summary(ht)
 
     logger.info("Annotating with frequency bin information...")
-    ht = ht.annotate(freq_bin=freq_criteria(ht[freq_str]))
+    ht = ht.annotate(freq_bin=freq_bin_expr(ht[freq_field]))
 
-    logger.info("Annotating HT globals with total counts...")
-    summary_per_variant = ht.aggregate(
+    logger.info("Annotating HT globals with total counts per variant category...")
+    summary_counts = ht.aggregate(
         hl.struct(
             **get_summary_counts_dict(
                 ht.alleles, ht.lof, ht.no_lof_flags, prefix_str="total_"
             )
         )
     )
-    ht = ht.annotate_globals(summary_per_variant=summary_per_variant)
+    ht = ht.annotate_globals(summary_counts=summary_counts)
     return ht.group_by("freq_bin").aggregate(
-        **ht.aggregate(
-            hl.struct(**get_summary_counts_dict(ht.alleles, ht.lof, ht.no_lof_flags))
-        )
+        **get_summary_counts_dict(ht.alleles, ht.lof, ht.no_lof_flags)
     )

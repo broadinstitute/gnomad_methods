@@ -61,7 +61,6 @@ def compute_ranked_bin(
     :param desc: Whether to bin the score in descending order
     :return: Table with the requested bin annotations
     """
-    import math
 
     if compute_snv_indel_separately:
         # For each bin, add a SNV / indel stratification

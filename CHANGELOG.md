@@ -26,6 +26,7 @@
 * Added VEPed context HT to resource files and included support for versioning [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
 * Modified `vep_or_lookup_vep` to support the use of different VEP versions [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
 * Removed `rep_on_read`; this function is no longer necessary, as MatrixTables/Tables can be repartitioned on read with `_n_partitions` added by this [hail update](https://github.com/hail-is/hail/pull/9887) [(#283)](https://github.com/broadinstitute/gnomad_methods/pull/283)
+* Added code to generate summary statistics (total number of variants, number of LoF variants, LOFTEE summaries) [(#285)](https://github.com/broadinstitute/gnomad_methods/pull/285)
 
 ## Version 0.4.0 - July 9th, 2020
 

@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import hail as hl
 import pyspark.sql
@@ -65,8 +65,10 @@ def create_binned_ht(
     """
 
     def _update_bin_expr(
-        bin_expr, new_expr: hl.expr.BooleanExpression, new_id: str,
-    ):
+            bin_expr: Dict[str, hl.expr.BooleanExpression],
+            new_expr: hl.expr.BooleanExpression,
+            new_id: str,
+    ) -> Dict[str, hl.expr.BooleanExpression]:
         """
         Updates a dictionary of expressions to add another stratification
 

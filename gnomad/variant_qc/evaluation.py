@@ -48,6 +48,7 @@ def compute_ranked_bin(
         and singleton specific binning, the following could be used:
 
         .. code-block:: python
+        
             bin_expr={
                 'biallelic_bin': ~ht.was_split,
                 'singleton_bin': ht.singleton

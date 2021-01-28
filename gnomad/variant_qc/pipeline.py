@@ -28,12 +28,12 @@ logger.setLevel(logging.INFO)
 
 
 def create_binned_ht(
-        ht: hl.Table,
-        n_bins: int = 100,
-        singleton: bool = True,
-        biallelic: bool = True,
-        adj: bool = True,
-        add_substrat=None,
+    ht: hl.Table,
+    n_bins: int = 100,
+    singleton: bool = True,
+    biallelic: bool = True,
+    adj: bool = True,
+    add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
     This is meant as a default wrapper for `compute_ranked_bin`. It annotates table with a bin, where variants are
@@ -65,18 +65,16 @@ def create_binned_ht(
     """
 
     def _update_bin_expr(
-            bin_expr,
-            new_expr: hl.expr.BooleanExpression,
-            new_id: str,
+        bin_expr, new_expr: hl.expr.BooleanExpression, new_id: str,
     ):
         """
         Updates a dictionary of expressions to add another stratification
-        :param bin_expr: Dictionary of expressions to add another
-        stratification to
+
+        :param bin_expr: Dictionary of expressions to add another stratification to
         :param new_expr: New Boolean expression to add to `bin_expr`
         :param new_id: Name to add to each current key in `bin_expr` to indicate the new stratification
         :return: Dictionary of `bin_expr` updated with `new_expr` added as an additional stratification to all
-        expressions already in `bin_expr`
+            expressions already in `bin_expr`
         """
         bin_expr.update(
             {

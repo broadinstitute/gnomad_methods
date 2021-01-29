@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import hail as hl
 import pyspark.sql
@@ -14,7 +14,7 @@ from gnomad.sample_qc.relatedness import (
 from gnomad.utils.annotations import annotate_adj, bi_allelic_expr
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
-from gnomad.variant_qc.evaluation import compute_quantile_bin
+from gnomad.variant_qc.evaluation import compute_ranked_bin
 from gnomad.variant_qc.random_forest import (
     get_features_importance,
     test_model,
@@ -36,7 +36,7 @@ def create_binned_ht(
     add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
-    This is meant as a default wrapper for `compute_quantile_bin`. It annotates table with a bin, where variants are
+    This is meant as a default wrapper for `compute_ranked_bin`. It annotates table with a bin, where variants are
     binned based on score into `n_bins` equally-sized bins.
 
     .. note::
@@ -72,12 +72,11 @@ def create_binned_ht(
         """
         Updates a dictionary of expressions to add another stratification
 
-        :param bin_expr: Dictionary of expressions to add another
-        stratification to
+        :param bin_expr: Dictionary of expressions to add another stratification to
         :param new_expr: New Boolean expression to add to `bin_expr`
         :param new_id: Name to add to each current key in `bin_expr` to indicate the new stratification
         :return: Dictionary of `bin_expr` updated with `new_expr` added as an additional stratification to all
-        expressions already in `bin_expr`
+            expressions already in `bin_expr`
         """
         bin_expr.update(
             {
@@ -103,7 +102,7 @@ def create_binned_ht(
         for add_id, add_expr in add_substrat.items():
             bin_expr = _update_bin_expr(bin_expr, add_expr, add_id)
 
-    bin_ht = compute_quantile_bin(
+    bin_ht = compute_ranked_bin(
         ht, score_expr=ht.score, bin_expr=bin_expr, n_bins=n_bins
     )
 

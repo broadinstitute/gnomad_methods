@@ -21,11 +21,13 @@ def freq_bin_expr(
     """
 	Returns case statement adding frequency string annotations based on input AC or AF.
 
+    .. note::
+        Default index is 0 because function assumes freq_expr was calculated with `annotate_freq`.
+        Frequency index 0 from `annotate_freq` is frequency for all
+        pops calculated on adj genotypes only.
+
 	:param freq_expr: Array of structs containing frequency information.
 	:param index: Which index of freq_expr to use for annotation. Default is 0. 
-		Assumes freq_expr was calculated with `annotate_freq`.
-		Frequency index 0 from `annotate_freq` is frequency for all
-		pops calculated on adj genotypes only.
 	:return: StringExpression containing bin name based on input AC or AF.
 	"""
     return (
@@ -61,23 +63,23 @@ def get_summary_counts_dict(
 		- Number of LoF variants
 		- Number of LoF variants that pass LOFTEE
 		- Number of LoF variants that pass LOFTEE without any flgs
-		- Number of LoF variants annotated as "other splice" (OS) by LOFTEE
+		- Number of LoF variants annotated as 'other splice' (OS) by LOFTEE
 		- Number of LoF variants that fail LOFTEE
         - Number of missense variants
         - Number of synonymous variants
         - Number of autosomal variants
         - Number of allosomal variants
 
-	..warning:: 
-		Assumes `allele_expr` contains only two variants (multi-allelics have been split).
+	.. warning:: 
+	    Assumes `allele_expr` contains only two variants (multi-allelics have been split).
 
     :param locus_expr: LocusExpression.
-	:param allele_expr: ArrayExpression containing alleles.
-	:param lof_expr: StringExpression containing LOFTEE annotation.
-	:param no_lof_flags_expr: BooleanExpression indicating whether LoF variant has any flags.
+    :param allele_expr: ArrayExpression containing alleles.
+    :param lof_expr: StringExpression containing LOFTEE annotation.
+    :param no_lof_flags_expr: BooleanExpression indicating whether LoF variant has any flags.
     :param most_severe_csq_expr: StringExpression containing most severe consequence annotation.
-	:param prefix_str: Desired prefix string for category names. Default is empty str.
-	:return: Dict of categories and counts per category.
+    :param prefix_str: Desired prefix string for category names. Default is empty str.
+    :return: Dict of categories and counts per category.
     """
     logger.warning("This function expects that multi-allelic variants have been split!")
     return {
@@ -124,12 +126,12 @@ def get_summary_ac_dict(
         - LoF variants
         - LoF variants that pass LOFTEE
         - LoF variants that pass LOFTEE without any flags
-        - LoF variants that are annotate as "other splice" (OS) by LOFTEE
+        - LoF variants that are annotate as 'other splice' (OS) by LOFTEE
         - LoF variants that fail LOFTEE
         - Missense variants
         - Synonymous variants
 
-    ..warning:: 
+    .. warning:: 
         Assumes `allele_expr` contains only two variants (multi-allelics have been split).
 
     :param allele_expr: ArrayExpression containing alleles.

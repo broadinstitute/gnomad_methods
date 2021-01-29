@@ -25,7 +25,7 @@ def compute_ranked_bin(
 
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing approximately equal numbers of elements.
     This is done by ranking the rows by `score_expr` (and a random number in cases where multiple variants have the same score)
-    and then assigning the variant to a bin based on it's ranking.
+    and then assigning the variant to a bin based on its ranking.
 
     If `compute_snv_indel_separately` is True all items in `bin_expr` will be stratified by snv / indels for the ranking and
     bin calculation. Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
@@ -48,7 +48,7 @@ def compute_ranked_bin(
         and singleton specific binning, the following could be used:
 
         .. code-block:: python
-        
+
             bin_expr={
                 'biallelic_bin': ~ht.was_split,
                 'singleton_bin': ht.singleton
@@ -56,7 +56,7 @@ def compute_ranked_bin(
 
     :param ht: Input Table
     :param score_expr: Expression containing the score
-    :param bin_expr: Specific row grouping(s) to perform ranking and binning on to be computed (see note)
+    :param bin_expr: Specific row grouping(s) to perform ranking and binning on (see note)
     :param compute_snv_indel_separately: Should all `bin_expr` items be stratified by SNVs / indels
     :param n_bins: Number of bins to bin the data into
     :param desc: Whether to bin the score in descending order
@@ -82,7 +82,7 @@ def compute_ranked_bin(
     )
 
     logger.info(
-        "Sorting the HT by score_expr followed by a random float between 0 and 1."
+        "Sorting the HT by score_expr followed by a random float between 0 and 1. "
         "Then adding a row index per grouping defined by bin_expr..."
     )
     bin_ht = bin_ht.order_by("_score", "_rand")
@@ -109,7 +109,7 @@ def compute_ranked_bin(
         )
     )
 
-    logger.info(f"Binning ranked rows into {n_bins}...")
+    logger.info(f"Binning ranked rows into {n_bins} bins...")
     bin_ht = bin_ht.select(
         "snv",
         **{
@@ -138,7 +138,7 @@ def compute_ranked_bin(
     # Update the global bin_group_variant_counts struct to reflect the change in bin names in the table
     if compute_snv_indel_separately:
         bin_expr_no_snv = {
-            bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.rank_variant_counts
+            bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_group_variant_counts
         }
         bin_ht = bin_ht.annotate_globals(
             bin_group_variant_counts=hl.struct(
@@ -170,9 +170,8 @@ def compute_grouped_binned_ht(
     bin_ht: hl.Table, checkpoint_path: Optional[str] = None,
 ) -> hl.GroupedTable:
     """
-    Groups a Table that has been annotated with bins based on quantiles (`compute_ranked_bin` or
-    `create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
-    singleton.
+    Groups a Table that has been annotated with bins (`compute_ranked_bin` or `create_binned_ht`). The table will be
+    grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and singleton.
 
     .. note::
 
@@ -185,16 +184,16 @@ def compute_grouped_binned_ht(
     """
     # Explode the rank table by bin_id
     bin_ht = bin_ht.annotate(
-        quantile_bins=hl.array(
+        bin_groups=hl.array(
             [
                 hl.Struct(bin_id=bin_name, bin=bin_ht[bin_name])
-                for bin_name in bin_ht.bin_stats
+                for bin_name in bin_ht.bin_group_variant_counts
             ]
         )
     )
-    bin_ht = bin_ht.explode(bin_ht.quantile_bins)
+    bin_ht = bin_ht.explode(bin_ht.bin_groups)
     bin_ht = bin_ht.transmute(
-        bin_id=bin_ht.quantile_bins.bin_id, bin=bin_ht.quantile_bins.bin
+        bin_id=bin_ht.bin_groups.bin_id, bin=bin_ht.bin_groups.bin
     )
     bin_ht = bin_ht.filter(hl.is_defined(bin_ht.bin))
 

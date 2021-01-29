@@ -78,7 +78,7 @@ def get_summary_counts_dict(
     :param most_severe_csq_expr: StringExpression containing most severe consequence annotation.
 	:param prefix_str: Desired prefix string for category names. Default is empty str.
 	:return: Dict of categories and counts per category.
-	"""
+    """
     logger.warning("This function expects that multi-allelic variants have been split!")
     return {
         f"{prefix_str}num_variants": hl.agg.count(),

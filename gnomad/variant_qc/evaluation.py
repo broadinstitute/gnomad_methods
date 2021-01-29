@@ -226,12 +226,12 @@ def compute_binned_truth_sample_concordance(
 
     .. note::
         The input 'ht` should contain three row fields:
-            - score: value to use for quantile binning
+            - score: value to use for binning
             - GT: a CallExpression containing the genotype of the evaluation data for the sample
             - truth_GT: a CallExpression containing the genotype of the truth sample
         The input `binned_score_ht` should contain:
              - score: value used to bin the full callset
-             - bin: the full callset quantile bin
+             - bin: the full callset bin
 
     'add_bins` can be used to add additional global and truth sample binning to the final binned truth sample
     concordance HT. The keys in `add_bins` must be present in `binned_score_ht` and the values in `add_bins`
@@ -242,7 +242,7 @@ def compute_binned_truth_sample_concordance(
     The table is grouped by global/truth sample bin and variant type and contains TP, FP and FN.
 
     :param ht: Input HT
-    :param binned_score_ht: Table with the an annotation for quantile bin for each variant
+    :param binned_score_ht: Table with the bin annotation for each variant
     :param n_bins: Number of bins to bin the data into
     :param add_bins: Dictionary of additional global bin columns (key) and the expr to use for binning the truth sample (value)
     :return: Binned truth sample concordance HT
@@ -256,7 +256,7 @@ def compute_binned_truth_sample_concordance(
         global_bin=indexed_binned_score_ht.bin,
     )
 
-    # Annotate the truth sample quantile bin
+    # Annotate the truth sample bin
     bin_ht = compute_ranked_bin(
         ht,
         score_expr=ht.score,

@@ -19,12 +19,11 @@ def freq_bin_expr(
     freq_expr: hl.expr.ArrayExpression, index: int = 0
 ) -> hl.expr.StringExpression:
     """
-	Returns case statement adding frequency string annotations based on input AC or AF.
+	Returns frequency string annotations based on input AC or AF.
 
     .. note::
-        Default index is 0 because function assumes freq_expr was calculated with `annotate_freq`.
-        Frequency index 0 from `annotate_freq` is frequency for all
-        pops calculated on adj genotypes only.
+        - Default index is 0 because function assumes freq_expr was calculated with `annotate_freq`.
+        - Frequency index 0 from `annotate_freq` is frequency for all pops calculated on adj genotypes only.
 
 	:param freq_expr: Array of structs containing frequency information.
 	:param index: Which index of freq_expr to use for annotation. Default is 0. 
@@ -54,24 +53,24 @@ def get_summary_counts_dict(
     prefix_str: str = "",
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
-	Returns dictionary containing containing counts of multiple variant categories.
+    Returns dictionary containing containing counts of multiple variant categories.
 
-	Categories are:
-		- Number of variants
-		- Number of indels
-		- Number of SNVs
-		- Number of LoF variants
-		- Number of LoF variants that pass LOFTEE
-		- Number of LoF variants that pass LOFTEE without any flgs
-		- Number of LoF variants annotated as 'other splice' (OS) by LOFTEE
-		- Number of LoF variants that fail LOFTEE
+    Categories are:
+        - Number of variants
+        - Number of indels
+        - Number of SNVs
+        - Number of LoF variants
+        - Number of LoF variants that pass LOFTEE
+        - Number of LoF variants that pass LOFTEE without any flgs
+        - Number of LoF variants annotated as 'other splice' (OS) by LOFTEE
+        - Number of LoF variants that fail LOFTEE
         - Number of missense variants
         - Number of synonymous variants
         - Number of autosomal variants
         - Number of allosomal variants
-
-	.. warning:: 
-	    Assumes `allele_expr` contains only two variants (multi-allelics have been split).
+        
+    .. warning:: 
+        Assumes `allele_expr` contains only two variants (multi-allelics have been split).
 
     :param locus_expr: LocusExpression.
     :param allele_expr: ArrayExpression containing alleles.
@@ -168,36 +167,35 @@ def get_summary_counts(
     """
 	Generates a struct with summary counts across variant categories.
 
-	Summary counts:
-		- Number of variants
-		- Number of indels
-		- Number of SNVs
-		- Number of LoF variants
-		- Number of LoF variants that pass LOFTEE (including with LoF flags)
-		- Number of LoF variants that pass LOFTEE without LoF flags
-		- Number of OS (other splice) variants annotated by LOFTEE
-		- Number of LoF variants that fail LOFTEE filters
+    Summary counts:
+        - Number of variants
+        - Number of indels
+        - Number of SNVs
+        - Number of LoF variants
+        - Number of LoF variants that pass LOFTEE (including with LoF flags)
+        - Number of LoF variants that pass LOFTEE without LoF flags
+        - Number of OS (other splice) variants annotated by LOFTEE
+        - Number of LoF variants that fail LOFTEE filters
 
-	Also annotates Table's globals with total variant counts.
+    Also annotates Table's globals with total variant counts.
 
-	Before calculating summary counts, function:
-		- Filters out low confidence regions
-		- Filters to canonical transcripts
-		- Uses the most severe consequence 
+    Before calculating summary counts, function:
+        - Filters out low confidence regions
+        - Filters to canonical transcripts
+        - Uses the most severe consequence 
 
-	Assumes that:
-		- Input HT is annotated with VEP.
-		- Multiallelic variants have been split and/or input HT contains bi-allelic variants only.
+    Assumes that:
+        - Input HT is annotated with VEP.
+        - Multiallelic variants have been split and/or input HT contains bi-allelic variants only.
+        - freq_expr was calculated with `annotate_freq`.
+        - (Frequency index 0 from `annotate_freq` is frequency for all pops calculated on adj genotypes only.)
 
-	:param ht: Input Table.
-	:param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
-	:param filter_field: Name of field in HT containing variant filter information. Default is "filters".
-	:param filter_decoy: Whether to filter decoy regions. Default is False.
+    :param ht: Input Table.
+    :param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
+    :param filter_field: Name of field in HT containing variant filter information. Default is "filters".
+    :param filter_decoy: Whether to filter decoy regions. Default is False.
     :param index: Which index of freq_expr to use for annotation. Default is 0. 
-        Assumes freq_expr was calculated with `annotate_freq`.
-        Frequency index 0 from `annotate_freq` is frequency for all
-        pops calculated on adj genotypes only.
-	:return: Table grouped by frequency bin and aggregated across summary count categories. 
+    :return: Table grouped by frequency bin and aggregated across summary count categories. 
 	"""
     logger.info("Filtering to PASS variants in high confidence regions...")
     ht = ht.filter((hl.len(ht[filter_field]) == 0))

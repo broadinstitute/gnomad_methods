@@ -12,24 +12,23 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def compute_quantile_bin(
+def compute_ranked_bin(
     ht: hl.Table,
     score_expr: hl.expr.NumericExpression,
     bin_expr: Dict[str, hl.expr.BooleanExpression] = {"bin": True},
     compute_snv_indel_separately: bool = True,
     n_bins: int = 100,
-    k: int = 1000,
     desc: bool = True,
 ) -> hl.Table:
     """
-    Returns a table with a bin for each row based on quantiles of `score_expr`.
+    Returns a table with a bin for each row based on the ranking of `score_expr`.
 
-    The bin is computed by dividing the `score_expr` into `n_bins` bins containing an equal number of elements.
-    This is done based on quantiles computed with hl.agg.approx_quantiles. If a single value in `score_expr` spans more
-    than one bin, the rows with this value are distributed randomly across the bins it spans.
+    The bin is computed by dividing the `score_expr` into `n_bins` bins containing approximately equal numbers of elements.
+    This is done by ranking the rows by `score_expr` (and a random number in cases where multiple variants have the same score)
+    and then assigning the variant to a bin based on its ranking.
 
-    If `compute_snv_indel_separately` is True all items in `bin_expr` will be stratified by snv / indels for the bin
-    calculation. Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
+    If `compute_snv_indel_separately` is True all items in `bin_expr` will be stratified by snv / indels for the ranking and
+    bin calculation. Because SNV and indel rows are mutually exclusive, they are re-combined into a single annotation. For
     example if we have the following four variants and scores and `n_bins` of 2:
 
     ========   =======   ======   =================   =================
@@ -45,8 +44,8 @@ def compute_quantile_bin(
 
     .. note::
 
-        The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get a biallelic quantile bin and an
-        singleton quantile bin, the following could be used:
+        The `bin_expr` defines which data the bin(s) should be computed on. E.g., to get biallelic specific binning
+        and singleton specific binning, the following could be used:
 
         .. code-block:: python
 
@@ -57,53 +56,12 @@ def compute_quantile_bin(
 
     :param ht: Input Table
     :param score_expr: Expression containing the score
-    :param bin_expr: Quantile bin(s) to be computed (see notes)
-    :param compute_snv_indel_separately: Should all `bin_expr` items be stratified by snv / indels
+    :param bin_expr: Specific row grouping(s) to perform ranking and binning on (see note)
+    :param compute_snv_indel_separately: Should all `bin_expr` items be stratified by SNVs / indels
     :param n_bins: Number of bins to bin the data into
-    :param k: The `k` parameter of approx_quantiles
     :param desc: Whether to bin the score in descending order
-    :return: Table with the quantile bins
+    :return: Table with the requested bin annotations
     """
-    import math
-
-    def quantiles_to_bin_boundaries(quantiles: List[int]) -> Dict:
-        """
-        Merges bins with the same boundaries into a unique bin while keeping track of
-        which bins have been merged and the global index of all bins.
-
-        :param quantiles: Original bins boundaries
-        :return: (dict of the indices of bins for which multiple bins were collapsed -> number of bins collapsed,
-                  Global indices of merged bins,
-                  Merged bins boundaries)
-        """
-
-        # Pad the quantiles to create boundaries for the first and last bins
-        bin_boundaries = [-math.inf] + quantiles + [math.inf]
-        merged_bins = defaultdict(int)
-
-        # If every quantile has a unique value, then bin boudaries are unique
-        # and can be passed to binary_search as-is
-        if len(quantiles) == len(set(quantiles)):
-            return dict(
-                merged_bins=merged_bins,
-                global_bin_indices=list(range(len(bin_boundaries))),
-                bin_boundaries=bin_boundaries,
-            )
-
-        indexed_bins = list(enumerate(bin_boundaries))
-        i = 1
-        while i < len(indexed_bins):
-            if indexed_bins[i - 1][1] == indexed_bins[i][1]:
-                merged_bins[i - 1] += 1
-                indexed_bins.pop(i)
-            else:
-                i += 1
-
-        return dict(
-            merged_bins=merged_bins,
-            global_bin_indices=[x[0] for x in indexed_bins],
-            bin_boundaries=[x[1] for x in indexed_bins],
-        )
 
     if compute_snv_indel_separately:
         # For each bin, add a SNV / indel stratification
@@ -116,88 +74,56 @@ def compute_quantile_bin(
             ]
         }
 
-    bin_ht = ht.annotate(
+    bin_ht = ht.select(
         **{f"_filter_{bin_id}": bin_expr for bin_id, bin_expr in bin_expr.items()},
         _score=score_expr,
         snv=hl.is_snp(ht.alleles[0], ht.alleles[1]),
+        _rand=hl.rand_unif(0, 1),
     )
 
     logger.info(
-        f"Adding quantile bins using approximate_quantiles binned into {n_bins}, using k={k}"
+        "Sorting the HT by score_expr followed by a random float between 0 and 1. "
+        "Then adding a row index per grouping defined by bin_expr..."
     )
-    bin_stats = bin_ht.aggregate(
-        hl.struct(
-            **{
-                bin_id: hl.agg.filter(
-                    bin_ht[f"_filter_{bin_id}"],
-                    hl.struct(
-                        n=hl.agg.count(),
-                        quantiles=hl.agg.approx_quantiles(
-                            bin_ht._score, [x / (n_bins) for x in range(1, n_bins)], k=k
-                        ),
-                    ),
-                )
-                for bin_id in bin_expr
-            }
-        )
-    )
-
-    # Take care of bins with duplicated boundaries
-    bin_stats = bin_stats.annotate(
-        **{
-            rname: bin_stats[rname].annotate(
-                **quantiles_to_bin_boundaries(bin_stats[rname].quantiles)
-            )
-            for rname in bin_stats
-        }
-    )
-
-    bin_ht = bin_ht.annotate_globals(
-        bin_stats=hl.literal(
-            bin_stats,
-            dtype=hl.tstruct(
-                **{
-                    bin_id: hl.tstruct(
-                        n=hl.tint64,
-                        quantiles=hl.tarray(hl.tfloat64),
-                        bin_boundaries=hl.tarray(hl.tfloat64),
-                        global_bin_indices=hl.tarray(hl.tint32),
-                        merged_bins=hl.tdict(hl.tint32, hl.tint32),
-                    )
-                    for bin_id in bin_expr
-                }
-            ),
-        )
-    )
-
-    # Annotate the bin as the index in the unique boundaries array
+    bin_ht = bin_ht.order_by("_score", "_rand")
     bin_ht = bin_ht.annotate(
         **{
-            bin_id: hl.or_missing(
+            f"{bin_id}_rank": hl.or_missing(
                 bin_ht[f"_filter_{bin_id}"],
-                hl.binary_search(
-                    bin_ht.bin_stats[bin_id].bin_boundaries, bin_ht._score
-                ),
+                hl.scan.count_where(bin_ht[f"_filter_{bin_id}"]),
             )
             for bin_id in bin_expr
         }
     )
+    bin_ht = bin_ht.key_by("locus", "alleles")
 
-    # Convert the bin to global bin by expanding merged bins, that is:
-    # If a value falls in a bin that needs expansion, assign it randomly to one of the expanded bins
-    # Otherwise, simply modify the bin to its global index (with expanded bins that is)
+    # Annotate globals with variant counts per group defined by bin_expr. This is used to determine bin assignment
+    bin_ht = bin_ht.annotate_globals(
+        bin_group_variant_counts=bin_ht.aggregate(
+            hl.Struct(
+                **{
+                    bin_id: hl.agg.filter(bin_ht[f"_filter_{bin_id}"], hl.agg.count(),)
+                    for bin_id in bin_expr
+                }
+            )
+        )
+    )
+
+    logger.info(f"Binning ranked rows into {n_bins} bins...")
     bin_ht = bin_ht.select(
         "snv",
         **{
-            bin_id: hl.if_else(
-                bin_ht.bin_stats[bin_id].merged_bins.contains(bin_ht[bin_id]),
-                bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]]
-                + hl.int(
-                    hl.rand_unif(
-                        0, bin_ht.bin_stats[bin_id].merged_bins[bin_ht[bin_id]] + 1
+            bin_id: hl.int(
+                hl.floor(
+                    (
+                        n_bins
+                        * (
+                            bin_ht[f"{bin_id}_rank"]
+                            / hl.float64(bin_ht.bin_group_variant_counts[bin_id])
+                        )
                     )
-                ),
-                bin_ht.bin_stats[bin_id].global_bin_indices[bin_ht[bin_id]],
+                    + 1
+                )
             )
             for bin_id in bin_expr
         },
@@ -205,19 +131,21 @@ def compute_quantile_bin(
 
     if desc:
         bin_ht = bin_ht.annotate(
-            **{bin_id: n_bins - bin_ht[bin_id] for bin_id in bin_expr}
+            **{bin_id: n_bins - bin_ht[bin_id] + 1 for bin_id in bin_expr}
         )
 
     # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
-    # Update the global bin_stats struct to reflect the change in bin names in the table
+    # Update the global bin_group_variant_counts struct to reflect the change in bin names in the table
     if compute_snv_indel_separately:
-        bin_expr_no_snv = {bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_stats}
+        bin_expr_no_snv = {
+            bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_group_variant_counts
+        }
         bin_ht = bin_ht.annotate_globals(
-            bin_stats=hl.struct(
+            bin_group_variant_counts=hl.struct(
                 **{
                     bin_id: hl.struct(
                         **{
-                            snv: bin_ht.bin_stats[f"{bin_id}_{snv}"]
+                            snv: bin_ht.bin_group_variant_counts[f"{bin_id}_{snv}"]
                             for snv in ["snv", "indel"]
                         }
                     )
@@ -242,9 +170,8 @@ def compute_grouped_binned_ht(
     bin_ht: hl.Table, checkpoint_path: Optional[str] = None,
 ) -> hl.GroupedTable:
     """
-    Groups a Table that has been annotated with bins based on quantiles (`compute_quantile_bin` or
-    `create_binned_ht`). The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and
-    singleton.
+    Groups a Table that has been annotated with bins (`compute_ranked_bin` or `create_binned_ht`). The table will be
+    grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and singleton.
 
     .. note::
 
@@ -257,16 +184,16 @@ def compute_grouped_binned_ht(
     """
     # Explode the rank table by bin_id
     bin_ht = bin_ht.annotate(
-        quantile_bins=hl.array(
+        bin_groups=hl.array(
             [
                 hl.Struct(bin_id=bin_name, bin=bin_ht[bin_name])
-                for bin_name in bin_ht.bin_stats
+                for bin_name in bin_ht.bin_group_variant_counts
             ]
         )
     )
-    bin_ht = bin_ht.explode(bin_ht.quantile_bins)
+    bin_ht = bin_ht.explode(bin_ht.bin_groups)
     bin_ht = bin_ht.transmute(
-        bin_id=bin_ht.quantile_bins.bin_id, bin=bin_ht.quantile_bins.bin
+        bin_id=bin_ht.bin_groups.bin_id, bin=bin_ht.bin_groups.bin
     )
     bin_ht = bin_ht.filter(hl.is_defined(bin_ht.bin))
 
@@ -295,16 +222,16 @@ def compute_binned_truth_sample_concordance(
 ) -> hl.Table:
     """
     Determines the concordance (TP, FP, FN) between a truth sample within the callset and the samples truth data
-    grouped by bins computed using `compute_quantile_bin`.
+    grouped by bins computed using `compute_ranked_bin`.
 
     .. note::
         The input 'ht` should contain three row fields:
-            - score: value to use for quantile binning
+            - score: value to use for binning
             - GT: a CallExpression containing the genotype of the evaluation data for the sample
             - truth_GT: a CallExpression containing the genotype of the truth sample
         The input `binned_score_ht` should contain:
              - score: value used to bin the full callset
-             - bin: the full callset quantile bin
+             - bin: the full callset bin
 
     'add_bins` can be used to add additional global and truth sample binning to the final binned truth sample
     concordance HT. The keys in `add_bins` must be present in `binned_score_ht` and the values in `add_bins`
@@ -315,7 +242,7 @@ def compute_binned_truth_sample_concordance(
     The table is grouped by global/truth sample bin and variant type and contains TP, FP and FN.
 
     :param ht: Input HT
-    :param binned_score_ht: Table with the an annotation for quantile bin for each variant
+    :param binned_score_ht: Table with the bin annotation for each variant
     :param n_bins: Number of bins to bin the data into
     :param add_bins: Dictionary of additional global bin columns (key) and the expr to use for binning the truth sample (value)
     :return: Binned truth sample concordance HT
@@ -329,8 +256,8 @@ def compute_binned_truth_sample_concordance(
         global_bin=indexed_binned_score_ht.bin,
     )
 
-    # Annotate the truth sample quantile bin
-    bin_ht = compute_quantile_bin(
+    # Annotate the truth sample bin
+    bin_ht = compute_ranked_bin(
         ht,
         score_expr=ht.score,
         bin_expr={
@@ -373,7 +300,7 @@ def compute_binned_truth_sample_concordance(
             ),
             # FN => allele is found in truth data only
             fn=hl.agg.count_where(
-                ht.GT.is_hom_ref() & hl.or_else(ht.truth_GT.is_non_ref(), True)
+                hl.or_else(ht.GT.is_hom_ref(), True) & ht.truth_GT.is_non_ref()
             ),
             min_score=hl.agg.min(ht.score),
             max_score=hl.agg.max(ht.score),

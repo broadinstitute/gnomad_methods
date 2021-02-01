@@ -497,11 +497,15 @@ def annotate_freq(
     mt = mt.annotate_globals(freq_meta=freq_meta_expr)
 
     # Create frequency expression array from the sample groups
+    # Adding sample_group_filters_range_array to reduce memory usage in this array_agg
+    mt = mt.annotate_rows(
+        sample_group_filters_range_array=hl.range(len(sample_group_filters))
+    )
     freq_expr = hl.agg.array_agg(
         lambda i: hl.agg.filter(
             mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)
         ),
-        hl.range(len(sample_group_filters)),
+        mt.sample_group_filters_range_array,
     )
 
     # Insert raw as the second element of the array

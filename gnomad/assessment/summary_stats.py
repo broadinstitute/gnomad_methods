@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional, Set, Union
+from typing import Dict, Optional, Set
 
 import hail as hl
 
@@ -155,7 +155,7 @@ def get_summary_counts(
     )
 
 
-def get_an_adj_criteria(
+def get_an_criteria(
     mt: hl.MatrixTable,
     samples_by_sex: Optional[Dict[str, int]] = None,
     meta_root: str = "meta",
@@ -205,25 +205,41 @@ def get_an_adj_criteria(
     )
 
 
-def annotate_tx_expression_data(
-    t: Union[hl.MatrixTable, hl.Table],
+def get_tx_expression_expr(
+    locus_expr: hl.expr.LocusExpression,
+    alleles_expr: hl.expr.ArrayExpression,
     tx_ht: hl.Table,
     csq_expr: hl.expr.StructExpression,
     gene_field: str = "ensg",
     csq_field: str = "csq",
-    tx_field: str = "tx_annotation",
-):
-    key = t.key if isinstance(t, hl.Table) else t.row_key
+    tx_struct: str = "tx_annotation",
+) -> hl.expr.Float64Expression:
+    """
+    Pulls appropriate transcript expression annotation struct given a specific locus and alleles.
+
+    Assumes that multi-allelic variants have been split in both `tx_ht` and `alleles_expr`.
+
+    :param locus_expr: Input locus.
+    :param alleles_expr: Input alleles.
+    :param tx_ht: Input Table containing transcript expression information.
+    :param csq_expr: Input StructExpression that contains VEP consequence information.
+    :param gene_field: Field in `csq_expr` that contains gene ID.
+    :param csq_field: Field in `csq_expr` that contains `most_severe_consequence` annotation.
+    :param tx_struct: StructExpression that contains transcript expression information.
+    :return: StructExpression that contains transcript expression information for given gene ID in `csq_expr`.
+    """
     return hl.find(
         lambda csq: (csq[gene_field] == csq_expr.gene_id)
         & (csq[csq_field] == csq_expr.most_severe_consequence),
-        tx_ht[key][tx_field],
+        tx_ht[locus_expr, alleles_expr][tx_struct],
     )
 
 
 def default_generate_gene_lof_matrix(
     mt: hl.MatrixTable,
     tx_ht: Optional[hl.Table],
+    high_expression_cutoff: float = 0.9,
+    low_expression_cutoff: float = 0.1,
     filter_field: str = "filters",
     freq_field: str = "freq",
     freq_index: int = 0,
@@ -244,6 +260,8 @@ def default_generate_gene_lof_matrix(
 
     :param mt: Input MatrixTable.
     :param tx_ht: Optional Table containing expression levels per transcript.
+    :param high_expression_cutoff: Minimum mean proportion expressed cutoff for a transcript to be considered highly expressed. Default is 0.9.
+    :param low_expression_cutoff: Upper mean proportion expressed cutoff for a transcript to lowly expressed. Default is 0.1.
     :param filter_field: Name of field in MT that contains variant filters. Default is 'filters'.
     :param freq_field: Name of field in MT that contains frequency information. Default is 'freq'.
     :param freq_index: Which index of frequency struct to use. Default is 0.
@@ -261,30 +279,43 @@ def default_generate_gene_lof_matrix(
     :param lof_csq_set: Set of LoF consequence strings. Default is {"splice_acceptor_variant", "splice_donor_variant", "stop_gained", "frameshift_variant"}.
     :param remove_ultra_common: Whether to remove ultra common (AF > 95%) variants. Default is False.
     """
+    logger.info("Filtering to PASS variants...")
     filt_criteria = hl.len(mt[filter_field]) == 0
     if filter_an:
-        filt_criteria &= get_an_adj_criteria(mt)
+        logger.info(
+            "Using AN (as a call rate proxy) to filter to variants that meet a minimum call rate..."
+        )
+        filt_criteria &= get_an_criteria(mt)
     if remove_ultra_common:
+        logger.info("Removing ultra common (AF > 95%) variants...")
         filt_criteria &= mt[freq_field][freq_index].AF < 0.95
     if filter_to_rare:
+        logger.info("Filtering to rare (AF < 5%) variants...")
         filt_criteria &= mt[freq_field][freq_index].AF < 0.05
     mt = mt.filter_rows(filt_criteria)
 
     if all_transcripts:
+        logger.info("Exploding transcript_consequences field...")
         explode_field = "transcript_consequences"
     else:
+        logger.info(
+            "Adding most severe (worst) consequence and expoding worst_csq_by_gene field..."
+        )
         mt = process_consequences(mt)
         explode_field = "worst_csq_by_gene"
 
     if pre_loftee:
+        logger.info(f"Filtering to LoF consequences: {lof_csq_set}")
         lof_cats = hl.literal(lof_csq_set)
         criteria = lambda x: lof_cats.contains(
             add_most_severe_consequence_to_consequence(x).most_severe_consequence
         )
     else:
+        logger.info("Filtering to LoF variants that pass LOFTEE with no LoF flags...")
         criteria = lambda x: (x.lof == "HC") & hl.is_missing(x.lof_flags)
 
     if additional_csq_set:
+        logger.info(f"Including these consequences: {additional_csq_set}")
         additional_cats = hl.literal(additional_csq_set)
         criteria &= lambda x: additional_cats.contains(
             add_most_severe_consequence_to_consequence(x).most_severe_consequence
@@ -301,11 +332,14 @@ def default_generate_gene_lof_matrix(
     }
 
     if tx_ht:
-        tx_annotation = annotate_tx_expression_data(mt, tx_ht, mt.csqs).mean_expression
+        logger.info("Adding transcript expression annotation...")
+        tx_annotation = get_tx_expression_expr(
+            mt.locus, mt.alleles, tx_ht, mt.csqs,
+        ).mean_proportion
         annotation_expr["expressed"] = (
             hl.case()
-            .when(tx_annotation >= 0.9, "high")
-            .when(tx_annotation > 0.1, "medium")
+            .when(tx_annotation >= high_expression_cutoff, "high")
+            .when(tx_annotation > low_expression_cutoff, "medium")
             .when(hl.is_defined(tx_annotation), "low")
             .default("missing")
         )

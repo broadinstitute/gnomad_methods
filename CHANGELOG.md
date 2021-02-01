@@ -28,6 +28,7 @@
 * Removed `rep_on_read`; this function is no longer necessary, as MatrixTables/Tables can be repartitioned on read with `_n_partitions` added by this [hail update](https://github.com/hail-is/hail/pull/9887) [(#283)](https://github.com/broadinstitute/gnomad_methods/pull/283)
 * Added code to generate summary statistics (total number of variants, number of LoF variants, LOFTEE summaries) [(#285)](https://github.com/broadinstitute/gnomad_methods/pull/285)
 * Removed `compute_quantile_bin` and added `compute_ranked_bin` as an alternative that provides more even binning. This is now used by `create_binned_ht` instead. [(#288)](https://github.com/broadinstitute/gnomad_methods/pull/288)
+* Added function, `default_generate_gene_lof_matrix`, to generate gene matrix [(#290)](https://github.com/broadinstitute/gnomad_methods/pull/290)
 
 ## Version 0.4.0 - July 9th, 2020
 

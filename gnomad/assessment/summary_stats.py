@@ -197,6 +197,11 @@ def get_summary_counts(
     :param index: Which index of freq_expr to use for annotation. Default is 0. 
     :return: Table grouped by frequency bin and aggregated across summary count categories. 
 	"""
+    logger.info("Checking if multi-allelic variants have been split...")
+    max_alleles = hl.agg.max(hl.len(ht.alleles))
+    if max_alleles > 2:
+        ht = hl.split_multi(ht)
+
     logger.info("Filtering to PASS variants in high confidence regions...")
     ht = ht.filter((hl.len(ht[filter_field]) == 0))
     ht = filter_low_conf_regions(ht, filter_decoy=filter_decoy)

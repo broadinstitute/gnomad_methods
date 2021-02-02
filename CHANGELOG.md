@@ -30,6 +30,7 @@
 
 * Removed `compute_quantile_bin` and added `compute_ranked_bin` as an alternative that provides more even binning. This is now used by `create_binned_ht` instead. [(#288)](https://github.com/broadinstitute/gnomad_methods/pull/288)
 * Added additional counts to summary statistics (added autosome/sex chromosome counts, allele counts, counts for missense and synomymous variants) [(#289)](https://github.com/broadinstitute/gnomad_methods/pull/289)
+* Added function, `default_generate_gene_lof_matrix`, to generate gene matrix [(#290)](https://github.com/broadinstitute/gnomad_methods/pull/290)
 
 ## Version 0.4.0 - July 9th, 2020
 

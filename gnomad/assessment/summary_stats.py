@@ -206,8 +206,7 @@ def get_an_criteria(
 
 
 def get_tx_expression_expr(
-    locus_expr: hl.expr.LocusExpression,
-    alleles_expr: hl.expr.ArrayExpression,
+    key_expr: hl.expr.StructExpression,
     tx_ht: hl.Table,
     csq_expr: hl.expr.StructExpression,
     gene_field: str = "ensg",
@@ -215,12 +214,12 @@ def get_tx_expression_expr(
     tx_struct: str = "tx_annotation",
 ) -> hl.expr.Float64Expression:
     """
-    Pulls appropriate transcript expression annotation struct given a specific locus and alleles.
+    Pulls appropriate transcript expression annotation struct given a specific locus and alleles (provided in `key_expr`).
 
-    Assumes that multi-allelic variants have been split in both `tx_ht` and `alleles_expr`.
+    Assumes that `key_expr` contains a locus and alleles.
+    Assumes that multi-allelic variants have been split in both `tx_ht` and `key_expr`.
 
-    :param locus_expr: Input locus.
-    :param alleles_expr: Input alleles.
+    :param row_key_expr: StructExpression containing locus and alleles to search in `tx_ht`.
     :param tx_ht: Input Table containing transcript expression information.
     :param csq_expr: Input StructExpression that contains VEP consequence information.
     :param gene_field: Field in `csq_expr` that contains gene ID.
@@ -231,7 +230,7 @@ def get_tx_expression_expr(
     return hl.find(
         lambda csq: (csq[gene_field] == csq_expr.gene_id)
         & (csq[csq_field] == csq_expr.most_severe_consequence),
-        tx_ht[locus_expr, alleles_expr][tx_struct],
+        tx_ht[key_expr][tx_struct],
     )
 
 
@@ -334,7 +333,7 @@ def default_generate_gene_lof_matrix(
     if tx_ht:
         logger.info("Adding transcript expression annotation...")
         tx_annotation = get_tx_expression_expr(
-            mt.locus, mt.alleles, tx_ht, mt.csqs,
+            mt.row_key, tx_ht, mt.csqs,
         ).mean_proportion
         annotation_expr["expressed"] = (
             hl.case()

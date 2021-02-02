@@ -531,7 +531,7 @@ def default_generate_gene_lof_summary(
     """
     Generates summary counts for loss-of-function (LoF), missense, and synonymous variants.
 
-    Also calculates p, proportion of of haplotypes carrying a probable LoF (pLoF) variant, 
+    Also calculates p, proportion of of haplotypes carrying a putative LoF (pLoF) variant, 
     and observed/expected (OE) ratio of samples with homozygous pLoF variant calls.
 
     Summary counts are (all per gene):

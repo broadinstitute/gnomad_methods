@@ -521,6 +521,7 @@ def default_generate_gene_lof_summary(
     lof_csq_set: Set[str] = LOF_CSQ_SET,
     meta_root: str = "meta",
     pop_field: str = "pop",
+    filter_loftee: bool = False,
 ) -> hl.Table:
     """
     Generates summary counts for loss-of-function (LoF), missense, and synonymous variants.
@@ -537,12 +538,18 @@ def default_generate_gene_lof_summary(
 
     Assumes MT was created using `default_generate_gene_lof_matrix`.
 
+    .. note::
+        Assumes LoF variants in MT were filtered (LOFTEE pass and no LoF flag only).
+        If LoF variants have not been filtered and `filter_loftee` is True,
+        expects MT has the row annotation `vep`.
+
     :param mt: Input MatrixTable.
     :param collapse_indels: Whether to collapse indels. Default is False.
     :param tx: Whether input MT has transcript expression data. Default is False.
     :param lof_csq_set: Set containing LoF transcript consequence strings. Default is LOF_CSQ_SET.
     :param meta_root: String indicating top level name for sample metadata. Default is 'meta'.
     :param pop_field: String indiciating field with sample population assignment information. Default is 'pop'.
+    :param filter_loftee: Filters to LOFTEE pass variants (and no LoF flags) only. Default is False. 
     :return: Table with het/hom summary counts.
     """
     if collapse_indels:
@@ -566,6 +573,14 @@ def default_generate_gene_lof_summary(
                 defined_sites=hl.agg.sum(mt.defined_sites),
             )
             .result()
+        )
+
+    if filter_loftee:
+        lof_ht = get_most_severe_consequence_for_summary(mt.rows())
+        mt = mt.filter_rows(
+            hl.is_defined(lof_ht[mt.row_key].lof)
+            & (lof_ht[mt.row_key].lof == "HC")
+            & (lof_ht[mt.row_key].no_lof_flags)
         )
 
     ht = mt.annotate_rows(

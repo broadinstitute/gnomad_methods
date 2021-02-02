@@ -8,6 +8,7 @@ from gnomad.utils.vep import (
     add_most_severe_consequence_to_consequence,
     filter_vep_to_canonical_transcripts,
     get_most_severe_consequence_for_summary,
+    LOF_CSQ_SET,
     process_consequences,
 )
 
@@ -342,12 +343,7 @@ def default_generate_gene_lof_matrix(
     filter_an: bool = False,
     filter_to_rare: bool = False,
     pre_loftee: bool = False,
-    lof_csq_set: Set[str] = {
-        "splice_acceptor_variant",
-        "splice_donor_variant",
-        "stop_gained",
-        "frameshift_variant",
-    },
+    lof_csq_set: Set[str] = LOF_CSQ_SET,
     remove_ultra_common: bool = False,
 ) -> hl.MatrixTable:
     """
@@ -455,3 +451,168 @@ def default_generate_gene_lof_matrix(
         )
         .result()
     )
+
+
+def get_het_hom_summary_dict(
+    csq_name: str,
+    csq_set: Set[str],
+    most_severe_csq_expr: hl.expr.StringExpression,
+    defined_sites_expr: hl.expr.Int64Expression,
+    num_homs_expr: hl.expr.Int64Expression,
+    num_hets_expr: hl.expr.Int64Expression,
+    pop_expr: hl.expr.StringExpression,
+) -> Dict[str, hl.expr.Int64Expression]:
+    """
+    Generates dictionary containing summary counts. 
+
+    Summary counts are:
+        - Number of sites with defined genotype calls
+        - Number of samples with heterozygous calls
+        - Number of samples with homozygous calls
+
+    Function has option to generate counts by population.
+
+    :param csq_name: Name of transcript consequence to be used in annotation name.
+    :param csq_set: Set containing transcript consequence string(s).
+    :param most_severe_csq_expr: StringExpression containing most severe consequence.
+    :param defined_sites_expr: Int64Expression containing number of sites with defined genotype calls.
+    :param num_homs_expr: Int64Expression containing number of samples with homozygous genotype calls.
+    :param num_hets_expr: Int64Expression containing number of samples with heterozygous genotype calls.
+    :param pop_expr: StringExpression containing sample population labels.
+    :return: Dictionary of summary annotation names and their values.
+    """
+    csq_filter_expr = hl.literal(csq_set).contains(most_severe_csq_expr)
+    return {
+        f"no_{csq_name}": hl.agg.count_where(
+            (csq_filter_expr)
+            & (defined_sites_expr > 0)
+            & (num_homs_expr + num_hets_expr == 0)
+        ),
+        f"obs_het_{csq_name}": hl.agg.count_where(
+            (csq_filter_expr) & (num_homs_expr == 0) & (num_hets_expr > 0)
+        ),
+        f"obs_hom_{csq_name}": hl.agg.count_where(
+            (csq_filter_expr) & (num_homs_expr > 0)
+        ),
+        f"defined_{csq_name}": hl.agg.count_where(
+            (csq_filter_expr) & (defined_sites_expr > 0)
+        ),
+        f"pop_no_{csq_name}": hl.agg.group_by(
+            pop_expr,
+            hl.agg.count_where(
+                (csq_filter_expr)
+                & (defined_sites_expr > 0)
+                & (num_homs_expr + num_hets_expr == 0)
+            ),
+        ),
+        f"pop_obs_het_{csq_name}": hl.agg.group_by(
+            pop_expr,
+            hl.agg.count_where(
+                (csq_filter_expr) & (num_homs_expr == 0) & (num_hets_expr > 0)
+            ),
+        ),
+        f"pop_obs_hom_{csq_name}": hl.agg.group_by(
+            pop_expr, hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
+        ),
+        f"pop_defined_{csq_name}": hl.agg.group_by(
+            pop_expr, hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
+        ),
+    }
+
+
+def default_generate_gene_lof_summary(
+    mt: hl.MatrixTable,
+    collapse_indels: bool = False,
+    tx: bool = False,
+    lof_csq_set: Set[str] = LOF_CSQ_SET,
+    meta_root: str = 'meta',
+    pop_field: str = 'pop',
+) -> hl.Table:
+    """
+    Generates summary counts for loss-of-function (LoF), missense, and synonymous variants.
+
+    Also calculates p, proportion of of haplotypes carrying a probable LoF (pLoF) variant, 
+    and observed/expected (OE) ratio of samples with homozygous pLoF variant calls.
+
+    Summary counts are (all per gene):
+        - Number of samples with no pLoF variants.
+        - Number of samples with heterozygous pLoF variants.
+        - Number of samples with homozygous pLoF variants.
+        - Total number of sites with genotype calls.
+        - All of the above stats grouped by population.
+
+    Assumes MT was created using `default_generate_gene_lof_matrix`.
+
+    :param mt: Input MatrixTable.
+    :param collapse_indels: Whether to collapse indels. Default is False.
+    :param tx: Whether input MT has transcript expression data. Default is False.
+    :param lof_csq_set: Set containing LoF transcript consequence strings. Default is LOF_CSQ_SET.
+    :param meta_root: String indicating top level name for sample metadata. Default is 'meta'.
+    :param pop_field: String indiciating field with sample population assignment information. Default is 'pop'.
+    :return: Table with het/hom summary counts.
+    """
+    if collapse_indels:
+        grouping = ["gene_id", "gene", "most_severe_consequence"]
+        if tx:
+            grouping.append("expressed")
+        else:
+            grouping.extend(["transcript_id", "canonical"])
+        mt = (
+            mt.group_rows_by(*grouping)
+            .aggregate_rows(
+                n_sites=hl.agg.sum(mt.n_sites),
+                n_sites_array=hl.agg.array_sum(mt.n_sites_array),
+                classic_caf=hl.agg.sum(mt.classic_caf),
+                max_af=hl.agg.max(mt.max_af),
+                classic_caf_array=hl.agg.array_sum(mt.classic_caf_array),
+            )
+            .aggregate_entries(
+                num_homs=hl.agg.sum(mt.num_homs),
+                num_hets=hl.agg.sum(mt.num_hets),
+                defined_sites=hl.agg.sum(mt.defined_sites),
+            )
+            .result()
+        )
+
+    ht = mt.annotate_rows(
+        **get_het_hom_summary_dict(
+            csq_name="lof",
+            csq_set=lof_csq_set,
+            most_severe_csq_expr=mt.most_severe_consequence,
+            defined_sites_expr=mt.defined_sites,
+            num_homs_expr=mt.num_homs,
+            num_hets_expr=mt.num_hets,
+            pop_expr=mt[meta_root][pop_field],
+        ),
+        **get_het_hom_summary_dict(
+            csq_name="missense",
+            csq_set={"missense_variant"},
+            most_severe_csq_expr=mt.most_severe_consequence,
+            defined_sites_expr=mt.defined_sites,
+            num_homs_expr=mt.num_homs,
+            num_hets_expr=mt.num_hets,
+            pop_expr=mt[meta_root][pop_field],
+        ),
+        **get_het_hom_summary_dict(
+            csq_name="synonymous",
+            csq_set={"synonymous_variant"},
+            most_severe_csq_expr=mt.most_severe_consequence,
+            defined_sites_expr=mt.defined_sites,
+            num_homs_expr=mt.num_homs,
+            num_hets_expr=mt.num_hets,
+            pop_expr=mt[meta_root][pop_field],
+        ),
+    ).rows()
+    ht = ht.annotate(
+        p=(1 - hl.sqrt(hl.float64(ht.no_lofs) / ht.defined)),
+        pop_p=hl.dict(
+            hl.array(ht.pop_defined).map(
+                lambda x: (
+                    x[0],
+                    1 - hl.sqrt(hl.float64(ht.pop_no_lofs.get(x[0])) / x[1]),
+                )
+            )
+        ),
+    )
+    ht = ht.annotate(exp_hom_lof=ht.defined * ht.p * ht.p)
+    return ht.annotate(oe=ht.obs_hom_lof / ht.exp_hom_lof)

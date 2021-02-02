@@ -351,6 +351,9 @@ def default_generate_gene_lof_matrix(
     remove_ultra_common: bool = False,
 ) -> hl.MatrixTable:
     """
+    Generates loss-of-function gene matrix.
+
+    Used to generate summary metrics on LoF variants.
 
     :param mt: Input MatrixTable.
     :param tx_ht: Optional Table containing expression levels per transcript.

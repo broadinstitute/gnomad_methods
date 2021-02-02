@@ -201,11 +201,7 @@ def get_summary_counts(
     max_alleles = ht.aggregate(hl.agg.max(hl.len(ht.alleles)))
     if max_alleles > 2:
         logger.info("Splitting multi-allelics and VEP transcript consequences...")
-        ht = hl.split_multi(ht)
-        allele_num = ht.vep.transcript_consequences.filter(
-            lambda csq: csq.allele_num == ht.a_index
-        )
-        ht = ht.annotate(vep=ht.vep.annotate(transcript_consequences=allele_num))
+        ht = hl.split_multi_hts(ht)
 
     logger.info("Filtering to PASS variants in high confidence regions...")
     ht = ht.filter((hl.len(ht[filter_field]) == 0))

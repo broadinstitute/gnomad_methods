@@ -267,12 +267,6 @@ def default_generate_gene_lof_matrix(
     :param additional_csq_set: Set of additional consequences to keep. Default is {'missense_variant', 'synonymous_variant'}.
     :param all_transcripts: Whether to use all transcripts instead of just the transcript with most severe consequence. Default is False.
     :param filter_an: Whether to filter using allele number as proxy for call rate. Default is False.
-    :param samples_by_sex: Optional Dictionary containing number of samples (value) for each sample sex (key).
-    :param meta_root: Name of field in MatrixTable containing sample metadata information. Default is 'meta'.
-    :param sex_field: Name of field in MatrixTable containing sample sex assignment. Defualt is 'sex_imputation.sex_karyotype'.
-    :param xy_str: String marking whether a sample has XY sex. Default is 'XY'.
-    :param xx_str: String marking whether a sample has XX sex. Default is 'XX'.
-    :param an_proportion_cutoff: Desired allele number proportion cutoff. Default is 0.8.
     :param filter_to_rare: Whether to filter to rare (AF < 5%) variants. Default is False.
     :param pre_loftee: Whether LoF consequences have been annotated with LOFTEE. Default is False.
     :param lof_csq_set: Set of LoF consequence strings. Default is {"splice_acceptor_variant", "splice_donor_variant", "stop_gained", "frameshift_variant"}.

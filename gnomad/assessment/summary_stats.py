@@ -525,8 +525,8 @@ def default_generate_gene_lof_summary(
     collapse_indels: bool = False,
     tx: bool = False,
     lof_csq_set: Set[str] = LOF_CSQ_SET,
-    meta_root: str = 'meta',
-    pop_field: str = 'pop',
+    meta_root: str = "meta",
+    pop_field: str = "pop",
 ) -> hl.Table:
     """
     Generates summary counts for loss-of-function (LoF), missense, and synonymous variants.

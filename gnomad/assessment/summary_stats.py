@@ -198,7 +198,7 @@ def get_summary_counts(
     :return: Table grouped by frequency bin and aggregated across summary count categories. 
 	"""
     logger.info("Checking if multi-allelic variants have been split...")
-    max_alleles = hl.agg.max(hl.len(ht.alleles))
+    max_alleles = ht.aggregate(hl.agg.max(hl.len(ht.alleles)))
     if max_alleles > 2:
         ht = hl.split_multi(ht)
 

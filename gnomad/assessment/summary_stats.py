@@ -454,7 +454,6 @@ def default_generate_gene_lof_matrix(
 
 
 def get_het_hom_summary_dict(
-    csq_name: str,
     csq_set: Set[str],
     most_severe_csq_expr: hl.expr.StringExpression,
     defined_sites_expr: hl.expr.Int64Expression,
@@ -472,7 +471,6 @@ def get_het_hom_summary_dict(
 
     Function has option to generate counts by population.
 
-    :param csq_name: Name of transcript consequence to be used in annotation name.
     :param csq_set: Set containing transcript consequence string(s).
     :param most_severe_csq_expr: StringExpression containing most severe consequence.
     :param defined_sites_expr: Int64Expression containing number of sites with defined genotype calls.
@@ -483,21 +481,17 @@ def get_het_hom_summary_dict(
     """
     csq_filter_expr = hl.literal(csq_set).contains(most_severe_csq_expr)
     return {
-        f"no_{csq_name}": hl.agg.count_where(
+        "no_alt_calls": hl.agg.count_where(
             (csq_filter_expr)
             & (defined_sites_expr > 0)
             & (num_homs_expr + num_hets_expr == 0)
         ),
-        f"obs_het_{csq_name}": hl.agg.count_where(
+        "obs_het": hl.agg.count_where(
             (csq_filter_expr) & (num_homs_expr == 0) & (num_hets_expr > 0)
         ),
-        f"obs_hom_{csq_name}": hl.agg.count_where(
-            (csq_filter_expr) & (num_homs_expr > 0)
-        ),
-        f"defined_{csq_name}": hl.agg.count_where(
-            (csq_filter_expr) & (defined_sites_expr > 0)
-        ),
-        f"pop_no_{csq_name}": hl.agg.group_by(
+        "obs_hom": hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
+        "defined": hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
+        "pop_no_alt_calls": hl.agg.group_by(
             pop_expr,
             hl.agg.count_where(
                 (csq_filter_expr)
@@ -505,16 +499,16 @@ def get_het_hom_summary_dict(
                 & (num_homs_expr + num_hets_expr == 0)
             ),
         ),
-        f"pop_obs_het_{csq_name}": hl.agg.group_by(
+        "pop_obs_het": hl.agg.group_by(
             pop_expr,
             hl.agg.count_where(
                 (csq_filter_expr) & (num_homs_expr == 0) & (num_hets_expr > 0)
             ),
         ),
-        f"pop_obs_hom_{csq_name}": hl.agg.group_by(
+        "pop_obs_hom": hl.agg.group_by(
             pop_expr, hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
         ),
-        f"pop_defined_{csq_name}": hl.agg.group_by(
+        "pop_defined": hl.agg.group_by(
             pop_expr, hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
         ),
     }
@@ -575,32 +569,35 @@ def default_generate_gene_lof_summary(
         )
 
     ht = mt.annotate_rows(
-        **get_het_hom_summary_dict(
-            csq_name="lof",
-            csq_set=lof_csq_set,
-            most_severe_csq_expr=mt.most_severe_consequence,
-            defined_sites_expr=mt.defined_sites,
-            num_homs_expr=mt.num_homs,
-            num_hets_expr=mt.num_hets,
-            pop_expr=mt[meta_root][pop_field],
+        lof=hl.struct(
+            **get_het_hom_summary_dict(
+                csq_set=lof_csq_set,
+                most_severe_csq_expr=mt.most_severe_consequence,
+                defined_sites_expr=mt.defined_sites,
+                num_homs_expr=mt.num_homs,
+                num_hets_expr=mt.num_hets,
+                pop_expr=mt[meta_root][pop_field],
+            ),
         ),
-        **get_het_hom_summary_dict(
-            csq_name="missense",
-            csq_set={"missense_variant"},
-            most_severe_csq_expr=mt.most_severe_consequence,
-            defined_sites_expr=mt.defined_sites,
-            num_homs_expr=mt.num_homs,
-            num_hets_expr=mt.num_hets,
-            pop_expr=mt[meta_root][pop_field],
+        missense=hl.struct(
+            **get_het_hom_summary_dict(
+                csq_set={"missense_variant"},
+                most_severe_csq_expr=mt.most_severe_consequence,
+                defined_sites_expr=mt.defined_sites,
+                num_homs_expr=mt.num_homs,
+                num_hets_expr=mt.num_hets,
+                pop_expr=mt[meta_root][pop_field],
+            ),
         ),
-        **get_het_hom_summary_dict(
-            csq_name="synonymous",
-            csq_set={"synonymous_variant"},
-            most_severe_csq_expr=mt.most_severe_consequence,
-            defined_sites_expr=mt.defined_sites,
-            num_homs_expr=mt.num_homs,
-            num_hets_expr=mt.num_hets,
-            pop_expr=mt[meta_root][pop_field],
+        synonymous=hl.struct(
+            **get_het_hom_summary_dict(
+                csq_set={"synonymous_variant"},
+                most_severe_csq_expr=mt.most_severe_consequence,
+                defined_sites_expr=mt.defined_sites,
+                num_homs_expr=mt.num_homs,
+                num_hets_expr=mt.num_hets,
+                pop_expr=mt[meta_root][pop_field],
+            ),
         ),
     ).rows()
     ht = ht.annotate(

@@ -96,6 +96,16 @@ LOFTEE_LABELS = ["HC", "LC", "OS"]
 Constant that contains annotations added by LOFTEE.
 """
 
+LOF_CSQ_SET = {
+    "splice_acceptor_variant",
+    "splice_donor_variant",
+    "stop_gained",
+    "frameshift_variant",
+}
+"""
+Set containing loss-of-function consequence strings.
+"""
+
 
 def get_vep_help(vep_config_path: Optional[str] = None):
     """

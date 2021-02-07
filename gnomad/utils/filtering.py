@@ -154,7 +154,9 @@ def filter_low_conf_regions(
 
     if filter_telomeres_and_centromeres:
         if build != "GRCh38":
-           raise DataException("The telomeres_and_centromeres resource only exists for GRCh38")
+            raise DataException(
+                "The telomeres_and_centromeres resource only exists for GRCh38"
+            )
 
         telomeres_and_centromeres = resources.telomeres_and_centromeres.ht()
         criteria.append(hl.is_missing(telomeres_and_centromeres[mt.locus]))

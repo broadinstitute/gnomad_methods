@@ -740,3 +740,21 @@ def compute_coverage_stats(
             )
         },
     ).rows()
+
+
+def filter_ref_blocks(
+    t: Union[hl.MatrixTable, hl.Table]
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filters ref blocks out of the Table or MatrixTable.
+    This assumes that the input contains a field named `locus` of type Locus
+
+    :param t: Input MT/HT
+    :return: MT/HT with ref blocks removed
+    """
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows((hl.len(t.alleles) > 1))
+    else:
+        t = t.filter((hl.len(t.alleles) > 1))
+
+    return t

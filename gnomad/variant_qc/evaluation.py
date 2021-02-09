@@ -341,8 +341,12 @@ def create_truth_sample_ht(
         truth_mt = truth_mt.filter_rows(
             hl.is_defined(high_confidence_intervals_ht[truth_mt.locus])
         )
-        truth_mt = truth_mt.rename({"GT": "_GT"})
-        return truth_mt.annotate_rows(GT=hl.agg.take(truth_mt._GT, 1)[0]).rows()
+        rename_entries = {"GT": "_GT"}
+        if "adj" in truth_mt.entry:
+            rename_entries.update({"adj": "_adj"})
+
+        truth_mt = truth_mt.rename(rename_entries)
+        return truth_mt.annotate_rows(**{x: hl.agg.take(truth_mt[f"_{x}"], 1)[0] for x in rename_entries}).rows()
 
     # Load truth sample MT,
     # restrict it to high confidence intervals

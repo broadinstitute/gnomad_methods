@@ -1,11 +1,24 @@
 # Contributing
 
+## Setting up a development environment
+
+- Install development dependencies.
+
+  ```
+  python3 -m pip install -r requirements-dev.txt
+  ```
+
+- Install [pre-commit](https://pre-commit.com/) hooks.
+
+  ```
+  python3 -m pre_commit install
+  ```
+
 ## Running Pylint
 
 Use [Pylint](https://www.pylint.org/) to check for some types of errors.
 
 ```
-python -m pip install -r requirements-dev.txt
 ./lint
 ```
 
@@ -20,7 +33,6 @@ To disable warnings, use:
 Use [Black](https://black.readthedocs.io/) to format code.
 
 ```
-python -m pip install -r requirements-dev.txt
 black gnomad
 ```
 

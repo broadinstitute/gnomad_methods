@@ -372,7 +372,7 @@ def default_generate_gene_lof_matrix(
         logger.info(
             "Using AN (as a call rate proxy) to filter to variants that meet a minimum call rate..."
         )
-        filt_criteria &= get_an_criteria(mt)
+        mt = mt.filter_rows(get_an_criteria(mt))
     if remove_ultra_common:
         logger.info("Removing ultra common (AF > 95%) variants...")
         filt_criteria &= mt[freq_field][freq_index].AF < 0.95
@@ -401,14 +401,15 @@ def default_generate_gene_lof_matrix(
         logger.info("Filtering to LoF variants that pass LOFTEE with no LoF flags...")
         criteria = lambda x: (x.lof == "HC") & hl.is_missing(x.lof_flags)
 
+    csqs = mt.vep[explode_field].filter(criteria)
     if additional_csq_set:
         logger.info(f"Including these consequences: {additional_csq_set}")
         additional_cats = hl.literal(additional_csq_set)
-        criteria &= lambda x: additional_cats.contains(
-            add_most_severe_consequence_to_consequence(x).most_severe_consequence
+        csqs = csqs.filter(
+            lambda x: additional_cats.contains(
+                add_most_severe_consequence_to_consequence(x).most_severe_consequence
+            )
         )
-
-    csqs = mt.vep[explode_field].filter(criteria)
     mt = mt.select_rows(mt[freq_field], csqs=csqs)
     mt = mt.explode_rows(mt.csqs)
     annotation_expr = {

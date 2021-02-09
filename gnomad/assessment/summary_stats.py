@@ -391,25 +391,35 @@ def default_generate_gene_lof_matrix(
         mt = process_consequences(mt)
         explode_field = "worst_csq_by_gene"
 
-    if pre_loftee:
-        logger.info(f"Filtering to LoF consequences: {lof_csq_set}")
-        lof_cats = hl.literal(lof_csq_set)
-        criteria = lambda x: lof_cats.contains(
-            add_most_severe_consequence_to_consequence(x).most_severe_consequence
-        )
-    else:
-        logger.info("Filtering to LoF variants that pass LOFTEE with no LoF flags...")
-        criteria = lambda x: (x.lof == "HC") & hl.is_missing(x.lof_flags)
-
-    csqs = mt.vep[explode_field].filter(criteria)
     if additional_csq_set:
         logger.info(f"Including these consequences: {additional_csq_set}")
         additional_cats = hl.literal(additional_csq_set)
-        csqs = csqs.filter(
-            lambda x: additional_cats.contains(
+
+    if pre_loftee:
+        logger.info(f"Filtering to LoF consequences: {lof_csq_set}")
+        lof_cats = hl.literal(lof_csq_set)
+        if additional_csq_set:
+            criteria = lambda x: lof_cats.contains(
+                add_most_severe_consequence_to_consequence(x).most_severe_consequence
+            ) | additional_cats.contains(
                 add_most_severe_consequence_to_consequence(x).most_severe_consequence
             )
-        )
+        else:
+            criteria = lambda x: lof_cats.contains(
+                add_most_severe_consequence_to_consequence(x).most_severe_consequence
+            )
+    else:
+        logger.info("Filtering to LoF variants that pass LOFTEE with no LoF flags...")
+        if additional_csq_set:
+            criteria = lambda x: (x.lof == "HC") & hl.is_missing(
+                x.lof_flags
+            ) | additional_cats.contains(
+                add_most_severe_consequence_to_consequence(x).most_severe_consequence
+            )
+        else:
+            criteria = lambda x: (x.lof == "HC") & hl.is_missing(x.lof_flags)
+
+    csqs = mt.vep[explode_field].filter(criteria)
     mt = mt.select_rows(mt[freq_field], csqs=csqs)
     mt = mt.explode_rows(mt.csqs)
     annotation_expr = {

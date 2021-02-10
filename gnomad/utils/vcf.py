@@ -352,7 +352,9 @@ def ht_to_vcf_mt(
 
 
 def make_label_combos(
-    label_groups: Dict[str, List[str]], sort_order: List[str] = SORT_ORDER,
+    label_groups: Dict[str, List[str]],
+    sort_order: List[str] = SORT_ORDER,
+    label_delimiter: str = "_",
 ) -> List[str]:
     """
     Make combinations of all possible labels for a supplied dictionary of label groups.
@@ -363,6 +365,7 @@ def make_label_combos(
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
+    :param label_delimiter: String to use as delimiter when making group label combinations.
     :return: list of all possible combinations of values for the supplied label groupings.
     """
     copy_label_groups = copy.deepcopy(label_groups)
@@ -374,12 +377,14 @@ def make_label_combos(
     anchor_val = copy_label_groups.pop(anchor_group)
     combos = []
     for x, y in itertools.product(anchor_val, make_label_combos(copy_label_groups)):
-        combos.append("{0}-{1}".format(x, y))
+        combos.append(f"{x}{label_delimiter}{y}")
     return combos
 
 
 def index_globals(
-    globals_array: List[Dict[str, str]], label_groups: Dict[str, List[str]]
+    globals_array: List[Dict[str, str]],
+    label_groups: Dict[str, List[str]],
+    label_delimiter: str = "_",
 ) -> Dict[str, int]:
     """
     Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry
@@ -389,6 +394,7 @@ def index_globals(
        Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
+    :param label_delimiter: String used as delimiter when making group label combinations.
     :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index
         of each grouping entry in the globals
     """
@@ -396,7 +402,7 @@ def index_globals(
     index_dict = {}
 
     for combo in combos:
-        combo_fields = combo.split("-")
+        combo_fields = combo.split(label_delimiter)
         for i, v in enumerate(globals_array):
             if set(v.values()) == set(combo_fields):
                 index_dict.update({f"{combo}": i})
@@ -457,6 +463,7 @@ def make_info_dict(
     prefix: str = "",
     pop_names: Dict[str, str] = POP_NAMES,
     label_groups: Dict[str, str] = None,
+    label_delimiter: str = "_",
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
     popmax: bool = False,
@@ -479,6 +486,7 @@ def make_info_dict(
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :param label_delimiter: String to use as delimiter when making group label combinations.
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
@@ -551,7 +559,7 @@ def make_info_dict(
         combos = make_label_combos(label_groups)
 
         for combo in combos:
-            combo_fields = combo.split("_")
+            combo_fields = combo.split(label_delimiter)
             group_dict = dict(zip(group_types, combo_fields))
 
             for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
@@ -700,12 +708,15 @@ def make_hist_bin_edges_expr(
     return edges_dict
 
 
-def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str, str]:
+def make_hist_dict(
+    bin_edges: Dict[str, Dict[str, str]], adj: bool, label_delimiter: str = "_"
+) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
 
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
+    :param label_delimiter: String used as delimiter when making group label combinations.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
@@ -717,7 +728,7 @@ def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool) -> Dict[str,
             hist = f"{hist}_raw"
 
         edges = bin_edges[hist]
-        hist_fields = hist.split("_")
+        hist_fields = hist.split(label_delimiter)
         hist_text = hist_fields[0].upper()
 
         if hist_fields[2] == "alt":

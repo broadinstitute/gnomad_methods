@@ -114,6 +114,7 @@ def filter_low_conf_regions(
     filter_decoy: bool = True,
     filter_segdup: bool = True,
     filter_exome_low_coverage_regions: bool = False,
+    filter_telomeres_and_centromeres: bool = False,
     high_conf_regions: Optional[List[str]] = None,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
@@ -124,6 +125,7 @@ def filter_low_conf_regions(
     :param filter_decoy: Whether to filter decoy regions
     :param filter_segdup: Whether to filter Segdup regions
     :param filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
+    :param filter_telomeres_and_centromeres: Whether to filter telomeres and centromeres
     :param high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
     :return: MatrixTable or Table with low confidence regions removed
     """
@@ -149,6 +151,15 @@ def filter_low_conf_regions(
     if filter_exome_low_coverage_regions:
         high_cov = resources.high_coverage_intervals.ht()
         criteria.append(hl.is_missing(high_cov[mt.locus]))
+
+    if filter_telomeres_and_centromeres:
+        if build != "GRCh38":
+            raise DataException(
+                "The telomeres_and_centromeres resource only exists for GRCh38"
+            )
+
+        telomeres_and_centromeres = resources.telomeres_and_centromeres.ht()
+        criteria.append(hl.is_missing(telomeres_and_centromeres[mt.locus]))
 
     if high_conf_regions is not None:
         for region in high_conf_regions:

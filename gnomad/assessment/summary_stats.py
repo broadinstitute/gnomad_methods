@@ -617,15 +617,15 @@ def default_generate_gene_lof_summary(
         ),
     ).rows()
     ht = ht.annotate(
-        p=(1 - hl.sqrt(hl.float64(ht.no_lofs) / ht.defined)),
+        p=(1 - hl.sqrt(hl.float64(ht.lof.no_alt_calls) / ht.lof.defined)),
         pop_p=hl.dict(
-            hl.array(ht.pop_defined).map(
+            hl.array(ht.lof.pop_defined).map(
                 lambda x: (
                     x[0],
-                    1 - hl.sqrt(hl.float64(ht.pop_no_lofs.get(x[0])) / x[1]),
+                    1 - hl.sqrt(hl.float64(ht.lof.pop_no_alt_calls.get(x[0])) / x[1]),
                 )
             )
         ),
     )
-    ht = ht.annotate(exp_hom_lof=ht.defined * ht.p * ht.p)
-    return ht.annotate(oe=ht.obs_hom_lof / ht.exp_hom_lof)
+    ht = ht.annotate(exp_hom_lof=ht.lof.defined * ht.p * ht.p)
+    return ht.annotate(oe=ht.lof.obs_hom / ht.exp_hom_lof)

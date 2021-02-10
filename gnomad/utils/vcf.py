@@ -352,7 +352,9 @@ def ht_to_vcf_mt(
 
 
 def make_label_combos(
-    label_groups: Dict[str, List[str]], sort_order: List[str] = SORT_ORDER, label_delimiter: str = "_"
+    label_groups: Dict[str, List[str]],
+    sort_order: List[str] = SORT_ORDER,
+    label_delimiter: str = "_",
 ) -> List[str]:
     """
     Make combinations of all possible labels for a supplied dictionary of label groups.
@@ -380,7 +382,9 @@ def make_label_combos(
 
 
 def index_globals(
-    globals_array: List[Dict[str, str]], label_groups: Dict[str, List[str]], label_delimiter: str = "_"
+    globals_array: List[Dict[str, str]],
+    label_groups: Dict[str, List[str]],
+    label_delimiter: str = "_",
 ) -> Dict[str, int]:
     """
     Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry
@@ -482,6 +486,7 @@ def make_info_dict(
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+    :param label_delimiter: String to use as delimiter when making group label combinations.
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
@@ -703,7 +708,9 @@ def make_hist_bin_edges_expr(
     return edges_dict
 
 
-def make_hist_dict(bin_edges: Dict[str, Dict[str, str]], adj: bool, label_delimiter: str = "_") -> Dict[str, str]:
+def make_hist_dict(
+    bin_edges: Dict[str, Dict[str, str]], adj: bool, label_delimiter: str = "_"
+) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
 

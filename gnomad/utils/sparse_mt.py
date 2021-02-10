@@ -747,7 +747,6 @@ def filter_ref_blocks(
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filters ref blocks out of the Table or MatrixTable.
-    This assumes that the input contains a field named `locus` of type Locus
 
     :param t: Input MT/HT
     :return: MT/HT with ref blocks removed

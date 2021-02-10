@@ -444,6 +444,7 @@ def default_generate_gene_lof_matrix(
         annotation_expr["transcript_id"] = mt.csqs.transcript_id
         annotation_expr["canonical"] = hl.is_defined(mt.csqs.canonical)
 
+    mt = mt.annotate_rows(**annotation_expr)
     return (
         mt.group_rows_by(*list(annotation_expr.keys()))
         .aggregate_rows(

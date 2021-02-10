@@ -398,26 +398,25 @@ def default_generate_gene_lof_matrix(
     if pre_loftee:
         logger.info(f"Filtering to LoF consequences: {lof_csq_set}")
         lof_cats = hl.literal(lof_csq_set)
+        criteria = lambda x: lof_cats.contains(
+            add_most_severe_consequence_to_consequence(x).most_severe_consequence
+        )
         if additional_csq_set:
             criteria = lambda x: lof_cats.contains(
                 add_most_severe_consequence_to_consequence(x).most_severe_consequence
             ) | additional_cats.contains(
                 add_most_severe_consequence_to_consequence(x).most_severe_consequence
             )
-        else:
-            criteria = lambda x: lof_cats.contains(
-                add_most_severe_consequence_to_consequence(x).most_severe_consequence
-            )
+
     else:
         logger.info("Filtering to LoF variants that pass LOFTEE with no LoF flags...")
+        criteria = lambda x: (x.lof == "HC") & hl.is_missing(x.lof_flags)
         if additional_csq_set:
             criteria = lambda x: (x.lof == "HC") & hl.is_missing(
                 x.lof_flags
             ) | additional_cats.contains(
                 add_most_severe_consequence_to_consequence(x).most_severe_consequence
             )
-        else:
-            criteria = lambda x: (x.lof == "HC") & hl.is_missing(x.lof_flags)
 
     csqs = mt.vep[explode_field].filter(criteria)
     mt = mt.select_rows(mt[freq_field], csqs=csqs)
@@ -444,7 +443,6 @@ def default_generate_gene_lof_matrix(
     else:
         annotation_expr["transcript_id"] = mt.csqs.transcript_id
         annotation_expr["canonical"] = hl.is_defined(mt.csqs.canonical)
-    mt = mt.annotate_rows(**annotation_expr)
 
     return (
         mt.group_rows_by(*list(annotation_expr.keys()))

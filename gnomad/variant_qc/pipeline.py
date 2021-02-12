@@ -26,6 +26,8 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+INBREEDING_COEFF_HARD_CUTOFF = -0.3
+
 
 def create_binned_ht(
     ht: hl.Table,

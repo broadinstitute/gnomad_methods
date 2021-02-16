@@ -24,7 +24,9 @@ def generic_field_check(
 
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
+
     .. note::
+
         `cond_expr` and `check_description` are opposites and should never be the same.
         E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
         then it is checking sites that fail to be the desired condition (`check_description`)

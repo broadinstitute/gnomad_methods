@@ -22,13 +22,14 @@ def generic_field_check(
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
-    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`). 
+    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
 
     .. note::
-        `cond_expr` and `check_description` are opposites and should never be the same. 
-        E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC, 
-        then it is checking sites that fail to be the desired condition (`check_description`) 
+
+        `cond_expr` and `check_description` are opposites and should never be the same.
+        E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
+        then it is checking sites that fail to be the desired condition (`check_description`)
         of having a raw AC greater than or equal to the adj AC.
 
     :param ht: Table containing annotations to be checked.
@@ -172,3 +173,17 @@ def sample_sum_check(
                 ],
                 verbose,
             )
+
+
+def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
+    """
+    Check if the row counts in two Tables are the same.
+
+    :param ht1: First Table to be checked
+    :param ht2: Second Table to be checked
+    :return: Whether the row counts are the same
+    """
+    r_count1 = ht1.count()
+    r_count2 = ht2.count()
+    logger.info(f"{r_count1} rows in left table; {r_count2} rows in right table")
+    return r_count1 == r_count2

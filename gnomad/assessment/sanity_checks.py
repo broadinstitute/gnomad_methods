@@ -179,10 +179,9 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
     Check if the row counts in two Tables are the same.
 
-    :param Table ht1: First Table to be checked
-    :param Table ht2: Second Table to be checked
+    :param ht1: First Table to be checked
+    :param ht2: Second Table to be checked
     :return: Whether the row counts are the same
-    :rtype: bool
     """
     r_count1 = ht1.count()
     r_count2 = ht2.count()

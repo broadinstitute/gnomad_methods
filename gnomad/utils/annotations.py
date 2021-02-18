@@ -352,6 +352,11 @@ def annotate_freq(
     Each element of the list contains metadata on a frequency stratification and the index in the list corresponds
     to the index of that frequency stratification in the `freq` row annotation.
 
+    .. rubric:: Global `freq_sample_count` annotation
+
+    The global annotation `freq_sample_count` is added to the input `mt`. This is a sample count per sample grouping
+    defined in the `freq_meta` global annotation.
+
     .. rubric:: The `downsamplings` parameter
 
     If the `downsamplings` parameter is used, frequencies will be computed for all samples and by population
@@ -487,6 +492,9 @@ def annotate_freq(
     )
 
     # Annotate columns with group_membership
+    freq_sample_count = mt.aggregate_cols(
+        [hl.agg.count_where(x[1]) for x in sample_group_filters]
+    )
     mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
 
     # Create and annotate global expression with meta information
@@ -494,7 +502,10 @@ def annotate_freq(
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]
     freq_meta_expr.insert(1, {"group": "raw"})
-    mt = mt.annotate_globals(freq_meta=freq_meta_expr)
+    freq_sample_count.insert(1, freq_sample_count[0])
+    mt = mt.annotate_globals(
+        freq_meta=freq_meta_expr, freq_sample_count=freq_sample_count,
+    )
 
     # Create frequency expression array from the sample groups
     # Adding sample_group_filters_range_array to reduce memory usage in this array_agg
@@ -621,14 +632,14 @@ def create_frequency_bins_expr(
     """
     Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
 
-    Bins: 
+    Bins:
         - singleton
-        - doubleton 
-        - 0.00005 
-        - 0.0001 
+        - doubleton
+        - 0.00005
+        - 0.0001
         - 0.0002
         - 0.0005
-        - 0.001, 
+        - 0.001,
         - 0.002
         - 0.005
         - 0.01
@@ -638,7 +649,7 @@ def create_frequency_bins_expr(
         - 0.2
         - 0.5
         - 1
-    
+
     NOTE: Frequencies should be frequencies from raw data.
     Used when creating site quality distribution json files.
 

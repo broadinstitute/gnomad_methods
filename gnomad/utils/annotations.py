@@ -323,8 +323,8 @@ def annotate_freq(
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
-    Adds a row annotation `freq` to the input `mt` with stratified allele frequencies,
-    and a global annotation `freq_meta` with metadata.
+    Adds a row annotation `freq` to the input `mt` with stratified allele frequencies, a global annotation `freq_meta`
+    with metadata, and a global annotation `freq_sample_count` with sample count information.
 
     .. note::
 
@@ -491,13 +491,14 @@ def annotate_freq(
         + sample_group_filters
     )
 
-    # Annotate columns with group_membership
     freq_sample_count = mt.aggregate_cols(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
     )
+
+    # Annotate columns with group_membership
     mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
 
-    # Create and annotate global expression with meta information
+    # Create and annotate global expression with meta and sample count information
     freq_meta_expr = [
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]

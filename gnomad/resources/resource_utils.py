@@ -85,7 +85,7 @@ class BaseResource(ABC):
 
     @abstractmethod
     def import_resource(
-        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+        self, overwrite: bool = True, *, resources_root: Optional[str] = None, **kwargs
     ) -> None:
         """
         Abstract method to import the resource using its import_func and writes it in its path.
@@ -123,7 +123,7 @@ class TableResource(BaseResource):
         )
 
     def ht(
-        self, force_import: bool = False, resources_root: Optional[str] = None
+        self, force_import: bool = False, *, resources_root: Optional[str] = None
     ) -> hl.Table:
         """
         Read and return the Hail Table resource
@@ -142,7 +142,7 @@ class TableResource(BaseResource):
             return hl.read_table(url)
 
     def import_resource(
-        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+        self, overwrite: bool = True, *, resources_root: Optional[str] = None, **kwargs
     ) -> None:
         """
         Imports the TableResource using its import_func and writes it in its path.
@@ -186,7 +186,7 @@ class MatrixTableResource(BaseResource):
         )
 
     def mt(
-        self, force_import: bool = False, resources_root: Optional[str] = None
+        self, force_import: bool = False, *, resources_root: Optional[str] = None
     ) -> hl.MatrixTable:
         """
         Read and return the Hail MatrixTable resource
@@ -205,7 +205,7 @@ class MatrixTableResource(BaseResource):
             return hl.read_matrix_table(url)
 
     def import_resource(
-        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+        self, overwrite: bool = True, *, resources_root: Optional[str] = None, **kwargs
     ) -> None:
         """
         Imports the MatrixTable resource using its import_func and writes it in its path.
@@ -258,7 +258,7 @@ class PedigreeResource(BaseResource):
         self.delimiter = delimiter
         self.missing = missing
 
-    def ht(self, resources_root: Optional[str] = None) -> hl.Table:
+    def ht(self, *, resources_root: Optional[str] = None) -> hl.Table:
         """
         Reads the pedigree into a family HT using hl.import_fam().
 
@@ -275,7 +275,7 @@ class PedigreeResource(BaseResource):
             missing=self.missing,
         )
 
-    def pedigree(self, resources_root: Optional[str] = None) -> hl.Pedigree:
+    def pedigree(self, *, resources_root: Optional[str] = None) -> hl.Pedigree:
         """
         Reads the pedigree into an hl.Pedigree using hl.Pedigree.read().
 
@@ -288,7 +288,7 @@ class PedigreeResource(BaseResource):
         return hl.Pedigree.read(url, delimiter=self.delimiter)
 
     def import_resource(
-        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+        self, overwrite: bool = True, *, resources_root: Optional[str] = None, **kwargs
     ) -> None:
         """
         Imports the Pedigree resource using its import_func and writes it in its path.
@@ -332,7 +332,7 @@ class BlockMatrixResource(BaseResource):
             gnomad_bucket=gnomad_bucket,
         )
 
-    def bm(self, resources_root: Optional[str] = None) -> BlockMatrix:
+    def bm(self, *, resources_root: Optional[str] = None) -> BlockMatrix:
         """
         Read and return the Hail MatrixTable resource
 
@@ -345,7 +345,7 @@ class BlockMatrixResource(BaseResource):
         return BlockMatrix.read(url)
 
     def import_resource(
-        self, overwrite: bool = True, resources_root: Optional[str] = None, **kwargs
+        self, overwrite: bool = True, *, resources_root: Optional[str] = None, **kwargs
     ) -> None:
         """
         Imports the BlockMatrixResource using its import_func and writes it in its path.

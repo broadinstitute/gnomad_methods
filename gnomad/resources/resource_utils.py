@@ -12,7 +12,7 @@ logger = logging.getLogger("gnomad.resources")
 
 
 def get_resource_url(
-    path, resources_root: Optional[str] = None, gnomad_bucket: str = "gnomad-public"
+    path, *, resources_root: Optional[str] = None, gnomad_bucket: str = "gnomad-public"
 ) -> str:
     """
     Get URL for a source.
@@ -134,7 +134,11 @@ class TableResource(BaseResource):
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+            url = get_resource_url(
+                self.path,
+                resources_root=resources_root,
+                gnomad_bucket=self.gnomad_bucket,
+            )
             return hl.read_table(url)
 
     def import_resource(
@@ -148,7 +152,9 @@ class TableResource(BaseResource):
         :param kwargs: Any other parameters to be passed to hl.Table.write
         :return: Nothing
         """
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         self.import_func(**self.import_args).write(
             url, overwrite=overwrite, **kwargs,
         )
@@ -191,7 +197,11 @@ class MatrixTableResource(BaseResource):
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+            url = get_resource_url(
+                self.path,
+                resources_root=resources_root,
+                gnomad_bucket=self.gnomad_bucket,
+            )
             return hl.read_matrix_table(url)
 
     def import_resource(
@@ -205,7 +215,9 @@ class MatrixTableResource(BaseResource):
         :param kwargs: Any other parameters to be passed to hl.MatrixTable.write
         :return: Nothing
         """
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         self.import_func(**self.import_args).write(
             url, overwrite=overwrite, **kwargs,
         )
@@ -253,7 +265,9 @@ class PedigreeResource(BaseResource):
         :param resources_root: URL for the root of the resources tree.
         :return: Family table
         """
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         return hl.import_fam(
             url,
             quant_pheno=self.quant_pheno,
@@ -268,7 +282,9 @@ class PedigreeResource(BaseResource):
         :param resources_root: URL for the root of the resources tree.
         :return: pedigree
         """
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         return hl.Pedigree.read(url, delimiter=self.delimiter)
 
     def import_resource(
@@ -285,7 +301,9 @@ class PedigreeResource(BaseResource):
         if not overwrite:
             raise NotImplementedError
 
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         self.import_func(**self.import_args).write(url)
 
 
@@ -321,7 +339,9 @@ class BlockMatrixResource(BaseResource):
         :param resources_root: URL for the root of the resources tree.
         :return: Hail MatrixTable resource
         """
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         return BlockMatrix.read(url)
 
     def import_resource(
@@ -335,7 +355,9 @@ class BlockMatrixResource(BaseResource):
         :param kwargs: Any additional parameters to be passed to BlockMatrix.write
         :return: Nothing
         """
-        url = get_resource_url(self.path, resources_root, self.gnomad_bucket)
+        url = get_resource_url(
+            self.path, resources_root=resources_root, gnomad_bucket=self.gnomad_bucket
+        )
         self.import_func(**self.import_args).write(
             url, overwrite=False, **kwargs,
         )

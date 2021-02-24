@@ -376,7 +376,10 @@ def make_label_combos(
     ]
     anchor_val = copy_label_groups.pop(anchor_group)
     combos = []
-    for x, y in itertools.product(anchor_val, make_label_combos(copy_label_groups)):
+    for x, y in itertools.product(
+        anchor_val,
+        make_label_combos(copy_label_groups, label_delimiter=label_delimiter),
+    ):
         combos.append(f"{x}{label_delimiter}{y}")
     return combos
 
@@ -398,7 +401,7 @@ def index_globals(
     :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index
         of each grouping entry in the globals
     """
-    combos = make_label_combos(label_groups)
+    combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
     index_dict = {}
 
     for combo in combos:
@@ -556,7 +559,7 @@ def make_info_dict(
 
     else:
         group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
-        combos = make_label_combos(label_groups)
+        combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 
         for combo in combos:
             combo_fields = combo.split(label_delimiter)

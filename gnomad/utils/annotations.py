@@ -56,6 +56,8 @@ def pop_max_expr(
     :return: Popmax struct
     """
     _pops_to_exclude = hl.literal(pops_to_exclude)
+
+    # pylint: disable=invalid-unary-operand-type
     popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (hl.set(freq_meta[i].keys()) == {"group", "pop"})
         & (freq_meta[i]["group"] == "adj")
@@ -166,6 +168,8 @@ def faf_expr(
     _pops_to_exclude = (
         hl.literal(pops_to_exclude) if pops_to_exclude is not None else {}
     )
+
+    # pylint: disable=invalid-unary-operand-type
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (freq_meta[i].get("group") == "adj")
         & (

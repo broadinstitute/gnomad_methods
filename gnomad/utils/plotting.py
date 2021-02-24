@@ -215,11 +215,8 @@ def plot_multi_hail_hist(
 
         hist_source = ColumnDataSource(data)
 
-        # fmt: off
-        hide_zeros_filter = BooleanFilter(
-            [top > 0 for top in hist_source.data["top"]]  # pylint: disable=unsubscriptable-object
-        )
-        # fmt: on
+        # pylint: disable=unsubscriptable-object
+        hide_zeros_filter = BooleanFilter([top > 0 for top in hist_source.data["top"]])
 
         view = (
             CDSView(source=hist_source, filters=[hide_zeros_filter])

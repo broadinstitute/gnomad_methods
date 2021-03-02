@@ -262,7 +262,9 @@ class BlockMatrixResource(BaseResource):
         :param kwargs: Any additional parameters to be passed to BlockMatrix.write
         :return: Nothing
         """
-        self.import_func(**self.import_args).write(self.path, overwrite=False, **kwargs)
+        self.import_func(**self.import_args).write(
+            self.path, overwrite=overwrite, **kwargs
+        )
 
 
 class BaseVersionedResource(BaseResource, ABC):

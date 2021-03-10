@@ -485,7 +485,7 @@ def default_compute_info(
         AC=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0))),
     )
 
-    info_ht = mt.select_rows(info=info_expr).rows()
+    info_ht = mt.select_rows(mt.alleles, info=info_expr).rows()
 
     # Add AS lowqual flag
     info_ht = info_ht.annotate(

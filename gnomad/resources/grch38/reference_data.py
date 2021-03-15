@@ -45,11 +45,10 @@ def _import_clinvar(**kwargs) -> hl.Table:
 
 def _import_dbsnp(**kwargs) -> hl.Table:
     dbsnp = import_sites_vcf(**kwargs)
-    dbsnp_set = dbsnp.group_by(dbsnp.locus, dbsnp.alleles).aggregate(
+    dbsnp = dbsnp.group_by(dbsnp.locus, dbsnp.alleles).aggregate(
         rsid=hl.agg.collect_as_set(dbsnp.rsid)
     )
-    dbsnp = dbsnp.annotate(rsid=dbsnp_set[dbsnp.key].rsid)
-    dbsnp = hl.split_multi(dbsnp)
+    dbsnp = hl.split_multi(dbsnp, permit_shuffle=True)
 
     return dbsnp
 

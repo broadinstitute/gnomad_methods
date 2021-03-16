@@ -73,9 +73,9 @@ autosummary.extract_summary = extract_summary
 
 # Configuration for sphinx.ext.intersphinx
 # https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
-intersphinx_mapping = {
-    "hail": ("https://hail.is/docs/0.2", None),
-}
+#intersphinx_mapping = {
+#    "hail": ("https://hail.is/docs/0.2", None),
+#}
 
 
 # sphinx_autodoc_typehints generates references with qualified names.

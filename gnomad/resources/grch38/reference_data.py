@@ -43,6 +43,17 @@ def _import_clinvar(**kwargs) -> hl.Table:
     return clinvar
 
 
+def _import_dbsnp(**kwargs) -> hl.Table:
+    dbsnp = import_sites_vcf(**kwargs)
+    # Note: permit_shuffle is set because the dbsnp vcf has duplicate loci (turned into a set) so might be out of order
+    dbsnp = hl.split_multi(dbsnp, permit_shuffle=True)
+    dbsnp = dbsnp.group_by(dbsnp.locus, dbsnp.alleles).aggregate(
+        rsid=hl.agg.collect_as_set(dbsnp.rsid)
+    )
+
+    return dbsnp
+
+
 # Resources with no versioning needed
 purcell_5k_intervals = TableResource(
     path="gs://gnomad-public/resources/grch38/purcell_5k_intervals/purcell5k.ht",
@@ -138,7 +149,7 @@ dbsnp = VersionedTableResource(
     versions={
         "b154": TableResource(
             path="gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
-            import_func=import_sites_vcf,
+            import_func=_import_dbsnp,
             import_args={
                 "path": "gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz",
                 "header_file": "gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header",

@@ -436,6 +436,8 @@ def make_combo_header_text(
 
     if len(combo_dict) == 1:
         if combo_dict["group"] == "adj":
+            if "gnomad" in prefix:
+                return f" {preposition} samples in gnomAD"
             return ""
 
     if "sex" in combo_dict:

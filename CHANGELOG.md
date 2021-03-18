@@ -34,6 +34,7 @@
 * Modified `create_truth_sample_ht` to add adj annotation information in the returned Table if present in the supplied MatrixTables [(#300)](https://github.com/broadinstitute/gnomad_methods/pull/300)
 * Fix to dbSNP b154 resource (resources.grch38.reference_data) import to allow for multiple rsIDs per variant [(#345)](https://github.com/broadinstitute/gnomad_methods/pull/345)
 * Fix to `set_female_metrics_to_na` to correctly update chrY metrics to be missing [(#347)](https://github.com/broadinstitute/gnomad_methods/pull/347)
+* Fix to `make_combo_header_text` to correctly return description text if 'gnomad' is in prefix, even if `combo_dict` only contains the group `adj` [(#348)](https://github.com/broadinstitute/gnomad_methods/pull/348)
 
 ## Version 0.4.0 - July 9th, 2020
 

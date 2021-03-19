@@ -413,10 +413,7 @@ def index_globals(
 
 
 def make_combo_header_text(
-    preposition: str,
-    combo_dict: Dict[str, str],
-    prefix: str,
-    pop_names: Dict[str, str],
+    preposition: str, combo_dict: Dict[str, str], pop_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -428,7 +425,6 @@ def make_combo_header_text(
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
         Possible grouping types are: "group", "pop", "sex", and "subpop".
         Example input: {"pop": "afr", "sex": "female"}
-    :param prefix: Prefix string indicating sample subset.
     :param pop_names: Dict with global population names (keys) and population descriptions (values).
     :return: String with automatically generated description text for a given set of combo fields.
     """
@@ -451,9 +447,6 @@ def make_combo_header_text(
 
         else:
             header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
-
-    if "gnomad" in prefix:
-        header_text = header_text + " in gnomAD"
 
     if "group" in combo_dict:
         if combo_dict["group"] == "raw":
@@ -565,8 +558,8 @@ def make_info_dict(
             combo_fields = combo.split(label_delimiter)
             group_dict = dict(zip(group_types, combo_fields))
 
-            for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
-            in_combo = make_combo_header_text("in", group_dict, prefix, pop_names)
+            for_combo = make_combo_header_text("for", group_dict, pop_names)
+            in_combo = make_combo_header_text("in", group_dict, pop_names)
 
             if not faf:
                 combo_dict = {

@@ -901,10 +901,10 @@ def region_flag_expr(
     prob_regions: Dict[str, hl.Table] = None,
 ) -> hl.expr.StructExpression:
     """
-    Creates `region_flag` struct.
-    Struct contains flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions).
-    .. note::
-        No hg38 resources for decoy or self chain are available yet.
+    Creates `region_flag` struct. Struct contains flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions)
+
+    .. note:: No hg38 resources for decoy or self chain are available yet.
+
     :param Table/MatrixTable t: Input Table/MatrixTable.
     :return: `region_flag` struct row annotation.
     :rtype: hl.expr.StructExpression

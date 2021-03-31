@@ -893,3 +893,46 @@ def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpressi
         .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
         .default(hl.null(hl.tcall))
     )
+
+def region_flag_expr(
+    t: Union[hl.Table, hl.MatrixTable],
+    non_par: bool = True,
+    prob_regions: Dict[str, hl.Table] = None,
+) -> hl.expr.StructExpression:
+    """
+    Creates `region_flag` struct.
+    Struct contains flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions).
+    .. note::
+        No hg38 resources for decoy or self chain are available yet.
+    :param Table/MatrixTable t: Input Table/MatrixTable.
+    :return: `region_flag` struct row annotation.
+    :rtype: hl.expr.StructExpression
+    """
+
+    prob_flags_expr = (
+        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+    )
+
+    if prob_regions is not None:
+        prob_flags_expr.update(
+            {
+                region_name: hl.is_defined(region_table[t.locus])
+                for region_name, region_table in prob_regions.items()
+            }
+        )
+
+    return hl.struct(**prob_flags_expr)
+
+def null_callstats_expr() -> hl.expr.StructExpression:
+    """
+    Creates a null callstats struct for insertion into frequency annotation arrays when data is missing
+
+    :return: Hail Struct with null values for each callstats element
+    """
+
+    return hl.struct(
+        AC=hl.null(hl.tint32),
+        AF=hl.null(hl.tfloat64),
+        AN=hl.null(hl.tint32),
+        homozygote_count=hl.null(hl.tint32),
+    )

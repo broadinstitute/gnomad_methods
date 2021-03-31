@@ -617,14 +617,14 @@ def create_frequency_bins_expr(
     """
     Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
 
-    Bins: 
+    Bins:
         - singleton
-        - doubleton 
-        - 0.00005 
-        - 0.0001 
+        - doubleton
+        - 0.00005
+        - 0.0001
         - 0.0002
         - 0.0005
-        - 0.001, 
+        - 0.001,
         - 0.002
         - 0.005
         - 0.01
@@ -634,7 +634,7 @@ def create_frequency_bins_expr(
         - 0.2
         - 0.5
         - 1
-    
+
     NOTE: Frequencies should be frequencies from raw data.
     Used when creating site quality distribution json files.
 
@@ -894,6 +894,7 @@ def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpressi
         .default(hl.null(hl.tcall))
     )
 
+
 def region_flag_expr(
     t: Union[hl.Table, hl.MatrixTable],
     non_par: bool = True,
@@ -922,6 +923,7 @@ def region_flag_expr(
         )
 
     return hl.struct(**prob_flags_expr)
+
 
 def null_callstats_expr() -> hl.expr.StructExpression:
     """

@@ -3,11 +3,12 @@ import pprint
 from pprint import pformat
 from typing import Dict, List, Optional, Tuple
 
+import json
 import hail as hl
 import pandas as pd
 import pyspark.sql
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import RandomForestClassifier, json
+from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import IndexToString, StringIndexer, VectorAssembler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, udf  # pylint: disable=no-name-in-module

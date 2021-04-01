@@ -3,8 +3,8 @@ import pprint
 from pprint import pformat
 from typing import Dict, List, Optional, Tuple
 
-import json
 import hail as hl
+import json
 import pandas as pd
 import pyspark.sql
 from pyspark.ml import Pipeline

@@ -141,11 +141,10 @@ def coverage(data_type: str) -> VersionedTableResource:
 
     if data_type == "exomes":
         current_release = "2.1"
-        releases = EXOME_RELEASES
-        releases.remove("2.1.1")
+        releases = [r for r in EXOME_RELEASES if r != "2.1.1"]
     else:
         current_release = CURRENT_GENOME_RELEASE
-        releases = GENOME_RELEASES
+        releases = [r for r in GENOME_RELEASES if r != "2.1.1"]
 
     return VersionedTableResource(
         current_release,
@@ -168,11 +167,10 @@ def liftover(data_type: str) -> VersionedTableResource:
 
     if data_type == "exomes":
         current_release = CURRENT_EXOME_RELEASE
-        releases = EXOME_RELEASES
-        releases.remove("2.1")
+        releases = [r for r in EXOME_RELEASES if r != "2.1"]
     else:
         current_release = CURRENT_GENOME_RELEASE
-        releases = GENOME_RELEASES
+        releases = [r for r in GENOME_RELEASES if r != "2.1"]
 
     return VersionedTableResource(
         current_release,

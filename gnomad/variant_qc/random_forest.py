@@ -1,3 +1,4 @@
+import json
 import logging
 import pprint
 from pprint import pformat
@@ -7,7 +8,7 @@ import hail as hl
 import pandas as pd
 import pyspark.sql
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import RandomForestClassifier, json
+from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import IndexToString, StringIndexer, VectorAssembler
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, udf  # pylint: disable=no-name-in-module
@@ -22,7 +23,7 @@ logger.setLevel(logging.INFO)
 
 def run_rf_test(
     mt: hl.MatrixTable, output: str = "/tmp"
-) -> Tuple[pyspark.ml.PipelineModel, hl.MatrixTable]:
+) -> Tuple[pyspark.ml.PipelineModel, hl.Table]:
     """
     Runs a dummy test RF on a given MT.
 
@@ -379,7 +380,8 @@ def apply_rf_model(
 
         return udf(to_array_, ArrayType(DoubleType()))(col)
 
-    # Note: SparkSession is needed to write DF to disk before converting to HT; hail currently fails without intermediate write
+    # Note: SparkSession is needed to write DF to disk before converting to HT;
+    # hail currently fails without intermediate write
     spark = SparkSession.builder.getOrCreate()
     rf_df.withColumn("probability", to_array(col("probability"))).select(
         [index_name, "probability", "predictedLabel"]

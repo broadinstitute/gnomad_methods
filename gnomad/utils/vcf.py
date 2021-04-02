@@ -705,19 +705,22 @@ def make_hist_bin_edges_expr(
 
 
 def make_hist_dict(
-    bin_edges: Dict[str, Dict[str, str]], adj: bool, label_delimiter: str = "_"
+    bin_edges: Dict[str, Dict[str, str]],
+    adj: bool,
+    dict_hists: List[str] = HISTS,
+    label_delimiter: str = "_",
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
 
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
+    :param dict_hists: List of hists to build hist info dict for
     :param label_delimiter: String used as delimiter when making group label combinations.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
-    for hist in HISTS:
-
+    for hist in dict_hists:
         # Get hists for both raw and adj data
         # Add "_raw" to quality histograms calculated on raw data
         if not adj:

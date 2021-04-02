@@ -16,6 +16,7 @@ GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
+
 SUBSETS = [
     "non_v2",
     "non_topmed",
@@ -25,10 +26,32 @@ SUBSETS = [
     "tgp",
     "hgdp",
 ]
+"""
+Order to sort subgroupings during VCF export.
+Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
+"""
+
 GROUPS = ["adj", "raw"]
+"""
+Group names used to generate labels for high quality genotypes and all raw genotypes. Used in VCF export.
+"""
+
 SEXES = ["XX", "XY"]
+"""
+Sample sexes used in VCF export.
+Used to stratify frequency annotations (AC, AN, AF) for each sex.
+"""
+
 POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
+"""
+Global populations in gnomAD v3
+"""
+
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
+"""
+Subsets in gnomAD v3.1 that are broken down by subpops instead of pops in the frequency struct
+"""
+
 KG_POPS = [
     "esn",
     "pur",
@@ -57,6 +80,10 @@ KG_POPS = [
     "chs",
     "gwd",
 ]
+"""
+1000 Genomes Project (1KG/TGP) subpops
+"""
+
 HGDP_POPS = [
     "japanese",
     "papuan",
@@ -111,7 +138,15 @@ HGDP_POPS = [
     "burusho",
     "maya",
 ]
+"""
+Human Genome Diversity Project (HGDP) subpops
+"""
+
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
+"""
+Populations that are removed before popmax calculations
+"""
+
 DOWNSAMPLINGS = [
     10,
     20,
@@ -140,6 +175,17 @@ DOWNSAMPLINGS = [
     110000,
     120000,
 ]
+"""
+List of the downsampling numbers to use for frequency calculations.
+"""
+
+REGION_FLAG_FIELDS = ["lcr", "nonpar", "segdup"]
+"""
+Annotations about variant region type.
+
+.. note::
+    decoy is not added because this resource does not currently exist for GRCh38/hg38.
+"""
 
 gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",

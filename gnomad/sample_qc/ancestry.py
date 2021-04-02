@@ -19,6 +19,7 @@ POP_NAMES = {
     "eur": "European",
     "fin": "Finnish",
     "mde": "Middle Eastern",
+    "mid": "Middle Eastern",
     "nfe": "Non-Finnish European",
     "oth": "Other",
     "sas": "South Asian",

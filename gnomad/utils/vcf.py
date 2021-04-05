@@ -578,8 +578,8 @@ def make_info_dict(
             combo_fields = combo.split(label_delimiter)
             group_dict = dict(zip(group_types, combo_fields))
 
-            for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
-            in_combo = make_combo_header_text("in", group_dict, prefix, pop_names)
+            for_combo = make_combo_header_text("for", group_dict, pop_names)
+            in_combo = make_combo_header_text("in", group_dict, pop_names)
 
             metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
             if prefix_before_metric:
@@ -715,7 +715,10 @@ def make_vcf_filter_dict(
 
 
 def make_hist_bin_edges_expr(
-    ht: hl.Table, hists: List[str] = HISTS, prefix: str = ""
+    ht: hl.Table,
+    hists: List[str] = HISTS,
+    prefix: str = "",
+    label_delimiter: str = "_",
 ) -> Dict[str, str]:
     """
     Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
@@ -728,7 +731,7 @@ def make_hist_bin_edges_expr(
     """
     # Add underscore to prefix if it isn't empty
     if prefix != "":
-        prefix += "_"
+        prefix += label_delimiter
 
     edges_dict = {
         f"{prefix}{call_type}": "|".join(

@@ -107,7 +107,12 @@ RF_FIELDS = [
 Annotations specific to the variant QC using a random forest model.
 """
 
-VQSR_FIELDS = ["AS_VQSLOD", "AS_culprit", "NEGATIVE_TRAIN_SITE", "POSITIVE_TRAIN_SITE"]
+AS_VQSR_FIELDS = ["NEGATIVE_TRAIN_SITE", "POSITIVE_TRAIN_SITE"]
+"""
+Allele-specific VQSR annotations.
+"""
+
+VQSR_FIELDS = AS_VQSR_FIELDS + ["NEGATIVE_TRAIN_SITE", "POSITIVE_TRAIN_SITE"]
 """
 Annotations specific to VQSR.
 """
@@ -274,20 +279,24 @@ Dictionary used during VCF export to export MatrixTable entries.
 
 def ht_to_vcf_mt(
     info_ht: hl.Table,
+    create_mt: hl.bool = True,
     pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
-) -> hl.MatrixTable:
+) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Creates a MT ready for vcf export from a HT. In particular, the following conversions are done:
-    - All int64 are coerced to int32
-    - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
+    Create a Table or MatrixTable ready for vcf export.
+
+    In particular, the following conversions are done:
+        - All int64 are coerced to int32
+        - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
 
     .. note::
 
-        The MT returned has no cols.
+        By default this will return a MatrixTable with no cols.
 
-    :param info_ht: Input HT
-    :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct)
-    :return: MatrixTable ready for VCF export
+    :param info_ht: Input HT.
+    :param create_mt: Return as a MT with no cols. Default is True.
+    :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct).
+    :return: Table/MatrixTable ready for VCF export.
     """
 
     def get_pipe_expr(array_expr: hl.expr.ArrayExpression) -> hl.expr.StringExpression:
@@ -325,9 +334,9 @@ def ht_to_vcf_mt(
 
     # Make sure to pipe-delimit fields that need to.
     # Note: the expr needs to be prefixed by "|" because GATK expect one value for the ref (always empty)
-    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, but it is overwritten below
+    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it is handled below
     for f in pipe_delimited_annotations:
-        if f in info_ht.info:
+        if f in info_ht.info and f != "AS_SB_TABLE":
             info_expr[f] = "|" + get_pipe_expr(info_ht.info[f])
 
     # Flatten SB if it is an array of arrays
@@ -341,14 +350,18 @@ def ht_to_vcf_mt(
             info_ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
         )
 
-    # Annotate with new expression and add 's' empty string field required to cast HT to MT
-    info_ht = info_ht.annotate(
-        info=info_ht.info.annotate(**info_expr), s=hl.null(hl.tstr)
-    )
+    # Annotate with new expression
+    info_ht = info_ht.annotate(info=info_ht.info.annotate(**info_expr))
+    info_t = info_ht
 
-    # Create an MT with no cols so that we acn export to VCF
-    info_mt = info_ht.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-    return info_mt.filter_cols(False)
+    if create_mt:
+        # Add 's' empty string field required to cast HT to MT
+        info_t = info_t.annotate(s=hl.null(hl.tstr))
+        # Create an MT with no cols so that we can export to VCF
+        info_t = info_t.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
+        info_t = info_t.filter_cols(False)
+
+    return info_t
 
 
 def make_label_combos(
@@ -457,6 +470,7 @@ def make_combo_header_text(
 
 def make_info_dict(
     prefix: str = "",
+    prefix_before_metric: bool = True,
     pop_names: Dict[str, str] = POP_NAMES,
     label_groups: Dict[str, str] = None,
     label_delimiter: str = "_",
@@ -479,6 +493,7 @@ def make_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations
 
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
+    :param prefix_before_metric: Should prefix be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
@@ -492,7 +507,7 @@ def make_info_dict(
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     """
     if prefix != "":
-        prefix = f"{prefix}_"
+        prefix = f"{prefix}{label_delimiter}"
 
     info_dict = dict()
 
@@ -547,6 +562,10 @@ def make_info_dict(
                 "Number": "A",
                 "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_text}",
             },
+            f"{prefix}faf95_popmax": {
+                "Number": "A",
+                "Description": f"Filtering allele frequency (using Poisson 95% CI) for the population with the maximum allele frequency{description_text}",
+            },
         }
         info_dict.update(popmax_dict)
 
@@ -555,43 +574,60 @@ def make_info_dict(
         combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 
         for combo in combos:
+            loop_description_text = description_text
             combo_fields = combo.split(label_delimiter)
             group_dict = dict(zip(group_types, combo_fields))
 
-            for_combo = make_combo_header_text("for", group_dict, pop_names)
-            in_combo = make_combo_header_text("in", group_dict, pop_names)
+            for_combo = make_combo_header_text("for", group_dict, prefix, pop_names)
+            in_combo = make_combo_header_text("in", group_dict, prefix, pop_names)
+
+            metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
+            if prefix_before_metric:
+                metric_label_dict = {
+                    metric: f"{prefix}AC{label_delimiter}{combo}" for metric in metrics
+                }
+            else:
+                metric_label_dict = {
+                    metric: f"AC{label_delimiter}{prefix}{combo}" for metric in metrics
+                }
 
             if not faf:
                 combo_dict = {
-                    f"{prefix}AC_{combo}": {
+                    metric_label_dict["AC"]: {
                         "Number": "A",
-                        "Description": f"Alternate allele count{for_combo}{description_text}",
+                        "Description": f"Alternate allele count{for_combo}{loop_description_text}",
                     },
-                    f"{prefix}AN_{combo}": {
+                    metric_label_dict["AN"]: {
                         "Number": "1",
-                        "Description": f"Total number of alleles{in_combo}{description_text}",
+                        "Description": f"Total number of alleles{in_combo}{loop_description_text}",
                     },
-                    f"{prefix}AF_{combo}": {
+                    metric_label_dict["AF"]: {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{in_combo}{description_text}",
+                        "Description": f"Alternate allele frequency{in_combo}{loop_description_text}",
                     },
-                    f"{prefix}nhomalt_{combo}": {
+                    metric_label_dict["nhomalt"]: {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{in_combo}{description_text}",
+                        "Description": f"Count of homozygous individuals{in_combo}{loop_description_text}",
                     },
                 }
             else:
+                if ("XX" in combo_fields) | ("XY" in combo_fields):
+                    loop_description_text = (
+                        loop_description_text
+                        + " in non-PAR regions of sex chromosomes only"
+                    )
                 combo_dict = {
-                    f"{prefix}faf95_{combo}": {
+                    metric_label_dict["faf95"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{loop_description_text}",
                     },
-                    f"{prefix}faf99_{combo}": {
+                    metric_label_dict["faf99"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{loop_description_text}",
                     },
                 }
             info_dict.update(combo_dict)
+
     return info_dict
 
 
@@ -631,7 +667,10 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
+    snp_cutoff: float,
+    indel_cutoff: float,
+    inbreeding_cutoff: float,
+    variant_qc_filter: str = "RF",
 ) -> Dict[str, str]:
     """
     Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -639,24 +678,39 @@ def make_vcf_filter_dict(
     Generates descriptions for:
         - AC0 filter
         - InbreedingCoeff filter
-        - RF filter
+        - Variant QC filter (RF or AS_VQSR)
         - PASS (passed all variant filters)
 
     :param snp_cutoff: Minimum SNP cutoff score from random forest model.
     :param indel_cutoff: Minimum indel cutoff score from random forest model.
     :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
+    :param variant_qc_filter: Method used for variant QC filter. One of 'RF' or 'AS_VQSR'. Default is 'RF'.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
     """
+
+    variant_qc_filter_dict = {
+        "RF": {
+            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
+        },
+        "AS_VQSR": {
+            "Description": f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels"
+        },
+    }
+
+    if variant_qc_filter not in variant_qc_filter_dict:
+        raise ValueError(
+            f"{variant_qc_filter} is not a valid value for 'variant_qc_filter'. It must be 'RF' or 'AS_VQSR'"
+        )
+
     filter_dict = {
         "AC0": {
             "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
         },
         "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
-        "RF": {
-            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
-        },
         "PASS": {"Description": "Passed all variant filters"},
+        variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
     }
+
     return filter_dict
 
 

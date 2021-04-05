@@ -179,14 +179,6 @@ DOWNSAMPLINGS = [
 List of the downsampling numbers to use for frequency calculations.
 """
 
-REGION_FLAG_FIELDS = ["lcr", "nonpar", "segdup"]
-"""
-Annotations about variant region type.
-
-.. note::
-    decoy is not added because this resource does not currently exist for GRCh38/hg38.
-"""
-
 gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",
     versions={

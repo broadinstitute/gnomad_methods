@@ -37,6 +37,7 @@
 * Removed `prefix` parameter from  to `make_combo_header_text`, as this was only used to check if samples were from gnomAD [(#348)](https://github.com/broadinstitute/gnomad_methods/pull/348)
 * Fixed available versions for gnomAD v2 `coverage` and `liftover` resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
 * Removed side effect of accessing gnomAD v2 `coverage` and `liftover` exome resources that would edit available versions for other resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
+* Use `overwrite` argument for importing a BlockMatrixResource [(#342)](https://github.com/broadinstitute/gnomad_methods/pull/342)
 
 ## Version 0.4.0 - July 9th, 2020
 

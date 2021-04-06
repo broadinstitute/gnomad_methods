@@ -975,18 +975,3 @@ def hemi_expr(
         # mt.GT[0] is alternate allele
         gt.is_haploid() & (sex_expr == male_str) & (gt[0] == 1),
     )
-
-
-def readviz_struct_expr(
-    s: hl.expr.StringExpression, gq: hl.expr.Int32Expression
-) -> hl.expr.StructExpression:
-    """
-    Extract sample ID and genotype quality from input MatrixTable.
-
-    Part of pipeline creating readviz input.
-
-    :param s: Input StringExpression containing sample ID.
-    :param gq: Input Int32Expression containing sample genotype quality.
-    :return: StructExpression of sample ID (s) and genotype quality (GQ).
-    """
-    return hl.struct(s=s, GQ=gq)

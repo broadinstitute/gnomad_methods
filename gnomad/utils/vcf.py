@@ -277,9 +277,81 @@ Dictionary used during VCF export to export MatrixTable entries.
 """
 
 
+def adjust_vcf_incompatible_types(
+    t: Union[hl.Table, hl.MatrixTable],
+    pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Create a Table or MatrixTable ready for vcf export.
+
+    In particular, the following conversions are done:
+        - All int64 are coerced to int32
+        - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
+
+
+    :param t: Input HT/MT.
+    :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct).
+    :return: Table/MatrixTable ready for VCF export.
+    """
+
+    def get_pipe_expr(array_expr: hl.expr.ArrayExpression) -> hl.expr.StringExpression:
+        return hl.delimit(array_expr.map(lambda x: hl.or_else(hl.str(x), "")), "|")
+
+    # Make sure the HT/MT is keyed by locus, alleles
+    if isinstance(hl.MatrixTable):
+        t = t.key_rows_by("locus", "alleles")
+    else:
+        t = t.key_by("locus", "alleles")
+
+    # Convert int64 fields to int32 (int64 isn't supported by VCF)
+    for f, ft in t.info.dtype.items():
+        if ft == hl.dtype("int64"):
+            logger.warning(
+                f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value."
+            )
+            info_expr = t.info.annotate(**{f: hl.int32(hl.min(2 ** 31 - 1, t.info[f]))})
+        elif ft == hl.dtype("array<int64>"):
+            logger.warning(
+                f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value."
+            )
+            info_expr = t.info.annotate(
+                **{f: t.info[f].map(lambda x: hl.int32(hl.min(2 ** 31 - 1, x)))}
+            )
+
+        if isinstance(hl.MatrixTable):
+            t = t.annotate_rows(info=info_expr)
+        else:
+            t = t.annotate(info=info_expr)
+
+    info_expr = {}
+
+    # Make sure to pipe-delimit fields that need to.
+    # Note: the expr needs to be prefixed by "|" because GATK expect one value for the ref (always empty)
+    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it is handled below
+    for f in pipe_delimited_annotations:
+        if f in t.info and f != "AS_SB_TABLE":
+            info_expr[f] = "|" + get_pipe_expr(t.info[f])
+
+    # Flatten SB if it is an array of arrays
+    if "SB" in t.info and not isinstance(t.info.SB, hl.expr.ArrayNumericExpression):
+        info_expr["SB"] = t.info.SB[0].extend(t.info.SB[1])
+
+    if "AS_SB_TABLE" in t.info:
+        info_expr["AS_SB_TABLE"] = get_pipe_expr(
+            t.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
+        )
+
+    # Annotate with new expression
+    if isinstance(hl.MatrixTable):
+        t = t.annotate_rows(info=t.info.annotate(**info_expr))
+    else:
+        t = t.annotate(info=t.info.annotate(**info_expr))
+
+    return t
+
+
 def ht_to_vcf_mt(
     info_ht: hl.Table,
-    create_mt: hl.bool = True,
     pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
@@ -294,74 +366,19 @@ def ht_to_vcf_mt(
         By default this will return a MatrixTable with no cols.
 
     :param info_ht: Input HT.
-    :param create_mt: Return as a MT with no cols. Default is True.
     :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct).
     :return: Table/MatrixTable ready for VCF export.
     """
+    t = adjust_vcf_incompatible_types(info_ht, pipe_delimited_annotations)
 
-    def get_pipe_expr(array_expr: hl.expr.ArrayExpression) -> hl.expr.StringExpression:
-        return hl.delimit(array_expr.map(lambda x: hl.or_else(hl.str(x), "")), "|")
+    # Add 's' empty string field required to cast HT to MT
+    t = t.annotate(s=hl.null(hl.tstr))
 
-    # Make sure the HT is keyed by locus, alleles
-    info_ht = info_ht.key_by("locus", "alleles")
+    # Create an MT with no cols so that we can export to VCF
+    t = t.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
+    t = t.filter_cols(False)
 
-    # Convert int64 fields to int32 (int64 isn't supported by VCF)
-    for f, ft in info_ht.info.dtype.items():
-        if ft == hl.dtype("int64"):
-            logger.warning(
-                f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value."
-            )
-            info_ht = info_ht.annotate(
-                info=info_ht.info.annotate(
-                    **{f: hl.int32(hl.min(2 ** 31 - 1, info_ht.info[f]))}
-                )
-            )
-        elif ft == hl.dtype("array<int64>"):
-            logger.warning(
-                f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value."
-            )
-            info_ht = info_ht.annotate(
-                info=info_ht.info.annotate(
-                    **{
-                        f: info_ht.info[f].map(
-                            lambda x: hl.int32(hl.min(2 ** 31 - 1, x))
-                        )
-                    }
-                )
-            )
-
-    info_expr = {}
-
-    # Make sure to pipe-delimit fields that need to.
-    # Note: the expr needs to be prefixed by "|" because GATK expect one value for the ref (always empty)
-    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it is handled below
-    for f in pipe_delimited_annotations:
-        if f in info_ht.info and f != "AS_SB_TABLE":
-            info_expr[f] = "|" + get_pipe_expr(info_ht.info[f])
-
-    # Flatten SB if it is an array of arrays
-    if "SB" in info_ht.info and not isinstance(
-        info_ht.info.SB, hl.expr.ArrayNumericExpression
-    ):
-        info_expr["SB"] = info_ht.info.SB[0].extend(info_ht.info.SB[1])
-
-    if "AS_SB_TABLE" in info_ht.info:
-        info_expr["AS_SB_TABLE"] = get_pipe_expr(
-            info_ht.info.AS_SB_TABLE.map(lambda x: hl.delimit(x, ","))
-        )
-
-    # Annotate with new expression
-    info_ht = info_ht.annotate(info=info_ht.info.annotate(**info_expr))
-    info_t = info_ht
-
-    if create_mt:
-        # Add 's' empty string field required to cast HT to MT
-        info_t = info_t.annotate(s=hl.null(hl.tstr))
-        # Create an MT with no cols so that we can export to VCF
-        info_t = info_t.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-        info_t = info_t.filter_cols(False)
-
-    return info_t
+    return t
 
 
 def make_label_combos(
@@ -727,6 +744,7 @@ def make_hist_bin_edges_expr(
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
+    :param label_delimiter: String used as delimiter when making group label combinations.
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
     """
     # Add underscore to prefix if it isn't empty
@@ -758,6 +776,7 @@ def make_hist_bin_edges_expr(
                     ht.head(1)[hist_type][hist].collect()[0].bin_edges,
                 )
             )
+
     return edges_dict
 
 
@@ -773,7 +792,7 @@ def make_hist_dict(
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
     :param dict_hists: List of hists to build hist info dict for
-    :param label_delimiter: String used as delimiter when making group label combinations.
+    :param label_delimiter: String used as delimiter in values stored in dict_hists list.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}

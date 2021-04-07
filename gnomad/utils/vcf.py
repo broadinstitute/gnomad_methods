@@ -107,7 +107,7 @@ RF_FIELDS = [
 Annotations specific to the variant QC using a random forest model.
 """
 
-AS_VQSR_FIELDS = ["NEGATIVE_TRAIN_SITE", "POSITIVE_TRAIN_SITE"]
+AS_VQSR_FIELDS = ["AS_culprit", "AS_VQSLOD"]
 """
 Allele-specific VQSR annotations.
 """

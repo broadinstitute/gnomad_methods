@@ -298,7 +298,7 @@ def adjust_vcf_incompatible_types(
         return hl.delimit(array_expr.map(lambda x: hl.or_else(hl.str(x), "")), "|")
 
     # Make sure the HT/MT is keyed by locus, alleles
-    if isinstance(hl.MatrixTable):
+    if isinstance(t, hl.MatrixTable):
         t = t.key_rows_by("locus", "alleles")
     else:
         t = t.key_by("locus", "alleles")
@@ -318,7 +318,7 @@ def adjust_vcf_incompatible_types(
                 **{f: t.info[f].map(lambda x: hl.int32(hl.min(2 ** 31 - 1, x)))}
             )
 
-        if isinstance(hl.MatrixTable):
+        if isinstance(t, hl.MatrixTable):
             t = t.annotate_rows(info=info_expr)
         else:
             t = t.annotate(info=info_expr)
@@ -342,7 +342,7 @@ def adjust_vcf_incompatible_types(
         )
 
     # Annotate with new expression
-    if isinstance(hl.MatrixTable):
+    if isinstance(t, hl.MatrixTable):
         t = t.annotate_rows(info=t.info.annotate(**info_expr))
     else:
         t = t.annotate(info=t.info.annotate(**info_expr))

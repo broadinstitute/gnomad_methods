@@ -142,6 +142,39 @@ HGDP_POPS = [
 Human Genome Diversity Project (HGDP) subpops
 """
 
+KG_POP_NAMES = {
+    "CHB": "Han Chinese",
+    "JPT": "Japanese",
+    "CHS": "Southern Han Chinese",
+    "CDX": "Chinese Dai",
+    "KHV": "Kinh",
+    "CEU": "Utah Residents (European Ancestry)",
+    "TSI": "Toscani",
+    "FIN": "Finnish",
+    "GBR": "British",
+    "IBS": "Iberian",
+    "YRI": "Yoruba",
+    "LWK": "Luhya",
+    "GWD": "Gambian",
+    "MSL": "Mende",
+    "ESN": "Esan",
+    "ASW": "African-American",
+    "ACB": "African Caribbean",
+    "MXL": "Mexican-American",
+    "PUR": "Puerto Rican",
+    "CLM": "Colombian",
+    "PEL": "Peruvian",
+    "GIH": "Gujarati",
+    "PJL": "Punjabi",
+    "BEB": "Bengali",
+    "STU": "Sri Lankan Tamil",
+    "ITU": "Indian Telugu",
+}
+"""
+1000 Genomes Project (1KG/TGP) pop label map
+"""
+
+
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
 """
 Populations that are removed before popmax calculations

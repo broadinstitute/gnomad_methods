@@ -602,11 +602,13 @@ def make_info_dict(
             metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
             if prefix_before_metric:
                 metric_label_dict = {
-                    metric: f"{prefix}AC{label_delimiter}{combo}" for metric in metrics
+                    metric: f"{prefix}{metric}{label_delimiter}{combo}"
+                    for metric in metrics
                 }
             else:
                 metric_label_dict = {
-                    metric: f"AC{label_delimiter}{prefix}{combo}" for metric in metrics
+                    metric: f"{metric}{label_delimiter}{prefix}{combo}"
+                    for metric in metrics
                 }
 
             if not faf:

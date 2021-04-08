@@ -93,6 +93,22 @@ class TestGnomadPublicTableResource:
         read_table.assert_called_with("gs://gnomad-public/table.ht")
 
     @patch("hail.read_table")
+    def test_gnomad_public_table_resource_google_cloud_public_datasets(
+        self, read_table
+    ):
+        """Test that Table can be read from Google Cloud Public Datasets bucket."""
+        resource = resource_utils.GnomadPublicTableResource(
+            "gs://gnomad-public/table.ht"
+        )
+
+        gnomad_public_resource_configuration.source = (
+            GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
+        )
+
+        resource.ht()
+        read_table.assert_called_with("gs://gcp-public-data--gnomad/table.ht")
+
+    @patch("hail.read_table")
     def test_gnomad_public_table_resource_custom_source(self, read_table):
         """Test that Table can be read from custom source."""
         resource = resource_utils.GnomadPublicTableResource(

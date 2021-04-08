@@ -8,6 +8,7 @@ class GnomadPublicResourceSource(Enum):
     """Sources for public gnomAD resources."""
 
     GNOMAD = "gnomAD"
+    GOOGLE_CLOUD_PUBLIC_DATASETS = "Google Cloud Public Datasets"
 
 
 DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = GnomadPublicResourceSource.GNOMAD

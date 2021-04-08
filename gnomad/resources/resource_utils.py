@@ -2,10 +2,14 @@
 
 import logging
 from abc import ABC, abstractmethod
+from functools import reduce
 from typing import Any, Callable, Dict, List, Optional
 
 import hail as hl
 from hail.linalg import BlockMatrix
+
+from .config import GnomadPublicResourceSource, gnomad_public_resource_configuration
+
 
 logger = logging.getLogger("gnomad.resources")
 
@@ -369,6 +373,21 @@ GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
 
 class GnomadPublicResource(BaseResource, ABC):
     """Base class for the gnomAD project's public resources."""
+
+    def _get_path(self) -> str:
+        resource_source = gnomad_public_resource_configuration.source
+        if resource_source == GnomadPublicResourceSource.GNOMAD:
+            return self._path
+
+        relative_path = reduce(
+            lambda path, bucket: path[5 + len(bucket) :]
+            if path.startswith(f"gs://{bucket}")
+            else path,
+            GNOMAD_PUBLIC_BUCKETS,
+            self._path,
+        )
+
+        return f"{resource_source.rstrip('/')}{relative_path}"
 
     def _set_path(self, path):
         if not any(

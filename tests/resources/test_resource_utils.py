@@ -3,6 +3,10 @@
 from unittest.mock import patch
 
 from gnomad.resources import resource_utils
+from gnomad.resources.config import (
+    gnomad_public_resource_configuration,
+    GnomadPublicResourceSource,
+)
 
 
 class TestTableResource:
@@ -71,3 +75,31 @@ class TestBlockMatrixResource:
         ds = resource.bm()
         read_block_matrix.assert_called_with("gs://gnomad-public/block_matrix.bm")
         assert ds == read_block_matrix.return_value
+
+
+class TestGnomadPublicTableResource:
+    """Tests for GnomadPublicTableResource."""
+
+    @patch("hail.read_table")
+    def test_gnomad_public_table_resource(self, read_table):
+        """Test that Table can be read from gnomAD bucket."""
+        resource = resource_utils.GnomadPublicTableResource(
+            "gs://gnomad-public/table.ht"
+        )
+
+        gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD
+
+        resource.ht()
+        read_table.assert_called_with("gs://gnomad-public/table.ht")
+
+    @patch("hail.read_table")
+    def test_gnomad_public_table_resource_custom_source(self, read_table):
+        """Test that Table can be read from custom source."""
+        resource = resource_utils.GnomadPublicTableResource(
+            "gs://gnomad-public/table.ht"
+        )
+
+        gnomad_public_resource_configuration.source = "gs://my-bucket/gnomad-resources"
+
+        resource.ht()
+        read_table.assert_called_with("gs://my-bucket/gnomad-resources/table.ht")

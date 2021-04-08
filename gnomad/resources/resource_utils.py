@@ -364,6 +364,39 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
         super().__init__(default_version, versions)
 
 
+GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
+
+
+class GnomadPublicResource(BaseResource, ABC):
+    """Base class for the gnomAD project's public resources."""
+
+    def _set_path(self, path):
+        if not any(
+            path.startswith(f"gs://{bucket}") for bucket in GNOMAD_PUBLIC_BUCKETS
+        ):
+            raise ValueError(
+                f"GnomadPublicResource requires a path to a file in one of the public gnomAD buckets ({', '.join(GNOMAD_PUBLIC_BUCKETS)})"
+            )
+
+        return super()._set_path(path)
+
+
+class GnomadPublicTableResource(TableResource, GnomadPublicResource):
+    """Resource class for a public Hail Table published by the gnomAD project."""
+
+
+class GnomadPublicMatrixTableResource(MatrixTableResource, GnomadPublicResource):
+    """Resource class for a public Hail MatrixTable published by the gnomAD project."""
+
+
+class GnomadPublicPedigreeResource(PedigreeResource, GnomadPublicResource):
+    """Resource class for a public pedigree published by the gnomAD project."""
+
+
+class GnomadPublicBlockMatrixResource(BlockMatrixResource, GnomadPublicResource):
+    """Resource class for a public Hail BlockMatrix published by the gnomAD project."""
+
+
 class DataException(Exception):  # noqa: D101
     pass
 

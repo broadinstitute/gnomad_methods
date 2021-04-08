@@ -51,10 +51,23 @@ class BaseResource(ABC):
             )
 
     def __repr__(self):
-        attr_str = [f"path={self.path}"]
+        attr_str = [f"path={self._path}"]
         if self.import_args is not None:
             attr_str.append(f"import_args={self.import_args}")
         return f'{self.__class__.__name__}({",".join(attr_str)})'
+
+    def _get_path(self):
+        return self._path
+
+    def _set_path(self, path):
+        self._path = path  # pylint: disable=attribute-defined-outside-init
+
+    # Defining path property this way instead of using a decorator allows _get_path and _set_path
+    # to be overridden in subclasses without having to reconfigure the property.
+    path = property(
+        fget=lambda self: self._get_path(),
+        fset=lambda self, path: self._set_path(path),
+    )
 
     @abstractmethod
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:

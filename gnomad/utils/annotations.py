@@ -36,7 +36,7 @@ def pop_max_expr(
     pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
-    Creates an expression containing popmax: the frequency information about the population
+    Create an expression containing popmax: the frequency information about the population
     that has the highest AF from the populations provided in `freq_meta`,
     excluding those specified in `pops_to_exclude`.
     Only frequencies from adj populations are considered.
@@ -76,7 +76,7 @@ def project_max_expr(
     n_projects: int = 5,
 ) -> hl.expr.ArrayExpression:
     """
-    Creates an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
+    Create an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
     This return an array with one element per non-reference allele.
 
     Each of these elements is itself an array of structs with the following fields:
@@ -140,7 +140,7 @@ def faf_expr(
     faf_thresholds: List[float] = [0.95, 0.99],
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
-    Calculates the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
+    Calculate the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
     See http://cardiodb.org/allelefrequencyapp/ for more information.
 
     The FAF is computed for each of the following population stratification if found in `freq_meta`:
@@ -227,7 +227,7 @@ def qual_hist_expr(
     adj_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
-    Returns a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
+    Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
 
     .. note::
 
@@ -292,7 +292,7 @@ def age_hists_expr(
     n_bins: int = 10,
 ) -> hl.expr.StructExpression:
     """
-    Returns a StructExpression with the age histograms for hets and homs.
+    Return a StructExpression with the age histograms for hets and homs.
 
     :param adj_expr: Entry expression containing whether a genotype is high quality (adj) or not
     :param gt_expr: Entry expression containing the genotype
@@ -323,7 +323,7 @@ def annotate_freq(
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
-    Adds a row annotation `freq` to the input `mt` with stratified allele frequencies,
+    Add a row annotation `freq` to the input `mt` with stratified allele frequencies,
     and a global annotation `freq_meta` with metadata.
 
     .. note::
@@ -535,7 +535,7 @@ def get_lowqual_expr(
     indel_phred_het_prior: int = 39,  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
-    Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
+    Compute lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox.
 
     .. note::
 
@@ -589,8 +589,7 @@ def get_annotations_hists(
     log10_annotations: List[str] = ["DP"],
 ) -> Dict[str, hl.expr.StructExpression]:
     """
-    Creates histograms for variant metrics in ht.info.
-    Used when creating site quality distribution json files.
+    Create histograms for variant metrics in ht.info. Used when creating site quality distribution json files.
 
     :param ht: Table with variant metrics
     :param annotations_hists: Dictionary of metrics names and their histogram values (start, end, bins)
@@ -615,7 +614,7 @@ def create_frequency_bins_expr(
     AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
 ) -> hl.expr.StringExpression:
     """
-    Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
+    Create bins for frequencies in preparation for aggregating QUAL by frequency bin.
 
     Bins:
         - singleton
@@ -677,8 +676,7 @@ def get_adj_expr(
     haploid_adj_dp: int = 5,
 ) -> hl.expr.BooleanExpression:
     """
-    Gets adj genotype annotation.
-    Defaults correspond to gnomAD values.
+    Get adj genotype annotation. Defaults correspond to gnomAD values.
     """
     return (
         (gq_expr >= adj_gq)
@@ -703,8 +701,7 @@ def annotate_adj(
     haploid_adj_dp: int = 5,
 ) -> hl.MatrixTable:
     """
-    Annotate genotypes with adj criteria (assumes diploid)
-    Defaults correspond to gnomAD values.
+    Annotate genotypes with adj criteria (assumes diploid). Defaults correspond to gnomAD values.
     """
     return mt.annotate_entries(
         adj=get_adj_expr(
@@ -715,7 +712,7 @@ def annotate_adj(
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
     """
-    Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)
+    Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles).
     """
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
@@ -736,7 +733,7 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
 
 def annotation_type_is_numeric(t: Any) -> bool:
     """
-    Given an annotation type, returns whether it is a numerical type or not.
+    Given an annotation type, return whether it is a numerical type or not.
 
     :param t: Type to test
     :return: If the input type is numeric
@@ -751,7 +748,7 @@ def annotation_type_is_numeric(t: Any) -> bool:
 
 def annotation_type_in_vcf_info(t: Any) -> bool:
     """
-    Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
+    Given an annotation type, return whether that type can be natively exported to a VCF INFO field.
     Note types that aren't natively exportable to VCF will be converted to String on export.
 
     :param t: Type to test
@@ -802,7 +799,7 @@ def fs_from_sb(
     min_p_value: float = 1e-320,
 ) -> hl.expr.Int64Expression:
     """
-    Computes `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+    Compute `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
     `FS` is the phred-scaled value of the double-sided Fisher exact test on strand balance.
 
     Using default values will have the same behavior as the GATK implementation, that is:
@@ -871,7 +868,7 @@ def fs_from_sb(
 
 def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
     """
-    Returns a boolean expression selecting bi-allelic sites only,
+    Return a boolean expression selecting bi-allelic sites only,
     accounting for whether the input MT/HT was split.
 
     :param t: Input HT/MT
@@ -882,7 +879,7 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
 
 def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpression:
     """
-    Generate unphased version of a call expression (which can be phased or not)
+    Generate unphased version of a call expression (which can be phased or not).
 
     :param call_expr: Input call expression
     :return: unphased call expression
@@ -901,13 +898,14 @@ def region_flag_expr(
     prob_regions: Dict[str, hl.Table] = None,
 ) -> hl.expr.StructExpression:
     """
-    Creates `region_flag` struct. Struct contains flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions)
+    Create a `region_flag` struct that contains flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions).
 
     .. note:: No hg38 resources for decoy or self chain are available yet.
 
-    :param Table/MatrixTable t: Input Table/MatrixTable.
+    :param t: Input Table/MatrixTable.
+    :param non_par: If True, flag loci that occur within pseudoautosomal regions on sex chromosomes
+    :param prob_regions: If supplied, flag loci that occur within regions defined in Hail Table(s)
     :return: `region_flag` struct row annotation.
-    :rtype: hl.expr.StructExpression
     """
 
     prob_flags_expr = (
@@ -927,7 +925,7 @@ def region_flag_expr(
 
 def null_callstats_expr() -> hl.expr.StructExpression:
     """
-    Creates a null callstats struct for insertion into frequency annotation arrays when data is missing
+    Create a null callstats struct for insertion into frequency annotation arrays when data is missing.
 
     :return: Hail Struct with null values for each callstats element
     """

@@ -950,3 +950,28 @@ def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpressi
         .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
         .default(hl.null(hl.tcall))
     )
+
+
+def hemi_expr(
+    locus: hl.expr.LocusExpression,
+    sex_expr: hl.expr.StringExpression,
+    gt: hl.expr.CallExpression,
+    male_str: str = "XY",
+) -> hl.expr.BooleanExpression:
+    """
+    Return whether genotypes are hemizygous.
+
+    Return missing expression if locus is not in chrX/chrY non-PAR regions.
+
+    :param locus: Input locus.
+    :param sex_expr: Input StringExpression indicating whether sample is XX or XY.
+    :param gt: Input genotype.
+    :param xy_str: String indicating whether sample is XY. Default is "XY".
+    :return: BooleanExpression indicating whether genotypes are hemizygous.
+    """
+    return hl.or_missing(
+        locus.in_x_nonpar() | locus.in_y_nonpar(),
+        # Haploid genotypes have a single integer, so checking if
+        # mt.GT[0] is alternate allele
+        gt.is_haploid() & (sex_expr == male_str) & (gt[0] == 1),
+    )

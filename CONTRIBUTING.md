@@ -36,6 +36,14 @@ Use [Black](https://black.readthedocs.io/) to format code.
 black gnomad
 ```
 
+## Running tests
+
+Run tests using [pytest](https://docs.pytest.org/en/stable/).
+
+```
+python -m pytest
+```
+
 ## Building documentation
 
 See instructions in [docs/README.md](./docs/README.md).

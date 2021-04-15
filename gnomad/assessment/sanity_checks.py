@@ -5,41 +5,19 @@ import hail as hl
 
 from gnomad.utils.vcf import make_label_combos, SORT_ORDER
 
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def generic_field_check_expr(cond_expr: hl.expr.BooleanExpression) -> hl.Expression:
-    """
-    Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
-
-    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
-    If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
-
-    .. note::
-
-        `cond_expr` and `check_description` are opposites and should never be the same.
-        E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
-        then it is checking sites that fail to be the desired condition (`check_description`)
-        of having a raw AC greater than or equal to the adj AC.
-
-    :param ht: Table containing annotations to be checked.
-    :param cond_expr: Logical expression referring to annotations in ht to be checked.
-    :return: None
-    """
-    return hl.agg.filter(cond_expr, hl.agg.count())
-
-
 def generic_field_check(
     ht: hl.Table,
-    cond_expr: hl.BooleanExpression,
+    cond_expr: hl.expr.BooleanExpression,
     check_description: str,
     display_fields: List[str],
-    verbose: bool = False,
+    verbose: bool,
     show_percent_sites: bool = False,
-    n_fail: int = None,
-    ht_count: int = None,
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
@@ -55,6 +33,7 @@ def generic_field_check(
         of having a raw AC greater than or equal to the adj AC.
 
     :param ht: Table containing annotations to be checked.
+    :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
     :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
         these fields are also displayed if verbose is True.
@@ -63,21 +42,20 @@ def generic_field_check(
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :return: None
     """
-    if show_percent_sites and (ht_count is None):
-        ht_count = ht.count()
-
-    if n_fail is None and cond_expr:
-        n_fail = ht.filter(cond_expr).count()
-
+    ht_orig = ht
+    ht = ht.filter(cond_expr)
+    n_fail = ht.count()
     if n_fail > 0:
         logger.info(f"Found {n_fail} sites that fail {check_description} check:")
         if show_percent_sites:
-            logger.info(f"Percentage of sites that fail: {n_fail / ht_count}")
-        ht.select(**display_fields).show()
+            logger.info(f"Percentage of sites that fail: {n_fail / ht_orig.count()}")
+        ht = ht.flatten()
+        ht.select("locus", "alleles", *display_fields).show()
     else:
         logger.info(f"PASSED {check_description} check")
         if verbose:
-            ht.select(**display_fields).show()
+            ht_orig = ht_orig.flatten()
+            ht_orig.select(*display_fields).show()
 
 
 def make_filters_sanity_check_expr(
@@ -166,53 +144,34 @@ def sample_sum_check(
 
     ht = ht.annotate(**annot_dict)
 
-    field_check_expr = {}
-
     for subfield in ["AC", "AN", "nhomalt"]:
         if not subpop:
-            field_check_expr.update(
-                {
-                    f"{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})": hl.struct(
-                        cond_expr=ht.info[f"{prefix}{subfield}_{group}"]
-                        != ht[f"sum_{subfield}_{group}_{alt_groups}"],
-                        n_fail=generic_field_check_expr(
-                            ht.info[f"{prefix}{subfield}_{group}"]
-                            != ht[f"sum_{subfield}_{group}_{alt_groups}"]
-                        ),
-                        display_fields=[
-                            f"info.{prefix}{subfield}_{group}",
-                            f"sum_{subfield}_{group}_{alt_groups}",
-                        ],
-                    )
-                }
-            )
-        else:
-            field_check_expr.update(
-                {
-                    f"{prefix}{subfield}_{subpop}_{group} = sum({subfield}_{group}_{alt_groups})": hl.struct(
-                        cond_expr=ht.info[f"{prefix}{subfield}_{group}"]
-                        != ht[f"sum_{subfield}_{group}_{alt_groups}"],
-                        n_fail=generic_field_check_expr(
-                            ht.info[f"{prefix}{subfield}_{subpop}_{group}"]
-                            != ht[f"sum_{subfield}_{group}_{alt_groups}"]
-                        ),
-                        display_fields=[
-                            f"info.{prefix}{subfield}_{subpop}_{group}",
-                            f"sum_{subfield}_{group}_{alt_groups}",
-                        ],
-                    )
-                }
-            )
-
-        ht_field_check_counts = ht.aggregate(**field_check_expr)
-        for check_description, field_struct in ht_field_check_counts.items():
             generic_field_check(
                 ht,
-                cond_expr=field_struct.cond_expr,
-                check_description=check_description,
-                n_fail=field_struct.n_fail,
-                display_fields=field_struct.display_fields,
-                verbose=verbose,
+                (
+                    ht.info[f"{prefix}{subfield}_{group}"]
+                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
+                ),
+                f"{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})",
+                [
+                    f"info.{prefix}{subfield}_{group}",
+                    f"sum_{subfield}_{group}_{alt_groups}",
+                ],
+                verbose,
+            )
+        else:
+            generic_field_check(
+                ht,
+                (
+                    ht.info[f"{prefix}{subfield}_{subpop}_{group}"]
+                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
+                ),
+                f"{prefix}{subfield}_{subpop}_{group} = sum({subfield}_{group}_{alt_groups})",
+                [
+                    f"info.{prefix}{subfield}_{subpop}_{group}",
+                    f"sum_{subfield}_{group}_{alt_groups}",
+                ],
+                verbose,
             )
 
 

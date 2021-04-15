@@ -282,4 +282,5 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     :return: Path to VCF
     """
     contig = f".{contig}" if contig else ""
-    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    version_prefix = "r" if version.startswith("3.0") else "v"
+    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"

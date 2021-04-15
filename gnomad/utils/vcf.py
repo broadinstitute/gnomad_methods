@@ -480,7 +480,7 @@ def make_info_dict(
     prefix: str = "",
     prefix_before_metric: bool = True,
     pop_names: Dict[str, str] = POP_NAMES,
-    label_groups: Dict[str, str] = None,
+    label_groups: Dict[str, List[str]] = None,
     label_delimiter: str = "_",
     bin_edges: Dict[str, str] = None,
     faf: bool = False,

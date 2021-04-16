@@ -8,7 +8,6 @@ from gnomad.resources.grch38.gnomad import (
     SEXES,
     SUBSETS,
 )
-from gnomad.utils.annotations import null_callstats_expr
 from gnomad.utils.vcf import index_globals, make_label_combos
 
 
@@ -69,33 +68,3 @@ def make_freq_index_dict(
     return index_dict
 
 
-def set_female_y_metrics_to_na_expr(
-    t: Union[hl.Table, hl.MatrixTable]
-) -> hl.expr.ArrayExpression:
-    """
-    Sets Y-variant frequency callstats for female-specific metrics to null structs
-
-    .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
-
-    :param t: Table or MatrixTable for which to adjust female metrics
-    :return: Hail array expression to set female Y-variant metrics to null values
-    """
-
-    female_idx = hl.map(
-        lambda x: t.freq_index_dict[x],
-        hl.filter(lambda x: x.contains("XX"), t.freq_index_dict.keys()),
-    )
-    freq_idx_range = hl.range(hl.len(t.freq_meta))
-
-    new_freq_expr = hl.if_else(
-        (t.locus.in_y_nonpar() | t.locus.in_y_par()),
-        hl.map(
-            lambda x: hl.if_else(
-                female_idx.contains(x), null_callstats_expr(), t.freq[x]
-            ),
-            freq_idx_range,
-        ),
-        t.freq,
-    )
-
-    return new_freq_expr

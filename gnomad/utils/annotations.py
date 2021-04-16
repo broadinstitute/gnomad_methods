@@ -924,18 +924,18 @@ def region_flag_expr(
     return hl.struct(**prob_flags_expr)
 
 
-def null_callstats_expr() -> hl.expr.StructExpression:
+def missing_callstats_expr() -> hl.expr.StructExpression:
     """
-    Create a null callstats struct for insertion into frequency annotation arrays when data is missing.
+    Create a missing callstats struct for insertion into frequency annotation arrays when data is missing.
 
-    :return: Hail Struct with null values for each callstats element
+    :return: Hail Struct with missing values for each callstats element
     """
 
     return hl.struct(
-        AC=hl.null(hl.tint32),
-        AF=hl.null(hl.tfloat64),
-        AN=hl.null(hl.tint32),
-        homozygote_count=hl.null(hl.tint32),
+        AC=hl.missing(hl.tint32),
+        AF=hl.missing(hl.tfloat64),
+        AN=hl.missing(hl.tint32),
+        homozygote_count=hl.missing(hl.tint32),
     )
 
 

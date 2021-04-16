@@ -143,7 +143,7 @@ def coverage(data_type: str) -> VersionedTableResource:
         current_release = "2.1"
         releases = [r for r in EXOME_RELEASES if r != "2.1.1"]
     else:
-        current_release = CURRENT_GENOME_RELEASE
+        current_release = "2.1"
         releases = [r for r in GENOME_RELEASES if r != "2.1.1"]
 
     return VersionedTableResource(

@@ -15,6 +15,8 @@ def make_faf_index_dict(faf_meta: List[Dict[str, str]]) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the filter allele frequency annotation array.
 
+    .. note: Filtering allele frequencies are only computed on 'adj'-filtered genotypes
+
     :param faf_meta: Global annotation containing the set of groupings for each element of the faf array
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
     :return: Dictionary of faf annotation population groupings, where values are the corresponding 0-based indices for the
@@ -36,6 +38,8 @@ def make_freq_index_dict(
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
+
+    .. note: Downsampling groupings are only computed on 'adj'-filtered genotypes
 
     :param freq_meta: Global annotation continaing the set of groupings for each element of the freq array
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])

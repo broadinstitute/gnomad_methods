@@ -2,7 +2,6 @@ import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
-from gnomad.utils.annotations import null_callstats_expr
 from gnomad.utils.gen_stats import to_phred
 
 logging.basicConfig(
@@ -903,10 +902,10 @@ def region_flag_expr(
 
     .. note:: No hg38 resources for decoy or self chain are available yet.
 
-    :param t: Input Table/MatrixTable.
+    :param t: Input Table/MatrixTable
     :param non_par: If True, flag loci that occur within pseudoautosomal regions on sex chromosomes
     :param prob_regions: If supplied, flag loci that occur within regions defined in Hail Table(s)
-    :return: `region_flag` struct row annotation.
+    :return: `region_flag` struct row annotation
     """
 
     prob_flags_expr = (
@@ -943,7 +942,7 @@ def set_female_y_metrics_to_na_expr(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> hl.expr.ArrayExpression:
     """
-    Sets Y-variant frequency callstats for female-specific metrics to null structs
+    Set Y-variant frequency callstats for female-specific metrics to null structs.
 
     .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
 
@@ -961,7 +960,7 @@ def set_female_y_metrics_to_na_expr(
         (t.locus.in_y_nonpar() | t.locus.in_y_par()),
         hl.map(
             lambda x: hl.if_else(
-                female_idx.contains(x), null_callstats_expr(), t.freq[x]
+                female_idx.contains(x), missing_callstats_expr(), t.freq[x]
             ),
             freq_idx_range,
         ),

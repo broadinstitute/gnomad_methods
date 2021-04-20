@@ -38,6 +38,7 @@
 * Fixed available versions for gnomAD v2 `coverage` and `liftover` resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
 * Removed side effect of accessing gnomAD v2 `coverage` and `liftover` exome resources that would edit available versions for other resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
 * Use `overwrite` argument for importing a BlockMatrixResource [(#342)](https://github.com/broadinstitute/gnomad_methods/pull/342)
+* Add resource for v3.1.1 release [(#364)](https://github.com/broadinstitute/gnomad_methods/pull/364)
 
 ## Version 0.4.0 - July 9th, 2020
 

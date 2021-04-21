@@ -37,7 +37,7 @@ def make_faf_index_dict(
     index_dict = {
         **_get_index(dict(group=groups)),
         **_get_index(dict(group=groups, pop=pops)),
-        **_get_index(dict(group=groups, sex=SEXES)),
+        **_get_index(dict(group=groups, sex=sexes)),
         **_get_index(dict(group=groups, pop=POPS, sex=SEXES)),
     }
     return index_dict

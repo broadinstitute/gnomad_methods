@@ -286,7 +286,7 @@ def adjust_vcf_incompatible_types(
 
     In particular, the following conversions are done:
         - All int64 are coerced to int32
-        - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
+        - Fields specified by `pipe_delimited_annotations` are converted from arrays to pipe-delimited strings
 
     :param ht: Input Table.
     :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct).
@@ -501,7 +501,7 @@ def make_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations
 
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
-    :param prefix_before_metric: Should prefix be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
+    :param prefix_before_metric: Whether prefix should be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).

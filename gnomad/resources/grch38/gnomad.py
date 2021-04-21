@@ -33,23 +33,26 @@ Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
 
 GROUPS = ["adj", "raw"]
 """
-Group names used to generate labels for high quality genotypes and all raw genotypes. Used in VCF export.
+Group names used to generate labels for high quality genotypes and all raw genotypes. 
+
+Used in VCF export.
 """
 
 SEXES = ["XX", "XY"]
 """
 Sample sexes used in VCF export.
+
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
 POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
 """
-Global populations in gnomAD v3
+Global populations in gnomAD v3.
 """
 
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
 """
-Subsets in gnomAD v3.1 that are broken down by subpops instead of pops in the frequency struct
+Subsets in gnomAD v3.1 that are broken down by subpops instead of global pops in the frequency struct.
 """
 
 KG_POPS = [
@@ -81,7 +84,7 @@ KG_POPS = [
     "gwd",
 ]
 """
-1000 Genomes Project (1KG/TGP) subpops
+1000 Genomes Project (1KG/TGP) subpops.
 """
 
 HGDP_POPS = [
@@ -139,7 +142,7 @@ HGDP_POPS = [
     "maya",
 ]
 """
-Human Genome Diversity Project (HGDP) subpops
+Human Genome Diversity Project (HGDP) subpops.
 """
 
 KG_POP_NAMES = {
@@ -171,13 +174,13 @@ KG_POP_NAMES = {
     "itu": "Indian Telugu",
 }
 """
-1000 Genomes Project (1KG/TGP) pop label map
+1000 Genomes Project (1KG/TGP) pop label map.
 """
 
 
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
 """
-Populations that are removed before popmax calculations
+Populations that are removed before popmax calculations.
 """
 
 DOWNSAMPLINGS = [

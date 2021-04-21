@@ -25,7 +25,7 @@ def make_faf_index_dict(
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS.
     :param pops: List of sample global population names for gnomAD genomes. Default is POPS.
-    :param sexes: gnomAD sample sexes used in VCF export. Default is SEXES.
+    :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param label_delimiter: String used as delimiter when making group label combinations.
     :return: Dictionary of faf annotation population groupings, where values are the corresponding 0-based indices for the
         groupings in the faf_meta array

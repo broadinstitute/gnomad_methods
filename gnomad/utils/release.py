@@ -64,7 +64,7 @@ def make_freq_index_dict(
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param subset_list: List of sample subsets in dataset. Default is SUBSETS
     :param downsamplings: List of downsampling cohort sizes present in global frequency array
-    :param label_delimiter: String used as delimiter when making group label combinations.
+    :param label_delimiter: String used as delimiter when making group label combinations
     :return: Dictionary keyed by the grouping combinations found in the frequency array, where values are the corresponding
         0-based indices for the groupings in the freq_meta array
     """

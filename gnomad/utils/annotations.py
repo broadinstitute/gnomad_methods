@@ -942,7 +942,7 @@ def set_female_y_metrics_to_na_expr(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> hl.expr.ArrayExpression:
     """
-    Set Y-variant frequency callstats for female-specific metrics to null structs.
+    Set Y-variant frequency callstats for female-specific metrics to missing structs.
 
     .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
 

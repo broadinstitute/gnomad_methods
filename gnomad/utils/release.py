@@ -8,7 +8,7 @@ from gnomad.resources.grch38.gnomad import (
     SEXES,
     SUBSETS,
 )
-from gnomad.utils.vcf import index_globals, make_label_combos
+from gnomad.utils.vcf import index_globals
 
 
 def make_faf_index_dict(

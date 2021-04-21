@@ -947,7 +947,7 @@ def set_female_y_metrics_to_na_expr(
     .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
 
     :param t: Table or MatrixTable for which to adjust female metrics
-    :return: Hail array expression to set female Y-variant metrics to null values
+    :return: Hail array expression to set female Y-variant metrics to missing values
     """
 
     female_idx = hl.map(

@@ -61,7 +61,7 @@ def make_freq_index_dict(
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS.
     :param pops: Dict of sample global population names for gnomAD genomes. Default is POPS.
-    :param sexes: gnomAD sample sexes used in VCF export. Default is SEXES.
+    :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param subset_list: List of sample subsets in dataset. Default is SUBSETS.
     :param downsamplings: List of downsampling cohort sizes present in global frequency array
     :param label_delimiter: String used as delimiter when making group label combinations.

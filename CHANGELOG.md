@@ -2,43 +2,56 @@
 
 ## Unreleased
 
+## Version 0.5.0 - April 22nd, 2021
+
+### Fixed
+
 * Fix for error in `generate_trio_stats_expr` that led to an incorrect untransmitted count. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlapped multiple bins. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
-* Removed assumption of `snv` annotation from `compute_quantile_bin`. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]](https://github.com/broadinstitute/gnomad_methods/pull/242)
+* Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
+* Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)
+* Fix to dbSNP b154 resource (resources.grch38.reference_data) import to allow for multiple rsIDs per variant [(#345)](https://github.com/broadinstitute/gnomad_methods/pull/345)
+* Fix to `set_female_metrics_to_na` to correctly update chrY metrics to be missing [(#347)](https://github.com/broadinstitute/gnomad_methods/pull/347)
+* Fixed available versions for gnomAD v2 `coverage` and `liftover` resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
+* Removed side effect of accessing gnomAD v2 `coverage` and `liftover` exome resources that would edit available versions for other resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
+* Use `overwrite` argument for importing a BlockMatrixResource [(#342)](https://github.com/broadinstitute/gnomad_methods/pull/342)
+
+### Changed
+
+* Removed assumption of `snv` annotation from `compute_quantile_bin`. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Modified `compute_binned_truth_sample_concordance` to handle additional binning for subsets of variants. [(#240)](https://github.com/broadinstitute/gnomad_methods/pull/240)
-* Added constants and functions relevant to VCF export [(#241)](https://github.com/broadinstitute/gnomad_methods/pull/241)
 * Updated liftover functions to be more generic [(#246)](https://github.com/broadinstitute/gnomad_methods/pull/246)
 * Changed quality histograms to label histograms calculated on raw and not adj data [(#247)](https://github.com/broadinstitute/gnomad_methods/pull/247)
 * Updated some VCF export constants [(#249)](https://github.com/broadinstitute/gnomad_methods/pull/249)
 * Changed default DP threshold to 5 for hemi genotype calls in `annotate_adj` and `get_adj_expr` [(#252)](https://github.com/broadinstitute/gnomad_methods/pull/252)
-* Updated coverage resources to version 3.0.1 [[#242]] (https://github.com/broadinstitute/gnomad_methods/pull/242)
-* Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]](https://github.com/broadinstitute/gnomad_methods/pull/242)
-* Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
+* Updated coverage resources to version 3.0.1 [[#242]](https://github.com/broadinstitute/gnomad_methods/pull/242)
+* Update to `compute_last_ref_block_end`, removing assumption that sparse MatrixTables are keyed only by `locus` by default [(#279)](https://github.com/broadinstitute/gnomad_methods/pull/279)
+* Update `generic_field_check` to have option to show percentage of sites that fail checks. [(#284)](https://github.com/broadinstitute/gnomad_methods/pull/284)
+* Modified `vep_or_lookup_vep` to support the use of different VEP versions [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
+* Modified `create_truth_sample_ht` to add adj annotation information in the returned Table if present in the supplied MatrixTables [(#300)](https://github.com/broadinstitute/gnomad_methods/pull/300)
+
+### Added
+
+* Added constants and functions relevant to VCF export [(#241)](https://github.com/broadinstitute/gnomad_methods/pull/241)
 * Add reference genome to call of `has_liftover` in `get_liftover_genome` [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Added fix for MQ calculation in `_get_info_agg_expr`, switched `RAW_MQ` and `MQ_DP` in calculation [(#262)](https://github.com/broadinstitute/gnomad_methods/pull/262)
 * Add importable method for filtering clinvar to pathogenic sites [(#257)](https://github.com/broadinstitute/gnomad_methods/pull/257)
-* Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)
-* Update to `compute_last_ref_block_end`, removing assumption that sparse MatrixTables are keyed only by `locus` by default [(#279)] (https://github.com/broadinstitute/gnomad_methods/pull/279)
 * Added common variant QC functions `get_rf_runs` and `get_run_data` to `random_forest.py` [(#278)](https://github.com/broadinstitute/gnomad_methods/pull/278)
 * Add calculation for the strand odds ratio (SOR) to `get_site_info_expr` and `get_as_info_expr` [(#281)](https://github.com/broadinstitute/gnomad_methods/pull/281)
-* Update `generic_field_check` to have option to show percentage of sites that fail checks. [(#284)](https://github.com/broadinstitute/gnomad_methods/pull/284)
 * Added VEPed context HT to resource files and included support for versioning [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
-* Modified `vep_or_lookup_vep` to support the use of different VEP versions [(#282)](https://github.com/broadinstitute/gnomad_methods/pull/282)
-* Removed `rep_on_read`; this function is no longer necessary, as MatrixTables/Tables can be repartitioned on read with `_n_partitions` added by this [hail update](https://github.com/hail-is/hail/pull/9887) [(#283)](https://github.com/broadinstitute/gnomad_methods/pull/283)
 * Added code to generate summary statistics (total number of variants, number of LoF variants, LOFTEE summaries) [(#285)](https://github.com/broadinstitute/gnomad_methods/pull/285)
-* Removed `compute_quantile_bin` and added `compute_ranked_bin` as an alternative that provides more even binning. This is now used by `create_binned_ht` instead. [(#288)](https://github.com/broadinstitute/gnomad_methods/pull/288)
 * Added additional counts to summary statistics (added autosome/sex chromosome counts, allele counts, counts for missense and synomymous variants) [(#289)](https://github.com/broadinstitute/gnomad_methods/pull/289)
 * Added function, `default_generate_gene_lof_matrix`, to generate gene matrix [(#290)](https://github.com/broadinstitute/gnomad_methods/pull/290)
 * Added function `default_generate_gene_lof_summary` to summarize gene matrix results [(#292)](https://github.com/broadinstitute/gnomad_methods/pull/292)
-* Modified `create_truth_sample_ht` to add adj annotation information in the returned Table if present in the supplied MatrixTables [(#300)](https://github.com/broadinstitute/gnomad_methods/pull/300)
-* Fix to dbSNP b154 resource (resources.grch38.reference_data) import to allow for multiple rsIDs per variant [(#345)](https://github.com/broadinstitute/gnomad_methods/pull/345)
-* Fix to `set_female_metrics_to_na` to correctly update chrY metrics to be missing [(#347)](https://github.com/broadinstitute/gnomad_methods/pull/347)
-* Removed `prefix` parameter from  to `make_combo_header_text`, as this was only used to check if samples were from gnomAD [(#348)](https://github.com/broadinstitute/gnomad_methods/pull/348)
-* Fixed available versions for gnomAD v2 `coverage` and `liftover` resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
-* Removed side effect of accessing gnomAD v2 `coverage` and `liftover` exome resources that would edit available versions for other resources [(#352)](https://github.com/broadinstitute/gnomad_methods/pull/352)
-* Use `overwrite` argument for importing a BlockMatrixResource [(#342)](https://github.com/broadinstitute/gnomad_methods/pull/342)
 * Add resource for v3.1.1 release [(#364)](https://github.com/broadinstitute/gnomad_methods/pull/364)
+
+### Removed
+
+* Removed `rep_on_read`; this function is no longer necessary, as MatrixTables/Tables can be repartitioned on read with `_n_partitions` added by this [hail update](https://github.com/hail-is/hail/pull/9887) [(#283)](https://github.com/broadinstitute/gnomad_methods/pull/283)
+* Removed `compute_quantile_bin` and added `compute_ranked_bin` as an alternative that provides more even binning. This is now used by `create_binned_ht` instead. [(#288)](https://github.com/broadinstitute/gnomad_methods/pull/288)
+* Removed `prefix` parameter from  to `make_combo_header_text`, as this was only used to check if samples were from gnomAD [(#348)](https://github.com/broadinstitute/gnomad_methods/pull/348)
 
 ## Version 0.4.0 - July 9th, 2020
 

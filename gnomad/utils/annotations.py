@@ -38,6 +38,7 @@ def pop_max_expr(
     pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
+
     Create an expression containing the frequency information about the population that has the highest AF in `freq_meta`.
 
     Populations specified in `pops_to_exclude` are excluded and only frequencies from adj populations are considered.
@@ -761,7 +762,7 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
 
 def annotation_type_is_numeric(t: Any) -> bool:
     """
-    Given an annotation type, returns whether it is a numerical type or not.
+    Given an annotation type, return whether it is a numerical type or not.
 
     :param t: Type to test
     :return: If the input type is numeric
@@ -957,6 +958,81 @@ def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpressi
         .when(call_expr.is_haploid(), hl.call(call_expr[0], phased=False))
         .default(hl.null(hl.tcall))
     )
+
+
+def region_flag_expr(
+    t: Union[hl.Table, hl.MatrixTable],
+    non_par: bool = True,
+    prob_regions: Dict[str, hl.Table] = None,
+) -> hl.expr.StructExpression:
+    """
+    Create a `region_flag` struct that contains flags for problematic regions (i.e., LCR, decoy, segdup, and nonpar regions).
+
+    .. note:: No hg38 resources for decoy or self chain are available yet.
+
+    :param t: Input Table/MatrixTable
+    :param non_par: If True, flag loci that occur within pseudoautosomal regions on sex chromosomes
+    :param prob_regions: If supplied, flag loci that occur within regions defined in Hail Table(s)
+    :return: `region_flag` struct row annotation
+    """
+    prob_flags_expr = (
+        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+    )
+
+    if prob_regions is not None:
+        prob_flags_expr.update(
+            {
+                region_name: hl.is_defined(region_table[t.locus])
+                for region_name, region_table in prob_regions.items()
+            }
+        )
+
+    return hl.struct(**prob_flags_expr)
+
+
+def missing_callstats_expr() -> hl.expr.StructExpression:
+    """
+    Create a missing callstats struct for insertion into frequency annotation arrays when data is missing.
+
+    :return: Hail Struct with missing values for each callstats element
+    """
+    return hl.struct(
+        AC=hl.missing(hl.tint32),
+        AF=hl.missing(hl.tfloat64),
+        AN=hl.missing(hl.tint32),
+        homozygote_count=hl.missing(hl.tint32),
+    )
+
+
+def set_female_y_metrics_to_na_expr(
+    t: Union[hl.Table, hl.MatrixTable]
+) -> hl.expr.ArrayExpression:
+    """
+    Set Y-variant frequency callstats for female-specific metrics to missing structs.
+
+    .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
+
+    :param t: Table or MatrixTable for which to adjust female metrics
+    :return: Hail array expression to set female Y-variant metrics to missing values
+    """
+    female_idx = hl.map(
+        lambda x: t.freq_index_dict[x],
+        hl.filter(lambda x: x.contains("XX"), t.freq_index_dict.keys()),
+    )
+    freq_idx_range = hl.range(hl.len(t.freq_meta))
+
+    new_freq_expr = hl.if_else(
+        (t.locus.in_y_nonpar() | t.locus.in_y_par()),
+        hl.map(
+            lambda x: hl.if_else(
+                female_idx.contains(x), missing_callstats_expr(), t.freq[x]
+            ),
+            freq_idx_range,
+        ),
+        t.freq,
+    )
+
+    return new_freq_expr
 
 
 def hemi_expr(

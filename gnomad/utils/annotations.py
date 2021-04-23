@@ -515,8 +515,7 @@ def annotate_freq(
     freq_meta_expr.insert(1, {"group": "raw"})
     freq_sample_count.insert(1, freq_sample_count[0])
     mt = mt.annotate_globals(
-        freq_meta=freq_meta_expr,
-        freq_sample_count=freq_sample_count,
+        freq_meta=freq_meta_expr, freq_sample_count=freq_sample_count,
     )
 
     # Create frequency expression array from the sample groups
@@ -976,7 +975,6 @@ def region_flag_expr(
     :param prob_regions: If supplied, flag loci that occur within regions defined in Hail Table(s)
     :return: `region_flag` struct row annotation
     """
-
     prob_flags_expr = (
         {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
     )
@@ -998,7 +996,6 @@ def missing_callstats_expr() -> hl.expr.StructExpression:
 
     :return: Hail Struct with missing values for each callstats element
     """
-
     return hl.struct(
         AC=hl.missing(hl.tint32),
         AF=hl.missing(hl.tfloat64),
@@ -1018,7 +1015,6 @@ def set_female_y_metrics_to_na_expr(
     :param t: Table or MatrixTable for which to adjust female metrics
     :return: Hail array expression to set female Y-variant metrics to missing values
     """
-
     female_idx = hl.map(
         lambda x: t.freq_index_dict[x],
         hl.filter(lambda x: x.contains("XX"), t.freq_index_dict.keys()),

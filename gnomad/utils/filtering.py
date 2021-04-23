@@ -1,3 +1,5 @@
+# noqa: D100
+
 import functools
 import logging
 import operator

@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 import random
 from typing import Any, Counter, List, Optional, Tuple, Union

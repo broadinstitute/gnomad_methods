@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 

@@ -1,3 +1,5 @@
+# noqa: D100
+
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedMatrixTableResource,

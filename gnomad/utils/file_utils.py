@@ -1,3 +1,5 @@
+# noqa: D100
+
 import base64
 import gzip
 import logging
@@ -37,7 +39,7 @@ def write_temp_gcs(
     gcs_path: str,
     overwrite: bool = False,
     temp_path: Optional[str] = None,
-) -> None:
+) -> None:  # noqa: D103
     if not temp_path:
         temp_path = f"/tmp_{uuid.uuid4()}.h"
     t.write(temp_path, overwrite=True)

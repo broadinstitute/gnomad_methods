@@ -1,3 +1,5 @@
+# noqa: D100
+
 import json
 import logging
 from typing import Callable, Dict, List, Optional, Union
@@ -42,7 +44,7 @@ logger.setLevel(logging.INFO)
 if "old_show" not in dir():
     old_show = hl.Table.show
 
-    def new_show(t, n=10, width=140, truncate=40, types=True):
+    def new_show(t, n=10, width=140, truncate=40, types=True):  # noqa: D103
         old_show(t, n, width, truncate, types)
 
     hl.Table.show = new_show
@@ -311,7 +313,7 @@ def plot_hail_hist_cumulative(
 
 def plot_hail_hist_both(
     hist_data: hl.Struct, title: str, normalize: bool = True, log: bool = False
-):
+):  # noqa: D103
     p1 = plot_hail_hist(hist_data, title, log)
     p2 = plot_hail_hist_cumulative(
         hist_data, f"{title} (Cumulative)", normalize, log=log
@@ -321,7 +323,7 @@ def plot_hail_hist_both(
     )
 
 
-def set_font_size(p, font_size: str = "12pt"):
+def set_font_size(p, font_size: str = "12pt"):  # noqa: D103
     p.title.text_font_size = font_size
     p.legend.label_text_font_size = font_size
     p.xaxis.axis_label_text_font_size = font_size
@@ -333,7 +335,7 @@ def set_font_size(p, font_size: str = "12pt"):
     return p
 
 
-def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
+def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:  # noqa: D103
     panels = []
     for axis_type in ["linear", "log"]:
         fig = plot_func(**kwargs, axis_type=axis_type)
@@ -580,7 +582,7 @@ def plot_hail_file_metadata(
         return rows_grid
 
 
-def scale_file_sizes(file_sizes):
+def scale_file_sizes(file_sizes):  # noqa: D103
     min_file_size = min(file_sizes) * 1.1
     total_file_size = sum(file_sizes)
     all_scales = [("T", 1e12), ("G", 1e9), ("M", 1e6), ("K", 1e3), ("", 1e0)]
@@ -596,7 +598,7 @@ def scale_file_sizes(file_sizes):
     return total_file_size, file_sizes, scale
 
 
-def get_rows_data(rows_files):
+def get_rows_data(rows_files):  # noqa: D103
     file_sizes = []
     partition_bounds = []
     parts_file = [x["path"] for x in rows_files if x["path"].endswith("parts")]

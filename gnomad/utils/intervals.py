@@ -1,3 +1,5 @@
+# noqa: D100
+
 from typing import List
 
 import hail as hl

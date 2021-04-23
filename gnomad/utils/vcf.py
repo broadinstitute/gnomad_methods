@@ -1,3 +1,5 @@
+# noqa: D100
+
 import copy
 import itertools
 import logging

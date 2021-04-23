@@ -1,3 +1,5 @@
+# noqa: D100
+
 import json
 import logging
 import os
@@ -335,6 +337,7 @@ def process_consequences(
 def filter_vep_to_canonical_transcripts(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
 ) -> Union[hl.MatrixTable, hl.Table]:
+    """Filter VEP transcript consequences to those in the canonical transcript."""
     canonical = mt[vep_root].transcript_consequences.filter(
         lambda csq: csq.canonical == 1
     )
@@ -349,6 +352,7 @@ def filter_vep_to_canonical_transcripts(
 def filter_vep_to_synonymous_variants(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
 ) -> Union[hl.MatrixTable, hl.Table]:
+    """Filter VEP transcript consequences to those with a most severe consequence of synonymous_variant."""
     synonymous = mt[vep_root].transcript_consequences.filter(
         lambda csq: csq.most_severe_consequence == "synonymous_variant"
     )

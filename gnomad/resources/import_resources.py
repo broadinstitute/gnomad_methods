@@ -1,3 +1,5 @@
+# noqa: D100
+
 import itertools
 import textwrap
 from inspect import getmembers
@@ -78,6 +80,7 @@ all_resources = {**grch37_resources, **grch38_resources}
 
 
 def main(args):
+    """Import selected resources."""
     for resource_arg in args.resources:
         resource_name, resource = all_resources[resource_arg]
         print(f"Importing {resource_name}...")

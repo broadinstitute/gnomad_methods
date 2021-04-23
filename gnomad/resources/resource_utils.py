@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
@@ -369,7 +371,7 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
         super().__init__(default_version, versions)
 
 
-class DataException(Exception):
+class DataException(Exception):  # noqa: D101
     pass
 
 
@@ -430,4 +432,5 @@ DBSNP_B154_CHR_CONTIG_RECODING = {
 
 
 def import_sites_vcf(**kwargs) -> hl.Table:
+    """Import site-level data from a VCF into a Hail Table."""
     return hl.import_vcf(**kwargs).rows()

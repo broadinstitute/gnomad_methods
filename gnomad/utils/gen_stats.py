@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 
 import hail as hl

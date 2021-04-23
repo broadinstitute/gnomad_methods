@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
@@ -66,7 +68,7 @@ class BaseResource(ABC):
 
 class TableResource(BaseResource):
     """
-    A Hail Table resource
+    A Hail Table resource.
 
     :param path: The Table path (typically ending in .ht)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
@@ -88,7 +90,7 @@ class TableResource(BaseResource):
 
     def ht(self, force_import: bool = False) -> hl.Table:
         """
-        Read and return the Hail Table resource
+        Read and return the Hail Table resource.
 
         :return: Hail Table resource
         """
@@ -99,7 +101,7 @@ class TableResource(BaseResource):
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
-        Imports the TableResource using its import_func and writes it in its path.
+        Import the TableResource using its import_func and writes it in its path.
 
         :param overwrite: If ``True``, overwrite an existing file at the destination.
         :param kwargs: Any other parameters to be passed to hl.Table.write
@@ -112,7 +114,7 @@ class TableResource(BaseResource):
 
 class MatrixTableResource(BaseResource):
     """
-    A Hail MatrixTable resource
+    A Hail MatrixTable resource.
 
     :param path: The MatrixTable path (typically ending in .mt)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
@@ -134,7 +136,7 @@ class MatrixTableResource(BaseResource):
 
     def mt(self, force_import: bool = False) -> hl.MatrixTable:
         """
-        Read and return the Hail MatrixTable resource
+        Read and return the Hail MatrixTable resource.
 
         :return: Hail MatrixTable resource
         """
@@ -145,7 +147,7 @@ class MatrixTableResource(BaseResource):
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
-        Imports the MatrixTable resource using its import_func and writes it in its path.
+        Import the MatrixTable resource using its import_func and writes it in its path.
 
         :param overwrite: If set, existing file(s) will be overwritten
         :param kwargs: Any other parameters to be passed to hl.MatrixTable.write
@@ -158,7 +160,7 @@ class MatrixTableResource(BaseResource):
 
 class PedigreeResource(BaseResource):
     """
-    A pedigree resource
+    A pedigree resource.
 
     :param path: The Pedigree path (typically ending in .fam or .ped)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
@@ -190,7 +192,7 @@ class PedigreeResource(BaseResource):
 
     def ht(self) -> hl.Table:
         """
-        Reads the pedigree into a family HT using hl.import_fam().
+        Read the pedigree into a family HT using hl.import_fam().
 
         :return: Family table
         """
@@ -203,7 +205,7 @@ class PedigreeResource(BaseResource):
 
     def pedigree(self) -> hl.Pedigree:
         """
-        Reads the pedigree into an hl.Pedigree using hl.Pedigree.read().
+        Read the pedigree into an hl.Pedigree using hl.Pedigree.read().
 
         :param delimiter: Delimiter used in the ped file
         :return: pedigree
@@ -212,7 +214,7 @@ class PedigreeResource(BaseResource):
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
-        Imports the Pedigree resource using its import_func and writes it in its path.
+        Import the Pedigree resource using its import_func and writes it in its path.
 
         :param overwrite: If set, existing file(s) will be overwritten. IMPORTANT: Currently there is no implementation of this method when `overwrite` is set the `False`
         :param kwargs: Any other parameters to be passed to hl.Pedigree.write
@@ -226,7 +228,7 @@ class PedigreeResource(BaseResource):
 
 class BlockMatrixResource(BaseResource):
     """
-    A Hail BlockMatrix resource
+    A Hail BlockMatrix resource.
 
     :param path: The BlockMatrix path (typically ending in .bm)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func.
@@ -248,7 +250,7 @@ class BlockMatrixResource(BaseResource):
 
     def bm(self) -> BlockMatrix:
         """
-        Read and return the Hail MatrixTable resource
+        Read and return the Hail MatrixTable resource.
 
         :return: Hail MatrixTable resource
         """
@@ -256,18 +258,20 @@ class BlockMatrixResource(BaseResource):
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
-        Imports the BlockMatrixResource using its import_func and writes it in its path.
+        Import the BlockMatrixResource using its import_func and writes it in its path.
 
         :param overwrite: If ``True``, overwrite an existing file at the destination.
         :param kwargs: Any additional parameters to be passed to BlockMatrix.write
         :return: Nothing
         """
-        self.import_func(**self.import_args).write(self.path, overwrite=False, **kwargs)
+        self.import_func(**self.import_args).write(
+            self.path, overwrite=overwrite, **kwargs
+        )
 
 
 class BaseVersionedResource(BaseResource, ABC):
     """
-    Abstract class for a versioned resource
+    Abstract class for a versioned resource.
 
     The `path`/`import_args` attributes of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
@@ -306,7 +310,7 @@ class BaseVersionedResource(BaseResource, ABC):
 
 class VersionedTableResource(BaseVersionedResource, TableResource):
     """
-    Versioned Table resource
+    Versioned Table resource.
 
     The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
@@ -321,7 +325,7 @@ class VersionedTableResource(BaseVersionedResource, TableResource):
 
 class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
     """
-    Versioned MatrixTable resource
+    Versioned MatrixTable resource.
 
     The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
@@ -336,7 +340,7 @@ class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
 
 class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
     """
-    Versioned Pedigree resource
+    Versioned Pedigree resource.
 
     The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
@@ -354,7 +358,7 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
 
 class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
     """
-    Versioned BlockMatrix resource
+    Versioned BlockMatrix resource.
 
     The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
@@ -367,7 +371,7 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
         super().__init__(default_version, versions)
 
 
-class DataException(Exception):
+class DataException(Exception):  # noqa: D101
     pass
 
 
@@ -428,4 +432,5 @@ DBSNP_B154_CHR_CONTIG_RECODING = {
 
 
 def import_sites_vcf(**kwargs) -> hl.Table:
+    """Import site-level data from a VCF into a Hail Table."""
     return hl.import_vcf(**kwargs).rows()

@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import requests
 import sphinx_autodoc_typehints
 from sphinx.ext import autosummary
 
@@ -73,10 +74,12 @@ autosummary.extract_summary = extract_summary
 
 # Configuration for sphinx.ext.intersphinx
 # https://www.sphinx-doc.org/en/master/usage/extensions/intersphinx.html
-intersphinx_mapping = {
-    "hail": ("https://hail.is/docs/0.2", None),
-}
+intersphinx_mapping = {}
 
+if requests.head("https://hail.is/docs/0.2/objects.inv").status_code == 200:
+    intersphinx_mapping["hail"] = ("https://hail.is/docs/0.2", None)
+else:
+    print("Unable to link to Hail docs (cannot access objects.inv)", file=sys.stderr)
 
 # sphinx_autodoc_typehints generates references with qualified names.
 # Since Hail re-exports many objects from higher level packages/modules,

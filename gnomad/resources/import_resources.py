@@ -1,3 +1,5 @@
+# noqa: D100
+
 import itertools
 import textwrap
 from inspect import getmembers
@@ -13,21 +15,22 @@ def get_module_importable_resources(
     module, prefix: Optional[str] = None
 ) -> Dict[str, Tuple[str, BaseResource]]:
     """
-    This takes a module that was imported and generates a list of all resources in this module that can be imported (i.e. with a path and import_func).
-    The dict produced is as follows:
-    keys: {prefix}.{resource_name}.{version} (with prefix only present if `prefix` is set, and `version` only present for versioned resources)
-    values: ({resource_name}[ version {version}], resource) with resource_name set to the variable name in the module and the version present for versioned resources.
+    Take a module that was imported and generates a list of all resources in this module that can be imported (i.e. with a path and import_func).
 
-     The following example will generate a dict with all the resources in gnomad.resources.grch37 that can be imported:
+    The dict produced is as follows:
+        - keys: {prefix}.{resource_name}.{version} (with prefix only present if `prefix` is set, and `version` only present for versioned resources)
+        - values: ({resource_name}[ version {version}], resource) with resource_name set to the variable name in the module and the version present for versioned resources.
+
+    The following example will generate a dict with all the resources in gnomad.resources.grch37 that can be imported:
 
     .. code-block:: python
 
         import gnomad.resources.grch37 as grch37
         grch37_resources = get_module_importable_resources(grch37, prefix='grch37')
-    
+
     :param module: Input module
-    :param prefix: 
-    :return: 
+    :param prefix:
+    :return:
     """
     _prefix = f"{prefix}." if prefix else ""
     resources = {}
@@ -48,8 +51,7 @@ def get_resources_descriptions(
     resources: Dict[str, Tuple[str, BaseResource]], width: Optional[int] = 100
 ) -> str:
     """
-    Returns a string listing all resources in the input dict along with the path from which they
-    are imported and the path at which they are stored.
+    Return a string listing all resources in the input dict along with the path from which they are imported and the path at which they are stored.
 
     :param resources: A dict returned from get_module_importable_resources
     :param width: Maximum width of lines in the returned string
@@ -78,6 +80,7 @@ all_resources = {**grch37_resources, **grch38_resources}
 
 
 def main(args):
+    """Import selected resources."""
     for resource_arg in args.resources:
         resource_name, resource = all_resources[resource_arg]
         print(f"Importing {resource_name}...")

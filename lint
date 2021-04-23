@@ -2,4 +2,4 @@
 
 cd "$(dirname "$0")"
 
-PYTHONPATH=$PYTHONPATH:$(pwd) pylint "$@" gnomad
+PYTHONPATH=$PYTHONPATH:$(pwd) pylint "$@" gnomad tests

@@ -1,3 +1,5 @@
+# noqa: D104
+
 from gnomad.utils import (
     annotations,
     file_utils,

@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Tuple, Union
 
@@ -28,16 +30,15 @@ def get_liftover_genome(
     t: Union[hl.MatrixTable, hl.Table]
 ) -> Tuple[hl.genetics.ReferenceGenome, hl.genetics.ReferenceGenome]:
     """
-    Infers reference genome build of input data and assumes destination reference genome build. 
+    Infer reference genome build of input data and assume destination reference genome build.
 
     Adds liftover chain to source reference genome and sequence to destination reference genome.
     Returns tuple containing both reference genomes in preparation for liftover.
 
     :param t: Input Table or MatrixTable.
-    :return: Tuple of source reference genome (with liftover chain added) 
+    :return: Tuple of source reference genome (with liftover chain added)
         and destination reference genome (with sequence loaded)
     """
-
     logger.info("Inferring reference genome of input...")
     input_build = get_reference_genome(t.locus).name
     source = hl.get_reference(input_build)
@@ -69,7 +70,7 @@ def liftover_expr(
     destination_reference: hl.ReferenceGenome,
 ) -> hl.expr.StructExpression:
     """
-    Generates struct liftover expression.
+    Generate struct liftover expression.
 
     Struct contains:
         - locus: Liftover coordinates
@@ -107,7 +108,7 @@ def default_lift_data(
     t: Union[hl.MatrixTable, hl.Table], remove_failed_sites: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Lifts input Table or MatrixTable from one reference build to another.
+    Lift input Table or MatrixTable from one reference build to another.
 
     :param t: Table or MatrixTable.
     :return: Table or MatrixTable with liftover annotations.
@@ -134,7 +135,7 @@ def default_lift_data(
         keep_expr = ~t.locus_fail_liftover
         t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
 
-    row_key_expr = {"locus": t.new_locus.result, "alleles": t.new_alleles}
+    row_key_expr = {"locus": t.new_locus, "alleles": t.new_alleles}
     return (
         t.key_by(**row_key_expr)
         if isinstance(t, hl.Table)
@@ -147,7 +148,7 @@ def liftover_using_gnomad_map(ht: hl.Table, data_type: str):
     Liftover a gnomAD v2 table using already-established liftover file.
 
     .. note::
-        This function shuffles! 
+        This function shuffles!
 
     :param ht: Input Hail Table.
     :param data_type: Which gnomAD data type to map across. One of "exomes" or "genomes".

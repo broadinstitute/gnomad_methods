@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Dict, List, Optional
 
@@ -17,17 +19,19 @@ def generic_field_check(
     check_description: str,
     display_fields: List[str],
     verbose: bool,
+    show_percent_sites: bool = False,
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
-    Displays the number of rows in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`). 
+    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
 
     .. note::
-        `cond_expr` and `check_description` are opposites and should never be the same. 
-        E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC, 
-        then it is checking sites that fail to be the desired condition (`check_description`) 
+
+        `cond_expr` and `check_description` are opposites and should never be the same.
+        E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
+        then it is checking sites that fail to be the desired condition (`check_description`)
         of having a raw AC greater than or equal to the adj AC.
 
     :param ht: Table containing annotations to be checked.
@@ -37,12 +41,16 @@ def generic_field_check(
         these fields are also displayed if verbose is True.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :return: None
     """
     ht_orig = ht
     ht = ht.filter(cond_expr)
     n_fail = ht.count()
     if n_fail > 0:
         logger.info(f"Found {n_fail} sites that fail {check_description} check:")
+        if show_percent_sites:
+            logger.info(f"Percentage of sites that fail: {n_fail / ht_orig.count()}")
         ht = ht.flatten()
         ht.select("locus", "alleles", *display_fields).show()
     else:
@@ -104,8 +112,9 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
 ) -> None:
     """
-    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    display results from checking the sum of the specified annotations in the terminal.
+    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
+
+    Results from checking the sum of the specified annotations are printed in the terminal.
 
     :param ht: Table containing annotations to be summed.
     :param prefix: String indicating sample subset.
@@ -167,3 +176,17 @@ def sample_sum_check(
                 ],
                 verbose,
             )
+
+
+def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
+    """
+    Check if the row counts in two Tables are the same.
+
+    :param ht1: First Table to be checked
+    :param ht2: Second Table to be checked
+    :return: Whether the row counts are the same
+    """
+    r_count1 = ht1.count()
+    r_count2 = ht2.count()
+    logger.info(f"{r_count1} rows in left table; {r_count2} rows in right table")
+    return r_count1 == r_count2

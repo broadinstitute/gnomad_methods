@@ -132,7 +132,7 @@ def assign_population_pcs(
     Default values for model and assignment parameters are those used in gnomAD.
 
     As input, this function can either take:
-         - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
+        - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
             - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
             - A Hail Table will be returned as output
         - A Pandas DataFrame. In this case:
@@ -141,8 +141,8 @@ def assign_population_pcs(
 
     .. note::
 
-        If you have a Pandas Dataframe and have all PCs as an array in a single column, the
-        `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
+        If you have a Pandas Dataframe and have all PCs as an array in a single column, the `expand_pd_array_col`
+        can be used to expand this column into multiple `PC` columns.
 
     :param pop_pc_pd: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use

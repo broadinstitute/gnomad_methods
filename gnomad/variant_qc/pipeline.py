@@ -125,9 +125,8 @@ def score_bin_agg(
 
         This function uses `ht._parent` to get the origin Table from the GroupedTable for the aggregation
 
-    This can easily be combined with the GroupedTable returned by `compute_grouped_binned_ht`
+    This can easily be combined with the GroupedTable returned by `compute_grouped_binned_ht`, For example:
 
-    Example:
     .. code-block:: python
 
         binned_ht = create_binned_ht(...)

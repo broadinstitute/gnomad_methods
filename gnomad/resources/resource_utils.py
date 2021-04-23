@@ -18,16 +18,16 @@ class BaseResource(ABC):
     :param path: The resource path
     :param import_args: Any sources that are required for the import and need to be kept track of (e.g. .vcf path for an imported VCF)
     :param import_func: A function used to import the resource. `import_func` will be passed the `import_args` dictionary as kwargs.
-    :param expected_file_extensions: A list of all expected file extensions. If path doesn't end with one of these, a warning if emitted.
     """
 
-    @abstractmethod
+    expected_file_extensions: List[str] = []
+    """Expected file extensions for this resource type. If path doesn't end with one of these, a warning is logged."""
+
     def __init__(
         self,
         path: Optional[str] = None,
         import_args: Optional[Dict[str, Any]] = None,
         import_func: Optional[Callable] = None,
-        expected_file_extensions: Optional[List[str]] = None,
     ):
         if path is None and import_func is None:
             raise ValueError(
@@ -40,13 +40,14 @@ class BaseResource(ABC):
 
         if (
             path is not None
-            and expected_file_extensions
-            and not any(path.endswith(ext) for ext in expected_file_extensions)
+            and self.expected_file_extensions
+            and not any(path.endswith(ext) for ext in self.expected_file_extensions)
         ):
             logger.warning(
-                "Created the following {} with a path that doesn't end with {}: {}".format(
-                    self.__class__.__name__, " or ".join(expected_file_extensions), self
-                )
+                "Created the following %s with a path that doesn't end with %s: %s",
+                self.__class__.__name__,
+                " or ".join(self.expected_file_extensions),
+                self,
             )
 
     def __repr__(self):
@@ -75,18 +76,7 @@ class TableResource(BaseResource):
     :param import_func: A function used to import the Table. `import_func` will be passed the `import_args` dictionary as kwargs.
     """
 
-    def __init__(
-        self,
-        path: Optional[str] = None,
-        import_args: Optional[Dict[str, Any]] = None,
-        import_func: Optional[Callable[..., hl.Table]] = None,
-    ):
-        super().__init__(
-            path=path,
-            import_args=import_args,
-            import_func=import_func,
-            expected_file_extensions=[".ht"],
-        )
+    expected_file_extensions: List[str] = [".ht"]
 
     def ht(self, force_import: bool = False) -> hl.Table:
         """
@@ -121,18 +111,7 @@ class MatrixTableResource(BaseResource):
     :param import_func: A function used to import the MatrixTable. `import_func` will be passed the `import_args` dictionary as kwargs.
     """
 
-    def __init__(
-        self,
-        path: Optional[str] = None,
-        import_args: Optional[Dict[str, Any]] = None,
-        import_func: Optional[Callable[..., hl.MatrixTable]] = None,
-    ):
-        super().__init__(
-            path=path,
-            import_args=import_args,
-            import_func=import_func,
-            expected_file_extensions=[".mt"],
-        )
+    expected_file_extensions: List[str] = [".mt"]
 
     def mt(self, force_import: bool = False) -> hl.MatrixTable:
         """
@@ -170,6 +149,8 @@ class PedigreeResource(BaseResource):
     :param missing: The string used to denote missing values. For case-control, 0, -9, and non-numeric are also treated as missing.
     """
 
+    expected_file_extensions: List[str] = [".fam", ".ped"]
+
     def __init__(
         self,
         path: Optional[str] = None,
@@ -180,10 +161,7 @@ class PedigreeResource(BaseResource):
         missing: str = "NA",
     ):
         super().__init__(
-            path=path,
-            import_args=import_args,
-            import_func=import_func,
-            expected_file_extensions=[".fam", ".ped"],
+            path=path, import_args=import_args, import_func=import_func,
         )
 
         self.quant_pheno = quant_pheno
@@ -235,18 +213,7 @@ class BlockMatrixResource(BaseResource):
     :param import_func: A function used to import the BlockMatrix. `import_func` will be passed the `import_args` dictionary as kwargs.
     """
 
-    def __init__(
-        self,
-        path: Optional[str] = None,
-        import_args: Optional[Dict[str, Any]] = None,
-        import_func: Optional[Callable[..., BlockMatrix]] = None,
-    ):
-        super().__init__(
-            path=path,
-            import_args=import_args,
-            import_func=import_func,
-            expected_file_extensions=[".bm"],
-        )
+    expected_file_extensions: List[str] = [".bm"]
 
     def bm(self) -> BlockMatrix:
         """

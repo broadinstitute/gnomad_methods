@@ -36,10 +36,9 @@ def pop_max_expr(
     pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
-    Creates an expression containing popmax: the frequency information about the population
-    that has the highest AF from the populations provided in `freq_meta`,
-    excluding those specified in `pops_to_exclude`.
-    Only frequencies from adj populations are considered.
+    Create an expression containing the frequency information about the population that has the highest AF in `freq_meta`.
+
+    Populations specified in `pops_to_exclude` are excluded and only frequencies from adj populations are considered.
 
     This resulting struct contains the following fields:
 
@@ -78,8 +77,9 @@ def project_max_expr(
     n_projects: int = 5,
 ) -> hl.expr.ArrayExpression:
     """
-    Creates an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
-    This return an array with one element per non-reference allele.
+    Create an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
+
+    Will return an array with one element per non-reference allele.
 
     Each of these elements is itself an array of structs with the following fields:
 
@@ -100,7 +100,6 @@ def project_max_expr(
     :param n_projects: Maximum number of projects to return for each row
     :return: projectmax expression
     """
-
     n_alleles = hl.len(alleles_expr)
 
     # compute call stats by  project
@@ -142,7 +141,8 @@ def faf_expr(
     faf_thresholds: List[float] = [0.95, 0.99],
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
-    Calculates the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
+    Calculate the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
+
     See http://cardiodb.org/allelefrequencyapp/ for more information.
 
     The FAF is computed for each of the following population stratification if found in `freq_meta`:
@@ -231,7 +231,7 @@ def qual_hist_expr(
     adj_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
-    Returns a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
+    Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
 
     .. note::
 
@@ -296,7 +296,7 @@ def age_hists_expr(
     n_bins: int = 10,
 ) -> hl.expr.StructExpression:
     """
-    Returns a StructExpression with the age histograms for hets and homs.
+    Return a StructExpression with the age histograms for hets and homs.
 
     :param adj_expr: Entry expression containing whether a genotype is high quality (adj) or not
     :param gt_expr: Entry expression containing the genotype
@@ -327,8 +327,12 @@ def annotate_freq(
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
-    Adds a row annotation `freq` to the input `mt` with stratified allele frequencies, a global annotation `freq_meta`
-    with metadata, and a global annotation `freq_sample_count` with sample count information.
+    Annotate `mt` with stratified allele frequencies.
+
+    The output Matrix table will include:
+        - row annotation `freq` containing the stratified allele frequencies
+        - global annotation `freq_meta` with metadata
+        - global annotation `freq_sample_count` with sample count information
 
     .. note::
 
@@ -377,7 +381,6 @@ def annotate_freq(
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
-
     if subpop_expr is not None and pop_expr is None:
         raise NotImplementedError(
             "annotate_freq requires pop_expr when using subpop_expr"
@@ -555,7 +558,7 @@ def get_lowqual_expr(
     indel_phred_het_prior: int = 39,  # 1/8,000
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
-    Computes lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox
+    Compute lowqual threshold expression for either split or unsplit alleles based on QUALapprox or AS_QUALapprox.
 
     .. note::
 
@@ -571,7 +574,6 @@ def get_lowqual_expr(
     :param indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
     """
-
     min_snv_qual = snv_phred_threshold + snv_phred_het_prior
     min_indel_qual = indel_phred_threshold + indel_phred_het_prior
     min_mixed_qual = max(min_snv_qual, min_indel_qual)
@@ -609,7 +611,8 @@ def get_annotations_hists(
     log10_annotations: List[str] = ["DP"],
 ) -> Dict[str, hl.expr.StructExpression]:
     """
-    Creates histograms for variant metrics in ht.info.
+    Create histograms for variant metrics in ht.info.
+
     Used when creating site quality distribution json files.
 
     :param ht: Table with variant metrics
@@ -635,7 +638,7 @@ def create_frequency_bins_expr(
     AC: hl.expr.NumericExpression, AF: hl.expr.NumericExpression
 ) -> hl.expr.StringExpression:
     """
-    Creates bins for frequencies in preparation for aggregating QUAL by frequency bin.
+    Create bins for frequencies in preparation for aggregating QUAL by frequency bin.
 
     Bins:
         - singleton
@@ -697,7 +700,8 @@ def get_adj_expr(
     haploid_adj_dp: int = 5,
 ) -> hl.expr.BooleanExpression:
     """
-    Gets adj genotype annotation.
+    Get adj genotype annotation.
+
     Defaults correspond to gnomAD values.
     """
     return (
@@ -723,7 +727,8 @@ def annotate_adj(
     haploid_adj_dp: int = 5,
 ) -> hl.MatrixTable:
     """
-    Annotate genotypes with adj criteria (assumes diploid)
+    Annotate genotypes with adj criteria (assumes diploid).
+
     Defaults correspond to gnomAD values.
     """
     return mt.annotate_entries(
@@ -734,9 +739,7 @@ def annotate_adj(
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
-    """
-    Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)
-    """
+    """Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)."""
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != "*", alts)
@@ -772,7 +775,10 @@ def annotation_type_is_numeric(t: Any) -> bool:
 def annotation_type_in_vcf_info(t: Any) -> bool:
     """
     Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
-    Note types that aren't natively exportable to VCF will be converted to String on export.
+
+    .. note::
+
+        Types that aren't natively exportable to VCF will be converted to String on export.
 
     :param t: Type to test
     :return: If the input type can be exported to VCF
@@ -822,7 +828,8 @@ def fs_from_sb(
     min_p_value: float = 1e-320,
 ) -> hl.expr.Int64Expression:
     """
-    Computes `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+    Compute `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+
     `FS` is the phred-scaled value of the double-sided Fisher exact test on strand balance.
 
     Using default values will have the same behavior as the GATK implementation, that is:
@@ -893,7 +900,7 @@ def sor_from_sb(
     sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
 ) -> hl.expr.Float64Expression:
     """
-    Computes `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
+    Compute `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
 
     .. note::
 
@@ -906,7 +913,6 @@ def sor_from_sb(
     :param sb: Count of ref/alt reads on each strand
     :return: SOR value
     """
-
     if not isinstance(sb, hl.expr.ArrayNumericExpression):
         sb = hl.bind(lambda x: hl.flatten(x), sb)
 
@@ -928,8 +934,7 @@ def sor_from_sb(
 
 def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
     """
-    Returns a boolean expression selecting bi-allelic sites only,
-    accounting for whether the input MT/HT was split.
+    Return a boolean expression selecting bi-allelic sites only, accounting for whether the input MT/HT was split.
 
     :param t: Input HT/MT
     :return: Boolean expression selecting only bi-allelic sites
@@ -939,7 +944,7 @@ def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpres
 
 def unphase_call_expr(call_expr: hl.expr.CallExpression) -> hl.expr.CallExpression:
     """
-    Generate unphased version of a call expression (which can be phased or not)
+    Generate unphased version of a call expression (which can be phased or not).
 
     :param call_expr: Input call expression
     :return: unphased call expression

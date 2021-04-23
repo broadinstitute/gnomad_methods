@@ -20,8 +20,8 @@ def compute_ranked_bin(
     n_bins: int = 100,
     desc: bool = True,
 ) -> hl.Table:
-    """
-    Returns a table with a bin for each row based on the ranking of `score_expr`.
+    r"""
+    Return a table with a bin for each row based on the ranking of `score_expr`.
 
     The bin is computed by dividing the `score_expr` into `n_bins` bins containing approximately equal numbers of elements.
     This is done by ranking the rows by `score_expr` (and a random number in cases where multiple variants have the same score)
@@ -62,7 +62,6 @@ def compute_ranked_bin(
     :param desc: Whether to bin the score in descending order
     :return: Table with the requested bin annotations
     """
-
     if compute_snv_indel_separately:
         # For each bin, add a SNV / indel stratification
         bin_expr = {
@@ -170,8 +169,9 @@ def compute_grouped_binned_ht(
     bin_ht: hl.Table, checkpoint_path: Optional[str] = None,
 ) -> hl.GroupedTable:
     """
-    Groups a Table that has been annotated with bins (`compute_ranked_bin` or `create_binned_ht`). The table will be
-    grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and singleton.
+    Group a Table that has been annotated with bins (`compute_ranked_bin` or `create_binned_ht`).
+
+    The table will be grouped by bin_id (bin, biallelic, etc.), contig, snv, bi_allelic and singleton.
 
     .. note::
 
@@ -221,8 +221,7 @@ def compute_binned_truth_sample_concordance(
     add_bins: Dict[str, hl.expr.BooleanExpression] = {},
 ) -> hl.Table:
     """
-    Determines the concordance (TP, FP, FN) between a truth sample within the callset and the samples truth data
-    grouped by bins computed using `compute_ranked_bin`.
+    Determine the concordance (TP, FP, FN) between a truth sample within the callset and the samples truth data grouped by bins computed using `compute_ranked_bin`.
 
     .. note::
         The input 'ht` should contain three row fields:
@@ -314,7 +313,7 @@ def create_truth_sample_ht(
     mt: hl.MatrixTable, truth_mt: hl.MatrixTable, high_confidence_intervals_ht: hl.Table
 ) -> hl.Table:
     """
-    Computes a table comparing a truth sample in callset vs the truth.
+    Compute a table comparing a truth sample in callset vs the truth.
 
     :param mt: MT of truth sample from callset to be compared to truth
     :param truth_mt: MT of truth sample
@@ -326,8 +325,7 @@ def create_truth_sample_ht(
         truth_mt: hl.MatrixTable, high_confidence_intervals_ht: hl.Table
     ) -> hl.Table:
         """
-        Splits a truth sample MT and filter it to the given high confidence intervals.
-        Then "flatten" it as a HT by annotating GT in a row field.
+        Split a truth sample MT, filter it to the given high confidence intervals, and then "flatten" it as a HT by annotating GT in a row field.
 
         :param truth_mt: Truth sample MT
         :param high_confidence_intervals_ht: High confidence intervals
@@ -372,7 +370,8 @@ def add_rank(
     subrank_expr: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
-    Adds rank based on the `score_expr`. Rank is added for snvs and indels separately.
+    Add rank based on the `score_expr`. Rank is added for snvs and indels separately.
+
     If one or more `subrank_expr` are provided, then subrank is added based on all sites for which the boolean expression is true.
 
     In addition, variant counts (snv, indel separately) is added as a global (`rank_variant_counts`).
@@ -382,7 +381,6 @@ def add_rank(
     :param subrank_expr: Any subranking to be added in the form name_of_subrank: subrank_filtering_expr
     :return: Table with rankings added
     """
-
     key = ht.key
     if subrank_expr is None:
         subrank_expr = {}

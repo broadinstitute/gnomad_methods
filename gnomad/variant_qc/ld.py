@@ -58,7 +58,7 @@ def get_r_for_pair_of_variants(
 
 def get_r_within_gene_in_pop(pop: str, gene: str):
     """
-    Gets LD information (`r`) for all pairs of variants within `gene` for a given `pop`.
+    Get LD information (`r`) for all pairs of variants within `gene` for a given `pop`.
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 
@@ -79,7 +79,7 @@ def get_r_within_gene(
     reference_genome: str = None,
 ):
     """
-    Gets LD information (`r`) for all pairs of variants within `gene`.
+    Get LD information (`r`) for all pairs of variants within `gene`.
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 

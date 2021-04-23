@@ -19,7 +19,8 @@ def compute_callrate_mt(
     match: bool = True,
 ) -> hl.MatrixTable:
     """
-    Computes a sample/interval MT with each entry containing the call rate for that sample/interval.
+    Compute a sample/interval MT with each entry containing the call rate for that sample/interval.
+
     This can be used as input for imputing exome sequencing platforms.
 
     .. note::
@@ -80,7 +81,8 @@ def run_platform_pca(
     callrate_mt: hl.MatrixTable, binarization_threshold: Optional[float] = 0.25
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
-    Runs a PCA on a sample/interval MT with each entry containing the call rate.
+    Run PCA on a sample/interval MT with each entry containing the call rate.
+
     When `binzarization_threshold` is set, the callrate is transformed to a 0/1 value based on the threshold.
     E.g. with the default threshold of 0.25, all entries with a callrate < 0.25 are considered as 0s, others as 1s.
 
@@ -116,7 +118,7 @@ def assign_platform_from_pcs(
     hdbscan_min_samples: int = None,
 ) -> hl.Table:
     """
-    Assigns platforms using HBDSCAN on the results of call rate PCA.
+    Assign platforms using HBDSCAN on the results of call rate PCA.
 
     :param platform_pca_scores_ht: Input table with the PCA score for each sample
     :param pc_scores_ann: Field containing the scores

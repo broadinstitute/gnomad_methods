@@ -25,7 +25,7 @@ def run_rf_test(
     mt: hl.MatrixTable, output: str = "/tmp"
 ) -> Tuple[pyspark.ml.PipelineModel, hl.Table]:
     """
-    Runs a dummy test RF on a given MT.
+    Run a dummy test RF on a given MT.
 
     1. Creates row annotations and labels to run model on
     2. Trains a RF pipeline model (including median imputation of missing values in created annotations)
@@ -36,7 +36,6 @@ def run_rf_test(
     :param output: Output files prefix to save the RF model
     :return: RF model and MatrixTable after applying RF model
     """
-
     mt = mt.annotate_rows(
         feature1=hl.rand_bool(0.1),
         feature2=hl.rand_norm(0.0, 1.0),
@@ -92,13 +91,12 @@ def run_rf_test(
 
 def check_ht_fields_for_spark(ht: hl.Table, fields: List[str]) -> None:
     """
-    Checks specified fields of a hail table for Spark DataFrame conversion (type and name)
+    Check specified fields of a hail table for Spark DataFrame conversion (type and name).
 
     :param ht: input Table
     :param fields: Fields to test
     :return: None
     """
-
     allowed_types = [
         hl.tfloat,
         hl.tfloat32,
@@ -134,7 +132,7 @@ def get_columns_quantiles(
     ht: hl.Table, fields: List[str], quantiles: List[float], relative_error: int = 0.001
 ) -> Dict[str, List[float]]:
     """
-    Computes approximate quantiles of specified numeric fields from non-missing values. Non-numeric fields are ignored.
+    Compute approximate quantiles of specified numeric fields from non-missing values. Non-numeric fields are ignored.
 
     This function returns a Dict of column name -> list of quantiles in the same order specified.
     If a column only has NAs, None is returned.
@@ -145,7 +143,6 @@ def get_columns_quantiles(
     :param relative_error: The relative error on the quantile approximation
     :return: Dict of column -> quantiles
     """
-
     check_ht_fields_for_spark(ht, fields)
 
     df = ht.key_by().select(*fields).to_spark()
@@ -181,7 +178,6 @@ def median_impute_features(
     :param strata: Whether to impute features median by specific strata (default False).
     :return: Feature Table imputed using approximate median values.
     """
-
     logger.info("Computing feature medians for imputation of missing numeric values")
     numerical_features = [
         k for k, v in ht.row.dtype.items() if v == hl.tint or v == hl.tfloat
@@ -233,7 +229,8 @@ def ht_to_rf_df(
     ht: hl.Table, features: List[str], label: str, index: str = None
 ) -> pyspark.sql.DataFrame:
     """
-    Creates a Spark dataframe ready for RF from a HT.
+    Create a Spark dataframe ready for RF from a HT.
+
     Rows with any missing features are dropped.
     Missing labels are replaced with 'NA'
 
@@ -247,7 +244,6 @@ def ht_to_rf_df(
     :param index: Optional index column to keep (E.g. for joining results back at later stage)
     :return: Spark Dataframe
     """
-
     cols_to_keep = features + [label]
     if index:
         cols_to_keep.append(index)
@@ -269,7 +265,6 @@ def get_features_importance(
     :param assembler_index: index of the VectorAssembler stage
     :return: feature importance for each feature in the RF model
     """
-
     feature_names = [
         x[: -len("_indexed")] if x.endswith("_indexed") else x
         for x in rf_pipeline.stages[assembler_index].getInputCols()
@@ -280,7 +275,7 @@ def get_features_importance(
 
 def get_labels(rf_pipeline: pyspark.ml.PipelineModel) -> List[str]:
     """
-    Returns the labels from the StringIndexer stage at index 0 from an RF pipeline model
+    Return the labels from the StringIndexer stage at index 0 from an RF pipeline model.
 
     :param rf_pipeline: Input pipeline
     :return: labels
@@ -309,7 +304,6 @@ def test_model(
     :param prediction_col_name: Where to store the prediction
     :return: A list containing structs with {label, prediction, n}
     """
-
     ht = apply_rf_model(
         ht.filter(hl.is_defined(ht[label])),
         rf_model,
@@ -347,7 +341,7 @@ def apply_rf_model(
     prediction_col_name: str = "rf_prediction",
 ) -> hl.Table:
     """
-    Applies a Random Forest (RF) pipeline model to a Table and annotate the RF probabilities and predictions.
+    Apply a Random Forest (RF) pipeline model to a Table and annotate the RF probabilities and predictions.
 
     :param ht: Input HT
     :param rf_model: Random Forest pipeline model
@@ -357,7 +351,6 @@ def apply_rf_model(
     :param prediction_col_name: Name of the column that will store the RF predictions
     :return: Table with RF columns
     """
-
     logger.info("Applying RF model.")
 
     check_ht_fields_for_spark(ht, features + [label])
@@ -411,7 +404,7 @@ def save_model(
     rf_pipeline: pyspark.ml.PipelineModel, out_path: str, overwrite: bool = False
 ) -> None:
     """
-    Saves a Random Forest pipeline model.
+    Save a Random Forest pipeline model.
 
     :param rf_pipeline: Pipeline to save
     :param out_path: Output path
@@ -427,7 +420,7 @@ def save_model(
 
 def load_model(input_path: str) -> pyspark.ml.PipelineModel:
     """
-    Loads a Random Forest pipeline model.
+    Load a Random Forest pipeline model.
 
     :param input_path: Location of model to load
     :return: Random Forest pipeline model
@@ -444,7 +437,7 @@ def train_rf(
     max_depth: int = 5,
 ) -> pyspark.ml.PipelineModel:
     """
-    Trains a Random Forest (RF) pipeline model.
+    Train a Random Forest (RF) pipeline model.
 
     :param ht: Input HT
     :param features: List of columns to be used as features
@@ -453,7 +446,6 @@ def train_rf(
     :param max_depth: Maximum tree depth
     :return: Random Forest pipeline model
     """
-
     logger.info(
         "Training RF model using:\n"
         "features: {}\n"
@@ -527,7 +519,7 @@ def train_rf(
 
 def get_rf_runs(rf_json_fp: str) -> Dict:
     """
-    Loads RF run data from JSON file.
+    Load RF run data from JSON file.
 
     :param rf_json_fp: File path to rf json file.
     :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
@@ -549,7 +541,7 @@ def get_run_data(
     test_results: List[hl.tstruct],
 ) -> Dict:
     """
-    Creates a Dict containing information about the RF input arguments and feature importance
+    Create a Dict containing information about the RF input arguments and feature importance.
 
     :param Dict of bool keyed by str input_args: Dictionary of model input arguments
     :param List of str test_intervals: Intervals withheld from training to be used in testing
@@ -582,14 +574,13 @@ def pretty_print_runs(
     runs: Dict, label_col: str = "rf_label", prediction_col_name: str = "rf_prediction"
 ) -> None:
     """
-    Prints the information for the RF runs loaded from the json file storing the RF run hashes -> info
+    Print the information for the RF runs loaded from the json file storing the RF run hashes -> info.
 
     :param runs: Dictionary containing JSON input loaded from RF run file
     :param label_col: Name of the RF label column
     :param prediction_col_name: Name of the RF prediction column
     :return: Nothing -- only prints information
     """
-
     for run_hash, run_data in runs.items():
         print(f"\n=== {run_hash} ===")
         testing_results = (

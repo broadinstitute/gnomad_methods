@@ -277,7 +277,9 @@ def ht_to_vcf_mt(
     pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
 ) -> hl.MatrixTable:
     """
-    Creates a MT ready for vcf export from a HT. In particular, the following conversions are done:
+    Create a MT ready for vcf export from a HT.
+
+    In particular, the following conversions are done:
     - All int64 are coerced to int32
     - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
 
@@ -390,8 +392,7 @@ def index_globals(
     label_delimiter: str = "_",
 ) -> Dict[str, int]:
     """
-    Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry
-    in the meta_array annotation
+    Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry in the meta_array annotation.
 
     :param globals_array: Ordered list containing dictionary entries describing all the grouping combinations contained in the globals_array annotation.
        Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
@@ -599,7 +600,7 @@ def add_as_info_dict(
     info_dict: Dict[str, Dict[str, str]] = INFO_DICT, as_fields: List[str] = AS_FIELDS
 ) -> Dict[str, Dict[str, str]]:
     """
-    Updates info dictionary with allele-specific terms and their descriptions.
+    Update info dictionary with allele-specific terms and their descriptions.
 
     Used in VCF export.
 
@@ -634,7 +635,7 @@ def make_vcf_filter_dict(
     snp_cutoff: float, indel_cutoff: float, inbreeding_cutoff: float
 ) -> Dict[str, str]:
     """
-    Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
+    Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
 
     Generates descriptions for:
         - AC0 filter
@@ -664,8 +665,7 @@ def make_hist_bin_edges_expr(
     ht: hl.Table, hists: List[str] = HISTS, prefix: str = ""
 ) -> Dict[str, str]:
     """
-    Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
-    separated by pipe delimiters.
+    Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string separated by pipe delimiters.
 
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.

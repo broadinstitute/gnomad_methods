@@ -112,7 +112,9 @@ def plot_hail_hist(
     hide_zeros: bool = False,
 ) -> bokeh.plotting.Figure:
     """
-    hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+    Plot histogram from Hail hist aggregation.
+
+    `hist_data` can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     :param hist_data: Data to plot
     :param title: Plot title
@@ -124,7 +126,6 @@ def plot_hail_hist(
     :param hide_zeros: Remove hist bars with 0 count
     :return: Histogram plot
     """
-
     return plot_multi_hail_hist(
         {"hist": hist_data},
         title=title,
@@ -150,7 +151,8 @@ def plot_multi_hail_hist(
     alpha: float = None,
 ) -> bokeh.plotting.Figure:
     """
-    Plots multiple histograms on the same plot.
+    Plot multiple histograms on the same plot.
+
     Each histogram can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     Example usage:
@@ -170,7 +172,6 @@ def plot_multi_hail_hist(
     :param alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
     :return: Histogram plot
     """
-
     low = int(log)
 
     if alpha is None:
@@ -272,7 +273,9 @@ def plot_hail_hist_cumulative(
     hover_mode: str = "mouse",
 ) -> bokeh.plotting.Figure:
     """
-    hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+    Plot cumulative histogram from Hail hist aggregation.
+
+    `hist_data` can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     :param hist_data: Data to plot
     :param title: Plot title
@@ -344,7 +347,8 @@ def plot_hail_file_metadata(
     t_path: str,
 ) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
-    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively.
+    Take path to hail Table or MatrixTable (gs://bucket/path/hail.mt), output Grid or Tabs, respectively.
+
     Or if an unordered Table is provided, a Figure with file sizes is output.
     If metadata file or rows directory is missing, returns None.
     """
@@ -638,7 +642,7 @@ def pair_plot(
     tooltip_cols: List[str] = None,
 ) -> Column:
     """
-    Plots each column of `data` against each other and returns a grid of plots.
+    Plot each column of `data` against each other and returns a grid of plots.
 
     The diagonal contains a histogram of each column, or a density plot if labels are provided.
     The lower diagonal contains scatter plots of each column against each other.
@@ -654,7 +658,6 @@ def pair_plot(
     :param tooltip_cols: Additional columns that should be displayed in tooltip
     :return: Grid of plots (column of rows)
     """
-
     if tooltip_cols is None:
         tooltip_cols = [] if label_col is None else [label_col]
     elif label_col not in tooltip_cols:

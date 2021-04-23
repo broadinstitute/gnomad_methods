@@ -249,7 +249,7 @@ class BaseVersionedResource:
 
     resource_class = BaseResource
 
-    __slots__ = ["default_version", "versions"]
+    __slots__ = {"default_version", "versions"}
 
     def __init__(self, default_version: str, versions: Dict[str, BaseResource]):
         default_resource = versions[default_version]

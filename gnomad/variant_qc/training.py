@@ -17,8 +17,10 @@ def sample_training_examples(
     test_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.Table:
     """
-    Returns a Table of all positive and negative training examples in `ht` with an annotation indicating those that
-    should be used for training given a true positive (TP) to false positive (FP) ratio.
+    Return a Table of all positive and negative training examples in `ht` with an annotation indicating those that should be used for training.
+
+    If `fp_to_tp` is greater than 0, this true positive (TP) to false positive (FP) ratio will be used to determine
+    sampling of training variants.
 
     The returned Table has the following annotations:
         - train: indicates if the variant should be used for training. A row is given False for the annotation if True
@@ -37,7 +39,6 @@ def sample_training_examples(
     :param test_expr: Optional expression to exclude a set of variants from training set. Still contains TP/FP label annotation.
     :return: Table subset with corresponding TP and FP examples with desired FP to TP ratio.
     """
-
     ht = ht.select(
         _tp=hl.or_else(tp_expr, False),
         _fp=hl.or_else(fp_expr, False),

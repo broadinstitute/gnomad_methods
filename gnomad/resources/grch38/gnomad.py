@@ -162,7 +162,7 @@ na12878 = VersionedMatrixTableResource(
 
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """
-    Get public release table path
+    Get public release table path.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh38
@@ -174,7 +174,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
     """
-    Get public coverage hail table
+    Get public coverage hail table.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh38
@@ -186,12 +186,11 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
 
 def public_release(data_type: str) -> VersionedTableResource:
     """
-    Retrieves publicly released versioned table resource
+    Retrieve publicly released versioned table resource.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Release Table
     """
-
     if data_type not in DATA_TYPES:
         raise DataException(
             f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
@@ -215,7 +214,7 @@ def public_release(data_type: str) -> VersionedTableResource:
 
 def coverage(data_type: str) -> VersionedTableResource:
     """
-    Retrieves gnomAD's coverage table by data_type
+    Retrieve gnomAD's coverage table by data_type.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Coverage Table
@@ -243,7 +242,7 @@ def coverage(data_type: str) -> VersionedTableResource:
 
 def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
     """
-    Retrieves gnomAD's coverage table by data_type
+    Retrieve gnomAD's coverage table by data_type.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Coverage Table
@@ -273,8 +272,7 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     """
-    Publically released VCF. Provide specific contig, i.e. "chr20", to retrieve contig
-    specific VCF
+    Publically released VCF. Provide specific contig, i.e. "chr20", to retrieve contig specific VCF.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh37

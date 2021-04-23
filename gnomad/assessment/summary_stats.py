@@ -22,16 +22,17 @@ def freq_bin_expr(
     freq_expr: hl.expr.ArrayExpression, index: int = 0
 ) -> hl.expr.StringExpression:
     """
-	Returns frequency string annotations based on input AC or AF.
+    Return frequency string annotations based on input AC or AF.
 
     .. note::
+
         - Default index is 0 because function assumes freq_expr was calculated with `annotate_freq`.
         - Frequency index 0 from `annotate_freq` is frequency for all pops calculated on adj genotypes only.
 
-	:param freq_expr: Array of structs containing frequency information.
-	:param index: Which index of freq_expr to use for annotation. Default is 0. 
-	:return: StringExpression containing bin name based on input AC or AF.
-	"""
+    :param freq_expr: Array of structs containing frequency information.
+    :param index: Which index of freq_expr to use for annotation. Default is 0.
+    :return: StringExpression containing bin name based on input AC or AF.
+    """
     return (
         hl.case(missing_false=True)
         .when(freq_expr[index].AC == 0, "Not found")
@@ -56,7 +57,7 @@ def get_summary_counts_dict(
     prefix_str: str = "",
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
-    Returns dictionary containing containing counts of multiple variant categories.
+    Return dictionary containing containing counts of multiple variant categories.
 
     Categories are:
         - Number of variants
@@ -71,8 +72,8 @@ def get_summary_counts_dict(
         - Number of synonymous variants
         - Number of autosomal variants
         - Number of allosomal variants
-        
-    .. warning:: 
+
+    .. warning::
         Assumes `allele_expr` contains only two variants (multi-allelics have been split).
 
     :param locus_expr: LocusExpression.
@@ -121,7 +122,7 @@ def get_summary_ac_dict(
     most_severe_csq_expr: hl.expr.StringExpression,
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
-    Returns dictionary containing containing total allele counts for variant categories.
+    Return dictionary containing containing total allele counts for variant categories.
 
     Categories are:
         - All variants
@@ -133,7 +134,7 @@ def get_summary_ac_dict(
         - Missense variants
         - Synonymous variants
 
-    .. warning:: 
+    .. warning::
         Assumes `allele_expr` contains only two variants (multi-allelics have been split).
 
     :param allele_expr: ArrayExpression containing alleles.
@@ -168,7 +169,7 @@ def get_summary_counts(
     index: int = 0,
 ) -> hl.Table:
     """
-	Generates a struct with summary counts across variant categories.
+    Generate a struct with summary counts across variant categories.
 
     Summary counts:
         - Number of variants
@@ -185,7 +186,7 @@ def get_summary_counts(
     Before calculating summary counts, function:
         - Filters out low confidence regions
         - Filters to canonical transcripts
-        - Uses the most severe consequence 
+        - Uses the most severe consequence
 
     Assumes that:
         - Input HT is annotated with VEP.
@@ -197,9 +198,9 @@ def get_summary_counts(
     :param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
     :param filter_field: Name of field in HT containing variant filter information. Default is "filters".
     :param filter_decoy: Whether to filter decoy regions. Default is False.
-    :param index: Which index of freq_expr to use for annotation. Default is 0. 
-    :return: Table grouped by frequency bin and aggregated across summary count categories. 
-	"""
+    :param index: Which index of freq_expr to use for annotation. Default is 0.
+    :return: Table grouped by frequency bin and aggregated across summary count categories.
+    """
     logger.info("Checking if multi-allelic variants have been split...")
     max_alleles = ht.aggregate(hl.agg.max(hl.len(ht.alleles)))
     if max_alleles > 2:
@@ -263,7 +264,7 @@ def get_an_criteria(
     an_proportion_cutoff: float = 0.8,
 ) -> hl.expr.BooleanExpression:
     """
-    Generates criteria to filter samples based on allele number (AN).
+    Generate criteria to filter samples based on allele number (AN).
 
     Uses allele number as proxy for call rate.
 
@@ -310,7 +311,7 @@ def get_tx_expression_expr(
     tx_struct: str = "tx_annotation",
 ) -> hl.expr.Float64Expression:
     """
-    Pulls appropriate transcript expression annotation struct given a specific locus and alleles (provided in `key_expr`).
+    Pull appropriate transcript expression annotation struct given a specific locus and alleles (provided in `key_expr`).
 
     Assumes that `key_expr` contains a locus and alleles.
     Assumes that multi-allelic variants have been split in both `tx_ht` and `key_expr`.
@@ -347,7 +348,7 @@ def default_generate_gene_lof_matrix(
     remove_ultra_common: bool = False,
 ) -> hl.MatrixTable:
     """
-    Generates loss-of-function gene matrix.
+    Generate loss-of-function gene matrix.
 
     Used to generate summary metrics on LoF variants.
 
@@ -472,7 +473,7 @@ def get_het_hom_summary_dict(
     pop_expr: hl.expr.StringExpression,
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
-    Generates dictionary containing summary counts. 
+    Generate dictionary containing summary counts.
 
     Summary counts are:
         - Number of sites with defined genotype calls
@@ -534,9 +535,9 @@ def default_generate_gene_lof_summary(
     filter_loftee: bool = False,
 ) -> hl.Table:
     """
-    Generates summary counts for loss-of-function (LoF), missense, and synonymous variants.
+    Generate summary counts for loss-of-function (LoF), missense, and synonymous variants.
 
-    Also calculates p, proportion of of haplotypes carrying a putative LoF (pLoF) variant, 
+    Also calculates p, proportion of of haplotypes carrying a putative LoF (pLoF) variant,
     and observed/expected (OE) ratio of samples with homozygous pLoF variant calls.
 
     Summary counts are (all per gene):
@@ -559,7 +560,7 @@ def default_generate_gene_lof_summary(
     :param lof_csq_set: Set containing LoF transcript consequence strings. Default is LOF_CSQ_SET.
     :param meta_root: String indicating top level name for sample metadata. Default is 'meta'.
     :param pop_field: String indiciating field with sample population assignment information. Default is 'pop'.
-    :param filter_loftee: Filters to LOFTEE pass variants (and no LoF flags) only. Default is False. 
+    :param filter_loftee: Filters to LOFTEE pass variants (and no LoF flags) only. Default is False.
     :return: Table with het/hom summary counts.
     """
     if collapse_indels:

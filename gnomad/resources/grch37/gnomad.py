@@ -60,7 +60,7 @@ POP_NAMES = {
 
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """
-    Get public release table path
+    Get public release table path.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh37
@@ -71,7 +71,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
     """
-    Get public coverage hail table
+    Get public coverage hail table.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh37
@@ -82,7 +82,7 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
 
 def _public_pca_ht_path(subpop: str) -> str:
     """
-    Get public pca loadings path
+    Get public pca loadings path.
 
     :param subpop: Can be empty ("") -> global, "eas" or "nfe"
     :return: Path to release Table
@@ -93,7 +93,7 @@ def _public_pca_ht_path(subpop: str) -> str:
 
 def _liftover_data_path(data_type: str, version: str) -> str:
     """
-    Paths to liftover gnomAD Table
+    Paths to liftover gnomAD Table.
 
     :param data_type: One of `exomes` or `genomes`
     :param version: One of the release versions of gnomAD on GRCh37
@@ -104,12 +104,11 @@ def _liftover_data_path(data_type: str, version: str) -> str:
 
 def public_release(data_type: str) -> VersionedTableResource:
     """
-    Retrieves publicly released versioned table resource
+    Retrieve publicly released versioned table resource.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Release Table
     """
-
     if data_type not in DATA_TYPES:
         raise DataException(f"{data_type} not in {DATA_TYPES}")
 
@@ -131,7 +130,7 @@ def public_release(data_type: str) -> VersionedTableResource:
 
 def coverage(data_type: str) -> VersionedTableResource:
     """
-    Retrieves gnomAD's coverage table by data_type
+    Retrieve gnomAD's coverage table by data_type.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Coverage Table
@@ -157,7 +156,7 @@ def coverage(data_type: str) -> VersionedTableResource:
 
 def liftover(data_type: str) -> VersionedTableResource:
     """
-    Get the 38 liftover of gnomad v2.1.1
+    Get the 38 liftover of gnomad v2.1.1.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Release Table
@@ -183,7 +182,7 @@ def liftover(data_type: str) -> VersionedTableResource:
 
 def public_pca_loadings(subpop: str = "") -> TableResource:
     """
-    Returns the TableResource containing sites and loadings from population PCA
+    Return the TableResource containing sites and loadings from population PCA.
 
     :param subpop: Can be empty ("") -> global, "eas" or "nfe"
     :return: gnomAD public PCA loadings TableResource
@@ -198,8 +197,7 @@ def public_pca_loadings(subpop: str = "") -> TableResource:
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     """
-    Publically released VCF. Provide specific contig, i.e. "20", to retrieve contig
-    specific VCF
+    Publically released VCF. Provide specific contig, i.e. "20", to retrieve contig specific VCF.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh37

@@ -14,9 +14,7 @@ logger.setLevel(logging.INFO)
 
 
 def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
-    """
-    Filter genotypes to adj criteria
-    """
+    """Filter genotypes to adj criteria."""
     if "adj" not in list(mt.entry):
         mt = annotate_adj(mt)
     mt = mt.filter_entries(mt.adj)
@@ -35,8 +33,9 @@ def filter_by_frequency(
     adj: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
-    (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
+    Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split).
+
+    gnomAD frequency data format expectation is: Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)].
 
     At least one of frequency or allele_count is required.
 
@@ -118,7 +117,7 @@ def filter_low_conf_regions(
     high_conf_regions: Optional[List[str]] = None,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filters low-confidence regions
+    Filter low-confidence regions.
 
     :param mt: MatrixTable or Table to filter
     :param filter_lcr: Whether to filter LCR regions
@@ -180,7 +179,8 @@ def filter_to_autosomes(
     t: Union[hl.MatrixTable, hl.Table]
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filters the Table or MatrixTable to autosomes only.
+    Filter the Table or MatrixTable to autosomes only.
+
     This assumes that the input contains a field named `locus` of type Locus
 
     :param t: Input MT/HT
@@ -198,7 +198,8 @@ def add_filters_expr(
     current_filters: hl.expr.SetExpression = None,
 ) -> hl.expr.SetExpression:
     """
-    Creates an expression to create or add filters.
+    Create an expression to create or add filters.
+
     For each entry in the `filters` dictionary, if the value evaluates to `True`,
     then the key is added as a filter name.
 
@@ -230,7 +231,7 @@ def subset_samples_and_variants(
     gt_expr: str = "GT",
 ) -> hl.MatrixTable:
     """
-    Subsets the MatrixTable to the provided list of samples and their variants
+    Subset the MatrixTable to the provided list of samples and their variants.
 
     :param mt: Input MatrixTable
     :param sample_path: Path to a file with list of samples
@@ -278,7 +279,7 @@ def filter_to_clinvar_pathogenic(
     remove_conflicting: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Returns a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
+    Return a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
 
     Example use:
 

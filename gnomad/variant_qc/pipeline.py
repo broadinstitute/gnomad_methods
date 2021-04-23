@@ -38,8 +38,9 @@ def create_binned_ht(
     add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
-    This is meant as a default wrapper for `compute_ranked_bin`. It annotates table with a bin, where variants are
-    binned based on score into `n_bins` equally-sized bins.
+    Annotate each row of `ht` with a bin based on the score annotation into `n_bins` equally-sized bins.
+
+    This is meant as a default wrapper for `compute_ranked_bin`.
 
     .. note::
 
@@ -72,7 +73,7 @@ def create_binned_ht(
         new_id: str,
     ) -> Dict[str, hl.expr.BooleanExpression]:
         """
-        Updates a dictionary of expressions to add another stratification
+        Update a dictionary of expressions to add another stratification.
 
         :param bin_expr: Dictionary of expressions to add another stratification to
         :param new_expr: New Boolean expression to add to `bin_expr`
@@ -118,8 +119,7 @@ def score_bin_agg(
     ht: hl.GroupedTable, fam_stats_ht: hl.Table
 ) -> Dict[str, hl.expr.Aggregation]:
     """
-    Default aggregation function to add aggregations for min/max of score, number of ClinVar variants, number of truth
-    variants (omni, mills, hapmap, and kgp_phase1), and family statistics.
+    Make dict of aggregations for min/max of score, number of ClinVar variants, number of truth variants, and family statistics.
 
     .. note::
 
@@ -128,7 +128,6 @@ def score_bin_agg(
     This can easily be combined with the GroupedTable returned by `compute_grouped_binned_ht`
 
     Example:
-
     .. code-block:: python
 
         binned_ht = create_binned_ht(...)
@@ -255,7 +254,7 @@ def generate_trio_stats(
     mt: hl.MatrixTable, autosomes_only: bool = True, bi_allelic_only: bool = True
 ) -> hl.Table:
     """
-    Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
+    Run `generate_trio_stats_expr` with variant QC pipeline defaults to get trio stats stratified by raw and adj.
 
     .. note::
 
@@ -299,10 +298,13 @@ def generate_sib_stats(
     bi_allelic_only: bool = True,
 ) -> hl.Table:
     """
-    This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
-    shared by pairs of siblings in `relatedness_ht`.
+    Generate a hail table with counts of variants shared by pairs of siblings in `relatedness_ht`.
 
-    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
+    This is meant as a default wrapper for `generate_sib_stats_expr`.
+
+    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related
+    (it's OK to have unrelated samples too).
+
     The `relationship_col` should be a column specifying the relationship between each two samples as defined by
     the constants in `gnomad.utils.relatedness`. This relationship_col will be used to filter to only pairs of
     samples that are annotated as `SIBLINGS`.
@@ -382,7 +384,6 @@ def train_rf_model(
     :param test_expr: An expression specifying variants to hold out for testing and use for evaluation only.
     :return: Table with TP and FP training sets used in the RF training and the resulting RF model.
     """
-
     ht = ht.annotate(_tp=tp_expr, _fp=fp_expr, rf_test=test_expr)
 
     rf_ht = sample_training_examples(

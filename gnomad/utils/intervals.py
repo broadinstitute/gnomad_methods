@@ -5,8 +5,7 @@ import hail as hl
 
 def sort_intervals(intervals: List[hl.Interval]):
     """
-    Sorts an array of intervals by:
-    start contig, then start position, then end contig, then end position
+    Sort an array of intervals by start contig, then start position, then end contig, then end position.
 
     :param intervals: Intervals to sort
     :return: Sorted interval list
@@ -24,7 +23,7 @@ def sort_intervals(intervals: List[hl.Interval]):
 
 def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
     """
-    Generates a list with the union of all intervals in the input list by merging overlapping intervals.
+    Generate a list with the union of all intervals in the input list by merging overlapping intervals.
 
     :param intervals: Intervals to merge
     :param is_sorted: If set, assumes intervals are already sorted, otherwise will sort.
@@ -49,7 +48,7 @@ def union_intervals(intervals: List[hl.Interval], is_sorted: bool = False):
 
 def interval_length(interval: hl.Interval) -> int:
     """
-    Returns the total number of bases in an Interval
+    Return the total number of bases in an Interval.
 
     :param interval: Input interval
     :return: Total length of the interval

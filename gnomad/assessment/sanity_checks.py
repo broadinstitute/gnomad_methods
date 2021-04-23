@@ -110,8 +110,9 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
 ) -> None:
     """
-    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    display results from checking the sum of the specified annotations in the terminal.
+    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
+
+    Results from from checking the sum of the specified annotations are printed in the terminal.
 
     :param ht: Table containing annotations to be summed.
     :param prefix: String indicating sample subset.

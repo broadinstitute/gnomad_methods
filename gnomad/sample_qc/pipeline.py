@@ -27,8 +27,10 @@ def filter_rows_for_qc(
     snv_only: bool = True,
 ) -> hl.MatrixTable:
     """
-    Annotates rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
-    AF and callrate thresholds are taken from gnomAD QC; inbreeding coeff, MQ, FS and QD filters are taken from GATK best practices
+    Annotate rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
+
+    AF and callrate thresholds are taken from gnomAD QC; inbreeding coeff, MQ, FS and QD filters are taken from
+    GATK best practices.
 
     .. note::
 
@@ -119,13 +121,14 @@ def get_qc_mt(
     high_conf_regions: Optional[List[str]] = None,
 ) -> hl.MatrixTable:
     """
-    Creates a QC-ready MT by keeping:
+    Create a QC-ready MT.
 
-    - Variants outside known problematic regions
-    - Bi-allelic SNVs only
-    - Variants passing hard thresholds
-    - Variants passing the set call rate and MAF thresholds
-    - Genotypes passing on gnomAD ADJ criteria (GQ>=20, DP>=10, AB>0.2 for hets)
+    Keeps the following:
+        - Variants outside known problematic regions
+        - Bi-allelic SNVs only
+        - Variants passing hard thresholds
+        - Variants passing the set call rate and MAF thresholds
+        - Genotypes passing on gnomAD ADJ criteria (GQ>=20, DP>=10, AB>0.2 for hets)
 
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
@@ -216,9 +219,9 @@ def annotate_sex(
     aaf_threshold: float = 0.001,
 ) -> hl.Table:
     """
-    Imputes sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
- 
-    Returns Table with the following fields:
+    Impute sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
+
+    Return Table with the following fields:
         - s (str): Sample
         - chr20_mean_dp (float32): Sample's mean coverage over chromosome 20.
         - chrX_mean_dp (float32): Sample's mean coverage over chromosome X.

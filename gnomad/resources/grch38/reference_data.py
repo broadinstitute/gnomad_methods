@@ -1,3 +1,5 @@
+# noqa: D100
+
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
     TableResource,
@@ -43,6 +45,17 @@ def _import_clinvar(**kwargs) -> hl.Table:
     return clinvar
 
 
+def _import_dbsnp(**kwargs) -> hl.Table:
+    dbsnp = import_sites_vcf(**kwargs)
+    # Note: permit_shuffle is set because the dbsnp vcf has duplicate loci (turned into a set) so might be out of order
+    dbsnp = hl.split_multi(dbsnp, permit_shuffle=True)
+    dbsnp = dbsnp.group_by(dbsnp.locus, dbsnp.alleles).aggregate(
+        rsid=hl.agg.collect_as_set(dbsnp.rsid)
+    )
+
+    return dbsnp
+
+
 # Resources with no versioning needed
 purcell_5k_intervals = TableResource(
     path="gs://gnomad-public/resources/grch38/purcell_5k_intervals/purcell5k.ht",
@@ -74,6 +87,15 @@ na12878_giab_hc_intervals = TableResource(
 )
 
 # Versioned resources: versions should be listed from most recent to oldest
+vep_context = VersionedTableResource(
+    default_version="95",
+    versions={
+        "95": TableResource(
+            path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",
+        )
+    },
+)
+
 syndip = VersionedMatrixTableResource(
     default_version="20180222",
     versions={
@@ -129,7 +151,7 @@ dbsnp = VersionedTableResource(
     versions={
         "b154": TableResource(
             path="gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
-            import_func=import_sites_vcf,
+            import_func=_import_dbsnp,
             import_args={
                 "path": "gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz",
                 "header_file": "gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header",
@@ -233,15 +255,16 @@ telomeres_and_centromeres = TableResource(
 
 def get_truth_ht() -> Table:
     """
-    Returns a table with the following annotations from the latest version of the corresponding truth data:
-    - hapmap
-    - kgp_omni (1000 Genomes intersection Onni 2.5M array)
-    - kgp_phase_1_hc (high confidence sites in 1000 genonmes)
-    - mills (Mills & Devine indels)
+    Return a table with annotations from the latest version of the corresponding truth data.
+
+    The following annotations are included:
+        - hapmap
+        - kgp_omni (1000 Genomes intersection Onni 2.5M array)
+        - kgp_phase_1_hc (high confidence sites in 1000 genonmes)
+        - mills (Mills & Devine indels)
 
     :return: A table with the latest version of popular truth data annotations
     """
-
     return (
         hapmap.ht()
         .select(hapmap=True)

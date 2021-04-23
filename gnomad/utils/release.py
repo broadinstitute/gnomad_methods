@@ -55,7 +55,9 @@ def make_freq_index_dict(
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
-    .. note: Downsampling groupings are only computed on 'adj'-filtered genotypes
+    .. note: 
+    
+        Downsampling groupings are only computed on 'adj'-filtered genotypes
 
     :param freq_meta: List containing the set of groupings for each element of the freq array
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])

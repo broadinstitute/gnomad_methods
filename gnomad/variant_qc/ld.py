@@ -1,10 +1,14 @@
+# noqa: D100
+
 import hail as hl
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
 from hail.linalg import BlockMatrix
 
 
-def get_r_human_readable(pop: str, var1: str, var2: str, ref_genome: str = "GRCh37"):
+def get_r_human_readable(
+    pop: str, var1: str, var2: str, ref_genome: str = "GRCh37"
+):  # noqa: D103
     bm = ld_matrix(pop).bm()
     ht = ld_index(pop).ht()
     chrom, pos, ref, alt = var1.split("-")
@@ -58,7 +62,7 @@ def get_r_for_pair_of_variants(
 
 def get_r_within_gene_in_pop(pop: str, gene: str):
     """
-    Gets LD information (`r`) for all pairs of variants within `gene` for a given `pop`.
+    Get LD information (`r`) for all pairs of variants within `gene` for a given `pop`.
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 
@@ -79,7 +83,7 @@ def get_r_within_gene(
     reference_genome: str = None,
 ):
     """
-    Gets LD information (`r`) for all pairs of variants within `gene`.
+    Get LD information (`r`) for all pairs of variants within `gene`.
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 

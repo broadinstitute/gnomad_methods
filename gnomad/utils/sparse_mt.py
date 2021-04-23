@@ -1,8 +1,15 @@
+# noqa: D100
+
 import logging
 from typing import Dict, List, Optional, Union
 
 import hail as hl
-from gnomad.utils.annotations import fs_from_sb, get_adj_expr, get_lowqual_expr
+from gnomad.utils.annotations import (
+    fs_from_sb,
+    get_adj_expr,
+    get_lowqual_expr,
+    sor_from_sb,
+)
 from gnomad.utils.intervals import interval_length, union_intervals
 from gnomad.utils.reference_genome import get_reference_genome
 
@@ -21,8 +28,7 @@ INFO_ARRAY_SUM_AGG_FIELDS = ["SB", "RAW_MQandDP"]
 
 def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
-    This function takes a sparse MT and computes for each row the genomic position of the
-    most upstream reference block overlapping that row.
+    Compute the genomic position of the most upstream reference block overlapping each row on a sparse MT.
 
     Note that since reference blocks do not extend beyond contig boundaries, only the position is kept.
 
@@ -72,7 +78,7 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
             ht.locus.position,
         )
     )
-    return ht.select_globals()
+    return ht.select_globals().key_by("locus")
 
 
 def densify_sites(
@@ -82,7 +88,7 @@ def densify_sites(
     semi_join_rows: bool = True,
 ) -> hl.MatrixTable:
     """
-    Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
+    Create a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
 
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
 
@@ -147,16 +153,16 @@ def _get_info_agg_expr(
     prefix: str = "",
 ) -> Dict[str, hl.expr.Aggregation]:
     """
-    Helper function containing code to create Aggregators for both site or AS info expression aggregations.
+    Create Aggregators for both site or AS info expression aggregations.
 
-    Notes:
+    .. note::
 
-    1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
-    2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as
+          list of str, then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param mt: Input MT
     :param sum_agg_fields: Fields to aggregate using sum.
@@ -280,23 +286,26 @@ def get_as_info_expr(
     array_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
     ] = INFO_ARRAY_SUM_AGG_FIELDS,
+    alt_alleles_range_array_field: str = "alt_alleles_range_array",
 ) -> hl.expr.StructExpression:
     """
-    Returns an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
+    Return an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
-    Notes:
+    .. note::
 
-    1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
-    2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+          then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
     :param median_agg_fields: Fields to aggregate using (approximate) median.
+    :param array_sum_agg_fields: Fields to aggregate using array sum.
+    :param alt_alleles_range_array_field: Annotation containing an array of the range of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
     :return: Expression containing the AS info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -319,11 +328,18 @@ def get_as_info_expr(
     if "AS_SB" in agg_expr:
         agg_expr["AS_SB_TABLE"] = agg_expr.pop("AS_SB")
 
+    if alt_alleles_range_array_field not in mt.row or mt[
+        alt_alleles_range_array_field
+    ].dtype != hl.dtype("array<int32>"):
+        msg = f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}' of type array<int32>"
+        logger.error(msg)
+        raise ValueError(msg)
+
     # Modify aggregations to aggregate per allele
     agg_expr = {
         f: hl.agg.array_agg(
             lambda ai: hl.agg.filter(mt.LA.contains(ai), expr),
-            hl.range(1, hl.len(mt.alleles)),
+            mt[alt_alleles_range_array_field],
         )
         for f, expr in agg_expr.items()
     }
@@ -347,6 +363,9 @@ def get_as_info_expr(
             AS_FS=hl.range(1, hl.len(mt.alleles)).map(
                 lambda i: fs_from_sb(as_sb_table[0].extend(as_sb_table[i]))
             ),
+            AS_SOR=hl.range(1, hl.len(mt.alleles)).map(
+                lambda i: sor_from_sb(as_sb_table[0].extend(as_sb_table[i]))
+            ),
         )
 
     return info
@@ -368,15 +387,15 @@ def get_site_info_expr(
     ] = INFO_ARRAY_SUM_AGG_FIELDS,
 ) -> hl.expr.StructExpression:
     """
-    Creates a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
+    Create a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
-    Notes:
+    .. note::
 
-    1. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    2. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as
+          list of str, then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
@@ -397,9 +416,11 @@ def get_site_info_expr(
         array_sum_agg_fields=array_sum_agg_fields,
     )
 
-    # Add FS if SB is present
+    # Add FS and SOR if SB is present
     # This is done outside of _get_info_agg_expr as the behavior is different in site vs allele-specific versions
-    agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
+    if "SB" in agg_expr:
+        agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
+        agg_expr["SOR"] = sor_from_sb(agg_expr["SB"])
 
     # Run aggregator on non-ref genotypes
     info = hl.agg.filter(
@@ -418,9 +439,11 @@ def default_compute_info(
     mt: hl.MatrixTable, site_annotations: bool = False, n_partitions: int = 5000
 ) -> hl.Table:
     """
-    Computes a HT with the typical GATK allele-specific (AS) info fields 
-    as well as ACs and lowqual fields.
-    Note that this table doesn't split multi-allelic sites.
+    Compute a HT with the typical GATK allele-specific (AS) info fields as well as ACs and lowqual fields.
+
+    .. note::
+
+        This table doesn't split multi-allelic sites.
 
     :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
     :param site_annotations: Whether to also generate site level info fields. Default is False.
@@ -430,6 +453,9 @@ def default_compute_info(
     """
     # Move gvcf info entries out from nested struct
     mt = mt.transmute_entries(**mt.gvcf_info)
+
+    # Adding alt_alleles_range_array as a required annotation for get_as_info_expr to reduce memory usage
+    mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
 
     # Compute AS info expr
     info_expr = get_as_info_expr(mt)
@@ -482,7 +508,7 @@ def split_info_annotation(
     info_expr: hl.expr.StructExpression, a_index: hl.expr.Int32Expression
 ) -> hl.expr.StructExpression:
     """
-    Splits multi-allelic allele-specific info fields.
+    Split multi-allelic allele-specific info fields.
 
     :param info_expr: Field containing info struct.
     :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
@@ -504,7 +530,7 @@ def split_lowqual_annotation(
     lowqual_expr: hl.expr.ArrayExpression, a_index: hl.expr.Int32Expression
 ) -> hl.expr.BooleanExpression:
     """
-    Splits multi-allelic low QUAL annotation.
+    Split multi-allelic low QUAL annotation.
 
     :param lowqual_expr: Field containing low QUAL annotation.
     :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
@@ -522,22 +548,24 @@ def impute_sex_ploidy(
     chr_y: Optional[str] = None,
 ) -> hl.Table:
     """
-    Imputes sex ploidy from a sparse Matrix Table by normalizing the coverage of chromosomes X and Y using
-    the coverage of an autosomal chromosome (by default chr20).
+    Impute sex ploidy from a sparse MatrixTable.
 
-    Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
+    Sex ploidy is imputed by normalizing the coverage of chromosomes X and Y using the coverage of an autosomal
+    chromosome (by default chr20).
+
+    Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at
+    non-ref genotypes.
 
     :param mt: Input sparse Matrix Table
-    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation. 
+    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation.
         Used only when determining contig size (not used when computing chromosome depth).
-    :param included_calling_intervals: Optional table of intervals to use in the computation. 
+    :param included_calling_intervals: Optional table of intervals to use in the computation.
         Used only when determining contig size (not used when computing chromosome depth).
     :param normalization_contig: Which chromosome to normalize by
     :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
     :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
     """
-
     ref = get_reference_genome(mt.locus, add_sequence=True)
     if chr_x is None:
         if len(ref.x_contigs) != 1:
@@ -631,7 +659,9 @@ def compute_coverage_stats(
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
 ) -> hl.Table:
     """
-    Computes the following coverage statistics for every base of the `reference_ht` provided:
+    Compute coverage statistics for every base of the `reference_ht` provided.
+
+    The following coverage stats are calculated:
         - mean
         - median
         - total DP
@@ -646,7 +676,6 @@ def compute_coverage_stats(
     :param coverage_over_x_bins: List of boundaries for computing samples over X
     :return: Table with per-base coverage stats
     """
-
     n_samples = mt.count_cols()
     print(f"Computing coverage stats on {n_samples} samples.")
 
@@ -717,3 +746,20 @@ def compute_coverage_stats(
             )
         },
     ).rows()
+
+
+def filter_ref_blocks(
+    t: Union[hl.MatrixTable, hl.Table]
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filter ref blocks out of the Table or MatrixTable.
+
+    :param t: Input MT/HT
+    :return: MT/HT with ref blocks removed
+    """
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows((hl.len(t.alleles) > 1))
+    else:
+        t = t.filter((hl.len(t.alleles) > 1))
+
+    return t

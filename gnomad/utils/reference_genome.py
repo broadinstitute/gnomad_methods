@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import List, Optional, Union
 
@@ -19,7 +21,7 @@ def get_reference_ht(
     filter_n: bool = True,
 ) -> hl.Table:
     """
-    Creates a reference Table with locus and alleles (containing only the reference allele by default) from the given reference genome.
+    Create a reference Table with locus and alleles (containing only the reference allele by default) from the given reference genome.
 
     .. note::
 
@@ -87,7 +89,8 @@ def get_reference_ht(
 
 def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
     """
-    Adds the fasta sequence to a Hail reference genome.
+    Add the fasta sequence to a Hail reference genome.
+
     Only GRCh37 and GRCh38 references are supported.
 
     :param ref: Input reference genome.
@@ -121,7 +124,7 @@ def get_reference_genome(
     add_sequence: bool = False,
 ) -> hl.ReferenceGenome:
     """
-    Returns the reference genome associated with the input Locus expression
+    Return the reference genome associated with the input Locus expression.
 
     :param locus: Input locus
     :param add_sequence: If set, the fasta sequence is added to the reference genome

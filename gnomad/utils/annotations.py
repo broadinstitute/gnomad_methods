@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -36,10 +38,10 @@ def pop_max_expr(
     pops_to_exclude: Optional[Set[str]] = None,
 ) -> hl.expr.StructExpression:
     """
-    Create an expression containing popmax: the frequency information about the population
-    that has the highest AF from the populations provided in `freq_meta`,
-    excluding those specified in `pops_to_exclude`.
-    Only frequencies from adj populations are considered.
+
+    Create an expression containing the frequency information about the population that has the highest AF in `freq_meta`.
+
+    Populations specified in `pops_to_exclude` are excluded and only frequencies from adj populations are considered.
 
     This resulting struct contains the following fields:
 
@@ -56,6 +58,8 @@ def pop_max_expr(
     :return: Popmax struct
     """
     _pops_to_exclude = hl.literal(pops_to_exclude)
+
+    # pylint: disable=invalid-unary-operand-type
     popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (hl.set(freq_meta[i].keys()) == {"group", "pop"})
         & (freq_meta[i]["group"] == "adj")
@@ -77,7 +81,8 @@ def project_max_expr(
 ) -> hl.expr.ArrayExpression:
     """
     Create an expression that computes allele frequency information by project for the `n_projects` with the largest AF at this row.
-    This return an array with one element per non-reference allele.
+
+    Will return an array with one element per non-reference allele.
 
     Each of these elements is itself an array of structs with the following fields:
 
@@ -98,7 +103,6 @@ def project_max_expr(
     :param n_projects: Maximum number of projects to return for each row
     :return: projectmax expression
     """
-
     n_alleles = hl.len(alleles_expr)
 
     # compute call stats by  project
@@ -141,6 +145,7 @@ def faf_expr(
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
     Calculate the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
+
     See http://cardiodb.org/allelefrequencyapp/ for more information.
 
     The FAF is computed for each of the following population stratification if found in `freq_meta`:
@@ -166,6 +171,8 @@ def faf_expr(
     _pops_to_exclude = (
         hl.literal(pops_to_exclude) if pops_to_exclude is not None else {}
     )
+
+    # pylint: disable=invalid-unary-operand-type
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (freq_meta[i].get("group") == "adj")
         & (
@@ -323,8 +330,12 @@ def annotate_freq(
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
-    Add a row annotation `freq` to the input `mt` with stratified allele frequencies,
-    and a global annotation `freq_meta` with metadata.
+    Annotate `mt` with stratified allele frequencies.
+
+    The output Matrix table will include:
+        - row annotation `freq` containing the stratified allele frequencies
+        - global annotation `freq_meta` with metadata
+        - global annotation `freq_sample_count` with sample count information
 
     .. note::
 
@@ -352,6 +363,11 @@ def annotate_freq(
     Each element of the list contains metadata on a frequency stratification and the index in the list corresponds
     to the index of that frequency stratification in the `freq` row annotation.
 
+    .. rubric:: Global `freq_sample_count` annotation
+
+    The global annotation `freq_sample_count` is added to the input `mt`. This is a sample count per sample grouping
+    defined in the `freq_meta` global annotation.
+
     .. rubric:: The `downsamplings` parameter
 
     If the `downsamplings` parameter is used, frequencies will be computed for all samples and by population
@@ -368,7 +384,6 @@ def annotate_freq(
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
-
     if subpop_expr is not None and pop_expr is None:
         raise NotImplementedError(
             "annotate_freq requires pop_expr when using subpop_expr"
@@ -486,22 +501,33 @@ def annotate_freq(
         + sample_group_filters
     )
 
+    freq_sample_count = mt.aggregate_cols(
+        [hl.agg.count_where(x[1]) for x in sample_group_filters]
+    )
+
     # Annotate columns with group_membership
     mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
 
-    # Create and annotate global expression with meta information
+    # Create and annotate global expression with meta and sample count information
     freq_meta_expr = [
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]
     freq_meta_expr.insert(1, {"group": "raw"})
-    mt = mt.annotate_globals(freq_meta=freq_meta_expr)
+    freq_sample_count.insert(1, freq_sample_count[0])
+    mt = mt.annotate_globals(
+        freq_meta=freq_meta_expr, freq_sample_count=freq_sample_count,
+    )
 
     # Create frequency expression array from the sample groups
+    # Adding sample_group_filters_range_array to reduce memory usage in this array_agg
+    mt = mt.annotate_rows(
+        sample_group_filters_range_array=hl.range(len(sample_group_filters))
+    )
     freq_expr = hl.agg.array_agg(
         lambda i: hl.agg.filter(
             mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)
         ),
-        hl.range(len(sample_group_filters)),
+        mt.sample_group_filters_range_array,
     )
 
     # Insert raw as the second element of the array
@@ -551,7 +577,6 @@ def get_lowqual_expr(
     :param indel_phred_het_prior: Phred-scaled indel heterozygosity prior (30 = 1/1000 bases, GATK default)
     :return: lowqual expression (BooleanExpression if `qual_approx_expr`is Numeric, Array[BooleanExpression] if `qual_approx_expr` is ArrayNumeric)
     """
-
     min_snv_qual = snv_phred_threshold + snv_phred_het_prior
     min_indel_qual = indel_phred_threshold + indel_phred_het_prior
     min_mixed_qual = max(min_snv_qual, min_indel_qual)
@@ -589,7 +614,9 @@ def get_annotations_hists(
     log10_annotations: List[str] = ["DP"],
 ) -> Dict[str, hl.expr.StructExpression]:
     """
-    Create histograms for variant metrics in ht.info. Used when creating site quality distribution json files.
+    Create histograms for variant metrics in ht.info.
+
+    Used when creating site quality distribution json files.
 
     :param ht: Table with variant metrics
     :param annotations_hists: Dictionary of metrics names and their histogram values (start, end, bins)
@@ -676,7 +703,9 @@ def get_adj_expr(
     haploid_adj_dp: int = 5,
 ) -> hl.expr.BooleanExpression:
     """
-    Get adj genotype annotation. Defaults correspond to gnomAD values.
+    Get adj genotype annotation.
+
+    Defaults correspond to gnomAD values.
     """
     return (
         (gq_expr >= adj_gq)
@@ -701,7 +730,9 @@ def annotate_adj(
     haploid_adj_dp: int = 5,
 ) -> hl.MatrixTable:
     """
-    Annotate genotypes with adj criteria (assumes diploid). Defaults correspond to gnomAD values.
+    Annotate genotypes with adj criteria (assumes diploid).
+
+    Defaults correspond to gnomAD values.
     """
     return mt.annotate_entries(
         adj=get_adj_expr(
@@ -711,9 +742,7 @@ def annotate_adj(
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
-    """
-    Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles).
-    """
+    """Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)."""
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != "*", alts)
@@ -748,8 +777,11 @@ def annotation_type_is_numeric(t: Any) -> bool:
 
 def annotation_type_in_vcf_info(t: Any) -> bool:
     """
-    Given an annotation type, return whether that type can be natively exported to a VCF INFO field.
-    Note types that aren't natively exportable to VCF will be converted to String on export.
+    Given an annotation type, returns whether that type can be natively exported to a VCF INFO field.
+
+    .. note::
+
+        Types that aren't natively exportable to VCF will be converted to String on export.
 
     :param t: Type to test
     :return: If the input type can be exported to VCF
@@ -800,6 +832,7 @@ def fs_from_sb(
 ) -> hl.expr.Int64Expression:
     """
     Compute `FS` (Fisher strand balance) annotation from  the `SB` (strand balance table) field.
+
     `FS` is the phred-scaled value of the double-sided Fisher exact test on strand balance.
 
     Using default values will have the same behavior as the GATK implementation, that is:
@@ -813,8 +846,8 @@ def fs_from_sb(
     .. note::
 
         This function can either take
-        - an array of length containing the table counts: [ref fwd, ref rev, alt fwd, alt rev]
-        - an array containig 2 arrays of length 2, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+        - an array of length four containing the forward and reverse strands' counts of ref and alt alleles: [ref fwd, ref rev, alt fwd, alt rev]
+        - a two dimensional array with arrays of length two, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
 
     GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/FisherStrand.java
 
@@ -866,10 +899,45 @@ def fs_from_sb(
     )
 
 
+def sor_from_sb(
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
+) -> hl.expr.Float64Expression:
+    """
+    Compute `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
+
+    .. note::
+
+        This function can either take
+        - an array of length four containing the forward and reverse strands' counts of ref and alt alleles: [ref fwd, ref rev, alt fwd, alt rev]
+        - a two dimensional array with arrays of length two, containing the counts: [[ref fwd, ref rev], [alt fwd, alt rev]]
+
+    GATK code here: https://github.com/broadinstitute/gatk/blob/master/src/main/java/org/broadinstitute/hellbender/tools/walkers/annotator/StrandOddsRatio.java
+
+    :param sb: Count of ref/alt reads on each strand
+    :return: SOR value
+    """
+    if not isinstance(sb, hl.expr.ArrayNumericExpression):
+        sb = hl.bind(lambda x: hl.flatten(x), sb)
+
+    sb = sb.map(lambda x: hl.float64(x) + 1)
+
+    ref_fw = sb[0]
+    ref_rv = sb[1]
+    alt_fw = sb[2]
+    alt_rv = sb[3]
+    symmetrical_ratio = ((ref_fw * alt_rv) / (alt_fw * ref_rv)) + (
+        (alt_fw * ref_rv) / (ref_fw * alt_rv)
+    )
+    ref_ratio = hl.min(ref_rv, ref_fw) / hl.max(ref_rv, ref_fw)
+    alt_ratio = hl.min(alt_fw, alt_rv) / hl.max(alt_fw, alt_rv)
+    sor = hl.log(symmetrical_ratio) + hl.log(ref_ratio) - hl.log(alt_ratio)
+
+    return sor
+
+
 def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
     """
-    Return a boolean expression selecting bi-allelic sites only,
-    accounting for whether the input MT/HT was split.
+    Return a boolean expression selecting bi-allelic sites only, accounting for whether the input MT/HT was split.
 
     :param t: Input HT/MT
     :return: Boolean expression selecting only bi-allelic sites
@@ -942,12 +1010,12 @@ def set_female_y_metrics_to_na_expr(
     t: Union[hl.Table, hl.MatrixTable]
 ) -> hl.expr.ArrayExpression:
     """
-    Set Y-variant frequency callstats for female-specific metrics to null structs.
+    Set Y-variant frequency callstats for female-specific metrics to missing structs.
 
     .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
 
     :param t: Table or MatrixTable for which to adjust female metrics
-    :return: Hail array expression to set female Y-variant metrics to null values
+    :return: Hail array expression to set female Y-variant metrics to missing values
     """
 
     female_idx = hl.map(
@@ -968,3 +1036,28 @@ def set_female_y_metrics_to_na_expr(
     )
 
     return new_freq_expr
+
+
+def hemi_expr(
+    locus: hl.expr.LocusExpression,
+    sex_expr: hl.expr.StringExpression,
+    gt: hl.expr.CallExpression,
+    male_str: str = "XY",
+) -> hl.expr.BooleanExpression:
+    """
+    Return whether genotypes are hemizygous.
+
+    Return missing expression if locus is not in chrX/chrY non-PAR regions.
+
+    :param locus: Input locus.
+    :param sex_expr: Input StringExpression indicating whether sample is XX or XY.
+    :param gt: Input genotype.
+    :param xy_str: String indicating whether sample is XY. Default is "XY".
+    :return: BooleanExpression indicating whether genotypes are hemizygous.
+    """
+    return hl.or_missing(
+        locus.in_x_nonpar() | locus.in_y_nonpar(),
+        # Haploid genotypes have a single integer, so checking if
+        # mt.GT[0] is alternate allele
+        gt.is_haploid() & (sex_expr == male_str) & (gt[0] == 1),
+    )

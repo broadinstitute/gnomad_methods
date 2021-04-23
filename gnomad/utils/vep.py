@@ -1,7 +1,18 @@
-from typing import Union
+# noqa: D100
+
+import json
+import logging
+import os
+import subprocess
+from typing import List, Optional, Union
 
 import hail as hl
-from gnomad.resources.resource_utils import DataException
+
+from gnomad.resources.resource_utils import VersionedTableResource
+
+logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [
@@ -62,17 +73,15 @@ CSQ_ORDER = (
     + CSQ_NON_CODING
 )
 
-VEP_REFERENCE_DATA = {
-    "GRCh37": {
-        "vep_config": "file:///vep_data/vep-gcloud.json",
-        "all_possible": "gs://gnomad-public-requester-pays/resources/context/grch37_context_vep_annotated.ht",
-    },
-    "GRCh38": {
-        "vep_config": "file:///vep_data/vep-gcloud.json",
-        "all_possible": "gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",
-    },
-}
+POSSIBLE_REFS = ("GRCh37", "GRCh38")
+"""
+Constant containing supported references
+"""
 
+VEP_CONFIG_PATH = "file:///vep_data/vep-gcloud.json"
+"""
+Constant that contains the local path to the VEP config file
+"""
 
 VEP_CSQ_FIELDS = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info"
 """
@@ -84,54 +93,134 @@ VEP_CSQ_HEADER = f"Consequence annotations from Ensembl VEP. Format: {VEP_CSQ_FI
 Constant that contains description for VEP used in VCF export.
 """
 
+LOFTEE_LABELS = ["HC", "LC", "OS"]
+"""
+Constant that contains annotations added by LOFTEE.
+"""
 
-def vep_context_ht_path(ref: str = "GRCh37"):
-    if ref not in VEP_REFERENCE_DATA.keys():
-        raise DataException(
-            "Select reference as one of: {}".format(",".join(VEP_REFERENCE_DATA.keys()))
-        )
-    return VEP_REFERENCE_DATA[ref]["all_possible"]
+LOF_CSQ_SET = {
+    "splice_acceptor_variant",
+    "splice_donor_variant",
+    "stop_gained",
+    "frameshift_variant",
+}
+"""
+Set containing loss-of-function consequence strings.
+"""
 
 
-def vep_config_path(ref: str = "GRCh37"):
-    if ref not in VEP_REFERENCE_DATA.keys():
-        raise DataException(
-            "Select reference as one of: {}".format(",".join(VEP_REFERENCE_DATA.keys()))
-        )
-    return VEP_REFERENCE_DATA[ref]["vep_config"]
-
-
-def vep_or_lookup_vep(ht, reference_vep_ht=None, reference=None, vep_config=None):
+def get_vep_help(vep_config_path: Optional[str] = None):
     """
-    VEP a table, or lookup variants in a reference database
+    Return the output of vep --help which includes the VEP version.
+
+    .. warning::
+        If no `vep_config_path` is supplied, this function will only work for Dataproc clusters
+        created with `hailctl dataproc start --vep`. It assumes that the command is `/path/to/vep`.
+
+    :param vep_config_path: Optional path to use as the VEP config file. If None, `VEP_CONFIG_URI` environment variable is used
+    :return: VEP help string
+    """
+    if vep_config_path is None:
+        vep_config_path = os.environ["VEP_CONFIG_URI"]
+
+    with hl.hadoop_open(vep_config_path) as vep_config_file:
+        vep_config = json.load(vep_config_file)
+        vep_command = vep_config["command"]
+        vep_help = subprocess.check_output([vep_command[0]]).decode("utf-8")
+        return vep_help
+
+
+def get_vep_context(ref: Optional[str] = None) -> VersionedTableResource:
+    """
+    Get VEP context resource for the genome build `ref`.
+
+    :param ref: Genome build. If None, `hl.default_reference` is used
+    :return: VEPed context resource
+    """
+    import gnomad.resources.grch37.reference_data as grch37
+    import gnomad.resources.grch38.reference_data as grch38
+
+    if ref is None:
+        ref = hl.default_reference().name
+
+    if ref not in POSSIBLE_REFS:
+        raise ValueError(
+            f'get_vep_context passed {ref}. Expected one of {", ".join(POSSIBLE_REFS)}'
+        )
+
+    vep_context = grch37.vep_context if ref == "GRCh37" else grch38.vep_context
+    return vep_context
+
+
+def vep_or_lookup_vep(
+    ht, reference_vep_ht=None, reference=None, vep_config_path=None, vep_version=None
+):
+    """
+    VEP a table, or lookup variants in a reference database.
+
+    .. warning::
+        If `reference_vep_ht` is supplied, no check is performed to confirm `reference_vep_ht` was
+        generated with the same version of VEP / VEP configuration as the VEP referenced in `vep_config_path`.
 
     :param ht: Input Table
     :param reference_vep_ht: A reference database with VEP annotations (must be in top-level `vep`)
     :param reference: If reference_vep_ht is not specified, find a suitable one in reference (if None, grabs from hl.default_reference)
-    :param vep_config: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
-    :return: VEPped Table
+    :param vep_config_path: vep_config to pass to hl.vep (if None, a suitable one for `reference` is chosen)
+    :param vep_version: Version of VEPed context Table to use (if None, the default `vep_context` resource will be used)
+    :return: VEPed Table
     """
     if reference is None:
         reference = hl.default_reference().name
+
+    if vep_config_path is None:
+        vep_config_path = VEP_CONFIG_PATH
+
+    vep_help = get_vep_help(vep_config_path)
+
+    with hl.hadoop_open(vep_config_path) as vep_config_file:
+        vep_config = vep_config_file.read()
+
     if reference_vep_ht is None:
 
-        possible_refs = ("GRCh37", "GRCh38")
-        if reference not in possible_refs:
+        if reference not in POSSIBLE_REFS:
             raise ValueError(
-                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(possible_refs)}'
+                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(POSSIBLE_REFS)}'
             )
 
-        reference_vep_ht = hl.read_table(vep_context_ht_path(reference))
+        vep_context = get_vep_context(reference)
+        if vep_version is None:
+            vep_version = vep_context.default_version
+
+        if vep_version not in vep_context.versions:
+            logger.warning(
+                f"No VEPed context Table available for genome build {reference} and VEP version {vep_version}, "
+                f"all variants will be VEPed using the following VEP:\n{vep_help}"
+            )
+            return hl.vep(ht, vep_config_path)
+
+        logger.info(
+            f"Using VEPed context Table from genome build {reference} and VEP version {vep_version}"
+        )
+
+        reference_vep_ht = vep_context.versions[vep_version].ht()
+        vep_context_help = hl.eval(reference_vep_ht.vep_help)
+        vep_context_config = hl.eval(reference_vep_ht.vep_config)
+
+        assert vep_help == vep_context_help, (
+            f"The VEP context HT version does not match the version referenced in the VEP config file."
+            f"\nVEP context:\n{vep_context_help}\n\n VEP config:\n{vep_help}"
+        )
+
+        assert vep_config == vep_context_config, (
+            f"The VEP context HT configuration does not match the configuration in {vep_config_path}."
+            f"\nVEP context:\n{vep_context_config}\n\n Current config:\n{vep_config}"
+        )
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
 
     vep_ht = ht.filter(hl.is_defined(ht.vep))
     revep_ht = ht.filter(hl.is_missing(ht.vep))
-
-    if vep_config is None:
-        vep_config = vep_config_path(reference)
-
-    revep_ht = hl.vep(revep_ht, vep_config)
+    revep_ht = hl.vep(revep_ht, vep_config_path)
 
     return vep_ht.union(revep_ht)
 
@@ -158,8 +247,9 @@ def process_consequences(
     penalize_flags: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
-    and worst_csq_by_gene, any_lof into [vep_root]
+    Add most_severe_consequence into [vep_root].transcript_consequences, and worst_csq_by_gene, any_lof into [vep_root].
+
+    `most_severe_consequence` is the worst consequence for a transcript.
 
     :param mt: Input MT
     :param vep_root: Root for vep annotation (probably vep)
@@ -172,9 +262,7 @@ def process_consequences(
     def find_worst_transcript_consequence(
         tcl: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
-        """
-        Gets worst transcript_consequence from an array of em
-        """
+        """Get worst transcript_consequence from an array of em."""
         flag_score = 500
         no_flag_score = flag_score * (1 + penalize_flags)
 
@@ -249,6 +337,7 @@ def process_consequences(
 def filter_vep_to_canonical_transcripts(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
 ) -> Union[hl.MatrixTable, hl.Table]:
+    """Filter VEP transcript consequences to those in the canonical transcript."""
     canonical = mt[vep_root].transcript_consequences.filter(
         lambda csq: csq.canonical == 1
     )
@@ -263,6 +352,7 @@ def filter_vep_to_canonical_transcripts(
 def filter_vep_to_synonymous_variants(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
 ) -> Union[hl.MatrixTable, hl.Table]:
+    """Filter VEP transcript consequences to those with a most severe consequence of synonymous_variant."""
     synonymous = mt[vep_root].transcript_consequences.filter(
         lambda csq: csq.most_severe_consequence == "synonymous_variant"
     )
@@ -293,7 +383,6 @@ def vep_struct_to_csq(
     :param csq_fields: The | delimited list of fields to include in the CSQ (in that order)
     :return: The corresponding CSQ strings
     """
-
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
 
     def get_csq_from_struct(
@@ -385,3 +474,80 @@ def vep_struct_to_csq(
         )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
+
+
+def get_most_severe_consequence_for_summary(
+    ht: hl.Table,
+    csq_order: List[str] = CSQ_ORDER,
+    loftee_labels: List[str] = LOFTEE_LABELS,
+) -> hl.Table:
+    """
+    Prepare a hail Table for summary statistics generation.
+
+    Adds the following annotations:
+        - most_severe_csq: Most severe consequence for variant
+        - protein_coding: Whether the variant is present on a protein-coding transcript
+        - lof: Whether the variant is a loss-of-function variant
+        - no_lof_flags: Whether the variant has any LOFTEE flags (True if no flags)
+
+    Assumes input Table is annotated with VEP and that VEP annotations have been filtered to canonical transcripts.
+
+    :param ht: Input Table.
+    :param csq_order: Order of VEP consequences, sorted from high to low impact. Default is CSQ_ORDER.
+    :param loftee_labels: Annotations added by LOFTEE. Default is LOFTEE_LABELS.
+    :return: Table annotated with VEP summary annotations.
+    """
+
+    def _get_most_severe_csq(
+        csq_list: hl.expr.ArrayExpression, protein_coding: bool
+    ) -> hl.expr.StructExpression:
+        """
+        Process VEP consequences to generate summary annotations.
+
+        :param csq_list: VEP consequences list to be processed.
+        :param protein_coding: Whether variant is in a protein-coding transcript.
+        :return: Struct containing summary annotations.
+        """
+        lof = hl.null(hl.tstr)
+        no_lof_flags = hl.null(hl.tbool)
+        if protein_coding:
+            all_lofs = csq_list.map(lambda x: x.lof)
+            lof = hl.literal(loftee_labels).find(lambda x: all_lofs.contains(x))
+            csq_list = hl.if_else(
+                hl.is_defined(lof), csq_list.filter(lambda x: x.lof == lof), csq_list
+            )
+            no_lof_flags = hl.or_missing(
+                hl.is_defined(lof),
+                csq_list.any(lambda x: (x.lof == lof) & hl.is_missing(x.lof_flags)),
+            )
+        all_csq_terms = csq_list.flatmap(lambda x: x.consequence_terms)
+        most_severe_csq = hl.literal(csq_order).find(
+            lambda x: all_csq_terms.contains(x)
+        )
+        return hl.struct(
+            most_severe_csq=most_severe_csq,
+            protein_coding=protein_coding,
+            lof=lof,
+            no_lof_flags=no_lof_flags,
+        )
+
+    protein_coding = ht.vep.transcript_consequences.filter(
+        lambda x: x.biotype == "protein_coding"
+    )
+    return ht.annotate(
+        **hl.case(missing_false=True)
+        .when(hl.len(protein_coding) > 0, _get_most_severe_csq(protein_coding, True))
+        .when(
+            hl.len(ht.vep.transcript_consequences) > 0,
+            _get_most_severe_csq(ht.vep.transcript_consequences, False),
+        )
+        .when(
+            hl.len(ht.vep.regulatory_feature_consequences) > 0,
+            _get_most_severe_csq(ht.vep.regulatory_feature_consequences, False),
+        )
+        .when(
+            hl.len(ht.vep.motif_feature_consequences) > 0,
+            _get_most_severe_csq(ht.vep.motif_feature_consequences, False),
+        )
+        .default(_get_most_severe_csq(ht.vep.intergenic_consequences, False))
+    )

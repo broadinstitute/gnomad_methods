@@ -1,0 +1,5 @@
+[pydocstyle]
+convention = pep257
+add-ignore =
+  D105, # Ignore missing docstring for magic methods.
+  D107 # Ignore missing docstring for __init__ method. Parameters are documented in the class docstring.

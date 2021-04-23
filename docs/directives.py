@@ -1,6 +1,4 @@
-"""
-Sphinx helpers for documentation.
-"""
+"""Sphinx helpers for documentation."""
 
 import importlib
 import symtable

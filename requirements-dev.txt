@@ -1,2 +1,5 @@
 black==19.10b0
+pre-commit==2.10.1
+pydocstyle==6.0.0
 pylint
+pytest==6.2.3

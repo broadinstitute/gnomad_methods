@@ -1037,8 +1037,8 @@ def set_female_y_metrics_to_na_expr(
 
     return new_freq_expr
 
-  
-  def hemi_expr(
+
+def hemi_expr(
     locus: hl.expr.LocusExpression,
     sex_expr: hl.expr.StringExpression,
     gt: hl.expr.CallExpression,

@@ -257,12 +257,12 @@ class BaseVersionedResource:
         for version_resource in versions.values():
             if not isinstance(version_resource, self.resource_class):
                 raise TypeError(
-                    f"{self.__class.__name__} requires all versions to be of type {self.resource_class.__name__}"
+                    f"{self.__class__.__name__} requires all versions to be of type {self.resource_class.__name__}"
                 )
 
             if version_resource.__class__ is not default_resource.__class__:
                 raise TypeError(
-                    f"{self.__class.__name__} requires all versions to be of the same type"
+                    f"{self.__class__.__name__} requires all versions to be of the same type"
                 )
 
         self.default_version = default_version
@@ -270,7 +270,7 @@ class BaseVersionedResource:
 
     def __repr__(self):
         return "{cls}(default_version={default_version}, versions={{{versions}}})".format(
-            cls=self.__class.__name__,
+            cls=self.__class__.__name__,
             default_version=self.default_version,
             versions=", ".join(f'"{k}": {repr(v)}' for k, v in self.versions.items()),
         )

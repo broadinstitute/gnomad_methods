@@ -1,14 +1,19 @@
 # Changes
 
 ## Unreleased
+* Added function `region_flag_expr` to flag problematic regions [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
+* Added function `missing_callstats_expr` to create a Hail Struct with missing values that is inserted into frequency annotation arrays when data is missing [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
+* Added function `set_female_y_metrics_to_na_expr` to set Y-variant frequency callstats for female-specific metrics to missing [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
+* Added function `make_faf_index_dict` to create a look-up Dictionary for entries contained in the filter allele frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
+* Added function `make_freq_index_dict` to create a look-up Dictionary for entries contained in the frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 
 ## Version 0.5.0 - April 22nd, 2021
 
 ### Fixed
 
 * Fix for error in `generate_trio_stats_expr` that led to an incorrect untransmitted count. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
-* Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlapped multiple bins. [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
-* Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error". [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fix for error in `compute_quantile_bin` that caused incorrect binning when a single score overlapped multiple bins [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
+* Fixed `create_binned_ht` because it produced a "Cannot combine expressions from different source objects error" [(#238)](https://github.com/broadinstitute/gnomad_methods/pull/238)
 * Fixed handling of missing entries (not within a ref block / alt site) when computing `coverage_stats` in `sparse_mt.py` [[#242]](https://github.com/broadinstitute/gnomad_methods/pull/242)
 * Fix for error in `compute_stratified_sample_qc` where `gt_expr` caused error [(#259)](https://github.com/broadinstitute/gnomad_methods/pull/259)
 * Fix for error in `default_lift_data` caused by missing `results` field in `new_locus` [(#270)](https://github.com/broadinstitute/gnomad_methods/pull/270)

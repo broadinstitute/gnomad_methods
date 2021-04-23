@@ -1,3 +1,5 @@
+# noqa: D100
+
 from gnomad.resources.resource_utils import TableResource, BlockMatrixResource
 from gnomad.resources.grch37.gnomad import CURRENT_EXOME_RELEASE, CURRENT_GENOME_RELEASE
 from typing import Optional

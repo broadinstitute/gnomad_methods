@@ -1,3 +1,5 @@
+# noqa: D100
+
 import hail as hl
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix

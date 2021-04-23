@@ -1,3 +1,5 @@
+# noqa: D100
+
 import base64
 import gzip
 import logging

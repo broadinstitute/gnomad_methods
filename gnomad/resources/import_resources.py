@@ -1,3 +1,5 @@
+# noqa: D100
+
 import itertools
 import textwrap
 from inspect import getmembers

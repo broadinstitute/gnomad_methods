@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import List, Optional, Tuple
 

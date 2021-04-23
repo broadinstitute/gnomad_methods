@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional

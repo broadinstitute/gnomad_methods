@@ -1,3 +1,5 @@
+# noqa: D100
+
 import json
 import logging
 from typing import Callable, Dict, List, Optional, Union

@@ -1,3 +1,5 @@
+# noqa: D100
+
 import os
 import sys
 import time

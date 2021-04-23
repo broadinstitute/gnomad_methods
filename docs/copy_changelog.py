@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-"""
-Copy CHANGELOG.md from repository root and remove "Unreleased" section.
-"""
+"""Copy CHANGELOG.md from repository root and remove "Unreleased" section."""
 
 import os
 

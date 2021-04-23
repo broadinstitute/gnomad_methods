@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
-"""
-Generate API reference documentation for a package.
-"""
+"""Generate API reference documentation for a package."""
 
 import importlib
 import os
@@ -25,9 +23,7 @@ EXCLUDE_PACKAGES = ["tests"]
 
 
 def module_doc_path(module):
-    """
-    Get the path for a module's documentation file.
-    """
+    """Get the path for a module's documentation file."""
     return os.path.join(
         DOCS_DIRECTORY,
         "api_reference",
@@ -36,9 +32,7 @@ def module_doc_path(module):
 
 
 def package_doc_path(package):
-    """
-    Get the path for a package's documentation file.
-    """
+    """Get the path for a package's documentation file."""
     return os.path.join(
         DOCS_DIRECTORY,
         "api_reference",
@@ -48,9 +42,7 @@ def package_doc_path(package):
 
 
 def write_file(path, contents):
-    """
-    Write a file after ensuring that the target directory exists.
-    """
+    """Write a file after ensuring that the target directory exists."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as out:
         out.write(contents)
@@ -77,9 +69,7 @@ MODULE_DOC_TEMPLATE = """{title}
 
 
 def write_module_doc(module_name):
-    """
-    Write API reference documentation file for a module.
-    """
+    """Write API reference documentation file for a module."""
     module = importlib.import_module(module_name)
 
     doc = MODULE_DOC_TEMPLATE.format(
@@ -104,9 +94,7 @@ PACKAGE_DOC_TEMPLATE = """{title}
 
 
 def write_package_doc(package_name):
-    """
-    Write API reference documentation file for a package.
-    """
+    """Write API reference documentation file for a package."""
     package = importlib.import_module(package_name)
 
     module_links = []

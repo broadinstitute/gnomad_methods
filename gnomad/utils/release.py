@@ -1,6 +1,6 @@
-from typing import Dict, List, Optional
+# noqa: D100
 
-import hail as hl
+from typing import Dict, List, Optional
 
 from gnomad.resources.grch38.gnomad import (
     GROUPS,

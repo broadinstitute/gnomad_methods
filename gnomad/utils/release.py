@@ -12,11 +12,11 @@ from gnomad.utils.vcf import index_globals
 
 
 def make_faf_index_dict(
-        faf_meta: List[Dict[str, str]],
-        groups: List[str] = ["adj"],
-        pops: List[str] = POPS,
-        sexes: List[str] = SEXES,
-        label_delimiter: str = "_",
+    faf_meta: List[Dict[str, str]],
+    groups: List[str] = ["adj"],
+    pops: List[str] = POPS,
+    sexes: List[str] = SEXES,
+    label_delimiter: str = "_",
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the filter allele frequency annotation array.
@@ -55,8 +55,8 @@ def make_freq_index_dict(
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
 
-    .. note: 
-    
+    .. note:
+
         Downsampling groupings are only computed on 'adj'-filtered genotypes
 
     :param freq_meta: List containing the set of groupings for each element of the freq array
@@ -70,10 +70,10 @@ def make_freq_index_dict(
     :return: Dictionary keyed by the grouping combinations found in the frequency array, where values are the corresponding
         0-based indices for the groupings in the freq_meta array
     """
-    
+
     def _get_index(label_groups):
         return index_globals(freq_meta, label_groups, label_delimiter)
-    
+
     index_dict = {
         **_get_index(dict(group=groups)),
         **_get_index(dict(group=groups, pop=pops)),
@@ -82,14 +82,12 @@ def make_freq_index_dict(
         **_get_index(dict(group=groups, subset=subsets)),
         **_get_index(dict(group=groups, subset=subsets, pop=pops)),
         **_get_index(dict(group=groups, subset=subsets, sex=sexes)),
-        **_get_index(dict(group=groups, subset=subsets, pop=pops, sex=sexes))
+        **_get_index(dict(group=groups, subset=subsets, pop=pops, sex=sexes)),
     }
-    
+
     if downsamplings:
         index_dict.update(
-            {
-                **_get_index(dict(downsampling=downsamplings, group=["adj"], pop=pops))
-            }
+            {**_get_index(dict(downsampling=downsamplings, group=["adj"], pop=pops))}
         )
 
     return index_dict

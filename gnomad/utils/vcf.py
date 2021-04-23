@@ -189,7 +189,9 @@ INFO_DICT = {
     "variant_type": {
         "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"
     },
-    "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)",},
+    "allele_type": {
+        "Description": "Allele type (snv, insertion, deletion, or mixed)",
+    },
     "n_alt_alleles": {
         "Number": "1",
         "Description": "Total number of alternate alleles observed at variant locus",
@@ -420,7 +422,9 @@ def index_globals(
 
 
 def make_combo_header_text(
-    preposition: str, combo_dict: Dict[str, str], pop_names: Dict[str, str],
+    preposition: str,
+    combo_dict: Dict[str, str],
+    pop_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -775,7 +779,8 @@ def set_female_y_metrics_to_na(
         female_metrics_dict.update(
             {
                 f"{metric}": hl.or_missing(
-                    (~t.locus.in_y_nonpar() & ~t.locus.in_y_par()), t.info[f"{metric}"],
+                    (~t.locus.in_y_nonpar() & ~t.locus.in_y_par()),
+                    t.info[f"{metric}"],
                 )
             }
         )

@@ -347,7 +347,7 @@ def plot_hail_file_metadata(
     t_path: str,
 ) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
-    Take path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively.
+    Take path to hail Table or MatrixTable (gs://bucket/path/hail.mt), output Grid or Tabs, respectively.
 
     Or if an unordered Table is provided, a Figure with file sizes is output.
     If metadata file or rows directory is missing, returns None.

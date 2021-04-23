@@ -27,7 +27,7 @@ def filter_rows_for_qc(
     snv_only: bool = True,
 ) -> hl.MatrixTable:
     """
-    Annotate rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then applies thresholds.
+    Annotate rows with `sites_callrate`, `site_inbreeding_coeff` and `af`, then apply thresholds.
 
     AF and callrate thresholds are taken from gnomAD QC; inbreeding coeff, MQ, FS and QD filters are taken from
     GATK best practices.

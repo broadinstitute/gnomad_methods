@@ -68,7 +68,7 @@ def merge_stats_counters_expr(
         i: hl.expr.StructExpression, j: hl.expr.StructExpression
     ) -> hl.expr.StructExpression:
         """
-        Merge two stast counters together.
+        Merge two stats counters together.
 
         Assumes that all stats counter fields are present in the struct.
 

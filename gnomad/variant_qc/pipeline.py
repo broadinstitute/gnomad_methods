@@ -38,7 +38,7 @@ def create_binned_ht(
     add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
-    Annotate each row of `ht` with a bin based on the score annotation into `n_bins` equally-sized bins.
+    Annotate each row of `ht` with a bin based on binning the score annotation into `n_bins` equally-sized bins.
 
     This is meant as a default wrapper for `compute_ranked_bin`.
 

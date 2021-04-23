@@ -51,7 +51,7 @@ def get_duplicated_samples(
     rel_col: str = "relationship",
 ) -> List[Set[str]]:
     """
-    Extract the list of duplicate sample using a Table ouput from pc_relate.
+    Extract the list of duplicate samples using a Table ouput from pc_relate.
 
     :param relationship_ht: Table with relationships between pairs of samples
     :param i_col: Column containing the 1st sample
@@ -270,8 +270,8 @@ def infer_families(
     """
     Generate a pedigree containing trios inferred from the `relationship_ht`.
 
-    This function takes a hail Table with a row for each pair of individuals i,j in the data that are
-    related (it's OK to have unrelated samples too).
+    This function takes a hail Table with a row for each pair of related individuals i, j in the data (it's OK to have
+    unrelated samples too).
 
     The `relationship_col` should be a column specifying the relationship between each two samples as defined in this
      module's constants.
@@ -297,8 +297,6 @@ def infer_families(
     ) -> List[List[Tuple[str, str]]]:
         """
         Group parent-child pairs into a list of families.
-
-        Takes all parent-children pairs and groups them by family.
 
         A family here is defined as a list of sample-pairs which all share at least one sample with at least one other
         sample-pair in the list.
@@ -409,7 +407,7 @@ def infer_families(
 
         def check_sibs(children: List[str]) -> bool:
             """
-            Confirm that all children a parent pair are siblings with each other.
+            Confirm that all children of a parent pair are siblings with each other.
 
             If there are multiple children for a given parent pair, all children should be siblings with each other.
 
@@ -571,7 +569,7 @@ def create_fake_pedigree(
     """
     Generate a pedigree made of trios created by sampling 3 random samples in the sample list.
 
-    - If `real_pedigree` is given, then children the resulting fake trios will not include any trio with proband - parents
+    - If `real_pedigree` is given, then children in the resulting fake trios will not include any trio with proband - parents
       that are in the real ones.
     - Each sample can be used only once as a proband in the resulting trios.
     - Sex of probands in fake trios is random.

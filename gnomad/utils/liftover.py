@@ -28,7 +28,7 @@ def get_liftover_genome(
     t: Union[hl.MatrixTable, hl.Table]
 ) -> Tuple[hl.genetics.ReferenceGenome, hl.genetics.ReferenceGenome]:
     """
-    Infer reference genome build of input data and assumes destination reference genome build.
+    Infer reference genome build of input data and assume destination reference genome build.
 
     Adds liftover chain to source reference genome and sequence to destination reference genome.
     Returns tuple containing both reference genomes in preparation for liftover.

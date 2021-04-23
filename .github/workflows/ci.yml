@@ -27,10 +27,12 @@ jobs:
           pip install wheel
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-      - name: Run Pylint
-        run: ./lint --disable=W
       - name: Check formatting
         run: black --check gnomad tests
+      - name: Check docstrings
+        run: pydocstyle gnomad
+      - name: Run Pylint
+        run: ./lint --disable=W
       - name: Run tests
         run: python -m pytest
   docs:

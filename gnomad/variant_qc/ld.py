@@ -6,7 +6,9 @@ from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
 from hail.linalg import BlockMatrix
 
 
-def get_r_human_readable(pop: str, var1: str, var2: str, ref_genome: str = "GRCh37"):
+def get_r_human_readable(
+    pop: str, var1: str, var2: str, ref_genome: str = "GRCh37"
+):  # noqa: D103
     bm = ld_matrix(pop).bm()
     ht = ld_index(pop).ht()
     chrom, pos, ref, alt = var1.split("-")

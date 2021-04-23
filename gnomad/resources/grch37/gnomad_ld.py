@@ -68,12 +68,15 @@ def _ld_scores_path(
 
 
 def ld_matrix(pop: str) -> BlockMatrixResource:
+    """Get resource for the LD matrix for the given population."""
     return BlockMatrixResource(path=_ld_matrix_path("genomes", pop))
 
 
 def ld_index(pop: str) -> TableResource:
+    """Get resource for the LD indices for the given population."""
     return TableResource(path=_ld_index_path("genomes", pop))
 
 
 def ld_scores(pop: str) -> TableResource:
+    """Get resource for the LD scores for the given population."""
     return TableResource(path=_ld_scores_path("genomes", pop))

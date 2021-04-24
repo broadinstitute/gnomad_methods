@@ -432,7 +432,7 @@ def annotate_freq(
             downsamplings = sorted(
                 [x for x in downsamplings if x <= sum(cut_data.get("pop").values())]
             )
-        logger.info(f"Found {len(downsamplings)} downsamplings: {downsamplings}")
+        logger.info("Found %d downsamplings: %s", len(downsamplings), downsamplings)
 
         # Shuffle the samples, then create a global index for downsampling
         # And a pop-index if pops were provided

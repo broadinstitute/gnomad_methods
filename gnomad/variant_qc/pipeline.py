@@ -274,7 +274,7 @@ def generate_trio_stats(
     if bi_allelic_only:
         mt = mt.filter_rows(bi_allelic_expr(mt))
 
-    logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
+    logger.info("Generating trio stats using %d trios.", mt.count_cols())
     trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
 
     ht = mt.select_rows(
@@ -399,9 +399,10 @@ def train_rf_model(
     summary.show(n=20)
 
     logger.info(
-        "Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}".format(
-            ",".join(rf_features), num_trees, max_depth
-        )
+        "Training RF model:\nfeatures: %s\nnum_tree: %d\nmax_depth:%d",
+        ",".join(rf_features),
+        num_trees,
+        max_depth,
     )
 
     rf_model = train_rf(
@@ -414,7 +415,7 @@ def train_rf_model(
 
     test_results = None
     if test_expr is not None:
-        logger.info(f"Testing model on specified variants or intervals...")
+        logger.info("Testing model on specified variants or intervals...")
         test_ht = ht.filter(hl.is_defined(ht.rf_label) & ht.rf_test)
         test_results = test_model(
             test_ht, rf_model, features=rf_features, label="rf_label"

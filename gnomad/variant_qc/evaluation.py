@@ -110,7 +110,7 @@ def compute_ranked_bin(
         )
     )
 
-    logger.info(f"Binning ranked rows into {n_bins} bins...")
+    logger.info("Binning ranked rows into %d bins...", n_bins)
     bin_ht = bin_ht.select(
         "snv",
         **{

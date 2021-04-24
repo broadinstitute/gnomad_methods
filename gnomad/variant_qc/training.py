@@ -98,7 +98,11 @@ def sample_training_examples(
             prob_tp = n_fp / desired_fp
 
         logger.info(
-            f"Training examples sampling: tp={prob_tp}*{n_tp}, fp={prob_fp}*{n_fp}"
+            "Training examples sampling: tp=%f*%d, fp=%f*%d",
+            prob_tp,
+            n_tp,
+            prob_fp,
+            n_fp,
         )
 
         train_expr = (
@@ -109,7 +113,7 @@ def sample_training_examples(
         )
     else:
         train_expr = ~(ht._tp & ht._fp)
-        logger.info(f"Using all {n_tp} TP and {n_fp} FP training examples.")
+        logger.info("Using all %d TP and %d FP training examples.", n_tp, n_fp)
 
     label_expr = (
         hl.case(missing_false=True)

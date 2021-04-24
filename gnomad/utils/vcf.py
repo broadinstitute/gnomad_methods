@@ -308,7 +308,8 @@ def ht_to_vcf_mt(
     for f, ft in info_ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value."
+                "Coercing field info.%s from int64 to int32 for VCF output. Value will be capped at int32 max value.",
+                f,
             )
             info_ht = info_ht.annotate(
                 info=info_ht.info.annotate(
@@ -317,7 +318,9 @@ def ht_to_vcf_mt(
             )
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
-                f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value."
+                "Coercing field info.%s from array<int64> to array<int32> for VCF output. Array values will be capped "
+                "at int32 max value.",
+                f,
             )
             info_ht = info_ht.annotate(
                 info=info_ht.info.annotate(
@@ -632,7 +635,7 @@ def add_as_info_dict(
             ] = f"Allele-specific {first_letter}{rest_of_description}"
 
         except KeyError:
-            logger.warning(f"{field} is not present in input info dictionary!")
+            logger.warning("%s is not present in input info dictionary!", field)
 
     return as_dict
 

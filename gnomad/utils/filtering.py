@@ -266,8 +266,8 @@ def subset_samples_and_variants(
         mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
 
     logger.info(
-        f"Finished subsetting samples. Kept {mt.count_cols()} "
-        f"out of {full_count} samples in MT"
+        "Finished subsetting samples. Kept %d out of {full_count} samples in MT",
+        mt.count_cols(),
     )
     return mt
 
@@ -300,7 +300,8 @@ def filter_to_clinvar_pathogenic(
     :return: Filtered MatrixTable or Table
     """
     logger.info(
-        f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants before filtering"
+        "Found %d variants before filtering",
+        t.count_rows() if isinstance(t, hl.MatrixTable) else t.count(),
     )
     path_expr = (
         t.info[clnsig_field]
@@ -325,7 +326,7 @@ def filter_to_clinvar_pathogenic(
 
     if remove_conflicting:
         logger.info(
-            f"Variants with conflicting clinical interpretations will be removed."
+            "Variants with conflicting clinical interpretations will be removed."
         )
         path_expr = path_expr & hl.is_missing(t.info[clnsigconf_field])
 
@@ -335,6 +336,7 @@ def filter_to_clinvar_pathogenic(
         t = t.filter(path_expr)
 
     logger.info(
-        f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants after filtering to clinvar pathogenic variants."
+        "Found %d variants after filtering to clinvar pathogenic variants.",
+        t.count_rows() if isinstance(t, hl.MatrixTable) else t.count(),
     )
     return t

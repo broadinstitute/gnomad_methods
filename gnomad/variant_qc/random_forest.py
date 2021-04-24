@@ -58,26 +58,20 @@ def run_rf_test(
         )
 
     f3_before_imputation = f3stats(ht)
-    logger.info(
-        "Feature3 defined values before imputation: {}".format(f3_before_imputation.n)
-    )
-    logger.info("Feature3 median: {}".format(f3_before_imputation.med))
+    logger.info("Feature3 defined values before imputation: %d", f3_before_imputation.n)
+    logger.info("Feature3 median: %f", f3_before_imputation.med)
 
     features_to_impute = ["feature3"]
     quantiles = get_columns_quantiles(ht, features_to_impute, [0.5])
     quantiles = {k: v[0] for k, v in quantiles.items()}
 
-    logger.info(
-        "Features median:\n{}".format(f"{k}: {v}\n" for k, v in quantiles.items())
-    )
+    logger.info("Features median:\n%s", [f"{k}: {v}\n" for k, v in quantiles.items()])
     ht = ht.annotate(**{f: hl.or_else(ht[f], quantiles[f]) for f in features_to_impute})
     ht = ht.annotate_globals(medians=quantiles)
 
     f3_after_imputation = f3stats(ht)
-    logger.info(
-        "Feature3 defined values after imputation: {}".format(f3_after_imputation.n)
-    )
-    logger.info("Feature3 median: {}".format(f3_after_imputation.med))
+    logger.info("Feature3 defined values after imputation: %d", f3_after_imputation.n)
+    logger.info("Feature3 median: %f", f3_after_imputation.med)
 
     ht = ht.select("label", "feature1", "feature2", "feature3")
 
@@ -151,7 +145,7 @@ def get_columns_quantiles(
 
     res = {}
     for f in fields:
-        logger.info("Computing median for column: {}".format(f))
+        logger.info("Computing median for column: %f", f)
         col_no_na = df.select(f).dropna()
         if col_no_na.first() is not None:
             res[f] = col_no_na.approxQuantile(str(f), quantiles, relative_error)
@@ -201,14 +195,13 @@ def median_impute_features(
         )
         feature_median_expr = ht.feature_medians[hl.tuple([ht[x] for x in strata])]
         logger.info(
-            "Variant count by strata:\n{}".format(
-                "\n".join(
-                    [
-                        "{}: {}".format(k, v)
-                        for k, v in hl.eval(ht.variants_by_strata).items()
-                    ]
-                )
-            )
+            "Variant count by strata:\n%s",
+            "\n".join(
+                [
+                    "{}: {}".format(k, v)
+                    for k, v in hl.eval(ht.variants_by_strata).items()
+                ]
+            ),
         )
 
     else:
@@ -323,12 +316,11 @@ def test_model(
     # Print results
     df = pd.DataFrame(test_results)
     df = df.pivot(index=label, columns=prediction_col_name, values="n")
-    logger.info("Testing results:\n{}".format(pprint.pformat(df)))
+    logger.info("Testing results:\n%s", pprint.pformat(df))
     logger.info(
-        "Accuracy: {}".format(
-            sum([x.n for x in test_results if x[label] == x[prediction_col_name]])
-            / sum([x.n for x in test_results])
-        )
+        "Accuracy: %f",
+        sum([x.n for x in test_results if x[label] == x[prediction_col_name]])
+        / sum([x.n for x in test_results]),
     )
 
     return test_results
@@ -413,7 +405,7 @@ def save_model(
     :param overwrite: If set, will overwrite existing file(s) at output location
     :return: Nothing
     """
-    logger.info("Saving model to %s" % out_path)
+    logger.info("Saving model to %s", out_path)
     if overwrite:
         rf_pipeline.write().overwrite().save(out_path)
     else:
@@ -427,7 +419,7 @@ def load_model(input_path: str) -> pyspark.ml.PipelineModel:
     :param input_path: Location of model to load
     :return: Random Forest pipeline model
     """
-    logger.info("Loading model from {}".format(input_path))
+    logger.info("Loading model from %s", input_path)
     return pyspark.ml.PipelineModel.load(input_path)
 
 
@@ -449,11 +441,11 @@ def train_rf(
     :return: Random Forest pipeline model
     """
     logger.info(
-        "Training RF model using:\n"
-        "features: {}\n"
-        "labels: {}\n"
-        "num_trees: {}\n"
-        "max_depth: {}".format(",".join(features), label, num_trees, max_depth)
+        "Training RF model using:\nfeatures: %s\nlabels: %s\nnum_trees: %d\nmax_depth: %d",
+        ",".join(features),
+        label,
+        num_trees,
+        max_depth,
     )
 
     check_ht_fields_for_spark(ht, features + [label])
@@ -466,11 +458,11 @@ def train_rf(
         .fit(df)
     )
     labels = label_indexer.labels
-    logger.info("Found labels: {}".format(labels))
+    logger.info("Found labels: %s", labels)
 
     string_features = [x[0] for x in df.dtypes if x[0] != label and x[1] == "string"]
     if string_features:
-        logger.info("Indexing string features: {}".format(",".join(string_features)))
+        logger.info("Indexing string features: %s", ",".join(string_features))
     string_features_indexers = [
         StringIndexer(inputCol=x, outputCol=x + "_indexed")
         .setHandleInvalid("keep")
@@ -511,9 +503,8 @@ def train_rf(
     feature_importance = get_features_importance(rf_model)
 
     logger.info(
-        "RF features importance:\n{}".format(
-            "\n".join(["{}: {}".format(f, i) for f, i in feature_importance.items()])
-        )
+        "RF features importance:\n%s",
+        "\n".join([f"{f}: {i}" for f, i in feature_importance.items()]),
     )
 
     return rf_model
@@ -531,7 +522,7 @@ def get_rf_runs(rf_json_fp: str) -> Dict:
             return json.load(f)
     else:
         logger.warning(
-            f"File {rf_json_fp} could not be found. Returning empty RF run hash dict."
+            "File %s could not be found. Returning empty RF run hash dict.", rf_json_fp
         )
         return {}
 
@@ -596,4 +587,4 @@ def pretty_print_runs(
             res_pd = res_pd.pivot(
                 index=label_col, columns=prediction_col_name, values="n"
             )
-            logger.info("Testing results:\n{}".format(pformat(res_pd)))
+            logger.info("Testing results:\n%s", pformat(res_pd))

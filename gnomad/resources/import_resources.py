@@ -34,16 +34,18 @@ def get_module_importable_resources(
     """
     _prefix = f"{prefix}." if prefix else ""
     resources = {}
-    for resource_name, resource in getmembers(
-        module, lambda x: isinstance(x, BaseResource)
-    ):
-        if resource.path and resource.import_func:
-            arg_name = f"{_prefix}{resource_name}"
-            if isinstance(resource, BaseVersionedResource):
-                for version in resource.versions:
-                    arg_name += f".{version}"
-                    resource_name = f"{resource_name} version {version}"
-            resources[arg_name] = (resource_name, resource)
+    for name, obj in getmembers(module):
+        if isinstance(obj, BaseResource) and obj.path and obj.import_func:
+            resources[f"{_prefix}{name}"] = (name, obj)
+
+        if isinstance(obj, BaseVersionedResource):
+            for version_name, version_resource in obj.versions.items():
+                if version_resource.path and version_resource.import_func:
+                    resources[f"{_prefix}{name}.{version_name}"] = (
+                        f"{name}.{version_name}",
+                        version_resource,
+                    )
+
     return resources
 
 

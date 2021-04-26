@@ -613,7 +613,7 @@ def impute_sex_ploidy(
                 hl.is_missing(excluded_calling_intervals[contig_ht.key])
             )
         contig_size = contig_ht.count()
-        logger.info("Contig %s has %s bases for coverage.", contig, contig_size)
+        logger.info("Contig %s has %d bases for coverage.", contig, contig_size)
         return contig_size
 
     def get_chr_dp_ann(chrom: str) -> hl.Table:

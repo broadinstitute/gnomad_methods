@@ -145,7 +145,7 @@ def get_columns_quantiles(
 
     res = {}
     for f in fields:
-        logger.info("Computing median for column: %f", f)
+        logger.info("Computing median for column: %s", f)
         col_no_na = df.select(f).dropna()
         if col_no_na.first() is not None:
             res[f] = col_no_na.approxQuantile(str(f), quantiles, relative_error)

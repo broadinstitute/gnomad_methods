@@ -266,8 +266,9 @@ def subset_samples_and_variants(
         mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
 
     logger.info(
-        "Finished subsetting samples. Kept %d out of {full_count} samples in MT",
+        "Finished subsetting samples. Kept %d out of %d samples in MT",
         mt.count_cols(),
+        full_count,
     )
     return mt
 

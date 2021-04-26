@@ -55,8 +55,9 @@ def get_liftover_genome(
     logger.info("Adding liftover chain to input build...")
     if source.has_liftover(target):
         logger.warning(
-            f"Source reference build {source.name} already has a chain file: {source._liftovers}!\
-            Using whichever chain has already been added."
+            "Source reference build %s already has a chain file: %s! Using whichever chain has already been added.",
+            source.name,
+            source._liftovers,
         )
     else:
         source.add_liftover(chain, target)
@@ -131,7 +132,7 @@ def default_lift_data(
     )
 
     if remove_failed_sites:
-        logger.info(f"Filtering out {num_no_target} sites that failed to liftover...")
+        logger.info("Filtering out %d sites that failed to liftover...", num_no_target)
         keep_expr = ~t.locus_fail_liftover
         t = t.filter(keep_expr) if isinstance(t, hl.Table) else t.filter_rows(keep_expr)
 

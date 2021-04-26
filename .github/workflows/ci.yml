@@ -32,7 +32,7 @@ jobs:
       - name: Check docstrings
         run: pydocstyle gnomad
       - name: Run Pylint
-        run: ./lint --disable=W
+        run: ./lint --disable=W --enable=logging-not-lazy,logging-format-interpolation,logging-fstring-interpolation
       - name: Run tests
         run: python -m pytest
   docs:

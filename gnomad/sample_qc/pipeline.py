@@ -262,7 +262,7 @@ def annotate_sex(
         )
 
     x_contigs = get_reference_genome(mt.locus).x_contigs
-    logger.info(f"Filtering mt to biallelic SNPs in X contigs: {x_contigs}")
+    logger.info("Filtering mt to biallelic SNPs in X contigs: %s", x_contigs)
     if "was_split" in list(mt.row):
         mt = mt.filter_rows((~mt.was_split) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
     else:

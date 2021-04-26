@@ -238,14 +238,16 @@ def _get_info_agg_expr(
     mq_tuple = None
     if f"{prefix}RAW_MQandDP" in agg_expr:
         logger.info(
-            f"Computing {prefix}MQ as sqrt({prefix}RAW_MQandDP[0]/{prefix}RAW_MQandDP[1]). "
-            f"Note that {prefix}MQ will be set to 0 if {prefix}RAW_MQandDP[1] == 0."
+            "Computing %sMQ as sqrt(%sRAW_MQandDP[0]/%sRAW_MQandDP[1]). "
+            "Note that %sMQ will be set to 0 if %sRAW_MQandDP[1] == 0.",
+            *[prefix] * 5,
         )
         mq_tuple = agg_expr.pop(f"{prefix}RAW_MQandDP")
     elif f"{prefix}RAW_MQ" in agg_expr and f"{prefix}MQ_DP" in agg_expr:
         logger.info(
-            f"Computing {prefix}MQ as sqrt({prefix}RAW_MQ/{prefix}MQ_DP). "
-            f"Note that MQ will be set to 0 if {prefix}RAW_MQ == 0."
+            "Computing %sMQ as sqrt(%sRAW_MQ/%sMQ_DP). "
+            "Note that MQ will be set to 0 if %sRAW_MQ == 0.",
+            *[prefix] * 4,
         )
         mq_tuple = (agg_expr.pop(f"{prefix}RAW_MQ"), agg_expr.pop(f"{prefix}MQ_DP"))
 
@@ -257,8 +259,9 @@ def _get_info_agg_expr(
     # If both VarDP and QUALapprox are present, also compute QD.
     if f"{prefix}VarDP" in agg_expr and f"{prefix}QUALapprox" in agg_expr:
         logger.info(
-            f"Computing {prefix}QD as {prefix}QUALapprox/{prefix}VarDP. "
-            f"Note that {prefix}QD will be set to 0 if {prefix}VarDP == 0."
+            f"Computing %sQD as %sQUALapprox/%sVarDP. "
+            f"Note that %sQD will be set to 0 if %sVarDP == 0.",
+            *[prefix] * 5,
         )
         var_dp = hl.int32(hl.agg.sum(int32_sum_agg_fields["VarDP"]))
         agg_expr[f"{prefix}QD"] = hl.cond(
@@ -585,7 +588,7 @@ def impute_sex_ploidy(
         chr_y = ref.y_contigs[0]
 
     def get_contig_size(contig: str) -> int:
-        logger.info(f"Working on {contig}")
+        logger.info("Working on %s", contig)
         contig_ht = hl.utils.range_table(
             ref.contig_length(contig),
             n_partitions=int(ref.contig_length(contig) / 500_000),
@@ -610,7 +613,7 @@ def impute_sex_ploidy(
                 hl.is_missing(excluded_calling_intervals[contig_ht.key])
             )
         contig_size = contig_ht.count()
-        logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
+        logger.info("Contig %s has %d bases for coverage.", contig, contig_size)
         return contig_size
 
     def get_chr_dp_ann(chrom: str) -> hl.Table:

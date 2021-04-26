@@ -390,7 +390,9 @@ class GnomadPublicResource(BaseResource, ABC):
         if resource_source == GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS:
             return f"gs://gcp-public-data--gnomad{relative_path}"
 
-        return f"{resource_source.rstrip('/')}{relative_path}"
+        return (
+            f"{resource_source.rstrip('/')}{relative_path}"  # pylint: disable=no-member
+        )
 
     def _set_path(self, path):
         if not any(

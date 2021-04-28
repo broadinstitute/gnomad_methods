@@ -113,7 +113,7 @@ HGDP_POPS = [
     "burusho",
     "maya",
 ]
-POPS_STORED_AS_SUBPOPs = TGP_POPS.extend(HGDP_POPS)
+POPS_STORED_AS_SUBPOPS = TGP_POPS.extend(HGDP_POPS)
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
 DOWNSAMPLINGS = [
     10,

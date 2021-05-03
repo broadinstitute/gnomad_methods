@@ -29,7 +29,8 @@ SUBSETS = [
 ]
 """
 Order to sort subgroupings during VCF export.
-Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
+
+Ensures that INFO labels in VCF are in desired order (e.g., tgp_raw_AC_esn_XX).
 """
 
 GROUPS = ["adj", "raw"]

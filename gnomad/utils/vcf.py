@@ -305,7 +305,7 @@ def adjust_vcf_incompatible_types(
     # Make sure the HT is keyed by locus, alleles
     ht = ht.key_by("locus", "alleles")
 
-    info_expr = {}
+    info_type_convert_expr = {}
     # Convert int64 fields to int32 (int64 isn't supported by VCF)
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
@@ -313,18 +313,20 @@ def adjust_vcf_incompatible_types(
                 "Coercing field info.%s from int64 to int32 for VCF output. Value will be capped at int32 max value.",
                 f,
             )
-            info_expr.update({f: hl.int32(hl.min(2 ** 31 - 1, ht.info[f]))})
+            info_type_convert_expr.update(
+                {f: hl.int32(hl.min(2 ** 31 - 1, ht.info[f]))}
+            )
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
                 "Coercing field info.%s from array<int64> to array<int32> for VCF output. Array values will be capped "
                 "at int32 max value.",
                 f,
             )
-            info_expr.update(
+            info_type_convert_expr.update(
                 {f: ht.info[f].map(lambda x: hl.int32(hl.min(2 ** 31 - 1, x)))}
             )
 
-    ht = ht.annotate(info=ht.info.annotate(**info_expr))
+    ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))
 
     info_expr = {}
 
@@ -348,37 +350,6 @@ def adjust_vcf_incompatible_types(
     ht = ht.annotate(info=ht.info.annotate(**info_expr))
 
     return ht
-
-
-def ht_to_vcf_mt(
-    info_ht: hl.Table,
-    pipe_delimited_annotations: List[str] = INFO_VCF_AS_PIPE_DELIMITED_FIELDS,
-) -> Union[hl.Table, hl.MatrixTable]:
-    """
-    Create a MatrixTable ready for vcf export using `adjust_vcf_incompatible_types`.
-
-    In particular, the following conversions are done:
-        - All int64 are coerced to int32
-        - Fields specified by `pipe_delimited_annotations` will be converted from arrays to pipe-delimited strings
-
-    .. note::
-
-        This will return a MatrixTable with no cols.
-
-    :param info_ht: Input HT.
-    :param pipe_delimited_annotations: List of info fields (they must be fields of the ht.info Struct).
-    :return: MatrixTable ready for VCF export.
-    """
-    info_ht = adjust_vcf_incompatible_types(info_ht, pipe_delimited_annotations)
-
-    # Add 's' empty string field required to cast HT to MT
-    info_ht = info_ht.annotate(s=hl.null(hl.tstr))
-
-    # Create an MT with no cols so that we can export to VCF
-    mt = info_ht.to_matrix_table_row_major(columns=["s"], entry_field_name="s")
-    mt = mt.filter_cols(False)
-
-    return mt
 
 
 def make_label_combos(
@@ -560,15 +531,15 @@ def make_info_dict(
         popmax_dict = {
             f"{prefix}popmax": {
                 "Number": "A",
-                "Description": f"Population with maximum AF{description_text}",
+                "Description": f"Population with maximum allele frequency{description_text}",
             },
             f"{prefix}AC_popmax": {
                 "Number": "A",
-                "Description": f"Allele count in the population with the maximum AF{description_text}",
+                "Description": f"Allele count in the population with the maximum allele frequency{description_text}",
             },
             f"{prefix}AN_popmax": {
                 "Number": "A",
-                "Description": f"Total number of alleles in the population with the maximum AF{description_text}",
+                "Description": f"Total number of alleles in the population with the maximum allele frequency{description_text}",
             },
             f"{prefix}AF_popmax": {
                 "Number": "A",

@@ -561,7 +561,6 @@ def make_info_dict(
         combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 
         for combo in combos:
-            loop_description_text = description_text
             combo_fields = combo.split(label_delimiter)
             group_dict = dict(zip(group_types, combo_fields))
 
@@ -584,35 +583,34 @@ def make_info_dict(
                 combo_dict = {
                     metric_label_dict["AC"]: {
                         "Number": "A",
-                        "Description": f"Alternate allele count{for_combo}{loop_description_text}",
+                        "Description": f"Alternate allele count{for_combo}{description_text}",
                     },
                     metric_label_dict["AN"]: {
                         "Number": "1",
-                        "Description": f"Total number of alleles{in_combo}{loop_description_text}",
+                        "Description": f"Total number of alleles{in_combo}{description_text}",
                     },
                     metric_label_dict["AF"]: {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{in_combo}{loop_description_text}",
+                        "Description": f"Alternate allele frequency{in_combo}{description_text}",
                     },
                     metric_label_dict["nhomalt"]: {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{in_combo}{loop_description_text}",
+                        "Description": f"Count of homozygous individuals{in_combo}{description_text}",
                     },
                 }
             else:
                 if ("XX" in combo_fields) | ("XY" in combo_fields):
-                    loop_description_text = (
-                        loop_description_text
-                        + " in non-PAR regions of sex chromosomes only"
+                    description_text = (
+                        description_text + " in non-PAR regions of sex chromosomes only"
                     )
                 combo_dict = {
                     metric_label_dict["faf95"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{loop_description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
                     },
                     metric_label_dict["faf99"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{loop_description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
                     },
                 }
             info_dict.update(combo_dict)
@@ -715,7 +713,7 @@ def make_hist_bin_edges_expr(
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
-    :param label_delimiter: String used as delimiter when making group label combinations.
+    :param label_delimiter: String used as delimiter between prefix and histogram annotation.
     :param include_age_hists: Include age histogram annotations.
     :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
     """
@@ -726,7 +724,7 @@ def make_hist_bin_edges_expr(
     edges_dict = {}
     if include_age_hists:
         edges_dict.update(
-            **{
+            {
                 f"{prefix}{call_type}": "|".join(
                     map(
                         lambda x: f"{x:.1f}",
@@ -759,7 +757,7 @@ def make_hist_bin_edges_expr(
 def make_hist_dict(
     bin_edges: Dict[str, Dict[str, str]],
     adj: bool,
-    dict_hists: List[str] = HISTS,
+    hist_metric_list: List[str] = HISTS,
     label_delimiter: str = "_",
 ) -> Dict[str, str]:
     """
@@ -767,12 +765,12 @@ def make_hist_dict(
 
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
-    :param dict_hists: List of hists to build hist info dict for
-    :param label_delimiter: String used as delimiter in values stored in dict_hists list.
+    :param hist_metric_list: List of hists to build hist info dict for
+    :param label_delimiter: String used as delimiter in values stored in hist_metric_list.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
-    for hist in dict_hists:
+    for hist in hist_metric_list:
         # Get hists for both raw and adj data
         # Add "_raw" to quality histograms calculated on raw data
         if not adj:

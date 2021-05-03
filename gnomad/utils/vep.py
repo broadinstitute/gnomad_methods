@@ -1,3 +1,5 @@
+# noqa: D100
+
 import json
 import logging
 import os
@@ -109,7 +111,7 @@ Set containing loss-of-function consequence strings.
 
 def get_vep_help(vep_config_path: Optional[str] = None):
     """
-    Returns the output of vep --help which includes the VEP version.
+    Return the output of vep --help which includes the VEP version.
 
     .. warning::
         If no `vep_config_path` is supplied, this function will only work for Dataproc clusters
@@ -130,7 +132,7 @@ def get_vep_help(vep_config_path: Optional[str] = None):
 
 def get_vep_context(ref: Optional[str] = None) -> VersionedTableResource:
     """
-    Get VEP context resource for the genome build `ref`
+    Get VEP context resource for the genome build `ref`.
 
     :param ref: Genome build. If None, `hl.default_reference` is used
     :return: VEPed context resource
@@ -154,7 +156,7 @@ def vep_or_lookup_vep(
     ht, reference_vep_ht=None, reference=None, vep_config_path=None, vep_version=None
 ):
     """
-    VEP a table, or lookup variants in a reference database
+    VEP a table, or lookup variants in a reference database.
 
     .. warning::
         If `reference_vep_ht` is supplied, no check is performed to confirm `reference_vep_ht` was
@@ -167,7 +169,6 @@ def vep_or_lookup_vep(
     :param vep_version: Version of VEPed context Table to use (if None, the default `vep_context` resource will be used)
     :return: VEPed Table
     """
-
     if reference is None:
         reference = hl.default_reference().name
 
@@ -192,13 +193,18 @@ def vep_or_lookup_vep(
 
         if vep_version not in vep_context.versions:
             logger.warning(
-                f"No VEPed context Table available for genome build {reference} and VEP version {vep_version}, "
-                f"all variants will be VEPed using the following VEP:\n{vep_help}"
+                "No VEPed context Table available for genome build %s and VEP version %s, "
+                "all variants will be VEPed using the following VEP:\n%s",
+                reference,
+                vep_version,
+                vep_help,
             )
             return hl.vep(ht, vep_config_path)
 
         logger.info(
-            f"Using VEPed context Table from genome build {reference} and VEP version {vep_version}"
+            "Using VEPed context Table from genome build %s and VEP version %s",
+            reference,
+            vep_version,
         )
 
         reference_vep_ht = vep_context.versions[vep_version].ht()
@@ -246,8 +252,9 @@ def process_consequences(
     penalize_flags: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Adds most_severe_consequence (worst consequence for a transcript) into [vep_root].transcript_consequences,
-    and worst_csq_by_gene, any_lof into [vep_root]
+    Add most_severe_consequence into [vep_root].transcript_consequences, and worst_csq_by_gene, any_lof into [vep_root].
+
+    `most_severe_consequence` is the worst consequence for a transcript.
 
     :param mt: Input MT
     :param vep_root: Root for vep annotation (probably vep)
@@ -260,9 +267,7 @@ def process_consequences(
     def find_worst_transcript_consequence(
         tcl: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
-        """
-        Gets worst transcript_consequence from an array of em
-        """
+        """Get worst transcript_consequence from an array of em."""
         flag_score = 500
         no_flag_score = flag_score * (1 + penalize_flags)
 
@@ -337,6 +342,7 @@ def process_consequences(
 def filter_vep_to_canonical_transcripts(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
 ) -> Union[hl.MatrixTable, hl.Table]:
+    """Filter VEP transcript consequences to those in the canonical transcript."""
     canonical = mt[vep_root].transcript_consequences.filter(
         lambda csq: csq.canonical == 1
     )
@@ -351,6 +357,7 @@ def filter_vep_to_canonical_transcripts(
 def filter_vep_to_synonymous_variants(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
 ) -> Union[hl.MatrixTable, hl.Table]:
+    """Filter VEP transcript consequences to those with a most severe consequence of synonymous_variant."""
     synonymous = mt[vep_root].transcript_consequences.filter(
         lambda csq: csq.most_severe_consequence == "synonymous_variant"
     )
@@ -381,7 +388,6 @@ def vep_struct_to_csq(
     :param csq_fields: The | delimited list of fields to include in the CSQ (in that order)
     :return: The corresponding CSQ strings
     """
-
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
 
     def get_csq_from_struct(
@@ -481,8 +487,7 @@ def get_most_severe_consequence_for_summary(
     loftee_labels: List[str] = LOFTEE_LABELS,
 ) -> hl.Table:
     """
-    Prepares hail Table for summary statistics generation 
-    (number of variants by functional class, number of variants by functional class per sample).
+    Prepare a hail Table for summary statistics generation.
 
     Adds the following annotations:
         - most_severe_csq: Most severe consequence for variant
@@ -502,7 +507,7 @@ def get_most_severe_consequence_for_summary(
         csq_list: hl.expr.ArrayExpression, protein_coding: bool
     ) -> hl.expr.StructExpression:
         """
-        Processes VEP consequences to generate summary annotations.
+        Process VEP consequences to generate summary annotations.
 
         :param csq_list: VEP consequences list to be processed.
         :param protein_coding: Whether variant is in a protein-coding transcript.

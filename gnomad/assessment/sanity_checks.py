@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Dict, List, Optional
 
@@ -46,13 +48,13 @@ def generic_field_check(
     ht = ht.filter(cond_expr)
     n_fail = ht.count()
     if n_fail > 0:
-        logger.info(f"Found {n_fail} sites that fail {check_description} check:")
+        logger.info("Found %d sites that fail %s check:", n_fail, check_description)
         if show_percent_sites:
-            logger.info(f"Percentage of sites that fail: {n_fail / ht_orig.count()}")
+            logger.info("Percentage of sites that fail: %f", n_fail / ht_orig.count())
         ht = ht.flatten()
         ht.select("locus", "alleles", *display_fields).show()
     else:
-        logger.info(f"PASSED {check_description} check")
+        logger.info("PASSED %s check", check_description)
         if verbose:
             ht_orig = ht_orig.flatten()
             ht_orig.select(*display_fields).show()
@@ -110,8 +112,9 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
 ) -> None:
     """
-    Compute afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    display results from checking the sum of the specified annotations in the terminal.
+    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
+
+    Results from checking the sum of the specified annotations are printed in the terminal.
 
     :param ht: Table containing annotations to be summed.
     :param prefix: String indicating sample subset.
@@ -185,5 +188,5 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
     r_count1 = ht1.count()
     r_count2 = ht2.count()
-    logger.info(f"{r_count1} rows in left table; {r_count2} rows in right table")
+    logger.info("%d rows in left table; %d rows in right table", r_count1, r_count2)
     return r_count1 == r_count2

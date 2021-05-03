@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 
 import hail as hl
@@ -9,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def to_phred(linear_expr: hl.expr.NumericExpression) -> hl.expr.Float64Expression:
     """
-    Computes the phred-scaled value of the linear-scale input
+    Compute the phred-scaled value of the linear-scale input.
 
     :param linear_expr: input
     :return: Phred-scaled value
@@ -21,7 +23,7 @@ def from_phred(
     phred_score_expr: hl.expr.NumericExpression,
 ) -> hl.expr.Float64Expression:
     """
-    Computes the linear-scale value of the phred-scaled input.
+    Compute the linear-scale value of the phred-scaled input.
 
     :param phred_score_expr: phred-scaled value
     :return: linear-scale value of the phred-scaled input.
@@ -33,8 +35,11 @@ def get_median_and_mad_expr(
     metric_expr: hl.expr.ArrayNumericExpression, k: float = 1.4826
 ) -> hl.expr.StructExpression:
     """
-    Computes the median and median absolute deviation (MAD) for the given expression.
-    Note that the default value of k assumes normally distributed data.
+    Compute the median and median absolute deviation (MAD) for the given expression.
+
+    ..note::
+
+        The default value of k assumes normally distributed data.
 
     :param metric_expr: Expression to compute median and MAD for
     :param k: The scaling factor for MAD calculation. Default assumes normally distributed data.
@@ -50,10 +55,9 @@ def merge_stats_counters_expr(
     stats: hl.expr.ArrayExpression,
 ) -> hl.expr.StructExpression:
     """
-    Merges multiple stats counters, assuming that they were computed on non-overlapping data.
+    Merge multiple stats counters, assuming that they were computed on non-overlapping data.
 
     Examples:
-
     - Merge stats computed on indel and snv separately
     - Merge stats computed on bi-allelic and multi-allelic variants separately
     - Merge stats computed on autosomes and sex chromosomes separately
@@ -66,7 +70,9 @@ def merge_stats_counters_expr(
         i: hl.expr.StructExpression, j: hl.expr.StructExpression
     ) -> hl.expr.StructExpression:
         """
-        This merges two stast counters together. It assumes that all stats counter fields are present in the struct.
+        Merge two stats counters together.
+
+        Assumes that all stats counter fields are present in the struct.
 
         :param i: accumulator: struct with mean, n and variance
         :param j: new element: stats_struct -- needs to contain mean, n and variance
@@ -92,7 +98,8 @@ def merge_stats_counters_expr(
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
         logger.warning(
-            f"The following metrics will be dropped during stats counter merging as they do not appear in all counters: {', '.join(dropped_metrics)}"
+            "The following metrics will be dropped during stats counter merging as they do not appear in all counters: %s",
+            ", ".join(dropped_metrics),
         )
 
     # Because merging standard deviation requires having the mean and n,
@@ -101,7 +108,8 @@ def merge_stats_counters_expr(
         missing_fields = [x for x in ["n", "mean"] if x not in metrics]
         if missing_fields:
             logger.warning(
-                f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}'
+                "Cannot merge `stdev` from given stats counters since they are missing the following fields: %s",
+                ",".join(missing_fields),
             )
             metrics.remove("stdev")
 

@@ -36,6 +36,22 @@ Use [Black](https://black.readthedocs.io/) to format code.
 black gnomad
 ```
 
+## Running pydocstyle
+
+Use [pydocstyle](https://www.pydocstyle.org/) to check that docstrings conform to [PEP 257](https://www.python.org/dev/peps/pep-0257/).
+
+```
+pydocstyle gnomad
+```
+
+## Running tests
+
+Run tests using [pytest](https://docs.pytest.org/en/stable/).
+
+```
+python -m pytest
+```
+
 ## Building documentation
 
 See instructions in [docs/README.md](./docs/README.md).

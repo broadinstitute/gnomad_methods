@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -38,8 +40,9 @@ def create_binned_ht(
     add_substrat: Optional[Dict[str, hl.expr.BooleanExpression]] = None,
 ) -> hl.Table:
     """
-    This is meant as a default wrapper for `compute_ranked_bin`. It annotates table with a bin, where variants are
-    binned based on score into `n_bins` equally-sized bins.
+    Annotate each row of `ht` with a bin based on binning the score annotation into `n_bins` equally-sized bins.
+
+    This is meant as a default wrapper for `compute_ranked_bin`.
 
     .. note::
 
@@ -72,7 +75,7 @@ def create_binned_ht(
         new_id: str,
     ) -> Dict[str, hl.expr.BooleanExpression]:
         """
-        Updates a dictionary of expressions to add another stratification
+        Update a dictionary of expressions to add another stratification.
 
         :param bin_expr: Dictionary of expressions to add another stratification to
         :param new_expr: New Boolean expression to add to `bin_expr`
@@ -118,16 +121,13 @@ def score_bin_agg(
     ht: hl.GroupedTable, fam_stats_ht: hl.Table
 ) -> Dict[str, hl.expr.Aggregation]:
     """
-    Default aggregation function to add aggregations for min/max of score, number of ClinVar variants, number of truth
-    variants (omni, mills, hapmap, and kgp_phase1), and family statistics.
+    Make dict of aggregations for min/max of score, number of ClinVar variants, number of truth variants, and family statistics.
 
     .. note::
 
         This function uses `ht._parent` to get the origin Table from the GroupedTable for the aggregation
 
-    This can easily be combined with the GroupedTable returned by `compute_grouped_binned_ht`
-
-    Example:
+    This can easily be combined with the GroupedTable returned by `compute_grouped_binned_ht`, For example:
 
     .. code-block:: python
 
@@ -255,7 +255,7 @@ def generate_trio_stats(
     mt: hl.MatrixTable, autosomes_only: bool = True, bi_allelic_only: bool = True
 ) -> hl.Table:
     """
-    Default function to run `generate_trio_stats_expr` to get trio stats stratified by raw and adj
+    Run `generate_trio_stats_expr` with variant QC pipeline defaults to get trio stats stratified by raw and adj.
 
     .. note::
 
@@ -274,7 +274,7 @@ def generate_trio_stats(
     if bi_allelic_only:
         mt = mt.filter_rows(bi_allelic_expr(mt))
 
-    logger.info(f"Generating trio stats using {mt.count_cols()} trios.")
+    logger.info("Generating trio stats using %d trios.", mt.count_cols())
     trio_adj = mt.proband_entry.adj & mt.father_entry.adj & mt.mother_entry.adj
 
     ht = mt.select_rows(
@@ -299,10 +299,13 @@ def generate_sib_stats(
     bi_allelic_only: bool = True,
 ) -> hl.Table:
     """
-    This is meant as a default wrapper for `generate_sib_stats_expr`. It returns a hail table with counts of variants
-    shared by pairs of siblings in `relatedness_ht`.
+    Generate a hail table with counts of variants shared by pairs of siblings in `relatedness_ht`.
 
-    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
+    This is meant as a default wrapper for `generate_sib_stats_expr`.
+
+    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related
+    (it's OK to have unrelated samples too).
+
     The `relationship_col` should be a column specifying the relationship between each two samples as defined by
     the constants in `gnomad.utils.relatedness`. This relationship_col will be used to filter to only pairs of
     samples that are annotated as `SIBLINGS`.
@@ -382,7 +385,6 @@ def train_rf_model(
     :param test_expr: An expression specifying variants to hold out for testing and use for evaluation only.
     :return: Table with TP and FP training sets used in the RF training and the resulting RF model.
     """
-
     ht = ht.annotate(_tp=tp_expr, _fp=fp_expr, rf_test=test_expr)
 
     rf_ht = sample_training_examples(
@@ -397,9 +399,10 @@ def train_rf_model(
     summary.show(n=20)
 
     logger.info(
-        "Training RF model:\nfeatures: {}\nnum_tree: {}\nmax_depth:{}".format(
-            ",".join(rf_features), num_trees, max_depth
-        )
+        "Training RF model:\nfeatures: %s\nnum_tree: %d\nmax_depth:%d",
+        ",".join(rf_features),
+        num_trees,
+        max_depth,
     )
 
     rf_model = train_rf(
@@ -412,7 +415,7 @@ def train_rf_model(
 
     test_results = None
     if test_expr is not None:
-        logger.info(f"Testing model on specified variants or intervals...")
+        logger.info("Testing model on specified variants or intervals...")
         test_ht = ht.filter(hl.is_defined(ht.rf_label) & ht.rf_test)
         test_results = test_model(
             test_ht, rf_model, features=rf_features, label="rf_label"

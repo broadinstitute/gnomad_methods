@@ -1,6 +1,23 @@
 [MESSAGES CONTROL]
 
 disable=
-  unused-wildcard-import,
+  # Ignore refactor and convention categories
   R,
-  C
+  C,
+  # Allow TODO and FIXME comments
+  fixme,
+  # Ignore unnecessary-lambda because it has many false positives from hl.ArrayExpression.map, etc.
+  unnecessary-lambda,
+  # Warnings present in existing code. These should be fixed and removed from this list.
+  cell-var-from-loop,
+  dangerous-default-value,
+  f-string-without-interpolation,
+  isinstance-second-argument-not-valid-type,
+  protected-access,
+  raise-missing-from,
+  redefined-builtin,
+  redefined-outer-name,
+  unused-import,
+  unnecessary-pass,
+  unused-variable,
+  unused-wildcard-import

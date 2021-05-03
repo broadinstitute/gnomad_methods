@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -19,7 +21,7 @@ def compute_qc_metrics_residuals(
     regression_sample_inclusion_expr: hl.expr.BooleanExpression = hl.bool(True),
 ) -> hl.Table:
     """
-    Computes QC metrics residuals after regressing out PCs (and optionally PC^2)
+    Compute QC metrics residuals after regressing out PCs (and optionally PC^2).
 
     .. note::
 
@@ -34,7 +36,6 @@ def compute_qc_metrics_residuals(
     :param regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
     :return: Table with QC metrics residuals
     """
-
     # Annotate QC HT with fields necessary for computation
     _sample_qc_ht = ht.select(
         **qc_metrics, scores=pc_scores, _keep=regression_sample_inclusion_expr
@@ -45,9 +46,9 @@ def compute_qc_metrics_residuals(
         n_pcs = _sample_qc_ht.aggregate(hl.agg.min(hl.len(_sample_qc_ht.scores)))
 
     logger.info(
-        "Computing regressed QC metrics filters using {} PCs for metrics: {}".format(
-            n_pcs, ", ".join(qc_metrics)
-        )
+        "Computing regressed QC metrics filters using %d PCs for metrics: %s",
+        n_pcs,
+        ", ".join(qc_metrics),
     )
 
     # Prepare regression variables, adding 1.0 first for the intercept
@@ -111,7 +112,7 @@ def compute_stratified_metrics_filter(
     filter_name: str = "qc_metrics_filters",
 ) -> hl.Table:
     """
-    Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering
+    Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering.
 
     :param ht: HT containing relevant sample QC metric annotations
     :param qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
@@ -122,7 +123,6 @@ def compute_stratified_metrics_filter(
     :param filter_name: Name of resulting filters annotation
     :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
     """
-
     _metric_threshold = {
         metric: (lower_threshold, upper_threshold) for metric in qc_metrics
     }
@@ -188,8 +188,11 @@ def compute_stratified_sample_qc(
     gt_col: Optional[str] = None,
 ) -> hl.Table:
     """
-    Runs hl.sample_qc on different strata and then also merge the results into a single expression.
-    Note that strata should be non-overlapping, e.g. SNV vs indels or bi-allelic vs multi-allelic
+    Run hl.sample_qc on different strata and then also merge the results into a single expression.
+
+    .. note::
+
+        Strata should be non-overlapping, e.g. SNV vs indels or bi-allelic vs multi-allelic
 
     :param mt: Input MT
     :param strata: Strata names and filtering expressions
@@ -234,7 +237,7 @@ def merge_sample_qc_expr(
     sample_qc_exprs: List[hl.expr.StructExpression],
 ) -> hl.expr.StructExpression:
     """
-    Creates an expression that merges results from non-overlapping strata of hail.sample_qc
+    Create an expression that merges results from non-overlapping strata of hail.sample_qc.
 
     E.g.:
 
@@ -253,7 +256,6 @@ def merge_sample_qc_expr(
     :param sample_qc_exprs: List of sample QC struct expressions for each stratification
     :return: Combined sample QC results
     """
-
     # List of metrics that can be aggregated by summing
     additive_metrics = [
         "n_called",

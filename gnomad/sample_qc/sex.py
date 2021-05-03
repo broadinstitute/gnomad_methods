@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Tuple
 
@@ -18,7 +20,7 @@ def adjusted_sex_ploidy_expr(
     xx_karyotype_str: str = "XX",
 ) -> hl.expr.CallExpression:
     """
-    Creates an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y
+    Create an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y.
 
     :param locus_expr: Locus
     :param gt_expr: Genotype
@@ -48,7 +50,7 @@ def adjust_sex_ploidy(
     female_str: str = "female",
 ) -> hl.MatrixTable:
     """
-    Converts males to haploid on non-PAR X/Y, sets females to missing on Y
+    Convert males to haploid on non-PAR X/Y, sets females to missing on Y.
 
     :param mt: Input MatrixTable
     :param sex_expr: Expression pointing to sex in MT (if not male_str or female_str, no change)
@@ -68,8 +70,13 @@ def get_ploidy_cutoffs(
     aneuploidy_cutoff: int = 6,
 ) -> Tuple[Tuple[float, Tuple[float, float], float], Tuple[Tuple[float, float], float]]:
     """
-    Gets chromosome X and Y ploidy cutoffs for XY and XX samples. Note this assumes the input hail Table has the fields f_stat, chrX_ploidy, and chrY_ploidy.
-    Returns a tuple of sex chromosome ploidy cutoffs: ((x_ploidy_cutoffs), (y_ploidy_cutoffs)).
+    Get chromosome X and Y ploidy cutoffs for XY and XX samples.
+
+    .. note::
+
+        This assumes the input hail Table has the fields f_stat, chrX_ploidy, and chrY_ploidy.
+
+    Return a tuple of sex chromosome ploidy cutoffs: ((x_ploidy_cutoffs), (y_ploidy_cutoffs)).
     x_ploidy_cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
     y_ploidy_cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
 
@@ -91,8 +98,8 @@ def get_ploidy_cutoffs(
             hl.struct(x=hl.agg.stats(ht.chrX_ploidy), y=hl.agg.stats(ht.chrY_ploidy)),
         )
     )
-    logger.info(f"XX stats: {sex_stats['xx']}")
-    logger.info(f"XY stats: {sex_stats['xy']}")
+    logger.info("XX stats: %s", sex_stats["xx"])
+    logger.info("XY stats: %s", sex_stats["xy"])
 
     cutoffs = (
         (
@@ -116,8 +123,8 @@ def get_ploidy_cutoffs(
         ),
     )
 
-    logger.info(f"X ploidy cutoffs: {cutoffs[0]}")
-    logger.info(f"Y ploidy cutoffs: {cutoffs[1]}")
+    logger.info("X ploidy cutoffs: %s", cutoffs[0])
+    logger.info("Y ploidy cutoffs: %s", cutoffs[1])
     return cutoffs
 
 
@@ -128,10 +135,7 @@ def get_sex_expr(
     y_ploidy_cutoffs: Tuple[Tuple[float, float], float],
 ) -> hl.expr.StructExpression:
     """
-    Creates a struct with the following annotation:
-    - X_karyotype (str)
-    - Y_karyotype (str)
-    - sex_karyotype (str)
+    Create a struct with X_karyotype, Y_karyotype, and sex_karyotype.
 
     Note that X0 is currently returned as 'X'.
 

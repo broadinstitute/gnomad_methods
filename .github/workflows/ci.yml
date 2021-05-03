@@ -27,10 +27,14 @@ jobs:
           pip install wheel
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
-      - name: Run Pylint
-        run: ./lint --disable=W
       - name: Check formatting
-        run: black --check gnomad
+        run: black --check gnomad tests
+      - name: Check docstrings
+        run: pydocstyle gnomad tests
+      - name: Run Pylint
+        run: ./lint
+      - name: Run tests
+        run: python -m pytest
   docs:
     name: Build documentation
     runs-on: ubuntu-latest
@@ -57,8 +61,6 @@ jobs:
         run: ./docs/build.sh
       - name: Publish to GitHub Pages
         if: github.event_name == 'push'
-        env:
-          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
           # Create empty gh-pages branch
           git checkout --orphan gh-pages
@@ -80,17 +82,7 @@ jobs:
           git add .
           git commit --allow-empty -m "Update docs"
 
-          mkdir -p $HOME/.ssh
-          echo "${DEPLOY_KEY}" > $HOME/.ssh/id_rsa
-          chmod 600 $HOME/.ssh/id_rsa
-          ssh-keyscan github.com >> $HOME/.ssh/known_hosts
-
-          git remote rm origin
-          git remote add origin git@github.com:${GITHUB_REPOSITORY}.git
-
           git push --force origin gh-pages
-
-          rm $HOME/.ssh/id_rsa
 
           # Restore the original working tree by checking out the
           # commit that triggered the workflow.

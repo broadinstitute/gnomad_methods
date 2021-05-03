@@ -1,3 +1,5 @@
+# noqa: D100
+
 import base64
 import gzip
 import logging
@@ -16,6 +18,7 @@ logger.setLevel(logging.INFO)
 def file_exists(fname: str) -> bool:
     """
     Check whether a file exists.
+
     Supports either local or Google cloud (gs://) paths.
     If the file is a Hail file (.ht, .mt extensions), it checks that _SUCCESS is present.
 
@@ -36,7 +39,7 @@ def write_temp_gcs(
     gcs_path: str,
     overwrite: bool = False,
     temp_path: Optional[str] = None,
-) -> None:
+) -> None:  # noqa: D103
     if not temp_path:
         temp_path = f"/tmp_{uuid.uuid4()}.h"
     t.write(temp_path, overwrite=True)
@@ -51,6 +54,7 @@ def write_temp_gcs(
 def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
     """
     Select only primitive types (string, int, float, bool) from a Table.
+
     Particularly useful for exporting a Table.
 
     :param ht: Input Table
@@ -68,7 +72,8 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
 
 def get_file_stats(url: str) -> Tuple[int, str, str]:
     """
-    Gets size (as both int and str) and md5 for file at specified URL.
+    Get size (as both int and str) and md5 for file at specified URL.
+
     Typically used to get stats on VCFs.
 
     :param url: Path to file of interest.
@@ -101,7 +106,8 @@ def get_file_stats(url: str) -> Tuple[int, str, str]:
 
 def read_list_data(input_file_path: str) -> List[str]:
     """
-    Reads a file input into a python list (each line will be an element).
+    Read a file input into a python list (each line will be an element).
+
     Supports Google storage paths and .gz compression.
 
     :param input_file_path: File path

@@ -1,3 +1,5 @@
+# noqa: D100
+
 import copy
 import itertools
 import logging
@@ -52,8 +54,10 @@ AS_FIELDS = [
     "AS_MQ",
     "AS_MQRankSum",
     "AS_pab_max",
+    "AS_QUALapprox",
     "AS_QD",
     "AS_ReadPosRankSum",
+    "AS_SB_TABLE",
     "AS_SOR",
     "AS_VarDP",
     "InbreedingCoeff",
@@ -67,8 +71,10 @@ SITE_FIELDS = [
     "FS",
     "MQ",
     "MQRankSum",
+    "QUALapprox",
     "QD",
     "ReadPosRankSum",
+    "SB",
     "SOR",
     "VarDP",
 ]
@@ -304,12 +310,15 @@ def adjust_vcf_incompatible_types(
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                f"Coercing field info.{f} from int64 to int32 for VCF output. Value will be capped at int32 max value."
+                "Coercing field info.%s from int64 to int32 for VCF output. Value will be capped at int32 max value.",
+                f,
             )
             info_expr.update({f: hl.int32(hl.min(2 ** 31 - 1, ht.info[f]))})
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
-                f"Coercing field info.{f} from array<int64> to array<int32> for VCF output. Array values will be capped at int32 max value."
+                "Coercing field info.%s from array<int64> to array<int32> for VCF output. Array values will be capped "
+                "at int32 max value.",
+                f,
             )
             info_expr.update(
                 {f: ht.info[f].map(lambda x: hl.int32(hl.min(2 ** 31 - 1, x)))}
@@ -411,8 +420,7 @@ def index_globals(
     label_delimiter: str = "_",
 ) -> Dict[str, int]:
     """
-    Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry
-    in the meta_array annotation
+    Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry in the meta_array annotation.
 
     :param globals_array: Ordered list containing dictionary entries describing all the grouping combinations contained in the globals_array annotation.
        Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
@@ -645,7 +653,7 @@ def add_as_info_dict(
     info_dict: Dict[str, Dict[str, str]] = INFO_DICT, as_fields: List[str] = AS_FIELDS
 ) -> Dict[str, Dict[str, str]]:
     """
-    Updates info dictionary with allele-specific terms and their descriptions.
+    Update info dictionary with allele-specific terms and their descriptions.
 
     Used in VCF export.
 
@@ -671,7 +679,7 @@ def add_as_info_dict(
             ] = f"Allele-specific {first_letter}{rest_of_description}"
 
         except KeyError:
-            logger.warning(f"{field} is not present in input info dictionary!")
+            logger.warning("%s is not present in input info dictionary!", field)
 
     return as_dict
 
@@ -683,7 +691,7 @@ def make_vcf_filter_dict(
     variant_qc_filter: str = "RF",
 ) -> Dict[str, str]:
     """
-    Generates dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
+    Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
 
     Generates descriptions for:
         - AC0 filter
@@ -697,7 +705,6 @@ def make_vcf_filter_dict(
     :param variant_qc_filter: Method used for variant QC filter. One of 'RF' or 'AS_VQSR'. Default is 'RF'.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
     """
-
     variant_qc_filter_dict = {
         "RF": {
             "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
@@ -732,8 +739,7 @@ def make_hist_bin_edges_expr(
     include_age_hists: bool = True,
 ) -> Dict[str, str]:
     """
-    Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string
-    separated by pipe delimiters.
+    Create dictionaries containing variant histogram annotations and their associated bin edges, formatted into a string separated by pipe delimiters.
 
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.

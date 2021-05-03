@@ -1,3 +1,5 @@
+# noqa: D100
+
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedMatrixTableResource,
@@ -8,15 +10,14 @@ from gnomad.resources.resource_utils import (
 from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
-CURRENT_GENOME_RELEASE = "3.1"
+CURRENT_GENOME_RELEASE = "3.1.1"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 EXOME_RELEASES = []
-GENOME_RELEASES = ["3.0", "3.1"]
+GENOME_RELEASES = ["3.0", "3.1", "3.1.1"]
 GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
-
 SUBSETS = [
     "non_v2",
     "non_topmed",
@@ -33,7 +34,7 @@ Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
 
 GROUPS = ["adj", "raw"]
 """
-Group names used to generate labels for high quality genotypes and all raw genotypes. 
+Group names used to generate labels for high quality genotypes and all raw genotypes.
 
 Used in VCF export.
 """
@@ -55,7 +56,7 @@ COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
 Subsets in gnomAD v3.1 that are broken down by subpops instead of global pops in the frequency struct.
 """
 
-KG_POPS = [
+TGP_POPS = [
     "esn",
     "pur",
     "pjl",
@@ -177,7 +178,7 @@ KG_POP_NAMES = {
 1000 Genomes Project (1KG/TGP) pop label map.
 """
 
-
+POPS_STORED_AS_SUBPOPS = TGP_POPS + HGDP_POPS
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
 """
 Populations that are removed before popmax calculations.
@@ -236,34 +237,35 @@ na12878 = VersionedMatrixTableResource(
 
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """
-    Get public release table path
+    Get public release table path.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh38
     :return: Path to release Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.r{version}.sites.ht"
+    version_prefix = "r" if version.startswith("3.0") else "v"
+    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites.ht"
 
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
     """
-    Get public coverage hail table
+    Get public coverage hail table.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh38
     :return: path to coverage Table
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
+    version_prefix = "r" if version.startswith("3.0") else "v"
+    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
     """
-    Retrieves publicly released versioned table resource
+    Retrieve publicly released versioned table resource.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Release Table
     """
-
     if data_type not in DATA_TYPES:
         raise DataException(
             f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
@@ -287,7 +289,7 @@ def public_release(data_type: str) -> VersionedTableResource:
 
 def coverage(data_type: str) -> VersionedTableResource:
     """
-    Retrieves gnomAD's coverage table by data_type
+    Retrieve gnomAD's coverage table by data_type.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Coverage Table
@@ -315,7 +317,7 @@ def coverage(data_type: str) -> VersionedTableResource:
 
 def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
     """
-    Retrieves gnomAD's coverage table by data_type
+    Retrieve gnomAD's coverage table by data_type.
 
     :param data_type: One of "exomes" or "genomes"
     :return: Coverage Table
@@ -345,8 +347,7 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     """
-    Publically released VCF. Provide specific contig, i.e. "chr20", to retrieve contig
-    specific VCF
+    Publically released VCF. Provide specific contig, i.e. "chr20", to retrieve contig specific VCF.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh37
@@ -354,4 +355,5 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     :return: Path to VCF
     """
     contig = f".{contig}" if contig else ""
-    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    version_prefix = "r" if version.startswith("3.0") else "v"
+    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"

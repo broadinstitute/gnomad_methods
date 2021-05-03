@@ -1,3 +1,5 @@
+# noqa: D100
+
 import functools
 import logging
 import operator
@@ -14,9 +16,7 @@ logger.setLevel(logging.INFO)
 
 
 def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
-    """
-    Filter genotypes to adj criteria
-    """
+    """Filter genotypes to adj criteria."""
     if "adj" not in list(mt.entry):
         mt = annotate_adj(mt)
     mt = mt.filter_entries(mt.adj)
@@ -35,8 +35,9 @@ def filter_by_frequency(
     adj: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split)
-    (i.e. Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)])
+    Filter MatrixTable or Table with gnomAD-format frequency data (assumed bi-allelic/split).
+
+    gnomAD frequency data format expectation is: Array[Struct(Array[AC], Array[AF], AN, homozygote_count, meta)].
 
     At least one of frequency or allele_count is required.
 
@@ -118,7 +119,7 @@ def filter_low_conf_regions(
     high_conf_regions: Optional[List[str]] = None,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filters low-confidence regions
+    Filter low-confidence regions.
 
     :param mt: MatrixTable or Table to filter
     :param filter_lcr: Whether to filter LCR regions
@@ -180,7 +181,8 @@ def filter_to_autosomes(
     t: Union[hl.MatrixTable, hl.Table]
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filters the Table or MatrixTable to autosomes only.
+    Filter the Table or MatrixTable to autosomes only.
+
     This assumes that the input contains a field named `locus` of type Locus
 
     :param t: Input MT/HT
@@ -198,7 +200,8 @@ def add_filters_expr(
     current_filters: hl.expr.SetExpression = None,
 ) -> hl.expr.SetExpression:
     """
-    Creates an expression to create or add filters.
+    Create an expression to create or add filters.
+
     For each entry in the `filters` dictionary, if the value evaluates to `True`,
     then the key is added as a filter name.
 
@@ -230,7 +233,7 @@ def subset_samples_and_variants(
     gt_expr: str = "GT",
 ) -> hl.MatrixTable:
     """
-    Subsets the MatrixTable to the provided list of samples and their variants
+    Subset the MatrixTable to the provided list of samples and their variants.
 
     :param mt: Input MatrixTable
     :param sample_path: Path to a file with list of samples
@@ -263,8 +266,9 @@ def subset_samples_and_variants(
         mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
 
     logger.info(
-        f"Finished subsetting samples. Kept {mt.count_cols()} "
-        f"out of {full_count} samples in MT"
+        "Finished subsetting samples. Kept %d out of %d samples in MT",
+        mt.count_cols(),
+        full_count,
     )
     return mt
 
@@ -278,7 +282,7 @@ def filter_to_clinvar_pathogenic(
     remove_conflicting: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Returns a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
+    Return a MatrixTable or Table that filters the clinvar data to pathogenic and likely pathogenic variants.
 
     Example use:
 
@@ -297,7 +301,8 @@ def filter_to_clinvar_pathogenic(
     :return: Filtered MatrixTable or Table
     """
     logger.info(
-        f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants before filtering"
+        "Found %d variants before filtering",
+        t.count_rows() if isinstance(t, hl.MatrixTable) else t.count(),
     )
     path_expr = (
         t.info[clnsig_field]
@@ -322,7 +327,7 @@ def filter_to_clinvar_pathogenic(
 
     if remove_conflicting:
         logger.info(
-            f"Variants with conflicting clinical interpretations will be removed."
+            "Variants with conflicting clinical interpretations will be removed."
         )
         path_expr = path_expr & hl.is_missing(t.info[clnsigconf_field])
 
@@ -332,6 +337,7 @@ def filter_to_clinvar_pathogenic(
         t = t.filter(path_expr)
 
     logger.info(
-        f"Found {t.count_rows() if isinstance(t, hl.MatrixTable) else t.count()} variants after filtering to clinvar pathogenic variants."
+        "Found %d variants after filtering to clinvar pathogenic variants.",
+        t.count_rows() if isinstance(t, hl.MatrixTable) else t.count(),
     )
     return t

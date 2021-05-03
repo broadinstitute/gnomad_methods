@@ -1,3 +1,5 @@
+# noqa: D100
+
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
     TableResource,
@@ -253,15 +255,16 @@ telomeres_and_centromeres = TableResource(
 
 def get_truth_ht() -> Table:
     """
-    Returns a table with the following annotations from the latest version of the corresponding truth data:
-    - hapmap
-    - kgp_omni (1000 Genomes intersection Onni 2.5M array)
-    - kgp_phase_1_hc (high confidence sites in 1000 genonmes)
-    - mills (Mills & Devine indels)
+    Return a table with annotations from the latest version of the corresponding truth data.
+
+    The following annotations are included:
+        - hapmap
+        - kgp_omni (1000 Genomes intersection Onni 2.5M array)
+        - kgp_phase_1_hc (high confidence sites in 1000 genonmes)
+        - mills (Mills & Devine indels)
 
     :return: A table with the latest version of popular truth data annotations
     """
-
     return (
         hapmap.ht()
         .select(hapmap=True)

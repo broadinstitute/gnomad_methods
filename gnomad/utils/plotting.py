@@ -1,3 +1,5 @@
+# noqa: D100
+
 import json
 import logging
 from typing import Callable, Dict, List, Optional, Union
@@ -42,7 +44,7 @@ logger.setLevel(logging.INFO)
 if "old_show" not in dir():
     old_show = hl.Table.show
 
-    def new_show(t, n=10, width=140, truncate=40, types=True):
+    def new_show(t, n=10, width=140, truncate=40, types=True):  # noqa: D103
         old_show(t, n, width, truncate, types)
 
     hl.Table.show = new_show
@@ -112,7 +114,9 @@ def plot_hail_hist(
     hide_zeros: bool = False,
 ) -> bokeh.plotting.Figure:
     """
-    hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+    Plot histogram from Hail hist aggregation.
+
+    `hist_data` can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     :param hist_data: Data to plot
     :param title: Plot title
@@ -124,7 +128,6 @@ def plot_hail_hist(
     :param hide_zeros: Remove hist bars with 0 count
     :return: Histogram plot
     """
-
     return plot_multi_hail_hist(
         {"hist": hist_data},
         title=title,
@@ -150,7 +153,8 @@ def plot_multi_hail_hist(
     alpha: float = None,
 ) -> bokeh.plotting.Figure:
     """
-    Plots multiple histograms on the same plot.
+    Plot multiple histograms on the same plot.
+
     Each histogram can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     Example usage:
@@ -170,7 +174,6 @@ def plot_multi_hail_hist(
     :param alpha: Alpha value (if None, then 1.0/len(hist_data) is used)
     :return: Histogram plot
     """
-
     low = int(log)
 
     if alpha is None:
@@ -272,7 +275,9 @@ def plot_hail_hist_cumulative(
     hover_mode: str = "mouse",
 ) -> bokeh.plotting.Figure:
     """
-    hist_data can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
+    Plot cumulative histogram from Hail hist aggregation.
+
+    `hist_data` can (and should) come straight from ht.aggregate(hl.agg.hist(ht.data, start, end, bins))
 
     :param hist_data: Data to plot
     :param title: Plot title
@@ -308,7 +313,7 @@ def plot_hail_hist_cumulative(
 
 def plot_hail_hist_both(
     hist_data: hl.Struct, title: str, normalize: bool = True, log: bool = False
-):
+):  # noqa: D103
     p1 = plot_hail_hist(hist_data, title, log)
     p2 = plot_hail_hist_cumulative(
         hist_data, f"{title} (Cumulative)", normalize, log=log
@@ -318,7 +323,7 @@ def plot_hail_hist_both(
     )
 
 
-def set_font_size(p, font_size: str = "12pt"):
+def set_font_size(p, font_size: str = "12pt"):  # noqa: D103
     p.title.text_font_size = font_size
     p.legend.label_text_font_size = font_size
     p.xaxis.axis_label_text_font_size = font_size
@@ -330,7 +335,7 @@ def set_font_size(p, font_size: str = "12pt"):
     return p
 
 
-def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:
+def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:  # noqa: D103
     panels = []
     for axis_type in ["linear", "log"]:
         fig = plot_func(**kwargs, axis_type=axis_type)
@@ -344,7 +349,8 @@ def plot_hail_file_metadata(
     t_path: str,
 ) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
     """
-    Takes path to hail Table or MatrixTable (gs://bucket/path/hail.mt), outputs Grid or Tabs, respectively.
+    Take path to hail Table or MatrixTable (gs://bucket/path/hail.mt), output Grid or Tabs, respectively.
+
     Or if an unordered Table is provided, a Figure with file sizes is output.
     If metadata file or rows directory is missing, returns None.
     """
@@ -576,7 +582,7 @@ def plot_hail_file_metadata(
         return rows_grid
 
 
-def scale_file_sizes(file_sizes):
+def scale_file_sizes(file_sizes):  # noqa: D103
     min_file_size = min(file_sizes) * 1.1
     total_file_size = sum(file_sizes)
     all_scales = [("T", 1e12), ("G", 1e9), ("M", 1e6), ("K", 1e3), ("", 1e0)]
@@ -592,7 +598,7 @@ def scale_file_sizes(file_sizes):
     return total_file_size, file_sizes, scale
 
 
-def get_rows_data(rows_files):
+def get_rows_data(rows_files):  # noqa: D103
     file_sizes = []
     partition_bounds = []
     parts_file = [x["path"] for x in rows_files if x["path"].endswith("parts")]
@@ -638,7 +644,7 @@ def pair_plot(
     tooltip_cols: List[str] = None,
 ) -> Column:
     """
-    Plots each column of `data` against each other and returns a grid of plots.
+    Plot each column of `data` against each other and returns a grid of plots.
 
     The diagonal contains a histogram of each column, or a density plot if labels are provided.
     The lower diagonal contains scatter plots of each column against each other.
@@ -654,7 +660,6 @@ def pair_plot(
     :param tooltip_cols: Additional columns that should be displayed in tooltip
     :return: Grid of plots (column of rows)
     """
-
     if tooltip_cols is None:
         tooltip_cols = [] if label_col is None else [label_col]
     elif label_col not in tooltip_cols:

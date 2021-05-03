@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 import random
 from typing import Any, Counter, List, Optional, Tuple, Union
@@ -82,7 +84,7 @@ def pc_project(
     af_location: str = "pca_af",
 ) -> hl.Table:
     """
-    Projects samples in `mt` on pre-computed PCs.
+    Project samples in `mt` on pre-computed PCs.
 
     :param mt: MT containing the samples to project
     :param loadings_ht: HT containing the PCA loadings and allele frequencies used for the PCA
@@ -90,7 +92,6 @@ def pc_project(
     :param af_location: Location of expression for allele frequency in `loadings_ht`
     :return: Table with scores calculated from loadings in column `scores`
     """
-
     n_variants = loadings_ht.count()
 
     mt = mt.annotate_rows(
@@ -129,22 +130,22 @@ def assign_population_pcs(
     Union[hl.Table, pd.DataFrame], Any
 ]:  # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     """
-    This function uses a random forest model to assign population labels based on the results of PCA.
+    Use a random forest model to assign population labels based on the results of PCA.
+
     Default values for model and assignment parameters are those used in gnomAD.
 
     As input, this function can either take:
-
-    - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
-        - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
-        - A Hail Table will be returned as output
-    - A Pandas DataFrame. In this case:
-        - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
-        - A pandas DataFrame is returned as output
+        - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
+            - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
+            - A Hail Table will be returned as output
+        - A Pandas DataFrame. In this case:
+            - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
+            - A pandas DataFrame is returned as output
 
     .. note::
 
-        If you have a Pandas Dataframe and have all PCs as an array in a single column, the
-        `expand_pd_array_col` can be used to expand this column into multiple `PC` columns.
+        If you have a Pandas Dataframe and have all PCs as an array in a single column, the `expand_pd_array_col`
+        can be used to expand this column into multiple `PC` columns.
 
     :param pop_pc_pd: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use
@@ -218,12 +219,10 @@ def assign_population_pcs(
     pop_pc_pd = pop_pc_pd.drop(pc_cols, axis="columns")
 
     logger.info(
-        "Found the following sample count after population assignment: {}".format(
-            ", ".join(
-                f"{pop}: {count}"
-                for pop, count in Counter(pop_pc_pd[output_col]).items()
-            )
-        )
+        "Found the following sample count after population assignment: %s",
+        ", ".join(
+            f"{pop}: {count}" for pop, count in Counter(pop_pc_pd[output_col]).items()
+        ),
     )
 
     if hail_input:
@@ -243,8 +242,7 @@ def run_pca_with_relateds(
     autosomes_only: bool = True,
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
-    First runs PCA excluding the given related samples,
-    then projects these samples in the PC space to return scores for all samples.
+    Run PCA excluding the given related samples, and project those samples in the PC space to return scores for all samples.
 
     The `related_samples_to_drop` Table has to be keyed by the sample ID and all samples present in this
     table will be excluded from the PCA.
@@ -258,7 +256,6 @@ def run_pca_with_relateds(
     :param autosomes_only: Whether to run the analysis on autosomes only
     :return: eigenvalues, scores and loadings
     """
-
     unrelated_mt = qc_mt.persist()
 
     if autosomes_only:

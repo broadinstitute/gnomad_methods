@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import Dict, List, Optional, Union
 
@@ -26,8 +28,7 @@ INFO_ARRAY_SUM_AGG_FIELDS = ["SB", "RAW_MQandDP"]
 
 def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
-    This function takes a sparse MT and computes for each row the genomic position of the
-    most upstream reference block overlapping that row.
+    Compute the genomic position of the most upstream reference block overlapping each row on a sparse MT.
 
     Note that since reference blocks do not extend beyond contig boundaries, only the position is kept.
 
@@ -87,7 +88,7 @@ def densify_sites(
     semi_join_rows: bool = True,
 ) -> hl.MatrixTable:
     """
-    Creates a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
+    Create a dense version of the input sparse MT at the sites in `sites_ht` reading the minimal amount of data required.
 
     Note that only rows that appear both in `mt` and `sites_ht` are returned.
 
@@ -152,16 +153,16 @@ def _get_info_agg_expr(
     prefix: str = "",
 ) -> Dict[str, hl.expr.Aggregation]:
     """
-    Helper function containing code to create Aggregators for both site or AS info expression aggregations.
+    Create Aggregators for both site or AS info expression aggregations.
 
-    Notes:
+    .. note::
 
-    1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
-    2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as
+          list of str, then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param mt: Input MT
     :param sum_agg_fields: Fields to aggregate using sum.
@@ -237,14 +238,16 @@ def _get_info_agg_expr(
     mq_tuple = None
     if f"{prefix}RAW_MQandDP" in agg_expr:
         logger.info(
-            f"Computing {prefix}MQ as sqrt({prefix}RAW_MQandDP[0]/{prefix}RAW_MQandDP[1]). "
-            f"Note that {prefix}MQ will be set to 0 if {prefix}RAW_MQandDP[1] == 0."
+            "Computing %sMQ as sqrt(%sRAW_MQandDP[0]/%sRAW_MQandDP[1]). "
+            "Note that %sMQ will be set to 0 if %sRAW_MQandDP[1] == 0.",
+            *[prefix] * 5,
         )
         mq_tuple = agg_expr.pop(f"{prefix}RAW_MQandDP")
     elif f"{prefix}RAW_MQ" in agg_expr and f"{prefix}MQ_DP" in agg_expr:
         logger.info(
-            f"Computing {prefix}MQ as sqrt({prefix}RAW_MQ/{prefix}MQ_DP). "
-            f"Note that MQ will be set to 0 if {prefix}RAW_MQ == 0."
+            "Computing %sMQ as sqrt(%sRAW_MQ/%sMQ_DP). "
+            "Note that MQ will be set to 0 if %sRAW_MQ == 0.",
+            *[prefix] * 4,
         )
         mq_tuple = (agg_expr.pop(f"{prefix}RAW_MQ"), agg_expr.pop(f"{prefix}MQ_DP"))
 
@@ -256,8 +259,9 @@ def _get_info_agg_expr(
     # If both VarDP and QUALapprox are present, also compute QD.
     if f"{prefix}VarDP" in agg_expr and f"{prefix}QUALapprox" in agg_expr:
         logger.info(
-            f"Computing {prefix}QD as {prefix}QUALapprox/{prefix}VarDP. "
-            f"Note that {prefix}QD will be set to 0 if {prefix}VarDP == 0."
+            f"Computing %sQD as %sQUALapprox/%sVarDP. "
+            f"Note that %sQD will be set to 0 if %sVarDP == 0.",
+            *[prefix] * 5,
         )
         var_dp = hl.int32(hl.agg.sum(int32_sum_agg_fields["VarDP"]))
         agg_expr[f"{prefix}QD"] = hl.cond(
@@ -288,16 +292,16 @@ def get_as_info_expr(
     alt_alleles_range_array_field: str = "alt_alleles_range_array",
 ) -> hl.expr.StructExpression:
     """
-    Returns an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
+    Return an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
-    Notes:
+    .. note::
 
-    1. If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
-    2. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    4. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
+          then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
@@ -386,15 +390,15 @@ def get_site_info_expr(
     ] = INFO_ARRAY_SUM_AGG_FIELDS,
 ) -> hl.expr.StructExpression:
     """
-    Creates a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
+    Create a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
-    Notes:
+    .. note::
 
-    1. If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    2. If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-    3. If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-       then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-       Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as
+          list of str, then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
@@ -438,9 +442,11 @@ def default_compute_info(
     mt: hl.MatrixTable, site_annotations: bool = False, n_partitions: int = 5000
 ) -> hl.Table:
     """
-    Computes a HT with the typical GATK allele-specific (AS) info fields 
-    as well as ACs and lowqual fields.
-    Note that this table doesn't split multi-allelic sites.
+    Compute a HT with the typical GATK allele-specific (AS) info fields as well as ACs and lowqual fields.
+
+    .. note::
+
+        This table doesn't split multi-allelic sites.
 
     :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
     :param site_annotations: Whether to also generate site level info fields. Default is False.
@@ -505,7 +511,7 @@ def split_info_annotation(
     info_expr: hl.expr.StructExpression, a_index: hl.expr.Int32Expression
 ) -> hl.expr.StructExpression:
     """
-    Splits multi-allelic allele-specific info fields.
+    Split multi-allelic allele-specific info fields.
 
     :param info_expr: Field containing info struct.
     :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
@@ -527,7 +533,7 @@ def split_lowqual_annotation(
     lowqual_expr: hl.expr.ArrayExpression, a_index: hl.expr.Int32Expression
 ) -> hl.expr.BooleanExpression:
     """
-    Splits multi-allelic low QUAL annotation.
+    Split multi-allelic low QUAL annotation.
 
     :param lowqual_expr: Field containing low QUAL annotation.
     :param a_index: Allele index. Output by hl.split_multi or hl.split_multi_hts.
@@ -545,22 +551,24 @@ def impute_sex_ploidy(
     chr_y: Optional[str] = None,
 ) -> hl.Table:
     """
-    Imputes sex ploidy from a sparse Matrix Table by normalizing the coverage of chromosomes X and Y using
-    the coverage of an autosomal chromosome (by default chr20).
+    Impute sex ploidy from a sparse MatrixTable.
 
-    Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at non-ref genotypes.
+    Sex ploidy is imputed by normalizing the coverage of chromosomes X and Y using the coverage of an autosomal
+    chromosome (by default chr20).
+
+    Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at
+    non-ref genotypes.
 
     :param mt: Input sparse Matrix Table
-    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation. 
+    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation.
         Used only when determining contig size (not used when computing chromosome depth).
-    :param included_calling_intervals: Optional table of intervals to use in the computation. 
+    :param included_calling_intervals: Optional table of intervals to use in the computation.
         Used only when determining contig size (not used when computing chromosome depth).
     :param normalization_contig: Which chromosome to normalize by
     :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
     :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
     """
-
     ref = get_reference_genome(mt.locus, add_sequence=True)
     if chr_x is None:
         if len(ref.x_contigs) != 1:
@@ -580,7 +588,7 @@ def impute_sex_ploidy(
         chr_y = ref.y_contigs[0]
 
     def get_contig_size(contig: str) -> int:
-        logger.info(f"Working on {contig}")
+        logger.info("Working on %s", contig)
         contig_ht = hl.utils.range_table(
             ref.contig_length(contig),
             n_partitions=int(ref.contig_length(contig) / 500_000),
@@ -605,7 +613,7 @@ def impute_sex_ploidy(
                 hl.is_missing(excluded_calling_intervals[contig_ht.key])
             )
         contig_size = contig_ht.count()
-        logger.info(f"Contig {contig} has {contig_size} bases for coverage.")
+        logger.info("Contig %s has %d bases for coverage.", contig, contig_size)
         return contig_size
 
     def get_chr_dp_ann(chrom: str) -> hl.Table:
@@ -654,7 +662,9 @@ def compute_coverage_stats(
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
 ) -> hl.Table:
     """
-    Computes the following coverage statistics for every base of the `reference_ht` provided:
+    Compute coverage statistics for every base of the `reference_ht` provided.
+
+    The following coverage stats are calculated:
         - mean
         - median
         - total DP
@@ -669,7 +679,6 @@ def compute_coverage_stats(
     :param coverage_over_x_bins: List of boundaries for computing samples over X
     :return: Table with per-base coverage stats
     """
-
     n_samples = mt.count_cols()
     print(f"Computing coverage stats on {n_samples} samples.")
 
@@ -746,7 +755,7 @@ def filter_ref_blocks(
     t: Union[hl.MatrixTable, hl.Table]
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Filters ref blocks out of the Table or MatrixTable.
+    Filter ref blocks out of the Table or MatrixTable.
 
     :param t: Input MT/HT
     :return: MT/HT with ref blocks removed

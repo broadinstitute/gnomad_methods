@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import List, Optional, Tuple
 
@@ -17,8 +19,10 @@ def sample_training_examples(
     test_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.Table:
     """
-    Returns a Table of all positive and negative training examples in `ht` with an annotation indicating those that
-    should be used for training given a true positive (TP) to false positive (FP) ratio.
+    Return a Table of all positive and negative training examples in `ht` with an annotation indicating those that should be used for training.
+
+    If `fp_to_tp` is greater than 0, this true positive (TP) to false positive (FP) ratio will be used to determine
+    sampling of training variants.
 
     The returned Table has the following annotations:
         - train: indicates if the variant should be used for training. A row is given False for the annotation if True
@@ -37,7 +41,6 @@ def sample_training_examples(
     :param test_expr: Optional expression to exclude a set of variants from training set. Still contains TP/FP label annotation.
     :return: Table subset with corresponding TP and FP examples with desired FP to TP ratio.
     """
-
     ht = ht.select(
         _tp=hl.or_else(tp_expr, False),
         _fp=hl.or_else(fp_expr, False),
@@ -95,7 +98,11 @@ def sample_training_examples(
             prob_tp = n_fp / desired_fp
 
         logger.info(
-            f"Training examples sampling: tp={prob_tp}*{n_tp}, fp={prob_fp}*{n_fp}"
+            "Training examples sampling: tp=%f*%d, fp=%f*%d",
+            prob_tp,
+            n_tp,
+            prob_fp,
+            n_fp,
         )
 
         train_expr = (
@@ -106,7 +113,7 @@ def sample_training_examples(
         )
     else:
         train_expr = ~(ht._tp & ht._fp)
-        logger.info(f"Using all {n_tp} TP and {n_fp} FP training examples.")
+        logger.info("Using all %d TP and %d FP training examples.", n_tp, n_fp)
 
     label_expr = (
         hl.case(missing_false=True)

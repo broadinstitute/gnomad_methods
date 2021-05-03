@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 from typing import List, Optional, Tuple
 
@@ -19,7 +21,8 @@ def compute_callrate_mt(
     match: bool = True,
 ) -> hl.MatrixTable:
     """
-    Computes a sample/interval MT with each entry containing the call rate for that sample/interval.
+    Compute a sample/interval MT with each entry containing the call rate for that sample/interval.
+
     This can be used as input for imputing exome sequencing platforms.
 
     .. note::
@@ -41,7 +44,8 @@ def compute_callrate_mt(
         intervals_ht.key[0], hl.expr.IntervalExpression
     ):
         logger.warning(
-            f"Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: {intervals_ht.key}"
+            "Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: %s",
+            intervals_ht.key,
         )
 
     if autosomes_only:
@@ -80,7 +84,8 @@ def run_platform_pca(
     callrate_mt: hl.MatrixTable, binarization_threshold: Optional[float] = 0.25
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
-    Runs a PCA on a sample/interval MT with each entry containing the call rate.
+    Run PCA on a sample/interval MT with each entry containing the call rate.
+
     When `binzarization_threshold` is set, the callrate is transformed to a 0/1 value based on the threshold.
     E.g. with the default threshold of 0.25, all entries with a callrate < 0.25 are considered as 0s, others as 1s.
 
@@ -104,7 +109,7 @@ def run_platform_pca(
     eigenvalues, scores, loadings = hl.pca(
         callrate_mt.callrate, compute_loadings=True
     )  # TODO:  Evaluate whether computing loadings is a good / worthy thing
-    logger.info("Platform PCA eigenvalues: {}".format(eigenvalues))
+    logger.info("Platform PCA eigenvalues: %s", eigenvalues)
 
     return eigenvalues, scores, loadings
 
@@ -116,7 +121,7 @@ def assign_platform_from_pcs(
     hdbscan_min_samples: int = None,
 ) -> hl.Table:
     """
-    Assigns platforms using HBDSCAN on the results of call rate PCA.
+    Assign platforms using HBDSCAN on the results of call rate PCA.
 
     :param platform_pca_scores_ht: Input table with the PCA score for each sample
     :param pc_scores_ann: Field containing the scores
@@ -131,7 +136,7 @@ def assign_platform_from_pcs(
     # Read and format data for clustering
     data = platform_pca_scores_ht.to_pandas()
     callrate_data = np.matrix(data[pc_scores_ann].tolist())
-    logger.info("Assigning platforms to {} samples.".format(len(callrate_data)))
+    logger.info("Assigning platforms to %d samples.", len(callrate_data))
 
     # Cluster data
     if hdbscan_min_cluster_size is None:
@@ -143,9 +148,7 @@ def assign_platform_from_pcs(
     n_clusters = len(set(cluster_labels)) - (
         -1 in cluster_labels
     )  # NOTE: -1 is the label for noisy (un-classifiable) data points
-    logger.info(
-        "Found {} unique platforms during platform imputation.".format(n_clusters)
-    )
+    logger.info("Found %d unique platforms during platform imputation.", n_clusters)
 
     data["qc_platform"] = cluster_labels
     ht = hl.Table.from_pandas(data, key=[*platform_pca_scores_ht.key])

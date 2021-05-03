@@ -1,3 +1,5 @@
+# noqa: D100
+
 import logging
 import random
 from collections import defaultdict
@@ -51,7 +53,8 @@ def get_duplicated_samples(
     rel_col: str = "relationship",
 ) -> List[Set[str]]:
     """
-    Given a pc_relate output Table, extract the list of duplicate samples. Returns a list of set of samples that are duplicates.
+    Extract the list of duplicate samples using a Table ouput from pc_relate.
+
     :param relationship_ht: Table with relationships between pairs of samples
     :param i_col: Column containing the 1st sample
     :param j_col: Column containing the 2nd sample
@@ -63,8 +66,9 @@ def get_duplicated_samples(
         s: str, dups: Set[str], samples_duplicates: Dict[str, Set[str]]
     ) -> Tuple[Set[str], Dict[str, Set[str]]]:
         """
-        Creates the set of all duplicated samples corresponding to `s` that are found in `sample_duplicates`.
-        Also returns the remaining sample duplicates after removing all duplicated samples corresponding to `s`.
+        Create the set of all duplicated samples corresponding to `s` that are found in `sample_duplicates`.
+
+        Also return the remaining sample duplicates after removing all duplicated samples corresponding to `s`.
 
         Works by recursively adding duplicated samples to the set.
 
@@ -112,7 +116,8 @@ def get_duplicated_samples_ht(
     rank_ann: str = "rank",
 ):
     """
-    Creates a HT with duplicated samples sets.
+    Create a HT with duplicated samples sets.
+
     Each row is indexed by the sample that is kept and also contains the set of duplicate samples that should be filtered.
 
     `samples_rankings_ht` is a HT containing a global rank for each of the samples (smaller is better).
@@ -150,7 +155,8 @@ def get_duplicated_samples_ht(
 
 def explode_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
     """
-    Explodes the result of `get_duplicated_samples_ht`, so that each line contains a single sample.
+    Explode the result of `get_duplicated_samples_ht`, so that each line contains a single sample.
+
     An additional annotation is added: `dup_filtered` indicating which of the duplicated samples was kept.
     Requires a field `filtered` which type should be the same as the input duplicated samples Table key.
 
@@ -200,9 +206,11 @@ def get_relationship_expr(  # TODO: The threshold detection could be easily auto
     ibd2_100_thresholds: Tuple[float, float] = (0.75, 1.25),
 ) -> hl.expr.StringExpression:
     """
-    Returns an expression that gives the relationship between a pair of samples given their kin coefficient and IBDO, IBD1, IBD2 values.
-    The kinship coefficient values in the defaults are in line with those output from `hail.methods.pc_relate <https://hail.is/docs/0.2/methods/genetics.html?highlight=pc_relate#hail.methods.pc_relate>`.
-    
+    Return an expression indicating the relationship between a pair of samples given their kin coefficient and IBDO, IBD1, IBD2 values.
+
+    The kinship coefficient values in the defaults are in line with those output from
+    `hail.methods.pc_relate <https://hail.is/docs/0.2/methods/genetics.html?highlight=pc_relate#hail.methods.pc_relate>`.
+
     :param kin_expr: Kin coefficient expression
     :param ibd0_expr: IBDO expression
     :param ibd1_expr: IBD1 expression
@@ -262,8 +270,13 @@ def infer_families(
     relationship_col: str = "relationship",
 ) -> hl.Pedigree:
     """
-    This function takes a hail Table with a row for each pair of individuals i,j in the data that are related (it's OK to have unrelated samples too).
-    The `relationship_col` should be a column specifying the relationship between each two samples as defined in this module's constants.
+    Generate a pedigree containing trios inferred from the `relationship_ht`.
+
+    This function takes a hail Table with a row for each pair of related individuals i, j in the data (it's OK to have
+    unrelated samples too).
+
+    The `relationship_col` should be a column specifying the relationship between each two samples as defined in this
+     module's constants.
 
     This function returns a pedigree containing trios inferred from the data. Family ID can be the same for multiple
     trios if one or more members of the trios are related (e.g. sibs, multi-generational family). Trios are ordered by family ID.
@@ -285,8 +298,10 @@ def infer_families(
         parent_child_pairs: Iterable[Tuple[str, str]]
     ) -> List[List[Tuple[str, str]]]:
         """
-        Takes all parent-children pairs and groups them by family.
-        A family here is defined as a list of sample-pairs which all share at least one sample with at least one other sample-pair in the list.
+        Group parent-child pairs into a list of families.
+
+        A family here is defined as a list of sample-pairs which all share at least one sample with at least one other
+        sample-pair in the list.
 
         :param parent_child_pairs: All the parent-children pairs
         :return: A list of families, where each element of the list is a list of the parent-children pairs
@@ -328,8 +343,9 @@ def infer_families(
         related_pairs: Dict[Tuple[str, str], str],
     ) -> List[hl.Trio]:
         """
-        Generates trios based from the list of parent-child pairs in the family and
-        all related pairs in the data. Only complete parent/offspring trios are included in the results.
+        Generate trios based on the list of parent-child pairs in the family and all related pairs in the data.
+
+        Only complete parent/offspring trios are included in the results.
 
         The trios are assembled as follows:
         1. All pairs of unrelated samples with different sexes within the family are extracted as possible parent pairs
@@ -345,7 +361,7 @@ def infer_families(
 
         def get_possible_parents(samples: List[str]) -> List[Tuple[str, str]]:
             """
-            1. All pairs of unrelated samples with different sexes within the family are extracted as possible parent pairs
+            Return all pairs of unrelated samples with different sexes within the family are extracted as possible parent pairs.
 
             :param samples: All samples in the family
             :return: Possible parent pairs
@@ -367,7 +383,9 @@ def infer_families(
 
         def get_children(possible_parents: Tuple[str, str]) -> List[str]:
             """
-            2. For a given possible parent pair, a list of all children is constructed (each child in the list has a parent-offspring pair with each parent)
+            Construct a list of all children for a given possible parent pair.
+
+            Each child in the list has a parent-offspring pair with each parent.
 
             :param possible_parents: A pair of possible parents
             :return: The list of all children (if any) corresponding to the possible parents
@@ -391,7 +409,9 @@ def infer_families(
 
         def check_sibs(children: List[str]) -> bool:
             """
-            3. If there are multiple children for a given parent pair, all children should be siblings with each other
+            Confirm that all children of a parent pair are siblings with each other.
+
+            If there are multiple children for a given parent pair, all children should be siblings with each other.
 
             :param children: List of all children for a given parent pair
             :return: Whether all children in the list are siblings
@@ -407,7 +427,9 @@ def infer_families(
 
         def discard_multi_parents_children(trios: List[hl.Trio]):
             """
-            4. Check that each child was only assigned a single pair of parents. If a child is found to have multiple parent pairs, they are ALL discarded.
+            Check that each child was only assigned a single pair of parents.
+
+            If a child is found to have multiple parent pairs, they are ALL discarded.
 
             :param trios: All trios formed for this family
             :return: The list of trios for which each child has a single parents pair.
@@ -419,9 +441,9 @@ def infer_families(
             for s, s_trios in children_trios.items():
                 if len(s_trios) > 1:
                     logger.warning(
-                        "Discarded duplicated child {0} found multiple in trios: {1}".format(
-                            s, ", ".join([str(trio) for trio in s_trios])
-                        )
+                        "Discarded duplicated child %s found multiple in trios: %s",
+                        s,
+                        ", ".join([str(trio) for trio in s_trios]),
                     )
 
             return [trios[0] for trios in children_trios.values() if len(trios) == 1]
@@ -450,9 +472,10 @@ def infer_families(
             else:
                 logger.warning(
                     "Discarded family with same parents, and multiple offspring that weren't siblings:"
-                    "\nMother: {}\nFather:{}\nChildren:{}".format(
-                        possible_parents[0], possible_parents[1], ", ".join(children)
-                    )
+                    "\nMother: %s\nFather:%s\nChildren:%s",
+                    possible_parents[0],
+                    possible_parents[1],
+                    ", ".join(children),
                 )
 
         return discard_multi_parents_children(trios)
@@ -480,11 +503,14 @@ def infer_families(
     # If i_col and j_col aren't str, then convert them
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
         logger.warning(
-            f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Expression will be converted to string in Pedigrees."
+            "Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: %s. "
+            "Expression will be converted to string in Pedigrees.",
+            relationship_ht[i_col].dtype,
         )
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
             logger.warning(
-                f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree."
+                "Struct fields %s will be joined by underscores to use as sample names in Pedigree.",
+                list(relationship_ht[i_col]),
             )
             relationship_ht = relationship_ht.key_by(
                 **{
@@ -547,10 +573,12 @@ def create_fake_pedigree(
     real_pedigree: Optional[hl.Pedigree] = None,
 ) -> hl.Pedigree:
     """
-    Generates a pedigree made of trios created by sampling 3 random samples in the sample list.
-    If `real_pedigree` is given, then children the resulting fake trios will not include any trio with proband - parents that are in the real ones.
-    Each sample can be used only once as a proband in the resulting trios.
-    Sex of probands in fake trios is random.
+    Generate a pedigree made of trios created by sampling 3 random samples in the sample list.
+
+    - If `real_pedigree` is given, then children in the resulting fake trios will not include any trio with proband - parents
+      that are in the real ones.
+    - Each sample can be used only once as a proband in the resulting trios.
+    - Sex of probands in fake trios is random.
 
     :param n: Number of fake trios desired in the pedigree
     :param sample_list: List of samples
@@ -595,7 +623,9 @@ def create_fake_pedigree(
 
     if tries == max_tries:
         logger.warning(
-            f"Only returning {len(fake_trios)} fake trios; random trio sampling stopped after reaching the maximum {max_tries} iterations"
+            "Only returning %d fake trios; random trio sampling stopped after reaching the maximum %d iterations",
+            len(fake_trios),
+            max_tries,
         )
 
     return hl.Pedigree(list(fake_trios.values()))
@@ -609,7 +639,7 @@ def compute_related_samples_to_drop(
     min_related_hard_filter: Optional[int] = None,
 ) -> hl.Table:
     """
-    Computes a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
+    Compute a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
 
     .. note::
 
@@ -623,20 +653,20 @@ def compute_related_samples_to_drop(
     :param min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
     :return: A Table with the list of the samples to drop along with their rank.
     """
-
     # Make sure that the key types are valid
     assert len(list(relatedness_ht.key)) == 2
     assert relatedness_ht.key[0].dtype == relatedness_ht.key[1].dtype
     assert len(list(rank_ht.key)) == 1
     assert relatedness_ht.key[0].dtype == rank_ht.key[0].dtype
 
-    logger.info(f"Filtering related samples using a kin threshold of {kin_threshold}")
+    logger.info("Filtering related samples using a kin threshold of %f", kin_threshold)
     relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kin_threshold)
 
     filtered_samples_rel = set()
     if min_related_hard_filter is not None:
         logger.info(
-            f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion"
+            "Computing samples related to too many individuals (>%d) for exclusion",
+            min_related_hard_filter,
         )
         gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
         gbi = gbi.explode(gbi.s)
@@ -645,7 +675,8 @@ def compute_related_samples_to_drop(
             hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s))
         )
         logger.info(
-            f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded."
+            "Found %d samples with too many 1st/2nd degree relatives. These samples will be excluded.",
+            len(filtered_samples_rel),
         )
 
     if filtered_samples is not None:
@@ -707,7 +738,7 @@ def compute_related_samples_to_drop(
 
 def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
     """
-    Filters a MatrixTable to a set of trios in `fam_ht` and annotates with adj.
+    Filter a MatrixTable to a set of trios in `fam_ht` and annotates with adj.
 
     :param mt: A Matrix Table to filter to only trios
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
@@ -733,8 +764,9 @@ def generate_trio_stats_expr(
     proband_is_female_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
-    Generates a row-wise expression containing the following counts:
+    Generate a row-wise expression containing trio transmission stats.
 
+    The expression will generate the following counts:
         - Number of alleles in het parents transmitted to the proband
         - Number of alleles in het parents not transmitted to the proband
         - Number of de novo mutations
@@ -757,7 +789,6 @@ def generate_trio_stats_expr(
     :param proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
     :return: An expression with the counts
     """
-
     # Create map for transmitted, untransmitted and DNM
     hom_ref = 0
     het = 1
@@ -789,10 +820,7 @@ def generate_trio_stats_expr(
     trans_count_map = hl.literal(trans_config_counts)
 
     def _get_copy_state(locus: hl.expr.LocusExpression) -> hl.expr.Int32Expression:
-        """
-        Helper method to go from LocusExpression to a copy-state int for indexing into the
-        trans_count_map.
-        """
+        """Get copy-state int from LocusExpression for indexing into the trans_count_map."""
         return (
             hl.case()
             .when(locus.in_autosome_or_par(), auto_or_par)
@@ -808,9 +836,7 @@ def generate_trio_stats_expr(
         locus: hl.expr.LocusExpression,
         proband_is_female: Optional[hl.expr.BooleanExpression],
     ) -> hl.expr.BooleanExpression:
-        """
-        Helper method to get whether a given genotype combination is a DNM at a given locus with a given proband sex.
-        """
+        """Determine whether a given genotype combination is a DNM at a given locus with a given proband sex."""
         if proband_is_female is None:
             logger.warning(
                 "Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted."
@@ -832,9 +858,7 @@ def generate_trio_stats_expr(
         father_gt: hl.expr.CallExpression,
         mother_gt: hl.expr.CallExpression,
     ) -> Dict[str, hl.expr.Int64Expression]:
-        """
-        Helper method to get AC and AN for parents and children
-        """
+        """Get AC and AN for parents and children."""
         ac_parent_expr = hl.agg.sum(
             father_gt.n_alt_alleles() + mother_gt.n_alt_alleles()
         )
@@ -923,7 +947,7 @@ def generate_sib_stats_expr(
     is_female: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.expr.StructExpression:
     """
-    Generates a row-wise expression containing the number of alternate alleles in common between sibling pairs.
+    Generate a row-wise expression containing the number of alternate alleles in common between sibling pairs.
 
     The sibling sharing counts can be stratified using additional filters using `stata`.
 
@@ -942,9 +966,7 @@ def generate_sib_stats_expr(
     """
 
     def _get_alt_count(locus, gt, is_female):
-        """
-        Helper method to calculate alt allele count with sex info if present
-        """
+        """Calculate alt allele count with sex info if present."""
         if is_female is None:
             return hl.or_missing(locus.in_autosome(), gt.n_alt_alleles())
         return (
@@ -979,7 +1001,7 @@ def generate_sib_stats_expr(
     sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
 
     logger.info(
-        f"Generating sibling variant sharing counts using {sib_ht.count()} pairs."
+        "Generating sibling variant sharing counts using %d pairs.", sib_ht.count()
     )
     sib_ht = sib_ht.explode("sibs").key_by("sibs")[mt.s]
 

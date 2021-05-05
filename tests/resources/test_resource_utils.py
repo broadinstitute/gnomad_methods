@@ -92,12 +92,27 @@ def gnomad_public_resource_test_parameters(path: str):
             f"gs://gnomad-public{path}",
         ),
         (
+            f"gs://gnomad-public-requester-pays{path}",
+            GnomadPublicResourceSource.GNOMAD,
+            f"gs://gnomad-public-requester-pays{path}",
+        ),
+        (
             f"gs://gnomad-public{path}",
             GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
             f"gs://gcp-public-data--gnomad{path}",
         ),
         (
+            f"gs://gnomad-public-requester-pays{path}",
+            GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+            f"gs://gcp-public-data--gnomad{path}",
+        ),
+        (
             f"gs://gnomad-public{path}",
+            "gs://my-bucket/gnomad-resources",
+            f"gs://my-bucket/gnomad-resources{path}",
+        ),
+        (
+            f"gs://gnomad-public-requester-pays{path}",
             "gs://my-bucket/gnomad-resources",
             f"gs://my-bucket/gnomad-resources{path}",
         ),

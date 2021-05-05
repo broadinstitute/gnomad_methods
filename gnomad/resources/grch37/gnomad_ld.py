@@ -1,6 +1,9 @@
 # noqa: D100
 
-from gnomad.resources.resource_utils import TableResource, BlockMatrixResource
+from gnomad.resources.resource_utils import (
+    GnomadPublicTableResource,
+    GnomadPublicBlockMatrixResource,
+)
 from gnomad.resources.grch37.gnomad import CURRENT_EXOME_RELEASE, CURRENT_GENOME_RELEASE
 from typing import Optional
 
@@ -67,16 +70,16 @@ def _ld_scores_path(
     return f'gs://gnomad-public-requester-pays/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop}.{"adj." if adj else ""}ld_scores.ht'
 
 
-def ld_matrix(pop: str) -> BlockMatrixResource:
+def ld_matrix(pop: str) -> GnomadPublicBlockMatrixResource:
     """Get resource for the LD matrix for the given population."""
-    return BlockMatrixResource(path=_ld_matrix_path("genomes", pop))
+    return GnomadPublicBlockMatrixResource(path=_ld_matrix_path("genomes", pop))
 
 
-def ld_index(pop: str) -> TableResource:
+def ld_index(pop: str) -> GnomadPublicTableResource:
     """Get resource for the LD indices for the given population."""
-    return TableResource(path=_ld_index_path("genomes", pop))
+    return GnomadPublicTableResource(path=_ld_index_path("genomes", pop))
 
 
-def ld_scores(pop: str) -> TableResource:
+def ld_scores(pop: str) -> GnomadPublicTableResource:
     """Get resource for the LD scores for the given population."""
-    return TableResource(path=_ld_scores_path("genomes", pop))
+    return GnomadPublicTableResource(path=_ld_scores_path("genomes", pop))

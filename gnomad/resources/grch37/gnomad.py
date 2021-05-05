@@ -2,7 +2,7 @@
 
 from gnomad.resources.resource_utils import (
     DataException,
-    TableResource,
+    GnomadPublicTableResource,
     VersionedTableResource,
 )
 
@@ -124,7 +124,9 @@ def public_release(data_type: str) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: TableResource(path=_public_release_ht_path(data_type, release))
+            release: GnomadPublicTableResource(
+                path=_public_release_ht_path(data_type, release)
+            )
             for release in releases
         },
     )
@@ -150,7 +152,9 @@ def coverage(data_type: str) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: TableResource(path=_public_coverage_ht_path(data_type, release))
+            release: GnomadPublicTableResource(
+                path=_public_coverage_ht_path(data_type, release)
+            )
             for release in releases
         },
     )
@@ -176,13 +180,15 @@ def liftover(data_type: str) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: TableResource(path=_liftover_data_path(data_type, release))
+            release: GnomadPublicTableResource(
+                path=_liftover_data_path(data_type, release)
+            )
             for release in releases
         },
     )
 
 
-def public_pca_loadings(subpop: str = "") -> TableResource:
+def public_pca_loadings(subpop: str = "") -> GnomadPublicTableResource:
     """
     Return the TableResource containing sites and loadings from population PCA.
 
@@ -194,7 +200,7 @@ def public_pca_loadings(subpop: str = "") -> TableResource:
             'Available subpops are "eas" or "nfe", default value "" for global'
         )
 
-    return TableResource(path=_public_pca_ht_path(subpop))
+    return GnomadPublicTableResource(path=_public_pca_ht_path(subpop))
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:

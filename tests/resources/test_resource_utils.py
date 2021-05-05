@@ -113,3 +113,145 @@ class TestGnomadPublicTableResource:
 
         resource.ht()
         read_table.assert_called_with(expected_read_path)
+
+
+class TestGnomadPublicMatrixTableResource:
+    """Tests for GnomadPublicMatrixTableResource."""
+
+    @pytest.mark.parametrize(
+        "resource_path,source,expected_read_path",
+        [
+            (
+                "gs://gnomad-public/matrix_table.mt",
+                GnomadPublicResourceSource.GNOMAD,
+                "gs://gnomad-public/matrix_table.mt",
+            ),
+            (
+                "gs://gnomad-public/matrix_table.mt",
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+                "gs://gcp-public-data--gnomad/matrix_table.mt",
+            ),
+            (
+                "gs://gnomad-public/matrix_table.mt",
+                "gs://my-bucket/gnomad-resources",
+                "gs://my-bucket/gnomad-resources/matrix_table.mt",
+            ),
+        ],
+    )
+    @patch("hail.read_matrix_table")
+    def test_read_gnomad_public_matrix_table_resource(
+        self, read_matrix_table, resource_path, source, expected_read_path
+    ):
+        """Test that MatrixTable can be read from different sources."""
+        resource = resource_utils.GnomadPublicMatrixTableResource(resource_path)
+
+        gnomad_public_resource_configuration.source = source
+
+        resource.mt()
+        read_matrix_table.assert_called_with(expected_read_path)
+
+
+class TestGnomadPublicPedigreeResource:
+    """Tests for GnomadPublicPedigreeResource."""
+
+    @pytest.mark.parametrize(
+        "resource_path,source,expected_read_path",
+        [
+            (
+                "gs://gnomad-public/pedigree.ped",
+                GnomadPublicResourceSource.GNOMAD,
+                "gs://gnomad-public/pedigree.ped",
+            ),
+            (
+                "gs://gnomad-public/pedigree.ped",
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+                "gs://gcp-public-data--gnomad/pedigree.ped",
+            ),
+            (
+                "gs://gnomad-public/pedigree.ped",
+                "gs://my-bucket/gnomad-resources",
+                "gs://my-bucket/gnomad-resources/pedigree.ped",
+            ),
+        ],
+    )
+    @patch("hail.Pedigree.read")
+    def test_read_gnomad_public_pedigree_resource(
+        self, read_pedigree, resource_path, source, expected_read_path
+    ):
+        """Test that Pedigree can be read from different sources."""
+        resource = resource_utils.GnomadPublicPedigreeResource(resource_path)
+
+        gnomad_public_resource_configuration.source = source
+
+        resource.pedigree()
+        read_pedigree.assert_called()
+        assert read_pedigree.call_args[0][0] == expected_read_path
+
+    @pytest.mark.parametrize(
+        "resource_path,source,expected_read_path",
+        [
+            (
+                "gs://gnomad-public/pedigree.fam",
+                GnomadPublicResourceSource.GNOMAD,
+                "gs://gnomad-public/pedigree.fam",
+            ),
+            (
+                "gs://gnomad-public/pedigree.fam",
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+                "gs://gcp-public-data--gnomad/pedigree.fam",
+            ),
+            (
+                "gs://gnomad-public/pedigree.fam",
+                "gs://my-bucket/gnomad-resources",
+                "gs://my-bucket/gnomad-resources/pedigree.fam",
+            ),
+        ],
+    )
+    @patch("hail.import_fam")
+    def test_import_gnomad_public_pedigree_resource(
+        self, import_fam, resource_path, source, expected_read_path
+    ):
+        """Test that pedigree can be imported from different sources."""
+        resource = resource_utils.GnomadPublicPedigreeResource(resource_path)
+
+        gnomad_public_resource_configuration.source = source
+
+        resource.ht()
+        import_fam.assert_called()
+        assert import_fam.call_args[0][0] == expected_read_path
+
+
+class TestGnomadPublicBlockMatrixResource:
+    """Tests for GnomadPublicBlockMatrixResource."""
+
+    @pytest.mark.parametrize(
+        "resource_path,source,expected_read_path",
+        [
+            (
+                "gs://gnomad-public/block_matrix.bm",
+                GnomadPublicResourceSource.GNOMAD,
+                "gs://gnomad-public/block_matrix.bm",
+            ),
+            (
+                "gs://gnomad-public/block_matrix.bm",
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+                "gs://gcp-public-data--gnomad/block_matrix.bm",
+            ),
+            (
+                "gs://gnomad-public/block_matrix.bm",
+                "gs://my-bucket/gnomad-resources",
+                "gs://my-bucket/gnomad-resources/block_matrix.bm",
+            ),
+        ],
+    )
+    @patch("hail.linalg.BlockMatrix.read")
+    def test_read_gnomad_public_block_matrix_resource(
+        self, read_block_matrix, resource_path, source, expected_read_path
+    ):
+        """Test that BlockMatrix can be read from different sources."""
+        resource = resource_utils.GnomadPublicBlockMatrixResource(resource_path)
+
+        gnomad_public_resource_configuration.source = source
+
+        resource.bm()
+        read_block_matrix.assert_called_with(expected_read_path)

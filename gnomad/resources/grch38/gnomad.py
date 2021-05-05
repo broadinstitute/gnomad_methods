@@ -2,8 +2,8 @@
 
 from gnomad.resources.resource_utils import (
     GnomadPublicTableResource,
-    VersionedMatrixTableResource,
     GnomadPublicMatrixTableResource,
+    VersionedMatrixTableResource,
     VersionedTableResource,
     DataException,
 )

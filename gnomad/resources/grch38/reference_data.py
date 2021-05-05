@@ -3,8 +3,8 @@
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
     GnomadPublicTableResource,
-    VersionedTableResource,
     GnomadPublicMatrixTableResource,
+    VersionedTableResource,
     VersionedMatrixTableResource,
     import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING,

@@ -7,6 +7,7 @@
 * Added function `make_faf_index_dict` to create a look-up Dictionary for entries contained in the filter allele frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * Added function `make_freq_index_dict` to create a look-up Dictionary for entries contained in the frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * VersionedResource objects are no longer subclasses of BaseResource [(#359)](https://github.com/broadinstitute/gnomad_methods/pull/359)
+* gnomAD resources can now be imported from different sources [(#373)](https://github.com/broadinstitute/gnomad_methods/pull/373)
 
 ## Version 0.5.0 - April 22nd, 2021
 

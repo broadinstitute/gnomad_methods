@@ -8,7 +8,10 @@ from typing import Any, Callable, Dict, List, Optional
 import hail as hl
 from hail.linalg import BlockMatrix
 
-from .config import GnomadPublicResourceSource, gnomad_public_resource_configuration
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
 
 
 logger = logging.getLogger("gnomad.resources")

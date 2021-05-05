@@ -399,7 +399,7 @@ class GnomadPublicResource(BaseResource, ABC):
 
     def _set_path(self, path):
         if not any(
-            path.startswith(f"gs://{bucket}") for bucket in GNOMAD_PUBLIC_BUCKETS
+            path.startswith(f"gs://{bucket}/") for bucket in GNOMAD_PUBLIC_BUCKETS
         ):
             raise ValueError(
                 f"GnomadPublicResource requires a path to a file in one of the public gnomAD buckets ({', '.join(GNOMAD_PUBLIC_BUCKETS)})"

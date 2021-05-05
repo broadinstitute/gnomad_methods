@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from gnomad.resources import resource_utils
 from gnomad.resources.config import (
     gnomad_public_resource_configuration,
@@ -80,42 +82,34 @@ class TestBlockMatrixResource:
 class TestGnomadPublicTableResource:
     """Tests for GnomadPublicTableResource."""
 
+    @pytest.mark.parametrize(
+        "resource_path,source,expected_read_path",
+        [
+            (
+                "gs://gnomad-public/table.ht",
+                GnomadPublicResourceSource.GNOMAD,
+                "gs://gnomad-public/table.ht",
+            ),
+            (
+                "gs://gnomad-public/table.ht",
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+                "gs://gcp-public-data--gnomad/table.ht",
+            ),
+            (
+                "gs://gnomad-public/table.ht",
+                "gs://my-bucket/gnomad-resources",
+                "gs://my-bucket/gnomad-resources/table.ht",
+            ),
+        ],
+    )
     @patch("hail.read_table")
-    def test_gnomad_public_table_resource(self, read_table):
-        """Test that Table can be read from gnomAD bucket."""
-        resource = resource_utils.GnomadPublicTableResource(
-            "gs://gnomad-public/table.ht"
-        )
-
-        gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD
-
-        resource.ht()
-        read_table.assert_called_with("gs://gnomad-public/table.ht")
-
-    @patch("hail.read_table")
-    def test_gnomad_public_table_resource_google_cloud_public_datasets(
-        self, read_table
+    def test_read_gnomad_public_table_resource(
+        self, read_table, resource_path, source, expected_read_path
     ):
-        """Test that Table can be read from Google Cloud Public Datasets bucket."""
-        resource = resource_utils.GnomadPublicTableResource(
-            "gs://gnomad-public/table.ht"
-        )
+        """Test that Table can be read from different sources."""
+        resource = resource_utils.GnomadPublicTableResource(resource_path)
 
-        gnomad_public_resource_configuration.source = (
-            GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
-        )
+        gnomad_public_resource_configuration.source = source
 
         resource.ht()
-        read_table.assert_called_with("gs://gcp-public-data--gnomad/table.ht")
-
-    @patch("hail.read_table")
-    def test_gnomad_public_table_resource_custom_source(self, read_table):
-        """Test that Table can be read from custom source."""
-        resource = resource_utils.GnomadPublicTableResource(
-            "gs://gnomad-public/table.ht"
-        )
-
-        gnomad_public_resource_configuration.source = "gs://my-bucket/gnomad-resources"
-
-        resource.ht()
-        read_table.assert_called_with("gs://my-bucket/gnomad-resources/table.ht")
+        read_table.assert_called_with(expected_read_path)

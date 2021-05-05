@@ -1,7 +1,7 @@
 """Configuration for loading resources."""
 
-import typing
 from enum import Enum
+from typing import Union
 
 
 class GnomadPublicResourceSource(Enum):
@@ -17,12 +17,12 @@ DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = GnomadPublicResourceSource.GNOMAD
 class _GnomadPublicResourceConfiguration:
     """Configuration for public gnomAD resources."""
 
-    __source: typing.Union[
+    __source: Union[
         GnomadPublicResourceSource, str
     ] = DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE
 
     @property
-    def source(self) -> typing.Union[GnomadPublicResourceSource, str]:
+    def source(self) -> Union[GnomadPublicResourceSource, str]:
         """
         Get the source for public gnomAD resource files.
 
@@ -33,7 +33,7 @@ class _GnomadPublicResourceConfiguration:
         return self.__source
 
     @source.setter
-    def source(self, source: typing.Union[GnomadPublicResourceSource, str]) -> None:
+    def source(self, source: Union[GnomadPublicResourceSource, str]) -> None:
         """
         Set the default source for resource files.
 

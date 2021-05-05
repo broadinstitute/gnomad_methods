@@ -17,6 +17,9 @@ from gnomad.resources.config import (
 logger = logging.getLogger("gnomad.resources")
 
 
+GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
+
+
 # Resource classes
 class BaseResource(ABC):
     """
@@ -369,9 +372,6 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
 
     def __init__(self, default_version: str, versions: Dict[str, BlockMatrixResource]):
         super().__init__(default_version, versions)
-
-
-GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
 
 
 class GnomadPublicResource(BaseResource, ABC):

@@ -79,28 +79,37 @@ class TestBlockMatrixResource:
         assert ds == read_block_matrix.return_value
 
 
+def gnomad_public_resource_test_parameters(path: str):
+    """
+    Get parameters for gnomAD public resource tests.
+
+    :param path: Path to resource file inside gnomAD bucket.
+    """
+    return [
+        (
+            f"gs://gnomad-public{path}",
+            GnomadPublicResourceSource.GNOMAD,
+            f"gs://gnomad-public{path}",
+        ),
+        (
+            f"gs://gnomad-public{path}",
+            GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+            f"gs://gcp-public-data--gnomad{path}",
+        ),
+        (
+            f"gs://gnomad-public{path}",
+            "gs://my-bucket/gnomad-resources",
+            f"gs://my-bucket/gnomad-resources{path}",
+        ),
+    ]
+
+
 class TestGnomadPublicTableResource:
     """Tests for GnomadPublicTableResource."""
 
     @pytest.mark.parametrize(
         "resource_path,source,expected_read_path",
-        [
-            (
-                "gs://gnomad-public/table.ht",
-                GnomadPublicResourceSource.GNOMAD,
-                "gs://gnomad-public/table.ht",
-            ),
-            (
-                "gs://gnomad-public/table.ht",
-                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
-                "gs://gcp-public-data--gnomad/table.ht",
-            ),
-            (
-                "gs://gnomad-public/table.ht",
-                "gs://my-bucket/gnomad-resources",
-                "gs://my-bucket/gnomad-resources/table.ht",
-            ),
-        ],
+        gnomad_public_resource_test_parameters("/table.ht"),
     )
     @patch("hail.read_table")
     def test_read_gnomad_public_table_resource(
@@ -120,23 +129,7 @@ class TestGnomadPublicMatrixTableResource:
 
     @pytest.mark.parametrize(
         "resource_path,source,expected_read_path",
-        [
-            (
-                "gs://gnomad-public/matrix_table.mt",
-                GnomadPublicResourceSource.GNOMAD,
-                "gs://gnomad-public/matrix_table.mt",
-            ),
-            (
-                "gs://gnomad-public/matrix_table.mt",
-                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
-                "gs://gcp-public-data--gnomad/matrix_table.mt",
-            ),
-            (
-                "gs://gnomad-public/matrix_table.mt",
-                "gs://my-bucket/gnomad-resources",
-                "gs://my-bucket/gnomad-resources/matrix_table.mt",
-            ),
-        ],
+        gnomad_public_resource_test_parameters("/matrix_table.mt"),
     )
     @patch("hail.read_matrix_table")
     def test_read_gnomad_public_matrix_table_resource(
@@ -156,23 +149,7 @@ class TestGnomadPublicPedigreeResource:
 
     @pytest.mark.parametrize(
         "resource_path,source,expected_read_path",
-        [
-            (
-                "gs://gnomad-public/pedigree.ped",
-                GnomadPublicResourceSource.GNOMAD,
-                "gs://gnomad-public/pedigree.ped",
-            ),
-            (
-                "gs://gnomad-public/pedigree.ped",
-                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
-                "gs://gcp-public-data--gnomad/pedigree.ped",
-            ),
-            (
-                "gs://gnomad-public/pedigree.ped",
-                "gs://my-bucket/gnomad-resources",
-                "gs://my-bucket/gnomad-resources/pedigree.ped",
-            ),
-        ],
+        gnomad_public_resource_test_parameters("/pedigree.ped"),
     )
     @patch("hail.Pedigree.read")
     def test_read_gnomad_public_pedigree_resource(
@@ -189,23 +166,7 @@ class TestGnomadPublicPedigreeResource:
 
     @pytest.mark.parametrize(
         "resource_path,source,expected_read_path",
-        [
-            (
-                "gs://gnomad-public/pedigree.fam",
-                GnomadPublicResourceSource.GNOMAD,
-                "gs://gnomad-public/pedigree.fam",
-            ),
-            (
-                "gs://gnomad-public/pedigree.fam",
-                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
-                "gs://gcp-public-data--gnomad/pedigree.fam",
-            ),
-            (
-                "gs://gnomad-public/pedigree.fam",
-                "gs://my-bucket/gnomad-resources",
-                "gs://my-bucket/gnomad-resources/pedigree.fam",
-            ),
-        ],
+        gnomad_public_resource_test_parameters("/pedigree.fam"),
     )
     @patch("hail.import_fam")
     def test_import_gnomad_public_pedigree_resource(
@@ -226,23 +187,7 @@ class TestGnomadPublicBlockMatrixResource:
 
     @pytest.mark.parametrize(
         "resource_path,source,expected_read_path",
-        [
-            (
-                "gs://gnomad-public/block_matrix.bm",
-                GnomadPublicResourceSource.GNOMAD,
-                "gs://gnomad-public/block_matrix.bm",
-            ),
-            (
-                "gs://gnomad-public/block_matrix.bm",
-                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
-                "gs://gcp-public-data--gnomad/block_matrix.bm",
-            ),
-            (
-                "gs://gnomad-public/block_matrix.bm",
-                "gs://my-bucket/gnomad-resources",
-                "gs://my-bucket/gnomad-resources/block_matrix.bm",
-            ),
-        ],
+        gnomad_public_resource_test_parameters("/block_matrix.bm"),
     )
     @patch("hail.linalg.BlockMatrix.read")
     def test_read_gnomad_public_block_matrix_resource(

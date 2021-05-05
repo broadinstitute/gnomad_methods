@@ -1,5 +1,6 @@
 """Tests for resource classes."""
 
+from typing import List, Tuple, Union
 from unittest.mock import patch
 
 import pytest
@@ -79,7 +80,9 @@ class TestBlockMatrixResource:
         assert ds == read_block_matrix.return_value
 
 
-def gnomad_public_resource_test_parameters(path: str):
+def gnomad_public_resource_test_parameters(
+    path: str,
+) -> List[Tuple[str, Union[GnomadPublicResourceSource, str], str]]:
     """
     Get parameters for gnomAD public resource tests.
 

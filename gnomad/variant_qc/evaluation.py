@@ -1,8 +1,7 @@
 # noqa: D100
 
 import logging
-from collections import defaultdict
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import hail as hl
 

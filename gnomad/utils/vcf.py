@@ -207,6 +207,17 @@ INFO_DICT = {
         "Number": "A",
         "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
     },
+    "monoallelic": {
+        "Description": "All samples are homozygous alternate for the variant"
+    },
+    "QUALapprox": {
+        "Number": "1",
+        "Description": "Sum of PL[0] values; used to approximate the QUAL score",
+    },
+    "AS_SB_TABLE": {
+        "Number": ".",
+        "Description": "Allele-specific forward/reverse read counts for strand bias tests",
+    },
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.

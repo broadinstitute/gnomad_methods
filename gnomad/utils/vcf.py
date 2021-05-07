@@ -49,7 +49,6 @@ Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
 AS_FIELDS = [
-    "AS_BaseQRankSum",
     "AS_FS",
     "AS_MQ",
     "AS_MQRankSum",
@@ -67,7 +66,6 @@ Allele-specific variant annotations.
 """
 
 SITE_FIELDS = [
-    "BaseQRankSum",
     "FS",
     "MQ",
     "MQRankSum",

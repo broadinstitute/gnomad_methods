@@ -97,7 +97,7 @@ REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "segdup"]
 Annotations about variant region type.
 
 .. note::
-    decoy and segdup resource files do not currently exist for GRCh38/hg38.
+    decoy resource files do not currently exist for GRCh38/hg38.
 """
 
 RF_FIELDS = [

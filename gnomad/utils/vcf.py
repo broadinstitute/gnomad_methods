@@ -221,6 +221,35 @@ INFO_DICT = {
 Dictionary used during VCF export to export row (variant) annotations.
 """
 
+IN_SILICO_ANNOTATIONS_INFO_DICT = {
+    "cadd_raw_score": {
+        "Number": "1",
+        "Description": "Raw CADD scores are interpretable as the extent to which the annotation profile for a given variant suggests that the variant is likely to be 'observed' (negative values) vs 'simulated' (positive values). Larger values are more deleterious.",
+    },
+    "cadd_phred": {
+        "Number": "1",
+        "Description": "Cadd Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious",
+    },
+    "revel_score": {
+        "Number": "1",
+        "Description": "dbNSFP's Revel score from 0 to 1. Variants with higher scores are predicted to be more likely to be deleterious.",
+    },
+    "splice_ai_max_ds": {
+        "Number": "1",
+        "Description": "Illumina's SpliceAI max delta score; interpreted as the probability of the variant being splice-altering.",
+    },
+    "splice_ai_consequence": {
+        "Description": "The consequence term associated with the max delta score in 'splice_ai_max_ds'.",
+    },
+    "primate_ai_score": {
+        "Number": "1",
+        "Description": "PrimateAI's deleteriousness score from 0 (less deleterious) to 1 (more deleterious).",
+    },
+}
+"""
+Dictionary with in silico score descriptions to include in the VCF INFO header.
+"""
+
 ENTRIES = ["GT", "GQ", "DP", "AD", "MIN_DP", "PGT", "PID", "PL", "SB"]
 """
 Densified entries to be selected during VCF export.

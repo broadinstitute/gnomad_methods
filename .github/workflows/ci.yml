@@ -30,9 +30,9 @@ jobs:
       - name: Check formatting
         run: black --check gnomad tests
       - name: Check docstrings
-        run: pydocstyle gnomad
+        run: pydocstyle gnomad tests
       - name: Run Pylint
-        run: ./lint --disable=W
+        run: ./lint
       - name: Run tests
         run: python -m pytest
   docs:

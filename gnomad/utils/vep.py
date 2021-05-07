@@ -193,13 +193,18 @@ def vep_or_lookup_vep(
 
         if vep_version not in vep_context.versions:
             logger.warning(
-                f"No VEPed context Table available for genome build {reference} and VEP version {vep_version}, "
-                f"all variants will be VEPed using the following VEP:\n{vep_help}"
+                "No VEPed context Table available for genome build %s and VEP version %s, "
+                "all variants will be VEPed using the following VEP:\n%s",
+                reference,
+                vep_version,
+                vep_help,
             )
             return hl.vep(ht, vep_config_path)
 
         logger.info(
-            f"Using VEPed context Table from genome build {reference} and VEP version {vep_version}"
+            "Using VEPed context Table from genome build %s and VEP version %s",
+            reference,
+            vep_version,
         )
 
         reference_vep_ht = vep_context.versions[vep_version].ht()

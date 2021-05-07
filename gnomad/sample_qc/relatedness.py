@@ -441,9 +441,9 @@ def infer_families(
             for s, s_trios in children_trios.items():
                 if len(s_trios) > 1:
                     logger.warning(
-                        "Discarded duplicated child {0} found multiple in trios: {1}".format(
-                            s, ", ".join([str(trio) for trio in s_trios])
-                        )
+                        "Discarded duplicated child %s found multiple in trios: %s",
+                        s,
+                        ", ".join([str(trio) for trio in s_trios]),
                     )
 
             return [trios[0] for trios in children_trios.values() if len(trios) == 1]
@@ -472,9 +472,10 @@ def infer_families(
             else:
                 logger.warning(
                     "Discarded family with same parents, and multiple offspring that weren't siblings:"
-                    "\nMother: {}\nFather:{}\nChildren:{}".format(
-                        possible_parents[0], possible_parents[1], ", ".join(children)
-                    )
+                    "\nMother: %s\nFather:%s\nChildren:%s",
+                    possible_parents[0],
+                    possible_parents[1],
+                    ", ".join(children),
                 )
 
         return discard_multi_parents_children(trios)
@@ -502,11 +503,14 @@ def infer_families(
     # If i_col and j_col aren't str, then convert them
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
         logger.warning(
-            f"Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: {relationship_ht[i_col].dtype}. Expression will be converted to string in Pedigrees."
+            "Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: %s. "
+            "Expression will be converted to string in Pedigrees.",
+            relationship_ht[i_col].dtype,
         )
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
             logger.warning(
-                f"Struct fields {list(relationship_ht[i_col])} will be joined by underscores to use as sample names in Pedigree."
+                "Struct fields %s will be joined by underscores to use as sample names in Pedigree.",
+                list(relationship_ht[i_col]),
             )
             relationship_ht = relationship_ht.key_by(
                 **{
@@ -619,7 +623,9 @@ def create_fake_pedigree(
 
     if tries == max_tries:
         logger.warning(
-            f"Only returning {len(fake_trios)} fake trios; random trio sampling stopped after reaching the maximum {max_tries} iterations"
+            "Only returning %d fake trios; random trio sampling stopped after reaching the maximum %d iterations",
+            len(fake_trios),
+            max_tries,
         )
 
     return hl.Pedigree(list(fake_trios.values()))
@@ -653,13 +659,14 @@ def compute_related_samples_to_drop(
     assert len(list(rank_ht.key)) == 1
     assert relatedness_ht.key[0].dtype == rank_ht.key[0].dtype
 
-    logger.info(f"Filtering related samples using a kin threshold of {kin_threshold}")
+    logger.info("Filtering related samples using a kin threshold of %f", kin_threshold)
     relatedness_ht = relatedness_ht.filter(relatedness_ht.kin > kin_threshold)
 
     filtered_samples_rel = set()
     if min_related_hard_filter is not None:
         logger.info(
-            f"Computing samples related to too many individuals (>{min_related_hard_filter}) for exclusion"
+            "Computing samples related to too many individuals (>%d) for exclusion",
+            min_related_hard_filter,
         )
         gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
         gbi = gbi.explode(gbi.s)
@@ -668,7 +675,8 @@ def compute_related_samples_to_drop(
             hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s))
         )
         logger.info(
-            f"Found {len(filtered_samples_rel)} samples with too many 1st/2nd degree relatives. These samples will be excluded."
+            "Found %d samples with too many 1st/2nd degree relatives. These samples will be excluded.",
+            len(filtered_samples_rel),
         )
 
     if filtered_samples is not None:
@@ -993,7 +1001,7 @@ def generate_sib_stats_expr(
     sib_ht = sib_ht.filter(hl.len(sib_ht.sibs) == 2).persist()
 
     logger.info(
-        f"Generating sibling variant sharing counts using {sib_ht.count()} pairs."
+        "Generating sibling variant sharing counts using %d pairs.", sib_ht.count()
     )
     sib_ht = sib_ht.explode("sibs").key_by("sibs")[mt.s]
 

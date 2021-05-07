@@ -98,7 +98,8 @@ def merge_stats_counters_expr(
         metrics = metrics.intersection(stat_expr_metrics)
     if dropped_metrics:
         logger.warning(
-            f"The following metrics will be dropped during stats counter merging as they do not appear in all counters: {', '.join(dropped_metrics)}"
+            "The following metrics will be dropped during stats counter merging as they do not appear in all counters: %s",
+            ", ".join(dropped_metrics),
         )
 
     # Because merging standard deviation requires having the mean and n,
@@ -107,7 +108,8 @@ def merge_stats_counters_expr(
         missing_fields = [x for x in ["n", "mean"] if x not in metrics]
         if missing_fields:
             logger.warning(
-                f'Cannot merge `stdev` from given stats counters since they are missing the following fields: {",".join(missing_fields)}'
+                "Cannot merge `stdev` from given stats counters since they are missing the following fields: %s",
+                ",".join(missing_fields),
             )
             metrics.remove("stdev")
 

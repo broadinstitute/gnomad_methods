@@ -218,12 +218,10 @@ def assign_population_pcs(
     pop_pc_pd = pop_pc_pd.drop(pc_cols, axis="columns")
 
     logger.info(
-        "Found the following sample count after population assignment: {}".format(
-            ", ".join(
-                f"{pop}: {count}"
-                for pop, count in Counter(pop_pc_pd[output_col]).items()
-            )
-        )
+        "Found the following sample count after population assignment: %s",
+        ", ".join(
+            f"{pop}: {count}" for pop, count in Counter(pop_pc_pd[output_col]).items()
+        ),
     )
 
     if hail_input:

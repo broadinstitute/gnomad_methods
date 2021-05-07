@@ -2,9 +2,9 @@
 
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
-    TableResource,
+    GnomadPublicTableResource,
+    GnomadPublicMatrixTableResource,
     VersionedTableResource,
-    MatrixTableResource,
     VersionedMatrixTableResource,
     import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING,
@@ -57,7 +57,7 @@ def _import_dbsnp(**kwargs) -> hl.Table:
 
 
 # Resources with no versioning needed
-purcell_5k_intervals = TableResource(
+purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/purcell_5k_intervals/purcell5k.ht",
     import_func=_import_purcell_5k,
     import_args={
@@ -65,7 +65,7 @@ purcell_5k_intervals = TableResource(
     },
 )
 
-na12878_giab = MatrixTableResource(
+na12878_giab = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.mt",
     import_func=hl.import_vcf,
     import_args={
@@ -76,7 +76,7 @@ na12878_giab = MatrixTableResource(
     },
 )
 
-na12878_giab_hc_intervals = TableResource(
+na12878_giab_hc_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7_hc_regions.ht",
     import_func=hl.import_bed,
     import_args={
@@ -90,7 +90,7 @@ na12878_giab_hc_intervals = TableResource(
 vep_context = VersionedTableResource(
     default_version="95",
     versions={
-        "95": TableResource(
+        "95": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",
         ),
         "101": TableResource(
@@ -102,7 +102,7 @@ vep_context = VersionedTableResource(
 syndip = VersionedMatrixTableResource(
     default_version="20180222",
     versions={
-        "20180222": MatrixTableResource(
+        "20180222": GnomadPublicMatrixTableResource(
             path="gs://gnomad-public/resources/grch38/syndip/syndip.b38_20180222.mt",
             import_func=hl.import_vcf,
             import_args={
@@ -118,7 +118,7 @@ syndip = VersionedMatrixTableResource(
 syndip_hc_intervals = VersionedTableResource(
     default_version="20180222",
     versions={
-        "20180222": TableResource(
+        "20180222": GnomadPublicTableResource(
             path="gs://gnomad-public/resources/grch38/syndip/syndip_b38_20180222_hc_regions.ht",
             import_func=hl.import_bed,
             import_args={
@@ -134,7 +134,7 @@ syndip_hc_intervals = VersionedTableResource(
 clinvar = VersionedTableResource(
     default_version="20190923",
     versions={
-        "20190923": TableResource(
+        "20190923": GnomadPublicTableResource(
             path="gs://gnomad-public/resources/grch38/clinvar/clinvar_20190923.ht",
             import_func=_import_clinvar,
             import_args={
@@ -152,7 +152,7 @@ clinvar = VersionedTableResource(
 dbsnp = VersionedTableResource(
     default_version="b154",
     versions={
-        "b154": TableResource(
+        "b154": GnomadPublicTableResource(
             path="gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
             import_func=_import_dbsnp,
             import_args={
@@ -165,7 +165,7 @@ dbsnp = VersionedTableResource(
                 "reference_genome": "GRCh38",
             },
         ),
-        "b151": TableResource(
+        "b151": GnomadPublicTableResource(
             path="gs://gnomad-public/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.ht",
             import_func=import_sites_vcf,
             import_args={
@@ -181,7 +181,7 @@ dbsnp = VersionedTableResource(
     },
 )
 
-hapmap = TableResource(
+hapmap = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/hapmap/hapmap_3.3.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
@@ -191,7 +191,7 @@ hapmap = TableResource(
     },
 )
 
-kgp_omni = TableResource(
+kgp_omni = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/kgp/1000G_omni2.5.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
@@ -204,7 +204,7 @@ kgp_omni = TableResource(
 kgp = VersionedTableResource(
     default_version="phase_1_hc",
     versions={
-        "phase_1_hc": TableResource(
+        "phase_1_hc": GnomadPublicTableResource(
             path="gs://gnomad-public/resources/grch38/kgp/1000G_phase1.snps.high_confidence.hg38.ht",
             import_func=import_sites_vcf,
             import_args={
@@ -216,7 +216,7 @@ kgp = VersionedTableResource(
     },
 )
 
-mills = TableResource(
+mills = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/mills/Mills_and_1000G_gold_standard.indels.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
@@ -226,7 +226,7 @@ mills = TableResource(
     },
 )
 
-lcr_intervals = TableResource(
+lcr_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/lcr_intervals/LCRFromHengHg38.ht",
     import_func=hl.import_locus_intervals,
     import_args={
@@ -236,7 +236,7 @@ lcr_intervals = TableResource(
     },
 )
 
-seg_dup_intervals = TableResource(
+seg_dup_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/seg_dup_intervals/GRCh38_segdups.ht",
     import_func=hl.import_bed,
     import_args={
@@ -245,7 +245,7 @@ seg_dup_intervals = TableResource(
     },
 )
 
-telomeres_and_centromeres = TableResource(
+telomeres_and_centromeres = GnomadPublicTableResource(
     path="gs://gnomad-public/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.ht",
     import_func=hl.import_bed,
     import_args={

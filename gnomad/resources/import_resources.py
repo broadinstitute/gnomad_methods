@@ -1,13 +1,18 @@
 # noqa: D100
 
+import argparse
 import itertools
 import textwrap
 from inspect import getmembers
 from typing import Dict, Tuple, Optional
+
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
 from gnomad.resources.resource_utils import BaseResource, BaseVersionedResource
 import gnomad.resources.grch37 as grch37
 import gnomad.resources.grch38 as grch38
-import argparse
 
 
 # Generate a dictionary of resource available for import for a given genome build
@@ -34,16 +39,18 @@ def get_module_importable_resources(
     """
     _prefix = f"{prefix}." if prefix else ""
     resources = {}
-    for resource_name, resource in getmembers(
-        module, lambda x: isinstance(x, BaseResource)
-    ):
-        if resource.path and resource.import_func:
-            arg_name = f"{_prefix}{resource_name}"
-            if isinstance(resource, BaseVersionedResource):
-                for version in resource.versions:
-                    arg_name += f".{version}"
-                    resource_name = f"{resource_name} version {version}"
-            resources[arg_name] = (resource_name, resource)
+    for name, obj in getmembers(module):
+        if isinstance(obj, BaseResource) and obj.path and obj.import_func:
+            resources[f"{_prefix}{name}"] = (name, obj)
+
+        if isinstance(obj, BaseVersionedResource):
+            for version_name, version_resource in obj.versions.items():
+                if version_resource.path and version_resource.import_func:
+                    resources[f"{_prefix}{name}.{version_name}"] = (
+                        f"{name}.{version_name}",
+                        version_resource,
+                    )
+
     return resources
 
 
@@ -81,6 +88,8 @@ all_resources = {**grch37_resources, **grch38_resources}
 
 def main(args):
     """Import selected resources."""
+    gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD
+
     for resource_arg in args.resources:
         resource_name, resource = all_resources[resource_arg]
         print(f"Importing {resource_name}...")

@@ -395,11 +395,11 @@ def default_generate_gene_lof_matrix(
         explode_field = "worst_csq_by_gene"
 
     if additional_csq_set:
-        logger.info(f"Including these consequences: {additional_csq_set}")
+        logger.info("Including these consequences: %s", additional_csq_set)
         additional_cats = hl.literal(additional_csq_set)
 
     if pre_loftee:
-        logger.info(f"Filtering to LoF consequences: {lof_csq_set}")
+        logger.info("Filtering to LoF consequences: %s", lof_csq_set)
         lof_cats = hl.literal(lof_csq_set)
         criteria = lambda x: lof_cats.contains(
             add_most_severe_consequence_to_consequence(x).most_severe_consequence

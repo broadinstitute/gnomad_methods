@@ -55,7 +55,7 @@ def get_reference_ht(
     for contig in contigs:
         n_partitions = max(1, int(ref.contig_length(contig) / 5000000))
         logger.info(
-            f"Creating reference contig {contig} with {n_partitions} partitions."
+            "Creating reference contig %s with %d partitions.", contig, n_partitions
         )
         _context = hl.utils.range_table(
             ref.contig_length(contig), n_partitions=n_partitions

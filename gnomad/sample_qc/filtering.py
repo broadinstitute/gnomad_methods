@@ -46,9 +46,9 @@ def compute_qc_metrics_residuals(
         n_pcs = _sample_qc_ht.aggregate(hl.agg.min(hl.len(_sample_qc_ht.scores)))
 
     logger.info(
-        "Computing regressed QC metrics filters using {} PCs for metrics: {}".format(
-            n_pcs, ", ".join(qc_metrics)
-        )
+        "Computing regressed QC metrics filters using %d PCs for metrics: %s",
+        n_pcs,
+        ", ".join(qc_metrics),
     )
 
     # Prepare regression variables, adding 1.0 first for the intercept

@@ -44,7 +44,8 @@ def compute_callrate_mt(
         intervals_ht.key[0], hl.expr.IntervalExpression
     ):
         logger.warning(
-            f"Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: {intervals_ht.key}"
+            "Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: %s",
+            intervals_ht.key,
         )
 
     if autosomes_only:
@@ -108,7 +109,7 @@ def run_platform_pca(
     eigenvalues, scores, loadings = hl.pca(
         callrate_mt.callrate, compute_loadings=True
     )  # TODO:  Evaluate whether computing loadings is a good / worthy thing
-    logger.info("Platform PCA eigenvalues: {}".format(eigenvalues))
+    logger.info("Platform PCA eigenvalues: %s", eigenvalues)
 
     return eigenvalues, scores, loadings
 
@@ -135,7 +136,7 @@ def assign_platform_from_pcs(
     # Read and format data for clustering
     data = platform_pca_scores_ht.to_pandas()
     callrate_data = np.matrix(data[pc_scores_ann].tolist())
-    logger.info("Assigning platforms to {} samples.".format(len(callrate_data)))
+    logger.info("Assigning platforms to %d samples.", len(callrate_data))
 
     # Cluster data
     if hdbscan_min_cluster_size is None:
@@ -147,9 +148,7 @@ def assign_platform_from_pcs(
     n_clusters = len(set(cluster_labels)) - (
         -1 in cluster_labels
     )  # NOTE: -1 is the label for noisy (un-classifiable) data points
-    logger.info(
-        "Found {} unique platforms during platform imputation.".format(n_clusters)
-    )
+    logger.info("Found %d unique platforms during platform imputation.", n_clusters)
 
     data["qc_platform"] = cluster_labels
     ht = hl.Table.from_pandas(data, key=[*platform_pca_scores_ht.key])

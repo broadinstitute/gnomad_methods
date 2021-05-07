@@ -98,8 +98,8 @@ def get_ploidy_cutoffs(
             hl.struct(x=hl.agg.stats(ht.chrX_ploidy), y=hl.agg.stats(ht.chrY_ploidy)),
         )
     )
-    logger.info(f"XX stats: {sex_stats['xx']}")
-    logger.info(f"XY stats: {sex_stats['xy']}")
+    logger.info("XX stats: %s", sex_stats["xx"])
+    logger.info("XY stats: %s", sex_stats["xy"])
 
     cutoffs = (
         (
@@ -123,8 +123,8 @@ def get_ploidy_cutoffs(
         ),
     )
 
-    logger.info(f"X ploidy cutoffs: {cutoffs[0]}")
-    logger.info(f"Y ploidy cutoffs: {cutoffs[1]}")
+    logger.info("X ploidy cutoffs: %s", cutoffs[0])
+    logger.info("Y ploidy cutoffs: %s", cutoffs[1])
     return cutoffs
 
 

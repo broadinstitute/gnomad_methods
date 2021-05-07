@@ -2,12 +2,22 @@
 
 import logging
 from abc import ABC, abstractmethod
+from functools import reduce
 from typing import Any, Callable, Dict, List, Optional
 
 import hail as hl
 from hail.linalg import BlockMatrix
 
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
+
+
 logger = logging.getLogger("gnomad.resources")
+
+
+GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
 
 
 # Resource classes
@@ -51,10 +61,23 @@ class BaseResource(ABC):
             )
 
     def __repr__(self):
-        attr_str = [f"path={self.path}"]
+        attr_str = [f"path={self._path}"]
         if self.import_args is not None:
             attr_str.append(f"import_args={self.import_args}")
         return f'{self.__class__.__name__}({",".join(attr_str)})'
+
+    def _get_path(self):
+        return self._path
+
+    def _set_path(self, path):
+        self._path = path  # pylint: disable=attribute-defined-outside-init
+
+    # Defining path property this way instead of using a decorator allows _get_path and _set_path
+    # to be overridden in subclasses without having to reconfigure the property.
+    path = property(
+        fget=lambda self: self._get_path(),
+        fset=lambda self, path: self._set_path(path),
+    )
 
     @abstractmethod
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
@@ -236,46 +259,54 @@ class BlockMatrixResource(BaseResource):
         )
 
 
-class BaseVersionedResource(BaseResource, ABC):
+class BaseVersionedResource:
     """
-    Abstract class for a versioned resource.
+    Class for a versioned resource.
 
-    The `path`/`import_args` attributes of the versioned resource are those of the default version of the resource.
+    The attributes and methods of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
 
-    :param default_version: The default version of this resource (must to be in the `versions` dict)
+    :param default_version: The default version of this resource (must be in the `versions` dict)
     :param versions: A dict of version name -> resource.
     """
 
+    resource_class = BaseResource
+
+    __slots__ = {"default_version", "versions"}
+
     def __init__(self, default_version: str, versions: Dict[str, BaseResource]):
-        if type(self) is BaseVersionedResource:
-            raise TypeError("Can't instantiate abstract class BaseVersionedResource")
+        default_resource = versions[default_version]
 
-        if default_version not in versions:
-            raise KeyError(
-                f"default_version {default_version} not found in versions dictionary passed to {self.__class__.__name__}."
-            )
-
-        for version_name, version_resource in versions.items():
-            if version_resource.__class__ not in self.__class__.__bases__:
+        for version_resource in versions.values():
+            if not isinstance(version_resource, self.resource_class):
                 raise TypeError(
-                    f"Cannot create a {self.__class__.__name__} resource with version {version_name} of type {version_resource.__class__.__name__}"
+                    f"{self.__class__.__name__} requires all versions to be of type {self.resource_class.__name__}"
+                )
+
+            if version_resource.__class__ is not default_resource.__class__:
+                raise TypeError(
+                    f"{self.__class__.__name__} requires all versions to be of the same type"
                 )
 
         self.default_version = default_version
         self.versions = versions
 
-        super().__init__(
-            path=versions[default_version].path,
-            import_args=versions[default_version].import_args,
-            import_func=versions[default_version].import_func,
+    def __repr__(self):
+        return "{cls}(default_version={default_version}, versions={{{versions}}})".format(
+            cls=self.__class__.__name__,
+            default_version=self.default_version,
+            versions=", ".join(f'"{k}": {repr(v)}' for k, v in self.versions.items()),
         )
 
-    def __repr__(self):
-        return f"{self.__class__.__name__}(default_version={self.default_version}, default_resource={self.versions[self.default_version]}, versions={list(self.versions.keys())})"
+    def __getattr__(self, name):
+        # If __getattr__ is called for 'default_version', 'version', etc. then something has gone wrong.
+        if name in self.__slots__:
+            raise ValueError("VersionedResource has not been initialized")
+
+        return getattr(self.versions[self.default_version], name)
 
 
-class VersionedTableResource(BaseVersionedResource, TableResource):
+class VersionedTableResource(BaseVersionedResource):
     """
     Versioned Table resource.
 
@@ -286,11 +317,13 @@ class VersionedTableResource(BaseVersionedResource, TableResource):
     :param versions: A dict of version name -> TableResource.
     """
 
+    resource_class = TableResource
+
     def __init__(self, default_version: str, versions: Dict[str, TableResource]):
         super().__init__(default_version, versions)
 
 
-class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
+class VersionedMatrixTableResource(BaseVersionedResource):
     """
     Versioned MatrixTable resource.
 
@@ -300,6 +333,8 @@ class VersionedMatrixTableResource(BaseVersionedResource, MatrixTableResource):
     :param default_version: The default version of this MatrixTable resource (must to be in the `versions` dict)
     :param versions: A dict of version name -> MatrixTableResource.
     """
+
+    resource_class = MatrixTableResource
 
     def __init__(self, default_version: str, versions: Dict[str, MatrixTableResource]):
         super().__init__(default_version, versions)
@@ -316,11 +351,10 @@ class VersionedPedigreeResource(BaseVersionedResource, PedigreeResource):
     :param versions: A dict of version name -> PedigreeResource.
     """
 
+    resource_class = PedigreeResource
+
     def __init__(self, default_version: str, versions: Dict[str, PedigreeResource]):
         super().__init__(default_version, versions)
-        self.delimiter = versions[default_version].delimiter
-        self.missing = versions[default_version].missing
-        self.quant_pheno = versions[default_version].quant_pheno
 
 
 class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
@@ -334,8 +368,60 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
     :param versions: A dict of version name -> BlockMatrixResource.
     """
 
+    resource_class = BlockMatrixResource
+
     def __init__(self, default_version: str, versions: Dict[str, BlockMatrixResource]):
         super().__init__(default_version, versions)
+
+
+class GnomadPublicResource(BaseResource, ABC):
+    """Base class for the gnomAD project's public resources."""
+
+    def _get_path(self) -> str:
+        resource_source = gnomad_public_resource_configuration.source
+        if resource_source == GnomadPublicResourceSource.GNOMAD:
+            return self._path
+
+        relative_path = reduce(
+            lambda path, bucket: path[5 + len(bucket) :]
+            if path.startswith(f"gs://{bucket}/")
+            else path,
+            GNOMAD_PUBLIC_BUCKETS,
+            self._path,
+        )
+
+        if resource_source == GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS:
+            return f"gs://gcp-public-data--gnomad{relative_path}"
+
+        return (
+            f"{resource_source.rstrip('/')}{relative_path}"  # pylint: disable=no-member
+        )
+
+    def _set_path(self, path):
+        if not any(
+            path.startswith(f"gs://{bucket}/") for bucket in GNOMAD_PUBLIC_BUCKETS
+        ):
+            raise ValueError(
+                f"GnomadPublicResource requires a path to a file in one of the public gnomAD buckets ({', '.join(GNOMAD_PUBLIC_BUCKETS)})"
+            )
+
+        return super()._set_path(path)
+
+
+class GnomadPublicTableResource(TableResource, GnomadPublicResource):
+    """Resource class for a public Hail Table published by the gnomAD project."""
+
+
+class GnomadPublicMatrixTableResource(MatrixTableResource, GnomadPublicResource):
+    """Resource class for a public Hail MatrixTable published by the gnomAD project."""
+
+
+class GnomadPublicPedigreeResource(PedigreeResource, GnomadPublicResource):
+    """Resource class for a public pedigree published by the gnomAD project."""
+
+
+class GnomadPublicBlockMatrixResource(BlockMatrixResource, GnomadPublicResource):
+    """Resource class for a public Hail BlockMatrix published by the gnomAD project."""
 
 
 class DataException(Exception):  # noqa: D101

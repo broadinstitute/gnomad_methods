@@ -1,3 +1,5 @@
+"""Setup script."""
+
 import setuptools
 
 
@@ -25,6 +27,7 @@ setuptools.setup(
         "Documentation": "https://broadinstitute.github.io/gnomad_methods/",
         "Source Code": "https://github.com/broadinstitute/gnomad_methods",
         "Issues": "https://github.com/broadinstitute/gnomad_methods/issues",
+        "Change Log": "https://broadinstitute.github.io/gnomad_methods/changelog.html",
     },
     classifiers=[
         "Topic :: Scientific/Engineering :: Bio-Informatics",

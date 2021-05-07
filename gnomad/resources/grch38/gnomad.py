@@ -147,7 +147,7 @@ HGDP_POPS = [
 Human Genome Diversity Project (HGDP) subpops.
 """
 
-KG_POP_NAMES = {
+TGP_POP_NAMES = {
     "chb": "Han Chinese",
     "jpt": "Japanese",
     "chs": "Southern Han Chinese",

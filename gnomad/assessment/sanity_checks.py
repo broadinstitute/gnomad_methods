@@ -272,3 +272,92 @@ def histograms_sanity_check(
                     verbose=verbose,
                 )
 
+
+def raw_and_adj_sanity_checks(
+    t: Union[hl.MatrixTable, hl.Table],
+    subsets: List[str],
+    verbose: bool,
+    delimiter: str = "-",
+) -> None:
+    """
+    Perform sanity checks on raw and adj data in input Table/MatrixTable.
+
+    Check that:
+        - Raw AC, AN, AF are not 0
+        - Adj AN is not 0 and AC and AF are not negative
+        - Raw values for AC, AN, nhomalt in each sample subset are greater than or equal to their corresponding adj values
+
+    Raw and adj call stat annotations must be in an info struct annotation on the Table/MatrixTable, e.g. t.info.AC-raw.
+
+    :param t: Input MatrixTable or Table to check.
+    :param subsets: List of sample subsets.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param delimiter: String to use as delimiter when making group label combinations.
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
+    for field in ["AC", "AF"]:
+        field = f"{field}{delimiter}"
+        # Check raw AC, AF > 0
+        generic_field_check(
+            t,
+            cond_expr=(t.info[f"{field}raw"] <= 0),
+            check_description=f"{field}raw > 0",
+            display_fields=[f"info.{field}raw"],
+            verbose=verbose,
+        )
+        # Check adj AC, AF >=0
+        generic_field_check(
+            t,
+            cond_expr=(t.info[f"{field}adj"] < 0),
+            check_description=f"{field}adj >= 0",
+            display_fields=[f"info.{field}adj", "filters"],
+            verbose=verbose,
+        )
+
+    # Check raw AN > 0
+    an_raw_field = f"AN{delimiter}raw"
+    generic_field_check(
+        t,
+        cond_expr=(t.info[an_raw_field] <= 0),
+        check_description=f"{an_raw_field} > 0",
+        display_fields=[f"info.{an_raw_field}"],
+        verbose=verbose,
+    )
+
+    an_adj_field = f"AN{delimiter}adj"
+    # Check adj AN >= 0
+    generic_field_check(
+        t,
+        cond_expr=(t.info[an_adj_field] < 0),
+        check_description=f"{an_adj_field} >= 0",
+        display_fields=[f"info.{an_adj_field}"],
+        verbose=verbose,
+    )
+
+    # Check overall raw subfields >= adj
+    for field in ["AC", "AN", "nhomalt"]:
+        field = f"{field}{delimiter}"
+        generic_field_check(
+            t,
+            cond_expr=(t.info[f"{field}raw"] < t.info[f"{field}adj"]),
+            check_description=f"{field}raw >= {field}adj",
+            display_fields=[f"info.{field}raw", f"info.{field}adj",],
+            verbose=verbose,
+        )
+
+    for subset in subsets:
+        for field in ["AC", "AN", "nhomalt"]:
+            # Check AC_raw >= AC adj
+            field = f"{field}{delimiter}{subset}{delimiter}"
+            generic_field_check(
+                t,
+                cond_expr=(t.info[f"{field}raw"] < t.info[f"{field}adj"]),
+                check_description=f"{field}raw >= {field}adj",
+                display_fields=[f"info.{field}raw", f"info.{field}adj",],
+                verbose=verbose,
+            )
+

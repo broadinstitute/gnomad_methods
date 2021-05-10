@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import hail as hl
 
@@ -190,3 +190,38 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     r_count2 = ht2.count()
     logger.info("%d rows in left table; %d rows in right table", r_count1, r_count2)
     return r_count1 == r_count2
+
+
+def summarize_variants(
+    t: Union[hl.MatrixTable, hl.Table], monoallelic_expr: Optional[hl.expr.BooleanExpression] = None
+) -> hl.Struct:
+    """
+    Get summary of variants in a MatrixTable or Table.
+
+    Print the number of variants to stdout and check that each chromosome has variant calls.
+
+    :param t: Input MatrixTable or Table to be checked.
+    :param monoallelic_expr: Boolean expression to log how many monoallelic sites are in the Table.
+    :rtype: Struct
+    """
+
+    if isinstance(t, hl.MatrixTable):
+        logger.info("Dataset has %d samples.", t.count_cols())
+
+    var_summary = hl.summarize_variants(t, show=False)
+    logger.info(
+        "Dataset has %d variants distributed across the following contigs: %s", var_summary.n_variants, var_summary.contigs
+    )
+
+    for contig in var_summary.contigs:
+        if var_summary.contigs[contig] == 0:
+            logger.warning("%s has no variants called", var_summary.contigs)
+
+    if monoallelic_expr is not None:
+        if isinstance(t, hl.MatrixTable):
+            mono_sites = t.filter_rows(monoallelic_expr).count_rows()
+        else:
+            mono_sites = t.filter(monoallelic_expr).count()
+        logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
+
+    return var_summary

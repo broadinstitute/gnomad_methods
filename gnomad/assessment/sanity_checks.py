@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 
 import hail as hl
 
-from gnomad.utils.vcf import make_label_combos, SORT_ORDER
+from gnomad.utils.vcf import HISTS, make_label_combos, SORT_ORDER
 
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -225,3 +225,50 @@ def summarize_variants(
         logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
 
     return var_summary
+
+
+def histograms_sanity_check(
+    t: Union[hl.MatrixTable, hl.Table], verbose: bool, hists: List[str] = HISTS
+) -> None:
+    """
+    Check that variants have nonzero values, with the excepion of DP hists, in their n_smaller and n_larger bins of quality histograms for both raw and adj.
+
+    Histogram annotations must exist within an info struct. For example, check that t.info.dp_hist_all_n_smaller != 0. 
+    All n_smaller and n_larger annotations must be within an info struct annotation. 
+
+    :param t: Input MatrixTable or Table.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param hists: List of variant annotation histograms.
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
+    for hist in hists:
+        for suffix in ["", "raw"]:
+            if suffix == "raw":
+                logger.info("Checking raw qual hists...")
+                hist = f"{hist}_{suffix}"
+            else:
+                logger.info("Checking adj qual hists...")
+
+            generic_field_check(
+                t,
+                cond_expr=(t.info[f"{hist}_n_smaller"] != 0),
+                check_description=f"{hist}_n_smaller == 0",
+                display_fields=[f"info.{hist}_n_smaller"],
+                verbose=verbose,
+            )
+            if hist not in {
+                "dp_hist_alt",
+                "dp_hist_all",
+            }:  # NOTE: DP hists can have nonzero values in n_larger bin
+                generic_field_check(
+                    t,
+                    cond_expr=(t.info[f"{hist}_n_larger"] != 0),
+                    check_description=f"{hist}_n_larger == 0",
+                    display_fields=[f"info.{hist}_n_larger"],
+                    verbose=verbose,
+                )
+

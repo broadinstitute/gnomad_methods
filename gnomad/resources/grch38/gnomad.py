@@ -54,7 +54,7 @@ Global populations in gnomAD v3.
 
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
 """
-Subsets in gnomAD v3.1 that are broken down by subpops instead of global pops in the frequency struct.
+Subsets in gnomAD v3.1 that are broken down by their known subpops instead of global pops in the frequency struct.
 """
 
 TGP_POPS = [

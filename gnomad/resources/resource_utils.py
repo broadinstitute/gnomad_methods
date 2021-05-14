@@ -87,7 +87,6 @@ class BaseResource(ABC):
         :param overwrite: If ``True``, overwrite an existing file at the destination.
         :param kwargs: Any other parameters to be passed to the underlying hail write function (acceptable parameters depend on specific resource types)
         """
-        pass
 
 
 class TableResource(BaseResource):

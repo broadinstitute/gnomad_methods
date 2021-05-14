@@ -259,8 +259,8 @@ def _get_info_agg_expr(
     # If both VarDP and QUALapprox are present, also compute QD.
     if f"{prefix}VarDP" in agg_expr and f"{prefix}QUALapprox" in agg_expr:
         logger.info(
-            f"Computing %sQD as %sQUALapprox/%sVarDP. "
-            f"Note that %sQD will be set to 0 if %sVarDP == 0.",
+            "Computing %sQD as %sQUALapprox/%sVarDP. "
+            "Note that %sQD will be set to 0 if %sVarDP == 0.",
             *[prefix] * 5,
         )
         var_dp = hl.int32(hl.agg.sum(int32_sum_agg_fields["VarDP"]))

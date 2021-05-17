@@ -14,6 +14,7 @@
 * Added function `build_vcf_export_reference` to create a subset reference based on an existing reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Added function `rekey_new_reference` to re-key a Table or MatrixTable with a new reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Modified `SEXES` in utils/vcf to be 'XX' and 'XY' instead of 'female' and 'male' [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
+* Fix `annotation_type_is_numeric` and `annotation_type_in_vcf_info` [(#379)](https://github.com/broadinstitute/gnomad_methods/pull/379)
 
 ## Version 0.5.0 - April 22nd, 2021
 

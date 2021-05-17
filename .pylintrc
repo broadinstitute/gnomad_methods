@@ -11,7 +11,6 @@ disable=
   # Warnings present in existing code. These should be fixed and removed from this list.
   cell-var-from-loop,
   dangerous-default-value,
-  isinstance-second-argument-not-valid-type,
   protected-access,
   raise-missing-from,
   redefined-builtin,

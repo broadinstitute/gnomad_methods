@@ -1,10 +1,10 @@
 # noqa: D100
 
 import logging
-from typing import List, Optional, Tuple
+from pprint import pformat
+from typing import Optional, Tuple
 
 import hail as hl
-from pprint import pformat
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

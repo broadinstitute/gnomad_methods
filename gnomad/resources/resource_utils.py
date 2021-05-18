@@ -2,12 +2,22 @@
 
 import logging
 from abc import ABC, abstractmethod
+from functools import reduce
 from typing import Any, Callable, Dict, List, Optional
 
 import hail as hl
 from hail.linalg import BlockMatrix
 
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
+
+
 logger = logging.getLogger("gnomad.resources")
+
+
+GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
 
 
 # Resource classes
@@ -51,10 +61,23 @@ class BaseResource(ABC):
             )
 
     def __repr__(self):
-        attr_str = [f"path={self.path}"]
+        attr_str = [f"path={self._path}"]
         if self.import_args is not None:
             attr_str.append(f"import_args={self.import_args}")
         return f'{self.__class__.__name__}({",".join(attr_str)})'
+
+    def _get_path(self):
+        return self._path
+
+    def _set_path(self, path):
+        self._path = path  # pylint: disable=attribute-defined-outside-init
+
+    # Defining path property this way instead of using a decorator allows _get_path and _set_path
+    # to be overridden in subclasses without having to reconfigure the property.
+    path = property(
+        fget=lambda self: self._get_path(),
+        fset=lambda self, path: self._set_path(path),
+    )
 
     @abstractmethod
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
@@ -64,7 +87,6 @@ class BaseResource(ABC):
         :param overwrite: If ``True``, overwrite an existing file at the destination.
         :param kwargs: Any other parameters to be passed to the underlying hail write function (acceptable parameters depend on specific resource types)
         """
-        pass
 
 
 class TableResource(BaseResource):
@@ -349,6 +371,56 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
 
     def __init__(self, default_version: str, versions: Dict[str, BlockMatrixResource]):
         super().__init__(default_version, versions)
+
+
+class GnomadPublicResource(BaseResource, ABC):
+    """Base class for the gnomAD project's public resources."""
+
+    def _get_path(self) -> str:
+        resource_source = gnomad_public_resource_configuration.source
+        if resource_source == GnomadPublicResourceSource.GNOMAD:
+            return self._path
+
+        relative_path = reduce(
+            lambda path, bucket: path[5 + len(bucket) :]
+            if path.startswith(f"gs://{bucket}/")
+            else path,
+            GNOMAD_PUBLIC_BUCKETS,
+            self._path,
+        )
+
+        if resource_source == GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS:
+            return f"gs://gcp-public-data--gnomad{relative_path}"
+
+        return (
+            f"{resource_source.rstrip('/')}{relative_path}"  # pylint: disable=no-member
+        )
+
+    def _set_path(self, path):
+        if not any(
+            path.startswith(f"gs://{bucket}/") for bucket in GNOMAD_PUBLIC_BUCKETS
+        ):
+            raise ValueError(
+                f"GnomadPublicResource requires a path to a file in one of the public gnomAD buckets ({', '.join(GNOMAD_PUBLIC_BUCKETS)})"
+            )
+
+        return super()._set_path(path)
+
+
+class GnomadPublicTableResource(TableResource, GnomadPublicResource):
+    """Resource class for a public Hail Table published by the gnomAD project."""
+
+
+class GnomadPublicMatrixTableResource(MatrixTableResource, GnomadPublicResource):
+    """Resource class for a public Hail MatrixTable published by the gnomAD project."""
+
+
+class GnomadPublicPedigreeResource(PedigreeResource, GnomadPublicResource):
+    """Resource class for a public pedigree published by the gnomAD project."""
+
+
+class GnomadPublicBlockMatrixResource(BlockMatrixResource, GnomadPublicResource):
+    """Resource class for a public Hail BlockMatrix published by the gnomAD project."""
 
 
 class DataException(Exception):  # noqa: D101

@@ -11,13 +11,10 @@ disable=
   # Warnings present in existing code. These should be fixed and removed from this list.
   cell-var-from-loop,
   dangerous-default-value,
-  f-string-without-interpolation,
   isinstance-second-argument-not-valid-type,
   protected-access,
   raise-missing-from,
   redefined-builtin,
   redefined-outer-name,
-  unused-import,
-  unnecessary-pass,
   unused-variable,
   unused-wildcard-import

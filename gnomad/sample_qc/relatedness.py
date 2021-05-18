@@ -869,10 +869,10 @@ def generate_trio_stats_expr(
         an_child_expr = hl.agg.sum(hl.is_defined(proband_gt) * 2)
 
         return {
-            f"ac_parents": ac_parent_expr,
-            f"an_parents": an_parent_expr,
-            f"ac_children": ac_child_expr,
-            f"an_children": an_child_expr,
+            "ac_parents": ac_parent_expr,
+            "an_parents": an_parent_expr,
+            "ac_children": ac_child_expr,
+            "an_children": an_child_expr,
         }
 
     # Create transmission counters

@@ -1,13 +1,18 @@
 # noqa: D100
 
+import argparse
 import itertools
 import textwrap
 from inspect import getmembers
 from typing import Dict, Tuple, Optional
+
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
 from gnomad.resources.resource_utils import BaseResource, BaseVersionedResource
 import gnomad.resources.grch37 as grch37
 import gnomad.resources.grch38 as grch38
-import argparse
 
 
 # Generate a dictionary of resource available for import for a given genome build
@@ -83,6 +88,8 @@ all_resources = {**grch37_resources, **grch38_resources}
 
 def main(args):
     """Import selected resources."""
+    gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD
+
     for resource_arg in args.resources:
         resource_name, resource = all_resources[resource_arg]
         print(f"Importing {resource_name}...")

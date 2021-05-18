@@ -1,9 +1,9 @@
 # noqa: D100
 
 from gnomad.resources.resource_utils import (
-    TableResource,
+    GnomadPublicTableResource,
+    GnomadPublicMatrixTableResource,
     VersionedMatrixTableResource,
-    MatrixTableResource,
     VersionedTableResource,
     DataException,
 )
@@ -220,7 +220,7 @@ List of the downsampling numbers to use for frequency calculations.
 gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
-        "3.0": MatrixTableResource(
+        "3.0": GnomadPublicMatrixTableResource(
             path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
         )
     },
@@ -229,7 +229,7 @@ gnomad_syndip = VersionedMatrixTableResource(
 na12878 = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
-        "3.0": MatrixTableResource(
+        "3.0": GnomadPublicMatrixTableResource(
             path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
         )
     },
@@ -282,7 +282,9 @@ def public_release(data_type: str) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: TableResource(path=_public_release_ht_path(data_type, release))
+            release: GnomadPublicTableResource(
+                path=_public_release_ht_path(data_type, release)
+            )
             for release in releases
         },
     )
@@ -310,7 +312,9 @@ def coverage(data_type: str) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: TableResource(path=_public_coverage_ht_path(data_type, release))
+            release: GnomadPublicTableResource(
+                path=_public_coverage_ht_path(data_type, release)
+            )
             for release in releases
         },
     )

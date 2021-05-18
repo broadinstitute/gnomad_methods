@@ -228,7 +228,7 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
     },
     "cadd_phred": {
         "Number": "1",
-        "Description": "Cadd Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious",
+        "Description": "Cadd Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious.",
     },
     "revel_score": {
         "Number": "1",
@@ -803,7 +803,7 @@ def make_hist_dict(
 
     :param bin_edges: Dictionary keyed by histogram annotation name, with corresponding string-reformatted bin edges for values.
     :param adj: Whether to create a header dict for raw or adj quality histograms.
-    :param hist_metric_list: List of hists to build hist info dict for
+    :param hist_metric_list: List of hists for which to build hist info dict
     :param label_delimiter: String used as delimiter in values stored in hist_metric_list.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """

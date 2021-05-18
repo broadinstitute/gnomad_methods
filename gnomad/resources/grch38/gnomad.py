@@ -27,10 +27,36 @@ SUBSETS = [
     "tgp",
     "hgdp",
 ]
+"""
+Order to sort subgroupings during VCF export.
+
+Ensures that INFO labels in VCF are in desired order (e.g., tgp_raw_AC_esn_XX).
+"""
+
 GROUPS = ["adj", "raw"]
+"""
+Group names used to generate labels for high quality genotypes and all raw genotypes.
+
+Used in VCF export.
+"""
+
 SEXES = ["XX", "XY"]
+"""
+Sample sexes used in VCF export.
+
+Used to stratify frequency annotations (AC, AN, AF) for each sex.
+"""
+
 POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
+"""
+Global populations in gnomAD v3.
+"""
+
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
+"""
+Subsets in gnomAD v3.1 that are broken down by their known subpops instead of global pops in the frequency struct.
+"""
+
 TGP_POPS = [
     "esn",
     "pur",
@@ -59,6 +85,10 @@ TGP_POPS = [
     "chs",
     "gwd",
 ]
+"""
+1000 Genomes Project (1KG/TGP) subpops.
+"""
+
 HGDP_POPS = [
     "japanese",
     "papuan",
@@ -113,8 +143,48 @@ HGDP_POPS = [
     "burusho",
     "maya",
 ]
+"""
+Human Genome Diversity Project (HGDP) subpops.
+"""
+
+TGP_POP_NAMES = {
+    "chb": "Han Chinese",
+    "jpt": "Japanese",
+    "chs": "Southern Han Chinese",
+    "cdx": "Chinese Dai",
+    "khv": "Kinh",
+    "ceu": "Utah Residents (European Ancestry)",
+    "tsi": "Toscani",
+    "fin": "Finnish",
+    "gbr": "British",
+    "ibs": "Iberian",
+    "yri": "Yoruba",
+    "lwk": "Luhya",
+    "gwd": "Gambian",
+    "msl": "Mende",
+    "esn": "Esan",
+    "asw": "African-American",
+    "acb": "African Caribbean",
+    "mxl": "Mexican-American",
+    "pur": "Puerto Rican",
+    "clm": "Colombian",
+    "pel": "Peruvian",
+    "gih": "Gujarati",
+    "pjl": "Punjabi",
+    "beb": "Bengali",
+    "stu": "Sri Lankan Tamil",
+    "itu": "Indian Telugu",
+}
+"""
+1000 Genomes Project (1KG/TGP) pop label map.
+"""
+
 POPS_STORED_AS_SUBPOPS = TGP_POPS + HGDP_POPS
 POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
+"""
+Populations that are removed before popmax calculations.
+"""
+
 DOWNSAMPLINGS = [
     10,
     20,
@@ -143,6 +213,9 @@ DOWNSAMPLINGS = [
     110000,
     120000,
 ]
+"""
+List of the downsampling numbers to use for frequency calculations.
+"""
 
 gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",

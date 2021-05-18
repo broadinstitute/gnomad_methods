@@ -104,79 +104,67 @@ def make_filters_sanity_check_expr(
 
 
 def sample_sum_check(
-    ht: hl.Table,
-    prefix: str,
+    t: Union[hl.MatrixTable, hl.Table],
+    subset: str,
     label_groups: Dict[str, List[str]],
     verbose: bool,
     subpop: bool = None,
     sort_order: List[str] = SORT_ORDER,
+    delimiter: str = "-",
 ) -> None:
     """
-    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
+    Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
-    Results from checking the sum of the specified annotations are printed in the terminal.
+    For example, if pop1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
 
-    :param ht: Table containing annotations to be summed.
-    :param prefix: String indicating sample subset.
+    :param t: Input MatrixTable or Table containing annotations to be summed.
+    :param subset: String indicating sample subset.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :param subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
+    :param delimiter: String to use as delimiter when making group label combinations.
     :return: None
     """
-    if prefix != "":
-        prefix = f"{prefix}_"
 
-    label_combos = make_label_combos(label_groups)
-    combo_AC = [ht.info[f"{prefix}AC_{x}"] for x in label_combos]
-    combo_AN = [ht.info[f"{prefix}AN_{x}"] for x in label_combos]
-    combo_nhomalt = [ht.info[f"{prefix}nhomalt_{x}"] for x in label_combos]
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
+    if subset:
+        subset += delimiter
+
+    label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
+    combo_AC = [t.info[f"AC{delimiter}{subset}{x}"] for x in label_combos]
+    combo_AN = [t.info[f"AN{delimiter}{subset}{x}"] for x in label_combos]
+    combo_nhomalt = [t.info[f"nhomalt{delimiter}{subset}{x}"] for x in label_combos]
+
+    # Grab "adj" from the group list
     group = label_groups.pop("group")[0]
-    alt_groups = "_".join(
+    alt_groups = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
-
+    group_expr = f"{subset}{group}{delimiter}{alt_groups}"
     annot_dict = {
-        f"sum_AC_{group}_{alt_groups}": hl.sum(combo_AC),
-        f"sum_AN_{group}_{alt_groups}": hl.sum(combo_AN),
-        f"sum_nhomalt_{group}_{alt_groups}": hl.sum(combo_nhomalt),
+        f"sum_AC{delimiter}{group_expr}": hl.sum(combo_AC),
+        f"sum_AN{delimiter}{group_expr}": hl.sum(combo_AN),
+        f"sum_nhomalt{delimiter}{group_expr}": hl.sum(combo_nhomalt),
     }
 
-    ht = ht.annotate(**annot_dict)
+    t = t.annotate(**annot_dict)
 
     for subfield in ["AC", "AN", "nhomalt"]:
-        if not subpop:
-            generic_field_check(
-                ht,
-                (
-                    ht.info[f"{prefix}{subfield}_{group}"]
-                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
-                ),
-                f"{prefix}{subfield}_{group} = sum({subfield}_{group}_{alt_groups})",
-                [
-                    f"info.{prefix}{subfield}_{group}",
-                    f"sum_{subfield}_{group}_{alt_groups}",
-                ],
-                verbose,
-            )
-        else:
-            generic_field_check(
-                ht,
-                (
-                    ht.info[f"{prefix}{subfield}_{subpop}_{group}"]
-                    != ht[f"sum_{subfield}_{group}_{alt_groups}"]
-                ),
-                f"{prefix}{subfield}_{subpop}_{group} = sum({subfield}_{group}_{alt_groups})",
-                [
-                    f"info.{prefix}{subfield}_{subpop}_{group}",
-                    f"sum_{subfield}_{group}_{alt_groups}",
-                ],
-                verbose,
-            )
 
+        group_expr = f"{subfield}{delimiter}{subset}{group}"
+        alt_groups_expr = f"{subfield}{delimiter}{subset}{group}{delimiter}{alt_groups}"
+
+        generic_field_check(
+            t,
+            (t.info[f"{group_expr}"] != t[f"sum_{alt_groups_expr}"]),
+            f"{group_expr} = sum({alt_groups_expr})",
+            [f"info.{group_expr}", f"sum_{alt_groups_expr}",],
+            verbose,
+        )
 
 def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """

@@ -7,6 +7,7 @@
 * Added function `make_faf_index_dict` to create a look-up Dictionary for entries contained in the filter allele frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * Added function `make_freq_index_dict` to create a look-up Dictionary for entries contained in the frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * VersionedResource objects are no longer subclasses of BaseResource [(#359)](https://github.com/broadinstitute/gnomad_methods/pull/359)
+* Replaced `ht_to_vcf_mt` with `adjust_vcf_incompatible_types` which maintains all functionality except turning the ht into a mt because it is no longer needed for use of the Hail module `export_vcf` [(#365)](https://github.com/broadinstitute/gnomad_methods/pull/365/files)
 
 ## Version 0.5.0 - April 22nd, 2021
 

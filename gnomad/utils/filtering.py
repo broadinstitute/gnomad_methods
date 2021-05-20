@@ -354,4 +354,4 @@ def remove_fields_from_globals(global_field: List[str], fields_to_remove: List[s
         if field in global_field:
             global_field.remove(field)
         else:
-            logger.info(f"'{field}'' missing from {global_field}")
+            logger.info("%s missing from %s", field, global_field)

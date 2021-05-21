@@ -9,7 +9,11 @@
 * VersionedResource objects are no longer subclasses of BaseResource [(#359)](https://github.com/broadinstitute/gnomad_methods/pull/359)
 * gnomAD resources can now be imported from different sources [(#373)](https://github.com/broadinstitute/gnomad_methods/pull/373)
 * Replaced `ht_to_vcf_mt` with `adjust_vcf_incompatible_types` which maintains all functionality except turning the ht into a mt because it is no longer needed for use of the Hail module `export_vcf` [(#365)](https://github.com/broadinstitute/gnomad_methods/pull/365/files)
-
+* Added function `remove_fields_from_constant` to remove fields from a list and notify which requested fields to remove were missing [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
+* Added function `create_label_groups` to generate a list of label group dictionaries needed to populate the info dictionary for vcf export [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
+* Added function `build_vcf_export_reference` to create a subset reference based on an existing reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
+* Added function `rekey_new_reference` to re-key a Table or MatrixTable with a new reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
+* Modified `SEXES` in utils/vcf to be 'XX' and 'XY' instead of 'female' and 'male' [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 
 ## Version 0.5.0 - April 22nd, 2021
 

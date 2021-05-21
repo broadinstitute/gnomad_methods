@@ -42,7 +42,7 @@ FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
 Global populations that are included in filtering allele frequency (faf) calculations. Used in VCF export.
 """
 
-SEXES = ["male", "female"]
+SEXES = ["XX", "XY"]
 """
 Sample sexes used in VCF export.
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
@@ -495,8 +495,8 @@ def make_combo_header_text(
 
 def create_label_groups(
     pops: List[str],
-    sexes: List[str],
-    groups: List[str] = GROUPS,
+    sexes: List[str] = SEXES,
+    all_groups: List[str] = GROUPS,
     pop_sex_groups: List[str] = ["adj"],
 ) -> List[Dict[str, List[str]]]:
     """
@@ -506,12 +506,14 @@ def create_label_groups(
 
     :param pops: List of population names.
     :param sexes: List of sample sexes.
-    :param groups: List of data types (raw, adj). Default is ["raw", "adj"].
-    :param pop_sex_groups: List of only data types to populate with pops and sexes (raw, adj). Default is ["adj"].
+    :param all_groups: List of data types (raw, adj). Default is `GROUPS`, which is ["raw", "adj"].
+    :param pop_sex_groups: List of data types (raw, adj) to populate with pops and sexes. Default is ["adj"].
     :return: List of label group dictionaries.
     """
     return [
-        dict(group=groups),
+        # This is to capture raw frequency fields, which are
+        # not stratified by sex or population (e.g., only AC_raw exists, not AC_XX_raw)
+        dict(group=all_groups),
         dict(group=pop_sex_groups, sex=sexes),
         dict(group=pop_sex_groups, pop=pops),
         dict(group=pop_sex_groups, pop=pops, sex=sexes),
@@ -895,7 +897,7 @@ def set_female_y_metrics_to_na(
 def build_vcf_export_reference(
     name: str,
     build: str = "GRCh38",
-    contigs_keep: List[str] = [f"chr{i}" for i in range(1, 23)]
+    keep_contigs: List[str] = [f"chr{i}" for i in range(1, 23)]
     + ["chrX", "chrY", "chrM"],
 ) -> hl.ReferenceGenome:
     """
@@ -903,19 +905,19 @@ def build_vcf_export_reference(
 
     By default this will return a new reference with all non-standard contigs eliminated. Keeps chr 1-22, Y, X, and M.
 
-    Non-standard for example is: ##contig=<ID=chr3_GL000221v1_random,length=155397,assembly=GRCh38>
+    An example of a non-standard contig is: ##contig=<ID=chr3_GL000221v1_random,length=155397,assembly=GRCh38>
 
     :param name: Name to use for new reference.
     :param build: Reference genome build to use as starting reference genome.
-    :param contigs_keep: Contigs to keep from reference genome defined by `build`.
-    :return: Reference genome for VCF export containing only contigs in `contigs_keep`
+    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is autosomes, sex chromosomes, and chrM.
+    :return: Reference genome for VCF export containing only contigs in `keep_contigs`.
     """
     ref = hl.get_reference(build)
 
     export_reference = hl.ReferenceGenome(
         name=name,
-        contigs=contigs_keep,
-        lengths={contig: ref.lengths[contig] for contig in contigs_keep},
+        contigs=keep_contigs,
+        lengths={contig: ref.lengths[contig] for contig in keep_contigs},
         x_contigs=ref.x_contigs,
         y_contigs=ref.y_contigs,
         par=[
@@ -930,7 +932,7 @@ def build_vcf_export_reference(
 
 def rekey_new_reference(
     t: Union[hl.Table, hl.MatrixTable], reference: hl.ReferenceGenome
-):
+) -> Union[hl.Table, hl.MatrixTable]:
     """
     Re-key Table or MatrixTable with a new reference genome.
 

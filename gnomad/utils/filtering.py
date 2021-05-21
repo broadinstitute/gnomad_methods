@@ -343,15 +343,19 @@ def filter_to_clinvar_pathogenic(
     return t
 
 
-def remove_fields_from_globals(global_field: List[str], fields_to_remove: List[str]):
+def remove_fields_from_constant(
+    constant: List[str], fields_to_remove: List[str]
+) -> List[str]:
     """
-    Remove fields from the pre-defined global field variables.
+    Remove fields from a list indicating which fields were missing from the original list.
 
-    :param global_field: Global list of fields
-    :param fields_to_remove: List of fields to remove from global (they must be in the global list)
+    :param constant: List of fields
+    :param fields_to_remove: List of fields to remove from `constant`
     """
     for field in fields_to_remove:
-        if field in global_field:
-            global_field.remove(field)
+        if field in constant:
+            constant.remove(field)
         else:
-            logger.info("%s missing from %s", field, global_field)
+            logger.info("%s missing from %s", field, constant)
+
+    return constant

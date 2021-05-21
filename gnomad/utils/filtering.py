@@ -347,7 +347,7 @@ def remove_fields_from_constant(
     constant: List[str], fields_to_remove: List[str]
 ) -> List[str]:
     """
-    Remove fields from a list indicating which fields were missing from the original list.
+    Remove fields from a list and display any field(s) missing from the original list.
 
     :param constant: List of fields
     :param fields_to_remove: List of fields to remove from `constant`

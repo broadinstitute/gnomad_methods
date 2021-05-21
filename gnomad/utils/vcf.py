@@ -45,7 +45,9 @@ Global populations that are included in filtering allele frequency (faf) calcula
 SEXES = ["XX", "XY"]
 """
 Sample sexes used in VCF export.
+
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
+Note that sample sexes in gnomAD v3 and earlier were 'male' and 'female'. 
 """
 
 AS_FIELDS = [

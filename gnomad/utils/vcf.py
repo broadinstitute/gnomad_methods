@@ -47,7 +47,7 @@ SEXES = ["XX", "XY"]
 Sample sexes used in VCF export.
 
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
-Note that sample sexes in gnomAD v3 and earlier were 'male' and 'female'. 
+Note that sample sexes in gnomAD v3 and earlier were 'male' and 'female'.
 """
 
 AS_FIELDS = [
@@ -600,23 +600,23 @@ def make_info_dict(
                 "Number": "A",
                 "Description": f"Population with maximum allele frequency{description_text}",
             },
-            f"{prefix}AC_popmax": {
+            f"{prefix}AC{label_delimiter}popmax": {
                 "Number": "A",
                 "Description": f"Allele count in the population with the maximum allele frequency{description_text}",
             },
-            f"{prefix}AN_popmax": {
+            f"{prefix}AN{label_delimiter}popmax": {
                 "Number": "A",
                 "Description": f"Total number of alleles in the population with the maximum allele frequency{description_text}",
             },
-            f"{prefix}AF_popmax": {
+            f"{prefix}AF{label_delimiter}popmax": {
                 "Number": "A",
                 "Description": f"Maximum allele frequency across populations{description_text}",
             },
-            f"{prefix}nhomalt_popmax": {
+            f"{prefix}nhomalt{label_delimiter}popmax": {
                 "Number": "A",
                 "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_text}",
             },
-            f"{prefix}faf95_popmax": {
+            f"{prefix}faf95{label_delimiter}popmax": {
                 "Number": "A",
                 "Description": f"Filtering allele frequency (using Poisson 95% CI) for the population with the maximum allele frequency{description_text}",
             },

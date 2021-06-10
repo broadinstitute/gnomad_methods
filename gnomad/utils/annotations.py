@@ -767,12 +767,7 @@ def annotation_type_is_numeric(t: Any) -> bool:
     :param t: Type to test
     :return: If the input type is numeric
     """
-    return (
-        isinstance(t, hl.tint32)
-        or isinstance(t, hl.tint64)
-        or isinstance(t, hl.tfloat32)
-        or isinstance(t, hl.tfloat64)
-    )
+    return t in (hl.tint32, hl.tint64, hl.tfloat32, hl.tfloat64)
 
 
 def annotation_type_in_vcf_info(t: Any) -> bool:
@@ -788,10 +783,11 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
     """
     return (
         annotation_type_is_numeric(t)
-        or isinstance(t, hl.tstr)
-        or isinstance(t, hl.tarray)
-        or isinstance(t, hl.tset)
-        or isinstance(t, hl.tbool)
+        or t in (hl.tstr, hl.tbool)
+        or (
+            isinstance(t, (hl.tarray, hl.tset))
+            and annotation_type_in_vcf_info(t.element_type)
+        )
     )
 
 

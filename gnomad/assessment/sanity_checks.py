@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
@@ -13,27 +13,76 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def make_field_check_dicts(
+    field_check_expr: dict,
+    field_check_details: dict,
+    check_description: str,
+    cond_expr: hl.expr.BooleanExpression,
+    display_fields: List[str],
+) -> Tuple(dict, dict):
+    """
+    Create one struct for aggregating each check's failure count and another for each check details.
+
+    :param field_check_expr: Dictionary of check description and aggregated expression filtering count
+    :param field_check_details: Dictionary of structs containing each check descriptions details
+    :param check_description: Check to be added to the dictionary
+    :param cond_expr: Logical expression referring to annotations in ht to be checked.
+    :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes);
+        these fields are also displayed if verbose is True.
+    :return: Tuple of dicts
+    """
+    field_check_expr[check_description] = hl.agg.filter(cond_expr, hl.agg.count())
+    field_check_details[check_description] = hl.struct(
+        cond_expr=cond_expr, display_fields=display_fields
+    )
+
+    return field_check_expr, field_check_details
+
+
+def generic_field_check_loop(
+    ht: hl.Table, field_check_expr: dict, field_check_details: dict, verbose: bool
+):
+    """
+    Loop through all conditional checks for a given hail Table.
+
+    This loop allows aggregation across the hail Table once, as opposed to every during every conditional check. 
+    :param ht: Table containing annotations to be checked.
+    :param field_check_expr: Struct containing condition being checked and expression for filtering to condition.
+    :param field_check_details: Struct of condition that was checked, expression used for check, and what to display for the check in the terminal
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    """
+    ht_field_check_counts = ht.aggregate(hl.struct(**field_check_expr))
+    for check_description, n_fail in ht_field_check_counts.items():
+        generic_field_check(
+            ht,
+            cond_expr=field_check_details[check_description].cond_expr,
+            check_description=check_description,
+            n_fail=n_fail,
+            display_fields=field_check_details[check_description].display_fields,
+            verbose=verbose,
+        )
+
+
 def generic_field_check(
     ht: hl.Table,
     cond_expr: hl.expr.BooleanExpression,
     check_description: str,
     display_fields: List[str],
-    verbose: bool,
+    verbose: bool = False,
     show_percent_sites: bool = False,
+    n_fail: int = None,
+    ht_count: int = None,
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
-
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
-
     .. note::
-
         `cond_expr` and `check_description` are opposites and should never be the same.
         E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
         then it is checking sites that fail to be the desired condition (`check_description`)
         of having a raw AC greater than or equal to the adj AC.
-
     :param ht: Table containing annotations to be checked.
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
@@ -42,22 +91,25 @@ def generic_field_check(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param n_fail: Previously computed number of sites that fail the conditional checks.
+    :param ht_count: Previously computed sum of sites within hail Table. 
     :return: None
     """
-    ht_orig = ht
-    ht = ht.filter(cond_expr)
-    n_fail = ht.count()
+    if show_percent_sites and (ht_count is None):
+        ht_count = ht.count()
+
+    if n_fail is None and cond_expr:
+        n_fail = ht.filter(cond_expr).count()
+
     if n_fail > 0:
-        logger.info("Found %d sites that fail %s check:", n_fail, check_description)
+        logger.info(f"Found {n_fail} sites that fail {check_description} check:")
         if show_percent_sites:
-            logger.info("Percentage of sites that fail: %f", n_fail / ht_orig.count())
-        ht = ht.flatten()
-        ht.select("locus", "alleles", *display_fields).show()
+            logger.info(f"Percentage of sites that fail: {n_fail / ht_count}")
+        ht.select(**display_fields).show()
     else:
-        logger.info("PASSED %s check", check_description)
+        logger.info(f"PASSED {check_description} check")
         if verbose:
-            ht_orig = ht_orig.flatten()
-            ht_orig.select(*display_fields).show()
+            ht.select(**display_fields).show()
 
 
 def make_filters_sanity_check_expr(
@@ -166,6 +218,7 @@ def sample_sum_check(
             verbose,
         )
 
+
 def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
     Check if the row counts in two Tables are the same.
@@ -181,7 +234,8 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
 
 
 def summarize_variants(
-    t: Union[hl.MatrixTable, hl.Table], monoallelic_expr: Optional[hl.expr.BooleanExpression] = None
+    t: Union[hl.MatrixTable, hl.Table],
+    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> hl.Struct:
     """
     Get summary of variants in a MatrixTable or Table.
@@ -198,7 +252,9 @@ def summarize_variants(
 
     var_summary = hl.summarize_variants(t, show=False)
     logger.info(
-        "Dataset has %d variants distributed across the following contigs: %s", var_summary.n_variants, var_summary.contigs
+        "Dataset has %d variants distributed across the following contigs: %s",
+        var_summary.n_variants,
+        var_summary.contigs,
     )
 
     for contig in var_summary.contigs:
@@ -219,7 +275,7 @@ def histograms_sanity_check(
     t: Union[hl.MatrixTable, hl.Table], verbose: bool, hists: List[str] = HISTS
 ) -> None:
     """
-    Check that variants have nonzero values, with the excepion of DP hists, in their n_smaller and n_larger bins of quality histograms for both raw and adj.
+    Check the number of that variants that have nonzero values, with the excepion of DP hists, in their n_smaller and n_larger bins of quality histograms for both raw and adj.
 
     Histogram annotations must exist within an info struct. For example, check that t.info.dp_hist_all_n_smaller != 0. 
     All n_smaller and n_larger annotations must be within an info struct annotation. 
@@ -232,33 +288,40 @@ def histograms_sanity_check(
     :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
+    field_check_expr = {}
+    field_check_details = {}
 
     for hist in hists:
         for suffix in ["", "raw"]:
             if suffix == "raw":
-                logger.info("Checking raw qual hists...")
                 hist = f"{hist}_{suffix}"
-            else:
-                logger.info("Checking adj qual hists...")
 
-            generic_field_check(
-                t,
-                cond_expr=(t.info[f"{hist}_n_smaller"] != 0),
-                check_description=f"{hist}_n_smaller == 0",
-                display_fields=[f"info.{hist}_n_smaller"],
-                verbose=verbose,
+            check_field = f"{hist}_n_smaller"
+            check_description = f"{check_field} == 0"
+            field_check_expr, field_check_details = make_field_check_structs(
+                field_check_expr=field_check_expr,
+                field_check_details=field_check_details,
+                check_description=check_description,
+                cond_expr=t.info[check_field] != 0,
+                display_fields=hl.struct(**{check_field: t.info[check_field]}),
             )
+
             if hist not in {
                 "dp_hist_alt",
                 "dp_hist_all",
             }:  # NOTE: DP hists can have nonzero values in n_larger bin
-                generic_field_check(
-                    t,
-                    cond_expr=(t.info[f"{hist}_n_larger"] != 0),
-                    check_description=f"{hist}_n_larger == 0",
-                    display_fields=[f"info.{hist}_n_larger"],
-                    verbose=verbose,
+                check_field = f"{hist}_n_larger"
+                check_description = f"{check_field} == 0"
+                field_check_expr, field_check_details = make_field_check_structs(
+                    field_check_expr=field_check_expr,
+                    field_check_details=field_check_details,
+                    check_description=check_description,
+                    cond_expr=t.info[check_field] != 0,
+                    display_fields=hl.struct(**{check_field: t.info[check_field]}),
                 )
+    generic_field_check_loop(
+        t, field_check_expr, field_check_details, verbose,
+    )
 
 
 def raw_and_adj_sanity_checks(
@@ -348,4 +411,3 @@ def raw_and_adj_sanity_checks(
                 display_fields=[f"info.{field}raw", f"info.{field}adj",],
                 verbose=verbose,
             )
-

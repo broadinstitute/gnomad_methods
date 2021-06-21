@@ -2,8 +2,8 @@
 
 import logging
 from abc import ABC, abstractmethod
-from functools import reduce
-from typing import Any, Callable, Dict, List, Optional
+from functools import reduce, wraps
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import hail as hl
 from hail.linalg import BlockMatrix
@@ -373,8 +373,46 @@ class VersionedBlockMatrixResource(BaseVersionedResource, BlockMatrixResource):
         super().__init__(default_version, versions)
 
 
+class ResourceNotAvailable(Exception):
+    """Exception raised if a resource is not available from the selected source."""
+
+
 class GnomadPublicResource(BaseResource, ABC):
     """Base class for the gnomAD project's public resources."""
+
+    def __init_subclass__(cls, *, read_resource_methods: Iterable[str] = []) -> None:
+        super().__init_subclass__()
+
+        # Some resources may not be available from all sources due to delays in syncing, etc.
+        # This wraps all methods that read the resource and adds a check for if the resource
+        # is available from the selected source. If the resource is not available, this
+        # throws a more helpful error than if the read were simply allowed to fail.
+        def _wrap_read_resource_method(method_name):
+            original_method = getattr(cls, method_name)
+
+            @wraps(original_method)
+            def read_resource(self, *args, **kwargs):
+                # If one of the known sources is selected, check if the resource is available.
+                # For custom sources, skip the check and attempt to read the resource.
+                resource_source = gnomad_public_resource_configuration.source
+                if (
+                    isinstance(resource_source, GnomadPublicResourceSource)
+                    and resource_source != GnomadPublicResourceSource.GNOMAD
+                ):
+                    if not self.is_resource_available():
+                        raise ResourceNotAvailable(
+                            f"This resource is not currently available from {resource_source.value}.\n\n"
+                            "To load resources directly from gnomAD instead, use:\n\n"
+                            ">>> from gnomad.resources.config import gnomad_public_resource_configuration, GnomadPublicResourceSource\n"
+                            ">>> gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD"
+                        )
+
+                return original_method(self, *args, **kwargs)
+
+            setattr(cls, method_name, read_resource)
+
+        for method_name in read_resource_methods:
+            _wrap_read_resource_method(method_name)
 
     def _get_path(self) -> str:
         resource_source = gnomad_public_resource_configuration.source
@@ -406,20 +444,46 @@ class GnomadPublicResource(BaseResource, ABC):
 
         return super()._set_path(path)
 
+    def is_resource_available(self) -> bool:
+        """
+        Check if this resource is available from the selected source.
 
-class GnomadPublicTableResource(TableResource, GnomadPublicResource):
+        :return: True if the resource is available.
+        """
+        path = self.path
+
+        # Hail Tables, MatrixTables, and BlockMatrices are directories.
+        # For those, check for the existence of the _SUCCESS object.
+        path_to_test = (
+            f"{path}/_SUCCESS"
+            if any(path.endswith(ext) for ext in (".ht", ".mt", ".bm"))
+            else path
+        )
+
+        return hl.current_backend().fs.exists(path_to_test)
+
+
+class GnomadPublicTableResource(
+    TableResource, GnomadPublicResource, read_resource_methods=("ht",)
+):
     """Resource class for a public Hail Table published by the gnomAD project."""
 
 
-class GnomadPublicMatrixTableResource(MatrixTableResource, GnomadPublicResource):
+class GnomadPublicMatrixTableResource(
+    MatrixTableResource, GnomadPublicResource, read_resource_methods=("mt",)
+):
     """Resource class for a public Hail MatrixTable published by the gnomAD project."""
 
 
-class GnomadPublicPedigreeResource(PedigreeResource, GnomadPublicResource):
+class GnomadPublicPedigreeResource(
+    PedigreeResource, GnomadPublicResource, read_resource_methods=("ht", "pedigree")
+):
     """Resource class for a public pedigree published by the gnomAD project."""
 
 
-class GnomadPublicBlockMatrixResource(BlockMatrixResource, GnomadPublicResource):
+class GnomadPublicBlockMatrixResource(
+    BlockMatrixResource, GnomadPublicResource, read_resource_methods=("bm",)
+):
     """Resource class for a public Hail BlockMatrix published by the gnomAD project."""
 
 

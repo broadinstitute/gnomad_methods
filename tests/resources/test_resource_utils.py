@@ -138,8 +138,9 @@ class TestGnomadPublicTableResource:
 
         gnomad_public_resource_configuration.source = source
 
-        resource.ht()
-        read_table.assert_called_with(expected_read_path)
+        with patch.object(resource, "is_resource_available", return_value=True):
+            resource.ht()
+            read_table.assert_called_with(expected_read_path)
 
 
 class TestGnomadPublicMatrixTableResource:
@@ -158,8 +159,9 @@ class TestGnomadPublicMatrixTableResource:
 
         gnomad_public_resource_configuration.source = source
 
-        resource.mt()
-        read_matrix_table.assert_called_with(expected_read_path)
+        with patch.object(resource, "is_resource_available", return_value=True):
+            resource.mt()
+            read_matrix_table.assert_called_with(expected_read_path)
 
 
 class TestGnomadPublicPedigreeResource:
@@ -178,9 +180,10 @@ class TestGnomadPublicPedigreeResource:
 
         gnomad_public_resource_configuration.source = source
 
-        resource.pedigree()
-        read_pedigree.assert_called()
-        assert read_pedigree.call_args[0][0] == expected_read_path
+        with patch.object(resource, "is_resource_available", return_value=True):
+            resource.pedigree()
+            read_pedigree.assert_called()
+            assert read_pedigree.call_args[0][0] == expected_read_path
 
     @pytest.mark.parametrize(
         "resource_path,source,expected_read_path",
@@ -195,9 +198,10 @@ class TestGnomadPublicPedigreeResource:
 
         gnomad_public_resource_configuration.source = source
 
-        resource.ht()
-        import_fam.assert_called()
-        assert import_fam.call_args[0][0] == expected_read_path
+        with patch.object(resource, "is_resource_available", return_value=True):
+            resource.ht()
+            import_fam.assert_called()
+            assert import_fam.call_args[0][0] == expected_read_path
 
 
 class TestGnomadPublicBlockMatrixResource:
@@ -216,5 +220,6 @@ class TestGnomadPublicBlockMatrixResource:
 
         gnomad_public_resource_configuration.source = source
 
-        resource.bm()
-        read_block_matrix.assert_called_with(expected_read_path)
+        with patch.object(resource, "is_resource_available", return_value=True):
+            resource.bm()
+            read_block_matrix.assert_called_with(expected_read_path)

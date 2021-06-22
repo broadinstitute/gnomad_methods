@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
+from gnomad.resources.grch38.gnomad import HGDP_POPS, TGP_POPS, POPS, SEXES
 from gnomad.utils.vcf import HISTS, make_label_combos, SORT_ORDER
 
 
@@ -29,7 +30,7 @@ def make_field_check_dicts(
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes);
         these fields are also displayed if verbose is True.
-    :return: Tuple of dicts
+    :return: Tuple of dictionaries
     """
     field_check_expr[check_description] = hl.agg.filter(cond_expr, hl.agg.count())
     field_check_details[check_description] = hl.struct(
@@ -102,12 +103,12 @@ def generic_field_check(
         n_fail = ht.filter(cond_expr).count()
 
     if n_fail > 0:
-        logger.info(f"Found {n_fail} sites that fail {check_description} check:")
+        logger.info("Found %d sites that fail %s check:", n_fail, check_description)
         if show_percent_sites:
-            logger.info(f"Percentage of sites that fail: {n_fail / ht_count}")
+            logger.info("Percentage of sites that fail: %d", n_fail / ht_count)
         ht.select(**display_fields).show()
     else:
-        logger.info(f"PASSED {check_description} check")
+        logger.info("PASSED %s check", check_description)
         if verbose:
             ht.select(**display_fields).show()
 
@@ -180,17 +181,17 @@ def sample_sum_check(
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
-    :return: None
+    :return: Tuple of dictionaries
     """
 
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    if subset != "":
+    if subset: # TODO: add & subset != "":
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
     group = label_groups.pop("group")[0]
-    alt_groups = "_".join(
+    alt_groups = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
     info_fields = t.info.keys()
@@ -235,6 +236,67 @@ def sample_sum_check(
 
     return field_check_expr, field_check_details
     
+
+def sample_sum_sanity_checks(
+    t: Union[hl.MatrixTable, hl.Table],
+    subsets: List[str],
+    pops: List[str] = POPS,
+    sexes: List[str] = SEXES,
+    subset_pops: Dict[str, List[str]] = {"hgdp": HGDP_POPS, "tgp": TGP_POPS},
+    verbose: bool = False,
+    metric_first_label: bool = True,
+) -> None:
+    """
+    Performs sanity checks on sample sums in input Table.
+    Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
+    displays results from checking the sum of the specified annotations in the terminal.
+    Also checks that annotations for all expected sample populations are present.
+    :param hl.Table ht: Input Table.
+    :param List[str] subsets: List of sample subsets.
+    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param pop_names: Dict with global population names (keys) and population descriptions (values).
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+    # Add "" for sum checks on entire callset
+    subsets.append("")
+    # Perform sample sum checks per subset
+    field_check_expr = {}
+    field_check_details = {}
+    for subset in subsets:
+        pop_names = pops
+        if subset_pops and subset in subset_pops:
+            pop_names = subset_pops[subset]
+
+        field_check_expr_s, field_check_details_s = sample_sum_check(
+            t,
+            subset,
+            metric_first_label,
+            dict(group=["adj"], pop=pop_names),
+            verbose,
+        )
+        field_check_expr.update(field_check_expr_s)
+        field_check_details.update(field_check_details_s)
+        field_check_expr_s, field_check_details_s = sample_sum_check(
+            t, subset, metric_first_label, dict(group=["adj"], sex=sexes), verbose
+        )
+        field_check_expr.update(field_check_expr_s)
+        field_check_details.update(field_check_details_s)
+        field_check_expr_s, field_check_details_s = sample_sum_check(
+            t,
+            subset,
+            metric_first_label,
+            dict(group=["adj"], pop=list(set(pop_names)), sex=sexes),
+            verbose,
+        )
+        field_check_expr.update(field_check_expr_s)
+        field_check_details.update(field_check_details_s)
+
+        generic_field_check_loop(t, field_check_expr, field_check_details, verbose)
+
 
 def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """

@@ -21,7 +21,7 @@ def make_field_check_dicts(
     display_fields: List[str],
 ) -> Tuple(dict, dict):
     """
-    Create one struct for aggregating each check's failure count and another for each check details.
+    Create dictionary for aggregating each sanity check's failure count and another for each check's details.
 
     :param field_check_expr: Dictionary of check description and aggregated expression filtering count
     :param field_check_details: Dictionary of structs containing each check descriptions details
@@ -45,10 +45,10 @@ def generic_field_check_loop(
     """
     Loop through all conditional checks for a given hail Table.
 
-    This loop allows aggregation across the hail Table once, as opposed to every during every conditional check. 
+    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check. 
     :param ht: Table containing annotations to be checked.
-    :param field_check_expr: Struct containing condition being checked and expression for filtering to condition.
-    :param field_check_details: Struct of condition that was checked, expression used for check, and what to display for the check in the terminal
+    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
+    :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     """
@@ -163,6 +163,7 @@ def sample_sum_check(
     subpop: bool = None,
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
+    metric_first_label: bool = True,
 ) -> None:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
@@ -178,46 +179,62 @@ def sample_sum_check(
     :param subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations.
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
     """
 
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    if subset:
+    if subset != "":
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    combo_AC = [t.info[f"AC{delimiter}{subset}{x}"] for x in label_combos]
-    combo_AN = [t.info[f"AN{delimiter}{subset}{x}"] for x in label_combos]
-    combo_nhomalt = [t.info[f"nhomalt{delimiter}{subset}{x}"] for x in label_combos]
-
-    # Grab "adj" from the group list
     group = label_groups.pop("group")[0]
-    alt_groups = delimiter.join(
+    alt_groups = "_".join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
-    group_expr = f"{subset}{group}{delimiter}{alt_groups}"
-    annot_dict = {
-        f"sum_AC{delimiter}{group_expr}": hl.sum(combo_AC),
-        f"sum_AN{delimiter}{group_expr}": hl.sum(combo_AN),
-        f"sum_nhomalt{delimiter}{group_expr}": hl.sum(combo_nhomalt),
-    }
+    info_fields = t.info.keys()
 
-    t = t.annotate(**annot_dict)
-
+    annot_dict = {}
     for subfield in ["AC", "AN", "nhomalt"]:
+        subfield_values = []
+        for x in label_combos:
+            if metric_first_label:
+                field = f"{subfield}{delimiter}{subset}{x}"
+            else:
+                field = f"{subset}{subfield}{delimiter}{x}"
 
-        group_expr = f"{subfield}{delimiter}{subset}{group}"
-        alt_groups_expr = f"{subfield}{delimiter}{subset}{group}{delimiter}{alt_groups}"
+            if field in info_fields:
+                subfield_values.append(t.info[field])
+            else:
+                logger.info("%s is not in table's info field", field)
 
-        generic_field_check(
-            t,
-            (t.info[f"{group_expr}"] != t[f"sum_{alt_groups_expr}"]),
-            f"{group_expr} = sum({alt_groups_expr})",
-            [f"info.{group_expr}", f"sum_{alt_groups_expr}",],
-            verbose,
+        annot_dict[f"sum_{subfield}"]= hl.sum(subfield_values)
+
+    field_check_expr = {}
+    field_check_details = {}
+    for subfield in ["AC", "AN", "nhomalt"]:
+        if metric_first_label:
+            check_field_left = f"{subfield}{delimiter}{subset}{group}"
+        else:
+            check_field_left = f"{subset}{subfield}{delimiter}{group}"
+
+        check_field_right = f"sum_{subfield}{delimiter}{group}{delimiter}{alt_groups}"
+        field_check_expr, field_check_details = make_field_check_dicts(
+            field_check_expr=field_check_expr,
+            field_check_details=field_check_details,
+            check_description=f"{check_field_left} = {check_field_right}",
+            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{subfield}"],
+            display_fields=hl.struct(
+                **{
+                    check_field_left: t.info[check_field_left],
+                    f"sum_{subfield}": annot_dict[f"sum_{subfield}"],
+                }
+            ),
         )
 
+    return field_check_expr, field_check_details
+    
 
 def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
@@ -298,7 +315,7 @@ def histograms_sanity_check(
 
             check_field = f"{hist}_n_smaller"
             check_description = f"{check_field} == 0"
-            field_check_expr, field_check_details = make_field_check_structs(
+            field_check_expr, field_check_details = make_field_check_dicts(
                 field_check_expr=field_check_expr,
                 field_check_details=field_check_details,
                 check_description=check_description,
@@ -312,7 +329,7 @@ def histograms_sanity_check(
             }:  # NOTE: DP hists can have nonzero values in n_larger bin
                 check_field = f"{hist}_n_larger"
                 check_description = f"{check_field} == 0"
-                field_check_expr, field_check_details = make_field_check_structs(
+                field_check_expr, field_check_details = make_field_check_dicts(
                     field_check_expr=field_check_expr,
                     field_check_details=field_check_details,
                     check_description=check_description,

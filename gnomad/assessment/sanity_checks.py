@@ -157,6 +157,115 @@ def make_filters_sanity_check_expr(
     return filters_dict
 
 
+def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
+    """
+    Summarize variants filtered under various conditions in input MatrixTable or Table.
+
+    Summarize counts for:
+        - Total number of variants
+        - Fraction of variants removed due to:
+            - Any filter
+            - Inbreeding coefficient filter in combination with any other filter
+            - AC0 filter in combination with any other filter
+            - VQSR filtering in combination with any other filter
+            - Only inbreeding coefficient filter
+            - Only AC0 filter
+            - Only VQSR filtering
+
+    :param t: Input MatrixTable or Table to be checked.
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
+    filters = t.aggregate(hl.agg.counter(t.filters))
+    logger.info(f"hl.agg.counter filters: {filters}")
+
+    filtered_expr = hl.len(t.filters) > 0
+    problematic_region_expr = hl.any(
+        lambda x: x,
+        [
+            t.info.lcr,
+            t.info.segdup,
+            t.info.nonpar,
+        ],  # NOTE: in_problematic_region check will need to be updated if we get hg38 decoy
+    )
+
+    t = t.annotate(
+        is_filtered=filtered_expr, in_problematic_region=problematic_region_expr
+    )
+
+    def _filter_agg_order(
+        t: Union[hl.MatrixTable, hl.Table],
+        group_exprs: Dict[str, hl.expr.Expression],
+        n_rows: int = None,
+        n_cols: int = None,
+        extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
+    ) -> None:
+        """
+        Perform sanity checks to measure percentages of variants filtered under different conditions.
+
+        :param t: Input MatrixTable or Table.
+        :param group_exprs: Dictionary of expressions to group the Table by.
+        :param n_rows: Number of rows to show.
+        :param n_cols: Number of columns to show.
+        :return: None
+        """
+        t = t.rows() if isinstance(t, hl.MatrixTable) else t
+        # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
+        t.group_by(**group_exprs).aggregate(
+            **make_filters_sanity_check_expr(t, extra_filter_checks)
+        ).order_by(hl.desc("n")).show(n_rows, n_cols)
+
+    logger.info(
+        "Checking distributions of filtered variants amongst variant filters..."
+    )
+
+    new_filters_dict = {
+        "frac_vqsr": hl.agg.fraction(t.filters.contains("AS_VQSR")),
+        "frac_vqsr_only": hl.agg.fraction(
+            t.filters.contains("AS_VQSR") & (t.filters.length() == 1)
+        ),
+    }
+    _filter_agg_order(
+        t, {"is_filtered": t.is_filtered}, extra_filter_checks=new_filters_dict
+    )
+
+    logger.info("Checking distributions of variant type amongst variant filters...")
+    _filter_agg_order(
+        t, {"allele_type": t.info.allele_type}, extra_filter_checks=new_filters_dict
+    )
+
+    logger.info(
+        "Checking distributions of variant type and region type amongst variant filters..."
+    )
+    _filter_agg_order(
+        t,
+        {
+            "allele_type": t.info.allele_type,
+            "in_problematic_region": t.in_problematic_region,
+        },
+        50,
+        140,
+        extra_filter_checks=new_filters_dict,
+    )
+
+    logger.info(
+        "Checking distributions of variant type, region type, and number of alt alleles amongst variant filters..."
+    )
+    _filter_agg_order(
+        t,
+        {
+            "allele_type": t.info.allele_type,
+            "in_problematic_region": t.in_problematic_region,
+            "n_alt_alleles": t.info.n_alt_alleles,
+        },
+        50,
+        140,
+        extra_filter_checks=new_filters_dict,
+    )
+
+
 def sample_sum_check(
     t: Union[hl.MatrixTable, hl.Table],
     subset: str,
@@ -713,3 +822,71 @@ def vcf_field_check(
 
     logger.info("Passed VCF fields check!")
     return True
+
+
+def sanity_check_release_t(
+    t: Union[hl.MatrixTable, hl.Table],
+    subsets: List[str],
+    missingness_threshold: float = 0.5,
+    monoallelic_check: bool = True,
+    verbose: bool = True,
+    summarize_variants_check: bool=True,
+    filters_check: bool=True,
+) -> None:
+    """
+    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
+
+    Includes:
+    - Summaries of % filter status for different partitions of variants
+    - Histogram outlier bin checks
+    - Checks on AC, AN, and AF annotations
+    - Checks that subgroup annotation values add up to the supergroup annotation values
+    - Checks on sex-chromosome annotations; and summaries of % missingness in variant annotations
+
+    All annotations must be within an info struct, e.g. t.info.AC-raw.
+
+    :param t: Input MatrixTable or Table containing variant annotations to check.
+    :param subsets: List of subsets to be checked.
+    :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
+    :param monoallelic_check: Log how many monoallelic sites are in the Table; requires a monoallelic annotation within an info struct.
+    :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check
+        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :return: None (terminal display of results from the battery of sanity checks).
+    :rtype: None
+    """
+
+    # Perform basic checks -- number of variants, number of contigs, number of samples
+    if summarize_variants_check:
+        logger.info("BASIC SUMMARY OF INPUT TABLE:")
+        summarize_variants(t, monoallelic_check)
+
+    if filters_check:
+        logger.info("VARIANT FILTER SUMMARIES:")
+        filters_sanity_check(t)
+
+    logger.info("HISTOGRAM CHECKS:")
+    histograms_sanity_check(t, verbose=verbose)
+
+    logger.info("RAW AND ADJ CHECKS:")
+    raw_and_adj_sanity_checks(t, subsets, verbose)
+
+    logger.info("FREQUENCY CHECKS:")
+    subset_freq_sanity_checks(t, subsets, verbose)
+
+    # Pull row annotations from HT
+    info_metrics = list(t.row.info)
+    non_info_metrics = list(t.row)
+    non_info_metrics.remove("info")
+
+    logger.info("SAMPLE SUM CHECKS:")
+    sample_sum_sanity_checks(t, subsets, info_metrics, verbose)
+
+    logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
+    contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
+    sex_chr_sanity_checks(t, info_metrics, contigs, verbose)
+
+    logger.info("MISSINGNESS CHECKS:")
+    n_sites = t.count()
+    missingness_sanity_checks(
+        t, info_metrics, non_info_metrics, n_sites, missingness_threshold
+    )

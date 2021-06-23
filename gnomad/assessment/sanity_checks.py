@@ -42,7 +42,12 @@ def make_field_check_dicts(
 
 
 def generic_field_check_loop(
-    ht: hl.Table, field_check_expr: dict, field_check_details: dict, verbose: bool
+    ht: hl.Table,
+    field_check_expr: dict,
+    field_check_details: dict,
+    verbose: bool,
+    show_percent_sites: bool = False,
+    ht_count: int = None,
 ):
     """
     Loop through all conditional checks for a given hail Table.
@@ -63,6 +68,8 @@ def generic_field_check_loop(
             n_fail=n_fail,
             display_fields=field_check_details[check_description].display_fields,
             verbose=verbose,
+            show_percent_sites=show_percent_sites,
+            ht_count=ht_count,
         )
 
 
@@ -179,7 +186,7 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     filters = t.aggregate(hl.agg.counter(t.filters))
-    logger.info(f"hl.agg.counter filters: {filters}")
+    logger.info("hl.agg.counter filters: %s", filters)
 
     filtered_expr = hl.len(t.filters) > 0
     problematic_region_expr = hl.any(
@@ -264,6 +271,83 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         140,
         extra_filter_checks=new_filters_dict,
     )
+
+
+def subset_freq_sanity_checks(
+    t: Union[hl.MatrixTable, hl.Table],
+    subsets: List[str],
+    verbose: bool,
+    show_percent_sites: bool = True,
+    delimiter: str = "-",
+    metric_first_label: bool = True,
+) -> None:
+    """
+    Perform sanity checks on frequency data in input Table.
+
+    Check:
+        - Number of sites where callset frequency is equal to a subset frequency (raw and adj)
+            - eg. t.info.AC-adj != t.info.AC-subset1-adj 
+        - Total number of sites where the allele count annotation is defined (raw and adj)
+        
+    :param t: Input MatrixTable or Table.
+    :param subsets: List of sample subsets.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param show_percent_sites: If true, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
+    :param delimiter: String to use as delimiter when making group label combinations.
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+    field_check_expr = {}
+    field_check_details = {}
+    for subset in subsets:
+        if subset != "":
+            subset += delimiter
+            for field in ["AC", "AN", "nhomalt"]:
+                for group in ["adj", "raw"]:
+                    logger.info(
+                        "Comparing subset %s frequencies to entire callset", subset
+                    )
+                    check_field_left = f"{field}{delimiter}{group}"
+                    if metric_first_label:
+                        check_field_right = f"{field}{delimiter}{subset}{group}"
+                    else:
+                        check_field_right = f"{subset}{field}{delimiter}{group}"
+                    field_check_expr, field_check_details = make_field_check_dicts(
+                        field_check_expr=field_check_expr,
+                        field_check_details=field_check_details,
+                        check_description=f"{check_field_left} != {check_field_right}",
+                        cond_expr=t.info[check_field_left] == t.info[check_field_right],
+                        display_fields=hl.struct(
+                            **{
+                                check_field_left: t.info[check_field_left],
+                                check_field_right: t.info[check_field_right],
+                            }
+                        ),
+                    )
+
+    generic_field_check_loop(
+        t,
+        field_check_expr,
+        field_check_details,
+        verbose,
+        show_percent_sites=show_percent_sites,
+    )
+
+    freq_counts = t.aggregate(
+        hl.struct(
+            total_defined_AC=hl.agg.count_where(
+                hl.is_defined(t.info[f"AC{delimiter}adj"])
+            ),
+            total_defined_AC_raw=hl.agg.count_where(
+                hl.is_defined(t.info[f"AC{delimiter}raw"])
+            ),
+        )
+    )
+    logger.info("Frequency spot check counts: %d", freq_counts)
 
 
 def sample_sum_check(
@@ -830,8 +914,8 @@ def sanity_check_release_t(
     missingness_threshold: float = 0.5,
     monoallelic_check: bool = True,
     verbose: bool = True,
-    summarize_variants_check: bool=True,
-    filters_check: bool=True,
+    summarize_variants_check: bool = True,
+    filters_check: bool = True,
 ) -> None:
     """
     Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.

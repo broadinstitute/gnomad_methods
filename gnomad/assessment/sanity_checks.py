@@ -124,7 +124,9 @@ def generic_field_check(
 
 
 def make_filters_sanity_check_expr(
-    ht: hl.Table, extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None
+    ht: hl.Table,
+    extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
+    rf: bool = True,
 ) -> Dict[str, hl.expr.Expression]:
     """
     Make Hail expressions to measure % variants filtered under varying conditions of interest.
@@ -135,29 +137,33 @@ def make_filters_sanity_check_expr(
             - Any filter
             - Inbreeding coefficient filter in combination with any other filter
             - AC0 filter in combination with any other filter
-            - Random forest filtering in combination with any other filter
+            - VQSR or random forest filtering in combination with any other filter
             - Only inbreeding coefficient filter
             - Only AC0 filter
-            - Only random forest filtering
+            - Only VQSR or random forest filtering
 
     :param ht: Table containing 'filter' annotation to be examined.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
+    :param rf: True if the random forest was used for variant filtration, False if VQSR was used.
     :return: Dictionary containing Hail aggregation expressions to examine filter flags.
     """
+    variant_filter_method = "RF" if rf else "VQSR"
     filters_dict = {
         "n": hl.agg.count(),
         "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) != 0),
         "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("InbreedingCoeff")),
         "frac_ac0": hl.agg.fraction(ht.filters.contains("AC0")),
-        "frac_rf": hl.agg.fraction(ht.filters.contains("RF")),
+        f"frac_{variant_filter_method.lower()}": hl.agg.fraction(
+            ht.filters.contains(f"{variant_filter_method}")
+        ),
         "frac_inbreed_coeff_only": hl.agg.fraction(
             ht.filters.contains("InbreedingCoeff") & (ht.filters.length() == 1)
         ),
         "frac_ac0_only": hl.agg.fraction(
             ht.filters.contains("AC0") & (ht.filters.length() == 1)
         ),
-        "frac_rf_only": hl.agg.fraction(
-            ht.filters.contains("RF") & (ht.filters.length() == 1)
+        f"frac_{variant_filter_method.lower()}_only": hl.agg.fraction(
+            ht.filters.contains(f"{variant_filter_method}") & (ht.filters.length() == 1)
         ),
     }
     if extra_filter_checks:

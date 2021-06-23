@@ -181,7 +181,6 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
 
     :param t: Input MatrixTable or Table to be checked.
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -298,7 +297,6 @@ def subset_freq_sanity_checks(
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
 
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
     field_check_expr = {}
@@ -359,7 +357,7 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
-) -> None:
+) -> Tuple(dict, dict):
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
@@ -452,7 +450,6 @@ def sample_sum_sanity_checks(
     :param pop_names: Dict with global population names (keys) and population descriptions (values).
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -513,7 +510,7 @@ def summarize_variants(
 
     :param t: Input MatrixTable or Table to be checked.
     :param monoallelic_expr: Boolean expression to log how many monoallelic sites are in the Table.
-    :rtype: Struct
+    :return: Struct of variant summary
     """
 
     if isinstance(t, hl.MatrixTable):
@@ -554,7 +551,6 @@ def histograms_sanity_check(
         show only top values of annotations that fail checks.
     :param hists: List of variant annotation histograms.
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
     field_check_expr = {}
@@ -725,7 +721,6 @@ def sex_chr_sanity_checks(
         show only top values of annotations that fail checks.
     :param delimiter: String to use as the delimiter in XX metrics
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -807,7 +802,6 @@ def missingness_sanity_checks(
     :param n_sites: Number of sites in input Table.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness.
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -847,7 +841,6 @@ def vcf_field_check(
     :param row_annotations: List of row annotations in MatrixTable.
     :param hists: List of variant histogram annotations. Default is HISTS.
     :return: Bool with whether all expected fields and descriptions are present.
-    :rtype: bool
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -916,6 +909,12 @@ def sanity_check_release_t(
     verbose: bool = True,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
+    histograms_check: bool = True,
+    raw_adj_check: bool = True,
+    subset_freq_check: bool = True,
+    samples_sum_check: bool = True,
+    sex_chr_check: bool = True,
+    missingness_check: bool = True,
 ) -> None:
     """
     Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -935,8 +934,15 @@ def sanity_check_release_t(
     :param monoallelic_check: Log how many monoallelic sites are in the Table; requires a monoallelic annotation within an info struct.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :param summarize_variants_check: When true, runs the summarize_variants method.
+    :param filters_check: When true, runs the filters_sanity_check method.
+    :param histograms_check: When true, runs the histograms_sanity_check method.
+    :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method.
+    :param subset_freq_check: When true, runs the subset_freq_sanity_checks method.
+    :param samples_sum_check: When true, runs the sample_sum_sanity_checks method.
+    :param sex_chr_check: When true, runs the sex_chr_sanity_checks method.
+    :param missingness_check: When true, runs the missingness_sanity_checks method.
     :return: None (terminal display of results from the battery of sanity checks).
-    :rtype: None
     """
 
     # Perform basic checks -- number of variants, number of contigs, number of samples
@@ -948,29 +954,35 @@ def sanity_check_release_t(
         logger.info("VARIANT FILTER SUMMARIES:")
         filters_sanity_check(t)
 
-    logger.info("HISTOGRAM CHECKS:")
-    histograms_sanity_check(t, verbose=verbose)
+    if histograms_check:
+        logger.info("HISTOGRAM CHECKS:")
+        histograms_sanity_check(t, verbose=verbose)
 
-    logger.info("RAW AND ADJ CHECKS:")
-    raw_and_adj_sanity_checks(t, subsets, verbose)
+    if raw_adj_check:
+        logger.info("RAW AND ADJ CHECKS:")
+        raw_and_adj_sanity_checks(t, subsets, verbose)
 
-    logger.info("FREQUENCY CHECKS:")
-    subset_freq_sanity_checks(t, subsets, verbose)
+    if subset_freq_check:
+        logger.info("SUBSET FREQUENCY CHECKS:")
+        subset_freq_sanity_checks(t, subsets, verbose)
 
-    # Pull row annotations from HT
-    info_metrics = list(t.row.info)
-    non_info_metrics = list(t.row)
-    non_info_metrics.remove("info")
+    if samples_sum_check or sex_chr_check:
+        # Pull row annotations from HT
+        info_metrics = list(t.row.info)
+        if samples_sum_check:
+            logger.info("SAMPLE SUM CHECKS:")
+            sample_sum_sanity_checks(t, subsets, info_metrics, verbose)
 
-    logger.info("SAMPLE SUM CHECKS:")
-    sample_sum_sanity_checks(t, subsets, info_metrics, verbose)
+        if sex_chr_check:
+            logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
+            contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
+            sex_chr_sanity_checks(t, info_metrics, contigs, verbose)
 
-    logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
-    contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
-    sex_chr_sanity_checks(t, info_metrics, contigs, verbose)
-
-    logger.info("MISSINGNESS CHECKS:")
-    n_sites = t.count()
-    missingness_sanity_checks(
-        t, info_metrics, non_info_metrics, n_sites, missingness_threshold
-    )
+    if missingness_check:   
+        logger.info("MISSINGNESS CHECKS:")
+        non_info_metrics = list(t.row)
+        non_info_metrics.remove("info")
+        n_sites = t.count()
+        missingness_sanity_checks(
+            t, info_metrics, non_info_metrics, n_sites, missingness_threshold
+        )

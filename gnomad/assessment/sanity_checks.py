@@ -509,3 +509,72 @@ def raw_and_adj_sanity_checks(
             )
 
     generic_field_check_loop(t, field_check_expr, field_check_details, verbose)
+
+
+def sex_chr_sanity_checks(
+    t: Union[hl.MatrixTable, hl.Table],
+    info_metrics: List[str],
+    contigs: List[str],
+    verbose: bool,
+    delimiter: str = "-",
+) -> None:
+    """
+    Performs sanity checks for annotations on the sex chromosomes.
+    Check:
+        - That metrics for chrY variants in XX samples are NA and not 0
+        - That nhomalt counts are equal to XX nhomalt counts for all non-PAR chrX variants
+
+    :param t: Input MatrixTable or Table.
+    :param info_metrics: List of metrics in info struct of input Table.
+    :param contigs: List of contigs present in input Table.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param delimiter: String to use as the delimiter in XX metrics
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
+    xx_metrics = [
+        x for x in info_metrics if f"{delimiter}female" in x or f"{delimiter}XX" in x
+    ]
+
+    if "chrY" in contigs:
+        logger.info("Check values of XX metrics for Y variants are NA:")
+        t_y = hl.filter_intervals(t, [hl.parse_locus_interval("chrY")])
+        metrics_values = {}
+        for metric in xx_metrics:
+            metrics_values[metric] = hl.agg.any(hl.is_defined(t_y.info[metric]))
+        output = dict(t_y.aggregate(hl.struct(**metrics_values)))
+        for metric, value in output.items():
+            if value:
+                values_found = t_y.aggregate(
+                    hl.agg.filter(
+                        hl.is_defined(t_y.info[metric]),
+                        hl.agg.take(t_y.info[metric], 1),
+                    )
+                )
+                logger.info(
+                    "FAILED %s = %s check for Y variants. Values found: %s", metric, None, values_found
+                )
+            else:
+                logger.info("PASSED %s = %s check for Y variants", metric, None)
+
+    t_x = hl.filter_intervals(t, [hl.parse_locus_interval("chrX")])
+    t_xnonpar = t_x.filter(t_x.locus.in_x_nonpar())
+    n = t_xnonpar.count()
+    logger.info("Found %d X nonpar sites", n)
+
+    logger.info("Check (nhomalt == nhomalt_xx) for X nonpar variants:")
+    xx_metrics = [x for x in xx_metrics if "nhomalt" in x]
+    for metric in xx_metrics:
+        standard_field = metric.replace(f"{delimiter}female", "").replace(
+            f"{delimiter}XX", ""
+        )
+        generic_field_check(
+            t_xnonpar,
+            (t_xnonpar.info[f"{metric}"] != t_xnonpar.info[f"{standard_field}"]),
+            f"{metric} == {standard_field}",
+            [f"info.{metric}", f"info.{standard_field}"],
+            verbose,
+        )

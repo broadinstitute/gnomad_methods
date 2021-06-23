@@ -567,14 +567,69 @@ def sex_chr_sanity_checks(
 
     logger.info("Check (nhomalt == nhomalt_xx) for X nonpar variants:")
     xx_metrics = [x for x in xx_metrics if "nhomalt" in x]
+
+    field_check_expr = {}
+    field_check_details = {}
     for metric in xx_metrics:
         standard_field = metric.replace(f"{delimiter}female", "").replace(
             f"{delimiter}XX", ""
         )
-        generic_field_check(
-            t_xnonpar,
-            (t_xnonpar.info[f"{metric}"] != t_xnonpar.info[f"{standard_field}"]),
-            f"{metric} == {standard_field}",
-            [f"info.{metric}", f"info.{standard_field}"],
-            verbose,
+        check_field_left = f"{metric}"
+        check_field_right = f"{standard_field}"
+        field_check_expr, field_check_details = make_field_check_dicts(
+            field_check_expr=field_check_expr,
+            field_check_details=field_check_details,
+            check_description=f"{check_field_left} == {check_field_right}",
+            cond_expr=t_xnonpar.info[check_field_left]
+            != t_xnonpar.info[check_field_right],
+            display_fields=hl.struct(
+                **{
+                    check_field_left: t_xnonpar.info[check_field_left],
+                    check_field_right: t_xnonpar.info[check_field_right],
+                }
+            ),
         )
+
+    generic_field_check_loop(t_xnonpar, field_check_expr, field_check_details, verbose)
+
+
+def missingness_sanity_checks(
+    t: Union[hl.MatrixTable, hl.Table],
+    info_metrics: List[str],
+    non_info_metrics: List[str],
+    n_sites: int,
+    missingness_threshold: float,
+) -> None:
+    """
+    Check amount of missingness in all row annotations.
+    Print metric to sdout if the metric annotations missingness exceeds the missingness_threshold.
+
+    :param t: Input MatrixTable or Table.
+    :param info_metrics: List of metrics in info struct of input Table.
+    :param non_info_metrics: List of row annotations minus info struct from input Table.
+    :param n_sites: Number of sites in input Table.
+    :param missingness_threshold: Upper cutoff for allowed amount of missingness.
+    :return: None
+    :rtype: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
+    logger.info(
+        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %d", missingness_threshold
+    )
+    metrics_frac_missing = {}
+    for x in info_metrics:
+        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(t.info[x])) / n_sites
+    for x in non_info_metrics:
+        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(t[x])) / n_sites
+    output = t.aggregate(hl.struct(**metrics_frac_missing))
+
+    n_fail = 0
+    for metric, value in dict(output).items():
+        message = "missingness check for %s: %d% missing", metric, 100 * value
+        if value > missingness_threshold:
+            logger.info("FAILED %s", message)
+            n_fail += 1
+        else:
+            logger.info("Passed %s", message)
+    logger.info("%d missing metrics checks failed", n_fail)

@@ -556,7 +556,10 @@ def sex_chr_sanity_checks(
                     )
                 )
                 logger.info(
-                    "FAILED %s = %s check for Y variants. Values found: %s", metric, None, values_found
+                    "FAILED %s = %s check for Y variants. Values found: %s",
+                    metric,
+                    None,
+                    values_found,
                 )
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
@@ -616,7 +619,8 @@ def missingness_sanity_checks(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %d", missingness_threshold
+        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %d",
+        missingness_threshold,
     )
     metrics_frac_missing = {}
     for x in info_metrics:
@@ -688,7 +692,9 @@ def vcf_field_check(
                     )
                     temp_missing_descriptions.append(field)
             except KeyError:
-                logger.warning("%s in T info field does not exist in VCF header!", field)
+                logger.warning(
+                    "%s in T info field does not exist in VCF header!", field
+                )
                 # NOTE: some hists are not exported, so ignoring here
                 # END entry is also not exported (removed during densify)
                 if (field not in hist_fields) and (field != "END"):

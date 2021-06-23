@@ -58,6 +58,8 @@ def generic_field_check_loop(
     :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param ht_count: Previously computed sum of sites within hail Table. 
     """
     ht_field_check_counts = ht.aggregate(hl.struct(**field_check_expr))
     for check_description, n_fail in ht_field_check_counts.items():
@@ -352,8 +354,6 @@ def sample_sum_check(
     t: Union[hl.MatrixTable, hl.Table],
     subset: str,
     label_groups: Dict[str, List[str]],
-    verbose: bool,
-    subpop: bool = None,
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
@@ -369,7 +369,6 @@ def sample_sum_check(
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
-    :param subpop: Subpop abbreviation, supplied only if subpopulations are included in the annotation groups being checked.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
@@ -443,11 +442,13 @@ def sample_sum_sanity_checks(
     Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
     Also checks that annotations for all expected sample populations are present.
-    :param hl.Table ht: Input Table.
-    :param List[str] subsets: List of sample subsets.
-    :param bool verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+    :param ht: Input Table.
+    :param subsets: List of sample subsets.
+    :param pops: List of pops in table.
+    :param sexes: List of sexes in table.
+    :param subset_pops: Dict with subset (keys) and populations within subset (values).
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
-    :param pop_names: Dict with global population names (keys) and population descriptions (values).
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
     """
@@ -907,6 +908,9 @@ def sanity_check_release_t(
     missingness_threshold: float = 0.5,
     monoallelic_check: bool = True,
     verbose: bool = True,
+    show_percent_sites: bool = True,
+    delimiter: str = "-",
+    metric_first_label: bool = True,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
     histograms_check: bool = True,
@@ -934,6 +938,8 @@ def sanity_check_release_t(
     :param monoallelic_check: Log how many monoallelic sites are in the Table; requires a monoallelic annotation within an info struct.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
     :param histograms_check: When true, runs the histograms_sanity_check method.
@@ -960,25 +966,24 @@ def sanity_check_release_t(
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")
-        raw_and_adj_sanity_checks(t, subsets, verbose)
+        raw_and_adj_sanity_checks(t, subsets, verbose, delimiter, metric_first_label)
 
     if subset_freq_check:
         logger.info("SUBSET FREQUENCY CHECKS:")
-        subset_freq_sanity_checks(t, subsets, verbose)
+        subset_freq_sanity_checks(t, subsets, verbose, show_percent_sites, delimiter, metric_first_label)
 
-    if samples_sum_check or sex_chr_check:
-        # Pull row annotations from HT
-        info_metrics = list(t.row.info)
-        if samples_sum_check:
-            logger.info("SAMPLE SUM CHECKS:")
-            sample_sum_sanity_checks(t, subsets, info_metrics, verbose)
+    if samples_sum_check:
+        logger.info("SAMPLE SUM CHECKS:")
+        sample_sum_sanity_checks(t, subsets, verbose, metric_first_label)
 
-        if sex_chr_check:
-            logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
-            contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
-            sex_chr_sanity_checks(t, info_metrics, contigs, verbose)
+    info_metrics = list(t.row.info)
 
-    if missingness_check:   
+    if sex_chr_check:
+        logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
+        contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
+        sex_chr_sanity_checks(t, info_metrics, contigs, verbose)
+
+    if missingness_check:
         logger.info("MISSINGNESS CHECKS:")
         non_info_metrics = list(t.row)
         non_info_metrics.remove("info")

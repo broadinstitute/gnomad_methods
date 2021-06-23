@@ -297,7 +297,6 @@ def subset_freq_sanity_checks(
     :param show_percent_sites: If true, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
-
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -442,7 +441,7 @@ def sample_sum_sanity_checks(
     Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
     Also checks that annotations for all expected sample populations are present.
-    :param ht: Input Table.
+    :param t: Input Table.
     :param subsets: List of sample subsets.
     :param pops: List of pops in table.
     :param sexes: List of sexes in table.
@@ -642,7 +641,7 @@ def raw_and_adj_sanity_checks(
         )
 
     # Check raw AN > 0
-    check_field = "AN-raw"
+    check_field = f"AN{delimiter}raw"
     field_check_expr, field_check_details = make_field_check_dicts(
         field_check_expr=field_check_expr,
         field_check_details=field_check_details,
@@ -652,7 +651,7 @@ def raw_and_adj_sanity_checks(
     )
 
     # Check adj AN >= 0
-    check_field = "AN-adj"
+    check_field = f"AN{delimiter}adj"
     field_check_expr, field_check_details = make_field_check_dicts(
         field_check_expr=field_check_expr,
         field_check_details=field_check_details,
@@ -662,8 +661,8 @@ def raw_and_adj_sanity_checks(
     )
     # Check overall gnomad's raw subfields >= adj
     for subfield in ["AC", "AN", "nhomalt"]:
-        check_field_left = f"{subfield}-raw"
-        check_field_right = f"{subfield}-adj"
+        check_field_left = f"{subfield}{delimiter}raw"
+        check_field_right = f"{subfield}{delimiter}adj"
         field_check_expr, field_check_details = make_field_check_dicts(
             field_check_expr=field_check_expr,
             field_check_details=field_check_details,
@@ -841,7 +840,7 @@ def vcf_field_check(
     :param header_dict: VCF header dictionary.
     :param row_annotations: List of row annotations in MatrixTable.
     :param hists: List of variant histogram annotations. Default is HISTS.
-    :return: Bool with whether all expected fields and descriptions are present.
+    :return: Boolean with whether all expected fields and descriptions are present.
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -978,18 +977,22 @@ def sanity_check_release_t(
 
     if subset_freq_check:
         logger.info("SUBSET FREQUENCY CHECKS:")
-        subset_freq_sanity_checks(t, subsets, verbose, show_percent_sites, delimiter, metric_first_label)
+        subset_freq_sanity_checks(
+            t, subsets, verbose, show_percent_sites, delimiter, metric_first_label
+        )
 
     if samples_sum_check:
         logger.info("SAMPLE SUM CHECKS:")
-        sample_sum_sanity_checks(t, subsets, pops, sexes, subset_pops, verbose, metric_first_label)
+        sample_sum_sanity_checks(
+            t, subsets, pops, sexes, subset_pops, verbose, metric_first_label
+        )
 
     info_metrics = list(t.row.info)
 
     if sex_chr_check:
         logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
         contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
-        sex_chr_sanity_checks(t, info_metrics, contigs, verbose)
+        sex_chr_sanity_checks(t, info_metrics, contigs, verbose, delimiter)
 
     if missingness_check:
         logger.info("MISSINGNESS CHECKS:")

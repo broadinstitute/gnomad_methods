@@ -911,6 +911,10 @@ def sanity_check_release_t(
     show_percent_sites: bool = True,
     delimiter: str = "-",
     metric_first_label: bool = True,
+    hists: List[str] = HISTS,
+    pops: List[str] = POPS,
+    sexes: List[str] = SEXES,
+    subset_pops: Dict[str, List[str]] = {"hgdp": HGDP_POPS, "tgp": TGP_POPS},
     summarize_variants_check: bool = True,
     filters_check: bool = True,
     histograms_check: bool = True,
@@ -940,6 +944,10 @@ def sanity_check_release_t(
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :param hists: List of variant annotation histograms.
+    :param pops: List of pops in table.
+    :param sexes: List of sexes in table.
+    :param subset_pops: Dict with subset (keys) and populations within subset (values).
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
     :param histograms_check: When true, runs the histograms_sanity_check method.
@@ -962,7 +970,7 @@ def sanity_check_release_t(
 
     if histograms_check:
         logger.info("HISTOGRAM CHECKS:")
-        histograms_sanity_check(t, verbose=verbose)
+        histograms_sanity_check(t, verbose, hists)
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")
@@ -974,7 +982,7 @@ def sanity_check_release_t(
 
     if samples_sum_check:
         logger.info("SAMPLE SUM CHECKS:")
-        sample_sum_sanity_checks(t, subsets, verbose, metric_first_label)
+        sample_sum_sanity_checks(t, subsets, pops, sexes, subset_pops, verbose, metric_first_label)
 
     info_metrics = list(t.row.info)
 

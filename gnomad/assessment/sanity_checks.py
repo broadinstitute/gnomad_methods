@@ -382,7 +382,8 @@ def sample_sum_check(
 
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    if subset:  # TODO: add & subset != "":
+    # Check if subset is "" which is added to check entire callset but does not need the added delimiter 
+    if subset & subset != "": 
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
@@ -804,7 +805,7 @@ def missingness_sanity_checks(
 ) -> None:
     """
     Check amount of missingness in all row annotations.
-    
+
     Print metric to sdout if the metric annotations missingness exceeds the missingness_threshold.
 
     :param t: Input MatrixTable or Table.

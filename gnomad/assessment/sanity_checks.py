@@ -386,6 +386,7 @@ def sample_sum_check(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
+    # Grab the adj group for checks
     group = label_groups.pop("group")[0]
     alt_groups = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
@@ -468,6 +469,7 @@ def sample_sum_sanity_checks(
         if subset_pops and subset in subset_pops:
             pop_names = subset_pops[subset]
 
+        # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
         field_check_expr_s, field_check_details_s = sample_sum_check(
             t, subset, metric_first_label, dict(group=["adj"], pop=pop_names), verbose,
         )

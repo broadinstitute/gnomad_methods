@@ -445,9 +445,11 @@ def sample_sum_sanity_checks(
 ) -> None:
     """
     Performs sanity checks on sample sums in input Table.
+
     Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
     Also checks that annotations for all expected sample populations are present.
+
     :param t: Input Table.
     :param subsets: List of sample subsets.
     :param pops: List of pops in table.
@@ -802,6 +804,7 @@ def missingness_sanity_checks(
 ) -> None:
     """
     Check amount of missingness in all row annotations.
+    
     Print metric to sdout if the metric annotations missingness exceeds the missingness_threshold.
 
     :param t: Input MatrixTable or Table.

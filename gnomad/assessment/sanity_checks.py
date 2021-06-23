@@ -261,9 +261,9 @@ def sample_sum_sanity_checks(
     :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
     # Add "" for sum checks on entire callset
     subsets.append("")
-    # Perform sample sum checks per subset
     field_check_expr = {}
     field_check_details = {}
     for subset in subsets:
@@ -404,6 +404,7 @@ def raw_and_adj_sanity_checks(
     subsets: List[str],
     verbose: bool,
     delimiter: str = "-",
+    metric_first_label: bool = True,
 ) -> None:
     """
     Perform sanity checks on raw and adj data in input Table/MatrixTable.
@@ -420,69 +421,91 @@ def raw_and_adj_sanity_checks(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :param delimiter: String to use as delimiter when making group label combinations.
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
-    :rtype: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    for field in ["AC", "AF"]:
-        field = f"{field}{delimiter}"
+    field_check_expr = {}
+    field_check_details = {}
+    for subfield in ["AC", "AF"]:
         # Check raw AC, AF > 0
-        generic_field_check(
-            t,
-            cond_expr=(t.info[f"{field}raw"] <= 0),
-            check_description=f"{field}raw > 0",
-            display_fields=[f"info.{field}raw"],
-            verbose=verbose,
+        check_field = f"{subfield}{delimiter}raw"
+        field_check_expr, field_check_details = make_field_check_dicts(
+            field_check_expr=field_check_expr,
+            field_check_details=field_check_details,
+            check_description=f"{check_field} > 0",
+            cond_expr=t.info[check_field] <= 0,
+            display_fields=hl.struct(**{check_field: t.info[check_field]}),
         )
-        # Check adj AC, AF >=0
-        generic_field_check(
-            t,
-            cond_expr=(t.info[f"{field}adj"] < 0),
-            check_description=f"{field}adj >= 0",
-            display_fields=[f"info.{field}adj", "filters"],
-            verbose=verbose,
+
+        check_field = f"{subfield}{delimiter}adj"
+        field_check_expr, field_check_details = make_field_check_dicts(
+            field_check_expr=field_check_expr,
+            field_check_details=field_check_details,
+            check_description=f"{check_field} >= 0",
+            cond_expr=t.info[check_field] < 0,
+            display_fields=hl.struct(
+                **{check_field: t.info[check_field], "filters": t.filters}
+            ),
         )
 
     # Check raw AN > 0
-    an_raw_field = f"AN{delimiter}raw"
-    generic_field_check(
-        t,
-        cond_expr=(t.info[an_raw_field] <= 0),
-        check_description=f"{an_raw_field} > 0",
-        display_fields=[f"info.{an_raw_field}"],
-        verbose=verbose,
+    check_field = "AN-raw"
+    field_check_expr, field_check_details = make_field_check_dicts(
+        field_check_expr=field_check_expr,
+        field_check_details=field_check_details,
+        check_description=f"{check_field} > 0",
+        cond_expr=t.info[check_field] <= 0,
+        display_fields=hl.struct(**{check_field: t.info[check_field]}),
     )
 
-    an_adj_field = f"AN{delimiter}adj"
     # Check adj AN >= 0
-    generic_field_check(
-        t,
-        cond_expr=(t.info[an_adj_field] < 0),
-        check_description=f"{an_adj_field} >= 0",
-        display_fields=[f"info.{an_adj_field}"],
-        verbose=verbose,
+    check_field = "AN-adj"
+    field_check_expr, field_check_details = make_field_check_dicts(
+        field_check_expr=field_check_expr,
+        field_check_details=field_check_details,
+        check_description=f"{check_field} >= 0",
+        cond_expr=t.info[check_field] < 0,
+        display_fields=hl.struct(**{check_field: t.info[check_field]}),
     )
-
-    # Check overall raw subfields >= adj
-    for field in ["AC", "AN", "nhomalt"]:
-        field = f"{field}{delimiter}"
-        generic_field_check(
-            t,
-            cond_expr=(t.info[f"{field}raw"] < t.info[f"{field}adj"]),
-            check_description=f"{field}raw >= {field}adj",
-            display_fields=[f"info.{field}raw", f"info.{field}adj",],
-            verbose=verbose,
+    # Check overall gnomad's raw subfields >= adj
+    for subfield in ["AC", "AN", "nhomalt"]:
+        check_field_left = f"{subfield}-raw"
+        check_field_right = f"{subfield}-adj"
+        field_check_expr, field_check_details = make_field_check_dicts(
+            field_check_expr=field_check_expr,
+            field_check_details=field_check_details,
+            check_description=f"{check_field_left} >= {check_field_right}",
+            cond_expr=t.info[check_field_left] < t.info[check_field_right],
+            display_fields=hl.struct(
+                **{
+                    check_field_left: t.info[check_field_left],
+                    check_field_right: t.info[check_field_right],
+                }
+            ),
         )
 
-    for subset in subsets:
-        for field in ["AC", "AN", "nhomalt"]:
-            # Check AC_raw >= AC adj
-            field = f"{field}{delimiter}{subset}{delimiter}"
-            generic_field_check(
-                t,
-                cond_expr=(t.info[f"{field}raw"] < t.info[f"{field}adj"]),
-                check_description=f"{field}raw >= {field}adj",
-                display_fields=[f"info.{field}raw", f"info.{field}adj",],
-                verbose=verbose,
+        for subset in subsets:
+            field_check_label = (
+                f"{subfield}{delimiter}{subset}{delimiter}"
+                if metric_first_label
+                else f"{subset}{delimiter}{subfield}{delimiter}"
             )
+            check_field_left = f"{field_check_label}raw"
+            check_field_right = f"{field_check_label}adj"
+
+            field_check_expr, field_check_details = make_field_check_dicts(
+                field_check_expr=field_check_expr,
+                field_check_details=field_check_details,
+                check_description=f"{check_field_left} >= {check_field_right}",
+                cond_expr=t.info[check_field_left] < t.info[check_field_right],
+                display_fields=hl.struct(
+                    **{
+                        check_field_left: t.info[check_field_left],
+                        check_field_right: t.info[check_field_right],
+                    }
+                ),
+            )
+
+    generic_field_check_loop(t, field_check_expr, field_check_details, verbose)

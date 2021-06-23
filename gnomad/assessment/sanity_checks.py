@@ -186,7 +186,7 @@ def sample_sum_check(
 
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    if subset: # TODO: add & subset != "":
+    if subset:  # TODO: add & subset != "":
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
@@ -210,7 +210,7 @@ def sample_sum_check(
             else:
                 logger.info("%s is not in table's info field", field)
 
-        annot_dict[f"sum_{subfield}"]= hl.sum(subfield_values)
+        annot_dict[f"sum_{subfield}"] = hl.sum(subfield_values)
 
     field_check_expr = {}
     field_check_details = {}
@@ -235,7 +235,7 @@ def sample_sum_check(
         )
 
     return field_check_expr, field_check_details
-    
+
 
 def sample_sum_sanity_checks(
     t: Union[hl.MatrixTable, hl.Table],
@@ -272,11 +272,7 @@ def sample_sum_sanity_checks(
             pop_names = subset_pops[subset]
 
         field_check_expr_s, field_check_details_s = sample_sum_check(
-            t,
-            subset,
-            metric_first_label,
-            dict(group=["adj"], pop=pop_names),
-            verbose,
+            t, subset, metric_first_label, dict(group=["adj"], pop=pop_names), verbose,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_details.update(field_check_details_s)

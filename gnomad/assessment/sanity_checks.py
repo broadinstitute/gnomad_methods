@@ -119,7 +119,7 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
-) -> Tuple(dict, dict):
+) -> Tuple[dict, dict]:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
@@ -319,7 +319,7 @@ def make_field_check_dicts(
     check_description: str,
     cond_expr: hl.expr.BooleanExpression,
     display_fields: List[str],
-) -> Tuple(dict, dict):
+) -> Tuple[dict, dict]:
     """
     Create dictionary for aggregating each sanity check's failure count and another for each check's details.
 

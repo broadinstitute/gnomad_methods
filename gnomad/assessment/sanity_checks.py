@@ -55,7 +55,7 @@ def generic_field_check(
     if n_fail > 0:
         logger.info("Found %d sites that fail %s check:", n_fail, check_description)
         if show_percent_sites:
-            logger.info("Percentage of sites that fail: %d", n_fail / ht_count)
+            logger.info("Percentage of sites that fail: %.2f %%", 100*(n_fail/ht_count))
         ht.select(**display_fields).show()
     else:
         logger.info("PASSED %s check", check_description)
@@ -129,8 +129,6 @@ def sample_sum_check(
     :param subset: String indicating sample subset.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
@@ -139,7 +137,7 @@ def sample_sum_check(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     # Check if subset is "" which is added to check entire callset but does not need the added delimiter
-    if subset & subset != "":
+    if subset != "":
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
@@ -171,10 +169,10 @@ def sample_sum_check(
     for subfield in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
             check_field_left = f"{subfield}{delimiter}{subset}{group}"
+            check_field_right = f"sum_{subfield}{delimiter}{subset}{group}{delimiter}{alt_groups}"
         else:
             check_field_left = f"{subset}{subfield}{delimiter}{group}"
-
-        check_field_right = f"sum_{subfield}{delimiter}{group}{delimiter}{alt_groups}"
+            check_field_right = f"sum_{subset}{subfield}{delimiter}{group}{delimiter}{alt_groups}"
         field_check_expr, field_check_details = make_field_check_dicts(
             field_check_expr=field_check_expr,
             field_check_details=field_check_details,
@@ -446,7 +444,7 @@ def subset_freq_sanity_checks(
             ),
         )
     )
-    logger.info("Frequency spot check counts: %d", freq_counts)
+    logger.info("Frequency spot check counts: %s", hl.eval(freq_counts))
 
 
 def sample_sum_sanity_checks(
@@ -456,6 +454,8 @@ def sample_sum_sanity_checks(
     sexes: List[str] = SEXES,
     subset_pops: Dict[str, List[str]] = {"hgdp": HGDP_POPS, "tgp": TGP_POPS},
     verbose: bool = False,
+    sort_order: List[str] = SORT_ORDER,
+    delimiter: str = "-",
     metric_first_label: bool = True,
 ) -> None:
     """
@@ -488,21 +488,22 @@ def sample_sum_sanity_checks(
 
         # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
         field_check_expr_s, field_check_details_s = sample_sum_check(
-            t, subset, metric_first_label, dict(group=["adj"], pop=pop_names), verbose,
+            t, subset, dict(group=["adj"], pop=pop_names), sort_order, delimiter, metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_details.update(field_check_details_s)
         field_check_expr_s, field_check_details_s = sample_sum_check(
-            t, subset, metric_first_label, dict(group=["adj"], sex=sexes), verbose
+            t, subset, dict(group=["adj"], sex=sexes), sort_order, delimiter, metric_first_label, 
         )
         field_check_expr.update(field_check_expr_s)
         field_check_details.update(field_check_details_s)
         field_check_expr_s, field_check_details_s = sample_sum_check(
             t,
             subset,
-            metric_first_label,
             dict(group=["adj"], pop=list(set(pop_names)), sex=sexes),
-            verbose,
+            sort_order,
+            delimiter,
+            metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_details.update(field_check_details_s)
@@ -920,7 +921,7 @@ def sanity_check_release_t(
     subsets: List[str],
     missingness_threshold: float = 0.5,
     monoallelic_check: bool = True,
-    verbose: bool = True,
+    verbose: bool = False,
     show_percent_sites: bool = True,
     delimiter: str = "-",
     metric_first_label: bool = True,
@@ -928,6 +929,7 @@ def sanity_check_release_t(
     pops: List[str] = POPS,
     sexes: List[str] = SEXES,
     subset_pops: Dict[str, List[str]] = {"hgdp": HGDP_POPS, "tgp": TGP_POPS},
+    sort_order: List[str] = SORT_ORDER,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
     histograms_check: bool = True,
@@ -961,6 +963,7 @@ def sanity_check_release_t(
     :param pops: List of pops in table.
     :param sexes: List of sexes in table.
     :param subset_pops: Dict with subset (keys) and populations within subset (values).
+    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
     :param histograms_check: When true, runs the histograms_sanity_check method.
@@ -996,7 +999,7 @@ def sanity_check_release_t(
     if samples_sum_check:
         logger.info("SAMPLE SUM CHECKS:")
         sample_sum_sanity_checks(
-            t, subsets, pops, sexes, subset_pops, verbose, metric_first_label
+            t, subsets, pops, sexes, subset_pops, verbose, sort_order, delimiter, metric_first_label
         )
 
     info_metrics = list(t.row.info)

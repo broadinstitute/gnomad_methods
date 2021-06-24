@@ -1,5 +1,3 @@
-# noqa: D100
-
 import logging
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -821,7 +819,7 @@ def missingness_sanity_checks(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %d",
+        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %.2f",
         missingness_threshold,
     )
     metrics_frac_missing = {}
@@ -833,12 +831,11 @@ def missingness_sanity_checks(
 
     n_fail = 0
     for metric, value in dict(output).items():
-        message = "missingness check for %s: %d% missing", metric, 100 * value
         if value > missingness_threshold:
-            logger.info("FAILED %s", message)
+            logger.info("FAILED missingness check for %s: %.2f %% missing", metric, 100*value)
             n_fail += 1
         else:
-            logger.info("Passed %s", message)
+            logger.info("Passed missingness check for %s: %.2f %% missing", metric, 100*value)
     logger.info("%d missing metrics checks failed", n_fail)
 
 
@@ -1017,3 +1014,4 @@ def sanity_check_release_t(
         missingness_sanity_checks(
             t, info_metrics, non_info_metrics, n_sites, missingness_threshold
         )
+    logger.info("SANITY CHECKS COMPLETE")

@@ -687,10 +687,13 @@ def raw_and_adj_sanity_checks(
         )
 
         for subset in subsets:
+            # Add delimiter for subsets but not "" representing entire callset
+            if subset != "":
+                subset += delimiter
             field_check_label = (
-                f"{subfield}{delimiter}{subset}{delimiter}"
+                f"{subfield}{delimiter}{subset}"
                 if metric_first_label
-                else f"{subset}{delimiter}{subfield}{delimiter}"
+                else f"{subset}{subfield}{delimiter}"
             )
             check_field_left = f"{field_check_label}raw"
             check_field_right = f"{field_check_label}adj"

@@ -15,66 +15,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def make_field_check_dicts(
-    field_check_expr: dict,
-    field_check_details: dict,
-    check_description: str,
-    cond_expr: hl.expr.BooleanExpression,
-    display_fields: List[str],
-) -> Tuple(dict, dict):
-    """
-    Create dictionary for aggregating each sanity check's failure count and another for each check's details.
-
-    :param field_check_expr: Dictionary of check description and aggregated expression filtering count
-    :param field_check_details: Dictionary of structs containing each check descriptions details
-    :param check_description: Check to be added to the dictionary
-    :param cond_expr: Logical expression referring to annotations in ht to be checked.
-    :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes);
-        these fields are also displayed if verbose is True.
-    :return: Tuple of dictionaries
-    """
-    field_check_expr[check_description] = hl.agg.filter(cond_expr, hl.agg.count())
-    field_check_details[check_description] = hl.struct(
-        cond_expr=cond_expr, display_fields=display_fields
-    )
-
-    return field_check_expr, field_check_details
-
-
-def generic_field_check_loop(
-    ht: hl.Table,
-    field_check_expr: dict,
-    field_check_details: dict,
-    verbose: bool,
-    show_percent_sites: bool = False,
-    ht_count: int = None,
-):
-    """
-    Loop through all conditional checks for a given hail Table.
-
-    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check. 
-    :param ht: Table containing annotations to be checked.
-    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
-    :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
-    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param ht_count: Previously computed sum of sites within hail Table. 
-    """
-    ht_field_check_counts = ht.aggregate(hl.struct(**field_check_expr))
-    for check_description, n_fail in ht_field_check_counts.items():
-        generic_field_check(
-            ht,
-            cond_expr=field_check_details[check_description].cond_expr,
-            check_description=check_description,
-            n_fail=n_fail,
-            display_fields=field_check_details[check_description].display_fields,
-            verbose=verbose,
-            show_percent_sites=show_percent_sites,
-            ht_count=ht_count,
-        )
-
-
 def generic_field_check(
     ht: hl.Table,
     cond_expr: hl.expr.BooleanExpression,
@@ -170,6 +110,99 @@ def make_filters_sanity_check_expr(
         filters_dict.update(extra_filter_checks)
 
     return filters_dict
+
+
+def sample_sum_check(
+    t: Union[hl.MatrixTable, hl.Table],
+    subset: str,
+    label_groups: Dict[str, List[str]],
+    sort_order: List[str] = SORT_ORDER,
+    delimiter: str = "-",
+    metric_first_label: bool = True,
+) -> Tuple(dict, dict):
+    """
+    Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
+
+    For example, if pop1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
+
+    :param t: Input MatrixTable or Table containing annotations to be summed.
+    :param subset: String indicating sample subset.
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
+        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
+    :param delimiter: String to use as delimiter when making group label combinations.
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :return: Tuple of dictionaries
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
+    # Check if subset is "" which is added to check entire callset but does not need the added delimiter
+    if subset & subset != "":
+        subset += delimiter
+
+    label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
+    # Grab the adj group for checks
+    group = label_groups.pop("group")[0]
+    alt_groups = delimiter.join(
+        sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
+    )
+    info_fields = t.info.keys()
+
+    annot_dict = {}
+    for subfield in ["AC", "AN", "nhomalt"]:
+        subfield_values = []
+        for x in label_combos:
+            if metric_first_label:
+                field = f"{subfield}{delimiter}{subset}{x}"
+            else:
+                field = f"{subset}{subfield}{delimiter}{x}"
+
+            if field in info_fields:
+                subfield_values.append(t.info[field])
+            else:
+                logger.info("%s is not in table's info field", field)
+
+        annot_dict[f"sum_{subfield}"] = hl.sum(subfield_values)
+
+    field_check_expr = {}
+    field_check_details = {}
+    for subfield in ["AC", "AN", "nhomalt"]:
+        if metric_first_label:
+            check_field_left = f"{subfield}{delimiter}{subset}{group}"
+        else:
+            check_field_left = f"{subset}{subfield}{delimiter}{group}"
+
+        check_field_right = f"sum_{subfield}{delimiter}{group}{delimiter}{alt_groups}"
+        field_check_expr, field_check_details = make_field_check_dicts(
+            field_check_expr=field_check_expr,
+            field_check_details=field_check_details,
+            check_description=f"{check_field_left} = {check_field_right}",
+            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{subfield}"],
+            display_fields=hl.struct(
+                **{
+                    check_field_left: t.info[check_field_left],
+                    f"sum_{subfield}": annot_dict[f"sum_{subfield}"],
+                }
+            ),
+        )
+
+    return field_check_expr, field_check_details
+
+
+def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
+    """
+    Check if the row counts in two Tables are the same.
+
+    :param ht1: First Table to be checked
+    :param ht2: Second Table to be checked
+    :return: Whether the row counts are the same
+    """
+    r_count1 = ht1.count()
+    r_count2 = ht2.count()
+    logger.info("%d rows in left table; %d rows in right table", r_count1, r_count2)
+    return r_count1 == r_count2
 
 
 def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
@@ -280,6 +313,66 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
     )
 
 
+def make_field_check_dicts(
+    field_check_expr: dict,
+    field_check_details: dict,
+    check_description: str,
+    cond_expr: hl.expr.BooleanExpression,
+    display_fields: List[str],
+) -> Tuple(dict, dict):
+    """
+    Create dictionary for aggregating each sanity check's failure count and another for each check's details.
+
+    :param field_check_expr: Dictionary of check description and aggregated expression filtering count
+    :param field_check_details: Dictionary of structs containing each check descriptions details
+    :param check_description: Check to be added to the dictionary
+    :param cond_expr: Logical expression referring to annotations in ht to be checked.
+    :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes);
+        these fields are also displayed if verbose is True.
+    :return: Tuple of dictionaries
+    """
+    field_check_expr[check_description] = hl.agg.filter(cond_expr, hl.agg.count())
+    field_check_details[check_description] = hl.struct(
+        cond_expr=cond_expr, display_fields=display_fields
+    )
+
+    return field_check_expr, field_check_details
+
+
+def generic_field_check_loop(
+    ht: hl.Table,
+    field_check_expr: dict,
+    field_check_details: dict,
+    verbose: bool,
+    show_percent_sites: bool = False,
+    ht_count: int = None,
+):
+    """
+    Loop through all conditional checks for a given hail Table.
+
+    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check. 
+    :param ht: Table containing annotations to be checked.
+    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
+    :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
+        show only top values of annotations that fail checks.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param ht_count: Previously computed sum of sites within hail Table. 
+    """
+    ht_field_check_counts = ht.aggregate(hl.struct(**field_check_expr))
+    for check_description, n_fail in ht_field_check_counts.items():
+        generic_field_check(
+            ht,
+            cond_expr=field_check_details[check_description].cond_expr,
+            check_description=check_description,
+            n_fail=n_fail,
+            display_fields=field_check_details[check_description].display_fields,
+            verbose=verbose,
+            show_percent_sites=show_percent_sites,
+            ht_count=ht_count,
+        )
+
+
 def subset_freq_sanity_checks(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
@@ -306,6 +399,7 @@ def subset_freq_sanity_checks(
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
+
     field_check_expr = {}
     field_check_details = {}
     for subset in subsets:
@@ -353,86 +447,6 @@ def subset_freq_sanity_checks(
         )
     )
     logger.info("Frequency spot check counts: %d", freq_counts)
-
-
-def sample_sum_check(
-    t: Union[hl.MatrixTable, hl.Table],
-    subset: str,
-    label_groups: Dict[str, List[str]],
-    sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
-    metric_first_label: bool = True,
-) -> Tuple(dict, dict):
-    """
-    Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
-
-    For example, if pop1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
-
-    :param t: Input MatrixTable or Table containing annotations to be summed.
-    :param subset: String indicating sample subset.
-    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
-    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations.
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
-    :return: Tuple of dictionaries
-    """
-
-    t = t.rows() if isinstance(t, hl.MatrixTable) else t
-
-    # Check if subset is "" which is added to check entire callset but does not need the added delimiter 
-    if subset & subset != "": 
-        subset += delimiter
-
-    label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the adj group for checks
-    group = label_groups.pop("group")[0]
-    alt_groups = delimiter.join(
-        sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
-    )
-    info_fields = t.info.keys()
-
-    annot_dict = {}
-    for subfield in ["AC", "AN", "nhomalt"]:
-        subfield_values = []
-        for x in label_combos:
-            if metric_first_label:
-                field = f"{subfield}{delimiter}{subset}{x}"
-            else:
-                field = f"{subset}{subfield}{delimiter}{x}"
-
-            if field in info_fields:
-                subfield_values.append(t.info[field])
-            else:
-                logger.info("%s is not in table's info field", field)
-
-        annot_dict[f"sum_{subfield}"] = hl.sum(subfield_values)
-
-    field_check_expr = {}
-    field_check_details = {}
-    for subfield in ["AC", "AN", "nhomalt"]:
-        if metric_first_label:
-            check_field_left = f"{subfield}{delimiter}{subset}{group}"
-        else:
-            check_field_left = f"{subset}{subfield}{delimiter}{group}"
-
-        check_field_right = f"sum_{subfield}{delimiter}{group}{delimiter}{alt_groups}"
-        field_check_expr, field_check_details = make_field_check_dicts(
-            field_check_expr=field_check_expr,
-            field_check_details=field_check_details,
-            check_description=f"{check_field_left} = {check_field_right}",
-            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{subfield}"],
-            display_fields=hl.struct(
-                **{
-                    check_field_left: t.info[check_field_left],
-                    f"sum_{subfield}": annot_dict[f"sum_{subfield}"],
-                }
-            ),
-        )
-
-    return field_check_expr, field_check_details
 
 
 def sample_sum_sanity_checks(
@@ -496,20 +510,6 @@ def sample_sum_sanity_checks(
         generic_field_check_loop(t, field_check_expr, field_check_details, verbose)
 
 
-def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
-    """
-    Check if the row counts in two Tables are the same.
-
-    :param ht1: First Table to be checked
-    :param ht2: Second Table to be checked
-    :return: Whether the row counts are the same
-    """
-    r_count1 = ht1.count()
-    r_count2 = ht2.count()
-    logger.info("%d rows in left table; %d rows in right table", r_count1, r_count2)
-    return r_count1 == r_count2
-
-
 def summarize_variants(
     t: Union[hl.MatrixTable, hl.Table],
     monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
@@ -523,7 +523,6 @@ def summarize_variants(
     :param monoallelic_expr: Boolean expression to log how many monoallelic sites are in the Table.
     :return: Struct of variant summary
     """
-
     if isinstance(t, hl.MatrixTable):
         logger.info("Dataset has %d samples.", t.count_cols())
 
@@ -969,8 +968,6 @@ def sanity_check_release_t(
     :param missingness_check: When true, runs the missingness_sanity_checks method.
     :return: None (terminal display of results from the battery of sanity checks).
     """
-
-    # Perform basic checks -- number of variants, number of contigs, number of samples
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
         summarize_variants(t, monoallelic_check)

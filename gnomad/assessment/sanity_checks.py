@@ -53,7 +53,9 @@ def generic_field_check(
     if n_fail > 0:
         logger.info("Found %d sites that fail %s check:", n_fail, check_description)
         if show_percent_sites:
-            logger.info("Percentage of sites that fail: %.2f %%", 100*(n_fail/ht_count))
+            logger.info(
+                "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
+            )
         ht.select(**display_fields).show()
     else:
         logger.info("PASSED %s check", check_description)
@@ -167,10 +169,14 @@ def sample_sum_check(
     for subfield in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
             check_field_left = f"{subfield}{delimiter}{subset}{group}"
-            check_field_right = f"sum_{subfield}{delimiter}{subset}{group}{delimiter}{alt_groups}"
+            check_field_right = (
+                f"sum_{subfield}{delimiter}{subset}{group}{delimiter}{alt_groups}"
+            )
         else:
             check_field_left = f"{subset}{subfield}{delimiter}{group}"
-            check_field_right = f"sum_{subset}{subfield}{delimiter}{group}{delimiter}{alt_groups}"
+            check_field_right = (
+                f"sum_{subset}{subfield}{delimiter}{group}{delimiter}{alt_groups}"
+            )
         field_check_expr, field_check_details = make_field_check_dicts(
             field_check_expr=field_check_expr,
             field_check_details=field_check_details,
@@ -486,12 +492,22 @@ def sample_sum_sanity_checks(
 
         # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
         field_check_expr_s, field_check_details_s = sample_sum_check(
-            t, subset, dict(group=["adj"], pop=pop_names), sort_order, delimiter, metric_first_label,
+            t,
+            subset,
+            dict(group=["adj"], pop=pop_names),
+            sort_order,
+            delimiter,
+            metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_details.update(field_check_details_s)
         field_check_expr_s, field_check_details_s = sample_sum_check(
-            t, subset, dict(group=["adj"], sex=sexes), sort_order, delimiter, metric_first_label, 
+            t,
+            subset,
+            dict(group=["adj"], sex=sexes),
+            sort_order,
+            delimiter,
+            metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_details.update(field_check_details_s)
@@ -544,58 +560,6 @@ def summarize_variants(
         logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
 
     return var_summary
-
-
-def histograms_sanity_check(
-    t: Union[hl.MatrixTable, hl.Table], verbose: bool, hists: List[str] = HISTS
-) -> None:
-    """
-    Check the number of that variants that have nonzero values, with the excepion of DP hists, in their n_smaller and n_larger bins of quality histograms for both raw and adj.
-
-    Histogram annotations must exist within an info struct. For example, check that t.info.dp_hist_all_n_smaller != 0. 
-    All n_smaller and n_larger annotations must be within an info struct annotation. 
-
-    :param t: Input MatrixTable or Table.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
-    :param hists: List of variant annotation histograms.
-    :return: None
-    """
-    t = t.rows() if isinstance(t, hl.MatrixTable) else t
-    field_check_expr = {}
-    field_check_details = {}
-
-    for hist in hists:
-        for suffix in ["", "raw"]:
-            if suffix == "raw":
-                hist = f"{hist}_{suffix}"
-
-            check_field = f"{hist}_n_smaller"
-            check_description = f"{check_field} == 0"
-            field_check_expr, field_check_details = make_field_check_dicts(
-                field_check_expr=field_check_expr,
-                field_check_details=field_check_details,
-                check_description=check_description,
-                cond_expr=t.info[check_field] != 0,
-                display_fields=hl.struct(**{check_field: t.info[check_field]}),
-            )
-
-            if hist not in {
-                "dp_hist_alt",
-                "dp_hist_all",
-            }:  # NOTE: DP hists can have nonzero values in n_larger bin
-                check_field = f"{hist}_n_larger"
-                check_description = f"{check_field} == 0"
-                field_check_expr, field_check_details = make_field_check_dicts(
-                    field_check_expr=field_check_expr,
-                    field_check_details=field_check_details,
-                    check_description=check_description,
-                    cond_expr=t.info[check_field] != 0,
-                    display_fields=hl.struct(**{check_field: t.info[check_field]}),
-                )
-    generic_field_check_loop(
-        t, field_check_expr, field_check_details, verbose,
-    )
 
 
 def raw_and_adj_sanity_checks(
@@ -832,10 +796,14 @@ def missingness_sanity_checks(
     n_fail = 0
     for metric, value in dict(output).items():
         if value > missingness_threshold:
-            logger.info("FAILED missingness check for %s: %.2f %% missing", metric, 100*value)
+            logger.info(
+                "FAILED missingness check for %s: %.2f %% missing", metric, 100 * value
+            )
             n_fail += 1
         else:
-            logger.info("Passed missingness check for %s: %.2f %% missing", metric, 100*value)
+            logger.info(
+                "Passed missingness check for %s: %.2f %% missing", metric, 100 * value
+            )
     logger.info("%d missing metrics checks failed", n_fail)
 
 
@@ -929,7 +897,6 @@ def sanity_check_release_t(
     sort_order: List[str] = SORT_ORDER,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
-    histograms_check: bool = True,
     raw_adj_check: bool = True,
     subset_freq_check: bool = True,
     samples_sum_check: bool = True,
@@ -979,10 +946,6 @@ def sanity_check_release_t(
         logger.info("VARIANT FILTER SUMMARIES:")
         filters_sanity_check(t)
 
-    if histograms_check:
-        logger.info("HISTOGRAM CHECKS:")
-        histograms_sanity_check(t, verbose, hists)
-
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")
         raw_and_adj_sanity_checks(t, subsets, verbose, delimiter, metric_first_label)
@@ -996,7 +959,15 @@ def sanity_check_release_t(
     if samples_sum_check:
         logger.info("SAMPLE SUM CHECKS:")
         sample_sum_sanity_checks(
-            t, subsets, pops, sexes, subset_pops, verbose, sort_order, delimiter, metric_first_label
+            t,
+            subsets,
+            pops,
+            sexes,
+            subset_pops,
+            verbose,
+            sort_order,
+            delimiter,
+            metric_first_label,
         )
 
     info_metrics = list(t.row.info)

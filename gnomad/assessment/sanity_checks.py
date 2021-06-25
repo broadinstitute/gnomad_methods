@@ -130,8 +130,7 @@ def sample_sum_check(
 
     :param t: Input MatrixTable or Table containing annotations to be summed.
     :param subset: String indicating sample subset.
-    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
@@ -332,8 +331,7 @@ def make_field_check_dicts(
     :param field_check_details: Dictionary of structs containing each check descriptions details
     :param check_description: Check to be added to the dictionary
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
-    :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes);
-        these fields are also displayed if verbose is True.
+    :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
     :return: Tuple of dictionaries
     """
     field_check_expr[check_description] = hl.agg.filter(cond_expr, hl.agg.count())
@@ -359,8 +357,7 @@ def generic_field_check_loop(
     :param ht: Table containing annotations to be checked.
     :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
     :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param ht_count: Previously computed sum of sites within hail Table. 
     """
@@ -396,8 +393,7 @@ def subset_freq_sanity_checks(
         
     :param t: Input MatrixTable or Table.
     :param subsets: List of sample subsets.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If true, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
@@ -473,8 +469,7 @@ def sample_sum_sanity_checks(
     :param t: Input Table.
     :param sexes: List of sexes in table.
     :param subset_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with callset pops as value to test entire callset.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
     """
@@ -576,8 +571,7 @@ def raw_and_adj_sanity_checks(
 
     :param t: Input MatrixTable or Table to check.
     :param subsets: List of sample subsets.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
@@ -689,8 +683,7 @@ def sex_chr_sanity_checks(
     :param t: Input MatrixTable or Table.
     :param info_metrics: List of metrics in info struct of input Table.
     :param contigs: List of contigs present in input Table.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as the delimiter in XX metrics
     :return: None
     """
@@ -914,8 +907,7 @@ def sanity_check_release_t(
     :param subsets: List of subsets to be checked.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
     :param monoallelic_check: Log how many monoallelic sites are in the Table; requires a monoallelic annotation within an info struct.
-    :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check
-        conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
+    :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :param sexes: List of sexes in table.

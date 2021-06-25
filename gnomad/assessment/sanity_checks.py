@@ -24,6 +24,7 @@ def generic_field_check(
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
+
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
     .. note::
@@ -460,7 +461,7 @@ def sample_sum_sanity_checks(
     metric_first_label: bool = True,
 ) -> None:
     """
-    Performs sanity checks on sample sums in input Table.
+    Perform sanity checks on sample sums in input Table.
 
     Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
@@ -676,7 +677,8 @@ def sex_chr_sanity_checks(
     delimiter: str = "-",
 ) -> None:
     """
-    Performs sanity checks for annotations on the sex chromosomes.
+    Perform sanity checks for annotations on the sex chromosomes.
+
     Check:
         - That metrics for chrY variants in XX samples are NA and not 0
         - That nhomalt counts are equal to XX nhomalt counts for all non-PAR chrX variants

@@ -2,7 +2,6 @@ import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
-from hail.expr.functions import missing
 
 from gnomad.resources.grch38.gnomad import HGDP_POPS, TGP_POPS, POPS, SEXES
 from gnomad.utils.vcf import HISTS, make_label_combos, SORT_ORDER

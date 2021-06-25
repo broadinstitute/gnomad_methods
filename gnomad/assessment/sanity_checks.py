@@ -86,7 +86,7 @@ def make_filters_sanity_check_expr(
     :param rf: True if the random forest was used for variant filtration, False if VQSR was used.
     :return: Dictionary containing Hail aggregation expressions to examine filter flags.
     """
-    variant_filter_method = "RF" if rf else "VQSR"
+    variant_filter_method = "RF" if rf else "AS_VQSR"
     filters_dict = {
         "n": hl.agg.count(),
         "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) != 0),

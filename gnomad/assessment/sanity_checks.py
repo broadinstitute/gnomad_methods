@@ -65,7 +65,7 @@ def generic_field_check(
 def make_filters_sanity_check_expr(
     ht: hl.Table,
     extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
-    rf: bool = True,
+    rf: bool = False,
 ) -> Dict[str, hl.expr.Expression]:
     """
     Make Hail expressions to measure % variants filtered under varying conditions of interest.
@@ -216,10 +216,10 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
             - Any filter
             - Inbreeding coefficient filter in combination with any other filter
             - AC0 filter in combination with any other filter
-            - VQSR filtering in combination with any other filter
+            - VQSR or random forest filtering in combination with any other filter
             - Only inbreeding coefficient filter
             - Only AC0 filter
-            - Only VQSR filtering
+            - Only VQSR or random forest filtering
 
     :param t: Input MatrixTable or Table to be checked.
     :return: None
@@ -249,6 +249,7 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         n_rows: int = None,
         n_cols: int = None,
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
+        rf: bool = False,
     ) -> None:
         """
         Perform sanity checks to measure percentages of variants filtered under different conditions.
@@ -257,32 +258,24 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         :param group_exprs: Dictionary of expressions to group the Table by.
         :param n_rows: Number of rows to show.
         :param n_cols: Number of columns to show.
+        :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
+        :param rf: True if the random forest was used for variant filtration, False if VQSR was used.
         :return: None
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
         t.group_by(**group_exprs).aggregate(
-            **make_filters_sanity_check_expr(t, extra_filter_checks)
+            **make_filters_sanity_check_expr(t, extra_filter_checks, rf)
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
 
-    new_filters_dict = {
-        "frac_vqsr": hl.agg.fraction(t.filters.contains("AS_VQSR")),
-        "frac_vqsr_only": hl.agg.fraction(
-            t.filters.contains("AS_VQSR") & (t.filters.length() == 1)
-        ),
-    }
-    _filter_agg_order(
-        t, {"is_filtered": t.is_filtered}, extra_filter_checks=new_filters_dict
-    )
+    _filter_agg_order(t, {"is_filtered": t.is_filtered})
 
     logger.info("Checking distributions of variant type amongst variant filters...")
-    _filter_agg_order(
-        t, {"allele_type": t.info.allele_type}, extra_filter_checks=new_filters_dict
-    )
+    _filter_agg_order(t, {"allele_type": t.info.allele_type})
 
     logger.info(
         "Checking distributions of variant type and region type amongst variant filters..."
@@ -295,7 +288,6 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         },
         50,
         140,
-        extra_filter_checks=new_filters_dict,
     )
 
     logger.info(
@@ -310,7 +302,6 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         },
         50,
         140,
-        extra_filter_checks=new_filters_dict,
     )
 
 
@@ -452,10 +443,8 @@ def subset_freq_sanity_checks(
 
 def sample_sum_sanity_checks(
     t: Union[hl.MatrixTable, hl.Table],
-    subsets: List[str],
-    pops: List[str] = POPS,
     sexes: List[str] = SEXES,
-    subset_pops: Dict[str, List[str]] = {"hgdp": HGDP_POPS, "tgp": TGP_POPS},
+    sample_sum_sets_and_pops: Dict[str, List[str]] = {"": POPS},
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
@@ -469,10 +458,8 @@ def sample_sum_sanity_checks(
     Also checks that annotations for all expected sample populations are present.
 
     :param t: Input Table.
-    :param subsets: List of sample subsets.
-    :param pops: List of pops in table.
     :param sexes: List of sexes in table.
-    :param subset_pops: Dict with subset (keys) and populations within subset (values).
+    :param subset_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with callset pops as value to test entire callset.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
         show only top values of annotations that fail checks.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
@@ -480,14 +467,10 @@ def sample_sum_sanity_checks(
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    # Add "" for sum checks on entire callset
-    subsets.append("")
     field_check_expr = {}
     field_check_details = {}
-    for subset in subsets:
+    for subset, pops in sample_sum_sets_and_pops.items():
         pop_names = pops
-        if subset_pops and subset in subset_pops:
-            pop_names = subset_pops[subset]
 
         # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
         field_check_expr_s, field_check_details_s = sample_sum_check(
@@ -889,10 +872,8 @@ def sanity_check_release_t(
     show_percent_sites: bool = True,
     delimiter: str = "-",
     metric_first_label: bool = True,
-    hists: List[str] = HISTS,
-    pops: List[str] = POPS,
     sexes: List[str] = SEXES,
-    subset_pops: Dict[str, List[str]] = {"hgdp": HGDP_POPS, "tgp": TGP_POPS},
+    sample_sum_sets_and_pops: Dict[str, List[str]] = {"": POPS},
     sort_order: List[str] = SORT_ORDER,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
@@ -922,10 +903,8 @@ def sanity_check_release_t(
         conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
-    :param hists: List of variant annotation histograms.
-    :param pops: List of pops in table.
     :param sexes: List of sexes in table.
-    :param subset_pops: Dict with subset (keys) and populations within subset (values).
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
@@ -959,10 +938,8 @@ def sanity_check_release_t(
         logger.info("SAMPLE SUM CHECKS:")
         sample_sum_sanity_checks(
             t,
-            subsets,
-            pops,
             sexes,
-            subset_pops,
+            sample_sum_sets_and_pops,
             verbose,
             sort_order,
             delimiter,

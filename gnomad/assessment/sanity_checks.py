@@ -30,8 +30,8 @@ def generic_field_check(
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
 
-    .. note::
-
+    ..note::
+        
         `cond_expr` and `check_description` are opposites and should never be the same.
         E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
         then it is checking sites that fail to be the desired condition (`check_description`)
@@ -40,10 +40,8 @@ def generic_field_check(
     :param ht: Table containing annotations to be checked.
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
-    :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes);
-        these fields are also displayed if verbose is True.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False,
-        show only top values of annotations that fail checks.
+    :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param n_fail: Previously computed number of sites that fail the conditional checks.
     :param ht_count: Previously computed sum of sites within hail Table. 

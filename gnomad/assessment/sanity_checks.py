@@ -206,7 +206,9 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     return r_count1 == r_count2
 
 
-def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
+def filters_sanity_check(
+    t: Union[hl.MatrixTable, hl.Table], rf_filter: bool = False
+) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
 
@@ -222,6 +224,7 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
             - Only VQSR or random forest filtering
 
     :param t: Input MatrixTable or Table to be checked.
+    :param rf_filter: True if the random forest was used for variant filtration, False if VQSR was used.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -272,10 +275,14 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         "Checking distributions of filtered variants amongst variant filters..."
     )
 
-    _filter_agg_order(t, {"is_filtered": t.is_filtered})
+    _filter_agg_order(
+        t, {"is_filtered": t.is_filtered}, rf=rf_filter,
+    )
 
     logger.info("Checking distributions of variant type amongst variant filters...")
-    _filter_agg_order(t, {"allele_type": t.info.allele_type})
+    _filter_agg_order(
+        t, {"allele_type": t.info.allele_type}, rf=rf_filter,
+    )
 
     logger.info(
         "Checking distributions of variant type and region type amongst variant filters..."
@@ -288,6 +295,7 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         },
         50,
         140,
+        rf=rf_filter,
     )
 
     logger.info(
@@ -302,6 +310,7 @@ def filters_sanity_check(t: Union[hl.MatrixTable, hl.Table]) -> None:
         },
         50,
         140,
+        rf=rf_filter,
     )
 
 
@@ -875,6 +884,7 @@ def sanity_check_release_t(
     sexes: List[str] = SEXES,
     sample_sum_sets_and_pops: Dict[str, List[str]] = {"": POPS},
     sort_order: List[str] = SORT_ORDER,
+    rf_filter: bool = False,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
     raw_adj_check: bool = True,
@@ -906,6 +916,7 @@ def sanity_check_release_t(
     :param sexes: List of sexes in table.
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
+    :param rf_filter: True if the random forest was used for variant filtration, False if VQSR was used.
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
     :param histograms_check: When true, runs the histograms_sanity_check method.
@@ -922,7 +933,7 @@ def sanity_check_release_t(
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")
-        filters_sanity_check(t)
+        filters_sanity_check(t, rf_filter)
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")

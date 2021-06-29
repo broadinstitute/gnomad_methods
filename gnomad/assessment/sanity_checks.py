@@ -469,8 +469,10 @@ def sample_sum_sanity_checks(
 
     :param t: Input Table.
     :param sexes: List of sexes in table.
-    :param subset_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with callset pops as value to test entire callset.
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with the callset pops as value to test entire callset.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
+    :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
+    :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
     """

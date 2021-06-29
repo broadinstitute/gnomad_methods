@@ -36,7 +36,7 @@ def generic_field_check(
         E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
         then it is checking sites that fail to be the desired condition (`check_description`)
         of having a raw AC greater than or equal to the adj AC.
-        
+
     :param ht: Table containing annotations to be checked.
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
@@ -142,51 +142,53 @@ def sample_sum_check(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the adj group for checks
+    # Grab the adj group for checks as we do not retain the raw metric counts for all sample groups so we cannot check the sample sums
     group = label_groups.pop("group")[0]
-    alt_groups = delimiter.join(
-        sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
+    # sum_group is the group, such as pop, sex, pop and sex that make up the main group for the check, e.g., if group = callset1, one sum_group could be callset1-pop, callset1-sex, or callset-pop-sex
+    sum_group = delimiter.join(
+        sorted(label_groups.keys(), key=lambda x: sort_order.index(x)) 
     )
     info_fields = t.info.keys()
 
+    # Loop through metrics to build dictionary of fields that make up 'group'
     annot_dict = {}
-    for subfield in ["AC", "AN", "nhomalt"]:
-        subfield_values = []
-        for x in label_combos:
+    for metric in ["AC", "AN", "nhomalt"]:
+        sum_group_exprs = []
+        for label in label_combos:
             if metric_first_label:
-                field = f"{subfield}{delimiter}{subset}{x}"
+                field = f"{metric}{delimiter}{subset}{label}"
             else:
-                field = f"{subset}{subfield}{delimiter}{x}"
+                field = f"{subset}{metric}{delimiter}{label}"
 
             if field in info_fields:
-                subfield_values.append(t.info[field])
+                sum_group_exprs.append(t.info[field])
             else:
                 logger.info("%s is not in table's info field", field)
 
-        annot_dict[f"sum_{subfield}"] = hl.sum(subfield_values)
+        annot_dict[f"sum_{metric}_{group}_{sum_group}"] = hl.sum(sum_group_exprs)
 
     field_check_expr = {}
     field_check_details = {}
-    for subfield in ["AC", "AN", "nhomalt"]:
+    for metric in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
-            check_field_left = f"{subfield}{delimiter}{subset}{group}"
+            check_field_left = f"{metric}{delimiter}{subset}{group}"
             check_field_right = (
-                f"sum_{subfield}{delimiter}{subset}{group}{delimiter}{alt_groups}"
+                f"sum_{metric}{delimiter}{subset}{group}{delimiter}{sum_group}"
             )
         else:
-            check_field_left = f"{subset}{subfield}{delimiter}{group}"
+            check_field_left = f"{subset}{metric}{delimiter}{group}"
             check_field_right = (
-                f"sum_{subset}{subfield}{delimiter}{group}{delimiter}{alt_groups}"
+                f"sum_{subset}{metric}{delimiter}{group}{delimiter}{sum_group}"
             )
         field_check_expr, field_check_details = make_field_check_dicts(
             field_check_expr=field_check_expr,
             field_check_details=field_check_details,
             check_description=f"{check_field_left} = {check_field_right}",
-            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{subfield}"],
+            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{metric}"],
             display_fields=hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
-                    f"sum_{subfield}": annot_dict[f"sum_{subfield}"],
+                    f"sum_{metric}_{group}_{sum_group}": annot_dict[f"sum_{metric}_{group}_{sum_group}"],
                 }
             ),
         )

@@ -462,7 +462,7 @@ def sample_sum_sanity_checks(
     """
     Perform sanity checks on sample sums in input Table.
 
-    Computes afresh the sum of annotations for a specified group of annotations, and compare to the annotated version;
+    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version;
     displays results from checking the sum of the specified annotations in the terminal.
     Also checks that annotations for all expected sample populations are present.
 

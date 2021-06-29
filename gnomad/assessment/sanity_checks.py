@@ -21,8 +21,8 @@ def generic_field_check(
     display_fields: List[str],
     verbose: bool = False,
     show_percent_sites: bool = False,
-    n_fail: int = None,
-    ht_count: int = None,
+    n_fail: Optional[int] = None,
+    ht_count: Optional[int] = None,
 ) -> None:
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
@@ -30,8 +30,8 @@ def generic_field_check(
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
 
-    ..note::
-        
+    .. note::
+
         `cond_expr` and `check_description` are opposites and should never be the same.
         E.g., If `cond_expr` filters for instances where the raw AC is less than adj AC,
         then it is checking sites that fail to be the desired condition (`check_description`)
@@ -40,14 +40,14 @@ def generic_field_check(
     :param ht: Table containing annotations to be checked.
     :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
-    :param display_fields: List of names of ht annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
+    :param display_fields: StructExpression containing annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param n_fail: Previously computed number of sites that fail the conditional checks.
-    :param ht_count: Previously computed sum of sites within hail Table. 
+    :param n_fail: Optional previously computed number of sites that fail the conditional checks. If none is supplied, `cond_expr` is used to filter the Table and obtain the count of sites.
+    :param ht_count: Optional previously computed sum of sites within hail Table. If none is supplied, a count of sites in the Table is performed.```
     :return: None
     """
-    if show_percent_sites and (ht_count is None):
+    if show_percent_sites and ht_count is None:
         ht_count = ht.count()
 
     if n_fail is None and cond_expr:
@@ -69,7 +69,7 @@ def generic_field_check(
 def make_filters_sanity_check_expr(
     ht: hl.Table,
     extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
-    rf: bool = False,
+    variant_filter_field: str = "RF",
 ) -> Dict[str, hl.expr.Expression]:
     """
     Make Hail expressions to measure % variants filtered under varying conditions of interest.
@@ -80,24 +80,23 @@ def make_filters_sanity_check_expr(
             - Any filter
             - Inbreeding coefficient filter in combination with any other filter
             - AC0 filter in combination with any other filter
-            - VQSR or random forest filtering in combination with any other filter
+            - `variant_filter_field` filtering in combination with any other filter
             - Only inbreeding coefficient filter
             - Only AC0 filter
-            - Only VQSR or random forest filtering
+            - Only filtering defined by `variant_filter_field`
 
     :param ht: Table containing 'filter' annotation to be examined.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
-    :param rf: True if the random forest was used for variant filtration, False if VQSR was used.
+    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
     :return: Dictionary containing Hail aggregation expressions to examine filter flags.
     """
-    variant_filter_method = "RF" if rf else "AS_VQSR"
     filters_dict = {
         "n": hl.agg.count(),
         "frac_any_filter": hl.agg.fraction(hl.len(ht.filters) != 0),
         "frac_inbreed_coeff": hl.agg.fraction(ht.filters.contains("InbreedingCoeff")),
         "frac_ac0": hl.agg.fraction(ht.filters.contains("AC0")),
-        f"frac_{variant_filter_method.lower()}": hl.agg.fraction(
-            ht.filters.contains(f"{variant_filter_method}")
+        f"frac_{variant_filter_field.lower()}": hl.agg.fraction(
+            ht.filters.contains(variant_filter_field)
         ),
         "frac_inbreed_coeff_only": hl.agg.fraction(
             ht.filters.contains("InbreedingCoeff") & (ht.filters.length() == 1)
@@ -105,8 +104,8 @@ def make_filters_sanity_check_expr(
         "frac_ac0_only": hl.agg.fraction(
             ht.filters.contains("AC0") & (ht.filters.length() == 1)
         ),
-        f"frac_{variant_filter_method.lower()}_only": hl.agg.fraction(
-            ht.filters.contains(f"{variant_filter_method}") & (ht.filters.length() == 1)
+        f"frac_{variant_filter_field.lower()}_only": hl.agg.fraction(
+            ht.filters.contains(variant_filter_field) & (ht.filters.length() == 1)
         ),
     }
     if extra_filter_checks:
@@ -126,7 +125,7 @@ def sample_sum_check(
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
-    For example, if pop1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
+    For example, if subset1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
 
     :param t: Input MatrixTable or Table containing annotations to be summed.
     :param subset: String indicating sample subset.
@@ -138,8 +137,8 @@ def sample_sum_check(
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    # Check if subset is "" which is added to check entire callset but does not need the added delimiter
-    if subset != "":
+    # Check if subset is an empty string which is added to check entire callset but does not need the added delimiter
+    if subset:
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
@@ -349,17 +348,19 @@ def generic_field_check_loop(
     verbose: bool,
     show_percent_sites: bool = False,
     ht_count: int = None,
-):
+) -> None:
     """
     Loop through all conditional checks for a given hail Table.
 
     This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check. 
+
     :param ht: Table containing annotations to be checked.
     :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
     :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param ht_count: Previously computed sum of sites within hail Table. 
+    :param ht_count: Previously computed sum of sites within hail Table.
+    :return: None
     """
     ht_field_check_counts = ht.aggregate(hl.struct(**field_check_expr))
     for check_description, n_fail in ht_field_check_counts.items():
@@ -404,7 +405,7 @@ def subset_freq_sanity_checks(
     field_check_expr = {}
     field_check_details = {}
     for subset in subsets:
-        if subset != "":
+        if subset:
             subset += delimiter
             for field in ["AC", "AN", "nhomalt"]:
                 for group in ["adj", "raw"]:
@@ -640,7 +641,7 @@ def raw_and_adj_sanity_checks(
 
         for subset in subsets:
             # Add delimiter for subsets but not "" representing entire callset
-            if subset != "":
+            if subset:
                 subset += delimiter
             field_check_label = (
                 f"{subfield}{delimiter}{subset}"
@@ -916,7 +917,6 @@ def sanity_check_release_t(
     :param rf_filter: True if the random forest was used for variant filtration, False if VQSR was used.
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
-    :param histograms_check: When true, runs the histograms_sanity_check method.
     :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method.
     :param subset_freq_check: When true, runs the subset_freq_sanity_checks method.
     :param samples_sum_check: When true, runs the sample_sum_sanity_checks method.

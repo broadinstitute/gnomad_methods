@@ -25,7 +25,7 @@ def generic_field_check(
     ht_count: Optional[int] = None,
 ) -> None:
     """
-    Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
+    Check generic logical condition involving annotations in a Hail Table when `n_fail` is absent and print the results to terminal.
 
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that fail, either previously computed as `n_fail` or that match the `cond_expr`, and fail to be the desired condition (`check_description`).
     If the number of rows that match the `cond_expr` or `n_fail` is 0 then the Table passes that check; otherwise, it fails.

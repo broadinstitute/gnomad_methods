@@ -16,9 +16,9 @@ logger.setLevel(logging.INFO)
 
 def generic_field_check(
     ht: hl.Table,
-    cond_expr: hl.expr.BooleanExpression,
     check_description: str,
     display_fields: hl.expr.StructExpression,
+    cond_expr: hl.expr.BooleanExpression = None,
     verbose: bool = False,
     show_percent_sites: bool = False,
     n_fail: Optional[int] = None,
@@ -27,8 +27,8 @@ def generic_field_check(
     """
     Check a generic logical condition involving annotations in a Hail Table and print the results to terminal.
 
-    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that match the `cond_expr` and fail to be the desired condition (`check_description`).
-    If the number of rows that match the `cond_expr` is 0, then the Table passes that check; otherwise, it fails.
+    Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that fail, either previously computed as `n_fail` or that match the `cond_expr`, and fail to be the desired condition (`check_description`).
+    If the number of rows that match the `cond_expr` or `n_fail` is 0 then the Table passes that check; otherwise, it fails.
 
     .. note::
 
@@ -38,20 +38,23 @@ def generic_field_check(
         of having a raw AC greater than or equal to the adj AC.
 
     :param ht: Table containing annotations to be checked.
-    :param cond_expr: Logical expression referring to annotations in ht to be checked.
     :param check_description: String describing the condition being checked; is displayed in terminal summary message.
     :param display_fields: StructExpression containing annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
+    :param cond_expr: Optional logical expression referring to annotations in ht to be checked.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param n_fail: Optional previously computed number of sites that fail the conditional checks. If none is supplied, `cond_expr` is used to filter the Table and obtain the count of sites.
     :param ht_count: Optional previously computed sum of sites within hail Table. If none is supplied, a count of sites in the Table is performed.```
     :return: None
     """
-    if show_percent_sites and ht_count is None:
-        ht_count = ht.count()
+    if (n_fail is None and cond_expr is None) or (n_fail and cond_expr):
+        raise ValueError("One and only one of n_fail or cond_expr must be defined!")
 
-    if n_fail is None and cond_expr:
+    if cond_expr:
         n_fail = ht.filter(cond_expr).count()
+
+    if show_percent_sites and (ht_count is None):
+        ht_count = ht.count()
 
     if n_fail > 0:
         logger.info("Found %d sites that fail %s check:", n_fail, check_description)
@@ -177,15 +180,15 @@ def sample_sum_check(
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
             check_field_right = f"sum{delimiter}{subset}{metric}{delimiter}{group}{delimiter}{sum_group}"
-        field_check_expr, field_check_details = make_field_check_dicts(
-            field_check_expr=field_check_expr,
-            field_check_details=field_check_details,
-            check_description=f"{check_field_left} = {check_field_right}",
-            cond_expr=t.info[check_field_left]
-            != annot_dict[
-                f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
-            ],
-            display_fields=hl.struct(
+
+        field_check_expr[f"{check_field_left} = {check_field_right}"] = {
+            "expr": hl.agg.count_where(
+                t.info[check_field_left]
+                != annot_dict[
+                    f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
+                ]
+            ),
+            "display_fields": hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
                     f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}": annot_dict[
@@ -193,9 +196,8 @@ def sample_sum_check(
                     ],
                 }
             ),
-        )
-
-    return field_check_expr, field_check_details
+        }
+    return field_check_expr
 
 
 def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
@@ -344,14 +346,14 @@ def generic_field_check_loop(
     :return: None
     """
     ht_field_check_counts = ht.aggregate(
-        hl.struct(**{k: v['expr'] for k, v in field_check_expr.items()})
+        hl.struct(**{k: v["expr"] for k, v in field_check_expr.items()})
     )
     for check_description, n_fail in ht_field_check_counts.items():
         generic_field_check(
             ht,
             check_description=check_description,
             n_fail=n_fail,
-            display_fields=field_check_expr[check_description]['display_fields'],
+            display_fields=field_check_expr[check_description]["display_fields"],
             verbose=verbose,
             show_percent_sites=show_percent_sites,
             ht_count=ht_count,
@@ -412,10 +414,7 @@ def subset_freq_sanity_checks(
                     }
 
     generic_field_check_loop(
-        t,
-        field_check_expr,
-        verbose,
-        show_percent_sites=show_percent_sites,
+        t, field_check_expr, verbose, show_percent_sites=show_percent_sites,
     )
 
     freq_counts = t.aggregate(
@@ -456,6 +455,7 @@ def sample_sum_sanity_checks(
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: None
     """
+    # TODO: Add support for subpop sums
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}

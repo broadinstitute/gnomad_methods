@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import hail as hl
 
@@ -215,7 +215,12 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
 
 
 def filters_sanity_check(
-    t: Union[hl.MatrixTable, hl.Table], variant_filter_field: str = "RF"
+    t: Union[hl.MatrixTable, hl.Table],
+    variant_filter_field: str = "RF",
+    check_lcr: bool = True,
+    check_segdup: bool = True,
+    check_nonpar: bool = True,
+    check_decoy: bool = False,
 ) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
@@ -233,6 +238,10 @@ def filters_sanity_check(
 
     :param t: Input MatrixTable or Table to be checked.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
+    :param check_lcr: Add the low complexity region's boolean expression to the problematic region check.
+    :param check_segdup: Add the segmental duplication region's boolean expression to the problematic region check.
+    :param check_nonpar: Add the non-pseudoautosomal region's boolean expression to the problematic region check.
+    :param check_decoy: Add the decoy region's boolean expression to the problematic region check.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -241,14 +250,18 @@ def filters_sanity_check(
     logger.info("hl.agg.counter filters: %s", filters)
 
     filtered_expr = hl.len(t.filters) > 0
-    problematic_region_expr = hl.any(
-        lambda x: x,
-        [
-            t.info.lcr,
-            t.info.segdup,
-            t.info.nonpar,
-        ],  # NOTE: in_problematic_region check will need to be updated if we get hg38 decoy
-    )
+
+    problematic_region_exprs = []
+    if check_lcr:
+        problematic_region_exprs.append(t.info.lcr)
+    if check_segdup:
+        problematic_region_exprs.append(t.info.segdup)
+    if check_nonpar:
+        problematic_region_exprs.append(t.info.nonpar)
+    if check_decoy:
+        problematic_region_exprs.append(t.info.nonpar)
+
+    problematic_region_expr = hl.any(lambda x: x, problematic_region_exprs)
 
     t = t.annotate(
         is_filtered=filtered_expr, in_problematic_region=problematic_region_expr

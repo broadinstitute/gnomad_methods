@@ -530,7 +530,7 @@ def summarize_variants(
     Print the number of variants to stdout and check that each chromosome has variant calls.
 
     :param t: Input MatrixTable or Table to be checked.
-    :param monoallelic_expr: Boolean expression to log how many monoallelic sites are in the Table.
+    :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
     :return: Struct of variant summary
     """
     if isinstance(t, hl.MatrixTable):
@@ -879,7 +879,7 @@ def sanity_check_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
     missingness_threshold: float = 0.5,
-    monoallelic_check: bool = True,
+    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
     verbose: bool = False,
     show_percent_sites: bool = True,
     delimiter: str = "-",
@@ -911,7 +911,7 @@ def sanity_check_release_t(
     :param t: Input MatrixTable or Table containing variant annotations to check.
     :param subsets: List of subsets to be checked.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
-    :param monoallelic_check: Log how many monoallelic sites are in the Table; requires a monoallelic annotation within an info struct.
+    :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
@@ -930,7 +930,7 @@ def sanity_check_release_t(
     """
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
-        summarize_variants(t, monoallelic_check)
+        summarize_variants(t, monoallelic_expr)
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")

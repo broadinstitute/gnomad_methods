@@ -18,7 +18,7 @@ def generic_field_check(
     ht: hl.Table,
     cond_expr: hl.expr.BooleanExpression,
     check_description: str,
-    display_fields: List[str],
+    display_fields: hl.expr.StructExpression,
     verbose: bool = False,
     show_percent_sites: bool = False,
     n_fail: Optional[int] = None,
@@ -780,25 +780,26 @@ def missingness_sanity_checks(
         "Missingness threshold (upper cutoff for what is allowed for missingness checks): %.2f",
         missingness_threshold,
     )
-    metrics_frac_missing = {}
+    metrics_missing = {}
     for x in info_metrics:
-        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(t.info[x])) / n_sites
+        metrics_missing[x] = hl.agg.sum(hl.is_missing(t.info[x]))
     for x in non_info_metrics:
-        metrics_frac_missing[x] = hl.agg.sum(hl.is_missing(t[x])) / n_sites
-    output = t.aggregate(hl.struct(**metrics_frac_missing))
+        metrics_missing[x] = hl.agg.sum(hl.is_missing(t[x])) 
+    output = dict(t.aggregate(hl.struct(**metrics_missing)))
 
     n_fail = 0
-    for metric, value in dict(output).items():
-        if value > missingness_threshold:
+    for metric, n_missing in output.items():
+        if n_missing/n_sites > missingness_threshold:
             logger.info(
-                "FAILED missingness check for %s: %.2f %% missing", metric, 100 * value
+                "FAILED missingness check for %s: %d sites or %.2f%% missing", metric, n_missing, (100 * n_missing/n_sites)
             )
             n_fail += 1
         else:
             logger.info(
-                "Passed missingness check for %s: %.2f %% missing", metric, 100 * value
+                "Passed missingness check for %s: %d sites or %.2f%% missing", metric, n_missing, (100 * n_missing/n_sites)
             )
     logger.info("%d missing metrics checks failed", n_fail)
+
 
 
 def vcf_field_check(
@@ -914,6 +915,7 @@ def sanity_check_release_t(
     :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :param sexes: List of sexes in table.
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset.

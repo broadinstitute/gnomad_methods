@@ -144,13 +144,13 @@ def sample_sum_check(
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
     # Grab the adj group for checks as we do not retain the raw metric counts for all sample groups so we cannot check the sample sums
     group = label_groups.pop("group")[0]
-    # sum_group is the group, such as pop, sex, pop and sex that make up the main group for the check, e.g., if group = callset1, one sum_group could be callset1-pop, callset1-sex, or callset-pop-sex
+    # sum_group is the group that when their metrics are added together they should equal the metric total `group` e.g., if group = callset1, one sum_group could be callset1-pop
     sum_group = delimiter.join(
-        sorted(label_groups.keys(), key=lambda x: sort_order.index(x)) 
+        sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
     info_fields = t.info.keys()
 
-    # Loop through metrics to build dictionary of fields that make up 'group'
+    # Loop through metrics to build dictionary of fields that make up 'group' and then stores their sum
     annot_dict = {}
     for metric in ["AC", "AN", "nhomalt"]:
         sum_group_exprs = []
@@ -165,30 +165,33 @@ def sample_sum_check(
             else:
                 logger.info("%s is not in table's info field", field)
 
-        annot_dict[f"sum_{metric}_{group}_{sum_group}"] = hl.sum(sum_group_exprs)
+        annot_dict[
+            f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
+        ] = hl.sum(sum_group_exprs)
 
     field_check_expr = {}
     field_check_details = {}
     for metric in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
-            check_field_right = (
-                f"sum_{metric}{delimiter}{subset}{group}{delimiter}{sum_group}"
-            )
+            check_field_right = f"sum{delimiter}{metric}{delimiter}{subset}{group}{delimiter}{sum_group}"
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
-            check_field_right = (
-                f"sum_{subset}{metric}{delimiter}{group}{delimiter}{sum_group}"
-            )
+            check_field_right = f"sum{delimiter}{subset}{metric}{delimiter}{group}{delimiter}{sum_group}"
         field_check_expr, field_check_details = make_field_check_dicts(
             field_check_expr=field_check_expr,
             field_check_details=field_check_details,
             check_description=f"{check_field_left} = {check_field_right}",
-            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{metric}_{group}_{sum_group}"],
+            cond_expr=t.info[check_field_left]
+            != annot_dict[
+                f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
+            ],
             display_fields=hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
-                    f"sum_{metric}_{group}_{sum_group}": annot_dict[f"sum_{metric}_{group}_{sum_group}"],
+                    f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}": annot_dict[
+                        f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
+                    ],
                 }
             ),
         )
@@ -272,7 +275,9 @@ def filters_sanity_check(
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
         t.group_by(**group_exprs).aggregate(
-            **make_filters_sanity_check_expr(t, extra_filter_checks, variant_filter_field)
+            **make_filters_sanity_check_expr(
+                t, extra_filter_checks, variant_filter_field
+            )
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
@@ -285,7 +290,9 @@ def filters_sanity_check(
 
     logger.info("Checking distributions of variant type amongst variant filters...")
     _filter_agg_order(
-        t, {"allele_type": t.info.allele_type}, variant_filter_field=variant_filter_field,
+        t,
+        {"allele_type": t.info.allele_type},
+        variant_filter_field=variant_filter_field,
     )
 
     logger.info(
@@ -784,22 +791,27 @@ def missingness_sanity_checks(
     for x in info_metrics:
         metrics_missing[x] = hl.agg.sum(hl.is_missing(t.info[x]))
     for x in non_info_metrics:
-        metrics_missing[x] = hl.agg.sum(hl.is_missing(t[x])) 
+        metrics_missing[x] = hl.agg.sum(hl.is_missing(t[x]))
     output = dict(t.aggregate(hl.struct(**metrics_missing)))
 
     n_fail = 0
     for metric, n_missing in output.items():
-        if n_missing/n_sites > missingness_threshold:
+        if n_missing / n_sites > missingness_threshold:
             logger.info(
-                "FAILED missingness check for %s: %d sites or %.2f%% missing", metric, n_missing, (100 * n_missing/n_sites)
+                "FAILED missingness check for %s: %d sites or %.2f%% missing",
+                metric,
+                n_missing,
+                (100 * n_missing / n_sites),
             )
             n_fail += 1
         else:
             logger.info(
-                "Passed missingness check for %s: %d sites or %.2f%% missing", metric, n_missing, (100 * n_missing/n_sites)
+                "Passed missingness check for %s: %d sites or %.2f%% missing",
+                metric,
+                n_missing,
+                (100 * n_missing / n_sites),
             )
     logger.info("%d missing metrics checks failed", n_fail)
-
 
 
 def vcf_field_check(

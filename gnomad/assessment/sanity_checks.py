@@ -516,7 +516,7 @@ def sample_sum_sanity_checks(
         field_check_expr_s, field_check_details_s = sample_sum_check(
             t,
             subset,
-            dict(group=["adj"], pop=list(set(pop_names)), sex=sexes),
+            dict(group=["adj"], pop=pop_names, sex=sexes),
             sort_order,
             delimiter,
             metric_first_label,

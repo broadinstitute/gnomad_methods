@@ -184,7 +184,7 @@ def sample_sum_check(
             field_check_expr=field_check_expr,
             field_check_details=field_check_details,
             check_description=f"{check_field_left} = {check_field_right}",
-            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{metric}"],
+            cond_expr=t.info[check_field_left] != annot_dict[f"sum_{metric}_{group}_{sum_group}"],
             display_fields=hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
@@ -211,7 +211,7 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
 
 
 def filters_sanity_check(
-    t: Union[hl.MatrixTable, hl.Table], rf_filter: bool = False
+    t: Union[hl.MatrixTable, hl.Table], variant_filter_field: str = "RF"
 ) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
@@ -222,13 +222,13 @@ def filters_sanity_check(
             - Any filter
             - Inbreeding coefficient filter in combination with any other filter
             - AC0 filter in combination with any other filter
-            - VQSR or random forest filtering in combination with any other filter
+            - `variant_filter_field` filtering in combination with any other filter in combination with any other filter
             - Only inbreeding coefficient filter
             - Only AC0 filter
-            - Only VQSR or random forest filtering
+            - Only `variant_filter_field` filtering
 
     :param t: Input MatrixTable or Table to be checked.
-    :param rf_filter: True if the random forest was used for variant filtration, False if VQSR was used.
+    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -256,7 +256,7 @@ def filters_sanity_check(
         n_rows: int = None,
         n_cols: int = None,
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
-        rf: bool = False,
+        variant_filter_field: str = "RF",
     ) -> None:
         """
         Perform sanity checks to measure percentages of variants filtered under different conditions.
@@ -266,13 +266,13 @@ def filters_sanity_check(
         :param n_rows: Number of rows to show.
         :param n_cols: Number of columns to show.
         :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
-        :param rf: True if the random forest was used for variant filtration, False if VQSR was used.
+        :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
         :return: None
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
         t.group_by(**group_exprs).aggregate(
-            **make_filters_sanity_check_expr(t, extra_filter_checks, rf)
+            **make_filters_sanity_check_expr(t, extra_filter_checks, variant_filter_field)
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
@@ -280,12 +280,12 @@ def filters_sanity_check(
     )
 
     _filter_agg_order(
-        t, {"is_filtered": t.is_filtered}, rf=rf_filter,
+        t, {"is_filtered": t.is_filtered}, variant_filter_field=variant_filter_field,
     )
 
     logger.info("Checking distributions of variant type amongst variant filters...")
     _filter_agg_order(
-        t, {"allele_type": t.info.allele_type}, rf=rf_filter,
+        t, {"allele_type": t.info.allele_type}, variant_filter_field=variant_filter_field,
     )
 
     logger.info(
@@ -299,7 +299,7 @@ def filters_sanity_check(
         },
         50,
         140,
-        rf=rf_filter,
+        variant_filter_field=variant_filter_field,
     )
 
     logger.info(
@@ -314,7 +314,7 @@ def filters_sanity_check(
         },
         50,
         140,
-        rf=rf_filter,
+        variant_filter_field=variant_filter_field,
     )
 
 
@@ -887,7 +887,7 @@ def sanity_check_release_t(
     sexes: List[str] = SEXES,
     sample_sum_sets_and_pops: Dict[str, List[str]] = {"": POPS},
     sort_order: List[str] = SORT_ORDER,
-    rf_filter: bool = False,
+    variant_filter_field: str = "RF",
     summarize_variants_check: bool = True,
     filters_check: bool = True,
     raw_adj_check: bool = True,
@@ -934,7 +934,7 @@ def sanity_check_release_t(
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")
-        filters_sanity_check(t, rf_filter)
+        filters_sanity_check(t, variant_filter_field)
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")

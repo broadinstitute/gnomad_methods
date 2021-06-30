@@ -121,7 +121,7 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
-) -> Tuple[dict, dict]:
+) -> dict:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
@@ -133,7 +133,7 @@ def sample_sum_check(
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations.
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
-    :return: Tuple of dictionaries
+    :return: Dictionary of sample sum field check expressions and display fields
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -170,7 +170,6 @@ def sample_sum_check(
         ] = hl.sum(sum_group_exprs)
 
     field_check_expr = {}
-    field_check_details = {}
     for metric in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
@@ -325,35 +324,9 @@ def filters_sanity_check(
     )
 
 
-def make_field_check_dicts(
-    field_check_expr: dict,
-    field_check_details: dict,
-    check_description: str,
-    cond_expr: hl.expr.BooleanExpression,
-    display_fields: List[str],
-) -> Tuple[dict, dict]:
-    """
-    Create dictionary for aggregating each sanity check's failure count and another for each check's details.
-
-    :param field_check_expr: Dictionary of check description and aggregated expression filtering count
-    :param field_check_details: Dictionary of structs containing each check descriptions details
-    :param check_description: Check to be added to the dictionary
-    :param cond_expr: Logical expression referring to annotations in ht to be checked.
-    :param display_fields: List of ht annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
-    :return: Tuple of dictionaries
-    """
-    field_check_expr[check_description] = hl.agg.filter(cond_expr, hl.agg.count())
-    field_check_details[check_description] = hl.struct(
-        cond_expr=cond_expr, display_fields=display_fields
-    )
-
-    return field_check_expr, field_check_details
-
-
 def generic_field_check_loop(
     ht: hl.Table,
     field_check_expr: dict,
-    field_check_details: dict,
     verbose: bool,
     show_percent_sites: bool = False,
     ht_count: int = None,
@@ -365,20 +338,20 @@ def generic_field_check_loop(
 
     :param ht: Table containing annotations to be checked.
     :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
-    :param field_check_details: Dictionary whose keys are the the check descriptions and values are struct expressions used for check and what to display for the check in the terminal.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param ht_count: Previously computed sum of sites within hail Table.
     :return: None
     """
-    ht_field_check_counts = ht.aggregate(hl.struct(**field_check_expr))
+    ht_field_check_counts = ht.aggregate(
+        hl.struct(**{k: v['expr'] for k, v in field_check_expr.items()})
+    )
     for check_description, n_fail in ht_field_check_counts.items():
         generic_field_check(
             ht,
-            cond_expr=field_check_details[check_description].cond_expr,
             check_description=check_description,
             n_fail=n_fail,
-            display_fields=field_check_details[check_description].display_fields,
+            display_fields=field_check_expr[check_description]['display_fields'],
             verbose=verbose,
             show_percent_sites=show_percent_sites,
             ht_count=ht_count,
@@ -412,7 +385,6 @@ def subset_freq_sanity_checks(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
-    field_check_details = {}
     for subset in subsets:
         if subset:
             subset += delimiter
@@ -426,23 +398,22 @@ def subset_freq_sanity_checks(
                         check_field_right = f"{field}{delimiter}{subset}{group}"
                     else:
                         check_field_right = f"{subset}{field}{delimiter}{group}"
-                    field_check_expr, field_check_details = make_field_check_dicts(
-                        field_check_expr=field_check_expr,
-                        field_check_details=field_check_details,
-                        check_description=f"{check_field_left} != {check_field_right}",
-                        cond_expr=t.info[check_field_left] == t.info[check_field_right],
-                        display_fields=hl.struct(
+
+                    field_check_expr[f"{check_field_left} != {check_field_right}"] = {
+                        "expr": hl.agg.count_where(
+                            t.info[check_field_left] == t.info[check_field_right]
+                        ),
+                        "display_fields": hl.struct(
                             **{
                                 check_field_left: t.info[check_field_left],
                                 check_field_right: t.info[check_field_right],
                             }
                         ),
-                    )
+                    }
 
     generic_field_check_loop(
         t,
         field_check_expr,
-        field_check_details,
         verbose,
         show_percent_sites=show_percent_sites,
     )
@@ -488,12 +459,11 @@ def sample_sum_sanity_checks(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
-    field_check_details = {}
     for subset, pops in sample_sum_sets_and_pops.items():
         pop_names = pops
 
         # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
-        field_check_expr_s, field_check_details_s = sample_sum_check(
+        field_check_expr_s = sample_sum_check(
             t,
             subset,
             dict(group=["adj"], pop=pop_names),
@@ -502,8 +472,7 @@ def sample_sum_sanity_checks(
             metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
-        field_check_details.update(field_check_details_s)
-        field_check_expr_s, field_check_details_s = sample_sum_check(
+        field_check_expr_s = sample_sum_check(
             t,
             subset,
             dict(group=["adj"], sex=sexes),
@@ -512,8 +481,7 @@ def sample_sum_sanity_checks(
             metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
-        field_check_details.update(field_check_details_s)
-        field_check_expr_s, field_check_details_s = sample_sum_check(
+        field_check_expr_s = sample_sum_check(
             t,
             subset,
             dict(group=["adj"], pop=pop_names, sex=sexes),
@@ -522,9 +490,8 @@ def sample_sum_sanity_checks(
             metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
-        field_check_details.update(field_check_details_s)
 
-        generic_field_check_loop(t, field_check_expr, field_check_details, verbose)
+        generic_field_check_loop(t, field_check_expr, verbose)
 
 
 def summarize_variants(
@@ -591,64 +558,53 @@ def raw_and_adj_sanity_checks(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
-    field_check_details = {}
     for subfield in ["AC", "AF"]:
         # Check raw AC, AF > 0
         check_field = f"{subfield}{delimiter}raw"
-        field_check_expr, field_check_details = make_field_check_dicts(
-            field_check_expr=field_check_expr,
-            field_check_details=field_check_details,
-            check_description=f"{check_field} > 0",
-            cond_expr=t.info[check_field] <= 0,
-            display_fields=hl.struct(**{check_field: t.info[check_field]}),
-        )
+
+        field_check_expr[f"{check_field} > 0"] = {
+            "expr": hl.agg.count_where(t.info[check_field] <= 0),
+            "display_fields": hl.struct(**{check_field: t.info[check_field]}),
+        }
 
         check_field = f"{subfield}{delimiter}adj"
-        field_check_expr, field_check_details = make_field_check_dicts(
-            field_check_expr=field_check_expr,
-            field_check_details=field_check_details,
-            check_description=f"{check_field} >= 0",
-            cond_expr=t.info[check_field] < 0,
-            display_fields=hl.struct(
+        field_check_expr[f"{check_field} >= 0"] = {
+            "expr": hl.agg.count_where(t.info[check_field] < 0),
+            "display_fields": hl.struct(
                 **{check_field: t.info[check_field], "filters": t.filters}
             ),
-        )
+        }
 
     # Check raw AN > 0
     check_field = f"AN{delimiter}raw"
-    field_check_expr, field_check_details = make_field_check_dicts(
-        field_check_expr=field_check_expr,
-        field_check_details=field_check_details,
-        check_description=f"{check_field} > 0",
-        cond_expr=t.info[check_field] <= 0,
-        display_fields=hl.struct(**{check_field: t.info[check_field]}),
-    )
+    field_check_expr[f"{check_field} > 0"] = {
+        "expr": hl.agg.count_where(t.info[check_field] <= 0),
+        "display_fields": hl.struct(**{check_field: t.info[check_field]}),
+    }
 
     # Check adj AN >= 0
     check_field = f"AN{delimiter}adj"
-    field_check_expr, field_check_details = make_field_check_dicts(
-        field_check_expr=field_check_expr,
-        field_check_details=field_check_details,
-        check_description=f"{check_field} >= 0",
-        cond_expr=t.info[check_field] < 0,
-        display_fields=hl.struct(**{check_field: t.info[check_field]}),
-    )
+    field_check_expr[f"{check_field} >= 0"] = {
+        "expr": hl.agg.count_where(t.info[check_field] < 0),
+        "display_fields": hl.struct(**{check_field: t.info[check_field]}),
+    }
+
     # Check overall gnomad's raw subfields >= adj
     for subfield in ["AC", "AN", "nhomalt"]:
         check_field_left = f"{subfield}{delimiter}raw"
         check_field_right = f"{subfield}{delimiter}adj"
-        field_check_expr, field_check_details = make_field_check_dicts(
-            field_check_expr=field_check_expr,
-            field_check_details=field_check_details,
-            check_description=f"{check_field_left} >= {check_field_right}",
-            cond_expr=t.info[check_field_left] < t.info[check_field_right],
-            display_fields=hl.struct(
+
+        field_check_expr[f"{check_field_left} >= {check_field_right}"] = {
+            "expr": hl.agg.count_where(
+                t.info[check_field_left] < t.info[check_field_right]
+            ),
+            "display_fields": hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
                     check_field_right: t.info[check_field_right],
                 }
             ),
-        )
+        }
 
         for subset in subsets:
             # Add delimiter for subsets but not "" representing entire callset
@@ -662,20 +618,19 @@ def raw_and_adj_sanity_checks(
             check_field_left = f"{field_check_label}raw"
             check_field_right = f"{field_check_label}adj"
 
-            field_check_expr, field_check_details = make_field_check_dicts(
-                field_check_expr=field_check_expr,
-                field_check_details=field_check_details,
-                check_description=f"{check_field_left} >= {check_field_right}",
-                cond_expr=t.info[check_field_left] < t.info[check_field_right],
-                display_fields=hl.struct(
+            field_check_expr[f"{check_field_left} >= {check_field_right}"] = {
+                "expr": hl.agg.count_where(
+                    t.info[check_field_left] < t.info[check_field_right]
+                ),
+                "display_fields": hl.struct(
                     **{
                         check_field_left: t.info[check_field_left],
                         check_field_right: t.info[check_field_right],
                     }
                 ),
-            )
+            }
 
-    generic_field_check_loop(t, field_check_expr, field_check_details, verbose)
+    generic_field_check_loop(t, field_check_expr, verbose)
 
 
 def sex_chr_sanity_checks(
@@ -738,28 +693,25 @@ def sex_chr_sanity_checks(
     xx_metrics = [x for x in xx_metrics if "nhomalt" in x]
 
     field_check_expr = {}
-    field_check_details = {}
     for metric in xx_metrics:
         standard_field = metric.replace(f"{delimiter}female", "").replace(
             f"{delimiter}XX", ""
         )
         check_field_left = f"{metric}"
         check_field_right = f"{standard_field}"
-        field_check_expr, field_check_details = make_field_check_dicts(
-            field_check_expr=field_check_expr,
-            field_check_details=field_check_details,
-            check_description=f"{check_field_left} == {check_field_right}",
-            cond_expr=t_xnonpar.info[check_field_left]
-            != t_xnonpar.info[check_field_right],
-            display_fields=hl.struct(
+        field_check_expr[f"{check_field_left} == {check_field_right}"] = {
+            "expr": hl.agg.count_where(
+                t_xnonpar.info[check_field_left] != t_xnonpar.info[check_field_right]
+            ),
+            "display_fields": hl.struct(
                 **{
                     check_field_left: t_xnonpar.info[check_field_left],
                     check_field_right: t_xnonpar.info[check_field_right],
                 }
             ),
-        )
+        }
 
-    generic_field_check_loop(t_xnonpar, field_check_expr, field_check_details, verbose)
+    generic_field_check_loop(t_xnonpar, field_check_expr, verbose)
 
 
 def missingness_sanity_checks(

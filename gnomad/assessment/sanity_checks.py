@@ -897,7 +897,7 @@ def sanity_check_release_t(
     :param sexes: List of sexes in table.
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param rf_filter: True if the random forest was used for variant filtration, False if VQSR was used.
+    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
     :param summarize_variants_check: When true, runs the summarize_variants method.
     :param filters_check: When true, runs the filters_sanity_check method.
     :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method.

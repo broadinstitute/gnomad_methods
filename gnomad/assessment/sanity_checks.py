@@ -25,10 +25,10 @@ def generic_field_check(
     ht_count: Optional[int] = None,
 ) -> None:
     """
-    Check generic logical condition involving annotations in a Hail Table when `n_fail` is absent and print the results to terminal.
+    Check generic logical condition `cond_expr` involving annotations in a Hail Table when `n_fail` is absent and print the results to stdout.
 
     Displays the number of rows (and percent of rows, if `show_percent_sites` is True) in the Table that fail, either previously computed as `n_fail` or that match the `cond_expr`, and fail to be the desired condition (`check_description`).
-    If the number of rows that match the `cond_expr` or `n_fail` is 0 then the Table passes that check; otherwise, it fails.
+    If the number of rows that match the `cond_expr` or `n_fail` is 0, then the Table passes that check; otherwise, it fails.
 
     .. note::
 
@@ -43,8 +43,8 @@ def generic_field_check(
     :param cond_expr: Optional logical expression referring to annotations in ht to be checked.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param n_fail: Optional previously computed number of sites that fail the conditional checks. If none is supplied, `cond_expr` is used to filter the Table and obtain the count of sites.
-    :param ht_count: Optional previously computed sum of sites within hail Table. If none is supplied, a count of sites in the Table is performed.```
+    :param n_fail: Optional number of sites that fail the conditional checks (previously computed). If not supplied, `cond_expr` is used to filter the Table and obtain the count of sites that fail the checks.
+    :param ht_count: Optional number of sites within hail Table (previously computed). If not supplied, a count of sites in the Table is performed.
     :return: None
     """
     if (n_fail is None and cond_expr is None) or (n_fail and cond_expr):
@@ -90,7 +90,7 @@ def make_filters_sanity_check_expr(
 
     :param ht: Table containing 'filter' annotation to be examined.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
-    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
+    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :return: Dictionary containing Hail aggregation expressions to examine filter flags.
     """
     filters_dict = {
@@ -124,17 +124,17 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
-) -> dict:
+) -> Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]]:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
     For example, if subset1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
 
-    :param t: Input MatrixTable or Table containing annotations to be summed.
+    :param t: Input MatrixTable or Table containing call stats annotations to be summed.
     :param subset: String indicating sample subset.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
     :return: Dictionary of sample sum field check expressions and display fields
     """
@@ -147,13 +147,14 @@ def sample_sum_check(
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
     # Grab the adj group for checks as we do not retain the raw metric counts for all sample groups so we cannot check the sample sums
     group = label_groups.pop("group")[0]
-    # sum_group is the group that when their metrics are added together they should equal the metric total `group` e.g., if group = callset1, one sum_group could be callset1-pop
+    # sum_group is a subset of group. When the metrics of sum_group are added, they should equal the total metric of group.
+    # e.g., if group = callset1, one sum_group could be callset1-pop
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
     info_fields = t.info.keys()
 
-    # Loop through metrics to build dictionary of fields that make up 'group' and then stores their sum
+    # Loop through metrics to build dictionary of fields that make up 'group' and then store the metrics sums
     annot_dict = {}
     for metric in ["AC", "AN", "nhomalt"]:
         sum_group_exprs = []
@@ -176,11 +177,10 @@ def sample_sum_check(
     for metric in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
-            check_field_right = f"sum{delimiter}{metric}{delimiter}{subset}{group}{delimiter}{sum_group}"
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
-            check_field_right = f"sum{delimiter}{subset}{metric}{delimiter}{group}{delimiter}{sum_group}"
 
+        check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
             "expr": hl.agg.count_where(
                 t.info[check_field_left]
@@ -237,11 +237,11 @@ def filters_sanity_check(
             - Only `variant_filter_field` filtering
 
     :param t: Input MatrixTable or Table to be checked.
-    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
-    :param check_lcr: Add the low complexity region's boolean expression to the problematic region check.
-    :param check_segdup: Add the segmental duplication region's boolean expression to the problematic region check.
-    :param check_nonpar: Add the non-pseudoautosomal region's boolean expression to the problematic region check.
-    :param check_decoy: Add the decoy region's boolean expression to the problematic region check.
+    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
+    :param check_lcr: Add the low complexity region's boolean expression to the problematic region check. Default is True.
+    :param check_segdup: Add the segmental duplication region's boolean expression to the problematic region check. Default is True.
+    :param check_nonpar: Add the non-pseudoautosomal region's boolean expression to the problematic region check. Default is True.
+    :param check_decoy: Add the decoy region's boolean expression to the problematic region check. False (hg38 decoy resource does not exist).
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -259,7 +259,7 @@ def filters_sanity_check(
     if check_nonpar:
         problematic_region_exprs.append(t.info.nonpar)
     if check_decoy:
-        problematic_region_exprs.append(t.info.nonpar)
+        problematic_region_exprs.append(t.info.decoy)
 
     problematic_region_expr = hl.any(lambda x: x, problematic_region_exprs)
 
@@ -282,8 +282,8 @@ def filters_sanity_check(
         :param group_exprs: Dictionary of expressions to group the Table by.
         :param n_rows: Number of rows to show.
         :param n_cols: Number of columns to show.
-        :param extra_filter_checks: Optional dictionary containing filter condition name (key) extra filter expressions (value) to be examined.
-        :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
+        :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
+        :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
         :return: None
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -297,7 +297,6 @@ def filters_sanity_check(
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-
     _filter_agg_order(
         t, {"is_filtered": t.is_filtered}, variant_filter_field=variant_filter_field,
     )
@@ -341,7 +340,7 @@ def filters_sanity_check(
 
 def generic_field_check_loop(
     ht: hl.Table,
-    field_check_expr: dict,
+    field_check_expr: Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]],
     verbose: bool,
     show_percent_sites: bool = False,
     ht_count: int = None,
@@ -355,7 +354,7 @@ def generic_field_check_loop(
     :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param ht_count: Previously computed sum of sites within hail Table.
+    :param ht_count: Previously computed sum of sites within hail Table. Default is None.
     :return: None
     """
     ht_field_check_counts = ht.aggregate(
@@ -392,9 +391,9 @@ def subset_freq_sanity_checks(
     :param t: Input MatrixTable or Table.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param show_percent_sites: If true, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
-    :param delimiter: String to use as delimiter when making group label combinations.
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -440,7 +439,7 @@ def subset_freq_sanity_checks(
             ),
         )
     )
-    logger.info("Frequency spot check counts: %s", hl.eval(freq_counts))
+    logger.info("Frequency spot check counts: %s", freq_counts)
 
 
 def sample_sum_sanity_checks(
@@ -456,16 +455,16 @@ def sample_sum_sanity_checks(
     Perform sanity checks on sample sums in input Table.
 
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    displays results from checking the sum of the specified annotations in the terminal.
+    displays results from checking the sum of the specified annotations in stdout.
     Also checks that annotations for all expected sample populations are present.
 
     :param t: Input Table.
     :param sexes: List of sexes in table.
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with the callset pops as value to test entire callset.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with the callset pops as value to test entire callset. Default is {"": POPS}.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations.
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :return: None
     """
     # TODO: Add support for subpop sums
@@ -564,8 +563,8 @@ def raw_and_adj_sanity_checks(
     :param t: Input MatrixTable or Table to check.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as delimiter when making group label combinations.
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -664,7 +663,7 @@ def sex_chr_sanity_checks(
     :param info_metrics: List of metrics in info struct of input Table.
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as the delimiter in XX metrics
+    :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -737,7 +736,7 @@ def missingness_sanity_checks(
     """
     Check amount of missingness in all row annotations.
 
-    Print metric to sdout if the metric annotations missingness exceeds the missingness_threshold.
+    Print metric to sdout if the percentage of metric annotations missingness exceeds the missingness_threshold.
 
     :param t: Input MatrixTable or Table.
     :param info_metrics: List of metrics in info struct of input Table.
@@ -788,7 +787,7 @@ def vcf_field_check(
     """
     Check that all VCF fields and descriptions are present in input Table and VCF header dictionary.
 
-    :param t: Input MatrixTable or Tableto be exported to VCF.
+    :param t: Input MatrixTable or Table to be exported to VCF.
     :param header_dict: VCF header dictionary.
     :param row_annotations: List of row annotations in MatrixTable.
     :param hists: List of variant histogram annotations. Default is HISTS.
@@ -892,20 +891,20 @@ def sanity_check_release_t(
     :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param delimiter: String to use as delimiter when making group label combinations.
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
-    :param sexes: List of sexes in table.
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param sexes: List of sexes in table. Default is SEXES.
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset. Default is {"": POPS}.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR).
-    :param summarize_variants_check: When true, runs the summarize_variants method.
-    :param filters_check: When true, runs the filters_sanity_check method.
-    :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method.
-    :param subset_freq_check: When true, runs the subset_freq_sanity_checks method.
-    :param samples_sum_check: When true, runs the sample_sum_sanity_checks method.
-    :param sex_chr_check: When true, runs the sex_chr_sanity_checks method.
-    :param missingness_check: When true, runs the missingness_sanity_checks method.
-    :return: None (terminal display of results from the battery of sanity checks).
+    :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
+    :param summarize_variants_check: When true, runs the summarize_variants method. Default is True.
+    :param filters_check: When true, runs the filters_sanity_check method. Default is True.
+    :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method. Default is True.
+    :param subset_freq_check: When true, runs the subset_freq_sanity_checks method. Default is True.
+    :param samples_sum_check: When true, runs the sample_sum_sanity_checks method. Default is True.
+    :param sex_chr_check: When true, runs the sex_chr_sanity_checks method. Default is True.
+    :param missingness_check: When true, runs the missingness_sanity_checks method. Default is True.
+    :return: None (stdout display of results from the battery of sanity checks).
     """
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")

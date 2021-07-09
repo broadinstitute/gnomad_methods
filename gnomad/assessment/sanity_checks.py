@@ -38,7 +38,7 @@ def generic_field_check(
         of having a raw AC greater than or equal to the adj AC.
 
     :param ht: Table containing annotations to be checked.
-    :param check_description: String describing the condition being checked; is displayed in terminal summary message.
+    :param check_description: String describing the condition being checked; is displayed in stdout summary message.
     :param display_fields: StructExpression containing annotations to be displayed in case of failure (for troubleshooting purposes); these fields are also displayed if verbose is True.
     :param cond_expr: Optional logical expression referring to annotations in ht to be checked.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
@@ -135,7 +135,7 @@ def sample_sum_check(
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC.
+    :param metric_first_label: If True, call statistic precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-AC-male. Default is True.
     :return: Dictionary of sample sum field check expressions and display fields
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -825,12 +825,12 @@ def vcf_field_check(
                 description = header_dict[item][field]
                 if len(description) == 0:
                     logger.warning(
-                        "%s in T info field has empty description in VCF header!", field
+                        "%s in info field has empty description in VCF header!", field
                     )
                     temp_missing_descriptions.append(field)
             except KeyError:
                 logger.warning(
-                    "%s in T info field does not exist in VCF header!", field
+                    "%s in info field does not exist in VCF header!", field
                 )
                 # NOTE: some hists are not exported, so ignoring here
                 # END entry is also not exported (removed during densify)

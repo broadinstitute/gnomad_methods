@@ -427,17 +427,10 @@ def subset_freq_sanity_checks(
         t, field_check_expr, verbose, show_percent_sites=show_percent_sites,
     )
 
-    freq_counts = t.aggregate(
-        hl.struct(
-            total_defined_AC=hl.agg.count_where(
-                hl.is_defined(t.info[f"AC{delimiter}adj"])
-            ),
-            total_defined_AC_raw=hl.agg.count_where(
-                hl.is_defined(t.info[f"AC{delimiter}raw"])
-            ),
-        )
+    total_defined_raw_AC = hl.agg.count_where(
+        hl.is_defined(t.info[f"AC{delimiter}raw"])
     )
-    logger.info("Frequency spot check counts: %s", freq_counts)
+    logger.info("Total defined raw AC count: %s", total_defined_raw_AC)
 
 
 def sample_sum_sanity_checks(

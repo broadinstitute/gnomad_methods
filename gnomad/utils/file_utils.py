@@ -23,6 +23,7 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
     """
     Check whether a large number of files exist.
 
+    Created for use with hail Batch jobs.
     Normal `file_exists` function is very slow when checking a large number of files.
 
     :param fnames: List of file names to check.

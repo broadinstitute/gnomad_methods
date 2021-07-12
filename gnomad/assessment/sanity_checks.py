@@ -436,7 +436,9 @@ def subset_freq_sanity_checks(
 def sample_sum_sanity_checks(
     t: Union[hl.MatrixTable, hl.Table],
     sexes: List[str] = SEXES,
-    sample_sum_sets_and_pops: Dict[str, List[str]] = {"": POPS},
+    subsets: List[str] = [""],
+    pops: List[str] = POPS,
+    additional_subsets_and_pops: Dict[str, List[str]] = None,
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
@@ -451,7 +453,9 @@ def sample_sum_sanity_checks(
 
     :param t: Input Table.
     :param sexes: List of sexes in table.
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of populations within subset (values). An empty string, e.g. "", should be passed as key with the callset pops as value to test entire callset. Default is {"": POPS}.
+    :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
+    :param pops: List of pops contained within the subsets. Default is POPS.
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
@@ -462,6 +466,12 @@ def sample_sum_sanity_checks(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
+    default_pop_subset = {subset: pops for subset in subsets}
+    sample_sum_sets_and_pops = (
+        {**default_pop_subset, **additional_subsets_and_pops}
+        if additional_subsets_and_pops
+        else default_pop_subset
+    )
     for subset, pops in sample_sum_sets_and_pops.items():
         pop_names = pops
 

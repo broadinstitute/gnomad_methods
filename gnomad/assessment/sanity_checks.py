@@ -396,7 +396,6 @@ def subset_freq_sanity_checks(
     field_check_expr = {}
     for subset in subsets:
         if subset:
-            subset += delimiter
             for field in ["AC", "AN", "nhomalt"]:
                 for group in ["adj", "raw"]:
                     logger.info(
@@ -404,9 +403,13 @@ def subset_freq_sanity_checks(
                     )
                     check_field_left = f"{field}{delimiter}{group}"
                     if metric_first_label:
-                        check_field_right = f"{field}{delimiter}{subset}{group}"
+                        check_field_right = (
+                            f"{field}{delimiter}{subset}{delimiter}{group}"
+                        )
                     else:
-                        check_field_right = f"{subset}{field}{delimiter}{group}"
+                        check_field_right = (
+                            f"{subset}{delimiter}{field}{delimiter}{group}"
+                        )
 
                     field_check_expr[f"{check_field_left} != {check_field_right}"] = {
                         "expr": hl.agg.count_where(

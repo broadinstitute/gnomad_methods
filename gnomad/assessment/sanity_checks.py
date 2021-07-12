@@ -124,6 +124,7 @@ def sample_sum_check(
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
+    metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]]:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
@@ -135,8 +136,9 @@ def sample_sum_check(
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, call statistic precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-AC-male. Default is True.
-    :return: Dictionary of sample sum field check expressions and display fields
+    :param metric_first_label: If True, call statistic precedes label group, e.g. AC-subset-male. If False, label group precedes metric, subset-AC-male. Default is True.
+    :param metricst: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
+    :return: Dictionary of sample sum field check expressions and display fields.
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
@@ -156,7 +158,7 @@ def sample_sum_check(
 
     # Loop through metrics to build dictionary of fields that make up 'group' and then store the metrics sums
     annot_dict = {}
-    for metric in ["AC", "AN", "nhomalt"]:
+    for metric in metrics:
         sum_group_exprs = []
         for label in label_combos:
             if metric_first_label:
@@ -174,6 +176,7 @@ def sample_sum_check(
         ] = hl.sum(sum_group_exprs)
 
     field_check_expr = {}
+
     for metric in ["AC", "AN", "nhomalt"]:
         if metric_first_label:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
@@ -181,19 +184,15 @@ def sample_sum_check(
             check_field_left = f"{subset}{metric}{delimiter}{group}"
 
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
+        sum_annot_key = f"{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
             "expr": hl.agg.count_where(
-                t.info[check_field_left]
-                != annot_dict[
-                    f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
-                ]
+                t.info[check_field_left] != annot_dict[f"sum{sum_annot_key}"]
             ),
             "display_fields": hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
-                    f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}": annot_dict[
-                        f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
-                    ],
+                    f"sum{sum_annot_key}": annot_dict[f"sum{sum_annot_key}"],
                 }
             ),
         }
@@ -204,9 +203,9 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     """
     Check if the row counts in two Tables are the same.
 
-    :param ht1: First Table to be checked
-    :param ht2: Second Table to be checked
-    :return: Whether the row counts are the same
+    :param ht1: First Table to be checked.
+    :param ht2: Second Table to be checked.
+    :return: Whether the row counts are the same.
     """
     r_count1 = ht1.count()
     r_count2 = ht2.count()

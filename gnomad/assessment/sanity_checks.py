@@ -586,20 +586,6 @@ def raw_and_adj_sanity_checks(
             ),
         }
 
-    # Check raw AN > 0
-    check_field = f"AN{delimiter}raw"
-    field_check_expr[f"{check_field} > 0"] = {
-        "expr": hl.agg.count_where(t.info[check_field] <= 0),
-        "display_fields": hl.struct(**{check_field: t.info[check_field]}),
-    }
-
-    # Check adj AN >= 0
-    check_field = f"AN{delimiter}adj"
-    field_check_expr[f"{check_field} >= 0"] = {
-        "expr": hl.agg.count_where(t.info[check_field] < 0),
-        "display_fields": hl.struct(**{check_field: t.info[check_field]}),
-    }
-
     # Check overall gnomad's raw subfields >= adj
     for subfield in ["AC", "AN", "nhomalt"]:
         check_field_left = f"{subfield}{delimiter}raw"

@@ -140,7 +140,7 @@ def sample_sum_check(
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    # Check if subset is an empty string which is added to check entire callset but does not need the added delimiter
+    # An empty string is passed to run this check on the entire callset but we do not want to add an delimiter to the field look ups for the empty string
     if subset:
         subset += delimiter
 
@@ -340,7 +340,9 @@ def filters_sanity_check(
 
 def generic_field_check_loop(
     ht: hl.Table,
-    field_check_expr: Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]],
+    field_check_expr: Dict[
+        str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]
+    ],
     verbose: bool,
     show_percent_sites: bool = False,
     ht_count: int = None,
@@ -348,7 +350,7 @@ def generic_field_check_loop(
     """
     Loop through all conditional checks for a given hail Table.
 
-    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check. 
+    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check.
 
     :param ht: Table containing annotations to be checked.
     :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
@@ -385,9 +387,9 @@ def subset_freq_sanity_checks(
 
     Check:
         - Number of sites where callset frequency is equal to a subset frequency (raw and adj)
-            - eg. t.info.AC-adj != t.info.AC-subset1-adj 
+            - eg. t.info.AC-adj != t.info.AC-subset1-adj
         - Total number of sites where the allele count annotation is defined (raw and adj)
-        
+
     :param t: Input MatrixTable or Table.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
@@ -829,9 +831,7 @@ def vcf_field_check(
                     )
                     temp_missing_descriptions.append(field)
             except KeyError:
-                logger.warning(
-                    "%s in info field does not exist in VCF header!", field
-                )
+                logger.warning("%s in info field does not exist in VCF header!", field)
                 # NOTE: some hists are not exported, so ignoring here
                 # END entry is also not exported (removed during densify)
                 if (field not in hist_fields) and (field != "END"):

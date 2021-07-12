@@ -6,13 +6,66 @@ import logging
 import os
 import subprocess
 import uuid
-from typing import List, Optional, Tuple, Union
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Dict, Optional, Tuple, Union
 
 import hail as hl
+from hailtop.aiotools import LocalAsyncFS, RouterAsyncFS, AsyncFS
+from hailtop.aiogoogle import GoogleStorageAsyncFS
+from hailtop.utils import bounded_gather, tqdm
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+
+async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
+    """
+    Check whether a large number of files exist.
+
+    Normal `file_exists` function is very slow when checking a large number of files.
+
+    :param fnames: List of file names to check.
+    :return: Dictionary of file names (str) and whether the file exists (boolean).
+    """
+
+    async def low_level_async_file_exists(fs: AsyncFS, url: str):
+        try:
+            await fs.statfile(url)
+        except FileNotFoundError:
+            return False
+        else:
+            return True
+
+    async def async_file_exists(fs: AsyncFS, fname: str):
+        fext = os.path.splitext(fname)[1]
+        if fext in [".ht", ".mt"]:
+            fname += "/_SUCCESS"
+        return await low_level_async_file_exists(fs, fname)
+
+    with tqdm(
+        total=len(fnames), desc="check files for existence", disable=False
+    ) as pbar:
+        with ThreadPoolExecutor() as thread_pool:
+            async with RouterAsyncFS(
+                "file", [LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
+            ) as fs:
+
+                def create_unapplied_function(fname):
+                    async def unapplied_function():
+                        x = await async_file_exists(fs, fname)
+                        pbar.update(1)
+                        return x
+
+                    return unapplied_function
+
+                file_existence_checks = [
+                    create_unapplied_function(fname) for fname in fnames
+                ]
+                file_existence = await bounded_gather(
+                    *file_existence_checks, parallelism=750
+                )
+    return {fname: exists for fname, exists in zip(fnames, file_existence)}
 
 
 def file_exists(fname: str) -> bool:

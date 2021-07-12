@@ -216,7 +216,7 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
 def filters_sanity_check(
     t: Union[hl.MatrixTable, hl.Table],
     variant_filter_field: str = "RF",
-    additional_regions: List[str] = ["lcr", "segdup", "nonpar"],
+    problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
     large_n_rows: int = 50,
     large_n_cols: int = 140,
     single_filter_count: bool = False,
@@ -238,7 +238,7 @@ def filters_sanity_check(
 
     :param t: Input MatrixTable or Table to be checked.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
-    :param additional_regions: List of additional egions run filter check in. Default is ["lcr", "segdup", "nonpar"].
+    :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param large_n_rows: Number of rows to show when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
@@ -263,10 +263,12 @@ def filters_sanity_check(
         logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
 
     filtered_expr = hl.len(t.filters) > 0
-    additional_region_expr = hl.any(lambda x: x, additional_regions)
+    problematic_region_expr = hl.any(
+        lambda x: x, [t.info[region] for region in problematic_regions]
+    )
 
     t = t.annotate(
-        is_filtered=filtered_expr, in_additional_region=additional_region_expr
+        is_filtered=filtered_expr, in_problematic_region=problematic_region_expr
     )
 
     def _filter_agg_order(
@@ -317,7 +319,7 @@ def filters_sanity_check(
         t,
         {
             "allele_type": t.info.allele_type,
-            "in_additional_region": t.in_additional_region,
+            "in_problematic_region": t.in_problematic_region,
         },
         large_n_rows,
         large_n_cols,
@@ -331,7 +333,7 @@ def filters_sanity_check(
         t,
         {
             "allele_type": t.info.allele_type,
-            "in_additional_region": t.in_additional_region,
+            "in_problematic_region": t.in_problematic_region,
             "n_alt_alleles": t.info.n_alt_alleles,
         },
         large_n_rows,
@@ -778,19 +780,13 @@ def vcf_field_check(
     """
     hist_fields = []
     for hist in hists:
-        hist_fields.extend(
-            [
-                f"{hist}_bin_freq",
-                f"{hist}_n_smaller",
-                f"{hist}_n_larger",
-                f"{hist}_raw_bin_freq",
-                f"{hist}_raw_n_smaller",
-                f"{hist}_raw_n_larger",
-            ]
-        )
+        hist_fields.append(f"{hist}_bin_freq")
+        if "dp" in hist:
+            hist_fields.append(f"{hist}_n_larger")
 
     missing_fields = []
     missing_descriptions = []
+
     items = ["info", "filter"]
     if entry_annotations:
         items.append("format")
@@ -844,7 +840,8 @@ def vcf_field_check(
 
 def sanity_check_release_t(
     t: Union[hl.MatrixTable, hl.Table],
-    subsets: List[str],
+    subsets: List[str] = [""],
+    pops: List[str] = POPS,
     missingness_threshold: float = 0.5,
     monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
     verbose: bool = False,
@@ -852,7 +849,7 @@ def sanity_check_release_t(
     delimiter: str = "-",
     metric_first_label: bool = True,
     sexes: List[str] = SEXES,
-    sample_sum_sets_and_pops: Dict[str, List[str]] = {"": POPS},
+    sample_sum_sets_and_pops: Dict[str, List[str]] = None,
     sort_order: List[str] = SORT_ORDER,
     variant_filter_field: str = "RF",
     summarize_variants_check: bool = True,
@@ -877,6 +874,7 @@ def sanity_check_release_t(
 
     :param t: Input MatrixTable or Table containing variant annotations to check.
     :param subsets: List of subsets to be checked.
+    :param pops: List of pops within main callset.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
     :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
@@ -884,7 +882,7 @@ def sanity_check_release_t(
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param sexes: List of sexes in table. Default is SEXES.
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. An empty string, e.g. "", should be passed as key for entire callset. Default is {"": POPS}.
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param summarize_variants_check: When true, runs the summarize_variants method. Default is True.
@@ -902,7 +900,7 @@ def sanity_check_release_t(
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")
-        filters_sanity_check(t, variant_filter_field, monoallelic_expr)
+        filters_sanity_check(t, variant_filter_field, monoallelic_expr=monoallelic_expr)
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")
@@ -919,6 +917,8 @@ def sanity_check_release_t(
         sample_sum_sanity_checks(
             t,
             sexes,
+            subsets,
+            pops,
             sample_sum_sets_and_pops,
             verbose,
             sort_order,

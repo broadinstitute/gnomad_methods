@@ -220,6 +220,7 @@ def filters_sanity_check(
     large_n_rows: int = 50,
     large_n_cols: int = 140,
     single_filter_count: bool = False,
+    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
 ) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
@@ -241,6 +242,7 @@ def filters_sanity_check(
     :param large_n_rows: Number of rows to show when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
+    :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -252,6 +254,13 @@ def filters_sanity_check(
         ex_t = t.explode(t.filters)
         filters = ex_t.aggregate(hl.agg.counter(ex_t.filters))
         logger.info("Exploded variant filter counts: %s", filters)
+
+    if monoallelic_expr is not None:
+        if isinstance(t, hl.MatrixTable):
+            mono_sites = t.filter_rows(monoallelic_expr).count_rows()
+        else:
+            mono_sites = t.filter(monoallelic_expr).count()
+        logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
 
     filtered_expr = hl.len(t.filters) > 0
     additional_region_expr = hl.any(lambda x: x, additional_regions)
@@ -507,17 +516,13 @@ def sample_sum_sanity_checks(
         generic_field_check_loop(t, field_check_expr, verbose)
 
 
-def summarize_variants(
-    t: Union[hl.MatrixTable, hl.Table],
-    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
-) -> hl.Struct:
+def summarize_variants(t: Union[hl.MatrixTable, hl.Table],) -> hl.Struct:
     """
     Get summary of variants in a MatrixTable or Table.
 
     Print the number of variants to stdout and check that each chromosome has variant calls.
 
     :param t: Input MatrixTable or Table to be checked.
-    :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
     :return: Struct of variant summary
     """
     if isinstance(t, hl.MatrixTable):
@@ -533,13 +538,6 @@ def summarize_variants(
     for contig in var_summary.contigs:
         if var_summary.contigs[contig] == 0:
             logger.warning("%s has no variants called", var_summary.contigs)
-
-    if monoallelic_expr is not None:
-        if isinstance(t, hl.MatrixTable):
-            mono_sites = t.filter_rows(monoallelic_expr).count_rows()
-        else:
-            mono_sites = t.filter(monoallelic_expr).count()
-        logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
 
     return var_summary
 
@@ -907,11 +905,11 @@ def sanity_check_release_t(
     """
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
-        summarize_variants(t, monoallelic_expr)
+        summarize_variants(t)
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")
-        filters_sanity_check(t, variant_filter_field)
+        filters_sanity_check(t, variant_filter_field, monoallelic_expr)
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")

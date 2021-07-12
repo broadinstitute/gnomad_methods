@@ -762,7 +762,8 @@ def missingness_sanity_checks(
 def vcf_field_check(
     t: Union[hl.MatrixTable, hl.Table],
     header_dict: Dict[str, Dict[str, Dict[str, str]]],
-    row_annotations: List[str],
+    row_annotations: List[str] = None,
+    entry_annotations: List[str] = None,
     hists: List[str] = HISTS,
 ) -> bool:
     """
@@ -770,13 +771,11 @@ def vcf_field_check(
 
     :param t: Input MatrixTable or Table to be exported to VCF.
     :param header_dict: VCF header dictionary.
-    :param row_annotations: List of row annotations in MatrixTable.
+    :param row_annotations: List of row annotations in MatrixTable or Table.
+    :param entry_annotations: List of entry annotations to use if running this check on a MatrixTable.
     :param hists: List of variant histogram annotations. Default is HISTS.
     :return: Boolean with whether all expected fields and descriptions are present.
     """
-    t = t.rows() if isinstance(t, hl.MatrixTable) else t
-
-    # Confirm all VCF fields/descriptions are present before exporting
     hist_fields = []
     for hist in hists:
         hist_fields.extend(
@@ -792,12 +791,25 @@ def vcf_field_check(
 
     missing_fields = []
     missing_descriptions = []
-    for item in ["info", "filter"]:
+    items = ["info", "filter"]
+    if entry_annotations:
+        items.append("format")
+    for item in items:
         if item == "info":
             annots = row_annotations
+        elif item == "format":
+            annots = entry_annotations
         else:
-            annot_t = t.explode(t.filters)
-            annots = list(annot_t.aggregate(hl.agg.collect_as_set(annot_t.filters)))
+            annot_t = (
+                t.explode_rows(t.filters)
+                if isinstance(t, hl.MatrixTable)
+                else t.explode(t.filters)
+            )
+            annots = (
+                list(annot_t.aggregate_rows(hl.agg.collect_as_set(annot_t.filters)))
+                if isinstance(t, hl.MatrixTable)
+                else list(annot_t.aggregate(hl.agg.collect_as_set(annot_t.filters)))
+            )
 
         temp_missing_fields = []
         temp_missing_descriptions = []
@@ -811,9 +823,8 @@ def vcf_field_check(
                     temp_missing_descriptions.append(field)
             except KeyError:
                 logger.warning("%s in info field does not exist in VCF header!", field)
-                # NOTE: some hists are not exported, so ignoring here
-                # END entry is also not exported (removed during densify)
-                if (field not in hist_fields) and (field != "END"):
+                # NOTE: END entry is not exported (removed during densify)
+                if isinstance(t, hl.MatrixTable) and (field != "END"):
                     temp_missing_fields.append(field)
 
         missing_fields.extend(temp_missing_fields)

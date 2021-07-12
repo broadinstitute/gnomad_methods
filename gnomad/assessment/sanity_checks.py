@@ -653,9 +653,7 @@ def sex_chr_sanity_checks(
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    xx_metrics = [
-        x for x in info_metrics if f"{delimiter}female" in x or f"{delimiter}XX" in x
-    ]
+    xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
 
     if "chrY" in contigs:
         logger.info("Check values of XX metrics for Y variants are NA:")
@@ -691,9 +689,7 @@ def sex_chr_sanity_checks(
 
     field_check_expr = {}
     for metric in xx_metrics:
-        standard_field = metric.replace(f"{delimiter}female", "").replace(
-            f"{delimiter}XX", ""
-        )
+        standard_field = metric.replace(f"{delimiter}XX", "")
         check_field_left = f"{metric}"
         check_field_right = f"{standard_field}"
         field_check_expr[f"{check_field_left} == {check_field_right}"] = {

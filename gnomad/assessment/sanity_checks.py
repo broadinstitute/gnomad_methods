@@ -217,10 +217,10 @@ def filters_sanity_check(
     t: Union[hl.MatrixTable, hl.Table],
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
-    large_n_rows: int = 50,
-    large_n_cols: int = 140,
     single_filter_count: bool = False,
     monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
+    large_n_rows: int = 50,
+    large_n_cols: int = 140,
 ) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
@@ -239,10 +239,10 @@ def filters_sanity_check(
     :param t: Input MatrixTable or Table to be checked.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
-    :param large_n_rows: Number of rows to show when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
-    :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
+    :param large_n_rows: Number of rows to show when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
+    :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -786,7 +786,6 @@ def vcf_field_check(
 
     missing_fields = []
     missing_descriptions = []
-
     items = ["info", "filter"]
     if entry_annotations:
         items.append("format")
@@ -852,6 +851,8 @@ def sanity_check_release_t(
     sample_sum_sets_and_pops: Dict[str, List[str]] = None,
     sort_order: List[str] = SORT_ORDER,
     variant_filter_field: str = "RF",
+    problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
+    single_filter_count: bool = False,
     summarize_variants_check: bool = True,
     filters_check: bool = True,
     raw_adj_check: bool = True,
@@ -885,6 +886,8 @@ def sanity_check_release_t(
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
+    :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
+    :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param summarize_variants_check: When true, runs the summarize_variants method. Default is True.
     :param filters_check: When true, runs the filters_sanity_check method. Default is True.
     :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method. Default is True.
@@ -900,7 +903,13 @@ def sanity_check_release_t(
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")
-        filters_sanity_check(t, variant_filter_field, monoallelic_expr=monoallelic_expr)
+        filters_sanity_check(
+            t,
+            variant_filter_field,
+            problematic_regions,
+            single_filter_count,
+            monoallelic_expr,
+        )
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")

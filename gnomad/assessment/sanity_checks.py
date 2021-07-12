@@ -216,10 +216,10 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
 def filters_sanity_check(
     t: Union[hl.MatrixTable, hl.Table],
     variant_filter_field: str = "RF",
-    check_lcr: bool = True,
-    check_segdup: bool = True,
-    check_nonpar: bool = True,
-    check_decoy: bool = False,
+    additional_regions: List[str] = ["lcr", "segdup", "nonpar"],
+    large_n_rows: int = 50,
+    large_n_cols: int = 140,
+    single_filter_count: bool = False,
 ) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
@@ -237,33 +237,27 @@ def filters_sanity_check(
 
     :param t: Input MatrixTable or Table to be checked.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
-    :param check_lcr: Add the low complexity region's boolean expression to the problematic region check. Default is True.
-    :param check_segdup: Add the segmental duplication region's boolean expression to the problematic region check. Default is True.
-    :param check_nonpar: Add the non-pseudoautosomal region's boolean expression to the problematic region check. Default is True.
-    :param check_decoy: Add the decoy region's boolean expression to the problematic region check. False (hg38 decoy resource does not exist).
+    :param additional_regions: List of additional egions run filter check in. Default is ["lcr", "segdup", "nonpar"].
+    :param large_n_rows: Number of rows to show when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
+    :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
+    :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     filters = t.aggregate(hl.agg.counter(t.filters))
-    logger.info("hl.agg.counter filters: %s", filters)
+    logger.info("Variant filter counts: %s", filters)
+
+    if single_filter_count:
+        ex_t = t.explode(t.filters)
+        filters = ex_t.aggregate(hl.agg.counter(ex_t.filters))
+        logger.info("Exploded variant filter counts: %s", filters)
 
     filtered_expr = hl.len(t.filters) > 0
-
-    problematic_region_exprs = []
-    if check_lcr:
-        problematic_region_exprs.append(t.info.lcr)
-    if check_segdup:
-        problematic_region_exprs.append(t.info.segdup)
-    if check_nonpar:
-        problematic_region_exprs.append(t.info.nonpar)
-    if check_decoy:
-        problematic_region_exprs.append(t.info.decoy)
-
-    problematic_region_expr = hl.any(lambda x: x, problematic_region_exprs)
+    additional_region_expr = hl.any(lambda x: x, additional_regions)
 
     t = t.annotate(
-        is_filtered=filtered_expr, in_problematic_region=problematic_region_expr
+        is_filtered=filtered_expr, in_additional_region=additional_region_expr
     )
 
     def _filter_agg_order(
@@ -314,10 +308,10 @@ def filters_sanity_check(
         t,
         {
             "allele_type": t.info.allele_type,
-            "in_problematic_region": t.in_problematic_region,
+            "in_additional_region": t.in_additional_region,
         },
-        50,
-        140,
+        large_n_rows,
+        large_n_cols,
         variant_filter_field=variant_filter_field,
     )
 
@@ -328,11 +322,11 @@ def filters_sanity_check(
         t,
         {
             "allele_type": t.info.allele_type,
-            "in_problematic_region": t.in_problematic_region,
+            "in_additional_region": t.in_additional_region,
             "n_alt_alleles": t.info.n_alt_alleles,
         },
-        50,
-        140,
+        large_n_rows,
+        large_n_cols,
         variant_filter_field=variant_filter_field,
     )
 

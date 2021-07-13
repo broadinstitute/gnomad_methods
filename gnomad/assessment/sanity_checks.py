@@ -137,7 +137,7 @@ def make_group_sum_expr_dict(
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_label: If True, call statistic precedes label group, e.g. AC-subset-male. If False, label group precedes metric, subset-AC-male. Default is True.
-    :param metricst: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
+    :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: Dictionary of sample sum field check expressions and display fields.
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -383,6 +383,7 @@ def compare_subset_freqs(
     show_percent_sites: bool = True,
     delimiter: str = "-",
     metric_first_label: bool = True,
+    metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
     """
     Perform sanity checks on frequency data in input Table.
@@ -398,6 +399,7 @@ def compare_subset_freqs(
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_label: If True, metric precedes label subset, e.g. AC-non_v2-XY. If False, subset precedes metric, non_v2-AC-XY. Default is True.
+    :param metrics: List of metrics to compare between subset and entire callset. Default is ["AC", "AN", "nhomalt"].
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -405,19 +407,19 @@ def compare_subset_freqs(
     field_check_expr = {}
     for subset in subsets:
         if subset:
-            for field in ["AC", "AN", "nhomalt"]:  # TODO Update to metrics param
+            for metric in metrics:
                 for group in ["adj", "raw"]:
                     logger.info(
                         "Comparing subset %s frequencies to entire callset", subset
                     )
-                    check_field_left = f"{field}{delimiter}{group}"
+                    check_field_left = f"{metric}{delimiter}{group}"
                     if metric_first_label:
                         check_field_right = (
-                            f"{field}{delimiter}{subset}{delimiter}{group}"
+                            f"{metric}{delimiter}{subset}{delimiter}{group}"
                         )
                     else:
                         check_field_right = (
-                            f"{subset}{delimiter}{field}{delimiter}{group}"
+                            f"{subset}{delimiter}{metric}{delimiter}{group}"
                         )
 
                     field_check_expr[f"{check_field_left} != {check_field_right}"] = {
@@ -436,10 +438,10 @@ def compare_subset_freqs(
         t, field_check_expr, verbose, show_percent_sites=show_percent_sites,
     )
 
-    total_defined_raw_AC = hl.agg.count_where(
-        hl.is_defined(t.info[f"AC{delimiter}raw"])
+    total_defined_raw_AC = t.aggregate(
+        hl.agg.count_where(hl.is_defined(t.info[f"AC{delimiter}raw"]))
     )
-    logger.info("Total defined raw AC count: %s", hl.eval(total_defined_raw_AC))
+    logger.info("Total defined raw AC count: %s", total_defined_raw_AC)
 
 
 def sum_group_callstats(
@@ -452,6 +454,7 @@ def sum_group_callstats(
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
     metric_first_label: bool = True,
+    metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
     """
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
@@ -468,6 +471,7 @@ def sum_group_callstats(
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: None
     """
     # TODO: Add support for subpop sums
@@ -491,6 +495,7 @@ def sum_group_callstats(
             sort_order,
             delimiter,
             metric_first_label,
+            metrics,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_expr_s = make_group_sum_expr_dict(
@@ -500,6 +505,7 @@ def sum_group_callstats(
             sort_order,
             delimiter,
             metric_first_label,
+            metrics,
         )
         field_check_expr.update(field_check_expr_s)
         field_check_expr_s = make_group_sum_expr_dict(
@@ -509,6 +515,7 @@ def sum_group_callstats(
             sort_order,
             delimiter,
             metric_first_label,
+            metrics,
         )
         field_check_expr.update(field_check_expr_s)
 
@@ -844,6 +851,7 @@ def sanity_check_release_t(
     show_percent_sites: bool = True,
     delimiter: str = "-",
     metric_first_label: bool = True,
+    sum_metrics: List[str] = ["AC", "AN", "nhomalt"],
     sexes: List[str] = SEXES,
     sample_sum_sets_and_pops: Dict[str, List[str]] = None,
     sort_order: List[str] = SORT_ORDER,
@@ -879,6 +887,7 @@ def sanity_check_release_t(
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -915,7 +924,13 @@ def sanity_check_release_t(
     if subset_freq_check:
         logger.info("SUBSET FREQUENCY CHECKS:")
         compare_subset_freqs(
-            t, subsets, verbose, show_percent_sites, delimiter, metric_first_label
+            t,
+            subsets,
+            verbose,
+            show_percent_sites,
+            delimiter,
+            metric_first_label,
+            sum_metrics,
         )
 
     if samples_sum_check:
@@ -930,6 +945,7 @@ def sanity_check_release_t(
             sort_order,
             delimiter,
             metric_first_label,
+            sum_metrics,
         )
 
     info_metrics = list(t.row.info)

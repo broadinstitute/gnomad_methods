@@ -69,7 +69,7 @@ def generic_field_check(
             ht.select(**display_fields).show()
 
 
-def make_filters_sanity_check_expr(
+def make_filters_expr_dict(
     ht: hl.Table,
     extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
     variant_filter_field: str = "RF",
@@ -117,7 +117,7 @@ def make_filters_sanity_check_expr(
     return filters_dict
 
 
-def sample_sum_check(
+def make_group_sum_expr_dict(
     t: Union[hl.MatrixTable, hl.Table],
     subset: str,
     label_groups: Dict[str, List[str]],
@@ -177,7 +177,7 @@ def sample_sum_check(
 
     field_check_expr = {}
 
-    for metric in ["AC", "AN", "nhomalt"]:
+    for metric in metrics:
         if metric_first_label:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
         else:
@@ -213,7 +213,7 @@ def compare_row_counts(ht1: hl.Table, ht2: hl.Table) -> bool:
     return r_count1 == r_count2
 
 
-def filters_sanity_check(
+def summarize_variant_filters(
     t: Union[hl.MatrixTable, hl.Table],
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
@@ -291,11 +291,9 @@ def filters_sanity_check(
         :return: None
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
-        # NOTE: make_filters_sanity_check_expr returns a dict with %ages of variants filtered
+        # NOTE: make_filters_expr_dict returns a dict with %ages of variants filtered
         t.group_by(**group_exprs).aggregate(
-            **make_filters_sanity_check_expr(
-                t, extra_filter_checks, variant_filter_field
-            )
+            **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
         ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
@@ -378,7 +376,7 @@ def generic_field_check_loop(
         )
 
 
-def subset_freq_sanity_checks(
+def compare_subset_freqs(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
     verbose: bool,
@@ -392,14 +390,14 @@ def subset_freq_sanity_checks(
     Check:
         - Number of sites where callset frequency is equal to a subset frequency (raw and adj)
             - eg. t.info.AC-adj != t.info.AC-subset1-adj
-        - Total number of sites where the allele count annotation is defined (raw and adj)
+        - Total number of sites where the raw allele count annotation is defined
 
     :param t: Input MatrixTable or Table.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_label: If True, metric precedes label subset, e.g. AC-non_v2-XY. If False, subset precedes metric, non_v2-AC-XY. Default is True.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -407,7 +405,7 @@ def subset_freq_sanity_checks(
     field_check_expr = {}
     for subset in subsets:
         if subset:
-            for field in ["AC", "AN", "nhomalt"]:
+            for field in ["AC", "AN", "nhomalt"]:  # TODO Update to metrics param
                 for group in ["adj", "raw"]:
                     logger.info(
                         "Comparing subset %s frequencies to entire callset", subset
@@ -441,10 +439,10 @@ def subset_freq_sanity_checks(
     total_defined_raw_AC = hl.agg.count_where(
         hl.is_defined(t.info[f"AC{delimiter}raw"])
     )
-    logger.info("Total defined raw AC count: %s", total_defined_raw_AC)
+    logger.info("Total defined raw AC count: %s", hl.eval(total_defined_raw_AC))
 
 
-def sample_sum_sanity_checks(
+def sum_group_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     sexes: List[str] = SEXES,
     subsets: List[str] = [""],
@@ -456,10 +454,9 @@ def sample_sum_sanity_checks(
     metric_first_label: bool = True,
 ) -> None:
     """
-    Perform sanity checks on sample sums in input Table.
+    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
 
-    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version;
-    displays results from checking the sum of the specified annotations in stdout.
+    Displays results from checking the sum of the specified annotations in stdout.
     Also checks that annotations for all expected sample populations are present.
 
     :param t: Input Table.
@@ -487,7 +484,7 @@ def sample_sum_sanity_checks(
         pop_names = pops
 
         # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
-        field_check_expr_s = sample_sum_check(
+        field_check_expr_s = make_group_sum_expr_dict(
             t,
             subset,
             dict(group=["adj"], pop=pop_names),
@@ -496,7 +493,7 @@ def sample_sum_sanity_checks(
             metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
-        field_check_expr_s = sample_sum_check(
+        field_check_expr_s = make_group_sum_expr_dict(
             t,
             subset,
             dict(group=["adj"], sex=sexes),
@@ -505,7 +502,7 @@ def sample_sum_sanity_checks(
             metric_first_label,
         )
         field_check_expr.update(field_check_expr_s)
-        field_check_expr_s = sample_sum_check(
+        field_check_expr_s = make_group_sum_expr_dict(
             t,
             subset,
             dict(group=["adj"], pop=pop_names, sex=sexes),
@@ -709,7 +706,7 @@ def sex_chr_sanity_checks(
     generic_field_check_loop(t_xnonpar, field_check_expr, verbose)
 
 
-def missingness_sanity_checks(
+def compute_missingness(
     t: Union[hl.MatrixTable, hl.Table],
     info_metrics: List[str],
     non_info_metrics: List[str],
@@ -889,12 +886,12 @@ def sanity_check_release_t(
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param summarize_variants_check: When true, runs the summarize_variants method. Default is True.
-    :param filters_check: When true, runs the filters_sanity_check method. Default is True.
+    :param filters_check: When true, runs the summarize_variant_filters method. Default is True.
     :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method. Default is True.
-    :param subset_freq_check: When true, runs the subset_freq_sanity_checks method. Default is True.
-    :param samples_sum_check: When true, runs the sample_sum_sanity_checks method. Default is True.
+    :param subset_freq_check: When true, runs the compare_subset_freqs method. Default is True.
+    :param samples_sum_check: When true, runs the sum_group_callstats method. Default is True.
     :param sex_chr_check: When true, runs the sex_chr_sanity_checks method. Default is True.
-    :param missingness_check: When true, runs the missingness_sanity_checks method. Default is True.
+    :param missingness_check: When true, runs the compute_missingness method. Default is True.
     :return: None (stdout display of results from the battery of sanity checks).
     """
     if summarize_variants_check:
@@ -903,7 +900,7 @@ def sanity_check_release_t(
 
     if filters_check:
         logger.info("VARIANT FILTER SUMMARIES:")
-        filters_sanity_check(
+        summarize_variant_filters(
             t,
             variant_filter_field,
             problematic_regions,
@@ -917,13 +914,13 @@ def sanity_check_release_t(
 
     if subset_freq_check:
         logger.info("SUBSET FREQUENCY CHECKS:")
-        subset_freq_sanity_checks(
+        compare_subset_freqs(
             t, subsets, verbose, show_percent_sites, delimiter, metric_first_label
         )
 
     if samples_sum_check:
-        logger.info("SAMPLE SUM CHECKS:")
-        sample_sum_sanity_checks(
+        logger.info("CALLSET ANNOTATIONS TO SUM GROUP CHECKS:")
+        sum_group_callstats(
             t,
             sexes,
             subsets,
@@ -947,7 +944,7 @@ def sanity_check_release_t(
         non_info_metrics = list(t.row)
         non_info_metrics.remove("info")
         n_sites = t.count()
-        missingness_sanity_checks(
+        compute_missingness(
             t, info_metrics, non_info_metrics, n_sites, missingness_threshold
         )
     logger.info("SANITY CHECKS COMPLETE")

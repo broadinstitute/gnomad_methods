@@ -125,7 +125,7 @@ def make_group_sum_expr_dict(
     delimiter: str = "-",
     metric_first_label: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
-) -> Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]]:
+) -> Dict[str, Dict[str, Union[hl.expr.Int64Expression, hl.expr.StructExpression]]]:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
@@ -274,41 +274,29 @@ def summarize_variant_filters(
     def _filter_agg_order(
         t: Union[hl.MatrixTable, hl.Table],
         group_exprs: Dict[str, hl.expr.Expression],
-        n_rows: int = None,
-        n_cols: int = None,
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
-        variant_filter_field: str = "RF",
     ) -> None:
         """
         Perform sanity checks to measure percentages of variants filtered under different conditions.
 
         :param t: Input MatrixTable or Table.
         :param group_exprs: Dictionary of expressions to group the Table by.
-        :param n_rows: Number of rows to show.
-        :param n_cols: Number of columns to show.
         :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
-        :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
         :return: None
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_expr_dict returns a dict with %ages of variants filtered
         t.group_by(**group_exprs).aggregate(
             **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
-        ).order_by(hl.desc("n")).show(n_rows, n_cols)
+        ).order_by(hl.desc("n")).show(large_n_rows, large_n_cols)
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-    _filter_agg_order(
-        t, {"is_filtered": t.is_filtered}, variant_filter_field=variant_filter_field,
-    )
+    _filter_agg_order(t, {"is_filtered": t.is_filtered})
 
     logger.info("Checking distributions of variant type amongst variant filters...")
-    _filter_agg_order(
-        t,
-        {"allele_type": t.info.allele_type},
-        variant_filter_field=variant_filter_field,
-    )
+    _filter_agg_order(t, {"allele_type": t.info.allele_type})
 
     logger.info(
         "Checking distributions of variant type and region type amongst variant filters..."
@@ -319,9 +307,6 @@ def summarize_variant_filters(
             "allele_type": t.info.allele_type,
             "in_problematic_region": t.in_problematic_region,
         },
-        large_n_rows,
-        large_n_cols,
-        variant_filter_field=variant_filter_field,
     )
 
     logger.info(
@@ -334,16 +319,13 @@ def summarize_variant_filters(
             "in_problematic_region": t.in_problematic_region,
             "n_alt_alleles": t.info.n_alt_alleles,
         },
-        large_n_rows,
-        large_n_cols,
-        variant_filter_field=variant_filter_field,
     )
 
 
 def generic_field_check_loop(
     ht: hl.Table,
     field_check_expr: Dict[
-        str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]
+        str, Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]]
     ],
     verbose: bool,
     show_percent_sites: bool = False,
@@ -438,10 +420,10 @@ def compare_subset_freqs(
         t, field_check_expr, verbose, show_percent_sites=show_percent_sites,
     )
 
-    total_defined_raw_AC = t.aggregate(
+    total_defined_raw_ac = t.aggregate(
         hl.agg.count_where(hl.is_defined(t.info[f"AC{delimiter}raw"]))
     )
-    logger.info("Total defined raw AC count: %s", total_defined_raw_AC)
+    logger.info("Total defined raw AC count: %s", total_defined_raw_ac)
 
 
 def sum_group_callstats(

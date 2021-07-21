@@ -219,8 +219,8 @@ def summarize_variant_filters(
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
     single_filter_count: bool = False,
     monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
-    large_n_rows: int = 50,
-    large_n_cols: int = 140,
+    n_rows: int = 50,
+    n_cols: int = 140,
 ) -> None:
     """
     Summarize variants filtered under various conditions in input MatrixTable or Table.
@@ -242,7 +242,7 @@ def summarize_variant_filters(
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
     :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
-    :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
+    :param n_cols: Number of columns to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -292,7 +292,7 @@ def summarize_variant_filters(
         # NOTE: make_filters_expr_dict returns a dict with %ages of variants filtered
         t.group_by(**group_exprs).aggregate(
             **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
-        ).order_by(hl.desc("n")).show(large_n_rows, large_n_cols)
+        ).order_by(hl.desc("n")).show(n_rows, n_cols)
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
@@ -311,6 +311,8 @@ def summarize_variant_filters(
             "allele_type": t.info.allele_type,
             "in_problematic_region": t.in_problematic_region,
         },
+        n_rows,
+        n_cols,
     )
 
     logger.info(
@@ -323,6 +325,8 @@ def summarize_variant_filters(
             "in_problematic_region": t.in_problematic_region,
             "n_alt_alleles": t.info.n_alt_alleles,
         },
+        n_rows,
+        n_cols,
     )
 
 

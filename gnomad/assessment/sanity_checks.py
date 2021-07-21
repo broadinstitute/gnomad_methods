@@ -142,7 +142,8 @@ def make_group_sum_expr_dict(
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
-    # An empty string is passed to run this check on the entire callset but we do not want to add an delimiter to the field look ups for the empty string
+    # Check if subset string is provided to avoid adding a delimiter to empty string
+    # (An empty string is passed to run this check on the entire callset)
     if subset:
         subset += delimiter
 
@@ -311,8 +312,8 @@ def summarize_variant_filters(
             "allele_type": t.info.allele_type,
             "in_problematic_region": t.in_problematic_region,
         },
-        n_rows,
-        n_cols,
+        n_rows=n_rows,
+        n_cols=n_cols,
     )
 
     logger.info(
@@ -325,8 +326,8 @@ def summarize_variant_filters(
             "in_problematic_region": t.in_problematic_region,
             "n_alt_alleles": t.info.n_alt_alleles,
         },
-        n_rows,
-        n_cols,
+        n_rows=n_rows,
+        n_cols=n_cols,
     )
 
 
@@ -397,9 +398,16 @@ def compare_subset_freqs(
     field_check_expr = {}
     for subset in subsets:
         if subset:
-            logger.info("Comparing subset %s frequencies to entire callset", subset)
             for metric in metrics:
                 for group in ["adj", "raw"]:
+                    logger.info(
+                        "Comparing the %s subset's %s %s to entire callset's %s %s",
+                        subset,
+                        group,
+                        metric,
+                        group,
+                        metric,
+                    )
                     check_field_left = f"{metric}{delimiter}{group}"
                     if metric_first_field:
                         check_field_right = (

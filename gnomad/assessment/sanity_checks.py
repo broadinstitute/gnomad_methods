@@ -169,7 +169,7 @@ def make_group_sum_expr_dict(
             if field in info_fields:
                 sum_group_exprs.append(t.info[field])
             else:
-                logger.info("%s is not in table's info field", field)
+                logger.warning("%s is not in table's info field", field)
 
         annot_dict[
             f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
@@ -241,7 +241,7 @@ def summarize_variant_filters(
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
-    :param large_n_rows: Number of rows to show when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
+    :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param large_n_cols: Number of columns to show when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :return: None
     """
@@ -275,6 +275,8 @@ def summarize_variant_filters(
         t: Union[hl.MatrixTable, hl.Table],
         group_exprs: Dict[str, hl.expr.Expression],
         extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
+        n_rows: Optional[int] = None,
+        n_cols: Optional[int] = None,
     ) -> None:
         """
         Perform sanity checks to measure percentages of variants filtered under different conditions.
@@ -282,6 +284,8 @@ def summarize_variant_filters(
         :param t: Input MatrixTable or Table.
         :param group_exprs: Dictionary of expressions to group the Table by.
         :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
+        :param n_rows: Number of rows to show. Default is None (to display 10 rows).
+        :param n_cols: Number of columns to show. Default is None (to display 10 cols).
         :return: None
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -877,12 +881,12 @@ def sanity_check_release_t(
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param summarize_variants_check: When true, runs the summarize_variants method. Default is True.
-    :param filters_check: When true, runs the summarize_variant_filters method. Default is True.
-    :param raw_adj_check: When true, runs the raw_and_adj_sanity_checks method. Default is True.
-    :param subset_freq_check: When true, runs the compare_subset_freqs method. Default is True.
-    :param samples_sum_check: When true, runs the sum_group_callstats method. Default is True.
-    :param sex_chr_check: When true, runs the sex_chr_sanity_checks method. Default is True.
-    :param missingness_check: When true, runs the compute_missingness method. Default is True.
+    :param filters_check: When True, runs the summarize_variant_filters method. Default is True.
+    :param raw_adj_check: When True, runs the raw_and_adj_sanity_checks method. Default is True.
+    :param subset_freq_check: When True, runs the compare_subset_freqs method. Default is True.
+    :param samples_sum_check: When True, runs the sum_group_callstats method. Default is True.
+    :param sex_chr_check: When True, runs the sex_chr_sanity_checks method. Default is True.
+    :param missingness_check: When True, runs the compute_missingness method. Default is True.
     :return: None (stdout display of results from the battery of sanity checks).
     """
     if summarize_variants_check:

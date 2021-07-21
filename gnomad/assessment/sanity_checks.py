@@ -447,6 +447,7 @@ def sum_group_callstats(
     sexes: List[str] = SEXES,
     subsets: List[str] = [""],
     pops: List[str] = POPS,
+    groups: List[str] = ["adj"],
     additional_subsets_and_pops: Dict[str, List[str]] = None,
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
@@ -464,6 +465,7 @@ def sum_group_callstats(
     :param sexes: List of sexes in table.
     :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
     :param pops: List of pops contained within the subsets. Default is POPS.
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
     :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -484,38 +486,37 @@ def sum_group_callstats(
     )
     for subset, pops in sample_sum_sets_and_pops.items():
         pop_names = pops
-
-        # We do not store the raw callstats for the pop or sex groupings of any subset so only check adj here.
-        field_check_expr_s = make_group_sum_expr_dict(
-            t,
-            subset,
-            dict(group=["adj"], pop=pop_names),
-            sort_order,
-            delimiter,
-            metric_first_field,
-            metrics,
-        )
-        field_check_expr.update(field_check_expr_s)
-        field_check_expr_s = make_group_sum_expr_dict(
-            t,
-            subset,
-            dict(group=["adj"], sex=sexes),
-            sort_order,
-            delimiter,
-            metric_first_field,
-            metrics,
-        )
-        field_check_expr.update(field_check_expr_s)
-        field_check_expr_s = make_group_sum_expr_dict(
-            t,
-            subset,
-            dict(group=["adj"], pop=pop_names, sex=sexes),
-            sort_order,
-            delimiter,
-            metric_first_field,
-            metrics,
-        )
-        field_check_expr.update(field_check_expr_s)
+        for group in groups:
+            field_check_expr_s = make_group_sum_expr_dict(
+                t,
+                subset,
+                dict(group=[group], pop=pop_names),
+                sort_order,
+                delimiter,
+                metric_first_field,
+                metrics,
+            )
+            field_check_expr.update(field_check_expr_s)
+            field_check_expr_s = make_group_sum_expr_dict(
+                t,
+                subset,
+                dict(group=[group], sex=sexes),
+                sort_order,
+                delimiter,
+                metric_first_field,
+                metrics,
+            )
+            field_check_expr.update(field_check_expr_s)
+            field_check_expr_s = make_group_sum_expr_dict(
+                t,
+                subset,
+                dict(group=[group], pop=pop_names, sex=sexes),
+                sort_order,
+                delimiter,
+                metric_first_field,
+                metrics,
+            )
+            field_check_expr.update(field_check_expr_s)
 
     generic_field_check_loop(t, field_check_expr, verbose)
 
@@ -851,6 +852,7 @@ def validate_release_t(
     metric_first_field: bool = True,
     sum_metrics: List[str] = ["AC", "AN", "nhomalt"],
     sexes: List[str] = SEXES,
+    groups: List[str] = ["adj"],
     sample_sum_sets_and_pops: Dict[str, List[str]] = None,
     sort_order: List[str] = SORT_ORDER,
     variant_filter_field: str = "RF",
@@ -887,6 +889,7 @@ def validate_release_t(
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
@@ -938,6 +941,7 @@ def validate_release_t(
             sexes,
             subsets,
             pops,
+            groups,
             sample_sum_sets_and_pops,
             verbose,
             sort_order,

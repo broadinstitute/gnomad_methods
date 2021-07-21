@@ -123,7 +123,7 @@ def make_group_sum_expr_dict(
     label_groups: Dict[str, List[str]],
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
-    metric_first_label: bool = True,
+    metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> Dict[str, Dict[str, Union[hl.expr.Int64Expression, hl.expr.StructExpression]]]:
     """
@@ -136,7 +136,7 @@ def make_group_sum_expr_dict(
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, call statistic precedes label group, e.g. AC-subset-male. If False, label group precedes metric, subset-AC-male. Default is True.
+    :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: Dictionary of sample sum field check expressions and display fields.
     """
@@ -161,7 +161,7 @@ def make_group_sum_expr_dict(
     for metric in metrics:
         sum_group_exprs = []
         for label in label_combos:
-            if metric_first_label:
+            if metric_first_field:
                 field = f"{metric}{delimiter}{subset}{label}"
             else:
                 field = f"{subset}{metric}{delimiter}{label}"
@@ -178,7 +178,7 @@ def make_group_sum_expr_dict(
     field_check_expr = {}
 
     for metric in metrics:
-        if metric_first_label:
+        if metric_first_field:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
@@ -251,8 +251,8 @@ def summarize_variant_filters(
     logger.info("Variant filter counts: %s", filters)
 
     if single_filter_count:
-        ex_t = t.explode(t.filters)
-        filters = ex_t.aggregate(hl.agg.counter(ex_t.filters))
+        exp_t = t.explode(t.filters)
+        filters = exp_t.aggregate(hl.agg.counter(exp_t.filters))
         logger.info("Exploded variant filter counts: %s", filters)
 
     if monoallelic_expr is not None:
@@ -279,7 +279,7 @@ def summarize_variant_filters(
         n_cols: Optional[int] = None,
     ) -> None:
         """
-        Perform sanity checks to measure percentages of variants filtered under different conditions.
+        Perform validity checks to measure percentages of variants filtered under different conditions.
 
         :param t: Input MatrixTable or Table.
         :param group_exprs: Dictionary of expressions to group the Table by.
@@ -372,11 +372,11 @@ def compare_subset_freqs(
     verbose: bool,
     show_percent_sites: bool = True,
     delimiter: str = "-",
-    metric_first_label: bool = True,
+    metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
     """
-    Perform sanity checks on frequency data in input Table.
+    Perform validity checks on frequency data in input Table.
 
     Check:
         - Number of sites where callset frequency is equal to a subset frequency (raw and adj)
@@ -388,7 +388,7 @@ def compare_subset_freqs(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, metric precedes label subset, e.g. AC-non_v2-XY. If False, subset precedes metric, non_v2-AC-XY. Default is True.
+    :param metric_first_field: If True, metric precedes subset, e.g. AC-non_v2-. If False, subset precedes metric, non_v2-AC-XY. Default is True.
     :param metrics: List of metrics to compare between subset and entire callset. Default is ["AC", "AN", "nhomalt"].
     :return: None
     """
@@ -397,13 +397,11 @@ def compare_subset_freqs(
     field_check_expr = {}
     for subset in subsets:
         if subset:
+            logger.info("Comparing subset %s frequencies to entire callset", subset)
             for metric in metrics:
                 for group in ["adj", "raw"]:
-                    logger.info(
-                        "Comparing subset %s frequencies to entire callset", subset
-                    )
                     check_field_left = f"{metric}{delimiter}{group}"
-                    if metric_first_label:
+                    if metric_first_field:
                         check_field_right = (
                             f"{metric}{delimiter}{subset}{delimiter}{group}"
                         )
@@ -428,6 +426,7 @@ def compare_subset_freqs(
         t, field_check_expr, verbose, show_percent_sites=show_percent_sites,
     )
 
+    # Spot check the raw AC counts
     total_defined_raw_ac = t.aggregate(
         hl.agg.count_where(hl.is_defined(t.info[f"AC{delimiter}raw"]))
     )
@@ -443,7 +442,7 @@ def sum_group_callstats(
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "-",
-    metric_first_label: bool = True,
+    metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
     """
@@ -460,7 +459,7 @@ def sum_group_callstats(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: None
     """
@@ -484,7 +483,7 @@ def sum_group_callstats(
             dict(group=["adj"], pop=pop_names),
             sort_order,
             delimiter,
-            metric_first_label,
+            metric_first_field,
             metrics,
         )
         field_check_expr.update(field_check_expr_s)
@@ -494,7 +493,7 @@ def sum_group_callstats(
             dict(group=["adj"], sex=sexes),
             sort_order,
             delimiter,
-            metric_first_label,
+            metric_first_field,
             metrics,
         )
         field_check_expr.update(field_check_expr_s)
@@ -504,12 +503,12 @@ def sum_group_callstats(
             dict(group=["adj"], pop=pop_names, sex=sexes),
             sort_order,
             delimiter,
-            metric_first_label,
+            metric_first_field,
             metrics,
         )
         field_check_expr.update(field_check_expr_s)
 
-        generic_field_check_loop(t, field_check_expr, verbose)
+    generic_field_check_loop(t, field_check_expr, verbose)
 
 
 def summarize_variants(t: Union[hl.MatrixTable, hl.Table],) -> hl.Struct:
@@ -538,18 +537,18 @@ def summarize_variants(t: Union[hl.MatrixTable, hl.Table],) -> hl.Struct:
     return var_summary
 
 
-def raw_and_adj_sanity_checks(
+def check_raw_and_adj_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
     verbose: bool,
     delimiter: str = "-",
-    metric_first_label: bool = True,
+    metric_first_field: bool = True,
 ) -> None:
     """
-    Perform sanity checks on raw and adj data in input Table/MatrixTable.
+    Perform validity checks on raw and adj data in input Table/MatrixTable.
 
     Check that:
-        - Raw AC, AN, AF are not 0
+        - Raw AC and AF are not 0
         - Adj AN is not 0 and AC and AF are not negative
         - Raw values for AC, AN, nhomalt in each sample subset are greater than or equal to their corresponding adj values
 
@@ -559,7 +558,7 @@ def raw_and_adj_sanity_checks(
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -573,7 +572,7 @@ def raw_and_adj_sanity_checks(
             "expr": hl.agg.count_where(t.info[check_field] <= 0),
             "display_fields": hl.struct(**{check_field: t.info[check_field]}),
         }
-
+        # Check adj AC, AF > 0
         check_field = f"{subfield}{delimiter}adj"
         field_check_expr[f"{check_field} >= 0"] = {
             "expr": hl.agg.count_where(t.info[check_field] < 0),
@@ -605,7 +604,7 @@ def raw_and_adj_sanity_checks(
                 subset += delimiter
             field_check_label = (
                 f"{subfield}{delimiter}{subset}"
-                if metric_first_label
+                if metric_first_field
                 else f"{subset}{subfield}{delimiter}"
             )
             check_field_left = f"{field_check_label}raw"
@@ -626,7 +625,7 @@ def raw_and_adj_sanity_checks(
     generic_field_check_loop(t, field_check_expr, verbose)
 
 
-def sex_chr_sanity_checks(
+def check_sex_chr_metrics(
     t: Union[hl.MatrixTable, hl.Table],
     info_metrics: List[str],
     contigs: List[str],
@@ -634,7 +633,7 @@ def sex_chr_sanity_checks(
     delimiter: str = "-",
 ) -> None:
     """
-    Perform sanity checks for annotations on the sex chromosomes.
+    Perform validity checks for annotations on the sex chromosomes.
 
     Check:
         - That metrics for chrY variants in XX samples are NA and not 0
@@ -831,7 +830,7 @@ def vcf_field_check(
     return True
 
 
-def sanity_check_release_t(
+def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
     pops: List[str] = POPS,
@@ -840,7 +839,7 @@ def sanity_check_release_t(
     verbose: bool = False,
     show_percent_sites: bool = True,
     delimiter: str = "-",
-    metric_first_label: bool = True,
+    metric_first_field: bool = True,
     sum_metrics: List[str] = ["AC", "AN", "nhomalt"],
     sexes: List[str] = SEXES,
     sample_sum_sets_and_pops: Dict[str, List[str]] = None,
@@ -857,7 +856,7 @@ def sanity_check_release_t(
     missingness_check: bool = True,
 ) -> None:
     """
-    Perform a battery of sanity checks on a specified group of subsets in a MatrixTable containing variant annotations.
+    Perform a battery of validity checks on a specified group of subsets in a MatrixTable containing variant annotations.
 
     Includes:
     - Summaries of % filter status for different partitions of variants
@@ -876,7 +875,7 @@ def sanity_check_release_t(
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_label: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
     :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
@@ -886,12 +885,12 @@ def sanity_check_release_t(
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param summarize_variants_check: When true, runs the summarize_variants method. Default is True.
     :param filters_check: When True, runs the summarize_variant_filters method. Default is True.
-    :param raw_adj_check: When True, runs the raw_and_adj_sanity_checks method. Default is True.
+    :param raw_adj_check: When True, runs the check_raw_and_adj_callstats method. Default is True.
     :param subset_freq_check: When True, runs the compare_subset_freqs method. Default is True.
     :param samples_sum_check: When True, runs the sum_group_callstats method. Default is True.
-    :param sex_chr_check: When True, runs the sex_chr_sanity_checks method. Default is True.
+    :param sex_chr_check: When True, runs the check_sex_chr_metricss method. Default is True.
     :param missingness_check: When True, runs the compute_missingness method. Default is True.
-    :return: None (stdout display of results from the battery of sanity checks).
+    :return: None (stdout display of results from the battery of validity checks).
     """
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
@@ -909,7 +908,7 @@ def sanity_check_release_t(
 
     if raw_adj_check:
         logger.info("RAW AND ADJ CHECKS:")
-        raw_and_adj_sanity_checks(t, subsets, verbose, delimiter, metric_first_label)
+        check_raw_and_adj_callstats(t, subsets, verbose, delimiter, metric_first_field)
 
     if subset_freq_check:
         logger.info("SUBSET FREQUENCY CHECKS:")
@@ -919,7 +918,7 @@ def sanity_check_release_t(
             verbose,
             show_percent_sites,
             delimiter,
-            metric_first_label,
+            metric_first_field,
             sum_metrics,
         )
 
@@ -934,7 +933,7 @@ def sanity_check_release_t(
             verbose,
             sort_order,
             delimiter,
-            metric_first_label,
+            metric_first_field,
             sum_metrics,
         )
 
@@ -943,7 +942,7 @@ def sanity_check_release_t(
     if sex_chr_check:
         logger.info("SEX CHROMOSOME ANNOTATION CHECKS:")
         contigs = t.aggregate(hl.agg.collect_as_set(t.locus.contig))
-        sex_chr_sanity_checks(t, info_metrics, contigs, verbose, delimiter)
+        check_sex_chr_metrics(t, info_metrics, contigs, verbose, delimiter)
 
     if missingness_check:
         logger.info("MISSINGNESS CHECKS:")
@@ -953,4 +952,4 @@ def sanity_check_release_t(
         compute_missingness(
             t, info_metrics, non_info_metrics, n_sites, missingness_threshold
         )
-    logger.info("SANITY CHECKS COMPLETE")
+    logger.info("VALIDITY CHECKS COMPLETE")

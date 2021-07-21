@@ -148,7 +148,7 @@ def make_group_sum_expr_dict(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the adj group for checks as we do not retain the raw metric counts for all sample groups so we cannot check the sample sums
+    # Grab the first group for check and remove if from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we cannot check the sample sums
     group = label_groups.pop("group")[0]
     # sum_group is a subset of group. When the metrics of sum_group are added, they should equal the total metric of group.
     # e.g., if group = callset1, one sum_group could be callset1-pop
@@ -157,7 +157,7 @@ def make_group_sum_expr_dict(
     )
     info_fields = t.info.keys()
 
-    # Loop through metrics to build dictionary of fields that make up 'group' and then store the metrics sums
+    # Loop through metrics and the label combos to build dictionary of fields that make up the 'group' and then store the sum of those fields
     annot_dict = {}
     for metric in metrics:
         sum_group_exprs = []
@@ -178,6 +178,9 @@ def make_group_sum_expr_dict(
 
     field_check_expr = {}
 
+    # if metric_first_field is True, metric is AC, subset is tgp, metric is AC, sum_group is pop, and group is adj, then the values below are:
+    # check_field_left = "AC-tgp-adj"
+    # check_field_right = "sum-AC-tgp-adj-pop"
     for metric in metrics:
         if metric_first_field:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
@@ -335,7 +338,7 @@ def summarize_variant_filters(
 def generic_field_check_loop(
     ht: hl.Table,
     field_check_expr: Dict[
-        str, Dict[str, Union[hl.expr.Int32Expression, hl.expr.StructExpression]]
+        str, Dict[str, Union[hl.expr.Int64Expression, hl.expr.StructExpression]]
     ],
     verbose: bool,
     show_percent_sites: bool = False,

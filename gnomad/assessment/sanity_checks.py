@@ -220,6 +220,7 @@ def summarize_variant_filters(
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
     single_filter_count: bool = False,
     monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
+    extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
     n_rows: int = 50,
     n_cols: int = 140,
 ) -> None:
@@ -242,6 +243,7 @@ def summarize_variant_filters(
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
     :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
+    :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
     :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param n_cols: Number of columns to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
     :return: None
@@ -275,7 +277,6 @@ def summarize_variant_filters(
     def _filter_agg_order(
         t: Union[hl.MatrixTable, hl.Table],
         group_exprs: Dict[str, hl.expr.Expression],
-        extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
         n_rows: Optional[int] = None,
         n_cols: Optional[int] = None,
     ) -> None:
@@ -312,8 +313,8 @@ def summarize_variant_filters(
             "allele_type": t.info.allele_type,
             "in_problematic_region": t.in_problematic_region,
         },
-        n_rows=n_rows,
-        n_cols=n_cols,
+        n_rows,
+        n_cols,
     )
 
     logger.info(
@@ -326,8 +327,8 @@ def summarize_variant_filters(
             "in_problematic_region": t.in_problematic_region,
             "n_alt_alleles": t.info.n_alt_alleles,
         },
-        n_rows=n_rows,
-        n_cols=n_cols,
+        n_rows,
+        n_cols,
     )
 
 

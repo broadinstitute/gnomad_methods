@@ -148,16 +148,19 @@ def make_group_sum_expr_dict(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the first group for check and remove if from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we cannot check the sample sums
+    # Grab the first group for check and remove if from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we do not check raw sample sums.
     group = label_groups.pop("group")[0]
-    # sum_group is a subset of group. When the metrics of sum_group are added, they should equal the total metric of group.
-    # e.g., if group = callset1, one sum_group could be callset1-pop
+    # sum_group is a the type of high level annotation that you want to sum e.g. 'pop', 'pop-sex', 'sex'.
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
     info_fields = t.info.keys()
 
-    # Loop through metrics and the label combos to build dictionary of fields that make up the 'group' and then store the sum of those fields
+    # Loop through metrics and the label combos to build a dictionary
+    # where the key is a string representing the sum_group annotations and the value is the sum of these annotations.
+    # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is pop, then the values below are:
+    # sum_group_exprs = ["AC-tgp-pop1", "AC-tgp-pop2", "AC-tgp-pop3"]
+    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1", "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])
     annot_dict = {}
     for metric in metrics:
         sum_group_exprs = []
@@ -173,30 +176,27 @@ def make_group_sum_expr_dict(
                 logger.warning("%s is not in table's info field", field)
 
         annot_dict[
-            f"sum{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
+            f"sum{delimiter}{metric}{delimiter}{subset}{group}{delimiter}{sum_group}"
         ] = hl.sum(sum_group_exprs)
 
-    field_check_expr = {}
-
-    # if metric_first_field is True, metric is AC, subset is tgp, metric is AC, sum_group is pop, and group is adj, then the values below are:
+    # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
-    # check_field_right = "sum-AC-tgp-adj-pop"
+    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict key from above
+    field_check_expr = {}
     for metric in metrics:
         if metric_first_field:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
-
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
-        sum_annot_key = f"{delimiter}{metric}{delimiter}{group}{delimiter}{sum_group}"
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
             "expr": hl.agg.count_where(
-                t.info[check_field_left] != annot_dict[f"sum{sum_annot_key}"]
+                t.info[check_field_left] != annot_dict[check_field_right]
             ),
             "display_fields": hl.struct(
                 **{
                     check_field_left: t.info[check_field_left],
-                    f"sum{sum_annot_key}": annot_dict[f"sum{sum_annot_key}"],
+                    check_field_right: annot_dict[check_field_right],
                 }
             ),
         }

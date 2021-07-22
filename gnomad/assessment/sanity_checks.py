@@ -562,7 +562,7 @@ def check_raw_and_adj_callstats(
 
     Check that:
         - Raw AC and AF are not 0
-        - Adj AN is not 0 and AC and AF are not negative
+        - AC and AF are not negative
         - Raw values for AC, AN, nhomalt in each sample subset are greater than or equal to their corresponding adj values
 
     Raw and adj call stat annotations must be in an info struct annotation on the Table/MatrixTable, e.g. t.info.AC-raw.

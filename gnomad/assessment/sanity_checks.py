@@ -148,9 +148,9 @@ def make_group_sum_expr_dict(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the first group for check and remove if from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we do not check raw sample sums.
+    # Grab the first group for check and remove it from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we do not check raw sample sums.
     group = label_groups.pop("group")[0]
-    # sum_group is a the type of high level annotation that you want to sum e.g. 'pop', 'pop-sex', 'sex'.
+    # sum_group is the type of high level annotation that you want to sum e.g. 'pop', 'pop-sex', 'sex'.
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
@@ -288,7 +288,6 @@ def summarize_variant_filters(
 
         :param t: Input MatrixTable or Table.
         :param group_exprs: Dictionary of expressions to group the Table by.
-        :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
         :param n_rows: Number of rows to show. Default is None (to display 10 rows).
         :param n_cols: Number of columns to show. Default is None (to display 10 cols).
         :return: None
@@ -363,10 +362,10 @@ def generic_field_check_loop(
         generic_field_check(
             ht,
             check_description=check_description,
-            n_fail=n_fail,
             display_fields=field_check_expr[check_description]["display_fields"],
             verbose=verbose,
             show_percent_sites=show_percent_sites,
+            n_fail=n_fail,
             ht_count=ht_count,
         )
 
@@ -384,7 +383,7 @@ def compare_subset_freqs(
     Perform validity checks on frequency data in input Table.
 
     Check:
-        - Number of sites where callset frequency is equal to a subset frequency (raw and adj)
+        - Number of sites where callset frequency is equal to a subset frequency (checks both raw and adj)
             - eg. t.info.AC-adj != t.info.AC-subset1-adj
         - Total number of sites where the raw allele count annotation is defined
 
@@ -393,7 +392,7 @@ def compare_subset_freqs(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes subset, e.g. AC-non_v2-. If False, subset precedes metric, non_v2-AC-XY. Default is True.
+    :param metric_first_field: If True, metric precedes subset, e.g. AC-non_v2. If False, subset precedes metric, non_v2-AC. Default is True.
     :param metrics: List of metrics to compare between subset and entire callset. Default is ["AC", "AN", "nhomalt"].
     :return: None
     """
@@ -459,7 +458,7 @@ def sum_group_callstats(
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
     """
-    Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
+    Compute the sum of annotations for a specified group of annotations and compare to the annotated version.
 
     Displays results from checking the sum of the specified annotations in stdout.
     Also checks that annotations for all expected sample populations are present.
@@ -468,12 +467,12 @@ def sum_group_callstats(
     :param sexes: List of sexes in table.
     :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
     :param pops: List of pops contained within the subsets. Default is POPS.
-    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"].
     :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: None
     """
@@ -882,18 +881,18 @@ def validate_release_t(
     All annotations must be within an info struct, e.g. t.info.AC-raw.
 
     :param t: Input MatrixTable or Table containing variant annotations to check.
-    :param subsets: List of subsets to be checked.
-    :param pops: List of pops within main callset.
+    :param subsets: List of subsets to be checked. Default is [""].
+    :param pops: List of pops within main callset. Default is POPS.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
     :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
-    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is True.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
     :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
-    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"].
+    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check. Default is None.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].

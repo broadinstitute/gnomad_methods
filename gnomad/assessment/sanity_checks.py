@@ -488,12 +488,11 @@ def sum_group_callstats(
         else default_pop_subset
     )
     for subset, pops in sample_sum_sets_and_pops.items():
-        pop_names = pops
         for group in groups:
             field_check_expr_s = make_group_sum_expr_dict(
                 t,
                 subset,
-                dict(group=[group], pop=pop_names),
+                dict(group=[group], pop=pops),
                 sort_order,
                 delimiter,
                 metric_first_field,
@@ -513,7 +512,7 @@ def sum_group_callstats(
             field_check_expr_s = make_group_sum_expr_dict(
                 t,
                 subset,
-                dict(group=[group], pop=pop_names, sex=sexes),
+                dict(group=[group], pop=pops, sex=sexes),
                 sort_order,
                 delimiter,
                 metric_first_field,

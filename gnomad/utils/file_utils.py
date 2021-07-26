@@ -73,7 +73,7 @@ async def parallel_file_exists(
                     """
                     Create function to check if file exists and update progress bar in stdout.
 
-                    :param fname: Path to file to chekc.
+                    :param fname: Path to file to check.
                     :return: Function that checks for file existence and updates progress bar.
                     """
 

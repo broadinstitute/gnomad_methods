@@ -66,7 +66,7 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
                 file_existence = await bounded_gather(
                     *file_existence_checks, parallelism=750
                 )
-    return {fname: exists for fname, exists in zip(fnames, file_existence)}
+    return dict(zip(fnames, file_existence))
 
 
 def file_exists(fname: str) -> bool:

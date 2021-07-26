@@ -1,3 +1,3 @@
 # noqa: D104
 
-from gnomad.assessment import sanity_checks
+from gnomad.assessment import validity_checks

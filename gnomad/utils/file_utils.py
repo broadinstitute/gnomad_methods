@@ -7,7 +7,7 @@ import os
 import subprocess
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Optional, Tuple, Union
+from typing import Callable, List, Dict, Optional, Tuple, Union
 
 import hail as hl
 from hailtop.aiotools import LocalAsyncFS, RouterAsyncFS, AsyncFS
@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
+async def parallel_file_exists(
+    fnames: List[str], parallelism: int = 750
+) -> Dict[str, bool]:
     """
     Check whether a large number of files exist.
 
@@ -27,10 +29,18 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
     Normal `file_exists` function is very slow when checking a large number of files.
 
     :param fnames: List of file names to check.
+    :param parallelism: Integer that sets parallelism of file existence checking task. Default is 750.
     :return: Dictionary of file names (str) and whether the file exists (boolean).
     """
 
-    async def low_level_async_file_exists(fs: AsyncFS, url: str):
+    async def low_level_async_file_exists(fs: AsyncFS, url: str) -> bool:
+        """
+        Check whether file exists.
+
+        :param fs: AsyncFS object.
+        :param url: File URL to check.
+        :return: Whether file URL exists.
+        """
         try:
             await fs.statfile(url)
         except FileNotFoundError:
@@ -38,7 +48,14 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
         else:
             return True
 
-    async def async_file_exists(fs: AsyncFS, fname: str):
+    async def async_file_exists(fs: AsyncFS, fname: str) -> bool:
+        """
+        Call `low_level_async_file_exists` to determine file existence.
+
+        :param fs: AsyncFS object.
+        :param fname: Path to file to check.
+        :return: Whether file exists.
+        """
         fext = os.path.splitext(fname)[1]
         if fext in [".ht", ".mt"]:
             fname += "/_SUCCESS"
@@ -52,7 +69,14 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
                 "file", [LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
             ) as fs:
 
-                def create_unapplied_function(fname):
+                def create_unapplied_function(fname: str) -> Callable:
+                    """
+                    Create function to check if file exists and update progress bar in stdout.
+
+                    :param fname: Path to file to chekc.
+                    :return: Function that checks for file existence and updates progress bar.
+                    """
+
                     async def unapplied_function():
                         x = await async_file_exists(fs, fname)
                         pbar.update(1)
@@ -64,7 +88,7 @@ async def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
                     create_unapplied_function(fname) for fname in fnames
                 ]
                 file_existence = await bounded_gather(
-                    *file_existence_checks, parallelism=750
+                    *file_existence_checks, parallelism=parallelism
                 )
     return dict(zip(fnames, file_existence))
 

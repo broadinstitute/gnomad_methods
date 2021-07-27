@@ -15,6 +15,7 @@
 * Added function `rekey_new_reference` to re-key a Table or MatrixTable with a new reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Modified `SEXES` in utils/vcf to be 'XX' and 'XY' instead of 'female' and 'male' [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Fix `annotation_type_is_numeric` and `annotation_type_in_vcf_info` [(#379)](https://github.com/broadinstitute/gnomad_methods/pull/379)
+* Added function `parallel_file_exists` to check whether a large number of files exist [(#394)](https://github.com/broadinstitute/gnomad_methods/pull/394)
 
 ## Version 0.5.0 - April 22nd, 2021
 

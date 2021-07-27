@@ -33,21 +33,6 @@ async def parallel_file_exists(
     :return: Dictionary of file names (str) and whether the file exists (boolean).
     """
 
-    async def low_level_async_file_exists(fs: AsyncFS, url: str) -> bool:
-        """
-        Check whether file exists.
-
-        :param fs: AsyncFS object.
-        :param url: File URL to check.
-        :return: Whether file URL exists.
-        """
-        try:
-            await fs.statfile(url)
-        except FileNotFoundError:
-            return False
-        else:
-            return True
-
     async def async_file_exists(fs: AsyncFS, fname: str) -> bool:
         """
         Call `low_level_async_file_exists` to determine file existence.
@@ -59,7 +44,12 @@ async def parallel_file_exists(
         fext = os.path.splitext(fname)[1]
         if fext in [".ht", ".mt"]:
             fname += "/_SUCCESS"
-        return await low_level_async_file_exists(fs, fname)
+        try:
+            await fs.statfile(fname)
+        except FileNotFoundError:
+            return False
+        else:
+            return True
 
     with tqdm(
         total=len(fnames), desc="check files for existence", disable=False

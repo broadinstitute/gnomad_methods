@@ -17,7 +17,7 @@ DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = GnomadPublicResourceSource.GNOMAD
 class _GnomadPublicResourceConfiguration:
     """Configuration for public gnomAD resources."""
 
-    __source: Union[
+    __source: Union[  # pylint: disable=unused-private-member
         GnomadPublicResourceSource, str
     ] = DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE
 

@@ -16,6 +16,7 @@
 * Modified `SEXES` in utils/vcf to be 'XX' and 'XY' instead of 'female' and 'male' [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Fix `annotation_type_is_numeric` and `annotation_type_in_vcf_info` [(#379)](https://github.com/broadinstitute/gnomad_methods/pull/379)
 * Added function `parallel_file_exists` to check whether a large number of files exist [(#394)](https://github.com/broadinstitute/gnomad_methods/pull/394)
+* Changed module `sanity_checks` to `validity_checks`, modified functions `generic_field_check`, `make_filters_expr_dict` (previously `make_filters_sanity_check_expr`), and `make_group_sum_expr_dict` (previously `sample_sum_check`), and added functions `summarize_variant_filters`, `generic_field_check_loop`, `compare_subset_freqs`, `sum_group_callstats`, `summarize_variants`, `check_raw_and_adj_callstats`, `check_sex_chr_metrics`, `compute_missingness`, `vcf_field_check`, and `validate_release_t` [(#395)](https://github.com/broadinstitute/gnomad_methods/pull/389)
 
 ## Version 0.5.0 - April 22nd, 2021
 

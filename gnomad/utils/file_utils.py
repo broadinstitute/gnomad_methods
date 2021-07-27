@@ -59,7 +59,7 @@ async def parallel_file_exists(
                 "file", [LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
             ) as fs:
 
-                def create_unapplied_function(fname: str) -> Callable:
+                def check_existence_and_update_pbar_thunk(fname: str) -> Callable:
                     """
                     Create function to check if file exists and update progress bar in stdout.
 
@@ -75,7 +75,7 @@ async def parallel_file_exists(
                     return unapplied_function
 
                 file_existence_checks = [
-                    create_unapplied_function(fname) for fname in fnames
+                    check_existence_and_update_pbar_thunk(fname) for fname in fnames
                 ]
                 file_existence = await bounded_gather(
                     *file_existence_checks, parallelism=parallelism

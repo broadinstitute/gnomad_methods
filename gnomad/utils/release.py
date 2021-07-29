@@ -50,6 +50,7 @@ def make_freq_index_dict(
     sexes: List[str] = SEXES,
     subsets: List[str] = SUBSETS,
     downsamplings: Optional[List[int]] = None,
+    label_delimiter: str = "_",
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
@@ -71,7 +72,7 @@ def make_freq_index_dict(
     """
 
     def _get_index(label_groups):
-        return index_globals(freq_meta, label_groups, "_")
+        return index_globals(freq_meta, label_groups, label_delimiter)
 
     index_dict = {
         **_get_index(dict(group=groups)),

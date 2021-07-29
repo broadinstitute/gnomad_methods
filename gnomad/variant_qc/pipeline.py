@@ -17,7 +17,7 @@ from gnomad.utils.annotations import annotate_adj, bi_allelic_expr
 from gnomad.utils.filtering import filter_to_autosomes
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_ranked_bin
-from gnomad.variant_qc.rf import (
+from gnomad.variant_qc.random_forest import (
     get_features_importance,
     test_model,
     train_rf,

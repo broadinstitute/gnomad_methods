@@ -116,7 +116,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install wheel
-          pip install gnomad_methods
+          pip install ./gnomad_methods
           cat gnomad_qc/requirements.txt | grep -v gnomad_methods > gnomad_qc/requirements-edited.txt
           pip install -r gnomad_qc/requirements-edited.txt
           pip install -r gnomad_methods/requirements-dev.txt

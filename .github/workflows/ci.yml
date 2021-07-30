@@ -89,3 +89,37 @@ jobs:
           # This restores requirements.txt so that @actions/cache
           # can use it for determining the cache key.
           git checkout ${GITHUB_SHA}
+  gnomad_qc:
+    name: gnomad_qc checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gnomad_methods
+        uses: actions/checkout@v2
+        with:
+          path: gnomad_methods
+      - name: Checkout gnomad_qc
+        uses: actions/checkout@v2
+        with:
+          repository: broadinstitute/gnomad_qc
+          path: gnomad_qc
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Use pip cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('gnomad_methods/**/requirements*.txt') }}
+          restore-keys: |
+            pip-
+      - name: Install dependencies
+        run: |
+          pip install wheel
+          pip install ./gnomad_methods
+          cat gnomad_qc/requirements.txt | grep -v gnomad_methods > gnomad_qc/requirements-edited.txt
+          pip install -r gnomad_qc/requirements-edited.txt
+          pip install -r gnomad_methods/requirements-dev.txt
+      - name: Run Pylint
+        run: pylint --disable=R,C,W gnomad_qc
+        working-directory: ./gnomad_qc

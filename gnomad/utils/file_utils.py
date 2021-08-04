@@ -1,5 +1,6 @@
 # noqa: D100
 
+import asyncio
 import base64
 import gzip
 import logging
@@ -83,6 +84,17 @@ async def parallel_file_exists(
                     *file_existence_checks, parallelism=parallelism
                 )
     return dict(zip(fnames, file_existence))
+
+
+def call_parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
+    """
+    Call `parallel_file_exists` to check whether large number of files exist.
+
+    :param fnames: List of file names to check.
+    :param parallelism: Integer that sets parallelism of file existence checking task. Default is 750.
+    :return: Dictionary of file names (str) and whether the file exists (boolean).
+    """
+    return asyncio.get_event_loop().run_until_complete(parallel_file_exists(fnames))
 
 
 def file_exists(fname: str) -> bool:

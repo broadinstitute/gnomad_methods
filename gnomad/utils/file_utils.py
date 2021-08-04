@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-async def parallel_file_exists(
+async def parallel_file_exists_async(
     fnames: List[str], parallelism: int = 750
 ) -> Dict[str, bool]:
     """
@@ -86,9 +86,9 @@ async def parallel_file_exists(
     return dict(zip(fnames, file_existence))
 
 
-def call_parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
+def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
     """
-    Call `parallel_file_exists` to check whether large number of files exist.
+    Call `parallel_file_exists_async` to check whether large number of files exist.
 
     :param fnames: List of file names to check.
     :param parallelism: Integer that sets parallelism of file existence checking task. Default is 750.

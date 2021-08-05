@@ -86,7 +86,7 @@ async def parallel_file_exists_async(
     return dict(zip(fpaths, file_existence))
 
 
-def parallel_file_exists(fpaths: List[str]) -> Dict[str, bool]:
+def parallel_file_exists(fpaths: List[str], parallelism: int = 750) -> Dict[str, bool]:
     """
     Call `parallel_file_exists_async` to check whether large number of files exist.
 
@@ -95,7 +95,7 @@ def parallel_file_exists(fpaths: List[str]) -> Dict[str, bool]:
     :return: Dictionary of file paths (str) and whether the file exists (boolean).
     """
     return asyncio.get_event_loop().run_until_complete(
-        parallel_file_exists_async(fpaths)
+        parallel_file_exists_async(fpaths, parallelism)
     )
 
 

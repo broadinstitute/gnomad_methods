@@ -94,7 +94,9 @@ def parallel_file_exists(fnames: List[str]) -> Dict[str, bool]:
     :param parallelism: Integer that sets parallelism of file existence checking task. Default is 750.
     :return: Dictionary of file names (str) and whether the file exists (boolean).
     """
-    return asyncio.get_event_loop().run_until_complete(parallel_file_exists(fnames))
+    return asyncio.get_event_loop().run_until_complete(
+        parallel_file_exists_async(fnames)
+    )
 
 
 def file_exists(fname: str) -> bool:

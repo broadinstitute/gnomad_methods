@@ -36,7 +36,7 @@ async def parallel_file_exists_async(
 
     async def async_file_exists(fs: AsyncFS, fname: str) -> bool:
         """
-        Call `low_level_async_file_exists` to determine file existence.
+        Determine file existence.
 
         :param fs: AsyncFS object.
         :param fname: Path to file to check.

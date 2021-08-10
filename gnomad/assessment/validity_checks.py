@@ -184,15 +184,12 @@ def make_group_sum_expr_dict(
     # check_field_left = "AC-tgp-adj"
     # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict key from above
     field_check_expr = {}
-    t.info.describe()
-    print(annot_dict)
     for metric in metrics:
         if metric_first_field:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
-        print(check_field_left, check_field_right)
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
             "expr": hl.agg.count_where(
                 t.info[check_field_left] != annot_dict[check_field_right]

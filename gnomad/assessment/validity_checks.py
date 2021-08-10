@@ -163,32 +163,36 @@ def make_group_sum_expr_dict(
     # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1", "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])
     annot_dict = {}
     for metric in metrics:
+        if metric_first_field:
+            field_prefix = f"{metric}{delimiter}{subset}"
+        else:
+            field_prefix = f"{subset}{metric}{delimiter}"
+
         sum_group_exprs = []
         for label in label_combos:
-            if metric_first_field:
-                field = f"{metric}{delimiter}{subset}{label}"
-            else:
-                field = f"{subset}{metric}{delimiter}{label}"
-
+            field = f"{field_prefix}{label}"
             if field in info_fields:
                 sum_group_exprs.append(t.info[field])
             else:
                 logger.warning("%s is not in table's info field", field)
 
         annot_dict[
-            f"sum{delimiter}{metric}{delimiter}{subset}{group}{delimiter}{sum_group}"
+            f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"
         ] = hl.sum(sum_group_exprs)
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
     # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict key from above
     field_check_expr = {}
+    t.info.describe()
+    print(annot_dict)
     for metric in metrics:
         if metric_first_field:
             check_field_left = f"{metric}{delimiter}{subset}{group}"
         else:
             check_field_left = f"{subset}{metric}{delimiter}{group}"
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
+        print(check_field_left, check_field_right)
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
             "expr": hl.agg.count_where(
                 t.info[check_field_left] != annot_dict[check_field_right]

@@ -90,7 +90,7 @@ def _public_pca_ht_path(subpop: str) -> str:
     :return: Path to release Table
     """
     subpop = f".{subpop}" if subpop else ""
-    return f"gs://gnomad-public/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
+    return f"gs://gnomad-public-requester-pays/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
 
 
 def _liftover_data_path(data_type: str, version: str) -> str:
@@ -213,4 +213,4 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     :return: Path to VCF
     """
     contig = f".{contig}" if contig else ""
-    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    return f"gs://gnomad-public-requester-pays/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"

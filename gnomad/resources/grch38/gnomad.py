@@ -221,7 +221,7 @@ gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
         "3.0": GnomadPublicMatrixTableResource(
-            path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
+            path="gs://gnomad-public-requester-pays/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
         )
     },
 )
@@ -230,7 +230,7 @@ na12878 = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
         "3.0": GnomadPublicMatrixTableResource(
-            path="gs://gnomad-public/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
+            path="gs://gnomad-public-requester-pays/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
         )
     },
 )
@@ -347,7 +347,7 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
                 f"Version {version} of gnomAD genomes for GRCh38 does not exist"
             )
 
-    return f"gs://gnomad-public/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
+    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:
@@ -361,4 +361,4 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     """
     contig = f".{contig}" if contig else ""
     version_prefix = "r" if version.startswith("3.0") else "v"
-    return f"gs://gnomad-public/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
+    return f"gs://gnomad-public-requester-pays/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"

@@ -395,17 +395,23 @@ class GnomadPublicResource(BaseResource, ABC):
                 # If one of the known sources is selected, check if the resource is available.
                 # For custom sources, skip the check and attempt to read the resource.
                 resource_source = gnomad_public_resource_configuration.source
-                if (
-                    isinstance(resource_source, GnomadPublicResourceSource)
-                    and resource_source != GnomadPublicResourceSource.GNOMAD
-                ):
-                    if not self.is_resource_available():
-                        raise ResourceNotAvailable(
-                            f"This resource is not currently available from {resource_source.value}.\n\n"
-                            "To load resources directly from gnomAD instead, use:\n\n"
-                            ">>> from gnomad.resources.config import gnomad_public_resource_configuration, GnomadPublicResourceSource\n"
-                            ">>> gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD"
-                        )
+                if not self.is_resource_available():
+                    if resource_source == GnomadPublicResourceSource.GNOMAD:
+                        message = "This resource is not currently available from the gnomAD project."
+                    elif isinstance(resource_source, GnomadPublicResourceSource):
+                        message = f"This resource is not currently available from {resource_source.value}."
+                    else:
+                        message = f"This resource is not currently available from {resource_source}."
+
+                    raise ResourceNotAvailable(
+                        f"{message}\n\n"
+                        "To load resources from a different source (for example, Google Cloud Public Datasets) instead, use:\n\n"
+                        ">>> from gnomad.resources.config import gnomad_public_resource_configuration, GnomadPublicResourceSource\n"
+                        ">>> gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS\n\n"
+                        "To get all available sources for gnomAD resources, use:\n\n"
+                        ">>> from gnomad.resources.config import GnomadPublicResourceSource\n"
+                        ">>> list(GnomadPublicResourceSource)"
+                    )
 
                 return original_method(self, *args, **kwargs)
 

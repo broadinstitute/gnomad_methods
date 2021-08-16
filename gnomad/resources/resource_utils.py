@@ -397,7 +397,7 @@ class GnomadPublicResource(BaseResource, ABC):
                 resource_source = gnomad_public_resource_configuration.source
                 if not self.is_resource_available():
                     if resource_source == GnomadPublicResourceSource.GNOMAD:
-                        message = "This resource is not currently available from the gnomAD project."
+                        message = "This resource is not currently available from the gnomAD project public buckets."
                     elif isinstance(resource_source, GnomadPublicResourceSource):
                         message = f"This resource is not currently available from {resource_source.value}."
                     else:

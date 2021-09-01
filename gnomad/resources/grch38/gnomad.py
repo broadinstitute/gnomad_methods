@@ -347,7 +347,8 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
                 f"Version {version} of gnomAD genomes for GRCh38 does not exist"
             )
 
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
+    version_prefix = "r" if version.startswith("3.0") else "v"
+    return f"gs://gcp-public-data--gnomad/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.summary.tsv.bgz"
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:

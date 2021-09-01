@@ -60,12 +60,6 @@ See instructions in [docs/README.md](./docs/README.md).
 
 https://packaging.python.org/guides/distributing-packages-using-setuptools/#packaging-your-project
 
-- Install tools.
-
-  ```
-  python -m pip install --upgrade setuptools wheel twine
-  ```
-
 - Make sure that the [changelog](./CHANGELOG.md) is up to date.
 
   To see changes since the last release, use:
@@ -82,11 +76,23 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
 
   https://packaging.python.org/guides/distributing-packages-using-setuptools/#semantic-versioning-preferred
 
-- Tag the release in git.
+- Tag the release in git. The version number in the tag must match the version number in setup.py.
 
   ```
   git tag v<version>
   git push origin v<version>
+  ```
+
+  When a `v<VERSION_NUMBER>` tag is pushed to GitHub, an Actions workflow will automatically publish the tagged code to PyPI.
+
+  New releases will automatically be posted in the #gnomad_notifications Slack channel (via the RSS Slack app).
+
+### Manually publishing a release
+
+- Install tools.
+
+  ```
+  python -m pip install --upgrade setuptools wheel twine
   ```
 
 - Remove any old builds.
@@ -107,5 +113,3 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
   ```
   twine upload dist/*
   ```
-
-- Announce new release on Slack.

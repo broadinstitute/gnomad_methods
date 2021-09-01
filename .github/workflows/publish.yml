@@ -1,0 +1,53 @@
+name: Publish to PyPI
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+jobs:
+  publish-release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name:
+        run: |
+          package_version=$(grep 'version' setup.py | sed -E 's|.*([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
+          tag_version=$(echo "$GITHUB_REF" | sed -E 's|.*([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
+          if [ "$package_version" != "$tag_version" ]; then
+            echo "Tag version (${tag_version}) does not match package version (${package_version})"
+            exit 1
+          fi
+
+          if ! grep -iq "version ${package_version}" CHANGELOG.md; then
+            echo "Missing changelog section for version ${package_version}"
+            exit 1
+          fi
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Use pip cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            pip-
+      - name: Install dependencies
+        run: |
+          pip install --upgrade setuptools
+          pip install wheel
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run Pylint
+        run: ./lint
+      - name: Run tests
+        run: python -m pytest
+      - name: Create distributions
+        run: python setup.py sdist bdist_wheel
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}

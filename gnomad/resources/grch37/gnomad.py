@@ -217,4 +217,5 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
             f"gnomAD version {version} is not available on reference genome GRCh37"
         )
 
+    contig = f".{contig}" if contig else ""
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"

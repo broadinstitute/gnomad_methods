@@ -7,6 +7,7 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
     DataException,
 )
+from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
 CURRENT_GENOME_RELEASE = "3.1.1"
@@ -317,6 +318,36 @@ def coverage(data_type: str) -> VersionedTableResource:
             for release in releases
         },
     )
+
+
+def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
+    """
+    Retrieve gnomAD's coverage table by data_type.
+
+    :param data_type: One of "exomes" or "genomes"
+    :return: Coverage Table
+    """
+    if data_type not in DATA_TYPES:
+        raise DataException(
+            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+        )
+
+    if data_type == "exomes":
+        if version is None:
+            version = CURRENT_EXOME_RELEASE
+        elif version not in EXOME_RELEASES:
+            raise DataException(
+                f"Version {version} of gnomAD exomes for GRCh38 does not exist"
+            )
+    else:
+        if version is None:
+            version = CURRENT_GENOME_COVERAGE_RELEASE
+        elif version not in GENOME_COVERAGE_RELEASES:
+            raise DataException(
+                f"Version {version} of gnomAD genomes for GRCh38 does not exist"
+            )
+
+    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.summary.tsv.bgz"
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:

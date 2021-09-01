@@ -200,15 +200,15 @@ def read_list_data(input_file_path: str) -> List[str]:
     if input_file_path.startswith("gs://"):
         hl.hadoop_copy(input_file_path, "file:///" + input_file_path.split("/")[-1])
         f = (
-            gzip.open("/" + os.path.basename(input_file_path))
+            gzip.open("/" + os.path.basename(input_file_path), encoding="utf-8")
             if input_file_path.endswith("gz")
-            else open("/" + os.path.basename(input_file_path))
+            else open("/" + os.path.basename(input_file_path), encoding="utf-8")
         )
     else:
         f = (
-            gzip.open(input_file_path)
+            gzip.open(input_file_path, encoding="utf-8")
             if input_file_path.endswith("gz")
-            else open(input_file_path)
+            else open(input_file_path, encoding="utf-8")
         )
     output = []
     for line in f:

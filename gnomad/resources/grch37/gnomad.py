@@ -212,5 +212,9 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     :param contig: Single contig "1" to "Y"
     :return: Path to VCF
     """
-    contig = f".{contig}" if contig else ""
-    return f"gs://gnomad-public-requester-pays/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+    if not version.startswith("2"):
+        raise DataException(
+            f"gnomAD version {version} is not available on reference genome GRCh37"
+        )
+
+    return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"

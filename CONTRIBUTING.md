@@ -70,15 +70,22 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
   ```
 
 - Update version in setup.py, replace "unreleased" heading in changelog with the version number, and commit.
+  Push changes to the master branch on GitHub or submit a pull request.
   The new version number should be based on changes since the last release.
 
   https://semver.org/
 
   https://packaging.python.org/guides/distributing-packages-using-setuptools/#semantic-versioning-preferred
 
-- Tag the release in git. The version number in the tag must match the version number in setup.py.
+- Once the version has been updated in the master branch on GitHub, tag the release.
+  The version tag should be applied to a commit on the master branch.
+
+  The version number in the tag must match the version number in setup.py.
 
   ```
+  git checkout master
+  git pull
+
   git tag v<version>
   git push origin v<version>
   ```

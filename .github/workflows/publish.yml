@@ -1,3 +1,4 @@
+# This workflow publishes the gnomad package to PyPI when a version tag is pushed to GitHub.
 name: Publish to PyPI
 on:
   push:

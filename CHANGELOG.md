@@ -1,22 +1,30 @@
 # Changes
 
-## Unreleased
+## Version 0.6.0 - September 3rd, 2021
+
+All resources have been moved to a [requester pays](https://cloud.google.com/storage/docs/requester-pays) bucket.
+
+### Fixed
+* Fix `annotation_type_is_numeric` and `annotation_type_in_vcf_info` [(#379)](https://github.com/broadinstitute/gnomad_methods/pull/379)
+
+### Changed
+* VersionedResource objects are no longer subclasses of BaseResource [(#359)](https://github.com/broadinstitute/gnomad_methods/pull/359)
+* gnomAD resources can now be imported from different sources [(#373)](https://github.com/broadinstitute/gnomad_methods/pull/373)
+* Replaced `ht_to_vcf_mt` with `adjust_vcf_incompatible_types` which maintains all functionality except turning the ht into a mt because it is no longer needed for use of the Hail module `export_vcf` [(#365)](https://github.com/broadinstitute/gnomad_methods/pull/365/files)
+* Modified `SEXES` in utils/vcf to be 'XX' and 'XY' instead of 'female' and 'male' [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
+* Changed module `sanity_checks` to `validity_checks`, modified functions `generic_field_check`, `make_filters_expr_dict` (previously `make_filters_sanity_check_expr`), and `make_group_sum_expr_dict` (previously `sample_sum_check`), and added functions `summarize_variant_filters`, `generic_field_check_loop`, `compare_subset_freqs`, `sum_group_callstats`, `summarize_variants`, `check_raw_and_adj_callstats`, `check_sex_chr_metrics`, `compute_missingness`, `vcf_field_check`, and `validate_release_t` [(#395)](https://github.com/broadinstitute/gnomad_methods/pull/389)
+
+### Added
 * Added function `region_flag_expr` to flag problematic regions [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * Added function `missing_callstats_expr` to create a Hail Struct with missing values that is inserted into frequency annotation arrays when data is missing [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * Added function `set_female_y_metrics_to_na_expr` to set Y-variant frequency callstats for female-specific metrics to missing [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * Added function `make_faf_index_dict` to create a look-up Dictionary for entries contained in the filter allele frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
 * Added function `make_freq_index_dict` to create a look-up Dictionary for entries contained in the frequency annotation array [(#349)](https://github.com/broadinstitute/gnomad_methods/pull/349/files)
-* VersionedResource objects are no longer subclasses of BaseResource [(#359)](https://github.com/broadinstitute/gnomad_methods/pull/359)
-* gnomAD resources can now be imported from different sources [(#373)](https://github.com/broadinstitute/gnomad_methods/pull/373)
-* Replaced `ht_to_vcf_mt` with `adjust_vcf_incompatible_types` which maintains all functionality except turning the ht into a mt because it is no longer needed for use of the Hail module `export_vcf` [(#365)](https://github.com/broadinstitute/gnomad_methods/pull/365/files)
 * Added function `remove_fields_from_constant` to remove fields from a list and notify which requested fields to remove were missing [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Added function `create_label_groups` to generate a list of label group dictionaries needed to populate the info dictionary for vcf export [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Added function `build_vcf_export_reference` to create a subset reference based on an existing reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
 * Added function `rekey_new_reference` to re-key a Table or MatrixTable with a new reference genome [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
-* Modified `SEXES` in utils/vcf to be 'XX' and 'XY' instead of 'female' and 'male' [(#381)](https://github.com/broadinstitute/gnomad_methods/pull/381)
-* Fix `annotation_type_is_numeric` and `annotation_type_in_vcf_info` [(#379)](https://github.com/broadinstitute/gnomad_methods/pull/379)
 * Added function `parallel_file_exists` to check whether a large number of files exist [(#394)](https://github.com/broadinstitute/gnomad_methods/pull/394)
-* Changed module `sanity_checks` to `validity_checks`, modified functions `generic_field_check`, `make_filters_expr_dict` (previously `make_filters_sanity_check_expr`), and `make_group_sum_expr_dict` (previously `sample_sum_check`), and added functions `summarize_variant_filters`, `generic_field_check_loop`, `compare_subset_freqs`, `sum_group_callstats`, `summarize_variants`, `check_raw_and_adj_callstats`, `check_sex_chr_metrics`, `compute_missingness`, `vcf_field_check`, and `validate_release_t` [(#395)](https://github.com/broadinstitute/gnomad_methods/pull/389)
 
 ## Version 0.5.0 - April 22nd, 2021
 

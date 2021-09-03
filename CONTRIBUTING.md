@@ -69,6 +69,10 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
   git log $LAST_RELEASE_TAG..
   ```
 
+  Especially if there are many changes in the release, organize the changelog by type.
+
+  See https://keepachangelog.com/en/1.0.0/#how for more information.
+
 - Update version in setup.py, replace "unreleased" heading in changelog with the version number, and commit.
   Push changes to the master branch on GitHub or submit a pull request.
   The new version number should be based on changes since the last release.
@@ -77,7 +81,7 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
 
   https://packaging.python.org/guides/distributing-packages-using-setuptools/#semantic-versioning-preferred
 
-- Once the version has been updated in the master branch on GitHub, tag the release.
+- Once the version and changelog have been updated in the master branch on GitHub, tag the release.
   The version tag should be applied to a commit on the master branch.
 
   The version number in the tag must match the version number in setup.py.

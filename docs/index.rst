@@ -14,4 +14,5 @@ Contents
    Getting Started <getting_started>
    Examples <examples/index>
    API Reference <api_reference/index>
+   Resource Sources <resource_sources>
    Change Log <changelog.md>

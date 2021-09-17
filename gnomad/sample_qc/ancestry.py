@@ -150,7 +150,7 @@ def assign_population_pcs(
     :param pop_pca_scores: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use
     :param known_col: Column storing the known population labels
-    :param fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
+    :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param seed: Random seed
     :param prop_train: Proportion of known data used for training
     :param n_estimators: Number of trees to use in the RF model

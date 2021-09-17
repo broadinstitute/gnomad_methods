@@ -147,7 +147,7 @@ def assign_population_pcs(
         If you have a Pandas Dataframe and have all PCs as an array in a single column, the `expand_pd_array_col`
         can be used to expand this column into multiple `PC` columns.
 
-    :param pop_pc_pd: Input Hail Table or Pandas Dataframe
+    :param pop_pca_scores: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use
     :param known_col: Column storing the known population labels
     :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)

@@ -147,10 +147,10 @@ def assign_population_pcs(
         If you have a Pandas Dataframe and have all PCs as an array in a single column, the `expand_pd_array_col`
         can be used to expand this column into multiple `PC` columns.
 
-    :param pop_pc_pd: Input Hail Table or Pandas Dataframe
+    :param pop_pca_scores: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use
     :param known_col: Column storing the known population labels
-    :param RandomForestClassifier fit: fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
+    :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param seed: Random seed
     :param prop_train: Proportion of known data used for training
     :param n_estimators: Number of trees to use in the RF model
@@ -163,7 +163,12 @@ def assign_population_pcs(
 
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
-        pop_pc_pd = pop_pca_scores.select(known_col, pca_scores=pc_cols).to_pandas()
+        if not fit:
+            pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pc_cols)
+        else:
+            pop_pca_scores = pop_pca_scores.select(pca_scores=pc_cols)
+
+        pop_pc_pd = pop_pca_scores.to_pandas()
 
         # Explode the PC array
         num_out_cols = min([len(x) for x in pop_pc_pd["pca_scores"].values.tolist()])
@@ -175,12 +180,10 @@ def assign_population_pcs(
     else:
         pop_pc_pd = pop_pca_scores
 
-    train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
-
-    N = len(train_data)
-
     # Split training data into subsamples for fitting and evaluating
     if not fit:
+        train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
+        N = len(train_data)
         random.seed(seed)
         train_subsample_ridx = random.sample(list(range(0, N)), int(N * prop_train))
         train_fit = train_data.iloc[train_subsample_ridx]

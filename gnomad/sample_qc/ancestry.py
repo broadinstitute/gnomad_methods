@@ -163,7 +163,12 @@ def assign_population_pcs(
 
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
-        pop_pc_pd = pop_pca_scores.select(known_col, pca_scores=pc_cols).to_pandas()
+        if not fit:
+            pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pc_cols)
+        else:
+            pop_pca_scores = pop_pca_scores.select(pca_scores=pc_cols)
+
+        pop_pc_pd = pop_pca_scores.to_pandas()
 
         # Explode the PC array
         num_out_cols = min([len(x) for x in pop_pc_pd["pca_scores"].values.tolist()])
@@ -175,12 +180,10 @@ def assign_population_pcs(
     else:
         pop_pc_pd = pop_pca_scores
 
-    train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
-
-    N = len(train_data)
-
     # Split training data into subsamples for fitting and evaluating
     if not fit:
+        train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
+        N = len(train_data)
         random.seed(seed)
         train_subsample_ridx = random.sample(list(range(0, N)), int(N * prop_train))
         train_fit = train_data.iloc[train_subsample_ridx]

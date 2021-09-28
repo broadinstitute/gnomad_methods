@@ -154,19 +154,25 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
     )
 
 
-def get_file_stats(url: str) -> Tuple[int, str, str]:
+def get_file_stats(url: str, project_id: Optional[str] = None) -> Tuple[int, str, str]:
     """
     Get size (as both int and str) and md5 for file at specified URL.
 
     Typically used to get stats on VCFs.
 
     :param url: Path to file of interest.
+    :param project_id: Google project ID. Specify if URL points to a requester-pays bucket.
     :return: Tuple of file size and md5.
     """
     one_gibibyte = 2 ** 30
     one_mebibyte = 2 ** 20
 
-    output = subprocess.check_output(["gsutil", "stat", url]).decode("utf8")
+    if project_id:
+        output = subprocess.check_output(
+            ["gsutil", "-u", project_id, "stat", url]
+        ).decode("utf8")
+    else:
+        output = subprocess.check_output(["gsutil", "stat", url]).decode("utf8")
     lines = output.split("\n")
 
     info = {}

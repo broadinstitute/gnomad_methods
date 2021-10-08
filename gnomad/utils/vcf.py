@@ -667,17 +667,19 @@ def make_info_dict(
                 }
             else:
                 if ("XX" in combo_fields) | ("XY" in combo_fields):
-                    description_text = (
+                    faf_description_text = (
                         description_text + " in non-PAR regions of sex chromosomes only"
                     )
+                else:
+                    faf_description_text = description_text
                 combo_dict = {
                     metric_label_dict["faf95"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{faf_description_text}",
                     },
                     metric_label_dict["faf99"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{description_text}",
+                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{faf_description_text}",
                     },
                 }
             info_dict.update(combo_dict)

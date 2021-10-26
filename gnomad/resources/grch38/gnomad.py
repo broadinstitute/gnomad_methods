@@ -10,10 +10,10 @@ from gnomad.resources.resource_utils import (
 from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
-CURRENT_GENOME_RELEASE = "3.1.1"
+CURRENT_GENOME_RELEASE = "3.1.2"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 EXOME_RELEASES = []
-GENOME_RELEASES = ["3.0", "3.1", "3.1.1"]
+GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2"]
 GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 

@@ -7,7 +7,7 @@ To build the documentation, run:
 ```
 cd /path/to/gnomad
 pip install -r requirements.txt
-pip install -r docs/requirements.txt
+pip install -r docs/requirements.docs.txt
 ./docs/build.sh
 ```
 

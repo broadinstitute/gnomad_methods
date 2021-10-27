@@ -20,7 +20,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "sphinx_autodoc_typehints",
-    "recommonmark",
+    "myst_parser",
 ]
 
 # README.md contains developer documentation for building docs

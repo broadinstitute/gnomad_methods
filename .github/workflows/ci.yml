@@ -56,7 +56,7 @@ jobs:
         run: |
           pip install wheel
           pip install -r requirements.txt
-          pip install -r docs/requirements.txt
+          pip install -r docs/requirements.docs.txt
       - name: Build docs
         run: ./docs/build.sh
       - name: Publish to GitHub Pages

@@ -182,7 +182,7 @@ def compute_stratified_metrics_filter(
 
 
 def compute_stratified_sample_qc(
-    mt: hl.MatrixTable,
+    t: Union[hl.MatrixTable, hl.vds.VariantDataset],
     strata: Dict[str, hl.expr.BooleanExpression],
     tmp_ht_prefix: Optional[str],
     gt_col: Optional[str] = None,
@@ -194,12 +194,18 @@ def compute_stratified_sample_qc(
 
         Strata should be non-overlapping, e.g. SNV vs indels or bi-allelic vs multi-allelic
 
-    :param mt: Input MT
+    :param t: Input MatrixTable or VariantDataset
     :param strata: Strata names and filtering expressions
     :param tmp_ht_prefix: Optional path prefix to write the intermediate strata results to (recommended for larger datasets)
     :param gt_col: Name of entry field storing the genotype. Default: 'GT'
     :return: Sample QC table, including strat-specific numbers
     """
+    is_vds = isinstance(t, hl.vds.VariantDataset)
+    if is_vds:
+        mt = t.variant_data
+    else:
+        mt = t
+
     mt = mt.select_rows(**strata)
 
     if gt_col is not None:
@@ -209,7 +215,11 @@ def compute_stratified_sample_qc(
 
     strat_hts = {}
     for strat in strata:
-        strat_sample_qc_ht = hl.sample_qc(mt.filter_rows(mt[strat])).cols()
+        if is_vds:
+            ht = mt.filter_rows(mt[strat]).rows()
+            strat_sample_qc_ht = hl.vds.sample_qc(hl.vds.filter_variants(t, ht))
+        else:
+            strat_sample_qc_ht = hl.sample_qc(mt.filter_rows(mt[strat])).cols()
         if tmp_ht_prefix is not None:
             strat_sample_qc_ht = strat_sample_qc_ht.checkpoint(
                 tmp_ht_prefix + f"_{strat}.ht", overwrite=True
@@ -219,13 +229,29 @@ def compute_stratified_sample_qc(
         strat_hts[strat] = strat_sample_qc_ht
 
     sample_qc_ht = strat_hts.pop(list(strata)[0])
-    sample_qc_ht = sample_qc_ht.select(
-        **{f"{list(strata)[0]}_sample_qc": sample_qc_ht.sample_qc},
-        **{
-            f"{strat}_sample_qc": strat_hts[strat][sample_qc_ht.key].sample_qc
-            for strat in list(strata)[1:]
-        },
-    )
+    if is_vds:
+        sample_qc_ht = sample_qc_ht.select(
+            **{
+                f"{list(strata)[0]}_sample_qc": hl.struct(**{
+                    f"{field}": sample_qc_ht[field]
+                    for field in sample_qc_ht.row_value
+                })
+            },
+            **{
+                f"{strat}_sample_qc": hl.struct(**{
+                    f"{field}": strat_hts[strat][sample_qc_ht.key][field]
+                    for field in sample_qc_ht.row_value
+                }) for strat in list(strata)[1:]
+            }
+        )
+    else:
+        sample_qc_ht = sample_qc_ht.select(
+            **{f"{list(strata)[0]}_sample_qc": sample_qc_ht.sample_qc},
+            **{
+                f"{strat}_sample_qc": strat_hts[strat][sample_qc_ht.key].sample_qc
+                for strat in list(strata)[1:]
+            },
+        )
     sample_qc_ht = sample_qc_ht.annotate(
         sample_qc=merge_sample_qc_expr(list(sample_qc_ht.row_value.values()))
     )
@@ -264,14 +290,16 @@ def merge_sample_qc_expr(
         "n_hom_ref",
         "n_het",
         "n_hom_var",
+        "n_non_ref",
         "n_snp",
         "n_insertion",
         "n_deletion",
         "n_singleton",
         "n_transition",
         "n_transversion",
-        "n_star",
-    ]
+        "n_star", ] + [
+        'gq_over_' + f'{GQ}' for GQ in range(0, 70, 10)] + [
+        'dp_over_' + f'{DP}' for DP in range(0, 40, 10)]
 
     # List of metrics that are ratio of summed metrics (name, nominator, denominator)
     ratio_metrics = [

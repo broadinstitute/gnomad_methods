@@ -233,7 +233,7 @@ def subset_samples_and_variants(
     gt_expr: str = "GT",
 ) -> Union[hl.MatrixTable, hl.vds.VariantDataset]:
     """
-    Subset the MatrixTable to the provided list of samples and their variants.
+    Subset the MatrixTable or VariantDataset to the provided list of samples and their variants.
 
     :param t: Input MatrixTable or VariantDataset
     :param sample_path: Path to a file with list of samples

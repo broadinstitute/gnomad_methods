@@ -245,7 +245,7 @@ def subset_samples_and_variants(
     """
     sample_ht = hl.import_table(sample_path, no_header=not header, key=table_key)
     sample_count = sample_ht.count()
-    is_vds =  isinstance(t, hl.vds.VariantDataset)
+    is_vds = isinstance(t, hl.vds.VariantDataset)
     if is_vds:
         mt = t.variant_data
     else:

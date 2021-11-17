@@ -232,17 +232,22 @@ def compute_stratified_sample_qc(
     if is_vds:
         sample_qc_ht = sample_qc_ht.select(
             **{
-                f"{list(strata)[0]}_sample_qc": hl.struct(**{
-                    f"{field}": sample_qc_ht[field]
-                    for field in sample_qc_ht.row_value
-                })
+                f"{list(strata)[0]}_sample_qc": hl.struct(
+                    **{
+                        f"{field}": sample_qc_ht[field]
+                        for field in sample_qc_ht.row_value
+                    }
+                )
             },
             **{
-                f"{strat}_sample_qc": hl.struct(**{
-                    f"{field}": strat_hts[strat][sample_qc_ht.key][field]
-                    for field in sample_qc_ht.row_value
-                }) for strat in list(strata)[1:]
-            }
+                f"{strat}_sample_qc": hl.struct(
+                    **{
+                        f"{field}": strat_hts[strat][sample_qc_ht.key][field]
+                        for field in sample_qc_ht.row_value
+                    }
+                )
+                for strat in list(strata)[1:]
+            },
         )
     else:
         sample_qc_ht = sample_qc_ht.select(
@@ -283,23 +288,26 @@ def merge_sample_qc_expr(
     :return: Combined sample QC results
     """
     # List of metrics that can be aggregated by summing
-    additive_metrics = [
-        "n_called",
-        "n_not_called",
-        "n_filtered",
-        "n_hom_ref",
-        "n_het",
-        "n_hom_var",
-        "n_non_ref",
-        "n_snp",
-        "n_insertion",
-        "n_deletion",
-        "n_singleton",
-        "n_transition",
-        "n_transversion",
-        "n_star", ] + [
-        'gq_over_' + f'{GQ}' for GQ in range(0, 70, 10)] + [
-        'dp_over_' + f'{DP}' for DP in range(0, 40, 10)]
+    additive_metrics = (
+        [
+            "n_called",
+            "n_not_called",
+            "n_filtered",
+            "n_hom_ref",
+            "n_het",
+            "n_hom_var",
+            "n_non_ref",
+            "n_snp",
+            "n_insertion",
+            "n_deletion",
+            "n_singleton",
+            "n_transition",
+            "n_transversion",
+            "n_star",
+        ]
+        + ["gq_over_" + f"{GQ}" for GQ in range(0, 70, 10)]
+        + ["dp_over_" + f"{DP}" for DP in range(0, 40, 10)]
+    )
 
     # List of metrics that are ratio of summed metrics (name, nominator, denominator)
     ratio_metrics = [

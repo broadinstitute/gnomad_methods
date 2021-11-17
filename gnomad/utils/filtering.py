@@ -225,26 +225,30 @@ def add_filters_expr(
 
 
 def subset_samples_and_variants(
-    mt: hl.MatrixTable,
+    t: Union[hl.MatrixTable, hl.vds.VariantDataset],
     sample_path: str,
     header: bool = True,
     table_key: str = "s",
     sparse: bool = False,
     gt_expr: str = "GT",
-) -> hl.MatrixTable:
+) -> Union[hl.MatrixTable, hl.vds.VariantDataset]:
     """
     Subset the MatrixTable to the provided list of samples and their variants.
 
-    :param mt: Input MatrixTable
+    :param t: Input MatrixTable or VariantDataset
     :param sample_path: Path to a file with list of samples
     :param header: Whether file with samples has a header. Default is True
     :param table_key: Key to sample Table. Default is "s"
     :param sparse: Whether the MatrixTable is sparse. Default is False
     :param gt_expr: Name of field in MatrixTable containing genotype expression. Default is "GT"
-    :return: MatrixTable subsetted to specified samples and their variants
+    :return: MatrixTable or VariantDataset subsetted to specified samples and their variants
     """
     sample_ht = hl.import_table(sample_path, no_header=not header, key=table_key)
     sample_count = sample_ht.count()
+    if isinstance(t, hl.vds.VariantDataset):
+        mt = t.variant_data
+    else:
+        mt = t
     missing_ht = sample_ht.anti_join(mt.cols())
     missing_ht_count = missing_ht.count()
     full_count = mt.count_cols()
@@ -257,20 +261,25 @@ def subset_samples_and_variants(
             f"IDs that aren't in the MT: {missing_samples}\n"
         )
 
-    mt = mt.semi_join_cols(sample_ht)
-    if sparse:
-        mt = mt.filter_rows(
-            hl.agg.any(mt[gt_expr].is_non_ref() | hl.is_defined(mt.END))
-        )
+    if isinstance(t, hl.vds.VariantDataset):
+        t = hl.vds.filter_samples(t, sample_ht, keep=True)
+        mt = t.variant_data
     else:
-        mt = mt.filter_rows(hl.agg.any(mt[gt_expr].is_non_ref()))
+        t = t.semi_join_cols(sample_ht)
+        if sparse:
+            t = t.filter_rows(
+                hl.agg.any(t[gt_expr].is_non_ref() | hl.is_defined(t.END))
+            )
+        else:
+            t = t.filter_rows(hl.agg.any(t[gt_expr].is_non_ref()))
+        mt = t
 
     logger.info(
         "Finished subsetting samples. Kept %d out of %d samples in MT",
         mt.count_cols(),
         full_count,
     )
-    return mt
+    return t
 
 
 def filter_to_clinvar_pathogenic(

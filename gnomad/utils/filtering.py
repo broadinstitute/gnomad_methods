@@ -277,7 +277,7 @@ def subset_samples_and_variants(
 
     logger.info(
         "Finished subsetting samples. Kept %d out of %d samples in MT",
-        mt.count_cols(),
+        n_cols,
         full_count,
     )
     return t

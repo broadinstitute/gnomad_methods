@@ -264,7 +264,7 @@ def subset_samples_and_variants(
 
     if is_vds:
         t = hl.vds.filter_samples(t, sample_ht, keep=True)
-        mt = t.variant_data
+        n_cols = t.variant_data.count_cols()
     else:
         t = t.semi_join_cols(sample_ht)
         if sparse:

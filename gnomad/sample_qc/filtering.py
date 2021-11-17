@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import hail as hl
 from gnomad.utils.gen_stats import get_median_and_mad_expr, merge_stats_counters_expr

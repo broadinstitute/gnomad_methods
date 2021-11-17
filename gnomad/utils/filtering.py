@@ -261,7 +261,7 @@ def subset_samples_and_variants(
             f"IDs that aren't in the MT: {missing_samples}\n"
         )
 
-    if isinstance(t, hl.vds.VariantDataset):
+    if is_vds:
         t = hl.vds.filter_samples(t, sample_ht, keep=True)
         mt = t.variant_data
     else:

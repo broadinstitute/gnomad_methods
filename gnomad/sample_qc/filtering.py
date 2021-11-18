@@ -182,7 +182,7 @@ def compute_stratified_metrics_filter(
 
 
 def compute_stratified_sample_qc(
-    t: Union[hl.MatrixTable, hl.vds.VariantDataset],
+    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     strata: Dict[str, hl.expr.BooleanExpression],
     tmp_ht_prefix: Optional[str],
     gt_col: Optional[str] = None,
@@ -194,17 +194,17 @@ def compute_stratified_sample_qc(
 
         Strata should be non-overlapping, e.g. SNV vs indels or bi-allelic vs multi-allelic
 
-    :param t: Input MatrixTable or VariantDataset
+    :param mtds: Input MatrixTable or VariantDataset
     :param strata: Strata names and filtering expressions
     :param tmp_ht_prefix: Optional path prefix to write the intermediate strata results to (recommended for larger datasets)
     :param gt_col: Name of entry field storing the genotype. Default: 'GT'
     :return: Sample QC table, including strat-specific numbers
     """
-    is_vds = isinstance(t, hl.vds.VariantDataset)
+    is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
-        mt = t.variant_data
+        mt = mtds.variant_data
     else:
-        mt = t
+        mt = mtds
 
     mt = mt.select_rows(**strata)
 
@@ -217,7 +217,7 @@ def compute_stratified_sample_qc(
     for strat in strata:
         if is_vds:
             ht = mt.filter_rows(mt[strat]).rows()
-            strat_sample_qc_ht = hl.vds.sample_qc(hl.vds.filter_variants(t, ht))
+            strat_sample_qc_ht = hl.vds.sample_qc(hl.vds.filter_variants(mtds, ht))
         else:
             strat_sample_qc_ht = hl.sample_qc(mt.filter_rows(mt[strat])).cols()
         if tmp_ht_prefix is not None:

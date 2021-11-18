@@ -158,6 +158,7 @@ class MatrixTableResource(BaseResource):
             self.path, overwrite=overwrite, **kwargs
         )
 
+
 class VariantDatasetResource(BaseResource):
     """
     A Hail VariantDataset resource.
@@ -188,6 +189,7 @@ class VariantDatasetResource(BaseResource):
         self.import_func(**self.import_args).write(
             self.path, overwrite=overwrite, **kwargs
         )
+
 
 class PedigreeResource(BaseResource):
     """

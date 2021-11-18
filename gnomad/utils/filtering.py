@@ -225,7 +225,7 @@ def add_filters_expr(
 
 
 def subset_samples_and_variants(
-    t: Union[hl.MatrixTable, hl.vds.VariantDataset],
+    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     sample_path: str,
     header: bool = True,
     table_key: str = "s",
@@ -235,7 +235,7 @@ def subset_samples_and_variants(
     """
     Subset the MatrixTable or VariantDataset to the provided list of samples and their variants.
 
-    :param t: Input MatrixTable or VariantDataset
+    :param mtds: Input MatrixTable or VariantDataset
     :param sample_path: Path to a file with list of samples
     :param header: Whether file with samples has a header. Default is True
     :param table_key: Key to sample Table. Default is "s"
@@ -245,11 +245,11 @@ def subset_samples_and_variants(
     """
     sample_ht = hl.import_table(sample_path, no_header=not header, key=table_key)
     sample_count = sample_ht.count()
-    is_vds = isinstance(t, hl.vds.VariantDataset)
+    is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
-        mt = t.variant_data
+        mt = mtds.variant_data
     else:
-        mt = t
+        mt = mtds
     missing_ht = sample_ht.anti_join(mt.cols())
     missing_ht_count = missing_ht.count()
     full_count = mt.count_cols()
@@ -258,29 +258,30 @@ def subset_samples_and_variants(
         missing_samples = missing_ht.s.collect()
         raise DataException(
             f"Only {sample_count - missing_ht_count} out of {sample_count} "
-            "subsetting-table IDs matched IDs in the MT.\n"
+            f"subsetting-table IDs matched IDs in the {'VariantDataset' if is_vds else 'MatrixTable'}.\n"
             f"IDs that aren't in the MT: {missing_samples}\n"
         )
 
     if is_vds:
-        t = hl.vds.filter_samples(t, sample_ht, keep=True)
-        n_cols = t.variant_data.count_cols()
+        mtds = hl.vds.filter_samples(mtds, sample_ht, keep=True)
+        n_cols = mtds.variant_data.count_cols()
     else:
-        t = t.semi_join_cols(sample_ht)
+        mtds = mtds.semi_join_cols(sample_ht)
         if sparse:
-            t = t.filter_rows(
-                hl.agg.any(t[gt_expr].is_non_ref() | hl.is_defined(t.END))
+            mtds = mtds.filter_rows(
+                hl.agg.any(mtds[gt_expr].is_non_ref() | hl.is_defined(mtds.END))
             )
         else:
-            t = t.filter_rows(hl.agg.any(t[gt_expr].is_non_ref()))
-        n_cols = t.count_cols()
+            mtds = mtds.filter_rows(hl.agg.any(mtds[gt_expr].is_non_ref()))
+        n_cols = mtds.count_cols()
 
     logger.info(
-        "Finished subsetting samples. Kept %d out of %d samples in MT",
+        "Finished subsetting samples. Kept %d out of %d samples in %s",
         n_cols,
         full_count,
+        "VariantDataset" if is_vds else "MatrixTable",
     )
-    return t
+    return mtds
 
 
 def filter_to_clinvar_pathogenic(

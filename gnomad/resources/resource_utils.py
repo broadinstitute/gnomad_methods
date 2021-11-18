@@ -169,7 +169,7 @@ class VariantDatasetResource(BaseResource):
 
     expected_file_extensions: List[str] = [".vds"]
 
-    def vds(self, force_import: bool = False) -> hl.VariantDataset:
+    def vds(self, force_import: bool = False) -> hl.vds.VariantDataset:
         """
         Read and return the Hail VariantDataset resource.
         :return: Hail VariantDataset resource
@@ -183,7 +183,7 @@ class VariantDatasetResource(BaseResource):
         """
         Import the VariantDataset resource using its import_func and writes it in its path.
         :param overwrite: If set, existing file(s) will be overwritten
-        :param kwargs: Any other parameters to be passed to hl.VariantDataset.write
+        :param kwargs: Any other parameters to be passed to hl.vds.VariantDataset.write
         :return: Nothing
         """
         self.import_func(**self.import_args).write(

@@ -184,8 +184,7 @@ class VariantDatasetResource(BaseResource):
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Import the VariantDataset resource using its import_func and writes it in its path.
-        
-        
+
         :param overwrite: If set, existing file(s) will be overwritten
         :param kwargs: Any other parameters to be passed to hl.vds.VariantDataset.write
         :return: Nothing
@@ -388,7 +387,9 @@ class VersionedVariantDatasetResource(BaseVersionedResource):
 
     resource_class = VariantDatasetResource
 
-    def __init__(self, default_version: str, versions: Dict[str, VariantDatasetResource]):
+    def __init__(
+        self, default_version: str, versions: Dict[str, VariantDatasetResource]
+    ):
         super().__init__(default_version, versions)
 
 

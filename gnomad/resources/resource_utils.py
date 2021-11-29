@@ -162,6 +162,7 @@ class MatrixTableResource(BaseResource):
 class VariantDatasetResource(BaseResource):
     """
     A Hail VariantDataset resource.
+    
     :param path: The VariantDataset path (typically ending in .vds)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
     :param import_func: A function used to import the VariantDataset. `import_func` will be passed the `import_args` dictionary as kwargs.
@@ -172,16 +173,19 @@ class VariantDatasetResource(BaseResource):
     def vds(self, force_import: bool = False) -> hl.vds.VariantDataset:
         """
         Read and return the Hail VariantDataset resource.
+        
         :return: Hail VariantDataset resource
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.read_vds(self.path)
+            return hl.vds.read_vds(self.path)
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
         Import the VariantDataset resource using its import_func and writes it in its path.
+        
+        
         :param overwrite: If set, existing file(s) will be overwritten
         :param kwargs: Any other parameters to be passed to hl.vds.VariantDataset.write
         :return: Nothing
@@ -374,9 +378,11 @@ class VersionedMatrixTableResource(BaseVersionedResource):
 class VersionedVariantDatasetResource(BaseVersionedResource):
     """
     Versioned VariantDataset resource.
+    
     The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
     :param default_version: The default version of this VariantDataset resource (must to be in the `versions` dict)
+    
     :param versions: A dict of version name -> VariantDatasetResource.
     """
 

@@ -57,7 +57,7 @@ async def parallel_file_exists_async(
     ) as pbar:
         with ThreadPoolExecutor() as thread_pool:
             async with RouterAsyncFS(
-                "file", [LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
+                "file", filesystems=[LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
             ) as fs:
 
                 def check_existence_and_update_pbar_thunk(fpath: str) -> Callable:

@@ -1,0 +1,5 @@
+black==19.10b0 # This should be kept in sync with the version in .pre-commit-config.yaml
+pre-commit
+pydocstyle==6.0.0 # This should be kept in sync with the version in .pre-commit-config.yaml
+pylint
+pytest

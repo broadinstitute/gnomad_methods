@@ -242,7 +242,7 @@ def subset_samples_and_variants(
     :param table_key: Key to sample Table. Default is "s"
     :param sparse: Whether the MatrixTable is sparse. Default is False
     :param gt_expr: Name of field in MatrixTable containing genotype expression. Default is "GT"
-    :param remove_dead_alleles: remove alleles observed in no samples for only VariantDataset. Default is False
+    :param remove_dead_alleles: Remove alleles observed in no samples. This option is currently only relevant when `mtds` is a VariantDataset. Default is False
     :return: MatrixTable or VariantDataset subsetted to specified samples and their variants
     """
     sample_ht = hl.import_table(sample_path, no_header=not header, key=table_key)

@@ -251,6 +251,8 @@ def subset_samples_and_variants(
     if is_vds:
         mt = mtds.variant_data
     else:
+        if remove_dead_alleles: 
+            raise ValueError("Removal of alleles observed in no samples is currently only implemented when the input dataset is a VariantDataset.")
         mt = mtds
     missing_ht = sample_ht.anti_join(mt.cols())
     missing_ht_count = missing_ht.count()

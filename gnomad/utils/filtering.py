@@ -231,7 +231,7 @@ def subset_samples_and_variants(
     table_key: str = "s",
     sparse: bool = False,
     gt_expr: str = "GT",
-    remove_dead_alleles: bool = False
+    remove_dead_alleles: bool = False,
 ) -> Union[hl.MatrixTable, hl.vds.VariantDataset]:
     """
     Subset the MatrixTable or VariantDataset to the provided list of samples and their variants.
@@ -265,7 +265,9 @@ def subset_samples_and_variants(
         )
 
     if is_vds:
-        mtds = hl.vds.filter_samples(mtds, sample_ht, keep=True, remove_dead_alleles=remove_dead_alleles)
+        mtds = hl.vds.filter_samples(
+            mtds, sample_ht, keep=True, remove_dead_alleles=remove_dead_alleles
+        )
         n_cols = mtds.variant_data.count_cols()
     else:
         mtds = mtds.semi_join_cols(sample_ht)

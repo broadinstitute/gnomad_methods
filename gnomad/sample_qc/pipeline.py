@@ -11,7 +11,7 @@ from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.sparse_mt import impute_sex_ploidy
 
-from typing import List, Optional
+from typing import List, Optional, Union
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -209,7 +209,7 @@ def get_qc_mt(
 
 
 def annotate_sex(
-    mt: hl.MatrixTable,
+    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     is_sparse: bool = True,
     excluded_intervals: Optional[hl.Table] = None,
     included_intervals: Optional[hl.Table] = None,
@@ -238,7 +238,7 @@ def annotate_sex(
         - Y_karyotype (str): Sample's chromosome Y karyotype.
         - sex_karyotype (str): Sample's sex karyotype.
 
-    :param mt: Input MatrixTable
+    :param mtds: Input MatrixTable or VariantDataset
     :param bool is_sparse: Whether input MatrixTable is in sparse data format
     :param excluded_intervals: Optional table of intervals to exclude from the computation.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
@@ -252,14 +252,29 @@ def annotate_sex(
     :return: Table of samples and their imputed sex karyotypes.
     """
     logger.info("Imputing sex chromosome ploidies...")
-    if is_sparse:
-        ploidy_ht = impute_sex_ploidy(
-            mt, excluded_intervals, included_intervals, normalization_contig
+
+    is_vds = isinstance(mtds, hl.vds.VariantDataset)
+    if is_vds:
+        ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+            mtds,
+            calling_intervals=included_intervals,
+            normalization_contig=normalization_contig,
         )
+        ploidy_ht = ploidy_ht.transmute(
+            chrX_ploidy=ploidy_ht.x_ploidy, chrY_ploidy=ploidy_ht.y_ploidy
+        )
+        mtds = hl.vds.split_multi(mtds, filter_changed_loci=True)
+        mt = mtds.variant_data
     else:
-        raise NotImplementedError(
-            "Imputing sex ploidy does not exist yet for dense data."
-        )
+        mt = mtds
+        if is_sparse:
+            ploidy_ht = impute_sex_ploidy(
+                mt, excluded_intervals, included_intervals, normalization_contig
+            )
+        else:
+            raise NotImplementedError(
+                "Imputing sex ploidy does not exist yet for dense data."
+            )
 
     x_contigs = get_reference_genome(mt.locus).x_contigs
     logger.info("Filtering mt to biallelic SNPs in X contigs: %s", x_contigs)
@@ -269,9 +284,22 @@ def annotate_sex(
         mt = mt.filter_rows(
             (hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1])
         )
-    mt = hl.filter_intervals(
-        mt, [hl.parse_locus_interval(contig) for contig in x_contigs]
-    )
+
+    if is_vds:
+        mtds = hl.vds.filter_variants(mtds, mt.rows(), keep=True)
+        mtds = hl.vds.filter_intervals(
+            mtds,
+            [
+                hl.parse_locus_interval(contig, reference_genome="GRCh38")
+                for contig in x_contigs
+            ],
+            keep=True,
+        )
+        mt = mtds.variant_data
+    else:
+        mt = hl.filter_intervals(
+            mt, [hl.parse_locus_interval(contig) for contig in x_contigs], keep=True
+        )
 
     if sites_ht is not None:
         if aaf_expr == None:
@@ -282,6 +310,9 @@ def annotate_sex(
         logger.info("Filtering to provided sites")
         mt = mt.annotate_rows(**sites_ht[mt.row_key])
         mt = mt.filter_rows(hl.is_defined(mt[aaf_expr]))
+        if is_vds:
+            mtds = hl.vds.filter_variants(mtds, mt.rows())
+            mt = mtds.variant_data
 
     logger.info("Calculating inbreeding coefficient on chrX")
     sex_ht = hl.impute_sex(

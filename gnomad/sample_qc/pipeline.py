@@ -214,6 +214,7 @@ def annotate_sex(
     excluded_intervals: Optional[hl.Table] = None,
     included_intervals: Optional[hl.Table] = None,
     normalization_contig: str = "chr20",
+    reference_genome: str = "GRCh38",
     sites_ht: Optional[hl.Table] = None,
     aaf_expr: Optional[str] = None,
     gt_expr: str = "GT",
@@ -243,6 +244,7 @@ def annotate_sex(
     :param excluded_intervals: Optional table of intervals to exclude from the computation.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
     :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex chromosome ploidies.
+    :param reference_genome: Reference genome used for constructing interval list. Default: 'GRCh38'
     :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex,
                     and pulls alternate allele frequency from this Table.
     :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
@@ -255,15 +257,18 @@ def annotate_sex(
 
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
+        if excluded_intervals is not None:
+            raise NotImplementedError(
+                "excluded_intervals is not used when imputing sex chromosome ploidy for VDS"
+            )
         ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
             mtds,
             calling_intervals=included_intervals,
             normalization_contig=normalization_contig,
         )
-.rename({'C1' : 'col1', 'C2' : 'col2'})
-        ploidy_ht = ploidy_ht.rename({'x_ploidy' : 'chrX_ploidy', 'y_ploidy' : 'chrY_ploidy'})
+        ploidy_ht = ploidy_ht.rename(
+            {"x_ploidy": "chrX_ploidy", "y_ploidy": "chrY_ploidy"}
         )
-        mtds = hl.vds.split_multi(mtds, filter_changed_loci=True)
         mt = mtds.variant_data
     else:
         mt = mtds
@@ -285,21 +290,14 @@ def annotate_sex(
             (hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1])
         )
 
-    if is_vds:
-        mtds = hl.vds.filter_variants(mtds, mt.rows(), keep=True)
-        mtds = hl.vds.filter_intervals(
-            mtds,
-            [
-                hl.parse_locus_interval(contig, reference_genome="GRCh38")
-                for contig in x_contigs
-            ],
-            keep=True,
-        )
-        mt = mtds.variant_data
-    else:
-        mt = hl.filter_intervals(
-            mt, [hl.parse_locus_interval(contig) for contig in x_contigs], keep=True
-        )
+    mt = hl.filter_intervals(
+        mt,
+        [
+            hl.parse_locus_interval(contig, reference_genome=reference_genome)
+            for contig in x_contigs
+        ],
+        keep=True,
+    )
 
     if sites_ht is not None:
         if aaf_expr == None:
@@ -310,9 +308,6 @@ def annotate_sex(
         logger.info("Filtering to provided sites")
         mt = mt.annotate_rows(**sites_ht[mt.row_key])
         mt = mt.filter_rows(hl.is_defined(mt[aaf_expr]))
-        if is_vds:
-            mtds = hl.vds.filter_variants(mtds, mt.rows())
-            mt = mtds.variant_data
 
     logger.info("Calculating inbreeding coefficient on chrX")
     sex_ht = hl.impute_sex(

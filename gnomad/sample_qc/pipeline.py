@@ -260,8 +260,8 @@ def annotate_sex(
             calling_intervals=included_intervals,
             normalization_contig=normalization_contig,
         )
-        ploidy_ht = ploidy_ht.transmute(
-            chrX_ploidy=ploidy_ht.x_ploidy, chrY_ploidy=ploidy_ht.y_ploidy
+.rename({'C1' : 'col1', 'C2' : 'col2'})
+        ploidy_ht = ploidy_ht.rename({'x_ploidy' : 'chrX_ploidy', 'y_ploidy' : 'chrY_ploidy'})
         )
         mtds = hl.vds.split_multi(mtds, filter_changed_loci=True)
         mt = mtds.variant_data

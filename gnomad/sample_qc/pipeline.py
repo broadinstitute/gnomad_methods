@@ -214,7 +214,6 @@ def annotate_sex(
     excluded_intervals: Optional[hl.Table] = None,
     included_intervals: Optional[hl.Table] = None,
     normalization_contig: str = "chr20",
-    reference_genome: str = "GRCh38",
     sites_ht: Optional[hl.Table] = None,
     aaf_expr: Optional[str] = None,
     gt_expr: str = "GT",
@@ -226,7 +225,7 @@ def annotate_sex(
 
     Return Table with the following fields:
         - s (str): Sample
-        - chr20_mean_dp (float32): Sample's mean coverage over chromosome 20.
+        - chr20_mean_dp/autosomal_mean_dp (float32): Sample's mean coverage over chromosome 20.
         - chrX_mean_dp (float32): Sample's mean coverage over chromosome X.
         - chrY_mean_dp (float32): Sample's mean coverage over chromosome Y.
         - chrX_ploidy (float32): Sample's imputed ploidy over chromosome X.
@@ -244,7 +243,6 @@ def annotate_sex(
     :param excluded_intervals: Optional table of intervals to exclude from the computation.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
     :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex chromosome ploidies.
-    :param reference_genome: Reference genome used for constructing interval list. Default: 'GRCh38'
     :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex,
                     and pulls alternate allele frequency from this Table.
     :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
@@ -267,7 +265,12 @@ def annotate_sex(
             normalization_contig=normalization_contig,
         )
         ploidy_ht = ploidy_ht.rename(
-            {"x_ploidy": "chrX_ploidy", "y_ploidy": "chrY_ploidy"}
+            {
+                "x_ploidy": "chrX_ploidy",
+                "y_ploidy": "chrY_ploidy",
+                "x_mean_dp": "chrX_mean_dp",
+                "y_mean_dp": "chrY_mean_dp",
+            }
         )
         mt = mtds.variant_data
     else:
@@ -290,10 +293,11 @@ def annotate_sex(
             (hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1])
         )
 
+    build = get_reference_genome(mt.locus).name
     mt = hl.filter_intervals(
         mt,
         [
-            hl.parse_locus_interval(contig, reference_genome=reference_genome)
+            hl.parse_locus_interval(contig, reference_genome=build)
             for contig in x_contigs
         ],
         keep=True,

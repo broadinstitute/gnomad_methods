@@ -259,7 +259,7 @@ def annotate_sex(
     if is_vds:
         if excluded_intervals is not None:
             raise NotImplementedError(
-                "excluded_intervals is not used when imputing sex chromosome ploidy for VDS"
+                "The use of the parameter excluded_intervals is currently not implemented for imputing sex chromosome ploidy on a VDS"
             )
         ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
             mtds,

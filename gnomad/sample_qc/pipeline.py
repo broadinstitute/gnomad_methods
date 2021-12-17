@@ -225,7 +225,7 @@ def annotate_sex(
 
     Return Table with the following fields:
         - s (str): Sample
-        - {normalization_contig}_mean_dp (float32): Sample's mean coverage over the specified `normalization_contig`.
+        - `normalization_contig`_mean_dp (float32): Sample's mean coverage over the specified `normalization_contig`.
         - chrX_mean_dp (float32): Sample's mean coverage over chromosome X.
         - chrY_mean_dp (float32): Sample's mean coverage over chromosome Y.
         - chrX_ploidy (float32): Sample's imputed ploidy over chromosome X.

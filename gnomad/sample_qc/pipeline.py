@@ -270,6 +270,7 @@ def annotate_sex(
                 "y_ploidy": "chrY_ploidy",
                 "x_mean_dp": "chrX_mean_dp",
                 "y_mean_dp": "chrY_mean_dp",
+                "autosomal_mean_dp": f"{normalization_contig}_mean_dp",
             }
         )
         mt = mtds.variant_data

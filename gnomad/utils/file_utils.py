@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, List, Dict, Optional, Tuple, Union
 
 import hail as hl
-from hailtop.aiotools import LocalAsyncFS, RouterAsyncFS, AsyncFS
+from hailtop.aiotools import LocalAsyncFS, AsyncFS
+from hailtop.aiotools.router_fs import RouterAsyncFS
 from hailtop.aiogoogle import GoogleStorageAsyncFS
 from hailtop.utils import bounded_gather, tqdm
 

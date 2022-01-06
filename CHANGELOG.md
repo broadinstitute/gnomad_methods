@@ -1,5 +1,10 @@
 # Changes
 
+## Version 0.6.1 - January 6th, 2022
+
+* Update for new RouterAsyncFS import/interface in recent Hail versions [(55214e8)](https://github.com/broadinstitute/gnomad_methods/commit/55214e882750e6d01e883ab200bdbf1fc8c611b2)
+* Fix `assign_population_pcs`'s use of known population label [(9c8f089)](https://github.com/broadinstitute/gnomad_methods/commit/9c8f0896bbb0cb99d3eb8b92cea4743b6864e61d)
+
 ## Version 0.6.0 - September 3rd, 2021
 
 All resources have been moved to a [requester pays](https://cloud.google.com/storage/docs/requester-pays) bucket.

@@ -11,9 +11,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, List, Dict, Optional, Tuple, Union
 
 import hail as hl
-from hailtop.aiotools import LocalAsyncFS, RouterAsyncFS, AsyncFS
+from hailtop.aiotools import LocalAsyncFS, AsyncFS
 from hailtop.aiogoogle import GoogleStorageAsyncFS
 from hailtop.utils import bounded_gather, tqdm
+
+try:
+    from hailtop.aiotools.router_fs import RouterAsyncFS
+except ImportError:
+    from hailtop.aiotools import RouterAsyncFS
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -57,7 +62,7 @@ async def parallel_file_exists_async(
     ) as pbar:
         with ThreadPoolExecutor() as thread_pool:
             async with RouterAsyncFS(
-                "file", [LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
+                "file", filesystems=[LocalAsyncFS(thread_pool), GoogleStorageAsyncFS()]
             ) as fs:
 
                 def check_existence_and_update_pbar_thunk(fpath: str) -> Callable:

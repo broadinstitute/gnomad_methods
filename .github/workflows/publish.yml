@@ -11,17 +11,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Validate version and changelog
+      - name: Validate version
         run: |
           package_version=$(grep 'version' setup.py | sed -E 's|.*([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
           tag_version=$(echo "$GITHUB_REF" | sed -E 's|.*([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
           if [ "$package_version" != "$tag_version" ]; then
             echo "Tag version (${tag_version}) does not match package version (${package_version})"
-            exit 1
-          fi
-
-          if ! grep -iq "version ${package_version}" CHANGELOG.md; then
-            echo "Missing changelog section for version ${package_version}"
             exit 1
           fi
       - name: Setup Python 3.8

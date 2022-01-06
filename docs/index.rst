@@ -15,4 +15,4 @@ Contents
    Examples <examples/index>
    API Reference <api_reference/index>
    Resource Sources <resource_sources>
-   Change Log <changelog.md>
+   Change Log <https://github.com/broadinstitute/gnomad_methods/releases>

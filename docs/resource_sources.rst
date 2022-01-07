@@ -5,15 +5,15 @@ gnomAD data is available through `multiple cloud providers' public datasets prog
 
 The functions in the :doc:`gnomad.resources </api_reference/resources/index>` package can be configured to load data from different sources.
 
-By default, resources are loaded from the gnomAD project's public Google Cloud Storage bucket ``gs://gnomad-public-requester-pays``. This bucket is `requester pays <https://cloud.google.com/storage/docs/requester-pays>`_, meaning that charges for data access and transfer will be billed to your Google Cloud project.
+By default, resources are loaded from Google Cloud Public Datasets.
 
-To load resources from a different source (for example, Google Public Datasets), use:
+To load resources from a different source (for example, the gnomAD project's public GCS bucket), use:
 
 .. code-block:: python
 
     from gnomad.resources.config import gnomad_public_resource_configuration, GnomadPublicResourceSource
 
-    gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
+    gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GNOMAD
 
 To see all available public sources for gnomAD resources, use:
 
@@ -23,6 +23,15 @@ To see all available public sources for gnomAD resources, use:
 
     list(GnomadPublicResourceSource)
 
+.. note::
+
+   The gnomAD project's bucket (``gs://gnomad-public-requester-pays``) is `requester pays <https://cloud.google.com/storage/docs/requester-pays>`_, meaning that charges for data access and transfer will be billed to your Google Cloud project.
+
+   Clusters must be configured to read requester pays buckets during creation. For example,
+
+   .. code-block::
+
+      hailctl dataproc start cluster-name --packages gnomad --requester-pays-allow-buckets gnomad-public-requester-pays
 
 Custom Sources
 --------------

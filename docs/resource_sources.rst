@@ -25,8 +25,13 @@ To see all available public sources for gnomAD resources, use:
 
 .. note::
 
-   The gnomAD project's bucket (``gs://gnomad-public-requester-pays``) is `requester pays <https://cloud.google.com/storage/docs/requester-pays>`_, meaning that charges for data access and transfer will be billed to your Google Cloud project. Clusters must be configured to read requester pays buckets during creation.
-``hailctl dataproc start cluster-name --packages gnomad --requester-pays-allow-buckets gnomad-public-requester-pays``
+   The gnomAD project's bucket (``gs://gnomad-public-requester-pays``) is `requester pays <https://cloud.google.com/storage/docs/requester-pays>`_, meaning that charges for data access and transfer will be billed to your Google Cloud project.
+
+   Clusters must be configured to read requester pays buckets during creation. For example,
+
+   .. code-block::
+
+      hailctl dataproc start cluster-name --packages gnomad --requester-pays-allow-buckets gnomad-public-requester-pays
 
 Custom Sources
 --------------

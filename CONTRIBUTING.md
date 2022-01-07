@@ -60,20 +60,7 @@ See instructions in [docs/README.md](./docs/README.md).
 
 https://packaging.python.org/guides/distributing-packages-using-setuptools/#packaging-your-project
 
-- Make sure that the [changelog](./CHANGELOG.md) is up to date.
-
-  To see changes since the last release, use:
-
-  ```
-  LAST_RELEASE_TAG=$(git tag --list --sort=-committerdate | head -n1)
-  git log $LAST_RELEASE_TAG..
-  ```
-
-  Especially if there are many changes in the release, organize the changelog by type.
-
-  See https://keepachangelog.com/en/1.0.0/#how for more information.
-
-- Update version in setup.py, replace "unreleased" heading in changelog with the version number, and commit.
+- Update version in setup.py and commit.
   Push changes to the master branch on GitHub or submit a pull request.
   The new version number should be based on changes since the last release.
 
@@ -81,7 +68,7 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
 
   https://packaging.python.org/guides/distributing-packages-using-setuptools/#semantic-versioning-preferred
 
-- Once the version and changelog have been updated in the master branch on GitHub, tag the release.
+- Once the version has been updated in the master branch on GitHub, tag the release.
   The version tag should be applied to a commit on the master branch.
 
   The version number in the tag must match the version number in setup.py.
@@ -97,6 +84,22 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
   When a `v<VERSION_NUMBER>` tag is pushed to GitHub, an Actions workflow will automatically publish the tagged code to PyPI.
 
   New releases will automatically be posted in the #gnomad_notifications Slack channel (via the RSS Slack app).
+
+- [Create a GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository#creating-a-release)
+  using the tag and add release notes.
+
+  Release notes can be [automatically generated from pull requests](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes).
+
+  Alternatively, to see commits since the last release, use:
+
+  ```
+  LAST_RELEASE_TAG=$(git tag --list --sort=-committerdate | head -n1)
+  git log $LAST_RELEASE_TAG..
+  ```
+
+  Especially if there are many changes in the release, organize the changelog by type.
+
+  See https://keepachangelog.com/en/1.0.0/#how for more information.
 
 ### Manually publishing a release
 

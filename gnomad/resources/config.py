@@ -11,7 +11,9 @@ class GnomadPublicResourceSource(Enum):
     GOOGLE_CLOUD_PUBLIC_DATASETS = "Google Cloud Public Datasets"
 
 
-DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = GnomadPublicResourceSource.GNOMAD
+DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = (
+    GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
+)
 
 
 class _GnomadPublicResourceConfiguration:

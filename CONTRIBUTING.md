@@ -85,12 +85,13 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
 
   New releases will automatically be posted in the #gnomad_notifications Slack channel (via the RSS Slack app).
 
-- [Create a GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository#creating-a-release)
-  using the tag and add release notes.
+- A [GitHub Release](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) will be automatically created with
+  [release notes generated from pull requests](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes).
 
-  Release notes can be [automatically generated from pull requests](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes).
+  Check the [Releases page](https://github.com/broadinstitute/gnomad_methods/releases) to make sure the generated release notes look ok
+  and edit them if necessary.
 
-  Alternatively, to see commits since the last release, use:
+  If needed, to see commits since the last release, use:
 
   ```
   LAST_RELEASE_TAG=$(git tag --list --sort=-committerdate | head -n1)

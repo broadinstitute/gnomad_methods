@@ -47,3 +47,11 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
+      - name: Create release notes
+        uses: actions/github-script@v5
+        with:
+          script: |
+            await github.request(`POST /repos/${{ github.repository }}/releases`, {
+              tag_name: "${{ github.ref }}",
+              generate_release_notes: true
+            });

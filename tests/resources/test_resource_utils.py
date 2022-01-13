@@ -127,6 +127,26 @@ def gnomad_public_resource_test_parameters(
         ),
         (
             f"gs://gnomad-public{path}",
+            GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS,
+            f"s3a://gnomad-public-us-east-1{path}",
+        ),
+        (
+            f"gs://gnomad-public-requester-pays{path}",
+            GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS,
+            f"s3a://gnomad-public-us-east-1{path}",
+        ),
+        (
+            f"gs://gnomad-public{path}",
+            GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
+            f"wasbs://dataset@datasetgnomad.blob.core.windows.net{path}",
+        ),
+        (
+            f"gs://gnomad-public-requester-pays{path}",
+            GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
+            f"wasbs://dataset@datasetgnomad.blob.core.windows.net{path}",
+        ),
+        (
+            f"gs://gnomad-public{path}",
             "gs://my-bucket/gnomad-resources",
             f"gs://my-bucket/gnomad-resources{path}",
         ),

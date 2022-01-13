@@ -9,6 +9,8 @@ class GnomadPublicResourceSource(Enum):
 
     GNOMAD = "gnomAD"
     GOOGLE_CLOUD_PUBLIC_DATASETS = "Google Cloud Public Datasets"
+    REGISTRY_OF_OPEN_DATA_ON_AWS = "Registry of Open Data on AWS"
+    AZURE_OPEN_DATASETS = "Azure Open Datasets"
 
 
 DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = (

@@ -1,8 +1,12 @@
 """Configuration for loading resources."""
 
+import logging
 import os
 from enum import Enum
 from typing import Union
+
+
+logger = logging.getLogger(__name__)
 
 
 class GnomadPublicResourceSource(Enum):
@@ -29,8 +33,15 @@ def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, st
         # Convert to a GnomadPublicResourceSource enum if possible
         try:
             default_source = GnomadPublicResourceSource(default_source_from_env)
+            logger.info(
+                "Using configured source for gnomAD resources: %s", default_source.value
+            )
             return default_source
         except ValueError:
+            logger.info(
+                "Using configured custom source for gnomAD resources: %s",
+                default_source_from_env,
+            )
             return default_source_from_env
 
     return GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS

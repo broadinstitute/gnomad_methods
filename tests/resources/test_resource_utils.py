@@ -96,6 +96,44 @@ class TestBlockMatrixResource:
         assert ds == read_block_matrix.return_value
 
 
+class TestDefaultPublicResourceSource:
+    """Tests for default public resource source."""
+
+    @pytest.mark.parametrize(
+        "default_source,expected_path",
+        [
+            (
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+                "gs://gcp-public-data--gnomad/example.ht",
+            ),
+            (
+                GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS,
+                "s3a://gnomad-public-us-east-1/example.ht",
+            ),
+            (
+                GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
+                "wasbs://dataset@datasetgnomad.blob.core.windows.net/example.ht",
+            ),
+            (
+                "gs://my-bucket/gnomad-resources",
+                "gs://my-bucket/gnomad-resources/example.ht",
+            ),
+        ],
+    )
+    def test_read_from_default_source(self, default_source, expected_path):
+        """Test that resource paths are based on default source when no source is configured."""
+        gnomad_public_resource_configuration._source = None
+
+        with patch(
+            "gnomad.resources.config.get_default_public_resource_source",
+            return_value=default_source,
+        ):
+            resource = resource_utils.GnomadPublicTableResource(
+                "gs://gnomad-public-requester-pays/example.ht"
+            )
+            assert resource.path == expected_path
+
+
 def gnomad_public_resource_test_parameters(
     path: str,
 ) -> List[Tuple[str, Union[GnomadPublicResourceSource, str], str]]:

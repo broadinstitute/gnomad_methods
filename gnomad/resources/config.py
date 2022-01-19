@@ -13,17 +13,19 @@ class GnomadPublicResourceSource(Enum):
     AZURE_OPEN_DATASETS = "Azure Open Datasets"
 
 
-DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = (
-    GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
-)
+def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, str]:
+    """
+    Get the default source for public gnomAD resources.
+
+    :returns: Default resource source
+    """
+    return GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
 
 
 class _GnomadPublicResourceConfiguration:
     """Configuration for public gnomAD resources."""
 
-    __source: Union[  # pylint: disable=unused-private-member
-        GnomadPublicResourceSource, str
-    ] = DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE
+    _source: Union[GnomadPublicResourceSource, str, None] = None
 
     @property
     def source(self) -> Union[GnomadPublicResourceSource, str]:
@@ -34,7 +36,10 @@ class _GnomadPublicResourceConfiguration:
 
         :returns: Source name or path to root of resources directory
         """
-        return self.__source
+        if self._source is None:
+            self._source = get_default_public_resource_source()
+
+        return self._source
 
     @source.setter
     def source(self, source: Union[GnomadPublicResourceSource, str]) -> None:
@@ -45,7 +50,7 @@ class _GnomadPublicResourceConfiguration:
 
         :param source: Source name or path to root of resources directory
         """
-        self.__source = source
+        self._source = source
 
 
 gnomad_public_resource_configuration = _GnomadPublicResourceConfiguration()

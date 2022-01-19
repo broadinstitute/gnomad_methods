@@ -17,6 +17,10 @@ class GnomadPublicResourceSource(Enum):
 def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, str]:
     """
     Get the default source for public gnomAD resources.
+    
+    .. note::
+    
+        Default is pulled from the `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE` environment variable if it exists. Otherwise `GOOGLE_CLOUD_PUBLIC_DATASETS` is used.
 
     :returns: Default resource source
     """

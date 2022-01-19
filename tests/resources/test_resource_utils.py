@@ -1,5 +1,6 @@
 """Tests for resource classes."""
 
+import os
 from typing import List, Tuple, Union
 from unittest.mock import patch
 
@@ -7,6 +8,7 @@ import pytest
 
 from gnomad.resources import resource_utils
 from gnomad.resources.config import (
+    get_default_public_resource_source,
     gnomad_public_resource_configuration,
     GnomadPublicResourceSource,
 )
@@ -132,6 +134,32 @@ class TestDefaultPublicResourceSource:
                 "gs://gnomad-public-requester-pays/example.ht"
             )
             assert resource.path == expected_path
+
+    @pytest.mark.parametrize(
+        "configured_default_source,expected_default_source",
+        [
+            ("gnomAD", GnomadPublicResourceSource.GNOMAD),
+            (
+                "Google Cloud Public Datasets",
+                GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+            ),
+            (
+                "Registry of Open Data on AWS",
+                GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS,
+            ),
+            ("Azure Open Datasets", GnomadPublicResourceSource.AZURE_OPEN_DATASETS),
+            ("gs://my-bucket/gnomad-resources", "gs://my-bucket/gnomad-resources"),
+        ],
+    )
+    def test_get_default_source_from_environment(
+        self, configured_default_source, expected_default_source
+    ):
+        """Test that default source is read from environment variable."""
+        with patch.dict(
+            os.environ,
+            {"GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE": configured_default_source},
+        ):
+            assert get_default_public_resource_source() == expected_default_source
 
 
 def gnomad_public_resource_test_parameters(

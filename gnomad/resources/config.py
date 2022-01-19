@@ -1,5 +1,6 @@
 """Configuration for loading resources."""
 
+import os
 from enum import Enum
 from typing import Union
 
@@ -19,6 +20,15 @@ def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, st
 
     :returns: Default resource source
     """
+    default_source_from_env = os.getenv("GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE", None)
+    if default_source_from_env:
+        # Convert to a GnomadPublicResourceSource enum if possible
+        try:
+            default_source = GnomadPublicResourceSource(default_source_from_env)
+            return default_source
+        except ValueError:
+            return default_source_from_env
+
     return GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
 
 

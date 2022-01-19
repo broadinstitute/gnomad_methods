@@ -5,7 +5,7 @@ gnomAD data is available through `multiple cloud providers' public datasets prog
 
 The functions in the :doc:`gnomad.resources </api_reference/resources/index>` package can be configured to load data from different sources.
 
-By default, resources are loaded from Google Cloud Public Datasets.
+By default, resources are loaded from Google Cloud Public Datasets. This can be configured using the ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`` environment variable.
 
 To load resources from a different source (for example, the gnomAD project's public GCS bucket), use:
 
@@ -43,3 +43,13 @@ Alternatively, instead of using one of the pre-defined public sources, a custom 
     from gnomad.resources.config import gnomad_public_resource_configuration
 
     gnomad_public_resource_configuration.source = "gs://my-bucket/gnomad-resources"
+
+Environment Configuration
+-------------------------
+
+The default source can be configured through the ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`` environment variable. This variable can be set to either the name of one of the public datasets programs or the URL of a custom source.
+
+Examples:
+
+- ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE="Google Cloud Public Datasets"``
+- ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE="gs://my-bucket/gnomad-resources"``

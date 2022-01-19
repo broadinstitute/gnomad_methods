@@ -1,7 +1,12 @@
 """Configuration for loading resources."""
 
+import logging
+import os
 from enum import Enum
 from typing import Union
+
+
+logger = logging.getLogger(__name__)
 
 
 class GnomadPublicResourceSource(Enum):
@@ -13,17 +18,39 @@ class GnomadPublicResourceSource(Enum):
     AZURE_OPEN_DATASETS = "Azure Open Datasets"
 
 
-DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE = (
-    GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
-)
+def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, str]:
+    """
+    Get the default source for public gnomAD resources.
+    
+    .. note::
+    
+        Default is pulled from the `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE` environment variable if it exists. Otherwise `GOOGLE_CLOUD_PUBLIC_DATASETS` is used.
+
+    :returns: Default resource source
+    """
+    default_source_from_env = os.getenv("GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE", None)
+    if default_source_from_env:
+        # Convert to a GnomadPublicResourceSource enum if possible
+        try:
+            default_source = GnomadPublicResourceSource(default_source_from_env)
+            logger.info(
+                "Using configured source for gnomAD resources: %s", default_source.value
+            )
+            return default_source
+        except ValueError:
+            logger.info(
+                "Using configured custom source for gnomAD resources: %s",
+                default_source_from_env,
+            )
+            return default_source_from_env
+
+    return GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
 
 
 class _GnomadPublicResourceConfiguration:
     """Configuration for public gnomAD resources."""
 
-    __source: Union[  # pylint: disable=unused-private-member
-        GnomadPublicResourceSource, str
-    ] = DEFAULT_GNOMAD_PUBLIC_RESOURCE_SOURCE
+    _source: Union[GnomadPublicResourceSource, str, None] = None
 
     @property
     def source(self) -> Union[GnomadPublicResourceSource, str]:
@@ -34,7 +61,10 @@ class _GnomadPublicResourceConfiguration:
 
         :returns: Source name or path to root of resources directory
         """
-        return self.__source
+        if self._source is None:
+            self._source = get_default_public_resource_source()
+
+        return self._source
 
     @source.setter
     def source(self, source: Union[GnomadPublicResourceSource, str]) -> None:
@@ -45,7 +75,7 @@ class _GnomadPublicResourceConfiguration:
 
         :param source: Source name or path to root of resources directory
         """
-        self.__source = source
+        self._source = source
 
 
 gnomad_public_resource_configuration = _GnomadPublicResourceConfiguration()

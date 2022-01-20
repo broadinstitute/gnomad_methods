@@ -161,6 +161,43 @@ class TestDefaultPublicResourceSource:
         ):
             assert get_default_public_resource_source() == expected_default_source
 
+    @pytest.mark.parametrize(
+        "cloud_spark_provider,expected_default_source",
+        [
+            ("dataproc", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
+            ("hdinsight", GnomadPublicResourceSource.AZURE_OPEN_DATASETS),
+            ("unknown", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
+            (None, GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
+        ],
+    )
+    def test_get_default_source_from_cloud_spark_provider(
+        self, cloud_spark_provider, expected_default_source
+    ):
+        """Test that default source is set based on cloud Spark provider."""
+        with patch(
+            "hail.utils.guess_cloud_spark_provider",
+            return_value=cloud_spark_provider,
+            create=True,
+        ):
+            assert get_default_public_resource_source() == expected_default_source
+
+    def test_default_source_from_environment_overrides_cloud_spark_provider(self):
+        """Test that a default source configured in environment variables is preferred over the one for the current cloud Spark provider."""
+        with patch(
+            "hail.utils.guess_cloud_spark_provider",
+            return_value="hdinsight",
+            create=True,
+        ), patch.dict(
+            os.environ,
+            {
+                "GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE": "gs://my-bucket/gnomad-resources"
+            },
+        ):
+            assert (
+                get_default_public_resource_source()
+                == "gs://my-bucket/gnomad-resources"
+            )
+
 
 def gnomad_public_resource_test_parameters(
     path: str,

@@ -5,7 +5,10 @@ gnomAD data is available through `multiple cloud providers' public datasets prog
 
 The functions in the :doc:`gnomad.resources </api_reference/resources/index>` package can be configured to load data from different sources.
 
-By default, resources are loaded from Google Cloud Public Datasets. This can be configured using the ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`` environment variable.
+If Hail determines that is is running in a cloud provider's Spark environment, resources will default to being read from that cloud provider's datasets program.
+For example, resource will be read from Azure Open Datasets if Hail determines that it is running on an Azure HDInsight cluster.
+Otherwise, resources will default to being read from Google Cloud Public Datasets.
+This can be configured using the ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`` environment variable.
 
 To load resources from a different source (for example, the gnomAD project's public GCS bucket), use:
 

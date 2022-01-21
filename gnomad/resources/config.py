@@ -21,10 +21,13 @@ class GnomadPublicResourceSource(Enum):
 def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, str]:
     """
     Get the default source for public gnomAD resources.
-    
-    .. note::
-    
-        Default is pulled from the `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE` environment variable if it exists. Otherwise `GOOGLE_CLOUD_PUBLIC_DATASETS` is used.
+
+    The default source is determined by...
+
+    - If the ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`` environment variable is set, use the source configured there.
+    - Otherwise, if Hail determines that is is running in a cloud provider's Spark environment, use the source from that cloud provider.
+      For example, use Azure Open Datasets if running on an Azure HDInsight cluster.
+    - Otherwise, use Google Cloud Public Datasets.
 
     :returns: Default resource source
     """
@@ -43,6 +46,29 @@ def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, st
                 default_source_from_env,
             )
             return default_source_from_env
+
+    try:
+        from hail.utils import guess_cloud_spark_provider
+    except ImportError:
+        pass
+    else:
+        cloud_spark_provider = guess_cloud_spark_provider()
+        default_resource_sources_by_provider = {
+            "dataproc": GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
+            "hdinsight": GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
+        }
+        if cloud_spark_provider:
+            try:
+                default_source_from_provider = default_resource_sources_by_provider[
+                    cloud_spark_provider
+                ]
+                logger.info(
+                    "Using default source for gnomAD resources based on cloud provider: %s",
+                    default_source_from_provider,
+                )
+                return default_source_from_provider
+            except KeyError:
+                pass
 
     return GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
 

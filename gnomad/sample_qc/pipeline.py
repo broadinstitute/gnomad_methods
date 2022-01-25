@@ -121,6 +121,7 @@ def get_qc_mt(
     filter_segdup: bool = True,
     filter_exome_low_coverage_regions: bool = False,
     high_conf_regions: Optional[List[str]] = None,
+    checkpoint_path: Optional[str] = None,
 ) -> hl.MatrixTable:
     """
     Create a QC-ready MT.
@@ -179,7 +180,10 @@ def get_qc_mt(
     )
 
     if ld_r2 is not None:
-        qc_mt = qc_mt.persist()
+        if checkpoint_path:
+            qc_mt = qc_mt.checkpoint(checkpoint_path)
+        else:
+            qc_mt = qc_mt.persist()
         unfiltered_qc_mt = qc_mt.unfilter_entries()
         pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2)
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))

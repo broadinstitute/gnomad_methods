@@ -148,6 +148,7 @@ def get_qc_mt(
     :param filter_segdup: Filter segmental duplication regions
     :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
     :param high_conf_regions: If given, the data will be filtered to only include variants in those regions
+    :param checkpoint_path: If given, the QC MT will be checkpointed to the specified path before running ld pruning. If not specified, persist will be used instead.
     :return: Filtered MT
     """
     logger.info("Creating QC MatrixTable")
@@ -181,9 +182,11 @@ def get_qc_mt(
 
     if ld_r2 is not None:
         if checkpoint_path:
-            qc_mt = qc_mt.checkpoint(checkpoint_path)
+            logger.info("Checkpointing the MT and ld pruning")
+            qc_mt = qc_mt.checkpoint(checkpoint_path, overwrite=True)
         else:
             qc_mt = qc_mt.persist()
+            logger.info("Persisting the MT and ld pruning")
         unfiltered_qc_mt = qc_mt.unfilter_entries()
         pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2)
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))

@@ -185,8 +185,8 @@ def get_qc_mt(
             logger.info("Checkpointing the MT and LD pruning")
             qc_mt = qc_mt.checkpoint(checkpoint_path, overwrite=True)
         else:
-            qc_mt = qc_mt.persist()
             logger.info("Persisting the MT and LD pruning")
+            qc_mt = qc_mt.persist()
         unfiltered_qc_mt = qc_mt.unfilter_entries()
         pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2)
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))

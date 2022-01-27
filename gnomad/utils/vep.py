@@ -226,7 +226,7 @@ def vep_or_lookup_vep(
     vep_ht = ht.filter(hl.is_defined(ht.vep))
     revep_ht = ht.filter(hl.is_missing(ht.vep))
     revep_ht = hl.vep(revep_ht, vep_config_path)
-    if "vep_proc_id" in list(revep_ht):
+    if "vep_proc_id" in list(revep_ht.row):
         revep_ht = revep_ht.drop("vep_proc_id")
 
     return vep_ht.union(revep_ht)

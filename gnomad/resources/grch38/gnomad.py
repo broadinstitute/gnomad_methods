@@ -221,7 +221,7 @@ gnomad_syndip = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
         "3.0": GnomadPublicMatrixTableResource(
-            path="gs://gnomad-public-requester-pays/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
+            path="gs://gcp-public-data--gnomad/truth-sets/hail-0.2/gnomad_v3_syndip.b38.mt"
         )
     },
 )
@@ -230,7 +230,7 @@ na12878 = VersionedMatrixTableResource(
     default_version="3.0",
     versions={
         "3.0": GnomadPublicMatrixTableResource(
-            path="gs://gnomad-public-requester-pays/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
+            path="gs://gcp-public-data--gnomad/truth-sets/hail-0.2/gnomad_v3_na12878.mt"
         )
     },
 )
@@ -245,7 +245,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     :return: Path to release Table
     """
     version_prefix = "r" if version.startswith("3.0") else "v"
-    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites.ht"
+    return f"gs://gcp-public-data--gnomad/release/{version}/ht/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites.ht"
 
 
 def _public_coverage_ht_path(data_type: str, version: str) -> str:
@@ -257,7 +257,7 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     :return: path to coverage Table
     """
     version_prefix = "r" if version.startswith("3.0") else "v"
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.ht"
+    return f"gs://gcp-public-data--gnomad/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

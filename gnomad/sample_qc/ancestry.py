@@ -229,6 +229,9 @@ def assign_population_pcs(
     )
 
     if hail_input:
+        # Convert pandas integer type <NA> to NaN to that Hail won't give a type import error when running hl.Table.from_pandas
+        pop_pc_pd['training_pop'] = pop_pc_pd['training_pop'].apply(lambda x: x if pd.Int64Dtype() else np.nan)
+        pop_pc_pd['training_pop'] = pop_pc_pd['training_pop'].astype(str)
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
         pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)

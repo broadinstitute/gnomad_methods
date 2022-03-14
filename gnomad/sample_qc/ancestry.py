@@ -230,7 +230,7 @@ def assign_population_pcs(
 
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
-        pops_ht.annotate_globals(
+        pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
         )
         return pops_ht, pop_clf

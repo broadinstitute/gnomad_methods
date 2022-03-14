@@ -233,6 +233,8 @@ def assign_population_pcs(
         pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
         )
+        pops_ht = pops_ht.annotate(evaluation_sample = hl.literal(list(evaluate_fit.s)).contains(pops_ht.s),
+                          training_sample = hl.literal(list(train_fit.s)).contains(pops_ht.s))
         return pops_ht, pop_clf
     else:
         return pop_pc_pd, pop_clf

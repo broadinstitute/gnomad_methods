@@ -549,6 +549,7 @@ def impute_sex_ploidy(
     normalization_contig: str = "chr20",
     chr_x: Optional[str] = None,
     chr_y: Optional[str] = None,
+    use_only_variants: bool = False,
 ) -> hl.Table:
     """
     Impute sex ploidy from a sparse MatrixTable.
@@ -567,6 +568,9 @@ def impute_sex_ploidy(
     :param normalization_contig: Which chromosome to normalize by
     :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
+    :param use_only_variants : Whether to use depth of variant data within calling intervals instead of reference data.
+        Default will only use reference data.
+
     :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
     """
     ref = get_reference_genome(mt.locus, add_sequence=True)
@@ -625,18 +629,28 @@ def impute_sex_ploidy(
         if chrom in ref.y_contigs:
             chr_mt = chr_mt.filter_rows(chr_mt.locus.in_y_nonpar())
 
-        return chr_mt.select_cols(
-            **{
-                f"{chrom}_mean_dp": hl.agg.sum(
-                    hl.cond(
-                        chr_mt.LGT.is_hom_ref(),
-                        chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
-                        chr_mt.DP,
+        if use_only_variants:
+            return chr_mt.select_cols(
+                **{
+                    f"{chrom}_mean_dp": hl.agg.filter(
+                        chr_mt.LGT.is_non_ref(), hl.agg.sum(chr_mt.DP),
                     )
-                )
-                / contig_size
-            }
-        ).cols()
+                    / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
+                }
+            ).cols()
+        else:
+            return chr_mt.select_cols(
+                **{
+                    f"{chrom}_mean_dp": hl.agg.sum(
+                        hl.cond(
+                            chr_mt.LGT.is_hom_ref(),
+                            chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
+                            chr_mt.DP,
+                        )
+                    )
+                    / contig_size
+                }
+            ).cols()
 
     normalization_chrom_dp = get_chr_dp_ann(normalization_contig)
     chrX_dp = get_chr_dp_ann(chr_x)

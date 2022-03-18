@@ -561,14 +561,14 @@ def impute_sex_ploidy(
     non-ref genotypes.
 
     :param mt: Input sparse Matrix Table
-    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation.
-        Used only when determining contig size (not used when computing chromosome depth).
-    :param included_calling_intervals: Optional table of intervals to use in the computation.
-        Used only when determining contig size (not used when computing chromosome depth).
+    :param excluded_calling_intervals: Optional table of intervals to exclude from the computation. Used only when
+        determining contig size (not used when computing chromosome depth) when `use_only_variants` is False.
+    :param included_calling_intervals: Optional table of intervals to use in the computation. Used only when
+        determining contig size (not used when computing chromosome depth) when `use_only_variants` is False.
     :param normalization_contig: Which chromosome to normalize by
     :param chr_x: Optional X Chromosome contig name (by default uses the X contig in the reference)
     :param chr_y: Optional Y Chromosome contig name (by default uses the Y contig in the reference)
-    :param use_only_variants : Whether to use depth of variant data within calling intervals instead of reference data.
+    :param use_only_variants: Whether to use depth of variant data within calling intervals instead of reference data.
         Default will only use reference data.
 
     :return: Table with mean coverage over chromosomes 20, X and Y and sex chromosomes ploidy based on normalized coverage.
@@ -630,6 +630,14 @@ def impute_sex_ploidy(
             chr_mt = chr_mt.filter_rows(chr_mt.locus.in_y_nonpar())
 
         if use_only_variants:
+            if included_calling_intervals is not None:
+                chr_mt = chr_mt.filter_rows(
+                    hl.is_defined(included_calling_intervals[chr_mt.row_key])
+                )
+            if excluded_calling_intervals is not None:
+                chr_mt = chr_mt.filter_rows(
+                    hl.is_missing(excluded_calling_intervals[chr_mt.row_key])
+                )
             return chr_mt.select_cols(
                 **{
                     f"{chrom}_mean_dp": hl.agg.filter(

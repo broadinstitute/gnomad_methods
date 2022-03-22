@@ -274,7 +274,7 @@ def annotate_sex(
             mtds,
             calling_intervals=included_intervals,
             normalization_contig=normalization_contig,
-            use_only_variants=variants_only_x_ploidy,
+            use_variant_dataset=variants_only_x_ploidy,
         )
         ploidy_ht = ploidy_ht.rename(
             {
@@ -292,7 +292,7 @@ def annotate_sex(
                 mtds,
                 calling_intervals=included_intervals,
                 normalization_contig=normalization_contig,
-                use_only_variants=variants_only_y_ploidy,
+                use_variant_dataset=variants_only_y_ploidy,
             )
             y_ploidy_idx = y_ploidy_ht[ploidy_ht.key]
             ploidy_ht = ploidy_ht.annotate(

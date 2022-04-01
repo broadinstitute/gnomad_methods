@@ -270,7 +270,6 @@ def annotate_sex(
             raise NotImplementedError(
                 "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex chromosome ploidy on a VDS!"
             )
-        # ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
         # Begin by creating a ploidy estimate HT using the method defined by 'variants_only_x_ploidy'
         ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
             mtds,
@@ -306,7 +305,7 @@ def annotate_sex(
 
             # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
             # that this is the variant dataset only mean DP (this will have already been added if
-            # 'variants_only_x_ploidy' was also True.
+            # 'variants_only_x_ploidy' was also True).
             if variants_only_y_ploidy:
                 ploidy_ht = ploidy_ht.annotate(
                     **{
@@ -338,20 +337,19 @@ def annotate_sex(
                 y_ploidy_ht.select(
                     "chrY_ploidy",
                     "chrY_mean_dp",
-                    f"var_data_{normalization_contig}_mean_dp"
-                    if variants_only_y_ploidy
-                    else f"{normalization_contig}_mean_dp",
+                    f"{normalization_contig}_mean_dp",
                 )
-                ploidy_ht = ploidy_ht.annotate(**y_ploidy_ht[ploidy_ht.key])
                 # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
                 # that this is the variant dataset only mean DP (this will have already been added if
-                # 'variants_only_x_ploidy' was also True.
+                # 'variants_only_x_ploidy' was also True).
                 if variants_only_y_ploidy:
                     ploidy_ht = ploidy_ht.rename(
                         {
                             f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
                         }
                     )
+                # Re-annotate the ploidy HT with modified Y ploidy annotations
+                ploidy_ht = ploidy_ht.annotate(**y_ploidy_ht[ploidy_ht.key])
 
         else:
             raise NotImplementedError(

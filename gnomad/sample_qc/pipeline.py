@@ -324,6 +324,13 @@ def annotate_sex(
                 normalization_contig,
                 use_only_variants=variants_only_x_ploidy,
             )
+            ploidy_ht = ploidy_ht.rename(
+                {
+                    "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                    if variants_only_x_ploidy
+                    else f"{normalization_contig}_mean_dp",
+                }
+            )
             # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation using
             # the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
             if variants_only_y_ploidy != variants_only_x_ploidy:

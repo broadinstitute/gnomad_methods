@@ -558,7 +558,8 @@ def impute_sex_ploidy(
     chromosome (by default chr20).
 
     Coverage is computed using the median block coverage (summed over the block size) and the non-ref coverage at
-    non-ref genotypes.
+    non-ref genotypes unless the `use_only_variants` argument is set to True and then it will use the mean coverage
+    defined by only the variants.
 
     :param mt: Input sparse Matrix Table
     :param excluded_calling_intervals: Optional table of intervals to exclude from the computation. Used only when
@@ -592,6 +593,16 @@ def impute_sex_ploidy(
         chr_y = ref.y_contigs[0]
 
     def get_contig_size(contig: str) -> int:
+        """
+        Compute the size of the specified `contig` using the median block coverage (summed over the block size).
+
+        The size of the contig will be determined using only non par regions if the contig is an X or Y reference contig
+        and using the intervals specified by `included_calling_intervals` and excluding intervals specified by
+        `excluded_calling_intervals` if either is defined in the outer function.
+
+        :param contig: Contig to compute the size of
+        :return: Integer of the contig size
+        """
         logger.info("Working on %s", contig)
         contig_ht = hl.utils.range_table(
             ref.contig_length(contig),
@@ -621,6 +632,24 @@ def impute_sex_ploidy(
         return contig_size
 
     def get_chr_dp_ann(chrom: str) -> hl.Table:
+        """
+        Compute the mean depth of the specified chromosome.
+
+        The total depth will be determined using the sum DP of either reference and variant data or only variant data
+        depending on the value of `use_only_variants` in the outer function.
+
+        If `use_only_variants` is set to False then this value is computed using the median block coverage (summed over
+        the block size). If `use_only_variants` is set to True, this value is computed using the sum of DP for  all
+        variants divided by the total number of variants.
+
+        The depth calculations will be determined using only non par regions if the contig is an X or Y reference contig
+        and using the intervals specified by `included_calling_intervals` and excluding intervals specified by
+        `excluded_calling_intervals` if either is defined in the outer function (when `use_only_variants` is not
+        set this only applies to the contig size estimate and is not used when computing chromosome depth).
+
+        :param chrom: Chromosome to compute the mean depth of
+        :return: Table of a per sample mean depth of `chrom`
+        """
         contig_size = get_contig_size(chrom)
         chr_mt = hl.filter_intervals(mt, [hl.parse_locus_interval(chrom)])
 
@@ -641,7 +670,8 @@ def impute_sex_ploidy(
             return chr_mt.select_cols(
                 **{
                     f"{chrom}_mean_dp": hl.agg.filter(
-                        chr_mt.LGT.is_non_ref(), hl.agg.sum(chr_mt.DP),
+                        chr_mt.LGT.is_non_ref(),
+                        hl.agg.sum(chr_mt.DP),
                     )
                     / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
                 }
@@ -650,7 +680,7 @@ def impute_sex_ploidy(
             return chr_mt.select_cols(
                 **{
                     f"{chrom}_mean_dp": hl.agg.sum(
-                        hl.cond(
+                        hl.if_else(
                             chr_mt.LGT.is_hom_ref(),
                             chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
                             chr_mt.DP,
@@ -665,7 +695,8 @@ def impute_sex_ploidy(
     chrY_dp = get_chr_dp_ann(chr_y)
 
     ht = normalization_chrom_dp.annotate(
-        **chrX_dp[normalization_chrom_dp.key], **chrY_dp[normalization_chrom_dp.key],
+        **chrX_dp[normalization_chrom_dp.key],
+        **chrY_dp[normalization_chrom_dp.key],
     )
 
     return ht.annotate(

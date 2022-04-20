@@ -331,8 +331,8 @@ def annotate_sex(
                     else f"{normalization_contig}_mean_dp",
                 }
             )
-            # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation using
-            # the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
+            # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation
+            # using the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
             if variants_only_y_ploidy != variants_only_x_ploidy:
                 y_ploidy_ht = impute_sex_ploidy(
                     mt,

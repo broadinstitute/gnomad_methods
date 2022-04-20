@@ -162,7 +162,7 @@ class MatrixTableResource(BaseResource):
 class VariantDatasetResource(BaseResource):
     """
     A Hail VariantDataset resource.
-    
+
     :param path: The VariantDataset path (typically ending in .vds)
     :param import_args: Any sources that are required for the import and need to be kept track of and/or passed to the import_func (e.g. .vcf path for an imported VCF)
     :param import_func: A function used to import the VariantDataset. `import_func` will be passed the `import_args` dictionary as kwargs.
@@ -173,7 +173,7 @@ class VariantDatasetResource(BaseResource):
     def vds(self, force_import: bool = False) -> hl.vds.VariantDataset:
         """
         Read and return the Hail VariantDataset resource.
-        
+
         :return: Hail VariantDataset resource
         """
         if self.path is None or force_import:
@@ -218,7 +218,9 @@ class PedigreeResource(BaseResource):
         missing: str = "NA",
     ):
         super().__init__(
-            path=path, import_args=import_args, import_func=import_func,
+            path=path,
+            import_args=import_args,
+            import_func=import_func,
         )
 
         self.quant_pheno = quant_pheno
@@ -326,10 +328,14 @@ class BaseVersionedResource:
         self.versions = versions
 
     def __repr__(self):
-        return "{cls}(default_version={default_version}, versions={{{versions}}})".format(
-            cls=self.__class__.__name__,
-            default_version=self.default_version,
-            versions=", ".join(f'"{k}": {repr(v)}' for k, v in self.versions.items()),
+        return (
+            "{cls}(default_version={default_version}, versions={{{versions}}})".format(
+                cls=self.__class__.__name__,
+                default_version=self.default_version,
+                versions=", ".join(
+                    f'"{k}": {repr(v)}' for k, v in self.versions.items()
+                ),
+            )
         )
 
     def __getattr__(self, name):
@@ -377,11 +383,11 @@ class VersionedMatrixTableResource(BaseVersionedResource):
 class VersionedVariantDatasetResource(BaseVersionedResource):
     """
     Versioned VariantDataset resource.
-    
+
     The attributes (path, import_args and import_func) of the versioned resource are those of the default version of the resource.
     In addition, all versions of the resource are stored in the `versions` attribute.
     :param default_version: The default version of this VariantDataset resource (must to be in the `versions` dict)
-    
+
     :param versions: A dict of version name -> VariantDatasetResource.
     """
 

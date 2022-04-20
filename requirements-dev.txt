@@ -4,17 +4,13 @@
 #
 #    pip-compile requirements-dev.in
 #
-appdirs==1.4.4
-    # via black
 astroid==2.9.0
     # via pylint
 attrs==21.2.0
-    # via
-    #   black
-    #   pytest
-backports.entry-points-selectable==1.1.1
+    # via pytest
+backports-entry-points-selectable==1.1.1
     # via virtualenv
-black==19.10b0
+black==22.3.0
     # via -r requirements-dev.in
 cfgv==3.3.1
     # via pre-commit
@@ -34,6 +30,8 @@ lazy-object-proxy==1.6.0
     # via astroid
 mccabe==0.6.1
     # via pylint
+mypy-extensions==0.4.3
+    # via black
 nodeenv==1.6.0
     # via pre-commit
 packaging==21.3
@@ -42,6 +40,7 @@ pathspec==0.9.0
     # via black
 platformdirs==2.4.0
     # via
+    #   black
     #   pylint
     #   virtualenv
 pluggy==1.0.0
@@ -60,23 +59,21 @@ pytest==6.2.5
     # via -r requirements-dev.in
 pyyaml==6.0
     # via pre-commit
-regex==2021.11.10
-    # via black
 six==1.16.0
     # via virtualenv
 snowballstemmer==2.2.0
     # via pydocstyle
 toml==0.10.2
     # via
-    #   black
     #   pre-commit
     #   pylint
     #   pytest
-typed-ast==1.5.0
+tomli==2.0.1
     # via black
 typing-extensions==4.0.0
     # via
     #   astroid
+    #   black
     #   pylint
 virtualenv==20.10.0
     # via pre-commit

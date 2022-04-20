@@ -194,7 +194,9 @@ INFO_DICT = {
     "variant_type": {
         "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"
     },
-    "allele_type": {"Description": "Allele type (snv, insertion, deletion, or mixed)",},
+    "allele_type": {
+        "Description": "Allele type (snv, insertion, deletion, or mixed)",
+    },
     "n_alt_alleles": {
         "Number": "1",
         "Description": "Total number of alternate alleles observed at variant locus",
@@ -354,7 +356,7 @@ def adjust_vcf_incompatible_types(
                 f,
             )
             info_type_convert_expr.update(
-                {f: hl.int32(hl.min(2 ** 31 - 1, ht.info[f]))}
+                {f: hl.int32(hl.min(2**31 - 1, ht.info[f]))}
             )
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
@@ -363,7 +365,7 @@ def adjust_vcf_incompatible_types(
                 f,
             )
             info_type_convert_expr.update(
-                {f: ht.info[f].map(lambda x: hl.int32(hl.min(2 ** 31 - 1, x)))}
+                {f: ht.info[f].map(lambda x: hl.int32(hl.min(2**31 - 1, x)))}
             )
 
     ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))
@@ -453,7 +455,9 @@ def index_globals(
 
 
 def make_combo_header_text(
-    preposition: str, combo_dict: Dict[str, str], pop_names: Dict[str, str],
+    preposition: str,
+    combo_dict: Dict[str, str],
+    pop_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -891,7 +895,8 @@ def set_female_y_metrics_to_na(
         female_metrics_dict.update(
             {
                 f"{metric}": hl.or_missing(
-                    (~t.locus.in_y_nonpar() & ~t.locus.in_y_par()), t.info[f"{metric}"],
+                    (~t.locus.in_y_nonpar() & ~t.locus.in_y_par()),
+                    t.info[f"{metric}"],
                 )
             }
         )
@@ -946,7 +951,9 @@ def rekey_new_reference(
     """
     t = t.rename({"locus": "locus_original"})
     locus_expr = hl.locus(
-        t.locus_original.contig, t.locus_original.position, reference_genome=reference,
+        t.locus_original.contig,
+        t.locus_original.position,
+        reference_genome=reference,
     )
 
     if isinstance(t, hl.MatrixTable):

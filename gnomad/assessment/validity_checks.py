@@ -436,7 +436,10 @@ def compare_subset_freqs(
                     }
 
     generic_field_check_loop(
-        t, field_check_expr, verbose, show_percent_sites=show_percent_sites,
+        t,
+        field_check_expr,
+        verbose,
+        show_percent_sites=show_percent_sites,
     )
 
     # Spot check the raw AC counts
@@ -524,7 +527,9 @@ def sum_group_callstats(
     generic_field_check_loop(t, field_check_expr, verbose)
 
 
-def summarize_variants(t: Union[hl.MatrixTable, hl.Table],) -> hl.Struct:
+def summarize_variants(
+    t: Union[hl.MatrixTable, hl.Table],
+) -> hl.Struct:
     """
     Get summary of variants in a MatrixTable or Table.
 

@@ -106,7 +106,8 @@ def liftover_expr(
 
 
 def default_lift_data(
-    t: Union[hl.MatrixTable, hl.Table], remove_failed_sites: bool = True,
+    t: Union[hl.MatrixTable, hl.Table],
+    remove_failed_sites: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Lift input Table or MatrixTable from one reference build to another.

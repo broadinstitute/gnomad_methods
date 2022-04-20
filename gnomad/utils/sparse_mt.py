@@ -643,7 +643,8 @@ def impute_sex_ploidy(
     chrY_dp = get_chr_dp_ann(chr_y)
 
     ht = normalization_chrom_dp.annotate(
-        **chrX_dp[normalization_chrom_dp.key], **chrY_dp[normalization_chrom_dp.key],
+        **chrX_dp[normalization_chrom_dp.key],
+        **chrY_dp[normalization_chrom_dp.key],
     )
 
     return ht.annotate(

@@ -226,6 +226,8 @@ def annotate_sex(
     gt_expr: str = "GT",
     f_stat_cutoff: float = 0.5,
     aaf_threshold: float = 0.001,
+    variants_only_x_ploidy: bool = False,
+    variants_only_y_ploidy: bool = False,
 ) -> hl.Table:
     """
     Impute sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
@@ -256,6 +258,8 @@ def annotate_sex(
     :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
     :param float aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
+    :param variants_only_x_ploidy: Whether to use depth of only variant data for the x ploidy estimation.
+    :param variants_only_y_ploidy: Whether to use depth of only variant data for the y ploidy estimation.
     :return: Table of samples and their imputed sex karyotypes.
     """
     logger.info("Imputing sex chromosome ploidies...")
@@ -266,10 +270,12 @@ def annotate_sex(
             raise NotImplementedError(
                 "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex chromosome ploidy on a VDS!"
             )
+        # Begin by creating a ploidy estimate HT using the method defined by 'variants_only_x_ploidy'
         ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
             mtds,
             calling_intervals=included_intervals,
             normalization_contig=normalization_contig,
+            use_variant_dataset=variants_only_x_ploidy,
         )
         ploidy_ht = ploidy_ht.rename(
             {
@@ -277,16 +283,81 @@ def annotate_sex(
                 "y_ploidy": "chrY_ploidy",
                 "x_mean_dp": "chrX_mean_dp",
                 "y_mean_dp": "chrY_mean_dp",
-                "autosomal_mean_dp": f"{normalization_contig}_mean_dp",
+                "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                if variants_only_x_ploidy
+                else f"{normalization_contig}_mean_dp",
             }
         )
+        # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation using
+        # the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
+        if variants_only_y_ploidy != variants_only_x_ploidy:
+            y_ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+                mtds,
+                calling_intervals=included_intervals,
+                normalization_contig=normalization_contig,
+                use_variant_dataset=variants_only_y_ploidy,
+            )
+            y_ploidy_idx = y_ploidy_ht[ploidy_ht.key]
+            ploidy_ht = ploidy_ht.annotate(
+                chrY_ploidy=y_ploidy_idx.y_ploidy,
+                chrY_mean_dp=y_ploidy_idx.y_mean_dp,
+            )
+
+            # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
+            # that this is the variant dataset only mean DP (this will have already been added if
+            # 'variants_only_x_ploidy' was also True).
+            if variants_only_y_ploidy:
+                ploidy_ht = ploidy_ht.annotate(
+                    **{
+                        f"var_data_{normalization_contig}_mean_dp": y_ploidy_idx.autosomal_mean_dp
+                    }
+                )
+
         mt = mtds.variant_data
     else:
         mt = mtds
         if is_sparse:
             ploidy_ht = impute_sex_ploidy(
-                mt, excluded_intervals, included_intervals, normalization_contig
+                mt,
+                excluded_intervals,
+                included_intervals,
+                normalization_contig,
+                use_only_variants=variants_only_x_ploidy,
             )
+            ploidy_ht = ploidy_ht.rename(
+                {
+                    "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                    if variants_only_x_ploidy
+                    else f"{normalization_contig}_mean_dp",
+                }
+            )
+            # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation
+            # using the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
+            if variants_only_y_ploidy != variants_only_x_ploidy:
+                y_ploidy_ht = impute_sex_ploidy(
+                    mt,
+                    excluded_intervals,
+                    included_intervals,
+                    normalization_contig,
+                    use_only_variants=variants_only_y_ploidy,
+                )
+                y_ploidy_ht.select(
+                    "chrY_ploidy",
+                    "chrY_mean_dp",
+                    f"{normalization_contig}_mean_dp",
+                )
+                # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
+                # that this is the variant dataset only mean DP (this will have already been added if
+                # 'variants_only_x_ploidy' was also True).
+                if variants_only_y_ploidy:
+                    ploidy_ht = ploidy_ht.rename(
+                        {
+                            f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                        }
+                    )
+                # Re-annotate the ploidy HT with modified Y ploidy annotations
+                ploidy_ht = ploidy_ht.annotate(**y_ploidy_ht[ploidy_ht.key])
+
         else:
             raise NotImplementedError(
                 "Imputing sex ploidy does not exist yet for dense data."
@@ -348,6 +419,8 @@ def annotate_sex(
             lower_cutoff_YY=y_ploidy_cutoffs[1],
         ),
         f_stat_cutoff=f_stat_cutoff,
+        variants_only_x_ploidy=variants_only_x_ploidy,
+        variants_only_y_ploidy=variants_only_y_ploidy,
     )
     return sex_ht.annotate(
         **get_sex_expr(

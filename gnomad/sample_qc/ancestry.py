@@ -150,7 +150,7 @@ def assign_population_pcs(
 
     :param pop_pca_scores: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use
-    :param pc_names: List fo integer to use for naming the selected PCs (i.e. an input of [1, 3] will result in the first two PCs of pc_cols being named PC1 and PC3)
+    :param pc_names: List of integers to use for naming the selected PCs (i.e. an input of [1, 3] will result in the first two PCs of pc_cols being named PC1 and PC3)
     :param known_col: Column storing the known population labels
     :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param seed: Random seed

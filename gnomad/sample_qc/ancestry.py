@@ -118,6 +118,7 @@ def pc_project(
 def assign_population_pcs(
     pop_pca_scores: Union[hl.Table, pd.DataFrame],
     pc_cols: Union[hl.expr.ArrayExpression, List[str]],
+    pc_names: List[int],
     known_col: str = "known_pop",
     fit: Any = None,  # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     seed: int = 42,
@@ -149,6 +150,7 @@ def assign_population_pcs(
 
     :param pop_pca_scores: Input Hail Table or Pandas Dataframe
     :param pc_cols: Columns storing the PCs to use
+    :param pc_names: List fo integer to use for naming the selected PCs (i.e. an input of [1, 3] will result in the first two PCs of pc_cols being named PC1 and PC3)
     :param known_col: Column storing the known population labels
     :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param seed: Random seed
@@ -172,10 +174,8 @@ def assign_population_pcs(
 
         # Explode the PC array
         num_out_cols = min([len(x) for x in pop_pc_pd["pca_scores"].values.tolist()])
-        pc_cols = [f"PC{i+1}" for i in range(num_out_cols)]
-        pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd["pca_scores"].values.tolist())[
-            list(range(num_out_cols))
-        ]
+        pc_cols = [f"PC{i}" for i in pc_names]
+        pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd["pca_scores"].values.tolist())
 
     else:
         pop_pc_pd = pop_pca_scores
@@ -230,8 +230,14 @@ def assign_population_pcs(
 
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
-        pops_ht.annotate_globals(
-            assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
+        pops_ht = pops_ht.annotate_globals(
+            assign_pops_from_pc_params=hl.struct(
+                min_assignment_prob=min_prob, error_rate=error_rate
+            )
+        )
+        pops_ht = pops_ht.annotate(
+            evaluation_sample=hl.literal(list(evaluate_fit.s)).contains(pops_ht.s),
+            training_sample=hl.literal(list(train_fit.s)).contains(pops_ht.s),
         )
         return pops_ht, pop_clf
     else:

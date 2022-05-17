@@ -148,7 +148,7 @@ def assign_population_pcs(
         can be used to expand this column into multiple `PC` columns.
 
     :param pop_pca_scores: Input Hail Table or Pandas Dataframe
-    :param pc_cols: List of which PCS to use/columns storing the PCs to use (i.e. [1,2,4,5])
+    :param pc_cols: List of which PCs to use/columns storing the PCs to use. Values provided should be 1-based and should be a list of integers when passing in a Hail Table (i.e. [1, 2, 4, 5]) or a list of strings when passing in a Pandas Dataframe (i.e. ["PC1", "PC2", "PC4", "PC5"]).
     :param known_col: Column storing the known population labels
     :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param seed: Random seed
@@ -163,6 +163,10 @@ def assign_population_pcs(
 
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
+        if not all(isinstance(n, int) for n in pc_cols):
+            raise TypeError(
+                "Using a Hail Table with pc_cols requires all values of pc_cols list to be integers"
+            )
         pcs_to_pull = [pop_pca_scores.scores[i - 1] for i in pc_cols]
         if not fit:
             pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pcs_to_pull)

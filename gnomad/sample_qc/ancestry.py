@@ -165,7 +165,7 @@ def assign_population_pcs(
     if hail_input:
         if not all(isinstance(n, int) for n in pc_cols):
             raise TypeError(
-                "Using a Hail Table with pc_cols requires all values of pc_cols list to be integers"
+                "Using a Hail Table with pc_cols requires all values of the pc_cols list to be integers"
             )
         pcs_to_pull = [pop_pca_scores.scores[i - 1] for i in pc_cols]
         if not fit:
@@ -180,6 +180,10 @@ def assign_population_pcs(
         pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd["pca_scores"].values.tolist())
 
     else:
+        if not all(isinstance(n, str) for n in pc_cols):
+            raise TypeError(
+                "Using a Pandas DataFrame with pc_cols requires all values of the pc_cols list to be strings"
+            )
         pop_pc_pd = pop_pca_scores
 
     # Split training data into subsamples for fitting and evaluating

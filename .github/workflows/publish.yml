@@ -47,11 +47,29 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-      - name: Create release notes
+      - name: Create GitHub Release
         uses: actions/github-script@v5
         with:
           script: |
-            await github.request(`POST /repos/${{ github.repository }}/releases`, {
-              tag_name: "${{ github.ref }}",
-              generate_release_notes: true
-            });
+            // Get repository and tag from workflow context
+            // https://docs.github.com/en/actions/learn-github-actions/contexts
+            const repo = "${{ github.event.repository.name }}"
+            const owner = "${{ github.event.repository.owner.name }}"
+            const tag = "${{ github.ref }}".replace(/^refs\/tags\//, "")
+
+            // Create a GitHub Release for the tag if one doesn't already exist
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag })
+              console.log("Release already exists")
+            } catch (error) {
+              if (error.status === 404) {
+                console.log("Creating release")
+                await github.rest.repos.createRelease({
+                  owner, repo,
+                  tag_name: tag,
+                  generate_release_notes: true
+                })
+              } else {
+                throw error
+              }
+            }

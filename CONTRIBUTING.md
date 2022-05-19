@@ -75,7 +75,7 @@ https://packaging.python.org/guides/distributing-packages-using-setuptools/#pack
 
   The tag can be created using GitHub by [creating a GitHub Release with a new tag](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository#creating-a-release).
 
-  Or the tag can be created locally and pushed to GitHub using:
+  Alternatively, the tag can be created locally and pushed to GitHub using:
 
   ```
   git checkout main

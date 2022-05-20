@@ -237,14 +237,20 @@ def assign_population_pcs(
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
         pops_ht = pops_ht.annotate_globals(
-            assign_pops_from_pc_params=hl.struct(
-                min_assignment_prob=min_prob, error_rate=error_rate
+            assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
+        )
+
+        if not fit:
+            pops_ht = pops_ht.annotate_globals(
+                assign_pops_from_pc_params=pops_ht.assign_pops_from_pc_params.annotate(
+                    error_rate=error_rate
+                )
             )
-        )
-        pops_ht = pops_ht.annotate(
-            evaluation_sample=hl.literal(list(evaluate_fit.s)).contains(pops_ht.s),
-            training_sample=hl.literal(list(train_fit.s)).contains(pops_ht.s),
-        )
+
+            pops_ht = pops_ht.annotate(
+                evaluation_sample=hl.literal(list(evaluate_fit.s)).contains(pops_ht.s),
+                training_sample=hl.literal(list(train_fit.s)).contains(pops_ht.s),
+            )
         return pops_ht, pop_clf
     else:
         return pop_pc_pd, pop_clf

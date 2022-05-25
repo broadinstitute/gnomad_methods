@@ -304,6 +304,8 @@ def merge_sample_qc_expr(
             "n_transition",
             "n_transversion",
             "n_star",
+            "n_singleton_ti",
+            "n_singleton_tv",
         ]
         + ["gq_over_" + f"{GQ}" for GQ in range(0, 70, 10)]
         + ["dp_over_" + f"{DP}" for DP in range(0, 40, 10)]
@@ -313,6 +315,7 @@ def merge_sample_qc_expr(
     ratio_metrics = [
         ("call_rate", "n_called", "n_not_called"),
         ("r_ti_tv", "n_transition", "n_transversion"),
+        ("r_ti_tv_singleton", "n_singleton_ti", "n_singleton_tv"),
         ("r_het_hom_var", "n_het", "n_hom_var"),
         ("r_insertion_deletion", "n_insertion", "n_deletion"),
     ]

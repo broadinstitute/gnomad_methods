@@ -18,7 +18,13 @@ logger = logging.getLogger("gnomad.resources")
 
 
 GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
+"""
+Public buckets used to stage gnomAD data.
 
+`gnomad-public` is a legacy bucket and contains one readme text file.
+The team writes output data to `gnomad-public-requester-pays`, and all data in this bucket
+syncs to the public bucket `gcp-public-data--gnomad`.
+"""
 
 # Resource classes
 class BaseResource(ABC):

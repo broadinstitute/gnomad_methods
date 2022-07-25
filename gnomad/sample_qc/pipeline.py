@@ -109,6 +109,8 @@ def filter_rows_for_qc(
 
 def get_qc_mt(
     mt: hl.MatrixTable,
+    bi_allelic_only: bool = True,
+    snv_only: bool = True,
     adj_only: bool = True,
     min_af: Optional[float] = 0.001,
     min_callrate: Optional[float] = 0.99,
@@ -126,9 +128,10 @@ def get_qc_mt(
     """
     Create a QC-ready MT.
 
-    Keeps the following:
+    Has options to filter to the following:
         - Variants outside known problematic regions
-        - Bi-allelic SNVs only
+        - Bi-allelic sites only
+        - SNVs only
         - Variants passing hard thresholds
         - Variants passing the set call rate and MAF thresholds
         - Genotypes passing on gnomAD ADJ criteria (GQ>=20, DP>=10, AB>0.2 for hets)
@@ -136,6 +139,8 @@ def get_qc_mt(
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
     :param mt: Input MT
+    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too.
+    :param snv_only: Whether to only keep SNVs or include other variant types.
     :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
     :param min_af: Minimum allele frequency to keep. Not applied if set to ``None``.
     :param min_callrate: Minimum call rate to keep. Not applied if set to ``None``.
@@ -178,6 +183,8 @@ def get_qc_mt(
         min_inbreeding_coeff_threshold,
         min_hardy_weinberg_threshold,
         apply_hard_filters,
+        bi_allelic_only,
+        snv_only,
     )
 
     if ld_r2 is not None:
@@ -193,6 +200,8 @@ def get_qc_mt(
 
     qc_mt = qc_mt.annotate_globals(
         qc_mt_params=hl.struct(
+            bi_allelic_only=bi_allelic_only,
+            snv_only=snv_only,
             adj_only=adj_only,
             min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
             min_callrate=min_callrate

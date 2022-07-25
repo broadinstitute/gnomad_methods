@@ -139,8 +139,8 @@ def get_qc_mt(
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
     :param mt: Input MT
-    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
-    :param snv_only: Whether to only keep SNVs or include other variant types
+    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too.
+    :param snv_only: Whether to only keep SNVs or include other variant types.
     :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
     :param min_af: Minimum allele frequency to keep. Not applied if set to ``None``.
     :param min_callrate: Minimum call rate to keep. Not applied if set to ``None``.
@@ -200,6 +200,8 @@ def get_qc_mt(
 
     qc_mt = qc_mt.annotate_globals(
         qc_mt_params=hl.struct(
+            bi_allelic_only=bi_allelic_only,
+            snv_only=snv_only,
             adj_only=adj_only,
             min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
             min_callrate=min_callrate

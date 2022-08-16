@@ -139,7 +139,7 @@ def get_qc_mt(
 
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
-    :param mt: Input MT
+    :param mt: Input MT.
     :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too.
     :param snv_only: Whether to only keep SNVs or include other variant types.
     :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.

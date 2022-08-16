@@ -190,7 +190,9 @@ def get_qc_mt(
             if n_partitions:
                 logger.info("Checkpointing and repartitioning the MT and LD pruning")
                 qc_mt.write(checkpoint_path, overwrite=True)
-                qc_mt = hl.read_matrix_table(checkpoint_path, _n_partitions=n_partitions)
+                qc_mt = hl.read_matrix_table(
+                    checkpoint_path, _n_partitions=n_partitions
+                )
             else:
                 logger.info("Checkpointing the MT and LD pruning")
                 qc_mt = qc_mt.checkpoint(checkpoint_path, overwrite=True)

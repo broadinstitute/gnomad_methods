@@ -122,7 +122,7 @@ def get_qc_mt(
     filter_exome_low_coverage_regions: bool = False,
     high_conf_regions: Optional[List[str]] = None,
     checkpoint_path: Optional[str] = None,
-    partitions: Optional[int] = None,
+    n_partitions: Optional[int] = None,
 ) -> hl.MatrixTable:
     """
     Create a QC-ready MT.
@@ -136,22 +136,22 @@ def get_qc_mt(
 
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
-    :param mt: Input MT
+    :param mt: Input MT.
     :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
     :param min_af: Minimum allele frequency to keep. Not applied if set to ``None``.
     :param min_callrate: Minimum call rate to keep. Not applied if set to ``None``.
     :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
     :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
-    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
-    :param ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
-    :param filter_lcr: Filter LCR regions
-    :param filter_decoy: Filter decoy regions
-    :param filter_segdup: Filter segmental duplication regions
-    :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
-    :param high_conf_regions: If given, the data will be filtered to only include variants in those regions
+    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30.
+    :param ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning).
+    :param filter_lcr: Filter LCR regions.
+    :param filter_decoy: Filter decoy regions.
+    :param filter_segdup: Filter segmental duplication regions.
+    :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept).
+    :param high_conf_regions: If given, the data will be filtered to only include variants in those regions.
     :param checkpoint_path: If given, the QC MT will be checkpointed to the specified path before running LD pruning. If not specified, persist will be used instead.
-    :param partitions: If given, the QC MT will be repartitioned to the specified number of partitions before running LD pruning. `checkpoint_path` must also be specified as the MT will first be written to the `checkpoint_path` before being reread with the new number of partitions.
-    :return: Filtered MT
+    :param n_partitions: If given, the QC MT will be repartitioned to the specified number of partitions before running LD pruning. `checkpoint_path` must also be specified as the MT will first be written to the `checkpoint_path` before being reread with the new number of partitions.
+    :return: Filtered MT.
     """
     logger.info("Creating QC MatrixTable")
     if ld_r2 is not None:
@@ -159,7 +159,7 @@ def get_qc_mt(
             "The LD-prune step of this function requires non-preemptible workers only!"
         )
 
-    if partitions and not checkpoint_path:
+    if n_partitions and not checkpoint_path:
         raise ValueError("checkpoint_path must be supplied if repartitioning!")
 
     qc_mt = filter_low_conf_regions(
@@ -187,10 +187,10 @@ def get_qc_mt(
 
     if ld_r2 is not None:
         if checkpoint_path:
-            if partitions:
+            if n_partitions:
                 logger.info("Checkpointing and repartitioning the MT and LD pruning")
                 qc_mt.write(checkpoint_path, overwrite=True)
-                qc_mt = hl.read_matrix_table(checkpoint_path, _n_partitions=partitions)
+                qc_mt = hl.read_matrix_table(checkpoint_path, _n_partitions=n_partitions)
             else:
                 logger.info("Checkpointing the MT and LD pruning")
                 qc_mt = qc_mt.checkpoint(checkpoint_path, overwrite=True)

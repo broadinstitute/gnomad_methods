@@ -150,7 +150,7 @@ def get_qc_mt(
     :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
     :param high_conf_regions: If given, the data will be filtered to only include variants in those regions
     :param checkpoint_path: If given, the QC MT will be checkpointed to the specified path before running LD pruning. If not specified, persist will be used instead.
-    :param partitions: If given, the QC MT will be repartitioned to the specified number of partitions before running LD pruning. 'checkpoint_path' must also be specified as the MT will first be written to the checkpoint_path before being reread with with new number of partitions.
+    :param partitions: If given, the QC MT will be repartitioned to the specified number of partitions before running LD pruning. `checkpoint_path` must also be specified as the MT will first be written to the `checkpoint_path` before being reread with the new number of partitions.
     :return: Filtered MT
     """
     logger.info("Creating QC MatrixTable")

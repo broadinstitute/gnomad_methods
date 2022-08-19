@@ -125,6 +125,7 @@ def get_qc_mt(
     high_conf_regions: Optional[List[str]] = None,
     checkpoint_path: Optional[str] = None,
     n_partitions: Optional[int] = None,
+    block_size: Optional[int] = None,
 ) -> hl.MatrixTable:
     """
     Create a QC-ready MT.
@@ -156,6 +157,7 @@ def get_qc_mt(
     :param high_conf_regions: If given, the data will be filtered to only include variants in those regions.
     :param checkpoint_path: If given, the QC MT will be checkpointed to the specified path before running LD pruning. If not specified, persist will be used instead.
     :param n_partitions: If given, the QC MT will be repartitioned to the specified number of partitions before running LD pruning. `checkpoint_path` must also be specified as the MT will first be written to the `checkpoint_path` before being reread with the new number of partitions.
+    :param block_size: If given, set the block size to this value when LD pruning.
     :return: Filtered MT.
     """
     logger.info("Creating QC MatrixTable")
@@ -207,7 +209,7 @@ def get_qc_mt(
             logger.info("Persisting the MT and LD pruning")
             qc_mt = qc_mt.persist()
         unfiltered_qc_mt = qc_mt.unfilter_entries()
-        pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2)
+        pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2, block_size=block_size)
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))
 
     qc_mt = qc_mt.annotate_globals(

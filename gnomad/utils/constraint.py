@@ -1,3 +1,5 @@
+# noqa: D100
+
 from typing import Union
 
 import hail as hl

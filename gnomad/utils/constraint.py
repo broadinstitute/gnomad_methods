@@ -8,7 +8,7 @@ def annotate_variant_types(
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Annotate variant types.
-    
+
     The following annotations are added to the output Table:
         - cpg
         - transition
@@ -59,7 +59,7 @@ def trimer_from_heptamer(
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Trim heptamer context to create trimer context.
-    
+
     :param t: Input MatrixTable or Table with context annotation.
     :return: MatrixTable or Table with trimer context annotated.
     """
@@ -76,12 +76,12 @@ def collapse_strand(
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Return the deduplicated context by collapsing DNA strands.
-    
+
     Function returns the reverse complement if the reference allele is either 'G' or 'T'.
-    
+
     The following annotations are added to the output Table:
         - was_flipped
-    
+
     :param ht: Input Table.
     :return: Table with deduplicated context annotation (ref, alt, context, was_flipped).
     """

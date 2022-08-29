@@ -240,7 +240,10 @@ def get_summary_counts(
     summary_ac_counts = ht.aggregate(
         hl.struct(
             **get_summary_ac_dict(
-                ht[freq_field][index].AC, ht.lof, ht.no_lof_flags, ht.most_severe_csq,
+                ht[freq_field][index].AC,
+                ht.lof,
+                ht.no_lof_flags,
+                ht.most_severe_csq,
             )
         )
     )
@@ -249,7 +252,11 @@ def get_summary_counts(
     )
     return ht.group_by("freq_bin").aggregate(
         **get_summary_counts_dict(
-            ht.locus, ht.alleles, ht.lof, ht.no_lof_flags, ht.most_severe_csq,
+            ht.locus,
+            ht.alleles,
+            ht.lof,
+            ht.no_lof_flags,
+            ht.most_severe_csq,
         )
     )
 
@@ -434,7 +441,9 @@ def default_generate_gene_lof_matrix(
     if tx_ht:
         logger.info("Adding transcript expression annotation...")
         tx_annotation = get_tx_expression_expr(
-            mt.row_key, tx_ht, mt.csqs,
+            mt.row_key,
+            tx_ht,
+            mt.csqs,
         ).mean_proportion
         annotation_expr["expressed"] = (
             hl.case()
@@ -519,10 +528,12 @@ def get_het_hom_summary_dict(
             ),
         ),
         "pop_obs_hom": hl.agg.group_by(
-            pop_expr, hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
+            pop_expr,
+            hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
         ),
         "pop_defined": hl.agg.group_by(
-            pop_expr, hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
+            pop_expr,
+            hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
         ),
     }
 

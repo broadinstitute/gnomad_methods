@@ -7,7 +7,7 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/psf/black
-    rev: 19.10b0 # This should be kept in sync with the version in requirements-dev.in
+    rev: 22.3.0 # This should be kept in sync with the version in requirements-dev.in
     hooks:
       - id: black
         language_version: python3

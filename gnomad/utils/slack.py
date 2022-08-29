@@ -96,7 +96,10 @@ class SlackClient:
                 optional_args["initial_comment"] = comment
 
             self._client.files_upload(
-                channels=channel, filename=filename, filetype=filetype, **optional_args,
+                channels=channel,
+                filename=filename,
+                filetype=filetype,
+                **optional_args,
             )
 
     def send_message(

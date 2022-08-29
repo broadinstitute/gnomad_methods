@@ -102,7 +102,10 @@ def compute_ranked_bin(
         bin_group_variant_counts=bin_ht.aggregate(
             hl.Struct(
                 **{
-                    bin_id: hl.agg.filter(bin_ht[f"_filter_{bin_id}"], hl.agg.count(),)
+                    bin_id: hl.agg.filter(
+                        bin_ht[f"_filter_{bin_id}"],
+                        hl.agg.count(),
+                    )
                     for bin_id in bin_expr
                 }
             )
@@ -157,7 +160,9 @@ def compute_ranked_bin(
         bin_ht = bin_ht.transmute(
             **{
                 bin_id: hl.if_else(
-                    bin_ht.snv, bin_ht[f"{bin_id}_snv"], bin_ht[f"{bin_id}_indel"],
+                    bin_ht.snv,
+                    bin_ht[f"{bin_id}_snv"],
+                    bin_ht[f"{bin_id}_indel"],
                 )
                 for bin_id in bin_expr_no_snv
             }
@@ -167,7 +172,8 @@ def compute_ranked_bin(
 
 
 def compute_grouped_binned_ht(
-    bin_ht: hl.Table, checkpoint_path: Optional[str] = None,
+    bin_ht: hl.Table,
+    checkpoint_path: Optional[str] = None,
 ) -> hl.GroupedTable:
     """
     Group a Table that has been annotated with bins (`compute_ranked_bin` or `create_binned_ht`).

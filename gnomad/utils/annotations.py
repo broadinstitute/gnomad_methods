@@ -521,7 +521,8 @@ def annotate_freq(
     freq_meta_expr.insert(1, {"group": "raw"})
     freq_sample_count.insert(1, freq_sample_count[0])
     mt = mt.annotate_globals(
-        freq_meta=freq_meta_expr, freq_sample_count=freq_sample_count,
+        freq_meta=freq_meta_expr,
+        freq_sample_count=freq_sample_count,
     )
 
     # Create frequency expression array from the sample groups

@@ -109,6 +109,8 @@ def filter_rows_for_qc(
 
 def get_qc_mt(
     mt: hl.MatrixTable,
+    bi_allelic_only: bool = True,
+    snv_only: bool = True,
     adj_only: bool = True,
     min_af: Optional[float] = 0.001,
     min_callrate: Optional[float] = 0.99,
@@ -122,40 +124,50 @@ def get_qc_mt(
     filter_exome_low_coverage_regions: bool = False,
     high_conf_regions: Optional[List[str]] = None,
     checkpoint_path: Optional[str] = None,
+    n_partitions: Optional[int] = None,
+    block_size: Optional[int] = None,
 ) -> hl.MatrixTable:
     """
     Create a QC-ready MT.
 
-    Keeps the following:
+    Has options to filter to the following:
         - Variants outside known problematic regions
-        - Bi-allelic SNVs only
+        - Bi-allelic sites only
+        - SNVs only
         - Variants passing hard thresholds
         - Variants passing the set call rate and MAF thresholds
         - Genotypes passing on gnomAD ADJ criteria (GQ>=20, DP>=10, AB>0.2 for hets)
 
     In addition, the MT will be LD-pruned if `ld_r2` is set.
 
-    :param mt: Input MT
+    :param mt: Input MT.
+    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too.
+    :param snv_only: Whether to only keep SNVs or include other variant types.
     :param adj_only: If set, only ADJ genotypes are kept. This filter is applied before the call rate and AF calculation.
     :param min_af: Minimum allele frequency to keep. Not applied if set to ``None``.
     :param min_callrate: Minimum call rate to keep. Not applied if set to ``None``.
     :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
     :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
-    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
-    :param ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning)
-    :param filter_lcr: Filter LCR regions
-    :param filter_decoy: Filter decoy regions
-    :param filter_segdup: Filter segmental duplication regions
-    :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept)
-    :param high_conf_regions: If given, the data will be filtered to only include variants in those regions
+    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30.
+    :param ld_r2: Minimum r2 to keep when LD-pruning (set to `None` for no LD pruning).
+    :param filter_lcr: Filter LCR regions.
+    :param filter_decoy: Filter decoy regions.
+    :param filter_segdup: Filter segmental duplication regions.
+    :param filter_exome_low_coverage_regions: If set, only high coverage exome regions (computed from gnomAD are kept).
+    :param high_conf_regions: If given, the data will be filtered to only include variants in those regions.
     :param checkpoint_path: If given, the QC MT will be checkpointed to the specified path before running LD pruning. If not specified, persist will be used instead.
-    :return: Filtered MT
+    :param n_partitions: If given, the QC MT will be repartitioned to the specified number of partitions before running LD pruning. `checkpoint_path` must also be specified as the MT will first be written to the `checkpoint_path` before being reread with the new number of partitions.
+    :param block_size: If given, set the block size to this value when LD pruning.
+    :return: Filtered MT.
     """
     logger.info("Creating QC MatrixTable")
     if ld_r2 is not None:
         logger.warning(
             "The LD-prune step of this function requires non-preemptible workers only!"
         )
+
+    if n_partitions and not checkpoint_path:
+        raise ValueError("checkpoint_path must be supplied if repartitioning!")
 
     qc_mt = filter_low_conf_regions(
         mt,
@@ -178,21 +190,32 @@ def get_qc_mt(
         min_inbreeding_coeff_threshold,
         min_hardy_weinberg_threshold,
         apply_hard_filters,
+        bi_allelic_only,
+        snv_only,
     )
 
     if ld_r2 is not None:
         if checkpoint_path:
-            logger.info("Checkpointing the MT and LD pruning")
-            qc_mt = qc_mt.checkpoint(checkpoint_path, overwrite=True)
+            if n_partitions:
+                logger.info("Checkpointing and repartitioning the MT and LD pruning")
+                qc_mt.write(checkpoint_path, overwrite=True)
+                qc_mt = hl.read_matrix_table(
+                    checkpoint_path, _n_partitions=n_partitions
+                )
+            else:
+                logger.info("Checkpointing the MT and LD pruning")
+                qc_mt = qc_mt.checkpoint(checkpoint_path, overwrite=True)
         else:
             logger.info("Persisting the MT and LD pruning")
             qc_mt = qc_mt.persist()
         unfiltered_qc_mt = qc_mt.unfilter_entries()
-        pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2)
+        pruned_ht = hl.ld_prune(unfiltered_qc_mt.GT, r2=ld_r2, block_size=block_size)
         qc_mt = qc_mt.filter_rows(hl.is_defined(pruned_ht[qc_mt.row_key]))
 
     qc_mt = qc_mt.annotate_globals(
         qc_mt_params=hl.struct(
+            bi_allelic_only=bi_allelic_only,
+            snv_only=snv_only,
             adj_only=adj_only,
             min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
             min_callrate=min_callrate
@@ -226,6 +249,8 @@ def annotate_sex(
     gt_expr: str = "GT",
     f_stat_cutoff: float = 0.5,
     aaf_threshold: float = 0.001,
+    variants_only_x_ploidy: bool = False,
+    variants_only_y_ploidy: bool = False,
 ) -> hl.Table:
     """
     Impute sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
@@ -256,6 +281,8 @@ def annotate_sex(
     :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
     :param float aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
+    :param variants_only_x_ploidy: Whether to use depth of only variant data for the x ploidy estimation.
+    :param variants_only_y_ploidy: Whether to use depth of only variant data for the y ploidy estimation.
     :return: Table of samples and their imputed sex karyotypes.
     """
     logger.info("Imputing sex chromosome ploidies...")
@@ -266,10 +293,12 @@ def annotate_sex(
             raise NotImplementedError(
                 "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex chromosome ploidy on a VDS!"
             )
+        # Begin by creating a ploidy estimate HT using the method defined by 'variants_only_x_ploidy'
         ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
             mtds,
             calling_intervals=included_intervals,
             normalization_contig=normalization_contig,
+            use_variant_dataset=variants_only_x_ploidy,
         )
         ploidy_ht = ploidy_ht.rename(
             {
@@ -277,16 +306,81 @@ def annotate_sex(
                 "y_ploidy": "chrY_ploidy",
                 "x_mean_dp": "chrX_mean_dp",
                 "y_mean_dp": "chrY_mean_dp",
-                "autosomal_mean_dp": f"{normalization_contig}_mean_dp",
+                "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                if variants_only_x_ploidy
+                else f"{normalization_contig}_mean_dp",
             }
         )
+        # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation using
+        # the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
+        if variants_only_y_ploidy != variants_only_x_ploidy:
+            y_ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+                mtds,
+                calling_intervals=included_intervals,
+                normalization_contig=normalization_contig,
+                use_variant_dataset=variants_only_y_ploidy,
+            )
+            y_ploidy_idx = y_ploidy_ht[ploidy_ht.key]
+            ploidy_ht = ploidy_ht.annotate(
+                chrY_ploidy=y_ploidy_idx.y_ploidy,
+                chrY_mean_dp=y_ploidy_idx.y_mean_dp,
+            )
+
+            # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
+            # that this is the variant dataset only mean DP (this will have already been added if
+            # 'variants_only_x_ploidy' was also True).
+            if variants_only_y_ploidy:
+                ploidy_ht = ploidy_ht.annotate(
+                    **{
+                        f"var_data_{normalization_contig}_mean_dp": y_ploidy_idx.autosomal_mean_dp
+                    }
+                )
+
         mt = mtds.variant_data
     else:
         mt = mtds
         if is_sparse:
             ploidy_ht = impute_sex_ploidy(
-                mt, excluded_intervals, included_intervals, normalization_contig
+                mt,
+                excluded_intervals,
+                included_intervals,
+                normalization_contig,
+                use_only_variants=variants_only_x_ploidy,
             )
+            ploidy_ht = ploidy_ht.rename(
+                {
+                    "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                    if variants_only_x_ploidy
+                    else f"{normalization_contig}_mean_dp",
+                }
+            )
+            # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation
+            # using the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
+            if variants_only_y_ploidy != variants_only_x_ploidy:
+                y_ploidy_ht = impute_sex_ploidy(
+                    mt,
+                    excluded_intervals,
+                    included_intervals,
+                    normalization_contig,
+                    use_only_variants=variants_only_y_ploidy,
+                )
+                y_ploidy_ht.select(
+                    "chrY_ploidy",
+                    "chrY_mean_dp",
+                    f"{normalization_contig}_mean_dp",
+                )
+                # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
+                # that this is the variant dataset only mean DP (this will have already been added if
+                # 'variants_only_x_ploidy' was also True).
+                if variants_only_y_ploidy:
+                    ploidy_ht = ploidy_ht.rename(
+                        {
+                            f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                        }
+                    )
+                # Re-annotate the ploidy HT with modified Y ploidy annotations
+                ploidy_ht = ploidy_ht.annotate(**y_ploidy_ht[ploidy_ht.key])
+
         else:
             raise NotImplementedError(
                 "Imputing sex ploidy does not exist yet for dense data."
@@ -348,6 +442,8 @@ def annotate_sex(
             lower_cutoff_YY=y_ploidy_cutoffs[1],
         ),
         f_stat_cutoff=f_stat_cutoff,
+        variants_only_x_ploidy=variants_only_x_ploidy,
+        variants_only_y_ploidy=variants_only_y_ploidy,
     )
     return sex_ht.annotate(
         **get_sex_expr(

@@ -117,7 +117,7 @@ def pc_project(
 
 def assign_population_pcs(
     pop_pca_scores: Union[hl.Table, pd.DataFrame],
-    pc_cols: Union[hl.expr.ArrayExpression, List[str]],
+    pc_cols: Union[List[int], List[str]],
     known_col: str = "known_pop",
     fit: Any = None,  # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     seed: int = 42,
@@ -136,7 +136,7 @@ def assign_population_pcs(
 
     As input, this function can either take:
         - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
-            - `pc_cols` should be an ArrayExpression of Floats where each element is one of the PCs to use.
+            - `pc_cols` should be a list of integers where each element is one of the PCs to use.
             - A Hail Table will be returned as output
         - A Pandas DataFrame. In this case:
             - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
@@ -148,7 +148,7 @@ def assign_population_pcs(
         can be used to expand this column into multiple `PC` columns.
 
     :param pop_pca_scores: Input Hail Table or Pandas Dataframe
-    :param pc_cols: Columns storing the PCs to use
+    :param pc_cols: List of which PCs to use/columns storing the PCs to use. Values provided should be 1-based and should be a list of integers when passing in a Hail Table (i.e. [1, 2, 4, 5]) or a list of strings when passing in a Pandas Dataframe (i.e. ["PC1", "PC2", "PC4", "PC5"]).
     :param known_col: Column storing the known population labels
     :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
     :param seed: Random seed
@@ -163,21 +163,27 @@ def assign_population_pcs(
 
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
+        if not all(isinstance(n, int) for n in pc_cols):
+            raise TypeError(
+                "Using a Hail Table with pc_cols requires all values of the pc_cols list to be integers"
+            )
+        pcs_to_pull = [pop_pca_scores.scores[i - 1] for i in pc_cols]
         if not fit:
-            pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pc_cols)
+            pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pcs_to_pull)
         else:
-            pop_pca_scores = pop_pca_scores.select(pca_scores=pc_cols)
+            pop_pca_scores = pop_pca_scores.select(pca_scores=pcs_to_pull)
 
         pop_pc_pd = pop_pca_scores.to_pandas()
 
         # Explode the PC array
-        num_out_cols = min([len(x) for x in pop_pc_pd["pca_scores"].values.tolist()])
-        pc_cols = [f"PC{i+1}" for i in range(num_out_cols)]
-        pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd["pca_scores"].values.tolist())[
-            list(range(num_out_cols))
-        ]
+        pc_cols = [f"PC{i}" for i in pc_cols]
+        pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd["pca_scores"].values.tolist())
 
     else:
+        if not all(isinstance(n, str) for n in pc_cols):
+            raise TypeError(
+                "Using a Pandas DataFrame with pc_cols requires all values of the pc_cols list to be strings"
+            )
         pop_pc_pd = pop_pca_scores
 
     # Split training data into subsamples for fitting and evaluating
@@ -230,9 +236,21 @@ def assign_population_pcs(
 
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
-        pops_ht.annotate_globals(
+        pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
         )
+
+        if not fit:
+            pops_ht = pops_ht.annotate_globals(
+                assign_pops_from_pc_params=pops_ht.assign_pops_from_pc_params.annotate(
+                    error_rate=error_rate
+                )
+            )
+
+            pops_ht = pops_ht.annotate(
+                evaluation_sample=hl.literal(list(evaluate_fit.s)).contains(pops_ht.s),
+                training_sample=hl.literal(list(train_fit.s)).contains(pops_ht.s),
+            )
         return pops_ht, pop_clf
     else:
         return pop_pc_pd, pop_clf

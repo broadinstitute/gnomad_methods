@@ -18,7 +18,14 @@ logger = logging.getLogger("gnomad.resources")
 
 
 GNOMAD_PUBLIC_BUCKETS = ("gnomad-public", "gnomad-public-requester-pays")
+"""
+Public buckets used to stage gnomAD data.
 
+`gnomad-public` is a legacy bucket and contains one readme text file.
+
+The gnomAD Production Team writes output data to `gnomad-public-requester-pays`, and all data in this bucket
+syncs to the public bucket `gcp-public-data--gnomad`.
+"""
 
 # Resource classes
 class BaseResource(ABC):
@@ -218,7 +225,9 @@ class PedigreeResource(BaseResource):
         missing: str = "NA",
     ):
         super().__init__(
-            path=path, import_args=import_args, import_func=import_func,
+            path=path,
+            import_args=import_args,
+            import_func=import_func,
         )
 
         self.quant_pheno = quant_pheno
@@ -326,10 +335,14 @@ class BaseVersionedResource:
         self.versions = versions
 
     def __repr__(self):
-        return "{cls}(default_version={default_version}, versions={{{versions}}})".format(
-            cls=self.__class__.__name__,
-            default_version=self.default_version,
-            versions=", ".join(f'"{k}": {repr(v)}' for k, v in self.versions.items()),
+        return (
+            "{cls}(default_version={default_version}, versions={{{versions}}})".format(
+                cls=self.__class__.__name__,
+                default_version=self.default_version,
+                versions=", ".join(
+                    f'"{k}": {repr(v)}' for k, v in self.versions.items()
+                ),
+            )
         )
 
     def __getattr__(self, name):

@@ -109,6 +109,7 @@ def collapse_strand(
         else ht.annotate_rows(**collapse_expr)
     )
 
+
 def add_most_severe_csq_to_tc_within_ht(t):
     """
     Add most_severe_consequence annotation to 'transcript_consequences' within the vep annotation.

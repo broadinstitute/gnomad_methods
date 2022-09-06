@@ -556,3 +556,22 @@ def get_most_severe_consequence_for_summary(
         )
         .default(_get_most_severe_csq(ht.vep.intergenic_consequences, False))
     )
+
+def add_most_severe_csq_to_tc_within_vep_root(t: Union[hl.Table, hl.MatrixTable], vep_root: str = "vep") -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Add most_severe_consequence annotation to 'transcript_consequences' within the vep root annotation.
+
+    :param t: Input Table or MatrixTable.
+    :param vep_root: Root for vep annotation (probably vep).
+    :return: Input Table or MatrixTable with most_severe_consequence annotation added.
+    """
+    annotation = t[vep_root].annotate(
+        transcript_consequences=t[vep_root].transcript_consequences.map(
+            add_most_severe_consequence_to_consequence
+        )
+    )
+    return (
+        t.annotate_rows(**{vep_root: annotation})
+        if isinstance(t, hl.MatrixTable)
+        else t.annotate(**{vep_root: annotation})
+    )

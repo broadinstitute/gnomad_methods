@@ -4,6 +4,7 @@ from typing import Union
 
 import hail as hl
 
+
 def annotate_mutation_type(
     t: Union[hl.MatrixTable, hl.Table], trimer: bool = False
 ) -> Union[hl.MatrixTable, hl.Table]:
@@ -74,7 +75,7 @@ def collapse_strand(
     Return the deduplicated context by collapsing DNA strands.
 
     Function returns the reverse complement for 'ref, 'alt', and 'context' if the reference allele is either 'G' or 'T'.
-    
+
     The following annotations are added to the output Table:
         - was_flipped - whether the 'ref, 'alt', and 'context' were flipped
 

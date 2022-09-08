@@ -566,7 +566,7 @@ def add_most_severe_csq_to_tc_within_vep_root(
 
     :param t: Input Table or MatrixTable.
     :param vep_root: Root for vep annotation (probably vep).
-    :return: Input Table or MatrixTable with most_severe_consequence annotation added.
+    :return: Table or MatrixTable with most_severe_consequence annotation added.
     """
     annotation = t[vep_root].annotate(
         transcript_consequences=t[vep_root].transcript_consequences.map(

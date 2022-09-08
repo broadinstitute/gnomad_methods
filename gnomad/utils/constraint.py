@@ -6,22 +6,28 @@ import hail as hl
 
 
 def annotate_mutation_type(
-    t: Union[hl.MatrixTable, hl.Table], trimer: bool = False
+    t: Union[hl.MatrixTable, hl.Table]
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
-    Annotate variant types.
+    Annotate mutation types.
 
     The following annotations are added to the output Table:
         - cpg
         - transition
-        - variant_type
-        - variant_type_model
+        - mutation_type - one of "CpG", "non-CpG transition", or "transversion"
+        - mutation_type_model
 
     :param t: Input Table or MatrixTable.
-    :param trimer: Whether to use trimers for context. Defaults to False (uses heptamers as context).
-    :return: Table with annotations.
+    :return: Table with mutation type annotations added.
     """
-    mid_index = 1 if trimer else 3
+    context_length = t.aggregate(hl.agg.mean(hl.len(t.context)))
+    if  context_length == 3:
+        mid_index = 1 
+    elif context_length == 7:
+        mid_index = 3
+    else:
+        raise ValueError(f"The length of context should be either 3 or 7, instead of {context_length}.")
+    
     transition_expr = hl.is_transition(t.ref, t.alt)
     cpg_expr = (
         (t.ref == "G") & (t.alt == "A") & (t.context[mid_index - 1 : mid_index] == "C")
@@ -34,20 +40,20 @@ def annotate_mutation_type(
         t = t.annotate_rows(transition=transition_expr, cpg=cpg_expr)
     else:
         t = t.annotate(transition=transition_expr, cpg=cpg_expr)
-    variant_type_expr = (
+    mutation_type_expr = (
         hl.case()
         .when(t.cpg, "CpG")
         .when(t.transition, "non-CpG transition")
         .default("transversion")
     )
-    variant_type_model_expr = hl.if_else(t.cpg, t.context, "non-CpG")
+    mutation_type_model_expr = hl.if_else(t.cpg, t.context, "non-CpG")
     if isinstance(t, hl.MatrixTable):
         return t.annotate_rows(
-            mutation_type=variant_type_expr, variant_type_model=variant_type_model_expr
+            mutation_type=mutation_type_expr, mutation_type_model=mutation_type_model_expr
         )
     else:
         return t.annotate(
-            mutation_type=variant_type_expr, variant_type_model=variant_type_model_expr
+            mutation_type=mutation_type_expr, mutation_type_model=mutation_type_model_expr
         )
 
 
@@ -77,7 +83,7 @@ def collapse_strand(
     Function returns the reverse complement for 'ref, 'alt', and 'context' if the reference allele is either 'G' or 'T'.
 
     The following annotations are added to the output Table:
-        - was_flipped - whether the 'ref, 'alt', and 'context' were flipped
+        - was_flipped - whether the 'ref, 'alt', and 'context' were flipped (reverse complement taken)
 
     :param ht: Input Table.
     :return: Table with deduplicated context annotation (ref, alt, context, was_flipped).

@@ -21,13 +21,15 @@ def annotate_mutation_type(
     :return: Table with mutation type annotations added.
     """
     context_length = t.aggregate(hl.agg.mean(hl.len(t.context)))
-    if  context_length == 3:
-        mid_index = 1 
+    if context_length == 3:
+        mid_index = 1
     elif context_length == 7:
         mid_index = 3
     else:
-        raise ValueError(f"The length of context should be either 3 or 7, instead of {context_length}.")
-    
+        raise ValueError(
+            f"The length of context should be either 3 or 7, instead of {context_length}."
+        )
+
     transition_expr = hl.is_transition(t.ref, t.alt)
     cpg_expr = (
         (t.ref == "G") & (t.alt == "A") & (t.context[mid_index - 1 : mid_index] == "C")
@@ -49,11 +51,13 @@ def annotate_mutation_type(
     mutation_type_model_expr = hl.if_else(t.cpg, t.context, "non-CpG")
     if isinstance(t, hl.MatrixTable):
         return t.annotate_rows(
-            mutation_type=mutation_type_expr, mutation_type_model=mutation_type_model_expr
+            mutation_type=mutation_type_expr,
+            mutation_type_model=mutation_type_model_expr,
         )
     else:
         return t.annotate(
-            mutation_type=mutation_type_expr, mutation_type_model=mutation_type_model_expr
+            mutation_type=mutation_type_expr,
+            mutation_type_model=mutation_type_model_expr,
         )
 
 

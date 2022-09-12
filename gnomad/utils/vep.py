@@ -345,27 +345,31 @@ def filter_vep_to_canonical_transcripts(
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter VEP transcript consequences to those in the canonical transcript.
-    
+
     :param mt: Input Table or MatrixTable.
     :param vep_root: Name used for VEP annotation. Defaults to 'vep'.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Defaults to True.
     :return: Table or MatrixTable with VEP transcript consequences filtered.
     """
-    return filter_vep_transcript_csqs(mt, vep_root, synonymous=False, filter_empty_csq=filter_empty_csq)
-    
+    return filter_vep_transcript_csqs(
+        mt, vep_root, synonymous=False, filter_empty_csq=filter_empty_csq
+    )
+
 
 def filter_vep_to_synonymous_variants(
     mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep", filter_empty_csq=False
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter VEP transcript consequences to those with a most severe consequence of synonymous_variant.
-    
+
     :param mt: Input Table or MatrixTable.
     :param vep_root: Name used for VEP annotation. Defaults to 'vep'.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Defaults to True.
     :return: Table or MatrixTable with VEP transcript consequences filtered.
     """
-    return filter_vep_transcript_csqs(mt, vep_root, canonical=False, filter_empty_csq=filter_empty_csq)
+    return filter_vep_transcript_csqs(
+        mt, vep_root, canonical=False, filter_empty_csq=filter_empty_csq
+    )
 
 
 def vep_struct_to_csq(
@@ -556,6 +560,7 @@ def get_most_severe_consequence_for_summary(
         .default(_get_most_severe_csq(ht.vep.intergenic_consequences, False))
     )
 
+
 def filter_vep_transcript_csqs(
     t: Union[hl.Table, hl.MatrixTable],
     vep_root: str = "vep",
@@ -579,7 +584,7 @@ def filter_vep_transcript_csqs(
     if not synonymous and not canonical and not filter_empty_csq:
         logger.warning("No changes have been made to input Table/MatrixTable!")
         return t
-    
+
     transcript_csqs = t[vep_root].transcript_consequences
     criteria = [lambda csq: True]
     if synonymous:
@@ -588,16 +593,14 @@ def filter_vep_transcript_csqs(
         criteria.append(lambda csq: csq.canonical == 1)
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)
-    vep_data = {
-        vep_root: t[vep_root].annotate(
-            transcript_consequences=transcript_csqs
-        )
-    }
+    vep_data = {vep_root: t[vep_root].annotate(transcript_consequences=transcript_csqs)}
     t = t.annotate_rows(**vep_data) if is_mt else t.annotate(**vep_data)
-    
+
     if filter_empty_csq:
         transcript_csq_expr = t[vep_root].transcript_consequences
-        filter_expr = hl.is_defined(transcript_csq_expr) & (hl.len(transcript_csq_expr) > 0)
+        filter_expr = hl.is_defined(transcript_csq_expr) & (
+            hl.len(transcript_csq_expr) > 0
+        )
         t = t.filter_rows(filter_expr) if is_mt else t.filter(filter_expr)
-    
+
     return t

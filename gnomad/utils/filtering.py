@@ -102,7 +102,10 @@ def filter_by_frequency(
         else t.filter(criteria, keep=keep)
     )
 
-def combine_functions(func_list: List[Callable[[bool], bool]], x: hl.expr.StructExpression, operator="and") -> bool:
+
+def combine_functions(
+    func_list: List[Callable[[bool], bool]], x: hl.expr.StructExpression, operator="and"
+) -> bool:
     """
     Combines the criteria to evaluation annotations.
 
@@ -124,6 +127,7 @@ def combine_functions(func_list: List[Callable[[bool], bool]], x: hl.expr.Struct
         elif operator == "or":
             cond |= c(x)
     return cond
+
 
 def filter_low_conf_regions(
     mt: Union[hl.MatrixTable, hl.Table],

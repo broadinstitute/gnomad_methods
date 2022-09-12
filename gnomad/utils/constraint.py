@@ -12,6 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger("constraint_pipeline")
 logger.setLevel(logging.INFO)
 
+
 def annotate_with_mu(
     ht: hl.Table,
     mutation_ht: hl.Table,
@@ -74,23 +75,25 @@ def count_variants(
     :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to freq_expr.
     :return: Table including 'variant_count' and downsampling counts if requested.
     """
-    if freq_expr is None and (count_downsamplings or max_af or (count_singletons and singleton_expr is None)):
+    if freq_expr is None and (
+        count_downsamplings or max_af or (count_singletons and singleton_expr is None)
+    ):
         logger.warning(
             "freq_expr was not provided, using 'freq' as the frequency annotation."
         )
-        freq_expr = ht.freq         
+        freq_expr = ht.freq
     if freq_meta_expr is None and count_downsamplings:
         logger.warning(
             "freq_meta_expr was not provided, using 'freq_meta' as the frequency metadata annotation."
         )
-        freq_meta_expr = ht.freq_meta            
+        freq_meta_expr = ht.freq_meta
     if count_singletons and singleton_expr is None:
         logger.warning(
             "count_singletons is True and singleton_expr was not provided, using freq_expr[0].AC == 1 as the singleton expression."
         )
         # Slower, but more flexible (allows for downsampling agg's
-        singleton_expr = freq_expr[0].AC == 1  
-    
+        singleton_expr = freq_expr[0].AC == 1
+
     grouping = hl.struct(context=ht.context, ref=ht.ref, alt=ht.alt)
     if not omit_methylation:
         grouping = grouping.annotate(methylation_level=ht.methylation_level)
@@ -167,5 +170,5 @@ def downsampling_counts_expr(
             return hl.int((freq_expr[i].AC > 0) & (freq_expr[i].AF <= max_af))
         else:
             return hl.int(freq_expr[i].AC > 0)
-        
+
     return hl.agg.array_sum(hl.map(_get_criteria, sorted_indices))

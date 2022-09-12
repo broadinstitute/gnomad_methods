@@ -1,9 +1,9 @@
 # noqa: D100
-
+# cSpell: disable
 import functools
 import logging
 import operator
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import hail as hl
 from gnomad.resources.resource_utils import DataException
@@ -94,12 +94,6 @@ def filter_by_frequency(
             raise Exception("No downsampling data for subpopulations implemented")
     criteria.append(lambda f: f.meta.size() == size)
 
-    def combine_functions(func_list, x):
-        cond = func_list[0](x)
-        for c in func_list[1:]:
-            cond &= c(x)
-        return cond
-
     filt = lambda x: combine_functions(criteria, x)
     criteria = hl.any(filt, t.freq)
     return (
@@ -108,6 +102,28 @@ def filter_by_frequency(
         else t.filter(criteria, keep=keep)
     )
 
+def combine_functions(func_list: List[Callable[[bool], bool]], x: hl.expr.StructExpression, operator="and") -> bool:
+    """
+    Combines the criteria to evaluation annotations.
+
+    :param func_list: A list of criterias.
+    :param x: Annotations to be evaluated.
+    :param operator: Operator to combine the criteria, defaults to "and".
+    :raises ValueError: Raise Value Error when the operator neither "and" nor "or".
+    :return: A boolean result from the operation.
+    """
+    possible_operators = ("and", "or")
+    if operator not in possible_operators:
+        raise ValueError(
+            f'combine_functions only allows operators: {", ".join(possible_operators)}'
+        )
+    cond = func_list[0](x)
+    for c in func_list[1:]:
+        if operator == "and":
+            cond &= c(x)
+        elif operator == "or":
+            cond |= c(x)
+    return cond
 
 def filter_low_conf_regions(
     mt: Union[hl.MatrixTable, hl.Table],

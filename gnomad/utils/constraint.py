@@ -1,6 +1,6 @@
 # noqa: D100
 # cSpell: disable
-from typing import Union
+from typing import Union, Optional, Tuple, Any
 import logging
 
 import hail as hl
@@ -45,8 +45,8 @@ def annotate_with_mu(
 def count_variants(
     ht: hl.Table,
     count_singletons: bool = False,
-    count_downsamplings: Optional[List[str]] = (),
-    additional_grouping: Optional[List[str]] = (),
+    count_downsamplings: Optional[Tuple[str]] = (),
+    additional_grouping: Optional[Tuple[str]] = (),
     partition_hint: int = 100,
     omit_methylation: bool = False,
     return_type_only: bool = False,

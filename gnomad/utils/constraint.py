@@ -29,21 +29,23 @@ def annotate_mutation_type(
     :return: Table with mutation type annotations added.
     """
     # Determine the middle index of context by sampling the first 100 values of 'context'
-    context_lengths = list(filter(None,set(hl.len(t.context).take(100))))
+    context_lengths = list(filter(None, set(hl.len(t.context).take(100))))
     if len(context_lengths) > 1:
-        raise ValueError("More than one length was found among the first 100 'context' values. Length of 'context' should be consistent.")
+        raise ValueError(
+            "More than one length was found among the first 100 'context' values. Length of 'context' should be consistent."
+        )
     else:
         context_length = context_lengths[0]
         logger.info("Detected a length of %d for context length", context_length)
 
     if context_length == 3:
-            mid_index = 1
+        mid_index = 1
     elif context_length == 7:
-            mid_index = 3
+        mid_index = 3
     else:
         raise ValueError(
             f"The length of context should be either 3 or 7, instead of {context_length}."
-            )
+        )
 
     transition_expr = hl.is_transition(t.ref, t.alt)
     cpg_expr = (

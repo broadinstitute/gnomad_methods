@@ -188,7 +188,7 @@ def get_ploidy_cutoffs(
 
     # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
     if f_stat_cutoff is not None:
-        group_by_expr = hl.cond(ht.f_stat < f_stat_cutoff, "xx", "xy")
+        group_by_expr = hl.cond(ht.f_stat < f_stat_cutoff, "XX", "XY")
 
     # Get mean/stdev for chrX/Y ploidies based on 'group_by_expr'
     sex_stats = ht.aggregate(
@@ -197,32 +197,32 @@ def get_ploidy_cutoffs(
             hl.struct(x=hl.agg.stats(ht.chrX_ploidy), y=hl.agg.stats(ht.chrY_ploidy)),
         )
     )
-    if "xx" not in sex_stats:
+    if "XX" not in sex_stats:
         raise ValueError("No samples are grouped as XX!")
-    if "xy" not in sex_stats:
+    if "XX" not in sex_stats:
         raise ValueError("No samples are grouped as XY!")
-    logger.info("XX stats: %s", sex_stats["xx"])
-    logger.info("XY stats: %s", sex_stats["xy"])
+    logger.info("XX stats: %s", sex_stats["XX"])
+    logger.info("XY stats: %s", sex_stats["XY"])
 
     cutoffs = (
         (
-            sex_stats["xy"].x.mean + (normal_ploidy_cutoff * sex_stats["xy"].x.stdev),
+            sex_stats["XY"].x.mean + (normal_ploidy_cutoff * sex_stats["XY"].x.stdev),
             (
-                sex_stats["xx"].x.mean
-                - (normal_ploidy_cutoff * sex_stats["xx"].x.stdev),
-                sex_stats["xx"].x.mean
-                + (normal_ploidy_cutoff * sex_stats["xx"].x.stdev),
+                sex_stats["XX"].x.mean
+                - (normal_ploidy_cutoff * sex_stats["XX"].x.stdev),
+                sex_stats["XX"].x.mean
+                + (normal_ploidy_cutoff * sex_stats["XX"].x.stdev),
             ),
-            sex_stats["xx"].x.mean + (aneuploidy_cutoff * sex_stats["xx"].x.stdev),
+            sex_stats["XX"].x.mean + (aneuploidy_cutoff * sex_stats["XX"].x.stdev),
         ),
         (
             (
-                sex_stats["xx"].y.mean
-                + (normal_ploidy_cutoff * sex_stats["xx"].y.stdev),
-                sex_stats["xy"].y.mean
-                + (normal_ploidy_cutoff * sex_stats["xy"].y.stdev),
+                sex_stats["XX"].y.mean
+                + (normal_ploidy_cutoff * sex_stats["XX"].y.stdev),
+                sex_stats["XY"].y.mean
+                + (normal_ploidy_cutoff * sex_stats["XY"].y.stdev),
             ),
-            sex_stats["xy"].y.mean + (aneuploidy_cutoff * sex_stats["xy"].y.stdev),
+            sex_stats["XY"].y.mean + (aneuploidy_cutoff * sex_stats["XY"].y.stdev),
         ),
     )
 

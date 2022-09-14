@@ -13,6 +13,7 @@ from gnomad.sample_qc.sex import (
 from gnomad.utils.annotations import (
     bi_allelic_expr,
     bi_allelic_site_inbreeding_expr,
+    get_adj_expr,
 )
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
@@ -338,6 +339,7 @@ def annotate_sex(
     variants_filter_segdup: bool = True,
     variants_filter_decoy: bool = False,
     variants_snv_only: bool = False,
+    compute_x_frac_variants_hom_alt: bool = False,
     compute_fstat: bool = True,
     infer_karyotype: bool = True,
     use_gaussian_mixture_model: bool = False,
@@ -393,6 +395,8 @@ def annotate_sex(
         exist for GRCh38.
     :param variants_snv_only: Whether to filter to only single nucleotide variants for variants only ploidy estimation
         and fraction of homozygous alternate variants on chromosome X. Default is False.
+    :param compute_x_frac_variants_hom_alt: Whether to return an annotation for the fraction of homozygous alternate
+        variants on chromosome X. Default is False.
     :param compute_fstat: Whether to compute f-stat. Default is True.
     :param infer_karyotype: Whether to infer sex karyotypes. Default is True.
     :param use_gaussian_mixture_model: Whether to use gaussian mixture model to split samples into 'XX' and 'XY'
@@ -493,11 +497,18 @@ def annotate_sex(
         if variants_only_y_ploidy:
             ploidy_ht = ploidy_ht.drop("chrY_ploidy", "chrY_mean_dp")
 
-    if var_keep_contigs:
+    add_globals = hl.struct()
+    if compute_x_frac_variants_hom_alt or var_keep_contigs:
         logger.info(
-            "Filtering variants for variant only sex chromosome ploidy imputation."
+            "Filtering variants for variant only sex chromosome ploidy imputation and/or computation of the fraction "
+            "of homozygous alternate variants on chromosome X",
         )
-        filtered_mt = hl.filter_intervals(mt, var_keep_locus_intervals)
+        if variants_only_x_ploidy:
+            filtered_mt = hl.filter_intervals(mt, var_keep_locus_intervals)
+        else:
+            filtered_mt = hl.filter_intervals(
+                mt, var_keep_locus_intervals + x_locus_intervals
+            )
         if variants_filter_lcr or variants_filter_segdup or variants_filter_decoy:
             logger.info(
                 "Filtering out variants in: %s",
@@ -517,13 +528,22 @@ def annotate_sex(
                 hl.is_snp(filtered_mt.alleles[0], filtered_mt.alleles[1])
             )
 
+        add_globals = add_globals.annotate(
+            variants_filter_lcr=variants_filter_lcr,
+            variants_segdup=variants_filter_segdup,
+            variants_filter_decoy=variants_filter_decoy,
+            variants_snv_only=variants_snv_only,
+        )
+
+    if var_keep_contigs:
         logger.info(
             "Imputing sex chromosome ploidy using only variant depth information on the following contigs: %s",
             var_keep_contigs,
         )
+        var_filtered_mt = hl.filter_intervals(filtered_mt, var_keep_locus_intervals)
         if is_vds:
             var_ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
-                hl.vds.VariantDataset(mtds.reference_data, filtered_mt),
+                hl.vds.VariantDataset(mtds.reference_data, var_filtered_mt),
                 calling_intervals=included_intervals,
                 normalization_contig=normalization_contig,
                 use_variant_dataset=True,
@@ -539,7 +559,7 @@ def annotate_sex(
             )
         else:
             var_ploidy_ht = impute_sex_ploidy(
-                filtered_mt,
+                var_filtered_mt,
                 excluded_intervals,
                 included_intervals,
                 normalization_contig,
@@ -549,12 +569,6 @@ def annotate_sex(
                 {
                     f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
                 }
-            )
-            var_ploidy_ht = var_ploidy_ht.annotate_globals(
-                variants_filter_lcr=variants_filter_lcr,
-                variants_filter_segdup=variants_filter_segdup,
-                variants_filter_decoy=variants_filter_decoy,
-                variants_snv_only=variants_snv_only,
             )
 
         if ref_keep_contigs:
@@ -566,7 +580,32 @@ def annotate_sex(
         normalization_contig=normalization_contig,
         variants_only_x_ploidy=variants_only_x_ploidy,
         variants_only_y_ploidy=variants_only_y_ploidy,
+        **add_globals,
     )
+
+    if compute_x_frac_variants_hom_alt:
+        logger.info(
+            "Computing fraction of variants that are homozygous alternate on chromosome X"
+        )
+        filtered_mt = hl.filter_intervals(filtered_mt, x_locus_intervals)
+        filtered_mt = filtered_mt.filter_rows(
+            hl.is_defined(included_intervals[filtered_mt.locus])
+        )
+        filtered_mt = filtered_mt.annotate_entries(
+            adj=get_adj_expr(
+                filtered_mt.LGT, filtered_mt.GQ, filtered_mt.DP, filtered_mt.LAD
+            )
+        )
+        frac_hom_alt_ht = filtered_mt.select_cols(
+            chrx_frac_hom_alt=hl.agg.count_where(filtered_mt.LGT.is_hom_var())
+            / hl.agg.count_where(hl.is_defined(filtered_mt.LGT)),
+            chrx_frac_hom_alt_adj=hl.agg.filter(
+                filtered_mt.adj,
+                hl.agg.count_where(filtered_mt.LGT.is_hom_var())
+                / hl.agg.count_where(hl.is_defined(filtered_mt.LGT)),
+            ),
+        ).cols()
+        ploidy_ht = ploidy_ht.annotate(**frac_hom_alt_ht[ploidy_ht.key])
 
     if compute_fstat:
         logger.info("Filtering mt to biallelic SNPs in X contigs: %s", x_contigs)

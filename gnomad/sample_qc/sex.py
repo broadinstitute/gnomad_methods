@@ -149,9 +149,10 @@ def gaussian_mixture_model_karyotype_assignment(
 
 def get_ploidy_cutoffs(
     ht: hl.Table,
-    f_stat_cutoff: float,
+    f_stat_cutoff: float = None,
     normal_ploidy_cutoff: int = 5,
     aneuploidy_cutoff: int = 6,
+    group_by_expr: hl.expr.StringExpression = None,
 ) -> Tuple[Tuple[float, Tuple[float, float], float], Tuple[Tuple[float, float], float]]:
     """
     Get chromosome X and Y ploidy cutoffs for XY and XX samples.
@@ -175,10 +176,17 @@ def get_ploidy_cutoffs(
     :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
     :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
     """
-    # Group sex chromosome ploidy table by f_stat cutoff and get mean/stdev for chrX/Y ploidies
+    if f_stat_cutoff is None and group_by_expr is None:
+        raise ValueError("One of 'f_stat_cutoff' or 'group_by_expr' must be supplied!")
+
+    # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
+    if f_stat_cutoff is not None:
+        group_by_expr = hl.cond(ht.f_stat < f_stat_cutoff, "xx", "xy")
+
+    # Get mean/stdev for chrX/Y ploidies based on 'group_by_expr'
     sex_stats = ht.aggregate(
         hl.agg.group_by(
-            hl.cond(ht.f_stat < f_stat_cutoff, "xx", "xy"),
+            group_by_expr,
             hl.struct(x=hl.agg.stats(ht.chrX_ploidy), y=hl.agg.stats(ht.chrY_ploidy)),
         )
     )

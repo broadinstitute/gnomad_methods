@@ -5,8 +5,15 @@ import logging
 import operator
 
 import hail as hl
-from gnomad.sample_qc.sex import get_ploidy_cutoffs, get_sex_expr
-from gnomad.utils.annotations import bi_allelic_site_inbreeding_expr, bi_allelic_expr
+from gnomad.sample_qc.sex import (
+    get_ploidy_cutoffs,
+    get_sex_expr,
+    gaussian_mixture_model_karyotype_assignment,
+)
+from gnomad.utils.annotations import (
+    bi_allelic_site_inbreeding_expr,
+    bi_allelic_expr,
+)
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.sparse_mt import impute_sex_ploidy
@@ -324,6 +331,9 @@ def annotate_sex(
     aaf_threshold: float = 0.001,
     variants_only_x_ploidy: bool = False,
     variants_only_y_ploidy: bool = False,
+    compute_fstat: bool = True,
+    infer_karyotype: bool = True,
+    use_gaussian_mixture_model: bool = False,
 ) -> hl.Table:
     """
     Impute sample sex based on X-chromosome heterozygosity and sex chromosome ploidy.
@@ -335,30 +345,51 @@ def annotate_sex(
         - chrY_mean_dp (float32): Sample's mean coverage over chromosome Y.
         - chrX_ploidy (float32): Sample's imputed ploidy over chromosome X.
         - chrY_ploidy (float32): Sample's imputed ploidy over chromosome Y.
-        - f_stat (float64): Sample f-stat. Calculated using hl.impute_sex.
-        - n_called (int64): Number of variants with a genotype call. Calculated using hl.impute_sex.
-        - expected_homs (float64): Expected number of homozygotes. Calculated using hl.impute_sex.
-        - observed_homs (int64): Expected number of homozygotes. Calculated using hl.impute_sex.
-        - X_karyotype (str): Sample's chromosome X karyotype.
-        - Y_karyotype (str): Sample's chromosome Y karyotype.
-        - sex_karyotype (str): Sample's sex karyotype.
 
-    :param mtds: Input MatrixTable or VariantDataset
-    :param bool is_sparse: Whether input MatrixTable is in sparse data format
+        If `compute_fstat`:
+            - f_stat (float64): Sample f-stat. Calculated using hl.impute_sex.
+            - n_called (int64): Number of variants with a genotype call. Calculated using hl.impute_sex.
+            - expected_homs (float64): Expected number of homozygotes. Calculated using hl.impute_sex.
+            - observed_homs (int64): Expected number of homozygotes. Calculated using hl.impute_sex.
+
+        If `infer_karyotype`:
+            - X_karyotype (str): Sample's chromosome X karyotype.
+            - Y_karyotype (str): Sample's chromosome Y karyotype.
+            - sex_karyotype (str): Sample's sex karyotype.
+
+    .. note::
+
+            In order to infer sex karyotype (`infer_karyotype`=True), one of `compute_fstat` or
+            `use_gaussian_mixture_model` must be set to True.
+
+    :param mtds: Input MatrixTable or VariantDataset.
+    :param is_sparse: Whether input MatrixTable is in sparse data format.
     :param excluded_intervals: Optional table of intervals to exclude from the computation.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
-    :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex chromosome ploidies.
-    :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to imputing sex,
-                    and pulls alternate allele frequency from this Table.
+    :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex
+        chromosome ploidies.
+    :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to
+        imputing sex, and pulls alternate allele frequency from this Table.
     :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
-    :param gt_expr: Name of entry field storing the genotype. Default: 'GT'
-    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
-    :param float aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
+    :param gt_expr: Name of entry field storing the genotype. Default is 'GT'.
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
+        are above cutoff.
+    :param aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
     :param variants_only_x_ploidy: Whether to use depth of only variant data for the x ploidy estimation.
     :param variants_only_y_ploidy: Whether to use depth of only variant data for the y ploidy estimation.
+    :param compute_fstat: Whether to compute f-stat. Default is True.
+    :param infer_karyotype: Whether to infer sex karyotypes. Default is True.
+    :param use_gaussian_mixture_model: Whether to use gaussian mixture model to split samples into 'XX' and 'XY'
+        instead of f-stat.
     :return: Table of samples and their imputed sex karyotypes.
     """
     logger.info("Imputing sex chromosome ploidies...")
+
+    if infer_karyotype and not (compute_fstat or use_gaussian_mixture_model):
+        raise ValueError(
+            "In order to infer sex karyotype (infer_karyotype=True), one of 'compute_fstat' or "
+            "'use_gaussian_mixture_model' must be set to True!"
+        )
 
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
@@ -458,68 +489,57 @@ def annotate_sex(
             raise NotImplementedError(
                 "Imputing sex ploidy does not exist yet for dense data."
             )
-
-    x_contigs = get_reference_genome(mt.locus).x_contigs
-    logger.info("Filtering mt to biallelic SNPs in X contigs: %s", x_contigs)
-    if "was_split" in list(mt.row):
-        mt = mt.filter_rows((~mt.was_split) & hl.is_snp(mt.alleles[0], mt.alleles[1]))
-    else:
-        mt = mt.filter_rows(
-            (hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1])
-        )
-
-    build = get_reference_genome(mt.locus).name
-    mt = hl.filter_intervals(
-        mt,
-        [
-            hl.parse_locus_interval(contig, reference_genome=build)
-            for contig in x_contigs
-        ],
-        keep=True,
-    )
-
-    if sites_ht is not None:
-        if aaf_expr == None:
-            logger.warning(
-                "sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele frequency is 'AF'."
-            )
-            aaf_expr = "AF"
-        logger.info("Filtering to provided sites")
-        mt = mt.annotate_rows(**sites_ht[mt.row_key])
-        mt = mt.filter_rows(hl.is_defined(mt[aaf_expr]))
-
-    logger.info("Calculating inbreeding coefficient on chrX")
-    sex_ht = hl.impute_sex(
-        mt[gt_expr],
-        aaf_threshold=aaf_threshold,
-        male_threshold=f_stat_cutoff,
-        female_threshold=f_stat_cutoff,
-        aaf=aaf_expr,
-    )
-
-    logger.info("Annotating sex ht with sex chromosome ploidies")
-    sex_ht = sex_ht.annotate(**ploidy_ht[sex_ht.key])
-
-    logger.info("Inferring sex karyotypes")
-    x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(sex_ht, f_stat_cutoff)
-    sex_ht = sex_ht.annotate_globals(
-        x_ploidy_cutoffs=hl.struct(
-            upper_cutoff_X=x_ploidy_cutoffs[0],
-            lower_cutoff_XX=x_ploidy_cutoffs[1][0],
-            upper_cutoff_XX=x_ploidy_cutoffs[1][1],
-            lower_cutoff_XXX=x_ploidy_cutoffs[2],
-        ),
-        y_ploidy_cutoffs=hl.struct(
-            lower_cutoff_Y=y_ploidy_cutoffs[0][0],
-            upper_cutoff_Y=y_ploidy_cutoffs[0][1],
-            lower_cutoff_YY=y_ploidy_cutoffs[1],
-        ),
-        f_stat_cutoff=f_stat_cutoff,
+    ploidy_ht = ploidy_ht.annotate_globals(
         variants_only_x_ploidy=variants_only_x_ploidy,
         variants_only_y_ploidy=variants_only_y_ploidy,
     )
-    return sex_ht.annotate(
-        **get_sex_expr(
-            sex_ht.chrX_ploidy, sex_ht.chrY_ploidy, x_ploidy_cutoffs, y_ploidy_cutoffs
+
+    if compute_fstat:
+        rg = get_reference_genome(mt.locus)
+        x_contigs = rg.x_contigs
+        x_locus_intervals = [
+            hl.parse_locus_interval(contig, reference_genome=rg.name)
+            for contig in x_contigs
+        ]
+        logger.info("Filtering mt to biallelic SNPs in X contigs: %s", x_contigs)
+        if "was_split" in list(mt.row):
+            mt = mt.filter_rows(
+                (~mt.was_split) & hl.is_snp(mt.alleles[0], mt.alleles[1])
+            )
+        else:
+            mt = mt.filter_rows(
+                (hl.len(mt.alleles) == 2) & hl.is_snp(mt.alleles[0], mt.alleles[1])
+            )
+
+        mt = hl.filter_intervals(mt, x_locus_intervals)
+        if sites_ht is not None:
+            if aaf_expr == None:
+                logger.warning(
+                    "sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele frequency is 'AF'."
+                )
+                aaf_expr = "AF"
+            logger.info("Filtering to provided sites")
+            mt = mt.annotate_rows(**sites_ht[mt.row_key])
+            mt = mt.filter_rows(hl.is_defined(mt[aaf_expr]))
+
+        logger.info("Calculating inbreeding coefficient on chrX")
+        sex_ht = hl.impute_sex(
+            mt[gt_expr],
+            aaf_threshold=aaf_threshold,
+            male_threshold=f_stat_cutoff,
+            female_threshold=f_stat_cutoff,
+            aaf=aaf_expr,
         )
-    )
+
+        logger.info("Annotating sex chromosome ploidy HT with impute_sex HT")
+        ploidy_ht = ploidy_ht.annotate(**sex_ht[ploidy_ht.key])
+        ploidy_ht = ploidy_ht.annotate(f_stat_cutoff=f_stat_cutoff)
+
+    if infer_karyotype:
+        karyotype_ht = infer_sex_karyotype(
+            ploidy_ht, f_stat_cutoff, use_gaussian_mixture_model
+        )
+        ploidy_ht = ploidy_ht.annotate(**karyotype_ht[ploidy_ht.key])
+        ploidy_ht = ploidy_ht.annotate_globals(**karyotype_ht.index_globals())
+
+    return ploidy_ht

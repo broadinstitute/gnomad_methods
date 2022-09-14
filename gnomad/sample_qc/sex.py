@@ -177,8 +177,10 @@ def get_ploidy_cutoffs(
         determine means and standard deviations for these categories and are not used in the final karyotype annotation.
 
     :param ht: Table with f_stat and sex chromosome ploidies
-    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
-    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes.
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
+        are above cutoff.
+    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
+        for XX, XY karyotypes.
     :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
     :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of and `f_stat_cutoff`.
     :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
@@ -244,8 +246,10 @@ def get_sex_expr(
 
     :param chr_x_ploidy: Chromosome X ploidy (or relative ploidy)
     :param chr_y_ploidy: Chromosome Y ploidy (or relative ploidy)
-    :param x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
-    :param y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for single Y), lower cutoff for double Y)
+    :param x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for
+        double X, upper cutoff for double X), lower cutoff for triple X)
+    :param y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for
+        single Y), lower cutoff for double Y)
     :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype
     """
     sex_expr = hl.struct(

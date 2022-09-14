@@ -395,7 +395,8 @@ def annotate_sex(
     if is_vds:
         if excluded_intervals is not None:
             raise NotImplementedError(
-                "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex chromosome ploidy on a VDS!"
+                "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex "
+                "chromosome ploidy on a VDS!"
             )
         # Begin by creating a ploidy estimate HT using the method defined by 'variants_only_x_ploidy'
         ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
@@ -473,8 +474,8 @@ def annotate_sex(
                     "chrY_mean_dp",
                     f"{normalization_contig}_mean_dp",
                 )
-                # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
-                # that this is the variant dataset only mean DP (this will have already been added if
+                # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to
+                # indicate that this is the variant dataset only mean DP (this will have already been added if
                 # 'variants_only_x_ploidy' was also True).
                 if variants_only_y_ploidy:
                     ploidy_ht = ploidy_ht.rename(
@@ -489,6 +490,7 @@ def annotate_sex(
             raise NotImplementedError(
                 "Imputing sex ploidy does not exist yet for dense data."
             )
+
     ploidy_ht = ploidy_ht.annotate_globals(
         variants_only_x_ploidy=variants_only_x_ploidy,
         variants_only_y_ploidy=variants_only_y_ploidy,
@@ -513,9 +515,10 @@ def annotate_sex(
 
         mt = hl.filter_intervals(mt, x_locus_intervals)
         if sites_ht is not None:
-            if aaf_expr == None:
+            if aaf_expr is None:
                 logger.warning(
-                    "sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele frequency is 'AF'."
+                    "sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele "
+                    "frequency is 'AF'."
                 )
                 aaf_expr = "AF"
             logger.info("Filtering to provided sites")

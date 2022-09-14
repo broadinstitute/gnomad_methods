@@ -79,9 +79,9 @@ def gaussian_mixture_model_karyotype_assignment(
     an X karyotype and a Y karyotype which are then combined into the sex karyotype.
 
     The following annotations are added:
-        - `karyotype_output_prefix`_x_karyotype
-        - `karyotype_output_prefix`_y_karyotype
-        - `karyotype_output_prefix`_karyotype = `karyotype_output_prefix`_x_karyotype + `karyotype_output_prefix`_y_karyotype
+        - {karyotype_output_prefix}_x_karyotype
+        - {karyotype_output_prefix_y_karyotype
+        - {karyotype_output_prefix}_karyotype = {karyotype_output_prefix}_x_karyotype + {karyotype_output_prefix}_y_karyotype
 
     .. note::
 

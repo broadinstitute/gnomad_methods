@@ -536,7 +536,7 @@ def annotate_sex(
 
         logger.info("Annotating sex chromosome ploidy HT with impute_sex HT")
         ploidy_ht = ploidy_ht.annotate(**sex_ht[ploidy_ht.key])
-        ploidy_ht = ploidy_ht.annotate(f_stat_cutoff=f_stat_cutoff)
+        ploidy_ht = ploidy_ht.annotate_globals(f_stat_cutoff=f_stat_cutoff)
 
     if infer_karyotype:
         karyotype_ht = infer_sex_karyotype(

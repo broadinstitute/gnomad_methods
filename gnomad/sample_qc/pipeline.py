@@ -398,111 +398,122 @@ def annotate_sex(
                 "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex "
                 "chromosome ploidy on a VDS!"
             )
-        # Begin by creating a ploidy estimate HT using the method defined by 'variants_only_x_ploidy'
-        ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
-            mtds,
-            calling_intervals=included_intervals,
-            normalization_contig=normalization_contig,
-            use_variant_dataset=variants_only_x_ploidy,
-        )
-        ploidy_ht = ploidy_ht.rename(
-            {
-                "x_ploidy": "chrX_ploidy",
-                "y_ploidy": "chrY_ploidy",
-                "x_mean_dp": "chrX_mean_dp",
-                "y_mean_dp": "chrY_mean_dp",
-                "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
-                if variants_only_x_ploidy
-                else f"{normalization_contig}_mean_dp",
-            }
-        )
-        # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation using
-        # the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
-        if variants_only_y_ploidy != variants_only_x_ploidy:
-            y_ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
-                mtds,
-                calling_intervals=included_intervals,
-                normalization_contig=normalization_contig,
-                use_variant_dataset=variants_only_y_ploidy,
-            )
-            y_ploidy_idx = y_ploidy_ht[ploidy_ht.key]
-            ploidy_ht = ploidy_ht.annotate(
-                chrY_ploidy=y_ploidy_idx.y_ploidy,
-                chrY_mean_dp=y_ploidy_idx.y_mean_dp,
-            )
-
-            # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to indicate
-            # that this is the variant dataset only mean DP (this will have already been added if
-            # 'variants_only_x_ploidy' was also True).
-            if variants_only_y_ploidy:
-                ploidy_ht = ploidy_ht.annotate(
-                    **{
-                        f"var_data_{normalization_contig}_mean_dp": y_ploidy_idx.autosomal_mean_dp
-                    }
-                )
-
         mt = mtds.variant_data
     else:
-        mt = mtds
-        if is_sparse:
-            ploidy_ht = impute_sex_ploidy(
-                mt,
-                excluded_intervals,
-                included_intervals,
-                normalization_contig,
-                use_only_variants=variants_only_x_ploidy,
-            )
-            ploidy_ht = ploidy_ht.rename(
-                {
-                    "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
-                    if variants_only_x_ploidy
-                    else f"{normalization_contig}_mean_dp",
-                }
-            )
-            # If 'variants_only_y_ploidy' is different from 'variants_only_x_ploidy' then re-run the ploidy estimation
-            # using the method defined by 'variants_only_y_ploidy' and re-annotate with the modified ploidy estimates.
-            if variants_only_y_ploidy != variants_only_x_ploidy:
-                y_ploidy_ht = impute_sex_ploidy(
-                    mt,
-                    excluded_intervals,
-                    included_intervals,
-                    normalization_contig,
-                    use_only_variants=variants_only_y_ploidy,
-                )
-                y_ploidy_ht.select(
-                    "chrY_ploidy",
-                    "chrY_mean_dp",
-                    f"{normalization_contig}_mean_dp",
-                )
-                # If the `variants_only_y_ploidy' is True modify the name of the normalization contig mean DP to
-                # indicate that this is the variant dataset only mean DP (this will have already been added if
-                # 'variants_only_x_ploidy' was also True).
-                if variants_only_y_ploidy:
-                    ploidy_ht = ploidy_ht.rename(
-                        {
-                            f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
-                        }
-                    )
-                # Re-annotate the ploidy HT with modified Y ploidy annotations
-                ploidy_ht = ploidy_ht.annotate(**y_ploidy_ht[ploidy_ht.key])
-
-        else:
+        if not is_sparse:
             raise NotImplementedError(
                 "Imputing sex ploidy does not exist yet for dense data."
             )
+        mt = mtds
+
+    # Determine the contigs that are needed for variant only and reference block only sex ploidy imputation
+    rg = get_reference_genome(mt.locus)
+    x_contigs = set(rg.x_contigs)
+    y_contigs = set(rg.y_contigs)
+    if variants_only_x_ploidy:
+        var_keep_contigs = x_contigs | {normalization_contig}
+        ref_keep_contigs = set()
+    else:
+        ref_keep_contigs = x_contigs | {normalization_contig}
+        var_keep_contigs = set()
+    if variants_only_y_ploidy:
+        var_keep_contigs = {normalization_contig} | var_keep_contigs | y_contigs
+    else:
+        ref_keep_contigs = {normalization_contig} | ref_keep_contigs | y_contigs
+
+    ref_keep_locus_intervals = [
+        hl.parse_locus_interval(contig, reference_genome=rg.name)
+        for contig in ref_keep_contigs
+    ]
+    var_keep_locus_intervals = [
+        hl.parse_locus_interval(contig, reference_genome=rg.name)
+        for contig in var_keep_contigs
+    ]
+    x_locus_intervals = [
+        hl.parse_locus_interval(contig, reference_genome=rg.name)
+        for contig in x_contigs
+    ]
+
+    if ref_keep_contigs:
+        logger.info(
+            "Imputing sex chromosome ploidy using only reference block depth information on the following contigs: %s",
+            ref_keep_contigs,
+        )
+        if is_vds:
+            ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+                hl.vds.filter_chromosomes(mtds, keep=ref_keep_contigs),
+                calling_intervals=included_intervals,
+                normalization_contig=normalization_contig,
+                use_variant_dataset=False,
+            )
+            ploidy_ht = ploidy_ht.rename(
+                {
+                    "x_ploidy": "chrX_ploidy",
+                    "y_ploidy": "chrY_ploidy",
+                    "x_mean_dp": "chrX_mean_dp",
+                    "y_mean_dp": "chrY_mean_dp",
+                }
+            )
+        else:
+            ploidy_ht = impute_sex_ploidy(
+                hl.filter_intervals(mt, ref_keep_locus_intervals),
+                excluded_intervals,
+                included_intervals,
+                normalization_contig,
+                use_only_variants=False,
+            )
+        if variants_only_x_ploidy:
+            ploidy_ht = ploidy_ht.drop("chrX_ploidy", "chrX_mean_dp")
+        if variants_only_y_ploidy:
+            ploidy_ht = ploidy_ht.drop("chrY_ploidy", "chrY_mean_dp")
+
+    if var_keep_contigs:
+        logger.info(
+            "Imputing sex chromosome ploidy using only variant depth information on the following contigs: %s",
+            var_keep_contigs,
+        )
+        if is_vds:
+            var_ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+                hl.vds.filter_intervals(vds, var_keep_locus_intervals),
+                calling_intervals=included_intervals,
+                normalization_contig=normalization_contig,
+                use_variant_dataset=True,
+            )
+            var_ploidy_ht = var_ploidy_ht.rename(
+                {
+                    "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp",
+                    "x_ploidy": "chrX_ploidy",
+                    "y_ploidy": "chrY_ploidy",
+                    "x_mean_dp": "chrX_mean_dp",
+                    "y_mean_dp": "chrY_mean_dp",
+                }
+            )
+        else:
+            var_ploidy_ht = impute_sex_ploidy(
+                hl.filter_intervals(mt, var_keep_locus_intervals),
+                excluded_intervals,
+                included_intervals,
+                normalization_contig,
+                use_only_variants=True,
+            )
+            var_ploidy_ht = var_ploidy_ht.rename(
+                {
+                    f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                }
+            )
+
+        if ref_keep_contigs:
+            ploidy_ht = var_ploidy_ht.annotate(**ploidy_ht[var_ploidy_ht.key])
+        else:
+            ploidy_ht = var_ploidy_ht
 
     ploidy_ht = ploidy_ht.annotate_globals(
+        normalization_contig=normalization_contig,
         variants_only_x_ploidy=variants_only_x_ploidy,
         variants_only_y_ploidy=variants_only_y_ploidy,
     )
 
     if compute_fstat:
-        rg = get_reference_genome(mt.locus)
-        x_contigs = rg.x_contigs
-        x_locus_intervals = [
-            hl.parse_locus_interval(contig, reference_genome=rg.name)
-            for contig in x_contigs
-        ]
         logger.info("Filtering mt to biallelic SNPs in X contigs: %s", x_contigs)
         if "was_split" in list(mt.row):
             mt = mt.filter_rows(

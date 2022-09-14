@@ -159,7 +159,8 @@ def get_ploidy_cutoffs(
 
     .. note::
 
-        This assumes the input hail Table has the fields f_stat, chrX_ploidy, and chrY_ploidy.
+        This assumes the input hail Table has the fields chrX_ploidy, and chrY_ploidy, and f_stat if `f_stat_cutoff` is
+        set.
 
     Return a tuple of sex chromosome ploidy cutoffs: ((x_ploidy_cutoffs), (y_ploidy_cutoffs)).
     x_ploidy_cutoffs: (upper cutoff for single X, (lower cutoff for double X, upper cutoff for double X), lower cutoff for triple X)
@@ -168,12 +169,18 @@ def get_ploidy_cutoffs(
     Uses the normal_ploidy_cutoff parameter to determine the ploidy cutoffs for XX and XY karyotypes.
     Uses the aneuploidy_cutoff parameter to determine the cutoffs for sex aneuploidies.
 
-    Note that f-stat is used only to split the samples into roughly 'XX' and 'XY' categories and is not used in the final karyotype annotation.
+    .. note::
+
+        `f_stat_cutoff` or `group_by_expr` must be supplied. If `f_stat_cutoff` is supplied then f-stat is used to
+        split the samples into roughly 'XX' and 'XY'. If `group_by_expr` is supplied instead, then it must include an
+        annotation grouping samples by 'XX' and 'XY'. These are both only used to divide samples into XX and XY to
+        determine means and standard deviations for these categories and are not used in the final karyotype annotation.
 
     :param ht: Table with f_stat and sex chromosome ploidies
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY are above cutoff.
     :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for XX, XY karyotypes.
     :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
+    :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of and `f_stat_cutoff`.
     :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
     """
     if f_stat_cutoff is None and group_by_expr is None:

@@ -44,9 +44,9 @@ def filter_rows_for_qc(
     :param min_callrate: Minimum site call rate to keep. Not applied if set to ``None``.
     :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
     :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
-    :paramapply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
-    :parambi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
-    :paramsnv_only: Whether to only keep SNVs or include other variant types
+    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
+    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
+    :param snv_only: Whether to only keep SNVs or include other variant types
     :return: annotated and filtered table
     """
     annotation_expr = {}

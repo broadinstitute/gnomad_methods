@@ -1,9 +1,12 @@
 # noqa: D100
 
 import logging
-from typing import Tuple
+from typing import Tuple, Union
 
 import hail as hl
+import numpy as np
+import pandas as pd
+from sklearn.mixture import GaussianMixture
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

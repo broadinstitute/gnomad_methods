@@ -661,11 +661,11 @@ def impute_sex_ploidy(
         if use_only_variants:
             if included_calling_intervals is not None:
                 chr_mt = chr_mt.filter_rows(
-                    hl.is_defined(included_calling_intervals[chr_mt.row_key])
+                    hl.is_defined(included_calling_intervals[chr_mt.locus])
                 )
             if excluded_calling_intervals is not None:
                 chr_mt = chr_mt.filter_rows(
-                    hl.is_missing(excluded_calling_intervals[chr_mt.row_key])
+                    hl.is_missing(excluded_calling_intervals[chr_mt.locus])
                 )
             return chr_mt.select_cols(
                 **{

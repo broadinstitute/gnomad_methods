@@ -331,6 +331,9 @@ def annotate_sex(
     aaf_threshold: float = 0.001,
     variants_only_x_ploidy: bool = False,
     variants_only_y_ploidy: bool = False,
+    variants_filter_lcr: bool = True,
+    variants_filter_segdup: bool = True,
+    variants_snv_only: bool = False,
     compute_fstat: bool = True,
     infer_karyotype: bool = True,
     use_gaussian_mixture_model: bool = False,
@@ -377,6 +380,12 @@ def annotate_sex(
     :param aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
     :param variants_only_x_ploidy: Whether to use depth of only variant data for the x ploidy estimation.
     :param variants_only_y_ploidy: Whether to use depth of only variant data for the y ploidy estimation.
+    :param variants_filter_lcr: Whether to filter out variants in LCR regions for variants only ploidy estimation and
+        fraction of homozygous alternate variants on chromosome X. Default is True.
+    :param variants_filter_segdup: Whether to filter out variants in segdup regions for variants only ploidy estimation
+        and fraction of homozygous alternate variants on chromosome X. Default is True.
+    :param variants_snv_only: Whether to filter to only single nucleotide variants for variants only ploidy estimation
+        and fraction of homozygous alternate variants on chromosome X. Default is False.
     :param compute_fstat: Whether to compute f-stat. Default is True.
     :param infer_karyotype: Whether to infer sex karyotypes. Default is True.
     :param use_gaussian_mixture_model: Whether to use gaussian mixture model to split samples into 'XX' and 'XY'
@@ -469,12 +478,35 @@ def annotate_sex(
 
     if var_keep_contigs:
         logger.info(
+            "Filtering variants for variant only sex chromosome ploidy imputation."
+        )
+        filtered_mt = hl.filter_intervals(mt, var_keep_locus_intervals)
+        if variants_filter_lcr or variants_filter_segdup:
+            logger.info(
+                "Filtering out variants in %s",
+                f"segmental duplications {'and low confidence regions' if variants_filter_lcr else ''}"
+                if variants_filter_segdup
+                else " low confidence regions ",
+            )
+            filtered_mt = filter_low_conf_regions(
+                filtered_mt,
+                filter_lcr=variants_filter_lcr,
+                filter_decoy=False,
+                filter_segdup=variants_filter_segdup,
+            )
+        if variants_snv_only:
+            logger.info("Filtering to SNVs")
+            filtered_mt = filtered_mt.filter_rows(
+                hl.is_snp(filtered_mt.alleles[0], filtered_mt.alleles[1])
+            )
+
+        logger.info(
             "Imputing sex chromosome ploidy using only variant depth information on the following contigs: %s",
             var_keep_contigs,
         )
         if is_vds:
             var_ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
-                hl.vds.filter_intervals(vds, var_keep_locus_intervals),
+                hl.vds.VariantDataset(mtds.reference_data, filtered_mt),
                 calling_intervals=included_intervals,
                 normalization_contig=normalization_contig,
                 use_variant_dataset=True,
@@ -490,7 +522,7 @@ def annotate_sex(
             )
         else:
             var_ploidy_ht = impute_sex_ploidy(
-                hl.filter_intervals(mt, var_keep_locus_intervals),
+                filtered_mt,
                 excluded_intervals,
                 included_intervals,
                 normalization_contig,
@@ -500,6 +532,11 @@ def annotate_sex(
                 {
                     f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
                 }
+            )
+            var_ploidy_ht = var_ploidy_ht.annotate_globals(
+                variants_filter_lcr=variants_filter_lcr,
+                variants_segdup=variants_filter_segdup,
+                variants_snv_only=variants_snv_only,
             )
 
         if ref_keep_contigs:

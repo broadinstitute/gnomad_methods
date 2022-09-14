@@ -197,6 +197,10 @@ def get_ploidy_cutoffs(
             hl.struct(x=hl.agg.stats(ht.chrX_ploidy), y=hl.agg.stats(ht.chrY_ploidy)),
         )
     )
+    if "xx" not in sex_stats:
+        raise ValueError("No samples are grouped as XX!")
+    if "xy" not in sex_stats:
+        raise ValueError("No samples are grouped as XY!")
     logger.info("XX stats: %s", sex_stats["xx"])
     logger.info("XY stats: %s", sex_stats["xy"])
 

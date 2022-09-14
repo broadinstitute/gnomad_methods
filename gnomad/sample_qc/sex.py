@@ -199,7 +199,7 @@ def get_ploidy_cutoffs(
 
     # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
     if f_stat_cutoff is not None:
-        group_by_expr = hl.cond(ht.f_stat < f_stat_cutoff, "XX", "XY")
+        group_by_expr = hl.if_else(ht.f_stat < f_stat_cutoff, "XX", "XY")
 
     # Get mean/stdev for chrX/Y ploidies based on 'group_by_expr'
     sex_stats = ht.aggregate(

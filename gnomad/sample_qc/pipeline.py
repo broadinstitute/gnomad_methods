@@ -238,6 +238,79 @@ def get_qc_mt(
     return qc_mt.annotate_cols(sample_callrate=hl.agg.fraction(hl.is_defined(qc_mt.GT)))
 
 
+def infer_sex_karyotype(
+    ploidy_ht: hl.Table,
+    f_stat_cutoff: float = 0.5,
+    use_gaussian_mixture_model: bool = False,
+    normal_ploidy_cutoff: int = 5,
+    aneuploidy_cutoff: int = 6,
+) -> hl.Table:
+    """
+    Create a Table with X_karyotype, Y_karyotype, and sex_karyotype.
+
+    This function uses `get_ploidy_cutoffs` to determine X and Y ploidy cutoffs and then `get_sex_expr` to get
+    karyotype annotations from those cutoffs.
+
+    By default `f_stat_cutoff` will be used to roughly split samples into 'XX' and 'XY' for use in `get_ploidy_cutoffs`.
+    If `use_gaussian_mixture_model` is True a gaussian mixture model will be used to split samples into 'XX' and 'XY'
+    instead of f-stat.
+
+    :param ploidy_ht: Input Table with chromosome X and chromosome Y ploidy values and optionally f-stat.
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
+        are above cutoff. Default is 0.5
+    :param use_gaussian_mixture_model: Use gaussian mixture model to split samples into 'XX' and 'XY' instead of f-stat.
+    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
+        for XX, XY karyotypes.
+    :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
+    :return: Table of samples imputed sex karyotype.
+    """
+    logger.info("Inferring sex karyotype")
+    if use_gaussian_mixture_model:
+        gmm_sex_ht = gaussian_mixture_model_karyotype_assignment(ploidy_ht)
+        x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
+            gmm_sex_ht,
+            group_by_expr=gmm_sex_ht.gmm_karyotype,
+            normal_ploidy_cutoff=normal_ploidy_cutoff,
+            aneuploidy_cutoff=aneuploidy_cutoff,
+        )
+    else:
+        x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
+            ploidy_ht,
+            f_stat_cutoff=f_stat_cutoff,
+            normal_ploidy_cutoff=normal_ploidy_cutoff,
+            aneuploidy_cutoff=aneuploidy_cutoff,
+        )
+
+    karyotype_ht = ploidy_ht.select(
+        **get_sex_expr(
+            ploidy_ht.chrX_ploidy,
+            ploidy_ht.chrY_ploidy,
+            x_ploidy_cutoffs,
+            y_ploidy_cutoffs,
+        )
+    )
+    karyotype_ht = karyotype_ht.annotate_globals(
+        x_ploidy_cutoffs=hl.struct(
+            upper_cutoff_X=x_ploidy_cutoffs[0],
+            lower_cutoff_XX=x_ploidy_cutoffs[1][0],
+            upper_cutoff_XX=x_ploidy_cutoffs[1][1],
+            lower_cutoff_XXX=x_ploidy_cutoffs[2],
+        ),
+        y_ploidy_cutoffs=hl.struct(
+            lower_cutoff_Y=y_ploidy_cutoffs[0][0],
+            upper_cutoff_Y=y_ploidy_cutoffs[0][1],
+            lower_cutoff_YY=y_ploidy_cutoffs[1],
+        ),
+        use_gaussian_mixture_model=use_gaussian_mixture_model,
+        normal_ploidy_cutoff=normal_ploidy_cutoff,
+        aneuploidy_cutoff=aneuploidy_cutoff,
+    )
+    if not use_gaussian_mixture_model:
+        karyotype_ht = karyotype_ht.annotate_globals(f_stat_cutoff=f_stat_cutoff)
+
+    return karyotype_ht
+
+
 def annotate_sex(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     is_sparse: bool = True,

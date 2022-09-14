@@ -63,6 +63,87 @@ def adjust_sex_ploidy(
     )
 
 
+def gaussian_mixture_model_karyotype_assignment(
+    sex_ht: hl.Table,
+    chrx_ploidy_expr: Union[hl.expr.NumericExpression, str] = "chrX_ploidy",
+    chry_ploidy_expr: Union[hl.expr.NumericExpression, str] = "chrY_ploidy",
+    karyotype_output_prefix: str = "gmm",
+) -> hl.Table:
+    """
+    Annotate the input Table with an X karyotype, Y karyotype, and sex karyotype based on a gaussian mixture model.
+
+    This function uses two component gaussian mixture models on `chrx_ploidy_expr` and `chry_ploidy_expr` to assign
+    an X karyotype and a Y karyotype which are then combined into the sex karyotype.
+
+    The following annotations are added:
+        - `karyotype_output_prefix`_x_karyotype
+        - `karyotype_output_prefix`_y_karyotype
+        - `karyotype_output_prefix`_karyotype = `karyotype_output_prefix`_x_karyotype + `karyotype_output_prefix`_y_karyotype
+
+    .. note::
+
+        This uses a two component gaussian mixture model so all samples are given one of the following sex karyotypes:
+        X, XX, XY, YY. It's recommended that this annotation is only used to split samples into XX and
+        XY groups that can then be used in `get_ploidy_cutoffs` to determine XX and XY ploidy means and stdevs.
+
+    :param sex_ht: Input Table with chromosome X and chromosome Y ploidy values.
+    :param chrx_ploidy_expr: Expression pointing to chromosome X ploidy in `sex_ht`. Default is 'chrX_ploidy'.
+    :param chry_ploidy_expr: Expression pointing to chromosome Y ploidy in `sex_ht`. Default is 'chrY_ploidy'.
+    :param karyotype_output_prefix: String to use as the prefix for the gaussian mixture model karyotype output.
+    :return: Input Table with gaussian mixture model karyotype annotations added.
+    """
+    if isinstance(chrx_ploidy_expr, str):
+        chrx_ploidy_expr = sex_ht[chrx_ploidy_expr]
+    if isinstance(chry_ploidy_expr, str):
+        chry_ploidy_expr = sex_ht[chry_ploidy_expr]
+
+    sex_pd = sex_ht.select(
+        chrX_ploidy=chrx_ploidy_expr,
+        chrY_ploidy=chry_ploidy_expr,
+    ).to_pandas()
+
+    def _run_gaussian_mixture_model(feature, karyotypes, karyotype_name):
+        df = sex_pd[["s", feature]].set_index("s")
+        gmm = GaussianMixture(n_components=2)
+        gmm.fit(df)
+        probs = gmm.predict_proba(df)
+        cluster_to_karyotype = dict(
+            zip(np.argsort([m[0] for m in gmm.means_]), karyotypes)
+        )
+
+        df[f"{feature}_cluster"] = gmm.predict(df)
+        df[
+            f"{feature if karyotype_name is None else karyotype_name}_karyotype"
+        ] = df.apply(
+            lambda row: cluster_to_karyotype[row[f"{feature}_cluster"]], axis=1
+        )
+        for i in cluster_to_karyotype:
+            df[f"{feature}_prob_{cluster_to_karyotype[i]}"] = probs[:, i]
+
+        return df
+
+    x_df = _run_gaussian_mixture_model(
+        "chrX_ploidy", ["X", "XX"], f"{karyotype_output_prefix}_x"
+    )
+    y_df = _run_gaussian_mixture_model(
+        "chrY_ploidy", ["", "Y"], f"{karyotype_output_prefix}_y"
+    )
+    xy_df = pd.concat(
+        [
+            x_df[f"{karyotype_output_prefix}_x_karyotype"],
+            y_df[f"{karyotype_output_prefix}_y_karyotype"],
+        ],
+        axis=1,
+    )
+    xy_df[f"{karyotype_output_prefix}_karyotype"] = (
+        xy_df[f"{karyotype_output_prefix}_x_karyotype"]
+        + xy_df[f"{karyotype_output_prefix}_y_karyotype"]
+    )
+    xy_ht = hl.Table.from_pandas(xy_df.reset_index(), key=["s"])
+
+    return sex_ht.annotate(**xy_ht[sex_ht.key])
+
+
 def get_ploidy_cutoffs(
     ht: hl.Table,
     f_stat_cutoff: float,

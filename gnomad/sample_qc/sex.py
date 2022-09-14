@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import hail as hl
 import numpy as np
@@ -105,19 +105,28 @@ def gaussian_mixture_model_karyotype_assignment(
         chrY_ploidy=chry_ploidy_expr,
     ).to_pandas()
 
-    def _run_gaussian_mixture_model(feature, karyotypes, karyotype_name):
+    def _run_gaussian_mixture_model(
+        feature: str, karyotypes: List[str], karyotype_name: str
+    ) -> pd.DataFrame:
+        """
+        Run gaussian mixture model on ploidy estimates and infer karyotype.
+
+        :param feature: Column name of ploidy feature to use in gaussian mixture model.
+        :param karyotypes: List of possible karyotypes in order of expected `feature` mean.
+        :param karyotype_name: Column name to use for karyotype output.
+        :return: Pandas DataFrame with karyotype assignment.
+        """
         df = sex_pd[["s", feature]].set_index("s")
         gmm = GaussianMixture(n_components=2)
         gmm.fit(df)
         probs = gmm.predict_proba(df)
+        # Assign cluster to karyotype based on cluster means and the order of `karyotypes`
         cluster_to_karyotype = dict(
             zip(np.argsort([m[0] for m in gmm.means_]), karyotypes)
         )
 
         df[f"{feature}_cluster"] = gmm.predict(df)
-        df[
-            f"{feature if karyotype_name is None else karyotype_name}_karyotype"
-        ] = df.apply(
+        df[karyotype_name] = df.apply(
             lambda row: cluster_to_karyotype[row[f"{feature}_cluster"]], axis=1
         )
         for i in cluster_to_karyotype:
@@ -126,10 +135,10 @@ def gaussian_mixture_model_karyotype_assignment(
         return df
 
     x_df = _run_gaussian_mixture_model(
-        "chrX_ploidy", ["X", "XX"], f"{karyotype_output_prefix}_x"
+        "chrX_ploidy", ["X", "XX"], f"{karyotype_output_prefix}_x_karyotype"
     )
     y_df = _run_gaussian_mixture_model(
-        "chrY_ploidy", ["", "Y"], f"{karyotype_output_prefix}_y"
+        "chrY_ploidy", ["", "Y"], f"{karyotype_output_prefix}_y_karyotype"
     )
     xy_df = pd.concat(
         [

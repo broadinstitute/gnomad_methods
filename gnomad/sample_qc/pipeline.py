@@ -51,9 +51,9 @@ def filter_rows_for_qc(
     :param min_callrate: Minimum site call rate to keep. Not applied if set to ``None``.
     :param min_inbreeding_coeff_threshold: Minimum site inbreeding coefficient to keep. Not applied if set to ``None``.
     :param min_hardy_weinberg_threshold: Minimum site HW test p-value to keep. Not applied if set to ``None``.
-    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30
-    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too
-    :param snv_only: Whether to only keep SNVs or include other variant types
+    :param apply_hard_filters: Whether to apply standard GAKT default site hard filters: QD >= 2, FS <= 60 and MQ >= 30.
+    :param bi_allelic_only: Whether to only keep bi-allelic sites or include multi-allelic sites too.
+    :param snv_only: Whether to only keep SNVs or include other variant types.
     :return: annotated and filtered table
     """
     annotation_expr = {}
@@ -266,13 +266,14 @@ def infer_sex_karyotype(
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
         are above cutoff. Default is 0.5
     :param use_gaussian_mixture_model: Use gaussian mixture model to split samples into 'XX' and 'XY' instead of f-stat.
-    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
+    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs.
         for XX, XY karyotypes.
     :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
     :return: Table of samples imputed sex karyotype.
     """
     logger.info("Inferring sex karyotype")
     if use_gaussian_mixture_model:
+        logger.info("Using Gaussian Mixture Model for karyotype assignment")
         gmm_sex_ht = gaussian_mixture_model_karyotype_assignment(ploidy_ht)
         x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
             gmm_sex_ht,
@@ -281,6 +282,7 @@ def infer_sex_karyotype(
             aneuploidy_cutoff=aneuploidy_cutoff,
         )
     else:
+        logger.info("Using f-stat for karyotype assignment")
         x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
             ploidy_ht,
             f_stat_cutoff=f_stat_cutoff,
@@ -353,7 +355,7 @@ def annotate_sex(
             - f_stat (float64): Sample f-stat. Calculated using hl.impute_sex.
             - n_called (int64): Number of variants with a genotype call. Calculated using hl.impute_sex.
             - expected_homs (float64): Expected number of homozygotes. Calculated using hl.impute_sex.
-            - observed_homs (int64): Expected number of homozygotes. Calculated using hl.impute_sex.
+            - observed_homs (int64): Observed number of homozygotes. Calculated using hl.impute_sex.
 
         If `infer_karyotype`:
             - X_karyotype (str): Sample's chromosome X karyotype.
@@ -366,18 +368,18 @@ def annotate_sex(
             `use_gaussian_mixture_model` must be set to True.
 
     :param mtds: Input MatrixTable or VariantDataset.
-    :param is_sparse: Whether input MatrixTable is in sparse data format.
-    :param excluded_intervals: Optional table of intervals to exclude from the computation.
+    :param is_sparse: Whether input MatrixTable is in sparse data format. Default is True.
+    :param excluded_intervals: Optional table of intervals to exclude from the computation. This option is currently
+        not implemented for imputing sex chromosome ploidy on a VDS.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
     :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex
-        chromosome ploidies.
-    :param sites_ht: Optional Table to use. If present, filters input MatrixTable to sites in this Table prior to
-        imputing sex, and pulls alternate allele frequency from this Table.
+        chromosome ploidies. Default is "chr20".
+    :param sites_ht: Optional Table of sites and alternate allele frequencies for filtering the input MatrixTable prior to imputing sex.
     :param aaf_expr: Optional. Name of field in input MatrixTable with alternate allele frequency.
     :param gt_expr: Name of entry field storing the genotype. Default is 'GT'.
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
-        are above cutoff.
-    :param aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations.
+        samples are above cutoff. Default is 0.5.
+    :param aaf_threshold: Minimum alternate allele frequency to be used in f-stat calculations. Default is 0.001.
     :param variants_only_x_ploidy: Whether to use depth of only variant data for the x ploidy estimation.
     :param variants_only_y_ploidy: Whether to use depth of only variant data for the y ploidy estimation.
     :param variants_filter_lcr: Whether to filter out variants in LCR regions for variants only ploidy estimation and
@@ -389,7 +391,7 @@ def annotate_sex(
     :param compute_fstat: Whether to compute f-stat. Default is True.
     :param infer_karyotype: Whether to infer sex karyotypes. Default is True.
     :param use_gaussian_mixture_model: Whether to use gaussian mixture model to split samples into 'XX' and 'XY'
-        instead of f-stat.
+        instead of f-stat. Default is False.
     :return: Table of samples and their imputed sex karyotypes.
     """
     logger.info("Imputing sex chromosome ploidies...")

@@ -456,7 +456,7 @@ def annotate_sex(
             )
             ploidy_ht = ploidy_ht.rename(
                 {
-                    "autosomal_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                    f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
                     if variants_only_x_ploidy
                     else f"{normalization_contig}_mean_dp",
                 }

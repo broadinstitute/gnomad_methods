@@ -571,7 +571,7 @@ def filter_vep_transcript_csqs(
     """
     Filter to variants where 'most_severe_consequence' is 'synonymous_variant' and/or the transcript is the
     canonical transcript, if `synonymous` and `canonical` parameter are set to True, respectively.
-    
+
     Also filter to variants where 'transcript_consequences' within the VEP annotation is not empty, if `filter_empty_csq` is parameter is et to True.
 
     :param t: Input Table or MatrixTable.

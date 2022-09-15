@@ -96,20 +96,30 @@ def count_variants(
     for group in additional_grouping:
         grouping = grouping.annotate(**{group: ht[group]})
 
-    agg = {"variant_count": hl.agg.count_where(freq_expr.AF <= max_af) if max_af else hl.agg.count()}
+    agg = {
+        "variant_count": hl.agg.count_where(freq_expr.AF <= max_af)
+        if max_af
+        else hl.agg.count()
+    }
     if count_singletons:
         agg["singleton_count"] = hl.agg.count_where(singleton_expr)
-        
-    if count_downsamplings:       
+
+    if count_downsamplings:
         for pop in count_downsamplings:
-            agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(freq_expr, freq_meta_expr, pop, max_af=max_af)
+            agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(
+                freq_expr, freq_meta_expr, pop, max_af=max_af
+            )
             if count_singletons:
-                agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(freq_expr, freq_meta_expr, pop, singleton=True)
-    
+                agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
+                    freq_expr, freq_meta_expr, pop, singleton=True
+                )
+
     if use_table_group_by:
         return ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg)
     else:
-        return ht.aggregate(hl.struct(**{field: hl.agg.group_by(grouping, agg[field]) for field in agg}))
+        return ht.aggregate(
+            hl.struct(**{field: hl.agg.group_by(grouping, agg[field]) for field in agg})
+        )
 
 
 def downsampling_counts_expr(

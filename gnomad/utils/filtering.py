@@ -107,7 +107,7 @@ def combine_functions(
     func_list: List[Callable[[bool], bool]], x: hl.expr.StructExpression, operator="and"
 ) -> bool:
     """
-    Combines the criteria to evaluation annotations.
+    Combine the criteria to evaluation annotations.
 
     :param func_list: A list of criterias.
     :param x: Annotations to be evaluated.

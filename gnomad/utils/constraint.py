@@ -1,7 +1,7 @@
 # noqa: D100
 
-from typing import Union
 import logging
+from typing import Union
 
 import hail as hl
 
@@ -109,19 +109,16 @@ def collapse_strand(
     :param ht: Input Table.
     :return: Table with deduplicated context annotation (ref, alt, context, was_flipped).
     """
+    ref_g_or_t_expr = (t.ref == "G") | (t.ref == "T")
     collapse_expr = {
-        "ref": hl.if_else(
-            ((t.ref == "G") | (t.ref == "T")), hl.reverse_complement(t.ref), t.ref
-        ),
-        "alt": hl.if_else(
-            ((t.ref == "G") | (t.ref == "T")), hl.reverse_complement(t.alt), t.alt
-        ),
+        "ref": hl.if_else((ref_g_or_t_expr), hl.reverse_complement(t.ref), t.ref),
+        "alt": hl.if_else((ref_g_or_t_expr), hl.reverse_complement(t.alt), t.alt),
         "context": hl.if_else(
-            ((t.ref == "G") | (t.ref == "T")),
+            (ref_g_or_t_expr),
             hl.reverse_complement(t.context),
             t.context,
         ),
-        "was_flipped": (t.ref == "G") | (t.ref == "T"),
+        "was_flipped": ref_g_or_t_expr,
     }
     return (
         t.annotate(**collapse_expr)

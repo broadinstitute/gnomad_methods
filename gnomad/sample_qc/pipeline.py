@@ -268,7 +268,8 @@ def infer_sex_karyotype(
     :param use_gaussian_mixture_model: Use gaussian mixture model to split samples into 'XX' and 'XY' instead of f-stat.
     :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs.
         for XX, XY karyotypes.
-    :param aneuploidy_cutoff: Number of standard deviations to use when sex chromosome ploidy cutoffs for aneuploidies.
+    :param aneuploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for
+        aneuploidies.
     :return: Table of samples imputed sex karyotype.
     """
     logger.info("Inferring sex karyotype")

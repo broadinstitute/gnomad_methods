@@ -194,8 +194,12 @@ def get_ploidy_cutoffs(
     :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of and `f_stat_cutoff`.
     :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
     """
-    if f_stat_cutoff is None and group_by_expr is None:
-        raise ValueError("One of 'f_stat_cutoff' or 'group_by_expr' must be supplied!")
+    if (f_stat_cutoff is None and group_by_expr is None) or (
+        f_stat_cutoff is not None and group_by_expr is not None
+    ):
+        raise ValueError(
+            "One and only one of 'f_stat_cutoff' or 'group_by_expr' must be supplied!"
+        )
 
     # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
     if f_stat_cutoff is not None:

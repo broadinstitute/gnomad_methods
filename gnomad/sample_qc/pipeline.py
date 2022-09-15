@@ -273,6 +273,7 @@ def infer_sex_karyotype(
     """
     logger.info("Inferring sex karyotype")
     if use_gaussian_mixture_model:
+        logger.info("Using Gaussian Mixture Model for karyotype assignment")
         gmm_sex_ht = gaussian_mixture_model_karyotype_assignment(ploidy_ht)
         x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
             gmm_sex_ht,
@@ -281,6 +282,7 @@ def infer_sex_karyotype(
             aneuploidy_cutoff=aneuploidy_cutoff,
         )
     else:
+        logger.info("Using f-stat for karyotype assignment")
         x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
             ploidy_ht,
             f_stat_cutoff=f_stat_cutoff,
@@ -364,7 +366,8 @@ def annotate_sex(
 
     :param mtds: Input MatrixTable or VariantDataset.
     :param is_sparse: Whether input MatrixTable is in sparse data format.
-    :param excluded_intervals: Optional table of intervals to exclude from the computation.
+    :param excluded_intervals: Optional table of intervals to exclude from the computation. This option is currently
+        not implemented for imputing sex chromosome ploidy on a VDS.
     :param included_intervals: Optional table of intervals to use in the computation. REQUIRED for exomes.
     :param normalization_contig: Which chromosome to use to normalize sex chromosome coverage. Used in determining sex
         chromosome ploidies.

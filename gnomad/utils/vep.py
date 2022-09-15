@@ -569,16 +569,16 @@ def filter_vep_transcript_csqs(
     filter_empty_csq: bool = True,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Filter to variants where 'transcript_consequences' within the VEP annotation is not empty.
-
-    Also filter to variants where 'most_severe_consequence' is 'synonymous_variant' and/or the transcript is the
+    Filter to variants where 'most_severe_consequence' is 'synonymous_variant' and/or the transcript is the
     canonical transcript, if `synonymous` and `canonical` parameter are set to True, respectively.
+    
+    Also filter to variants where 'transcript_consequences' within the VEP annotation is not empty, if `filter_empty_csq` is parameter is et to True.
 
     :param t: Input Table or MatrixTable.
     :param vep_root: Name used for VEP annotation. Defaults to 'vep'.
     :param synonymous: Whether to filter to variants where the most severe consequence is "synonymous_variant". Defaults to True.
     :param canonical: Whether to filter to only canonical transcripts. Defaults to True.
-    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Defaults to True.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering transcript_consequences to the specified criteria. Defaults to True.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not canonical and not filter_empty_csq:

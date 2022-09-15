@@ -75,7 +75,7 @@ def gaussian_mixture_model_karyotype_assignment(
     """
     Annotate the input Table with an X karyotype, Y karyotype, and sex karyotype based on a gaussian mixture model.
 
-    This function uses two component gaussian mixture models on `chrx_ploidy_expr` and `chry_ploidy_expr` to assign
+    This function uses two component Gaussian mixture models on `chrx_ploidy_expr` and `chry_ploidy_expr` to assign
     an X karyotype and a Y karyotype which are then combined into the sex karyotype.
 
     The following annotations are added:
@@ -85,15 +85,15 @@ def gaussian_mixture_model_karyotype_assignment(
 
     .. note::
 
-        This uses a two component gaussian mixture model so all samples are given one of the following sex karyotypes:
+        This uses a two component Gaussian mixture model so all samples are given one of the following sex karyotypes:
         X, XX, XY, YY. It's recommended that this annotation is only used to split samples into XX and
         XY groups that can then be used in `get_ploidy_cutoffs` to determine XX and XY ploidy means and stdevs.
 
     :param sex_ht: Input Table with chromosome X and chromosome Y ploidy values.
     :param chrx_ploidy_expr: Expression pointing to chromosome X ploidy in `sex_ht`. Default is 'chrX_ploidy'.
     :param chry_ploidy_expr: Expression pointing to chromosome Y ploidy in `sex_ht`. Default is 'chrY_ploidy'.
-    :param karyotype_output_prefix: String to use as the prefix for the gaussian mixture model karyotype output.
-    :return: Input Table with gaussian mixture model karyotype annotations added.
+    :param karyotype_output_prefix: String to use as the prefix for the Gaussian mixture model karyotype output. Default is 'gmm'.
+    :return: Input Table with Gaussian mixture model karyotype annotations added.
     """
     if isinstance(chrx_ploidy_expr, str):
         chrx_ploidy_expr = sex_ht[chrx_ploidy_expr]
@@ -109,9 +109,9 @@ def gaussian_mixture_model_karyotype_assignment(
         feature: str, karyotypes: List[str], karyotype_name: str
     ) -> pd.DataFrame:
         """
-        Run gaussian mixture model on ploidy estimates and infer karyotype.
+        Run Gaussian mixture model on ploidy estimates and infer karyotype.
 
-        :param feature: Column name of ploidy feature to use in gaussian mixture model.
+        :param feature: Column name of ploidy feature to use in Gaussian mixture model.
         :param karyotypes: List of possible karyotypes in order of expected `feature` mean.
         :param karyotype_name: Column name to use for karyotype output.
         :return: Pandas DataFrame with karyotype assignment.
@@ -194,8 +194,12 @@ def get_ploidy_cutoffs(
     :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of and `f_stat_cutoff`.
     :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
     """
-    if f_stat_cutoff is None and group_by_expr is None:
-        raise ValueError("One of 'f_stat_cutoff' or 'group_by_expr' must be supplied!")
+    if (f_stat_cutoff is None and group_by_expr is None) or (
+        f_stat_cutoff is not None and group_by_expr is not None
+    ):
+        raise ValueError(
+            "One and only one of 'f_stat_cutoff' or 'group_by_expr' must be supplied!"
+        )
 
     # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
     if f_stat_cutoff is not None:

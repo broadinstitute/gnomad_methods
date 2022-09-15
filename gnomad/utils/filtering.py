@@ -398,3 +398,43 @@ def remove_fields_from_constant(
             logger.info("%s missing from %s", field, constant)
 
     return constant
+
+
+def filter_x_nonpar(t: Union[hl.Table, hl.MatrixTable]):
+    """
+    Filter to locus that is on chrX.
+
+    :param t: Input Table or MatrixTable
+    :return: Table or MatrixTable with locus on chrX.
+    """
+    rg = t.locus.dtype.reference_genome
+    t = hl.filter_intervals(
+        t, [hl.parse_locus_interval(contig) for contig in rg.x_contigs]
+    )
+    non_par_expr = t.locus.in_x_nonpar()
+
+    return (
+        t.filter(non_par_expr)
+        if isinstance(t, hl.Table)
+        else t.filter_rows(non_par_expr)
+    )
+
+
+def filter_y_nonpar(t: Union[hl.Table, hl.MatrixTable]):
+    """
+    Filter to locus that is on chrY.
+
+    :param t: Input Table or MatrixTable
+    :return: Table or MatrixTable with locus on chrY.
+    """
+    rg = t.locus.dtype.reference_genome
+    t = hl.filter_intervals(
+        t, [hl.parse_locus_interval(contig) for contig in rg.y_contigs]
+    )
+    non_par_expr = t.locus.in_y_nonpar()
+
+    return (
+        t.filter(non_par_expr)
+        if isinstance(t, hl.Table)
+        else t.filter_rows(non_par_expr)
+    )

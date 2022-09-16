@@ -6,13 +6,13 @@ import operator
 
 import hail as hl
 from gnomad.sample_qc.sex import (
+    gaussian_mixture_model_karyotype_assignment,
     get_ploidy_cutoffs,
     get_sex_expr,
-    gaussian_mixture_model_karyotype_assignment,
 )
 from gnomad.utils.annotations import (
-    bi_allelic_site_inbreeding_expr,
     bi_allelic_expr,
+    bi_allelic_site_inbreeding_expr,
 )
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome

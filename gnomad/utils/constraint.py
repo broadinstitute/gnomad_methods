@@ -111,10 +111,10 @@ def collapse_strand(
     """
     ref_g_or_t_expr = (t.ref == "G") | (t.ref == "T")
     collapse_expr = {
-        "ref": hl.if_else((ref_g_or_t_expr), hl.reverse_complement(t.ref), t.ref),
-        "alt": hl.if_else((ref_g_or_t_expr), hl.reverse_complement(t.alt), t.alt),
+        "ref": hl.if_else(ref_g_or_t_expr, hl.reverse_complement(t.ref), t.ref),
+        "alt": hl.if_else(ref_g_or_t_expr, hl.reverse_complement(t.alt), t.alt),
         "context": hl.if_else(
-            (ref_g_or_t_expr),
+            ref_g_or_t_expr,
             hl.reverse_complement(t.context),
             t.context,
         ),

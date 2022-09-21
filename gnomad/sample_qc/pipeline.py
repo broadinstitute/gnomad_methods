@@ -503,12 +503,9 @@ def annotate_sex(
             "Filtering variants for variant only sex chromosome ploidy imputation and/or computation of the fraction "
             "of homozygous alternate variants on chromosome X",
         )
-        if variants_only_x_ploidy:
-            filtered_mt = hl.filter_intervals(mt, var_keep_locus_intervals)
-        else:
-            filtered_mt = hl.filter_intervals(
-                mt, var_keep_locus_intervals + x_locus_intervals
-            )
+        filtered_mt = hl.filter_intervals(
+            mt, var_keep_locus_intervals + x_locus_intervals
+        )
         if variants_filter_lcr or variants_filter_segdup or variants_filter_decoy:
             logger.info(
                 "Filtering out variants in: %s",

@@ -61,7 +61,7 @@ purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.ht",
     import_func=_import_purcell_5k,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.interval_list",
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/purcell_5k_intervals/purcell5k.interval_list",
     },
 )
 
@@ -69,7 +69,7 @@ na12878_giab = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.mt",
     import_func=hl.import_vcf,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz",
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz",
         "force_bgz": True,
         "min_partitions": 100,
         "reference_genome": "GRCh38",
@@ -80,7 +80,7 @@ na12878_giab_hc_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7_hc_regions.ht",
     import_func=hl.import_bed,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed",
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed",
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
     },
@@ -106,7 +106,7 @@ syndip = VersionedMatrixTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/syndip/syndip.b38_20180222.mt",
             import_func=hl.import_vcf,
             import_args={
-                "path": "gs://gnomad-public-requester-pays/resources/grch38/syndip/full.38.20180222.vcf.gz",
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/syndip/full.38.20180222.vcf.gz",
                 "force_bgz": True,
                 "min_partitions": 100,
                 "reference_genome": "GRCh38",
@@ -122,7 +122,7 @@ syndip_hc_intervals = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/syndip/syndip_b38_20180222_hc_regions.ht",
             import_func=hl.import_bed,
             import_args={
-                "path": "gs://gnomad-public-requester-pays/resources/grch38/syndip/syndip.b38_20180222.bed",
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/syndip/syndip.b38_20180222.bed",
                 "reference_genome": "GRCh38",
                 "skip_invalid_intervals": True,
                 "min_partitions": 10,
@@ -138,7 +138,7 @@ clinvar = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20190923.ht",
             import_func=_import_clinvar,
             import_args={
-                "path": "gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -156,8 +156,8 @@ dbsnp = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
             import_func=_import_dbsnp,
             import_args={
-                "path": "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz",
-                "header_file": "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header",
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz",
+                "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header",
                 "force_bgz": True,
                 "contig_recoding": DBSNP_B154_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -169,8 +169,8 @@ dbsnp = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.ht",
             import_func=import_sites_vcf,
             import_args={
-                "path": "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.bgz",
-                "header_file": "gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.header",
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.bgz",
+                "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.header",
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -230,7 +230,7 @@ lcr_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/lcr_intervals/LCRFromHengHg38.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/lcr_intervals/LCRFromHengHg38.txt",
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/lcr_intervals/LCRFromHengHg38.txt",
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
     },
@@ -240,7 +240,7 @@ seg_dup_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/seg_dup_intervals/GRCh38_segdups.ht",
     import_func=hl.import_bed,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/seg_dup_intervals/GRCh38_segdups.bed",
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/seg_dup_intervals/GRCh38_segdups.bed",
         "reference_genome": "GRCh38",
     },
 )
@@ -249,7 +249,7 @@ telomeres_and_centromeres = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.ht",
     import_func=hl.import_bed,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.bed",
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.bed",
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
     },

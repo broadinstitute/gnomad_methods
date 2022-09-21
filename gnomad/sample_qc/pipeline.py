@@ -337,6 +337,7 @@ def annotate_sex(
     variants_only_y_ploidy: bool = False,
     variants_filter_lcr: bool = True,
     variants_filter_segdup: bool = True,
+    variants_filter_decoy: bool = False,
     variants_snv_only: bool = False,
     compute_x_frac_variants_hom_alt: bool = False,
     compute_fstat: bool = True,
@@ -389,6 +390,9 @@ def annotate_sex(
         fraction of homozygous alternate variants on chromosome X. Default is True.
     :param variants_filter_segdup: Whether to filter out variants in segdup regions for variants only ploidy estimation
         and fraction of homozygous alternate variants on chromosome X. Default is True.
+    :param variants_filter_decoy: Whether to filter out variants in decoy regions for variants only ploidy estimation
+        and fraction of homozygous alternate variants on chromosome X. Default is False. Note: this option doesn't
+        exist for GRCh38.
     :param variants_snv_only: Whether to filter to only single nucleotide variants for variants only ploidy estimation
         and fraction of homozygous alternate variants on chromosome X. Default is False.
     :param compute_x_frac_variants_hom_alt: Whether to return an annotation for the fraction of homozygous alternate
@@ -414,6 +418,11 @@ def annotate_sex(
                 "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex "
                 "chromosome ploidy on a VDS!"
             )
+        if included_intervals is None:
+            raise NotImplementedError(
+                "The current implementation for imputing sex chromosome ploidy on a VDS requires a list of "
+                "'included_intervals'!"
+            )
         mt = mtds.variant_data
     else:
         if not is_sparse:
@@ -424,6 +433,11 @@ def annotate_sex(
 
     # Determine the contigs that are needed for variant only and reference block only sex ploidy imputation
     rg = get_reference_genome(mt.locus)
+    if normalization_contig not in rg.contigs:
+        raise ValueError(
+            f"Normalization contig {normalization_contig} is not found in reference genome {rg.name}!"
+        )
+
     x_contigs = set(rg.x_contigs)
     y_contigs = set(rg.y_contigs)
     if variants_only_x_ploidy:
@@ -495,17 +509,21 @@ def annotate_sex(
             filtered_mt = hl.filter_intervals(
                 mt, var_keep_locus_intervals + x_locus_intervals
             )
-        if variants_filter_lcr or variants_filter_segdup:
+        if variants_filter_lcr or variants_filter_segdup or variants_filter_decoy:
             logger.info(
-                "Filtering out variants in %s",
-                f"segmental duplications {'and low confidence regions' if variants_filter_lcr else ''}"
+                "Filtering out variants in: %s",
+                "segmental duplications "
                 if variants_filter_segdup
-                else " low confidence regions ",
+                else "" + "low confidence regions "
+                if variants_filter_lcr
+                else "" + " decoy regions"
+                if variants_filter_lcr
+                else "",
             )
             filtered_mt = filter_low_conf_regions(
                 filtered_mt,
                 filter_lcr=variants_filter_lcr,
-                filter_decoy=False,
+                filter_decoy=variants_filter_decoy,
                 filter_segdup=variants_filter_segdup,
             )
         if variants_snv_only:
@@ -517,6 +535,7 @@ def annotate_sex(
         add_globals = add_globals.annotate(
             variants_filter_lcr=variants_filter_lcr,
             variants_segdup=variants_filter_segdup,
+            variants_filter_decoy=variants_filter_decoy,
             variants_snv_only=variants_snv_only,
         )
 

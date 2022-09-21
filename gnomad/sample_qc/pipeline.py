@@ -501,13 +501,13 @@ def annotate_sex(
         if variants_filter_lcr or variants_filter_segdup or variants_filter_decoy:
             logger.info(
                 "Filtering out variants in: %s",
-                "segmental duplications "
+                ("segmental duplications, "
                 if variants_filter_segdup
-                else "" + "low confidence regions "
+                else "") + ("low confidence regions, "
                 if variants_filter_lcr
-                else "" + " decoy regions"
-                if variants_filter_lcr
-                else "",
+                else "") + (" decoy regions"
+                if variants_filter_decoy
+                else "")
             )
             filtered_mt = filter_low_conf_regions(
                 filtered_mt,

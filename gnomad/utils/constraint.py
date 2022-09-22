@@ -9,7 +9,7 @@ logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
-logger = logging.getLogger("generic_constraint_functions")
+logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
 

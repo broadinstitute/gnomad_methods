@@ -81,7 +81,9 @@ def compute_callrate_mt(
 
 
 def run_platform_pca(
-    callrate_mt: hl.MatrixTable, binarization_threshold: Optional[float] = 0.25
+    callrate_mt: hl.MatrixTable,
+    binarization_threshold: Optional[float] = 0.25,
+    n_pcs: int = 10,
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
     Run PCA on a sample/interval MT with each entry containing the call rate.
@@ -91,6 +93,7 @@ def run_platform_pca(
 
     :param callrate_mt: Input callrate MT
     :param binarization_threshold: binzarization_threshold. None is no threshold desired
+    :param n_pcs: Number of PCs to compute
     :return: eigenvalues, scores_ht, loadings_ht
     """
     logger.info("Running platform PCA")
@@ -107,7 +110,9 @@ def run_platform_pca(
         callrate=callrate_mt.callrate - callrate_mt.mean_callrate
     )
     eigenvalues, scores, loadings = hl.pca(
-        callrate_mt.callrate, compute_loadings=True
+        callrate_mt.callrate,
+        compute_loadings=True,
+        k=n_pcs,
     )  # TODO:  Evaluate whether computing loadings is a good / worthy thing
     logger.info("Platform PCA eigenvalues: %s", eigenvalues)
 

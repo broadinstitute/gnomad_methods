@@ -14,7 +14,6 @@ logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
 
-
 def annotate_with_mu(
     ht: hl.Table,
     mutation_ht: hl.Table,
@@ -178,6 +177,7 @@ def downsampling_counts_expr(
 
     return hl.agg.array_sum(hl.map(_get_criteria, sorted_indices))
 
+
 def annotate_mutation_type(
     t: Union[hl.MatrixTable, hl.Table]
 ) -> Union[hl.MatrixTable, hl.Table]:
@@ -290,4 +290,3 @@ def collapse_strand(
         if isinstance(t, hl.Table)
         else t.annotate_rows(**collapse_expr)
     )
-

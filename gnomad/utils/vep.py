@@ -616,6 +616,7 @@ def filter_vep_transcript_csqs(
 
     return t
 
+
 def add_most_severe_csq_to_tc_within_vep_root(
     t: Union[hl.Table, hl.MatrixTable], vep_root: str = "vep"
 ) -> Union[hl.Table, hl.MatrixTable]:
@@ -636,4 +637,3 @@ def add_most_severe_csq_to_tc_within_vep_root(
         if isinstance(t, hl.MatrixTable)
         else t.annotate(**{vep_root: annotation})
     )
-

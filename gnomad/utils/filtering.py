@@ -104,28 +104,21 @@ def filter_by_frequency(
 
 
 def combine_functions(
-    func_list: List[Callable[[bool], bool]], x: hl.expr.StructExpression, operator="and"
+    func_list: List[Callable[[bool], bool]],
+    x: hl.expr.StructExpression,
+    operator_func: Callable[[bool, bool], bool] = operator.iand,
 ) -> bool:
     """
     Combine the criteria to evaluation annotations.
 
-    :param func_list: A list of criterias.
+    :param func_list: A list of boolean functions that can be applied to `x`..
     :param x: Annotations to be evaluated.
-    :param operator: Operator to combine the criteria, defaults to "and".
-    :raises ValueError: Raise Value Error when the operator neither "and" nor "or".
-    :return: A boolean result from the operation.
+    :param operator: Operator function to combine the functions in `func_list`, defaults to `operator.iand`.
+    :return: A boolean result from the combined operations.
     """
-    possible_operators = ("and", "or")
-    if operator not in possible_operators:
-        raise ValueError(
-            f'combine_functions only allows operators: {", ".join(possible_operators)}'
-        )
     cond = func_list[0](x)
     for c in func_list[1:]:
-        if operator == "and":
-            cond &= c(x)
-        elif operator == "or":
-            cond |= c(x)
+        cond = operator_func(cond, c(x))
     return cond
 
 
@@ -400,12 +393,14 @@ def remove_fields_from_constant(
     return constant
 
 
-def filter_x_nonpar(t: Union[hl.Table, hl.MatrixTable]):
+def filter_x_nonpar(
+    t: Union[hl.Table, hl.MatrixTable]
+) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Filter to locus that is on chrX.
+    Filter to loci that are in non-PAR regions on chromosome X.
 
-    :param t: Input Table or MatrixTable
-    :return: Table or MatrixTable with locus on chrX.
+    :param t: Input Table or MatrixTable.
+    :return: Filtered Table or MatrixTable.
     """
     rg = t.locus.dtype.reference_genome
     t = hl.filter_intervals(
@@ -420,12 +415,14 @@ def filter_x_nonpar(t: Union[hl.Table, hl.MatrixTable]):
     )
 
 
-def filter_y_nonpar(t: Union[hl.Table, hl.MatrixTable]):
+def filter_y_nonpar(
+    t: Union[hl.Table, hl.MatrixTable]
+) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Filter to locus that is on chrY.
+    Filter to loci that are in non-PAR regions on chromosome Y.
 
-    :param t: Input Table or MatrixTable
-    :return: Table or MatrixTable with locus on chrY.
+    :param t: Input Table or MatrixTable.
+    :return: Filtered Table or MatrixTable.
     """
     rg = t.locus.dtype.reference_genome
     t = hl.filter_intervals(

@@ -174,15 +174,15 @@ def build_models(
     .. note::
         This function expects that the input `coverage_ht` is the output of `get_proportion_observed_by_coverage`, and
         therefore the following fields should be present in `coverage_ht`:
-            - context - trinucleotide genomic context
-            - ref - the reference allele
-            - alt - the alternate base
-            - methylation_level - methylation level
-            - exome_coverage - median exome coverage at integer values between 1-100
-            - observed_variants - the number of observed variants in the dataset for each variant. Note that the term "variant" here refers to a specific substitution, context, methylation level, and coverage combination.
-            - downsampling_counts_{pop} (pop defaults to ()) - array of observed variant counts per population after downsampling
-            - mu_snp - mutation rate
-            - possible_variants - the number of possible variants in the dataset for each variant. Note that the term "variant" here refers to a specific substitution, context, methylation level, and coverage combination.
+        - context - trinucleotide genomic context
+        - ref - the reference allele
+        - alt - the alternate base
+        - methylation_level - methylation level
+        - exome_coverage - median exome coverage at integer values between 1-100
+        - observed_variants - the number of observed variants in the dataset for each variant. Note that the term "variant" here refers to a specific substitution, context, methylation level, and coverage combination.
+        - downsampling_counts_{pop} (pop defaults to ()) - array of observed variant counts per population after downsampling
+        - mu_snp - mutation rate
+        - possible_variants - the number of possible variants in the dataset for each variant. Note that the term "variant" here refers to a specific substitution, context, methylation level, and coverage combination.
 
     :param coverage_ht: Input coverage Table.
     :param weighted: Whether to weight the high coverage model (a linear regression model) by 'possible_variants'. Defaults to False.
@@ -354,7 +354,7 @@ def build_coverage_model(
     The x and y of the coverage model:
     - x: log10('exome_coverage') at low coverage site
     - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
-        where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
+    where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
 
     :param ht: Low coverage Table.
     :param low_cov_oe_expr: The annotation name of observed:expected ratio for a given coverage level.

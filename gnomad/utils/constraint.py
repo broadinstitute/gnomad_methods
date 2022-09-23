@@ -158,8 +158,8 @@ def build_models(
 
     Plateau model: adjusts proportion of expected variation based on location in the genome and CpG status.
     The x and y of the coverage model:
-        - x: log10('exome_coverage') at low coverage site
-        - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
+    - x: log10('exome_coverage') at low coverage site
+    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
             where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
 
     For low coverage sites, or sites below `HIGH_COVERAGE_CUTOFF`, this function performs a base-level resolution rather than exon-level to compute a coverage correction factor
@@ -275,8 +275,8 @@ def build_plateau_models_pop(
     Build plateau model for each `pop` population to calibrate mutation rate to compute predicted proportion observed value.
 
     The x and y of the plateau models:
-        - x: `mu_snp` - mutation rate
-        - y: proportion observed (observed_{pop}' / 'possible_variants')
+    - x: `mu_snp` - mutation rate
+    - y: proportion observed (observed_{pop}' / 'possible_variants')
 
     :param ht: High coverage Table.
     :param cpg: The annotation name of booleans that determine whether the site is CPG site or not.
@@ -316,8 +316,8 @@ def build_plateau_models_total(
     Build plateau model for all release samples without downsamplings to calibrate mutation rate to compute predicted proportion observed value.
 
     The x and y of the plateau models:
-        - x: `mu_snp` - mutation rate
-        - y: proportion observed ('observed_variants'/ 'possible_variants')
+    - x: `mu_snp` - mutation rate
+    - y: proportion observed ('observed_variants'/ 'possible_variants')
 
     :param ht: High coverage Table.
     :param cpg: The annotation name of booleans that determine whether the site is CPG site or not.
@@ -352,9 +352,9 @@ def build_coverage_model(
     factor for predicted proportion observed/expected variant counts at low coverage sites.
 
     The x and y of the coverage model:
-        - x: log10('exome_coverage') at low coverage site
-        - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
-            where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
+    - x: log10('exome_coverage') at low coverage site
+    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
+        where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
 
     :param ht: Low coverage Table.
     :param low_cov_oe_expr: The annotation name of observed:expected ratio for a given coverage level.

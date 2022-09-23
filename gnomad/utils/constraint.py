@@ -160,7 +160,7 @@ def build_models(
     The x and y of the coverage model:
     - x: log10('exome_coverage') at low coverage site
     - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
-            where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
+    where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
 
     For low coverage sites, or sites below `HIGH_COVERAGE_CUTOFF`, this function performs a base-level resolution rather than exon-level to compute a coverage correction factor
     to reduce the inaccuracy of expected variant counts caused by low coverage on each base. The coverage models are built

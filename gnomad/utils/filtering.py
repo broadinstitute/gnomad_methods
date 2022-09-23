@@ -1,5 +1,5 @@
 # noqa: D100
-# cSpell: disable
+
 import functools
 import logging
 import operator

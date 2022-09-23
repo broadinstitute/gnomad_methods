@@ -147,8 +147,8 @@ def build_models(
 
     Coverage model: corrects proportion of expected variation at low coverage sites. Low coverage sites are defined as sites with median coverage < `HIGH_COVERAGE_CUTOFF`.
     The x and y of the plateau models:
-        - x: `mu_snp` - mutation rate
-        - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
+    - x: `mu_snp` - mutation rate
+    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
     This function builds plateau models to calibrate mutation rate estimates against the proportion observed
     of each substitution, context, and methylation level in `coverage_ht` considering only high coverage sites,

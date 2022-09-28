@@ -102,7 +102,7 @@ def parallel_file_exists(fpaths: List[str], parallelism: int = 750) -> Dict[str,
     )
 
 
-def file_exists(fname: str, overwrite: Optional[bool] = None) -> bool:
+def file_exists(fname: str) -> bool:
     """
     Check whether a file exists.
 
@@ -110,7 +110,6 @@ def file_exists(fname: str, overwrite: Optional[bool] = None) -> bool:
     If the file is a Hail file (.ht, .mt, .bm, .parquet, and .vds extensions), it checks that _SUCCESS is present.
 
     :param fname: File name.
-    :param overwrite: Optional boolean that will raise an error if set to False and file exists.
     :return: Whether the file exists.
     """
     fext = os.path.splitext(fname)[1]
@@ -127,37 +126,40 @@ def file_exists(fname: str, overwrite: Optional[bool] = None) -> bool:
 
     exists = all([exists_func(p) for p in paths])
 
-    if exists and overwrite is False:
-        raise DataException(
-            f"{fname} already exists and the overwrite option was not used!"
-        )
-
     return exists
 
 
-def file_list_exists(
-    fname_list: List[str],
-    overwrite: bool = None,
+def check_file_exists_no_overwrite(
+    fname: Union[str, List[str]],
+    overwrite: bool = True,
 ) -> bool:
     """
     Check whether all files in the list exist and raise an exception if any of them exist and overwrite is False.
 
-    :param fname_list: List of file paths to check the existence of.
-    :param overwrite: Optional boolean that will raise an exception if set to False and any of the resources exist.
-    :return: Boolean indicating if all files in `fname_list` exist.
+    Useful when writing out to files at the end of a pipeline, but want to first check if the file already exists and
+    requires the file to be removed or overwrite specified so the pipeline doesn't fail.
+
+    :param fname: File path, or list of file paths to check the existence of.
+    :param overwrite: Boolean that will raise an exception if set to False and any of the files exist.
+    :return: Boolean indicating if `fname` or all files in `fname` exist.
     """
-    exists = []
-    exceptions_raised = []
-    for fname in fname_list:
-        try:
-            exists.append(file_exists(fname, overwrite))
-        except DataException as e:
-            exceptions_raised.append(str(e))
+    if isinstance(fname, str):
+        fname = [fname]
 
-    if exceptions_raised:
-        raise DataException("\n".join(exceptions_raised))
+    all_exist = True
+    data_exceptions = []
+    for f in fname:
+        exists = file_exists(f)
+        all_exist &= exists
+        if exists and overwrite is False:
+            data_exceptions.append(f)
 
-    return all(exists)
+    if data_exceptions:
+        raise DataException(
+            f"The following files already exist and the overwrite option was not used! {','.join(data_exceptions)}"
+        )
+
+    return all_exist
 
 
 def write_temp_gcs(

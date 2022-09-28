@@ -129,35 +129,47 @@ def file_exists(fname: str) -> bool:
     return exists
 
 
-def check_file_exists_no_overwrite(
+def check_file_exists_raise_error(
     fname: Union[str, List[str]],
-    overwrite: bool = True,
+    error_if_exists: bool = False,
+    error_if_not_exists: bool = False,
+    error_if_exists_msg: str = "The following files already exist and the overwrite option was not used: ",
+    error_if_not_exists_msg: str = "The following files do not exist: ",
 ) -> bool:
     """
-    Check whether all files in the list exist and raise an exception if any of them exist and overwrite is False.
+    Check whether the file or all files in a list of files exist and optionally raise an exception.
 
-    Useful when writing out to files at the end of a pipeline, but want to first check if the file already exists and
-    requires the file to be removed or overwrite specified so the pipeline doesn't fail.
+    This can be useful when writing out to files at the end of a pipeline, but want to check if the file already
+    exists and therefore requires the file to be removed or overwrite specified so the pipeline doesn't fail.
 
     :param fname: File path, or list of file paths to check the existence of.
-    :param overwrite: Boolean that will raise an exception if set to False and any of the files exist.
+    :param error_if_exists: Whether to raise an exception if any of the files exist. Default is True.
+    :param error_if_not_exists: Whether to raise an exception if any of the files do not exist. Default is False.
+    :param error_if_exists_msg: String of the error message to print if any of the files exist.
+    :param error_if_not_exists_msg: String of the error message to print if any of the files do not exist.
     :return: Boolean indicating if `fname` or all files in `fname` exist.
     """
     if isinstance(fname, str):
         fname = [fname]
 
     all_exist = True
-    data_exceptions = []
+    exist = []
+    not_exist = []
     for f in fname:
         exists = file_exists(f)
         all_exist &= exists
-        if exists and overwrite is False:
-            data_exceptions.append(f)
+        if exists and error_if_exists:
+            exist.append(f)
+        if not exists and error_if_not_exists:
+            not_exist.append(f)
 
-    if data_exceptions:
-        raise DataException(
-            f"The following files already exist and the overwrite option was not used! {','.join(data_exceptions)}"
-        )
+    error_msg = ""
+    if exist:
+        error_msg = error_if_exists_msg + ", ".join(exist)
+    if not_exist:
+        error_msg = error_msg + "\n" + error_if_not_exists_msg + ", ".join(not_exist)
+    if error_msg:
+        raise DataException(error_msg)
 
     return all_exist
 

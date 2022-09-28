@@ -135,6 +135,31 @@ def file_exists(fname: str, overwrite: Optional[bool] = None) -> bool:
     return exists
 
 
+def file_list_exists(
+    fname_list: List[str],
+    overwrite: bool = None,
+) -> bool:
+    """
+    Check whether all files in the list exist and raise an exception if any of them exist and overwrite is False.
+
+    :param fname_list: List of file paths to check the existence of.
+    :param overwrite: Optional boolean that will raise an exception if set to False and any of the resources exist.
+    :return: Boolean indicating if all files in `fname_list` exist.
+    """
+    exists = []
+    exceptions_raised = []
+    for fname in fname_list:
+        try:
+            exists.append(file_exists(fname, overwrite))
+        except DataException as e:
+            exceptions_raised.append(str(e))
+
+    if exceptions_raised:
+        raise DataException("\n".join(exceptions_raised))
+
+    return all(exists)
+
+
 def write_temp_gcs(
     t: Union[hl.MatrixTable, hl.Table],
     gcs_path: str,

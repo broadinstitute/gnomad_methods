@@ -16,6 +16,8 @@ from hailtop.aiotools.router_fs import RouterAsyncFS
 from hailtop.aiogoogle import GoogleStorageAsyncFS
 from hailtop.utils import bounded_gather, tqdm
 
+from gnomad.resources.resource_utils import DataException
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -100,23 +102,37 @@ def parallel_file_exists(fpaths: List[str], parallelism: int = 750) -> Dict[str,
     )
 
 
-def file_exists(fname: str) -> bool:
+def file_exists(fname: str, overwrite: Optional[bool] = None) -> bool:
     """
     Check whether a file exists.
 
     Supports either local or Google cloud (gs://) paths.
-    If the file is a Hail file (.ht, .mt extensions), it checks that _SUCCESS is present.
+    If the file is a Hail file (.ht, .mt, .bm, .parquet, and .vds extensions), it checks that _SUCCESS is present.
 
-    :param fname: File name
-    :return: Whether the file exists
+    :param fname: File name.
+    :param overwrite: Optional boolean that will raise an error if set to False and file exists.
+    :return: Whether the file exists.
     """
     fext = os.path.splitext(fname)[1]
-    if fext in [".ht", ".mt"]:
-        fname += "/_SUCCESS"
+    if fext in {".ht", ".mt", ".bm", ".parquet"}:
+        paths = [f"{fname}/_SUCCESS"]
+
+    if fext == ".vds":
+        paths = [f"{fname}/reference_data/_SUCCESS", f"{fname}/variant_data/_SUCCESS"]
+
     if fname.startswith("gs://"):
-        return hl.hadoop_exists(fname)
+        exists_func = hl.hadoop_exists
     else:
-        return os.path.isfile(fname)
+        exists_func = os.path.isfile
+
+    exists = all([exists_func(p) for p in paths])
+
+    if exists and overwrite is False:
+        raise DataException(
+            f"{fname} already exists and the overwrite option was not used!"
+        )
+
+    return exists
 
 
 def write_temp_gcs(

@@ -133,13 +133,13 @@ def check_file_exists_raise_error(
     fname: Union[str, List[str]],
     error_if_exists: bool = False,
     error_if_not_exists: bool = False,
-    error_if_exists_msg: str = "The following files already exist and the overwrite option was not used: ",
+    error_if_exists_msg: str = "The following files already exist: ",
     error_if_not_exists_msg: str = "The following files do not exist: ",
 ) -> bool:
     """
     Check whether the file or all files in a list of files exist and optionally raise an exception.
 
-    This can be useful when writing out to files at the end of a pipeline, but want to check if the file already
+    This can be useful when writing out to files at the end of a pipeline to first check if the file already
     exists and therefore requires the file to be removed or overwrite specified so the pipeline doesn't fail.
 
     :param fname: File path, or list of file paths to check the existence of.

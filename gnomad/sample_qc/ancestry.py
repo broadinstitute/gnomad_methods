@@ -267,7 +267,7 @@ def run_pca_with_relateds(
     Run PCA excluding the given related or outlier samples, and project those samples in the PC space to return scores for all samples.
 
     The `related_samples_to_drop` and `outlier_samples_to_drop` Tables have to be keyed by the sample ID and all samples present in these
-    table will be excluded from the PCA.
+    tables will be excluded from the PCA.
 
     The loadings Table returned also contains a `pca_af` annotation which is the allele frequency
     used for PCA. This is useful to project other samples in the PC space.

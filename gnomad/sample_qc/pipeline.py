@@ -283,6 +283,9 @@ def infer_sex_karyotype(
             normal_ploidy_cutoff=normal_ploidy_cutoff,
             aneuploidy_cutoff=aneuploidy_cutoff,
         )
+        ploidy_ht = ploidy_ht.annotate(
+            gmm_karyotype=gmm_sex_ht[ploidy_ht.key].gmm_karyotype
+        )
     else:
         logger.info("Using f-stat for karyotype assignment")
         x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
@@ -316,7 +319,11 @@ def infer_sex_karyotype(
         normal_ploidy_cutoff=normal_ploidy_cutoff,
         aneuploidy_cutoff=aneuploidy_cutoff,
     )
-    if not use_gaussian_mixture_model:
+    if use_gaussian_mixture_model:
+        karyotype_ht = karyotype_ht.annotate(
+            gmm_sex_karyotype=ploidy_ht[karyotype_ht.key].gmm_karyotype
+        )
+    else:
         karyotype_ht = karyotype_ht.annotate_globals(f_stat_cutoff=f_stat_cutoff)
 
     return karyotype_ht

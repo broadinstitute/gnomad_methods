@@ -259,14 +259,14 @@ def assign_population_pcs(
 def run_pca_with_relateds(
     qc_mt: hl.MatrixTable,
     related_samples_to_drop: Optional[hl.Table],
-    outlier_samples_to_drop: Optional[hl.Table],
+    additional_samples_to_drop: Optional[hl.Table],
     n_pcs: int = 10,
     autosomes_only: bool = True,
 ) -> Tuple[List[float], hl.Table, hl.Table]:
     """
-    Run PCA excluding the given related or outlier samples, and project those samples in the PC space to return scores for all samples.
+    Run PCA excluding the given related or additional samples, and project those samples in the PC space to return scores for all samples.
 
-    The `related_samples_to_drop` and `outlier_samples_to_drop` Tables have to be keyed by the sample ID and all samples present in these
+    The `related_samples_to_drop` and `additional_samples_to_drop` Tables have to be keyed by the sample ID and all samples present in these
     tables will be excluded from the PCA.
 
     The loadings Table returned also contains a `pca_af` annotation which is the allele frequency
@@ -274,27 +274,26 @@ def run_pca_with_relateds(
 
     :param qc_mt: Input QC MT
     :param related_samples_to_drop: Optional table of related samples to drop when generating the PCs, these samples will be projected in the PC space
-    :param outlier_samples_to_drop: Optional table of outlier samples to drop when generating the PCs, these samples will be projected in the PC space
+    :param additional_samples_to_drop: Optional table of additional samples to drop when generating the PCs, these samples will be projected in the PC space
     :param n_pcs: Number of PCs to compute
     :param autosomes_only: Whether to run the analysis on autosomes only
     :return: eigenvalues, scores and loadings
     """
-    qc_mt = qc_mt.persist()
 
     if autosomes_only:
         qc_mt = filter_to_autosomes(qc_mt)
 
     # 'pca_mt' is the MatrixTable to use for generating the PCs
-    # If samples to drop are provided in related_samples_to_drop or outlier_samples_to_drop, 'project_pca_mt' will also be generated and will contain the samples to project in the PC space
+    # If samples to drop are provided in related_samples_to_drop or additional_samples_to_drop, 'project_pca_mt' will also be generated and will contain the samples to project in the PC space
     pca_mt = qc_mt
 
     if related_samples_to_drop:
         pca_mt = pca_mt.filter_cols(
             hl.is_missing(related_samples_to_drop[pca_mt.col_key])
         )
-    if outlier_samples_to_drop:
+    if additional_samples_to_drop:
         pca_mt = pca_mt.filter_cols(
-            hl.is_missing(outlier_samples_to_drop[pca_mt.col_key])
+            hl.is_missing(additional_samples_to_drop[pca_mt.col_key])
         )
 
     pca_evals, pca_scores, pca_loadings = hl.hwe_normalized_pca(
@@ -307,7 +306,7 @@ def run_pca_with_relateds(
         pca_af=pca_af_ht[pca_loadings.key].pca_af
     )  # TODO: Evaluate if needed to write results at this point if relateds or not
 
-    if not related_samples_to_drop and not outlier_samples_to_drop:
+    if not related_samples_to_drop and not additional_samples_to_drop:
         return pca_evals, pca_scores, pca_loadings
     else:
         pca_loadings = pca_loadings.persist()

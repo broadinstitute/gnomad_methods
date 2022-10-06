@@ -129,18 +129,16 @@ def count_variants_by_group(
 
     for pop in count_downsamplings:
         logger.info(
-            "Counting variants in downsamplings of {pop}. 'downsampling_counts_{pop}' is annotated.".format(
-                pop=pop
-            )
+            "Counting variants in downsamplings. 'downsampling_counts_%s' is annotated.",
+            pop,
         )
         agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(
             freq_expr, freq_meta_expr, pop, max_af=max_af
         )
         if count_singletons:
             logger.info(
-                "Counting singleton variants in downsamplings of {pop}. 'singleton_downsampling_counts_{pop}' is annotated.".format(
-                    pop=pop
-                )
+                "Counting singleton variants in downsamplings. 'singleton_downsampling_counts_%s' is annotated.",
+                pop,
             )
             agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
                 freq_expr, freq_meta_expr, pop, singleton=True

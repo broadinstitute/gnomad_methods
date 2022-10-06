@@ -23,6 +23,7 @@ def annotate_with_mu(
     Annotate SNP mutation rate for the input Table.
 
     .. note::
+
         `ht` is expected to include annotations that `mutation_ht` is keyed by, but these annotations don't need to be the keys of `ht`.
 
     :param ht: Input Table to annotate.
@@ -52,21 +53,23 @@ def count_variants_by_group(
     """
     Count number of observed or possible variants by context, ref, alt, and optionally methylation_level.
 
-    Counts variants in `freq_expr` based on specified criteria (singleton or in downsamplings or None), and aggregates variant counts based on
+    Counts variants in `ht` based on specified criteria (singleton or in downsamplings or None), and aggregates variant counts based on
     'context', 'ref', 'alt', 'methylation_level' (optional), and any annotation provided in `additional_grouping`.
 
-    If `freq_expr` is not given and variants in downsamplings (`count_downsamplings` is not empty) or singleton variants (`count_singletons` is True)
-    need to be counted, `freq_expr` defaults to `ht.freq`. If variants in downsamplings needs to be counted and `freq_meta_expr` is None, `freq_meta_expr`
-    defaults to `ht.freq_meta`. If variants in singleton needs to be counted and singleton_expr is None, `singleton_expr` defaults to `freq_expr[0].AC == 1`.
+    If `freq_expr` is not given and variants in downsamplings (`count_downsamplings` is not empty) or singleton variants need to be counted (`count_singletons` is True),
+    `freq_expr` defaults to `ht.freq`, which is annotated by annotate_freq(). (Only adj freq info, or ht.freq[0], that contains high quality genotype is used.) If variants
+    in downsamplings needs to be counted and `freq_meta_expr` is None, `freq_meta_expr` defaults to `ht.freq_meta`. If variants in singleton needs to be counted and
+    singleton_expr is None, `singleton_expr` defaults to `freq_expr[0].AC == 1`.
 
     Function will return a Table with annotations used for grouping ('context', 'ref', 'alt', 'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
 
     .. note::
+
         The following annotations should be present in `ht`:
         - ref - the reference allele
         - alt - the alternate base
         - context - trinucleotide genomic context
-        - methylation_level - methylation level
+        - methylation_level - methylation level (optional if omit_methylation==True)
         - freq - Allele frequency information (AC, AN, AF, homozygote count) in gnomAD release
         - freq_meta - gnomAD frequency metadata. An ordered list containing the frequency aggregation group for each element of the gnomad_freq array row annotation
 
@@ -103,29 +106,46 @@ def count_variants_by_group(
 
     grouping = hl.struct(context=ht.context, ref=ht.ref, alt=ht.alt)
     if not omit_methylation:
-        logger.info("methylation_level annotation is included in the grouping when counting variants.")
+        logger.info(
+            "'methylation_level' annotation is included in the grouping when counting variants."
+        )
         grouping = grouping.annotate(methylation_level=ht.methylation_level)
     for group in additional_grouping:
         grouping = grouping.annotate(**{group: ht[group]})
-    logger.info("Annotations added to grouping when counting variants: '", ''.join(grouping))
+    logger.info(
+        "Annotations added to grouping when counting variants: %s.",
+        ", ".join(grouping.keys()),
+    )
 
-    agg = {
-        "variant_count": hl.agg.count_where(freq_expr[0].AF <= max_af)
-        if max_af
-        else hl.agg.count()
-    }
+    if max_af:
+        logger.info("Maximum variant allele frequency to keep is %.3f.", max_af)
+        agg = {"variant_count": hl.agg.count_where(freq_expr[0].AF <= max_af)}
+    else:
+        agg = {"variant_count": hl.agg.count()}
+
     if count_singletons:
+        logger.info("'singleton_count' is annotated when counting variant.")
         agg["singleton_count"] = hl.agg.count_where(singleton_expr)
 
     for pop in count_downsamplings:
+        logger.info(
+            "Counting variants in downsamplings of {pop}. 'downsampling_counts_{pop}' is annotated.".format(
+                pop=pop
+            )
+        )
         agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(
             freq_expr, freq_meta_expr, pop, max_af=max_af
         )
         if count_singletons:
+            logger.info(
+                "Counting singleton variants in downsamplings of {pop}. 'singleton_downsampling_counts_{pop}' is annotated.".format(
+                    pop=pop
+                )
+            )
             agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
                 freq_expr, freq_meta_expr, pop, singleton=True
             )
-
+    # count the variants that have same combination of `grouping`
     if use_table_group_by:
         return ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg)
     else:
@@ -143,20 +163,20 @@ def downsampling_counts_expr(
     max_af: Optional[float] = None,
 ) -> hl.expr.ArrayExpression:
     """
-    Count variants in `freq_expr` of downsamplings with specified criteria in their meta data.
+    Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
 
-    The meta data (`freq_meta_expr`) of each downsampling should have 'group',
-    'pop', and 'downsampling' keys, where 'group' key is 'variant_quality' and 'pop' key is 'pop'.
+    The meta data (`freq_meta_expr` annotated by annotate_freq) of each downsampling should have 'group',
+    'pop', and 'downsampling' keys. Included downsamplings are those where 'group' == `variant_quality` and 'pop' == `pop`.
 
     :param freq_expr: ArrayExpression of Structs with with 'AC' and 'AF' annotations.
-    :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to freq_expr.
-    :param pop: Population. Defaults to 'global'.
-    :param variant_quality: Variant quality for "group" key in `freq_meta_expr`. Defaults to 'adj'.
-    :param singleton: Whether to sum only alleles that are singletons. Defaults to False.
+    :param freq_meta_expr: ArrayExpression containing the set of groupings for each element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
+    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`. Defaults to 'global'.
+    :param variant_quality: Variant quality to use for filtering by the 'group' key in `freq_meta_expr`. Defaults to 'adj'.
+    :param singleton: Whether to filter to only singletons before counting (AC == 1). Defaults to False.
     :param max_af: Maximum variant allele frequency to keep. By default no allele frequency cutoff is applied.
-    :return: Variant counts in downsamplings for specified population.
+    :return: Aggregation Expression for an array of the variant counts in downsamplings for specified population.
     """
-    # get indices of dictionaries in meta dictionaries that only have the "downsampling" key with required "group" and "pop" keys
+    # get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "group" and "pop" values
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].size() == 3)
         & (f[1].get("group") == variant_quality)
@@ -168,7 +188,8 @@ def downsampling_counts_expr(
         lambda x: x[0]
     )
 
-    def _get_criteria(i: hl.expr.Int32Expression) -> hl.expr.ArrayNumericExpression:
+    # variants met with specified criteria will be marked as 1
+    def _get_criteria(i: hl.expr.Int32Expression) -> hl.expr.Int32Expression:
         if singleton:
             return hl.int(freq_expr[i].AC == 1)
         elif max_af:
@@ -176,6 +197,7 @@ def downsampling_counts_expr(
         else:
             return hl.int(freq_expr[i].AC > 0)
 
+    # mark variants met with specified criteria in each downsampling as 1
     return hl.agg.array_sum(hl.map(_get_criteria, sorted_indices))
 
 

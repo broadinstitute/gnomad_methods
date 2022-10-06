@@ -109,12 +109,16 @@ def combine_functions(
     operator_func: Callable[[bool, bool], bool] = operator.iand,
 ) -> bool:
     """
-    Combine the criteria to evaluation annotations.
+    Combine a list of boolean functions to an Expression using the specified operator.
 
-    :param func_list: A list of boolean functions that can be applied to `x`..
-    :param x: Annotations to be evaluated.
-    :param operator: Operator function to combine the functions in `func_list`, defaults to `operator.iand`.
-    :return: A boolean result from the combined operations.
+    .. note::
+
+        The `operator_func` is applied cumulatively from left to right of the `func_list`.
+
+    :param func_list: A list of boolean functions that can be applied to `x`.
+    :param x: Expression to be passed to each function in `func_list`.
+    :param operator_func: Operator function to combine the functions in `func_list`, defaults to `operator.iand`.
+    :return: A boolean from the combined operations.
     """
     cond = func_list[0](x)
     for c in func_list[1:]:

@@ -1,5 +1,5 @@
 # noqa: D100
-
+# cSpell: disable
 import logging
 from typing import List, Optional, Tuple, Union
 
@@ -12,6 +12,10 @@ logging.basicConfig(
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
+"""
+Minimum median exome coverage differentiating high coverage sites from low coverage sites.
+Low coverage sites require an extra calibration when computing the proportion of expected variation.
+"""
 COVERAGE_CUTOFF = 40
 
 
@@ -251,12 +255,13 @@ def build_models(
             )
         )
     )
+    # TODO: consider weighting here as well
     coverage_model = build_coverage_model(
         low_coverage_ht,
         low_coverage_obs_exp="low_coverage_obs_exp",
         log_coverage="log_coverage",
     )
-    # TODO: consider weighting here as well
+    
 
     return coverage_model, plateau_models
 
@@ -267,9 +272,8 @@ def build_plateau_models_pop(
     mu_snp: str,
     observed_variants: str,
     possible_variants: str,
-    pop: str,
-    length: int,
     weighted: bool = False,
+    pops: Optional[Tuple[str]] = (),
 ) -> hl.Struct:
     """
     Build plateau model for each `pop` population to calibrate mutation rate to compute predicted proportion observed value.
@@ -283,25 +287,42 @@ def build_plateau_models_pop(
     :param mu_snp: The annotation name of the mutation rate.
     :param observed_variants: The annotation name of the observed variant counts for each combination of keys in `ht`.
     :param possible_variants: The annotation name of the possible variant counts for each combination of keys in `ht`.
-    :param pop: List of populations. Defaults to None.
     :param length: The minimum array length of variant counts array in downsampings for `pop`.
     :param weighted: Whether to generalize the model to weighted least squares using 'possible_variants', defaults to False.
+    :param pops: List of populations used to build coverage and plateau models. Defaults to ().
     :return: A Dictionary of intercepts and slopes for plateau models of each population.
     """
     agg_expr = {
-        pop: [
-            hl.agg.group_by(
-                ht[cpg],
-                hl.agg.linreg(
-                    ht[observed_variants][i] / ht[possible_variants],
-                    [1, ht[mu_snp]],
-                    weight=ht[possible_variants] if weighted else None,
-                ).beta,
-            )
-            for i in range(length)
-        ]
+        "total": hl.agg.group_by(
+            ht[cpg],
+            hl.agg.linreg(
+                ht[observed_variants] / ht[possible_variants],
+                [1, ht[mu_snp]],
+                weight=ht[possible_variants] if weighted else None,
+            ).beta,
+        )
     }
-    return ht.aggregate(hl.struct(**agg_expr))
+    plateau_models = ht.aggregate(hl.struct(**agg_expr))
+    if pops:
+        pop_lengths = get_all_pop_lengths(ht, pops)
+        for length, pop in pop_lengths:
+            agg_expr = {
+                pop: [
+                    hl.agg.group_by(
+                        ht[cpg],
+                        hl.agg.linreg(
+                            ht[f"observed_{pop}"][i] / ht[possible_variants],
+                            [1, ht[mu_snp]],
+                            weight=ht[possible_variants] if weighted else None,
+                        ).beta,
+                    )
+                    for i in range(length)
+                ]
+            }
+            pop_plateau_model = ht.aggregate(hl.struct(**agg_expr))
+            plateau_models = plateau_models.annotate(**pop_plateau_model)
+            
+    return plateau_models
 
 
 def build_plateau_models_total(
@@ -327,16 +348,7 @@ def build_plateau_models_total(
     :param weighted: Whether to generalize the model to weighted least squares using 'possible_variants', defaults to False.
     :return: A Dictionary of intercepts and slopes for a plateau model.
     """
-    agg_expr = {
-        "total": hl.agg.group_by(
-            ht[cpg],
-            hl.agg.linreg(
-                ht[observed_variants] / ht[possible_variants],
-                [1, ht[mu_snp]],
-                weight=ht[possible_variants] if weighted else None,
-            ).beta,
-        )
-    }
+    
     return ht.aggregate(hl.struct(**agg_expr))
 
 

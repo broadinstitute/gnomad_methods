@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import hail as hl
 import numpy as np
@@ -344,7 +344,7 @@ def get_sex_expr(
     """
     # TODO: add check for both if one
 
-    if chr_x_frac_hom_alt_expr:
+    if chr_x_frac_hom_alt_expr is not None:
         add_x_condition = chr_x_frac_hom_alt_expr > chr_x_frac_hom_alt_cutoffs[1]
         add_xx_condition = (
             chr_x_frac_hom_alt_expr > chr_x_frac_hom_alt_cutoffs[0][0]

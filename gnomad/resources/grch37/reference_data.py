@@ -1,5 +1,7 @@
 # noqa: D100
 
+import hail as hl
+
 from gnomad.resources.resource_utils import (
     GnomadPublicMatrixTableResource,
     GnomadPublicTableResource,
@@ -7,7 +9,6 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
     import_sites_vcf,
 )
-import hail as hl
 
 na12878_giab = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt",

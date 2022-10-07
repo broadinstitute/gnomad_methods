@@ -2,12 +2,7 @@
 
 from typing import Dict, List, Optional
 
-from gnomad.resources.grch38.gnomad import (
-    GROUPS,
-    POPS,
-    SEXES,
-    SUBSETS,
-)
+from gnomad.resources.grch38.gnomad import GROUPS, POPS, SEXES, SUBSETS
 from gnomad.utils.vcf import index_globals
 
 

@@ -4,15 +4,15 @@ import argparse
 import itertools
 import textwrap
 from inspect import getmembers
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
+import gnomad.resources.grch37 as grch37
+import gnomad.resources.grch38 as grch38
 from gnomad.resources.config import (
     GnomadPublicResourceSource,
     gnomad_public_resource_configuration,
 )
 from gnomad.resources.resource_utils import BaseResource, BaseVersionedResource
-import gnomad.resources.grch37 as grch37
-import gnomad.resources.grch38 as grch38
 
 
 # Generate a dictionary of resource available for import for a given genome build

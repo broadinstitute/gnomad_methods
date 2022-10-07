@@ -13,7 +13,6 @@ from gnomad.resources.config import (
     gnomad_public_resource_configuration,
 )
 
-
 logger = logging.getLogger("gnomad.resources")
 
 

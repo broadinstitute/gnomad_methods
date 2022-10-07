@@ -6,8 +6,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import POPS, SEXES
-from gnomad.utils.vcf import HISTS, make_label_combos, SORT_ORDER
-
+from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

@@ -35,6 +35,13 @@ Use [Black](https://black.readthedocs.io/) to format code.
 ```
 black gnomad
 ```
+## Running Black
+
+Use [isort](https://pycqa.github.io/isort/) to format imports.
+
+```
+isort gnomad
+```
 
 ## Running pydocstyle
 

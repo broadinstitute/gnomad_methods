@@ -16,3 +16,8 @@ repos:
     rev: 6.0.0 # This should be kept in sync with the version in requirements-dev.in
     hooks:
       - id: pydocstyle
+  - repo: https://github.com/pycqa/isort
+    rev: 5.10.1 # This should be kept in sync with the version in requirements-dev.in
+    hooks:
+      - id: isort
+        args: ["--profile", "black", "--filter-files"]

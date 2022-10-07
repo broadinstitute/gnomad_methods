@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Optional, Union
 
 import hail as hl
+
 from gnomad.utils.annotations import (
     fs_from_sb,
     get_adj_expr,

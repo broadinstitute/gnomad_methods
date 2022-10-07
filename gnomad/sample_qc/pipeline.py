@@ -3,8 +3,10 @@
 import functools
 import logging
 import operator
+from typing import List, Optional, Union
 
 import hail as hl
+
 from gnomad.sample_qc.sex import (
     gaussian_mixture_model_karyotype_assignment,
     get_ploidy_cutoffs,
@@ -18,8 +20,6 @@ from gnomad.utils.annotations import (
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.sparse_mt import impute_sex_ploidy
-
-from typing import List, Optional, Union
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

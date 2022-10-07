@@ -6,6 +6,7 @@ from typing import Any, Counter, List, Optional, Tuple, Union
 
 import hail as hl
 import pandas as pd
+
 from gnomad.utils.filtering import filter_to_autosomes
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")

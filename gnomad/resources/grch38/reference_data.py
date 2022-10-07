@@ -1,18 +1,18 @@
 # noqa: D100
 
+import hail as hl
+from hail import Table
+
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
-    GnomadPublicTableResource,
-    GnomadPublicMatrixTableResource,
-    VersionedTableResource,
-    VersionedMatrixTableResource,
-    import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING,
+    GnomadPublicMatrixTableResource,
+    GnomadPublicTableResource,
+    VersionedMatrixTableResource,
+    VersionedTableResource,
+    import_sites_vcf,
 )
 from gnomad.utils.vep import vep_or_lookup_vep
-import hail as hl
-
-from hail import Table
 
 
 def _import_purcell_5k(path) -> hl.Table:

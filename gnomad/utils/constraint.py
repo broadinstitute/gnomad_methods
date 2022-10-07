@@ -366,10 +366,12 @@ def get_all_pop_lengths(
     :param prefix: Prefix of population observed variant counts. Defaults to 'observed_'.
     :return: A Dictionary with the minimum array length for each population.
     """
+    # get minimum length of downsamplings for each population
     pop_downsampling_lengths = ht.aggregate(
         [hl.agg.min(hl.len(ht[f"{prefix}{pop}"])) for pop in pops]
     )
 
+    # zip population name with their downsampling length
     pop_lengths = list(zip(pop_downsampling_lengths, pops))
     logger.info("Found: %s", "".join(map(str, pop_lengths)))
 

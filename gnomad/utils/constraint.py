@@ -31,6 +31,7 @@ def annotate_mutation_type(
         - transition
         - mutation_type - one of "CpG", "non-CpG transition", or "transversion"
         - mutation_type_model
+
     ..note:
 
         `variant_type` in gnomAD refers to any variant that is "multi-snv", "snv", "multi-indel", "indel", or "mixed".

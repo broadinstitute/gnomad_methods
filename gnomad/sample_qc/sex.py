@@ -246,23 +246,25 @@ def get_ploidy_cutoffs(
     return cutoffs
 
 
-def get_chrx_hom_alt_cutoffs(
+def get_chr_x_hom_alt_cutoffs(
     ht: hl.Table,
-    chrx_frac_hom_alt_expr: hl.expr.NumericExpression,
+    chr_x_frac_hom_alt_expr: hl.expr.NumericExpression,
     f_stat_cutoff: float = None,
     group_by_expr: hl.expr.StringExpression = None,
     cutoff_stdev: int = 5,
 ) -> Tuple[Tuple[float, float], float]:
     """
-    Get FILL IN cutoffs for XY and XX samples.
+    Get cutoffs for the fraction homozygous alternate genotypes on chromosome X in 'XY' and 'XX' samples.
 
     .. note::
 
-        This assumes the input hail Table has the field f_stat if `f_stat_cutoff` is set.
+        This assumes the input hail Table has the field 'f_stat' if `f_stat_cutoff` is set.
 
-    Return a tuple of FILL IN cutoffs: (lower cutoff for more than one X, upper cutoff for more than one X), lower cutoff for single X)
+    Return a tuple of cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on
+    chromosome X: ((lower cutoff for more than one X, upper cutoff for more than one X), lower cutoff for single X).
 
-    Uses the cutoff_stdev parameter to determine the FILL IN cutoffs for XX and XY karyotypes.
+    Uses the `cutoff_stdev` parameter to determine the fraction of homozygous alternate genotypes
+    (hom-alt/(hom-alt + het)) on chromosome X cutoffs for 'XX' and 'XY' karyotypes.
 
     .. note::
 
@@ -271,13 +273,15 @@ def get_chrx_hom_alt_cutoffs(
         annotation grouping samples by 'XX' and 'XY'. These are both only used to divide samples into XX and XY to
         determine means and standard deviations for these categories and are not used in the final karyotype annotation.
 
-    :param ht: Table with f_stat and sex chromosome ploidies
+    :param ht: Table with f_stat and fraction of homozygous alternate genotypes on chromosome X.
+    :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
         are above cutoff.
     :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of and `f_stat_cutoff`.
     :param cutoff_stdev: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
         for XX, XY karyotypes.
-    :return: Tuple of ploidy cutoff tuples: ((x_ploidy_cutoffs), (y_ploidy_cutoffs))
+    :return: Tuple of cutoffs: ((lower cutoff for more than one X, upper cutoff for more than one X), lower cutoff for
+        single X).
     """
     if (f_stat_cutoff is None and group_by_expr is None) or (
         f_stat_cutoff is not None and group_by_expr is not None
@@ -294,7 +298,7 @@ def get_chrx_hom_alt_cutoffs(
     sex_stats = ht.aggregate(
         hl.agg.group_by(
             group_by_expr,
-            hl.struct(chrx_homalt=hl.agg.stats(chrx_frac_hom_alt_expr)),
+            hl.struct(chrx_homalt=hl.agg.stats(chr_x_frac_hom_alt_expr)),
         )
     )
     if "XX" not in sex_stats:
@@ -334,15 +338,22 @@ def get_sex_expr(
 
     Note that X0 is currently returned as 'X'.
 
-    :param chr_x_ploidy: Chromosome X ploidy (or relative ploidy)
-    :param chr_y_ploidy: Chromosome Y ploidy (or relative ploidy)
+    :param chr_x_ploidy: Chromosome X ploidy (or relative ploidy).
+    :param chr_y_ploidy: Chromosome Y ploidy (or relative ploidy).
     :param x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for
-        double X, upper cutoff for double X), lower cutoff for triple X)
+        double X, upper cutoff for double X), lower cutoff for triple X).
     :param y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for
-        single Y), lower cutoff for double Y)
-    :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype
+        single Y), lower cutoff for double Y).
+    :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
+    :param chr_x_frac_hom_alt_cutoffs: Tuple of cutoffs for the fraction of homozygous alternate genotypes
+        (hom-alt/(hom-alt + het)) on chromosome X: ((lower cutoff for more than one X, upper cutoff for more than one X),
+        lower cutoff for single X).
+    :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype.
     """
-    # TODO: add check for both if one
+    if sum([chr_x_frac_hom_alt_expr is None, chr_x_frac_hom_alt_cutoffs is None]) == 1:
+        raise ValueError(
+            "None or both of `chr_x_frac_hom_alt_expr` and `chr_x_frac_hom_alt_cutoffs` must be set!"
+        )
 
     if chr_x_frac_hom_alt_expr is not None:
         add_x_condition = chr_x_frac_hom_alt_expr > chr_x_frac_hom_alt_cutoffs[1]

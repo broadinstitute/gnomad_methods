@@ -7,7 +7,7 @@ import operator
 import hail as hl
 from gnomad.sample_qc.sex import (
     gaussian_mixture_model_karyotype_assignment,
-    get_chrx_hom_alt_cutoffs,
+    get_chr_x_hom_alt_cutoffs,
     get_ploidy_cutoffs,
     get_sex_expr,
 )
@@ -253,8 +253,8 @@ def infer_sex_karyotype(
     use_gaussian_mixture_model: bool = False,
     normal_ploidy_cutoff: int = 5,
     aneuploidy_cutoff: int = 6,
-    chrx_frac_hom_alt_expr: Optional[hl.expr.NumericExpression] = None,
-    normal_chrx_hom_alt_cutoff: int = 5,
+    chr_x_frac_hom_alt_expr: Optional[hl.expr.NumericExpression] = None,
+    normal_chr_x_hom_alt_cutoff: int = 5,
 ) -> hl.Table:
     """
     Create a Table with X_karyotype, Y_karyotype, and sex_karyotype.
@@ -268,17 +268,20 @@ def infer_sex_karyotype(
 
     :param ploidy_ht: Input Table with chromosome X and chromosome Y ploidy values and optionally f-stat.
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
-        are above cutoff. Default is 0.5
+        are above cutoff. Default is 0.5.
     :param use_gaussian_mixture_model: Use gaussian mixture model to split samples into 'XX' and 'XY' instead of f-stat.
-    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs.
+    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
         for XX, XY karyotypes.
     :param aneuploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for
         aneuploidies.
+    :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
+    :param normal_chr_x_hom_alt_cutoff: Number of standard deviations to use when determining cutoffs for the fraction
+        of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X for for XX and XY karyotypes.
     :return: Table of samples imputed sex karyotype.
     """
     logger.info("Inferring sex karyotype")
-    if chrx_frac_hom_alt_expr is not None:
-        ploidy_ht = ploidy_ht.annotate(_chrx_frac_hom_alt=chrx_frac_hom_alt_expr)
+    if chr_x_frac_hom_alt_expr is not None:
+        ploidy_ht = ploidy_ht.annotate(_chr_x_frac_hom_alt=chr_x_frac_hom_alt_expr)
 
     if use_gaussian_mixture_model:
         logger.info("Using Gaussian Mixture Model for karyotype assignment")
@@ -304,20 +307,23 @@ def infer_sex_karyotype(
         )
         group_by_expr = None
 
-    if chrx_frac_hom_alt_expr is not None:
-        logger.info("FILL ME IN")
-        chrx_frac_hom_alt_expr = ploidy_ht._chrx_frac_hom_alt
-        chrx_frac_hom_alt_cutoffs = get_chrx_hom_alt_cutoffs(
+    if chr_x_frac_hom_alt_expr is not None:
+        logger.info(
+            "Including cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on "
+            "chromosome X."
+        )
+        chr_x_frac_hom_alt_expr = ploidy_ht._chr_x_frac_hom_alt
+        chr_x_frac_hom_alt_cutoffs = get_chr_x_hom_alt_cutoffs(
             ploidy_ht,
-            chrx_frac_hom_alt_expr,
+            chr_x_frac_hom_alt_expr,
             f_stat_cutoff=f_stat_cutoff,
             group_by_expr=group_by_expr,
-            cutoff_stdev=normal_chrx_hom_alt_cutoff,
+            cutoff_stdev=normal_chr_x_hom_alt_cutoff,
         )
 
     else:
-        chrx_frac_hom_alt_expr = None
-        chrx_frac_hom_alt_cutoffs = None
+        chr_x_frac_hom_alt_expr = None
+        chr_x_frac_hom_alt_cutoffs = None
 
     karyotype_ht = ploidy_ht.select(
         **get_sex_expr(
@@ -325,8 +331,8 @@ def infer_sex_karyotype(
             ploidy_ht.chrY_ploidy,
             x_ploidy_cutoffs,
             y_ploidy_cutoffs,
-            chr_x_frac_hom_alt_expr=chrx_frac_hom_alt_expr,
-            chr_x_frac_hom_alt_cutoffs=chrx_frac_hom_alt_cutoffs,
+            chr_x_frac_hom_alt_expr=chr_x_frac_hom_alt_expr,
+            chr_x_frac_hom_alt_cutoffs=chr_x_frac_hom_alt_cutoffs,
         )
     )
     karyotype_ht = karyotype_ht.annotate_globals(
@@ -345,12 +351,12 @@ def infer_sex_karyotype(
             lower_cutoff_YY=y_ploidy_cutoffs[1],
         ),
     )
-    if chrx_frac_hom_alt_expr is not None:
+    if chr_x_frac_hom_alt_expr is not None:
         karyotype_ht = karyotype_ht.annotate_globals(
             x_frac_hom_alt_cutoffs=hl.struct(
-                lower_cutoff_more_than_one_X=chrx_frac_hom_alt_cutoffs[0][0],
-                upper_cutoff_more_than_one_X=chrx_frac_hom_alt_cutoffs[0][1],
-                lower_cutoff_X=chrx_frac_hom_alt_cutoffs[1],
+                lower_cutoff_more_than_one_X=chr_x_frac_hom_alt_cutoffs[0][0],
+                upper_cutoff_more_than_one_X=chr_x_frac_hom_alt_cutoffs[0][1],
+                lower_cutoff_X=chr_x_frac_hom_alt_cutoffs[1],
             )
         )
 

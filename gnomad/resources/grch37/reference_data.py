@@ -58,7 +58,9 @@ syndip = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch37/syndip/hybrid.m37m.mt",
     import_func=hl.import_vcf,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch37/syndip/hybrid.m37m.vcf.bgz",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch37/syndip/hybrid.m37m.vcf.bgz"
+        ),
         "min_partitions": 100,
         "reference_genome": "GRCh37",
     },

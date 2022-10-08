@@ -186,7 +186,9 @@ hapmap = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/hapmap/hapmap_3.3.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
-        "path": "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz",
+        "path": (
+            "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz"
+        ),
         "force_bgz": True,
         "reference_genome": "GRCh38",
     },

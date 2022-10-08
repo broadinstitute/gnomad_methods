@@ -222,7 +222,8 @@ def get_summary_counts(
     ht = ht.annotate(freq_bin=freq_bin_expr(ht[freq_field], index))
 
     logger.info(
-        "Annotating HT globals with total counts/total allele counts per variant category..."
+        "Annotating HT globals with total counts/total allele counts per variant"
+        " category..."
     )
     summary_counts = ht.aggregate(
         hl.struct(
@@ -379,7 +380,8 @@ def default_generate_gene_lof_matrix(
     filt_criteria = hl.len(mt[filter_field]) == 0
     if filter_an:
         logger.info(
-            "Using AN (as a call rate proxy) to filter to variants that meet a minimum call rate..."
+            "Using AN (as a call rate proxy) to filter to variants that meet a minimum"
+            " call rate..."
         )
         mt = mt.filter_rows(get_an_criteria(mt))
     if remove_ultra_common:
@@ -395,7 +397,8 @@ def default_generate_gene_lof_matrix(
         explode_field = "transcript_consequences"
     else:
         logger.info(
-            "Adding most severe (worst) consequence and expoding worst_csq_by_gene field..."
+            "Adding most severe (worst) consequence and expoding worst_csq_by_gene"
+            " field..."
         )
         mt = process_consequences(mt)
         explode_field = "worst_csq_by_gene"

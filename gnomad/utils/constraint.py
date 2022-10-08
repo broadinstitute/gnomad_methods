@@ -33,7 +33,8 @@ def annotate_mutation_type(
     context_lengths = list(filter(None, set(hl.len(t.context).take(100))))
     if len(context_lengths) > 1:
         raise ValueError(
-            "More than one length was found among the first 100 'context' values. Length of 'context' should be consistent."
+            "More than one length was found among the first 100 'context' values."
+            " Length of 'context' should be consistent."
         )
     else:
         context_length = context_lengths[0]
@@ -45,7 +46,8 @@ def annotate_mutation_type(
         mid_index = 3
     else:
         raise ValueError(
-            f"The length of context should be either 3 or 7, instead of {context_length}."
+            "The length of context should be either 3 or 7, instead of"
+            f" {context_length}."
         )
 
     transition_expr = hl.is_transition(t.ref, t.alt)

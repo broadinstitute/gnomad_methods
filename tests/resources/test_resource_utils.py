@@ -190,7 +190,9 @@ class TestDefaultPublicResourceSource:
         ), patch.dict(
             os.environ,
             {
-                "GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE": "gs://my-bucket/gnomad-resources"
+                "GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE": (
+                    "gs://my-bucket/gnomad-resources"
+                )
             },
         ):
             assert (

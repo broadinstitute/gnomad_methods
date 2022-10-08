@@ -190,9 +190,8 @@ def _get_info_agg_expr(
         missing_fields = [f for f in fields if f not in out_fields]
         if missing_fields:
             raise ValueError(
-                "Could not find the following field(s)in the MT entry schema (or nested under mt.gvcf_info: {}".format(
-                    ",".join(missing_fields)
-                )
+                "Could not find the following field(s)in the MT entry schema (or nested"
+                " under mt.gvcf_info: {}".format(",".join(missing_fields))
             )
 
         return out_fields
@@ -316,9 +315,9 @@ def get_as_info_expr(
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
-            "`DP` was included in allele-specific aggregation, "
-            "however `DP` is typically not aggregated by allele; `VarDP` is."
-            "Note that the resulting `AS_DP` field will NOT include reference genotypes."
+            "`DP` was included in allele-specific aggregation, however `DP` is"
+            " typically not aggregated by allele; `VarDP` is.Note that the resulting"
+            " `AS_DP` field will NOT include reference genotypes."
         )
 
     agg_expr = _get_info_agg_expr(
@@ -337,7 +336,10 @@ def get_as_info_expr(
     if alt_alleles_range_array_field not in mt.row or mt[
         alt_alleles_range_array_field
     ].dtype != hl.dtype("array<int32>"):
-        msg = f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}' of type array<int32>"
+        msg = (
+            f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}'"
+            " of type array<int32>"
+        )
         logger.error(msg)
         raise ValueError(msg)
 
@@ -411,7 +413,8 @@ def get_site_info_expr(
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
-            "`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr"
+            "`DP` was included in site-level aggregation. This requires a densifying"
+            " prior to running get_site_info_expr"
         )
 
     agg_expr = _get_info_agg_expr(
@@ -583,7 +586,10 @@ def impute_sex_ploidy(
     if chr_x is None:
         if len(ref.x_contigs) != 1:
             raise NotImplementedError(
-                "Found {0} X chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single X chromosome contig. Please use the `chr_x` argument to  specify which X chromosome contig to use ".format(
+                "Found {0} X chromosome contigs ({1}) in Genome reference."
+                " sparse_impute_sex_ploidy currently only supports a single X"
+                " chromosome contig. Please use the `chr_x` argument to  specify which"
+                " X chromosome contig to use ".format(
                     len(ref.x_contigs), ",".join(ref.x_contigs)
                 )
             )
@@ -591,7 +597,10 @@ def impute_sex_ploidy(
     if chr_y is None:
         if len(ref.y_contigs) != 1:
             raise NotImplementedError(
-                "Found {0} Y chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single Y chromosome contig. Please use the `chr_y` argument to  specify which Y chromosome contig to use ".format(
+                "Found {0} Y chromosome contigs ({1}) in Genome reference."
+                " sparse_impute_sex_ploidy currently only supports a single Y"
+                " chromosome contig. Please use the `chr_y` argument to  specify which"
+                " Y chromosome contig to use ".format(
                     len(ref.y_contigs), ",".join(ref.y_contigs)
                 )
             )

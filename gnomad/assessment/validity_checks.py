@@ -313,7 +313,8 @@ def summarize_variant_filters(
     _filter_agg_order(t, {"allele_type": t.info.allele_type})
 
     logger.info(
-        "Checking distributions of variant type and region type amongst variant filters..."
+        "Checking distributions of variant type and region type amongst variant"
+        " filters..."
     )
     _filter_agg_order(
         t,
@@ -326,7 +327,8 @@ def summarize_variant_filters(
     )
 
     logger.info(
-        "Checking distributions of variant type, region type, and number of alt alleles amongst variant filters..."
+        "Checking distributions of variant type, region type, and number of alt alleles"
+        " amongst variant filters..."
     )
     _filter_agg_order(
         t,
@@ -746,7 +748,8 @@ def compute_missingness(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %.2f",
+        "Missingness threshold (upper cutoff for what is allowed for missingness"
+        " checks): %.2f",
         missingness_threshold,
     )
     metrics_missing = {}
@@ -842,7 +845,8 @@ def vcf_field_check(
 
     if len(missing_fields) != 0 or len(missing_descriptions) != 0:
         logger.error(
-            "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
+            "Some fields are either missing or missing descriptions in the VCF header!"
+            " Please reconcile."
         )
         logger.error("Missing fields: %s", missing_fields)
         logger.error("Missing descriptions: %s", missing_descriptions)

@@ -36,6 +36,14 @@ Use [Black](https://black.readthedocs.io/) to format code.
 black gnomad
 ```
 
+## Running autopep8
+
+Use [autopep8](https://github.com/hhatto/autopep8/) to format comments.
+
+```
+autopep8 --in-place gnomad
+```
+
 ## Running isort
 
 Use [isort](https://pycqa.github.io/isort/) to format imports.

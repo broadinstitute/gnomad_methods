@@ -109,11 +109,13 @@ def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
             )
         else:
             raise NotImplementedError(
-                f"No known location for the fasta/fai files for genome {ref.name}. Only GRCh37 and GRCh38 are supported at this time."
+                f"No known location for the fasta/fai files for genome {ref.name}. Only"
+                " GRCh37 and GRCh38 are supported at this time."
             )
     else:
         logger.info(
-            "Reference genome sequence already present. Ignoring add_reference_sequence."
+            "Reference genome sequence already present. Ignoring"
+            " add_reference_sequence."
         )
 
     return ref

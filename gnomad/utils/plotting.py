@@ -196,7 +196,6 @@ def plot_multi_hail_hist(
     )
     hists = []
     for label, hist in hist_data.items():
-
         data = {}
         distance = abs(hist.bin_edges[0] - hist.bin_edges[1])
         data["top"] = [x + low for x in hist.bin_freq]
@@ -442,7 +441,10 @@ def plot_hail_file_metadata(
 
     title = f"{data_type}: {t_path}"
 
-    msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size}<br/>"
+    msg = (
+        f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions:"
+        f" {len(all_data['rows_per_partition']):,}<br/>Size: {total_file_size}<br/>"
+    )
     if success_file[0]:
         msg += success_file[0]
 
@@ -510,7 +512,11 @@ def plot_hail_file_metadata(
     if "entry_file_sizes" in all_data:
         title = f"Statistics for {data_type}: {t_path}"
 
-        msg = f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions: {len(all_data['rows_per_partition']):,}<br/>Size: {total_entry_file_size}<br/>"
+        msg = (
+            f"Rows: {sum(all_data['rows_per_partition']):,}<br/>Partitions:"
+            f" {len(all_data['rows_per_partition']):,}<br/>Size:"
+            f" {total_entry_file_size}<br/>"
+        )
         if success_file[0]:
             msg += success_file[0]
 

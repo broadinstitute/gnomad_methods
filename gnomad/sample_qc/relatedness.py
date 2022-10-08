@@ -173,7 +173,9 @@ def explode_duplicate_samples_ht(dups_ht: hl.Table) -> hl.Table:
             return (dups_ht.key[0], False)
         else:
             raise TypeError(
-                f"Cannot explode table as types of the filtered field ({dups_ht.filtered.dtype}) and the key ({dups_ht.key.dtype}) are incompatible."
+                "Cannot explode table as types of the filtered field"
+                f" ({dups_ht.filtered.dtype}) and the key ({dups_ht.key.dtype}) are"
+                " incompatible."
             )
 
     dups_ht = dups_ht.annotate(
@@ -472,8 +474,8 @@ def infer_families(
                 )
             else:
                 logger.warning(
-                    "Discarded family with same parents, and multiple offspring that weren't siblings:"
-                    "\nMother: %s\nFather:%s\nChildren:%s",
+                    "Discarded family with same parents, and multiple offspring that"
+                    " weren't siblings:\nMother: %s\nFather:%s\nChildren:%s",
                     possible_parents[0],
                     possible_parents[1],
                     ", ".join(children),
@@ -504,13 +506,15 @@ def infer_families(
     # If i_col and j_col aren't str, then convert them
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
         logger.warning(
-            "Pedigrees can only be constructed from string IDs, but your relatedness_ht ID column is of type: %s. "
-            "Expression will be converted to string in Pedigrees.",
+            "Pedigrees can only be constructed from string IDs, but your relatedness_ht"
+            " ID column is of type: %s. Expression will be converted to string in"
+            " Pedigrees.",
             relationship_ht[i_col].dtype,
         )
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
             logger.warning(
-                "Struct fields %s will be joined by underscores to use as sample names in Pedigree.",
+                "Struct fields %s will be joined by underscores to use as sample names"
+                " in Pedigree.",
                 list(relationship_ht[i_col]),
             )
             relationship_ht = relationship_ht.key_by(
@@ -537,7 +541,8 @@ def infer_families(
             )
         else:
             raise NotImplementedError(
-                "The `i_col` and `j_col` columns of the `relationship_ht` argument passed to infer_families are not of type StringExpression or Struct."
+                "The `i_col` and `j_col` columns of the `relationship_ht` argument"
+                " passed to infer_families are not of type StringExpression or Struct."
             )
 
     # If sex is a Table, extract sex information as a Dict
@@ -596,7 +601,8 @@ def create_fake_pedigree(
 
     if exclude_real_probands and len(real_trios) == len(set(sample_list)):
         logger.warning(
-            "All samples are in the real probands list; cannot create any fake pedigrees with exclude_real_probands=True. Returning an empty Pedigree."
+            "All samples are in the real probands list; cannot create any fake"
+            " pedigrees with exclude_real_probands=True. Returning an empty Pedigree."
         )
         return hl.Pedigree([])
 
@@ -624,7 +630,8 @@ def create_fake_pedigree(
 
     if tries == max_tries:
         logger.warning(
-            "Only returning %d fake trios; random trio sampling stopped after reaching the maximum %d iterations",
+            "Only returning %d fake trios; random trio sampling stopped after reaching"
+            " the maximum %d iterations",
             len(fake_trios),
             max_tries,
         )
@@ -676,7 +683,8 @@ def compute_related_samples_to_drop(
             hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s))
         )
         logger.info(
-            "Found %d samples with too many 1st/2nd degree relatives. These samples will be excluded.",
+            "Found %d samples with too many 1st/2nd degree relatives. These samples"
+            " will be excluded.",
             len(filtered_samples_rel),
         )
 
@@ -840,7 +848,8 @@ def generate_trio_stats_expr(
         """Determine whether a given genotype combination is a DNM at a given locus with a given proband sex."""
         if proband_is_female is None:
             logger.warning(
-                "Since no proband sex expression was given to generate_trio_stats_expr, only DNMs in autosomes will be counted."
+                "Since no proband sex expression was given to generate_trio_stats_expr,"
+                " only DNMs in autosomes will be counted."
             )
             return hl.or_missing(
                 locus.in_autosome(),
@@ -983,7 +992,8 @@ def generate_sib_stats_expr(
 
     if is_female is None:
         logger.warning(
-            "Since no sex expression was given to generate_sib_stats_expr, only variants in autosomes will be counted."
+            "Since no sex expression was given to generate_sib_stats_expr, only"
+            " variants in autosomes will be counted."
         )
 
     # If a sample is in sib_ht more than one time, keep only one of the sibling pairs

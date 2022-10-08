@@ -829,7 +829,7 @@ def generate_trio_stats_expr(
     trans_count_map = hl.literal(trans_config_counts)
 
     def _get_copy_state(locus: hl.expr.LocusExpression) -> hl.expr.Int32Expression:
-        """Get copy-state int from LocusExpression for indexing into the trans_count_map."""
+        """Get copy-state int from LocusExpression for indexing into trans_count_map."""
         return (
             hl.case()
             .when(locus.in_autosome_or_par(), auto_or_par)
@@ -845,7 +845,7 @@ def generate_trio_stats_expr(
         locus: hl.expr.LocusExpression,
         proband_is_female: Optional[hl.expr.BooleanExpression],
     ) -> hl.expr.BooleanExpression:
-        """Determine whether a given genotype combination is a DNM at a given locus with a given proband sex."""
+        """Determine whether a trio genotype combination is a DNM."""
         if proband_is_female is None:
             logger.warning(
                 "Since no proband sex expression was given to generate_trio_stats_expr,"

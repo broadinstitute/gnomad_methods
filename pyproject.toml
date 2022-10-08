@@ -1,5 +1,6 @@
 [tool.black]
 target-version = ['py36', 'py37', 'py38']
+preview = true
 [tool.isort]
 profile = "black"
 [tool.autopep8]

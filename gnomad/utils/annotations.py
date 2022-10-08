@@ -752,7 +752,7 @@ def annotate_adj(
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
-    """Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)."""
+    """Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings."""
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != "*", alts)

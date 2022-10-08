@@ -123,7 +123,7 @@ class TestDefaultPublicResourceSource:
         ],
     )
     def test_read_from_default_source(self, default_source, expected_path):
-        """Test that resource paths are based on default source when no source is configured."""
+        """Test that resource paths use default source when no source is configured."""
         gnomad_public_resource_configuration._source = None
 
         with patch(
@@ -182,7 +182,12 @@ class TestDefaultPublicResourceSource:
             assert get_default_public_resource_source() == expected_default_source
 
     def test_default_source_from_environment_overrides_cloud_spark_provider(self):
-        """Test that a default source configured in environment variables is preferred over the one for the current cloud Spark provider."""
+        """
+        Test that a default source configured in environment variables is preferred.
+
+        Make sure the environment variables is used over the one for the current cloud
+        Spark provider.
+        """
         with patch(
             "hail.utils.guess_cloud_spark_provider",
             return_value="hdinsight",

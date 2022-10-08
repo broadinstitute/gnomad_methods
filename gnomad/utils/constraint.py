@@ -28,7 +28,8 @@ def annotate_mutation_type(
     :param t: Input Table or MatrixTable.
     :return: Table with mutation type annotations added.
     """
-    # Determine the middle index of context by sampling the first 100 values of 'context'
+    # Determine the middle index of context by sampling the first 100 values
+    # of 'context'
     context_lengths = list(filter(None, set(hl.len(t.context).take(100))))
     if len(context_lengths) > 1:
         raise ValueError(

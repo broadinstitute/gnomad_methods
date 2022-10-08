@@ -198,7 +198,8 @@ def get_relationship_expr(  # TODO: The threshold detection could be easily auto
     # ibd0_50_thresholds = [0.37, 0.625], Not useful for relationship inference
     # ibd0_100_threshold = 0.625  , Not useful for relationship inference
     ibd1_0_thresholds: Tuple[float, float] = (-0.15, 0.1),
-    # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37), Not useful for relationship inference
+    # ibd1_25_thresholds: Tuple[float, float] = (0.1, 0.37), Not useful for
+    # relationship inference
     ibd1_50_thresholds: Tuple[float, float] = (0.275, 0.75),
     ibd1_100_min: float = 0.75,
     ibd2_0_max: float = 0.125,

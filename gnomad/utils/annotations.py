@@ -479,7 +479,8 @@ def annotate_freq(
                 ]
             )
 
-    # Add all desired strata, starting with the full set and ending with downsamplings (if any)
+    # Add all desired strata, starting with the full set and ending with
+    # downsamplings (if any)
     sample_group_filters = (
         [({}, True)]
         + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
@@ -632,7 +633,8 @@ def get_annotations_hists(
     :return: Dictionary of merics and their histograms
     :rtype: Dict[str, hl.expr.StructExpression]
     """
-    # Check all fields in ht.info and create histograms if they are in annotations_hists dict
+    # Check all fields in ht.info and create histograms if they are in
+    # annotations_hists dict
     return {
         field: hl.agg.hist(
             hl.log10(ht.info[field]) if field in log10_annotations else ht.info[field],

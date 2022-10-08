@@ -27,6 +27,8 @@ syncs to the public bucket `gcp-public-data--gnomad`.
 """
 
 # Resource classes
+
+
 class BaseResource(ABC):
     """
     Generic abstract resource class.
@@ -345,7 +347,8 @@ class BaseVersionedResource:
         )
 
     def __getattr__(self, name):
-        # If __getattr__ is called for 'default_version', 'version', etc. then something has gone wrong.
+        # If __getattr__ is called for 'default_version', 'version', etc. then
+        # something has gone wrong.
         if name in self.__slots__:
             raise ValueError("VersionedResource has not been initialized")
 

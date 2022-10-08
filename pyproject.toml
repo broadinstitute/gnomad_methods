@@ -2,3 +2,9 @@
 target-version = ['py36', 'py37', 'py38']
 [tool.isort]
 profile = "black"
+[tool.autopep8]
+max_line_length = 88
+ignore = ['E731']
+in-place = true
+recursive = true
+aggressive = 1

@@ -374,7 +374,8 @@ def adjust_vcf_incompatible_types(
 
     # Make sure to pipe-delimit fields that need to.
     # Note: the expr needs to be prefixed by "|" because GATK expect one value for the ref (always empty)
-    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it is handled below
+    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it
+    # is handled below
     for f in pipe_delimited_annotations:
         if f in ht.info and f != "AS_SB_TABLE":
             info_expr[f] = "|" + get_pipe_expr(ht.info[f])

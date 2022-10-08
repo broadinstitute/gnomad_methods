@@ -47,7 +47,8 @@ def _import_clinvar(**kwargs) -> hl.Table:
 
 def _import_dbsnp(**kwargs) -> hl.Table:
     dbsnp = import_sites_vcf(**kwargs)
-    # Note: permit_shuffle is set because the dbsnp vcf has duplicate loci (turned into a set) so might be out of order
+    # Note: permit_shuffle is set because the dbsnp vcf has duplicate loci
+    # (turned into a set) so might be out of order
     dbsnp = hl.split_multi(dbsnp, permit_shuffle=True)
     dbsnp = dbsnp.group_by(dbsnp.locus, dbsnp.alleles).aggregate(
         rsid=hl.agg.collect_as_set(dbsnp.rsid)

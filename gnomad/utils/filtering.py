@@ -82,7 +82,8 @@ def filter_by_frequency(
     if subpop:
         criteria.append(lambda f: f.meta.get("subpop", "") == subpop)
         size += 1
-        # If one supplies a subpop but not a population, this will ensure this gets it right
+        # If one supplies a subpop but not a population, this will ensure this
+        # gets it right
         if not population:
             size += 1
     if downsampling:

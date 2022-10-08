@@ -81,7 +81,8 @@ def sample_training_examples(
         logger.info(pformat(pd_stats))
         pd_stats = pd_stats.fillna(False)
 
-        # Number of true positive and false positive variants to be sampled for the training set
+        # Number of true positive and false positive variants to be sampled for
+        # the training set
         n_tp = pd_stats[pd_stats["tp"] & ~pd_stats["fp"]]["n"].sum()
         n_fp = pd_stats[~pd_stats["tp"] & pd_stats["fp"]]["n"].sum()
 

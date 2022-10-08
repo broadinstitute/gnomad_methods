@@ -433,7 +433,8 @@ def annotate_sex(
             )
         mt = mtds
 
-    # Determine the contigs that are needed for variant only and reference block only sex ploidy imputation
+    # Determine the contigs that are needed for variant only and reference
+    # block only sex ploidy imputation
     rg = get_reference_genome(mt.locus)
     if normalization_contig not in rg.contigs:
         raise ValueError(

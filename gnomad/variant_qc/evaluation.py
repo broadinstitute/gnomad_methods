@@ -97,7 +97,8 @@ def compute_ranked_bin(
     )
     bin_ht = bin_ht.key_by("locus", "alleles")
 
-    # Annotate globals with variant counts per group defined by bin_expr. This is used to determine bin assignment
+    # Annotate globals with variant counts per group defined by bin_expr. This
+    # is used to determine bin assignment
     bin_ht = bin_ht.annotate_globals(
         bin_group_variant_counts=bin_ht.aggregate(
             hl.Struct(
@@ -138,7 +139,8 @@ def compute_ranked_bin(
         )
 
     # Because SNV and indel rows are mutually exclusive, re-combine them into a single bin.
-    # Update the global bin_group_variant_counts struct to reflect the change in bin names in the table
+    # Update the global bin_group_variant_counts struct to reflect the change
+    # in bin names in the table
     if compute_snv_indel_separately:
         bin_expr_no_snv = {
             bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_group_variant_counts
@@ -209,7 +211,8 @@ def compute_grouped_binned_ht(
     else:
         bin_ht = bin_ht.persist()
 
-    # Group by bin_id, bin and additional stratification desired and compute QC metrics per bin
+    # Group by bin_id, bin and additional stratification desired and compute
+    # QC metrics per bin
     return bin_ht.group_by(
         bin_id=bin_ht.bin_id,
         contig=bin_ht.locus.contig,

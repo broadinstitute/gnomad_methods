@@ -21,7 +21,8 @@ POP_NAMES = {
     "eas": "East Asian",
     "eur": "European",
     "fin": "Finnish",
-    "mde": "Middle Eastern",  # NOTE: mde is kept for historical purposes, in gnomAD v3.1 mid was used instead
+    # NOTE: mde is kept for historical purposes, in gnomAD v3.1 mid was used instead
+    "mde": "Middle Eastern",
     "mid": "Middle Eastern",
     "nfe": "Non-Finnish European",
     "oth": "Other",

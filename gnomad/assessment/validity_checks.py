@@ -147,9 +147,12 @@ def make_group_sum_expr_dict(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the first group for check and remove if from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we do not check raw sample sums.
+    # Grab the first group for check and remove if from the label_group
+    # dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric
+    # counts for all sample groups so we do not check raw sample sums.
     group = label_groups.pop("group")[0]
-    # sum_group is a the type of high level annotation that you want to sum e.g. 'pop', 'pop-sex', 'sex'.
+    # sum_group is a the type of high level annotation that you want to sum
+    # e.g. 'pop', 'pop-sex', 'sex'.
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
@@ -159,7 +162,8 @@ def make_group_sum_expr_dict(
     # where the key is a string representing the sum_group annotations and the value is the sum of these annotations.
     # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is pop, then the values below are:
     # sum_group_exprs = ["AC-tgp-pop1", "AC-tgp-pop2", "AC-tgp-pop3"]
-    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1", "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])
+    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1",
+    # "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])}
     annot_dict = {}
     for metric in metrics:
         if metric_first_field:
@@ -181,7 +185,8 @@ def make_group_sum_expr_dict(
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
-    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict key from above
+    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict
+    # key from above
     field_check_expr = {}
     for metric in metrics:
         if metric_first_field:

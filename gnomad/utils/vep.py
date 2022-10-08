@@ -14,7 +14,8 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
+# Note that this is the current as of v81 with some included for backwards
+# compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
     "splice_acceptor_variant",

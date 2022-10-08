@@ -40,7 +40,8 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
     mt = mt.select_entries("END")
 
-    # Localize entries, so that they can be viewed as an array and scanned over using hl.scan.array_agg
+    # Localize entries, so that they can be viewed as an array and scanned
+    # over using hl.scan.array_agg
     ht = mt._localize_entries("__entries", "__cols")
 
     # Compute the position by using hl.scan._prev_nonnull.
@@ -50,7 +51,8 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     # The following code computes the following annotation for each row:
     # 1. Keep a scan of the entries using _prev_nonnull, keeping the start (ht.locus) and end (entry.END) of each ref block  (1.1)
     # 2. For the current row locus, record the start of the block that starts the furthest away,
-    #    that is the minimum position in the current scan for any block that overlaps the current locus (2.1)
+    # that is the minimum position in the current scan for any block that
+    # overlaps the current locus (2.1)
     ht = ht.select(
         last_END_position=hl.or_else(
             hl.min(  # 2. For the current row locus, record the start of the block that starts the furthest away
@@ -421,7 +423,8 @@ def get_site_info_expr(
     )
 
     # Add FS and SOR if SB is present
-    # This is done outside of _get_info_agg_expr as the behavior is different in site vs allele-specific versions
+    # This is done outside of _get_info_agg_expr as the behavior is different
+    # in site vs allele-specific versions
     if "SB" in agg_expr:
         agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
         agg_expr["SOR"] = sor_from_sb(agg_expr["SB"])
@@ -458,7 +461,8 @@ def default_compute_info(
     # Move gvcf info entries out from nested struct
     mt = mt.transmute_entries(**mt.gvcf_info)
 
-    # Adding alt_alleles_range_array as a required annotation for get_as_info_expr to reduce memory usage
+    # Adding alt_alleles_range_array as a required annotation for
+    # get_as_info_expr to reduce memory usage
     mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
 
     # Compute AS info expr
@@ -763,20 +767,24 @@ def compute_coverage_stats(
     max_coverage_bin = coverage_over_x_bins[-1]
     hl_coverage_over_x_bins = hl.array(coverage_over_x_bins)
 
-    # This expression creates a counter DP -> number of samples for DP between 0 and max_coverage_bin
+    # This expression creates a counter DP -> number of samples for DP between
+    # 0 and max_coverage_bin
     coverage_counter_expr = hl.agg.counter(
         hl.min(max_coverage_bin, hl.or_else(mt.DP, 0))
     )
 
     # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
     # and computes the cumulative sum over them.
-    #  It needs to be in reverse order because we want the sum over samples covered by > X.
+    # It needs to be in reverse order because we want the sum over samples
+    # covered by > X.
     count_array_expr = hl.cumulative_sum(
         hl.array(
             [
                 hl.int32(coverage_counter_expr.get(max_coverage_bin, 0))
             ]  # The coverage was already floored to the max_coverage_bin, so no more aggregation is needed for the max bin
-        ).extend(  # For each of the other bins, coverage needs to be summed between the boundaries
+            # For each of the other bins, coverage needs to be summed between the
+            # boundaries
+        ).extend(
             hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
                 lambda i: hl.sum(
                     hl.range(

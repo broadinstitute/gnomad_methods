@@ -310,8 +310,9 @@ def infer_sex_karyotype(
 
     if chr_x_frac_hom_alt_expr is not None:
         logger.info(
-            f"Including cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on "
-            f"chromosome X. Using {normal_chr_x_hom_alt_cutoff} standard deviations to determine cutoffs."
+            "Including cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on "
+            "chromosome X. Using %d standard deviations to determine cutoffs.",
+            normal_chr_x_hom_alt_cutoff,
         )
         chr_x_frac_hom_alt_expr = ploidy_ht._chr_x_frac_hom_alt
         chr_x_frac_hom_alt_cutoffs = get_chr_x_hom_alt_cutoffs(

@@ -276,7 +276,8 @@ def infer_sex_karyotype(
         aneuploidies.
     :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
     :param normal_chr_x_hom_alt_cutoff: Number of standard deviations to use when determining cutoffs for the fraction
-        of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X for for XX and XY karyotypes.
+        of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X for for XX and XY karyotypes. Only
+        used if `chr_x_frac_hom_alt_expr` is supplied.
     :return: Table of samples imputed sex karyotype.
     """
     logger.info("Inferring sex karyotype")
@@ -309,8 +310,8 @@ def infer_sex_karyotype(
 
     if chr_x_frac_hom_alt_expr is not None:
         logger.info(
-            "Including cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on "
-            "chromosome X."
+            f"Including cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on "
+            f"chromosome X. Using {normal_chr_x_hom_alt_cutoff} standard deviations to determine cutoffs."
         )
         chr_x_frac_hom_alt_expr = ploidy_ht._chr_x_frac_hom_alt
         chr_x_frac_hom_alt_cutoffs = get_chr_x_hom_alt_cutoffs(
@@ -322,7 +323,6 @@ def infer_sex_karyotype(
         )
 
     else:
-        chr_x_frac_hom_alt_expr = None
         chr_x_frac_hom_alt_cutoffs = None
 
     karyotype_ht = ploidy_ht.select(
@@ -356,7 +356,7 @@ def infer_sex_karyotype(
             x_frac_hom_alt_cutoffs=hl.struct(
                 lower_cutoff_more_than_one_X=chr_x_frac_hom_alt_cutoffs[0][0],
                 upper_cutoff_more_than_one_X=chr_x_frac_hom_alt_cutoffs[0][1],
-                lower_cutoff_X=chr_x_frac_hom_alt_cutoffs[1],
+                lower_cutoff_single_X=chr_x_frac_hom_alt_cutoffs[1],
             )
         )
 

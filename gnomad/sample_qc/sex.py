@@ -356,40 +356,55 @@ def get_sex_expr(
         )
 
     if chr_x_frac_hom_alt_expr is not None:
-        add_x_condition = chr_x_frac_hom_alt_expr > chr_x_frac_hom_alt_cutoffs[1]
-        add_xx_condition = (
-            chr_x_frac_hom_alt_expr > chr_x_frac_hom_alt_cutoffs[0][0]
-        ) & (chr_x_frac_hom_alt_expr < chr_x_frac_hom_alt_cutoffs[0][1])
-        add_xxx_condition = chr_x_frac_hom_alt_expr < chr_x_frac_hom_alt_cutoffs[0][1]
+        lower_cutoff_for_single_x = chr_x_frac_hom_alt_cutoffs[1]
+        lower_cutoff_for_multiple_x = chr_x_frac_hom_alt_cutoffs[0][0]
+        upper_cutoff_for_multiple_x = chr_x_frac_hom_alt_cutoffs[0][1]
+
+        add_x_condition = chr_x_frac_hom_alt_expr > lower_cutoff_for_single_x
+        add_xx_condition = (chr_x_frac_hom_alt_expr > lower_cutoff_for_multiple_x) & (
+            chr_x_frac_hom_alt_expr < upper_cutoff_for_multiple_x
+        )
+        add_xxx_condition = chr_x_frac_hom_alt_expr < upper_cutoff_for_multiple_x
     else:
         add_x_condition = add_xx_condition = add_xxx_condition = True
+
+    upper_ploidy_cutoff_for_x = x_ploidy_cutoffs[0]
+    lower_ploidy_cutoff_for_xx = x_ploidy_cutoffs[1][0]
+    upper_ploidy_cutoff_for_xx = x_ploidy_cutoffs[1][1]
+    lower_ploidy_cutoff_for_xxx = x_ploidy_cutoffs[2]
+
+    lower_ploidy_cutoff_for_y = y_ploidy_cutoffs[0][0]
+    upper_ploidy_cutoff_for_y = y_ploidy_cutoffs[0][1]
+    lower_ploidy_cutoff_for_yy = y_ploidy_cutoffs[1]
 
     sex_expr = hl.struct(
         X_karyotype=(
             hl.case()
-            .when((chr_x_ploidy < x_ploidy_cutoffs[0]) & add_x_condition, "X")
+            .when((chr_x_ploidy < upper_ploidy_cutoff_for_x) & add_x_condition, "X")
             .when(
                 (
-                    (chr_x_ploidy > x_ploidy_cutoffs[1][0])
-                    & (chr_x_ploidy < x_ploidy_cutoffs[1][1])
+                    (chr_x_ploidy > lower_ploidy_cutoff_for_xx)
+                    & (chr_x_ploidy < upper_ploidy_cutoff_for_xx)
                     & add_xx_condition
                 ),
                 "XX",
             )
-            .when((chr_x_ploidy >= x_ploidy_cutoffs[2]) & add_xxx_condition, "XXX")
+            .when(
+                (chr_x_ploidy >= lower_ploidy_cutoff_for_xxx) & add_xxx_condition, "XXX"
+            )
             .default("ambiguous")
         ),
         Y_karyotype=(
             hl.case()
-            .when(chr_y_ploidy < y_ploidy_cutoffs[0][0], "")
+            .when(chr_y_ploidy < lower_ploidy_cutoff_for_y, "")
             .when(
                 (
-                    (chr_y_ploidy > y_ploidy_cutoffs[0][0])
-                    & (chr_y_ploidy < y_ploidy_cutoffs[0][1])
+                    (chr_y_ploidy > lower_ploidy_cutoff_for_y)
+                    & (chr_y_ploidy < upper_ploidy_cutoff_for_y)
                 ),
                 "Y",
             )
-            .when(chr_y_ploidy >= y_ploidy_cutoffs[1], "YY")
+            .when(chr_y_ploidy >= lower_ploidy_cutoff_for_yy, "YY")
             .default("ambiguous")
         ),
     )

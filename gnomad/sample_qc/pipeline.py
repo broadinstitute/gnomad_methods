@@ -3,8 +3,10 @@
 import functools
 import logging
 import operator
+from typing import List, Optional, Union
 
 import hail as hl
+
 from gnomad.sample_qc.sex import (
     gaussian_mixture_model_karyotype_assignment,
     get_chr_x_hom_alt_cutoffs,
@@ -19,8 +21,6 @@ from gnomad.utils.annotations import (
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.sparse_mt import impute_sex_ploidy
-
-from typing import List, Optional, Union
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -387,6 +387,7 @@ def annotate_sex(
     variants_filter_segdup: bool = True,
     variants_filter_decoy: bool = False,
     variants_snv_only: bool = False,
+    coverage_mt: Optional[hl.MatrixTable] = None,
     compute_x_frac_variants_hom_alt: bool = False,
     compute_fstat: bool = True,
     infer_karyotype: bool = True,
@@ -443,6 +444,7 @@ def annotate_sex(
         exist for GRCh38.
     :param variants_snv_only: Whether to filter to only single nucleotide variants for variants only ploidy estimation
         and fraction of homozygous alternate variants on chromosome X. Default is False.
+    :param coverage_mt: Optional precomputed coverage MatrixTable to use in reference based VDS ploidy estimation.
     :param compute_x_frac_variants_hom_alt: Whether to return an annotation for the fraction of homozygous alternate
         variants on chromosome X. Default is False.
     :param compute_fstat: Whether to compute f-stat. Default is True.
@@ -518,12 +520,23 @@ def annotate_sex(
             ref_keep_contigs,
         )
         if is_vds:
-            ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
-                hl.vds.filter_intervals(mtds, ref_keep_locus_intervals),
-                calling_intervals=included_intervals,
-                normalization_contig=normalization_contig,
-                use_variant_dataset=False,
-            )
+            if coverage_mt is not None:
+                ploidy_ht = hl.vds.impute_sex_chr_ploidy_from_interval_coverage(
+                    coverage_mt.filter_rows(
+                        hl.is_defined(included_intervals[coverage_mt.row_key])
+                        & hl.literal(ref_keep_contigs).contains(
+                            coverage_mt.interval.start.contig
+                        )
+                    ),
+                    normalization_contig=normalization_contig,
+                )
+            else:
+                ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+                    hl.vds.filter_intervals(mtds, ref_keep_locus_intervals),
+                    calling_intervals=included_intervals,
+                    normalization_contig=normalization_contig,
+                    use_variant_dataset=False,
+                )
             ploidy_ht = ploidy_ht.rename(
                 {
                     "x_ploidy": "chrX_ploidy",

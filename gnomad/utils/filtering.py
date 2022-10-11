@@ -6,6 +6,7 @@ import operator
 from typing import Dict, List, Optional, Union
 
 import hail as hl
+
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome

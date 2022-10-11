@@ -7,7 +7,6 @@ import traceback
 import typing
 from contextlib import contextmanager
 
-
 from slack import WebClient
 
 

@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
+
 from gnomad.utils.gen_stats import to_phred
 
 logging.basicConfig(

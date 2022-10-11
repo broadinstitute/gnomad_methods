@@ -25,6 +25,7 @@ from bokeh.models.widgets import Panel, Tabs
 from bokeh.palettes import Spectral8, d3, viridis  # pylint: disable=no-name-in-module
 from bokeh.plotting import figure
 from bokeh.transform import factor_cmap
+
 from gnomad.utils.vep import (
     CSQ_CODING_HIGH_IMPACT,
     CSQ_CODING_LOW_IMPACT,

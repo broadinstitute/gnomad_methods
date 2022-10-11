@@ -7,13 +7,12 @@ import hail as hl
 
 from gnomad.utils.filtering import filter_low_conf_regions
 from gnomad.utils.vep import (
+    LOF_CSQ_SET,
     add_most_severe_consequence_to_consequence,
     filter_vep_to_canonical_transcripts,
     get_most_severe_consequence_for_summary,
-    LOF_CSQ_SET,
     process_consequences,
 )
-
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

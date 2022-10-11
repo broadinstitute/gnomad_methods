@@ -1,9 +1,10 @@
 # noqa: D100
 
 import hail as hl
+from hail.linalg import BlockMatrix
+
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
-from hail.linalg import BlockMatrix
 
 
 def get_r_human_readable(

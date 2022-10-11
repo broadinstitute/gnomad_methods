@@ -1,13 +1,14 @@
 # noqa: D100
 
+from typing import Optional
+
 from gnomad.resources.resource_utils import (
-    GnomadPublicTableResource,
+    DataException,
     GnomadPublicMatrixTableResource,
+    GnomadPublicTableResource,
     VersionedMatrixTableResource,
     VersionedTableResource,
-    DataException,
 )
-from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
 CURRENT_GENOME_RELEASE = "3.1.2"

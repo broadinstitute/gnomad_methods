@@ -4,8 +4,9 @@ import logging
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import hail as hl
-from gnomad.utils.gen_stats import get_median_and_mad_expr, merge_stats_counters_expr
 from hail.utils.misc import divide_null
+
+from gnomad.utils.gen_stats import get_median_and_mad_expr, merge_stats_counters_expr
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

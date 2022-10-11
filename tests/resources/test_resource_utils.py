@@ -8,9 +8,9 @@ import pytest
 
 from gnomad.resources import resource_utils
 from gnomad.resources.config import (
+    GnomadPublicResourceSource,
     get_default_public_resource_source,
     gnomad_public_resource_configuration,
-    GnomadPublicResourceSource,
 )
 
 

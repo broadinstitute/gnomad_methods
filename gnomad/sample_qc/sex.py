@@ -277,7 +277,7 @@ def get_chr_x_hom_alt_cutoffs(
     :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
         are above cutoff.
-    :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of and `f_stat_cutoff`.
+    :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of `f_stat_cutoff`.
     :param cutoff_stdev: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
         for XX, XY karyotypes.
     :return: Tuple of cutoffs: ((lower cutoff for more than one X, upper cutoff for more than one X), lower cutoff for

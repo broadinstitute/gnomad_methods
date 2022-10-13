@@ -353,8 +353,8 @@ def filter_vep_to_canonical_transcripts(
     Filter VEP transcript consequences to those in the canonical transcript.
 
     :param mt: Input Table or MatrixTable.
-    :param vep_root: Name used for VEP annotation. Defaults to 'vep'.
-    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Defaults to False.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Default is False.
     :return: Table or MatrixTable with VEP transcript consequences filtered.
     """
     return filter_vep_transcript_csqs(
@@ -371,8 +371,8 @@ def filter_vep_to_synonymous_variants(
     Filter VEP transcript consequences to those with a most severe consequence of 'synonymous_variant'.
 
     :param mt: Input Table or MatrixTable.
-    :param vep_root: Name used for VEP annotation. Defaults to 'vep'.
-    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Defaults to False.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Default is False.
     :return: Table or MatrixTable with VEP transcript consequences filtered.
     """
     return filter_vep_transcript_csqs(
@@ -580,16 +580,16 @@ def filter_vep_transcript_csqs(
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
 
     Transcript consequences can be filtered to those where 'most_severe_consequence' is 'synonymous_variant' and/or the transcript is the canonical transcript,
-    if `synonymous` and `canonical` parameter are set to True, respectively.
+    if the `synonymous` and `canonical` parameter are set to True, respectively.
 
     If `filter_empty_csq` parameter is set to True, the Table/MatrixTable is filtered to variants where 'transcript_consequences' within the VEP annotation
     is not empty after the specified filtering criteria is applied.
 
     :param t: Input Table or MatrixTable.
-    :param vep_root: Name used for VEP annotation. Defaults to 'vep'.
-    :param synonymous: Whether to filter to variants where the most severe consequence is 'synonymous_variant'. Defaults to True.
-    :param canonical: Whether to filter to only canonical transcripts. Defaults to True.
-    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Defaults to True.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param synonymous: Whether to filter to variants where the most severe consequence is 'synonymous_variant'. Default is True.
+    :param canonical: Whether to filter to only canonical transcripts. Default is True.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Default is True.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not canonical and not filter_empty_csq:

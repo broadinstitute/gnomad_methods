@@ -1,6 +1,5 @@
 # noqa: D100
 
-
 import logging
 from typing import Any, Optional, Tuple, Union
 
@@ -28,7 +27,7 @@ def annotate_with_mu(
 
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.
-    :param mu_annotation: The name of mutation rate annotation in `mutation_ht`. Defaults to 'mu_snp'.
+    :param mu_annotation: The name of mutation rate annotation in `mutation_ht`. Default is 'mu_snp'.
     :return: Table with mutational rate annotation added.
     """
     mu = mutation_ht.index(*[ht[k] for k in mutation_ht.key])[mu_annotation]
@@ -53,15 +52,14 @@ def count_variants_by_group(
     """
     Count number of observed or possible variants by context, ref, alt, and optionally methylation_level.
 
-    Counts variants in `ht` based on specified criteria (singleton or in downsamplings or None), and aggregates variant counts based on
-    'context', 'ref', 'alt', 'methylation_level' (optional), and any annotation provided in `additional_grouping`.
+    Performs variant count aggregations based on specified criteria (`count_singletons`, `count_downsamplings`, and `max_af`), and grouped by: 'context', 'ref', 'alt', 'methylation_level' (optional), and all annotations provided in `additional_grouping`.
 
     If `freq_expr` is not given and variants in downsamplings (`count_downsamplings` is not empty) or singleton variants need to be counted (`count_singletons` is True),
     `freq_expr` defaults to `ht.freq`, which is annotated by annotate_freq(). (Only adj freq info, or ht.freq[0], that contains high quality genotype is used.) If variants
     in downsamplings needs to be counted and `freq_meta_expr` is None, `freq_meta_expr` defaults to `ht.freq_meta`. If variants in singleton needs to be counted and
     singleton_expr is None, `singleton_expr` defaults to `freq_expr[0].AC == 1`.
 
-    Function will return a Table with annotations used for grouping ('context', 'ref', 'alt', 'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
+    This function will return a Table with annotations used for grouping ('context', 'ref', 'alt', 'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
 
     .. note::
 
@@ -70,21 +68,21 @@ def count_variants_by_group(
         - alt - the alternate base
         - context - trinucleotide genomic context
         - methylation_level - methylation level (optional if omit_methylation==True)
-        - freq - Allele frequency information (AC, AN, AF, homozygote count) in gnomAD release
-        - freq_meta - gnomAD frequency metadata. An ordered list containing the frequency aggregation group for each element of the gnomad_freq array row annotation
+        - freq - Allele frequency information (AC, AN, AF, homozygote count)
+        - freq_meta - frequency metadata. An ordered list containing the frequency aggregation group for each element of the `freq` array row annotation.
 
     :param ht: Input Hail Table.
     :param freq_expr: ArrayExpression of Structs with with 'AC' and 'AF' annotations. If `freq_expr` is None and any of `count_downsamplings`, `max_af`, and `count_singletons` is True, `freq_expr` would be `ht.freq`.
     :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to `freq_expr`. If `count_downsamplings` and `freq_meta_expr` is None, `freq_meta_expr` would be `ht.freq_meta`.
-    :param count_singletons: Whether to count singletons. Defaults to False.
-    :param count_downsamplings: Tuple of populations to use for downsampling counts. Defaults to ().
-    :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'. Defaults to ().
-    :param partition_hint: Target number of partitions for aggregation. Defaults to 100.
-    :param omit_methylation: Whether to omit 'methylation_level' from the grouping when counting variants. Defaults to False.
-    :param use_table_group_by: Whether to group `ht` before aggregating the variant counts. If `use_table_group_by` is False, function will return a hl.StructExpression. Defaults to False.
-    :param singleton_expression: Expression for defining a singleton. When `count_singletons` is True and `singleton_expression` is None, `singleton_expression` would be `freq_expr[0].AC == 1`. Defaults to None.
+    :param count_singletons: Whether to count singletons (defined by `singleton_expression`). Default is False.
+    :param count_downsamplings: Tuple of populations to use for downsampling counts. Default is ().
+    :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'. Default is ().
+    :param partition_hint: Target number of partitions for aggregation. Default is 100.
+    :param omit_methylation: Whether to omit 'methylation_level' from the grouping when counting variants. Default is False.
+    :param use_table_group_by: Whether to group `ht` before aggregating the variant counts. If `use_table_group_by` is False, function will return a hl.StructExpression. Default is False.
+    :param singleton_expression: Expression for defining a singleton. When `count_singletons` is True and `singleton_expression` is None, `singleton_expression` would be `freq_expr[0].AC == 1`. Default is None.
     :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is applied.
-    :return: Table including 'variant_count' and downsampling counts if requested.
+    :return: Table including 'variant_count' annotation and if requested, `singleton_count` and downsampling counts.
     """
     if freq_expr is None and (
         count_downsamplings or max_af or (count_singletons and singleton_expr is None)
@@ -113,23 +111,23 @@ def count_variants_by_group(
     for group in additional_grouping:
         grouping = grouping.annotate(**{group: ht[group]})
     logger.info(
-        "Annotations added to grouping when counting variants: %s.",
+        "The following annotations will be used to group the input Table rows when counting variants: %s.",
         ", ".join(grouping.keys()),
     )
 
     if max_af:
-        logger.info("Maximum variant allele frequency to keep is %.3f.", max_af)
+        logger.info("The maximum variant allele frequency to be included in `variant_count` is %.3f.", max_af)
         agg = {"variant_count": hl.agg.count_where(freq_expr[0].AF <= max_af)}
     else:
         agg = {"variant_count": hl.agg.count()}
 
     if count_singletons:
-        logger.info("'singleton_count' is annotated when counting variant.")
+        logger.info("Counting singleton variants and adding as 'singleton_count' annotation.")
         agg["singleton_count"] = hl.agg.count_where(singleton_expr)
 
     for pop in count_downsamplings:
         logger.info(
-            "Counting variants in downsamplings. 'downsampling_counts_%s' is annotated.",
+            "Counting variants in downsamplings for population '%s', and adding as 'downsampling_counts_%s' annotation.",
             pop,
         )
         agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(
@@ -137,13 +135,14 @@ def count_variants_by_group(
         )
         if count_singletons:
             logger.info(
-                "Counting singleton variants in downsamplings. 'singleton_downsampling_counts_%s' is annotated.",
+                "Counting singleton variants in downsamplings for population '%s', and adding as 'singleton_downsampling_counts_%s' annotation.",
+                pop,
                 pop,
             )
             agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
                 freq_expr, freq_meta_expr, pop, singleton=True
             )
-    # count the variants that have same combination of `grouping`
+    # Apply each variant count aggregation in `agg` to get counts for all combinations of `grouping`
     if use_table_group_by:
         return ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg)
     else:
@@ -163,25 +162,25 @@ def downsampling_counts_expr(
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
 
-    The meta data (`freq_meta_expr` annotated by annotate_freq) of each downsampling should have 'group',
+    The meta data (`freq_meta_expr`) should be in a similar format to the `freq_meta` annotation added by  `annotate_freq()`. Each downsampling should have 'group',
     'pop', and 'downsampling' keys. Included downsamplings are those where 'group' == `variant_quality` and 'pop' == `pop`.
 
     :param freq_expr: ArrayExpression of Structs with with 'AC' and 'AF' annotations.
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`. Defaults to 'global'.
-    :param variant_quality: Variant quality to use for filtering by the 'group' key in `freq_meta_expr`. Defaults to 'adj'.
-    :param singleton: Whether to filter to only singletons before counting (AC == 1). Defaults to False.
+    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`. Default is 'global'.
+    :param variant_quality: Variant quality to use for filtering by the 'group' key in `freq_meta_expr`. Default is 'adj'.
+    :param singleton: Whether to filter to only singletons before counting (AC == 1). Default is False.
     :param max_af: Maximum variant allele frequency to keep. By default no allele frequency cutoff is applied.
     :return: Aggregation Expression for an array of the variant counts in downsamplings for specified population.
     """
-    # get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "group" and "pop" values
+    # Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "group" and "pop" values
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].size() == 3)
         & (f[1].get("group") == variant_quality)
         & (f[1].get("pop") == pop)
         & f[1].contains("downsampling")
     )
-    # get an array of indices sorted by "downsampling" key
+    # Get an array of indices sorted by "downsampling" key
     sorted_indices = hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"])).map(
         lambda x: x[0]
     )

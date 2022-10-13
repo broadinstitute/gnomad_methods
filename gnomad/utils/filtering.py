@@ -117,7 +117,7 @@ def combine_functions(
 
     :param func_list: A list of boolean functions that can be applied to `x`.
     :param x: Expression to be passed to each function in `func_list`.
-    :param operator_func: Operator function to combine the functions in `func_list`, defaults to `operator.iand`.
+    :param operator_func: Operator function to combine the functions in `func_list`. Default is `operator.iand`.
     :return: A boolean from the combined operations.
     """
     cond = func_list[0](x)

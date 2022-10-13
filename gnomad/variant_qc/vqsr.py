@@ -1,5 +1,6 @@
 import argparse
 import logging
+import hail as hl
 from typing import List, Optional, Dict
 import hailtop.batch as hb
 from hailtop.batch.job import Job
@@ -11,14 +12,14 @@ logging.basicConfig(format='%(levelname)s (%(name)s %(lineno)s): %(message)s')
 logger.setLevel(logging.INFO)
 
 
-def _add_split_intervals_job(
+def split_intervals(
         b: hb.Batch,
         utils: Dict,
 ) -> Job:
     """
-    Split genome into intervals to parallelise VQSR for large sample sizes
+    Split genome into intervals to parallelize VQSR for large sample sizes
     :param b: Batch object to add jobs to
-    :param utils: a dictionary containing paths to resource files to be used to split genome
+    :param utils: a dictionary containing resources (file paths and arguments) to be used to split genome
     :return: a Job object with a single output j.intervals of type ResourceGroup
     """
     j = b.new_job(f"""Make {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} intervals""")
@@ -38,7 +39,7 @@ def _add_split_intervals_job(
     # Modes other than INTERVAL_SUBDIVISION will produce an unpredicted number 
     # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS number of 
     # output files because our workflow is not dynamic.
-    gatk --java-options -Xms{java_mem}g SplitIntervals \\
+    gatk --java-options "-Xms{java_mem}g" SplitIntervals \\
       -L {utils['UNPADDED_INTERVALS']} \\
       -O {j.intervals} \\
       -scatter {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} \\
@@ -51,18 +52,13 @@ def _add_split_intervals_job(
 
 
 # SNPs
-def SNPsVariantRecalibratorCreateModel(
+def snps_variant_recalibrator_create_model(
         b: hb.Batch,
-        sites_only_vcf: hb.ResourceGroup,
-        hapmap_resource_vcf: hb.ResourceGroup,
-        omni_resource_vcf: hb.ResourceGroup,
-        one_thousand_genomes_resource_vcf: hb.ResourceGroup,
-        dbsnp_resource_vcf: hb.ResourceGroup,
+        sites_only_vcf: str,
         utils: Dict,
-        disk_size: int,
         use_as_annotations: bool,
-        transmitted_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        sibling_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
+        transmitted_singletons_resource_vcf: Optional[str] = None,
+        sibling_singletons_resource_vcf: Optional[str] = None,
         out_bucket: str = None,
         is_small_callset: bool = False,
         is_huge_callset: bool = False,
@@ -71,8 +67,8 @@ def SNPsVariantRecalibratorCreateModel(
     """
     First step of VQSR for SNPs: run VariantRecalibrator to subsample variants
     and produce a file of the VQSR model.
-    To support cohorts with more than 10,000 WGS samples, the SNP recalibrartion process
-    is borken down across genomic regions for parallel processing, and done in 3 steps:
+    To support cohorts with more than 10,000 WGS samples, the SNP recalibration process
+    is broken down across genomic regions for parallel processing, and done in 3 steps:
     1. Run the recalibrator with the following additional arguments:
        --sample-every-Nth-variant <downsample_factor> --output-model <model_file>
     2. Apply the resulting model to each genomic interval with, running the recalibrator
@@ -86,31 +82,27 @@ def SNPsVariantRecalibratorCreateModel(
 
     :param b: Batch object to add jobs to
     :param sites_only_vcf: sites only VCF file to be used to build the model
-    :param hapmap_resource_vcf: HapMap ResourceGroup VCF file to be used in building the model
-    :param omni_resource_vcf: OMNI ResourceGroup VCF file to be used in building the model
-    :param one_thousand_genomes_resource_vcf: 1KG ResourceGroup VCF file to be used in building the model
-    :param dbsnp_resource_vcf: DBSNP ResourceGroup VCF file to be used in building the model
-    :param utils: a dictionary containing paths to resource files to be used to split genome
-    :param disk_size: disk size to be used for the job
+    :param utils: a dictionary containing resources (file paths and arguments) to be used to create the model
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param transmitted_singletons_resource_vcf: If supplied, Transmitted Singletons VCF will be used in building the model
-    :param sibling_singletons_resource_vcf: Sibling Singletons VCF will be used in building the model
+    :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to be used in building the model
+    :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to be used in building the model
     :param out_bucket: full path to output bucket to write model and plots to
-    :param is_small_callset: whether or not the dataset is small. Used to set number of CPUs for the job
-    :param is_huge_callset: whether or not the dataset is huge. Used to set number of CPUs for the job
+    :param is_small_callset: whether the dataset is small. Used to set number of CPUs for the job
+    :param is_huge_callset: whether the dataset is huge. Used to set number of CPUs for the job
     :param max_gaussians: maximum number of Gaussians for the positive model
     :return: a Job object with 2 outputs: j.model_file and j.snp_rscript_file.
     """
     j = b.new_job('VQSR: SNPsVariantRecalibratorCreateModel')
-    j.image(utils.GATK_IMAGE)
+    j.image(utils['GATK_IMAGE'])
     j.memory('highmem')
+    j._preemptible = False
     if is_small_callset:
         ncpu = 8  # ~ 8G/core ~ 64G
     else:
         ncpu = 16  # ~ 8G/core ~ 128G
     j.cpu(ncpu)
     java_mem = ncpu * 8 - 10
-    j.storage(f'{disk_size}G')
+    j.storage('50G')
 
     downsample_factor = 75 if is_huge_callset else 10
 
@@ -119,17 +111,17 @@ def SNPsVariantRecalibratorCreateModel(
         [
             f'-an {v}'
             for v in (
-            utils['SNP_RECALIBRATION_ANNOTATION_VALUES_AS']
-            if use_as_annotations
-            else utils['SNP_RECALIBRATION_ANNOTATION_VALUES']
-        )
+                utils['SNP_RECALIBRATION_ANNOTATION_VALUES_AS']
+                if use_as_annotations
+                else utils['SNP_RECALIBRATION_ANNOTATION_VALUES']
+            )
         ]
     )
     j.command(
         f"""set -euo pipefail
-        gatk --java-options -Xms{java_mem}g \\
+        gatk --java-options "-Xms{java_mem}g -XX:+UseParallelGC -XX:ParallelGCThreads={ncpu-2}" \\
           VariantRecalibrator \\
-          -V {sites_only_vcf['vcf.gz']} \\
+          -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
@@ -140,12 +132,12 @@ def SNPsVariantRecalibratorCreateModel(
           --sample-every-Nth-variant {downsample_factor} \\
           --output-model {j.model_file} \\
           --max-gaussians {max_gaussians} \\
-          -resource:hapmap,known=false,training=true,truth=true,prior=15 {hapmap_resource_vcf.base} \\
-          -resource:omni,known=false,training=true,truth=true,prior=12 {omni_resource_vcf.base} \\
-          -resource:1000G,known=false,training=true,truth=false,prior=10 {one_thousand_genomes_resource_vcf.base} \\
-          -resource:dbsnp,known=true,training=false,truth=false,prior=7 {dbsnp_resource_vcf.base} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf.base}' if transmitted_singletons_resource_vcf else ''} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf.base}' if sibling_singletons_resource_vcf else ''} \\
+          -resource:hapmap,known=false,training=true,truth=true,prior=15 {utils['hapmap_resource_vcf']} \\
+          -resource:omni,known=false,training=true,truth=true,prior=12 {utils['omni_resource_vcf']} \\
+          -resource:1000G,known=false,training=true,truth=false,prior=10 {utils['one_thousand_genomes_resource_vcf']} \\
+          -resource:dbsnp,known=true,training=false,truth=false,prior=7 {utils['dbsnp_resource_vcf']} \\
+          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf}' if transmitted_singletons_resource_vcf else ''} \\
+          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf}' if sibling_singletons_resource_vcf else ''} \\
           --rscript-file {j.snp_rscript}
           ls $(dirname {j.snp_rscript})
           ln {j.snp_rscript}.pdf {j.snp_rscript_pdf}
@@ -154,135 +146,31 @@ def SNPsVariantRecalibratorCreateModel(
     )
 
     if out_bucket:
-        b.write_output(
-            j.snp_rscript, f'{out_bucket}model/SNPS/recalibration-snps-features-build.RScript'
-        )
-        b.write_output(
-            j.snp_rscript_pdf, f'{out_bucket}model/SNPS/recalibration-snps-features-build.pdf'
-        )
-        b.write_output(
-            j.tranches_pdf, f'{out_bucket}model/SNPS/recalibration-snps-tranches-build.pdf'
-        )
-        b.write_output(
-            j.model_file, f'{out_bucket}model/SNPS/recalibration-snps-model-file.recal'
-        )
+        b.write_output(j.snp_rscript, f'{out_bucket}model/SNPS/snps.features.build.RScript')
+        b.write_output(j.snp_rscript_pdf, f'{out_bucket}model/SNPS/snps.features.build.pdf')
+        b.write_output(j.tranches_pdf, f'{out_bucket}model/SNPS/snps.tranches.build.pdf')
+        b.write_output(j.model_file, f'{out_bucket}model/SNPS/snps.model.report')
+
     return j
 
 
-def SNPsVariantRecalibrator(
+def snps_variant_recalibrator(
         b: hb.Batch,
-        sites_only_vcf: hb.ResourceGroup,
-        hapmap_resource_vcf: hb.ResourceGroup,
-        omni_resource_vcf: hb.ResourceGroup,
-        one_thousand_genomes_resource_vcf: hb.ResourceGroup,
-        dbsnp_resource_vcf: hb.ResourceGroup,
+        sites_only_vcf: str,
         utils: Dict,
         out_bucket: str,
-        disk_size: int,
         use_as_annotations: bool,
-        transmitted_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        sibling_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        max_gaussians: int = 6,
-) -> Job:
-    """
-    Recalibrate SNPs in one run (alternative to scatter-gather approach)
-    :param b: Batch object to add jobs to
-    :param sites_only_vcf: sites only VCF file to be used to build the model
-    :param hapmap_resource_vcf: HapMap ResourceGroup VCF file to be used in building the model
-    :param omni_resource_vcf: OMNI ResourceGroup VCF file to be used in building the model
-    :param one_thousand_genomes_resource_vcf: 1KG ResourceGroup VCF file to be used in building the model
-    :param dbsnp_resource_vcf: DBSNP ResourceGroup VCF file to be used in building the model
-    :param utils: a dictionary containing paths to resource files to be used to split genome
-    :param out_bucket: full path to output bucket to write model and plots to
-    :param disk_size: disk size to be used for the job
-    :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param transmitted_singletons_resource_vcf: If supplied, Transmitted Singletons VCF will be used in building the model
-    :param sibling_singletons_resource_vcf: Sibling Singletons VCF will be used in building the model
-    :param max_gaussians: maximum number of Gaussians for the positive model
-    :return: a Job object with 2 outputs: j.recalibration (ResourceGroup) and j.tranches
-    """
-    j = b.new_job('VQSR: SNPsVariantRecalibrator')
-
-    j.image(utils.GATK_IMAGE)
-    j.memory('highmem')
-    ncpu = 8  # ~ 8G/core ~ 64G
-    j.cpu(ncpu)
-    java_mem = ncpu * 8 - 8
-    j.storage(f'{disk_size}G')
-
-    j.declare_resource_group(recalibration={'index': '{root}.idx', 'base': '{root}'})
-
-    tranche_cmdl = ' '.join([f'-tranche {v}' for v in utils['SNP_RECALIBRATION_TRANCHE_VALUES']])
-    an_cmdl = ' '.join(
-        [
-            f'-an {v}'
-            for v in (
-            utils['SNP_RECALIBRATION_ANNOTATION_VALUES_AS']
-            if use_as_annotations
-            else utils['SNP_RECALIBRATION_ANNOTATION_VALUES']
-        )
-        ]
-    )
-    j.command(
-        f"""set -euo pipefail
-        gatk --java-options -Xms{java_mem}g \\
-          VariantRecalibrator \\
-          -V {sites_only_vcf['vcf.gz']} \\
-          -O {j.recalibration} \\
-          --tranches-file {j.tranches} \\
-          --trust-all-polymorphic \\
-          {tranche_cmdl} \\
-          {an_cmdl} \\
-          -mode SNP \\
-          {"--use-allele-specific-annotations " if use_as_annotations else ""} \\
-          --max-gaussians {max_gaussians} \\
-          -resource:hapmap,known=false,training=true,truth=true,prior=15 {hapmap_resource_vcf.base} \\
-          -resource:omni,known=false,training=true,truth=true,prior=12 {omni_resource_vcf.base} \\
-          -resource:1000G,known=false,training=true,truth=false,prior=10 {one_thousand_genomes_resource_vcf.base} \\
-          -resource:dbsnp,known=true,training=false,truth=false,prior=7 {dbsnp_resource_vcf.base} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf.base}' if transmitted_singletons_resource_vcf else ''} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf.base}' if sibling_singletons_resource_vcf else ''} \\
-          --rscript-file {j.snp_rscript}
-          ln {j.snp_rscript}.pdf {j.snp_rscript_pdf}
-          ln {j.tranches}.pdf {j.tranches_pdf}
-          """
-    )
-
-    if out_bucket:
-        b.write_output(
-            j.snp_rscript, f'{out_bucket}model/SNPS/recalibration-snps-features-apply.RScript'
-        )
-        b.write_output(
-            j.snp_rscript_pdf, f'{out_bucket}model/SNPS/recalibration-snps-features-apply.pdf'
-        )
-        b.write_output(
-            j.tranches_pdf, f'{out_bucket}model/recalibration-snps-tranches-apply.pdf'
-        )
-    return j
-
-
-def SNPsVariantRecalibratorScattered(
-        b: hb.Batch,
-        sites_only_vcf: hb.ResourceGroup,
-        model_file: hb.ResourceFile,
-        hapmap_resource_vcf: hb.ResourceGroup,
-        omni_resource_vcf: hb.ResourceGroup,
-        one_thousand_genomes_resource_vcf: hb.ResourceGroup,
-        dbsnp_resource_vcf: hb.ResourceGroup,
-        utils: Dict,
-        disk_size: int,
-        out_bucket: str,
-        tranche_idx: int,
-        use_as_annotations: bool,
-        transmitted_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        sibling_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
         interval: Optional[hb.ResourceGroup] = None,
+        tranche_idx: Optional[int] = None,
+        model_file: Optional[hb.ResourceFile] = None,
+        transmitted_singletons_resource_vcf: Optional[str] = None,
+        sibling_singletons_resource_vcf: Optional[str] = None,
         max_gaussians: int = 4,
 ) -> Job:
     """
     Second step of VQSR for SNPs: run VariantRecalibrator scattered to apply
     the VQSR model file to each genomic interval.
-    To support cohorts with more than 10,000 WGS samples, the SNP recalibrartion process
+    To support cohorts with more than 10,000 WGS samples, the SNP recalibration process
     is broken down across genomic regions for parallel processing, and done in 3 steps:
     1. Run the recalibrator with the following additional arguments:
        --sample-every-Nth-variant <downsample_factor> --output-model <model_file>
@@ -298,17 +186,12 @@ def SNPsVariantRecalibratorScattered(
     :param b: Batch object to add jobs to
     :param sites_only_vcf: sites only VCF file to be used to build the model
     :param model_file: model file to be applied
-    :param hapmap_resource_vcf: HapMap ResourceGroup VCF file to be used in building the model
-    :param omni_resource_vcf: OMNI ResourceGroup VCF file to be used in building the model
-    :param one_thousand_genomes_resource_vcf: 1KG ResourceGroup VCF file to be used in building the model
-    :param dbsnp_resource_vcf: DBSNP ResourceGroup VCF file to be used in building the model
-    :param utils: a dictionary containing paths to resource files to be used to split genome
-    :param disk_size: disk size to be used for the job
+    :param utils: a dictionary containing resources (file paths and arguments)
     :param out_bucket: full path to output bucket to write model and plots to
     :param tranche_idx: index for the tranches file
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param transmitted_singletons_resource_vcf: If supplied, Transmitted Singletons VCF will be used in building the model
-    :param sibling_singletons_resource_vcf: Sibling Singletons VCF will be used in building the model
+    :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to include in VariantRecalibrator
+    :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to include in VariantRecalibrator
     :param interval: genomic interval to apply the model to
     :param max_gaussians: maximum number of Gaussians for the positive model
     :return: a Job object with 2 outputs: j.recalibration (ResourceGroup) and j.tranches
@@ -318,8 +201,8 @@ def SNPsVariantRecalibratorScattered(
     j.image(utils['GATK_IMAGE'])
     mem_gb = 64  # ~ twice the sum of all input resources and input VCF sizes
     j.memory(f'{mem_gb}G')
-    j.cpu(2)
-    j.storage(f'{disk_size}G')
+    j.cpu(4)
+    j.storage('20G')
 
     j.declare_resource_group(recalibration={'index': '{root}.idx', 'base': '{root}'})
 
@@ -328,52 +211,60 @@ def SNPsVariantRecalibratorScattered(
         [
             f'-an {v}'
             for v in (
-            utils['SNP_RECALIBRATION_ANNOTATION_VALUES_AS']
-            if use_as_annotations
-            else utils['SNP_RECALIBRATION_ANNOTATION_VALUES']
-        )
+                utils['SNP_RECALIBRATION_ANNOTATION_VALUES_AS']
+                if use_as_annotations
+                else utils['SNP_RECALIBRATION_ANNOTATION_VALUES']
+            )
         ]
     )
-    j.command(
-        f"""set -euo pipefail
-        MODEL_REPORT={model_file}
-        gatk --java-options -Xms{mem_gb - 1}g \\
+
+    cmd = f"""set -euo pipefail
+        gatk --java-options "-Xms{mem_gb-1}g -XX:+UseParallelGC -XX:ParallelGCThreads=3" \\
           VariantRecalibrator \\
-          -V {sites_only_vcf['vcf.gz']} \\
+          -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
           {an_cmdl} \\
           -mode SNP \\
-          {f'-L {interval} ' if interval else ''} \\
-          {"--use-allele-specific-annotations " if use_as_annotations else ""} \\
-          --input-model {model_file} --output-tranches-for-scatter \\
           --max-gaussians {max_gaussians} \\
-          -resource:hapmap,known=false,training=true,truth=true,prior=15 {hapmap_resource_vcf.base} \\
-          -resource:omni,known=false,training=true,truth=true,prior=12 {omni_resource_vcf.base} \\
-          -resource:1000G,known=false,training=true,truth=false,prior=10 {one_thousand_genomes_resource_vcf.base} \\
-          -resource:dbsnp,known=true,training=false,truth=false,prior=7 {dbsnp_resource_vcf.base} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf.base}' if transmitted_singletons_resource_vcf else ''} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf.base}' if sibling_singletons_resource_vcf else ''}"""
-    )
+          -resource:hapmap,known=false,training=true,truth=true,prior=15 {utils['hapmap_resource_vcf']} \\
+          -resource:omni,known=false,training=true,truth=true,prior=12 {utils['omni_resource_vcf']} \\
+          -resource:1000G,known=false,training=true,truth=false,prior=10 {utils['one_thousand_genomes_resource_vcf']} \\
+          -resource:dbsnp,known=true,training=false,truth=false,prior=7 {utils['dbsnp_resource_vcf']} \\
+        """
+
+    if interval:
+        cmd += f' -L {interval}'
+    if use_as_annotations:
+        cmd += ' --use-allele-specific-annotations'
+    if model_file:
+        cmd += f' --input-model {model_file} --output-tranches-for-scatter'
+    if transmitted_singletons_resource_vcf:
+        cmd += f' -resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf}'
+    if sibling_singletons_resource_vcf:
+        cmd += f' -resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf}'
+
+    j.command(cmd)
+
     if out_bucket:
-        b.write_output(j.tranches, f'{out_bucket}model/SNPS/tranches/recalibration-snps-tranches-{tranche_idx}')
+        if tranche_idx:
+            b.write_output(j.tranches, f'{out_bucket}recalibration/SNPS/snps.{tranche_idx}.tranches')
+        else:
+            b.write_output(j.tranches, f'{out_bucket}recalibration/SNPS/snps.tranches')
+
     return j
 
 
 # INDELs
-def IndelsVariantRecalibratorCreateModel(
+def indels_variant_recalibrator_create_model(
         b: hb.Batch,
-        sites_only_vcf: hb.ResourceGroup,
-        mills_resource_vcf: hb.ResourceGroup,
-        axiomPoly_resource_vcf: hb.ResourceGroup,
-        dbsnp_resource_vcf: hb.ResourceGroup,
+        sites_only_vcf: str,
         utils: Dict,
-        disk_size: int,
         use_as_annotations: bool,
-        transmitted_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        sibling_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
+        transmitted_singletons_resource_vcf: str = None,
+        sibling_singletons_resource_vcf: str = None,
         out_bucket: str = None,
         is_small_callset: bool = False,
         max_gaussians: int = 4,
@@ -381,8 +272,8 @@ def IndelsVariantRecalibratorCreateModel(
     """
     First step of VQSR for INDELs: run VariantRecalibrator to subsample variants
     and produce a file of the VQSR model.
-    To support cohorts with more than 10,000 WGS samples, the INDEL recalibrartion process
-    is borken down across genomic regions for parallel processing, and done in 3 steps:
+    To support cohorts with more than 10,000 WGS samples, the INDEL recalibration process
+    is broken down across genomic regions for parallel processing, and done in 3 steps:
     1. Run the recalibrator with the following additional arguments:
        --sample-every-Nth-variant <downsample_factor> --output-model <model_file>
     2. Apply the resulting model to each genomic interval with, running the recalibrator
@@ -396,22 +287,18 @@ def IndelsVariantRecalibratorCreateModel(
 
     :param b: Batch object to add jobs to
     :param sites_only_vcf: sites only VCF file to be used to build the model
-    :param mills_resource_vcf: MILLS ResourceGroup VCF file to be used in building the model
-    :param axiomPoly_resource_vcf: Axiom Poly ResourceGroup VCF file to be used in building the model
-    :param dbsnp_resource_vcf: DBSNP ResourceGroup VCF file to be used in building the model
-    :param utils: a dictionary containing paths to resource files to be used to split genome
-    :param disk_size: disk size to be used for the job
+    :param utils: a dictionary containing resources (file paths and arguments)
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param transmitted_singletons_resource_vcf: If supplied, Transmitted Singletons VCF will be used in building the model
-    :param sibling_singletons_resource_vcf: Sibling Singletons VCF will be used in building the model
+    :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to be used in building the model
+    :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to be used in building the model
     :param out_bucket: full path to output bucket to write model and plots to
-    :param is_small_callset: whether or not the dataset is small. Used to set number of CPUs for the job
+    :param is_small_callset: whether the dataset is small. Used to set number of CPUs for the job
     :param max_gaussians: maximum number of Gaussians for the positive model
     :return: a Job object with 2 outputs: j.model_file and j.indel_rscript_file.
     The latter is useful to produce the optional tranche plot.
     """
     j = b.new_job('VQSR: INDELsVariantRecalibratorCreateModel')
-    j.image(utils.GATK_IMAGE)
+    j.image(utils['GATK_IMAGE'])
     j.memory('highmem')
     if is_small_callset:
         ncpu = 8  # ~ 8G/core ~ 64G
@@ -419,7 +306,8 @@ def IndelsVariantRecalibratorCreateModel(
         ncpu = 16  # ~ 8G/core ~ 128G
     j.cpu(ncpu)
     java_mem = ncpu * 8 - 10
-    j.storage(f'{disk_size}G')
+    j.storage('50G')
+    j._preemptible = False
 
     # downsample_factor = 75 if is_huge_callset else 10
     downsample_factor = 10
@@ -429,159 +317,65 @@ def IndelsVariantRecalibratorCreateModel(
         [
             f'-an {v}'
             for v in (
-            utils['INDEL_RECALIBRATION_ANNOTATION_VALUES_AS']
-            if use_as_annotations
-            else utils['INDEL_RECALIBRATION_ANNOTATION_VALUES']
-        )
+                utils['INDEL_RECALIBRATION_ANNOTATION_VALUES_AS']
+                if use_as_annotations
+                else utils['INDEL_RECALIBRATION_ANNOTATION_VALUES']
+            )
         ]
     )
+
     j.command(
         f"""set -euo pipefail
-        gatk --java-options -Xms{java_mem}g \\
+        gatk --java-options "-Xms{java_mem}g -XX:+UseParallelGC -XX:ParallelGCThreads={ncpu-2}" \\
           VariantRecalibrator \\
-          -V {sites_only_vcf['vcf.gz']} \\
+          -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
           {an_cmdl} \\
           -mode INDEL \\
-          {"--use-allele-specific-annotations " if use_as_annotations else ""} \\
+          {"--use-allele-specific-annotations" if use_as_annotations else ""} \\
           --sample-every-Nth-variant {downsample_factor} \\
           --output-model {j.model_file} \\
           --max-gaussians {max_gaussians} \\
-          -resource:mills,known=false,training=true,truth=true,prior=12 {mills_resource_vcf.base} \\
-          -resource:axiomPoly,known=false,training=true,truth=false,prior=10 {axiomPoly_resource_vcf.base} \\
-          -resource:dbsnp,known=true,training=false,truth=false,prior=2 {dbsnp_resource_vcf.base} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf.base}' if transmitted_singletons_resource_vcf else ''} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf.base}' if sibling_singletons_resource_vcf else ''} 
-          """
-    )
-
-    if out_bucket:
-        b.write_output(
-            j.model_file, f'{out_bucket}model/INDELS/recalibration-indels-model-file.recal'
-        )
-    return j
-
-
-def IndelsVariantRecalibrator(
-        b: hb.Batch,
-        sites_only_vcf: hb.ResourceGroup,
-        mills_resource_vcf: hb.ResourceGroup,
-        axiomPoly_resource_vcf: hb.ResourceGroup,
-        dbsnp_resource_vcf: hb.ResourceGroup,
-        utils: Dict,
-        disk_size: int,
-        use_as_annotations: bool,
-        transmitted_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        sibling_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        out_bucket: str = None,
-        max_gaussians: int = 4,
-) -> Job:
-    """
-    Run VariantRecalibrator to calculate VQSLOD tranches for indels
-    The --max-gaussians parameter sets the expected number of clusters in modeling.
-    If a dataset gives fewer distinct clusters, e.g. as can happen for smaller data,
-    then the tool will tell you there is insufficient data with a No data found error
-    message. In this case, try decrementing the --max-gaussians value. 4 is a
-    reasonable default for indels, as their number is smaller than SNPs
-
-    :param b: Batch object to add jobs to
-    :param sites_only_vcf: sites only VCF file to be used to build the model
-    :param mills_resource_vcf: MILLS ResourceGroup VCF file to be used in building the model
-    :param axiomPoly_resource_vcf: Axiom Poly ResourceGroup VCF file to be used in building the model
-    :param dbsnp_resource_vcf: DBSNP ResourceGroup VCF file to be used in building the model
-    :param utils: a dictionary containing paths to resource files to be used to split genome
-    :param disk_size: disk size to be used for the job
-    :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param transmitted_singletons_resource_vcf: If supplied, Transmitted Singletons VCF will be used in building the model
-    :param sibling_singletons_resource_vcf: Sibling Singletons VCF will be used in building the model
-    :param out_bucket: full path to output bucket to write model and plots to
-    :param max_gaussians: maximum number of Gaussians for the positive model
-    :return: a Job object with 3 outputs: j.recalibration (ResourceGroup), j.tranches,
-    and j.indel_rscript_file. The latter is usedful to produce the optional tranche plot.
-    """
-    j = b.new_job('VQSR: INDELsVariantRecalibrator')
-    j.image(utils.GATK_IMAGE)
-    j.memory('highmem')
-    ncpu = 4  # ~ 8G/core ~ 32G
-    j.cpu(ncpu)
-    java_mem = ncpu * 8 - 4
-    j.storage(f'{disk_size}G')
-
-    j.declare_resource_group(recalibration={'index': '{root}.idx', 'base': '{root}'})
-
-    tranche_cmdl = ' '.join(
-        [f'-tranche {v}' for v in utils['INDEL_RECALIBRATION_TRANCHE_VALUES']]
-    )
-    an_cmdl = ' '.join(
-        [
-            f'-an {v}'
-            for v in (
-            utils['INDEL_RECALIBRATION_ANNOTATION_VALUES_AS']
-            if use_as_annotations
-            else utils['INDEL_RECALIBRATION_ANNOTATION_VALUES']
-        )
-        ]
-    )
-    j.command(
-        f"""set -euo pipefail
-        gatk --java-options -Xms{java_mem}g \\
-          VariantRecalibrator \\
-          -V {sites_only_vcf['vcf.gz']} \\
-          -O {j.recalibration} \\
-          --tranches-file {j.tranches} \\
-          --trust-all-polymorphic \\
-          {tranche_cmdl} \\
-          {an_cmdl} \\
-          -mode INDEL \\
-          {"--use-allele-specific-annotations " if use_as_annotations else ""} \\
-          --max-gaussians {max_gaussians} \\
-          -resource:mills,known=false,training=true,truth=true,prior=12 {mills_resource_vcf.base} \\
-          -resource:axiomPoly,known=false,training=true,truth=false,prior=10 {axiomPoly_resource_vcf.base} \\
-          -resource:dbsnp,known=true,training=false,truth=false,prior=2 {dbsnp_resource_vcf.base} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf.base}' if transmitted_singletons_resource_vcf else ''} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf.base}' if sibling_singletons_resource_vcf else ''} \\
-          --rscript-file {j.indel_rscript_file}
-
-          ls $(dirname {j.indel_rscript_file})
+          -resource:mills,known=false,training=true,truth=true,prior=12 {utils['mills_resource_vcf']} \\
+          -resource:axiomPoly,known=false,training=true,truth=false,prior=10 {utils['axiom_poly_resource_vcf']} \\
+          -resource:dbsnp,known=true,training=false,truth=false,prior=2 {utils['dbsnp_resource_vcf']} \\
+          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf}' if transmitted_singletons_resource_vcf else ''} \\
+          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf}' if sibling_singletons_resource_vcf else ''} \\
+          --rscript-file {j.indel_rscript}
+          ls $(dirname {j.indel_rscript})
           ln {j.indel_rscript}.pdf {j.indel_rscript_pdf}
-          """
+        """
     )
+
     if out_bucket:
-        b.write_output(
-            j.indel_rscript_file, f'{out_bucket}model/INDELS/recalibration-indels-features-apply.Rscript'
-        )
-        b.write_output(
-            j.indel_rscript_pdf, f'{out_bucket}model/INDELS/recalibration-indels-features-apply.pdf'
-        )
+        b.write_output(j.indel_rscript, f'{out_bucket}model/INDELS/indels.features.build.RScript')
+        b.write_output(j.indel_rscript_pdf, f'{out_bucket}model/INDELS/indels.features.build.pdf')
+        b.write_output(j.model_file, f'{out_bucket}model/INDELS/indels.model.report')
 
     return j
 
 
-def IndelsVariantRecalibratorScattered(
+def indels_variant_recalibrator(
         b: hb.Batch,
-        sites_only_vcf: hb.ResourceGroup,
-        model_file: hb.ResourceGroup,
-        mills_resource_vcf: hb.ResourceGroup,
-        axiomPoly_resource_vcf: hb.ResourceGroup,
-        dbsnp_resource_vcf: hb.ResourceGroup,
+        sites_only_vcf: str,
         utils: Dict,
-        disk_size: int,
         out_bucket: str,
-        tranche_idx: int,
         use_as_annotations: bool,
-        transmitted_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
-        sibling_singletons_resource_vcf: Optional[hb.ResourceGroup] = None,
         interval: Optional[hb.ResourceGroup] = None,
+        tranche_idx: Optional[int] = None,
+        model_file: Optional[hb.ResourceFile] = None,
+        transmitted_singletons_resource_vcf: Optional[str] = None,
+        sibling_singletons_resource_vcf: Optional[str] = None,
         max_gaussians: int = 4,
 ) -> Job:
     """
     Second step of VQSR for INDELs: run VariantRecalibrator scattered to apply
     the VQSR model file to each genomic interval.
-    To support cohorts with more than 10,000 WGS samples, the SNP recalibrartion process
-    is borken down across genomic regions for parallel processing, and done in 3 steps:
+    To support cohorts with more than 10,000 WGS samples, the SNP recalibration process
+    is broken down across genomic regions for parallel processing, and done in 3 steps:
     1. Run the recalibrator with the following additional arguments:
        --sample-every-Nth-variant <downsample_factor> --output-model <model_file>
     2. Apply the resulting model to each genomic interval with, running the recalibrator
@@ -596,27 +390,23 @@ def IndelsVariantRecalibratorScattered(
     :param b: Batch object to add jobs to
     :param sites_only_vcf: sites only VCF file to be used to build the model
     :param model_file: model file to be applied
-    :param mills_resource_vcf: MILLS ResourceGroup VCF file to be used in building the model
-    :param axiomPoly_resource_vcf: Axiom Poly ResourceGroup VCF file to be used in building the model
-    :param dbsnp_resource_vcf: DBSNP ResourceGroup VCF file to be used in building the model
-    :param utils: a dictionary containing paths to resource files to be used to split genome
-    :param disk_size: disk size to be used for the job
+    :param utils: a dictionary containing resources (file paths and arguments)
     :param out_bucket: full path to output bucket to write model and plots to
     :param tranche_idx: index for the tranches file
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param transmitted_singletons_resource_vcf: If supplied, Transmitted Singletons VCF will be used in building the model
-    :param sibling_singletons_resource_vcf: Sibling Singletons VCF will be used in building the model
+    :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to include in VariantRecalibrator
+    :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to include in VariantRecalibrator
     :param interval: genomic interval to apply the model to
     :param max_gaussians: maximum number of Gaussians for the positive model
     :return: a Job object with 2 outputs: j.recalibration (ResourceGroup) and j.tranches
     """
     j = b.new_job('VQSR: INDELsVariantRecalibratorScattered')
 
-    j.image(utils.GATK_IMAGE)
+    j.image(utils['GATK_IMAGE'])
     mem_gb = 64  # ~ twice the sum of all input resources and input VCF sizes
     j.memory(f'{mem_gb}G')
-    j.cpu(2)
-    j.storage(f'{disk_size}G')
+    j.cpu(4)
+    j.storage('20G')
 
     j.declare_resource_group(recalibration={'index': '{root}.idx', 'base': '{root}'})
 
@@ -625,41 +415,52 @@ def IndelsVariantRecalibratorScattered(
         [
             f'-an {v}'
             for v in (
-            utils['INDEL_RECALIBRATION_ANNOTATION_VALUES_AS']
-            if use_as_annotations
-            else utils['INDEL_RECALIBRATION_TRANCHE_VALUES']
-        )
+                utils['INDEL_RECALIBRATION_ANNOTATION_VALUES_AS']
+                if use_as_annotations
+                else utils['INDEL_RECALIBRATION_TRANCHE_VALUES']
+            )
         ]
     )
-    j.command(
-        f"""set -euo pipefail
-        MODEL_REPORT={model_file}
-        gatk --java-options -Xms{mem_gb - 1}g \\
+
+    cmd = f"""set -euo pipefail
+        gatk --java-options "-Xms{mem_gb-1}g -XX:+UseParallelGC -XX:ParallelGCThreads=3" \\
           VariantRecalibrator \\
-          -V {sites_only_vcf['vcf.gz']} \\
+          -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
           {an_cmdl} \\
           -mode INDEL \\
-          {f'-L {interval} ' if interval else ''} \\
-          {"--use-allele-specific-annotations " if use_as_annotations else ""} \\
-          --input-model {model_file} --output-tranches-for-scatter \\
           --max-gaussians {max_gaussians} \\
-          -resource:mills,known=false,training=true,truth=true,prior=12 {mills_resource_vcf.base} \\
-          -resource:axiomPoly,known=false,training=true,truth=false,prior=10 {axiomPoly_resource_vcf.base} \\
-          -resource:dbsnp,known=true,training=false,truth=false,prior=2 {dbsnp_resource_vcf.base} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf.base}' if transmitted_singletons_resource_vcf else ''} \\
-          {f'-resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf.base}' if sibling_singletons_resource_vcf else ''}"""
-    )
+          -resource:mills,known=false,training=true,truth=true,prior=12 {utils['mills_resource_vcf']} \\
+          -resource:axiomPoly,known=false,training=true,truth=false,prior=10 {utils['axiom_poly_resource_vcf']} \\
+          -resource:dbsnp,known=true,training=false,truth=false,prior=2 {utils['dbsnp_resource_vcf']} \\
+        """
+
+    if interval:
+        cmd += f' -L {interval}'
+    if use_as_annotations:
+        cmd += ' --use-allele-specific-annotations'
+    if model_file:
+        cmd += f' --input-model {model_file} --output-tranches-for-scatter'
+    if transmitted_singletons_resource_vcf:
+        cmd += f' -resource:singletons,known=true,training=true,truth=true,prior=10 {transmitted_singletons_resource_vcf}'
+    if sibling_singletons_resource_vcf:
+        cmd += f' -resource:singletons,known=true,training=true,truth=true,prior=10 {sibling_singletons_resource_vcf}'
+
+    j.command(cmd)
+
     if out_bucket:
-        b.write_output(j.tranches, f'{out_bucket}model/INDELS/tranches/recalibration-indels-tranches-{tranche_idx}')
+        if tranche_idx:
+            b.write_output(j.tranches, f'{out_bucket}recalibration/INDELS/indels.{tranche_idx}.tranches')
+        else:
+            b.write_output(j.tranches, f'{out_bucket}recalibration/INDELS/indels.tranches')
     return j
 
 
 # other
-def GatherTranches(
+def gather_tranches(
         b: hb.Batch,
         tranches: List[hb.ResourceFile],
         mode: str,
@@ -668,7 +469,7 @@ def GatherTranches(
     """
     Third step of VQSR for SNPs: run GatherTranches to gather scattered per-interval
     tranches outputs.
-    To support cohorts with more than 10,000 WGS samples, the SNP recalibrartion process
+    To support cohorts with more than 10,000 WGS samples, the SNP recalibration process
     is broken down across genomic regions for parallel processing, and done in 3 steps:
     1. Run the recalibrator with the following additional arguments:
        --sample-every-Nth-variant <downsample_factor> --output-model <model_file>
@@ -693,18 +494,19 @@ def GatherTranches(
     inputs_cmdl = ' '.join([f'--input {t}' for t in tranches])
     j.command(
         f"""set -euo pipefail
-        gatk --java-options -Xms6g \\
+        gatk --java-options "-Xms6g" \\
           GatherTranches \\
           --mode {mode} \\
           {inputs_cmdl} \\
           --output {j.out_tranches}"""
     )
+
     return j
 
 
-def ApplyRecalibration(
+def apply_recalibration(
         b: hb.Batch,
-        input_vcf: hb.ResourceGroup,
+        input_vcf: str,
         out_vcf_name: str,
         indels_recalibration: hb.ResourceGroup,
         indels_tranches: hb.ResourceFile,
@@ -713,8 +515,6 @@ def ApplyRecalibration(
         utils: Dict,
         disk_size: int,
         use_as_annotations: bool,
-        indel_filter_level: float,
-        snp_filter_level: float,
         scatter: Optional[int] = None,
         interval: Optional[hb.ResourceGroup] = None,
         out_bucket: Optional[str] = None,
@@ -738,73 +538,80 @@ def ApplyRecalibration(
     :param out_vcf_name: output vcf filename
     :param indels_recalibration: input recal file (ResourceGroup) for INDELs
     :param indels_tranches: input tranches file (ResourceFile) for INDELs
-    :param snps_recalibration: nput recal file (ResourceGroup) for SNPs
+    :param snps_recalibration: input recal file (ResourceGroup) for SNPs
     :param snps_tranches: input tranches file (ResourceFile) for SNPs
-    :param utils: a dictionary containing paths to resource files to be used to split genome
+    :param utils: a dictionary containing resources (file paths and arguments)
     :param disk_size: disk size to be used for the job
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
-    :param indel_filter_level: the truth sensitivity level at which to start filtering for INDELs
-    :param snp_filter_level: the truth sensitivity level at which to start filtering for SNPs
     :param scatter: scatter index to be used in output VCF filename if running in scattered mode
     :param interval: genomic interval to apply the model to
     :param out_bucket: full path to output bucket to write output(s) to
     :return: a Job object with one ResourceGroup output j.output_vcf, corresponding
     to a VCF with tranche annotated in the FILTER field
     """
-    if scatter:
+    if scatter is not None:
         filename = f'{out_vcf_name}_vqsr_recalibrated_{scatter}'
-        outpath = f'{out_bucket}scatter/'
+        outpath = f'{out_bucket}apply_recalibration/scatter/'
     else:
         filename = f'{out_vcf_name}_vqsr_recalibrated'
         outpath = out_bucket
 
     j = b.new_job('VQSR: ApplyRecalibration')
-    j.image(utils['GATK_IMAGE'])
+    # couldn't find a public image with both gatk and bcftools installed
+    j.image('docker.io/lindonkambule/vqsr_gatk_bcftools_img:latest')
     j.memory('8G')
     j.storage(f'{disk_size}G')
     j.declare_resource_group(
-        output_vcf={'vcf.gz': f'{filename}.vcf.gz', 'vcf.gz.tbi': f'{filename}.vcf.gz.tbi'}
+        output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
     )
 
     j.command(
         f"""set -euo pipefail
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        gatk --java-options -Xms5g \\
+        gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
           -O tmp.indel.recalibrated.vcf \\
-          -V {input_vcf['vcf.gz']} \\
+          -V {input_vcf} \\
           --recal-file {indels_recalibration} \\
           --tranches-file {indels_tranches} \\
-          --truth-sensitivity-filter-level {indel_filter_level} \\
+          --truth-sensitivity-filter-level {utils['INDEL_HARD_FILTER_LEVEL']} \\
           --create-output-variant-index true \\
           {f'-L {interval} ' if interval else ''} \\
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
           -mode INDEL
 
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        rm {input_vcf['vcf.gz']} {indels_recalibration} {indels_tranches}
+        rm {indels_recalibration} {indels_tranches}
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        gatk --java-options -Xms5g \\
+        gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
-          -O {j.output_vcf['vcf.gz']} \\
+          -O intermediate.vcf.gz \\
           -V tmp.indel.recalibrated.vcf \\
           --recal-file {snps_recalibration} \\
           --tranches-file {snps_tranches} \\
-          --truth-sensitivity-filter-level {snp_filter_level} \\
+          --truth-sensitivity-filter-level {utils['SNP_HARD_FILTER_LEVEL']} \\
           --create-output-variant-index true \\
           {f'-L {interval} ' if interval else ''} \\
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
           -mode SNP
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-          """
+        
+        # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
+        # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
+        interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+        bcftools view -t $interval intermediate.vcf.gz --output-file {j.output_vcf['vcf.gz']} --output-type z
+        tabix {j.output_vcf['vcf.gz']}
+        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
+        """
     )
 
     if out_bucket:
         b.write_output(j.output_vcf, f'{outpath}{filename}')
+
     return j
 
 
-def GatherVcfs(
+def gather_vcfs(
         b: hb.Batch,
         input_vcfs: List[hb.ResourceGroup],
         out_vcf_name: str,
@@ -829,22 +636,27 @@ def GatherVcfs(
     j.image(utils['GATK_IMAGE'])
     j.memory(f'16G')
     j.storage(f'{disk_size}G')
+
     j.declare_resource_group(
-        output_vcf={'vcf.gz': f'{filename}.vcf.gz', 'vcf.gz.tbi': f'{filename}vcf.gz.tbi'}
+        output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
     )
 
     input_cmdl = ' '.join([f'--input {v["vcf.gz"]}' for v in input_vcfs])
     j.command(
         f"""set -euo pipefail
-        # --ignore-safety-checks makes a big performance difference so we include it in 
-        # our invocation. This argument disables expensive checks that the file headers 
-        # contain the same set of genotyped samples and that files are in order 
-        # by position of first record.
-        gatk --java-options -Xms6g \\
+        # --ignore-safety-checks makes a big performance difference so we include it in our invocation.
+        # This argument disables expensive checks that the file headers contain the same set of
+        # genotyped samples and that files are in order by position of first record.
+        cd /io
+        mkdir tmp/
+        gatk --java-options "-Xms6g -Djava.io.tmpdir=`pwd`/tmp" \\
           GatherVcfsCloud \\
+          --ignore-safety-checks \\
           --gather-type BLOCK \\
           {input_cmdl} \\
-          --output {j.output_vcf['vcf.gz']}
+          --output {j.output_vcf['vcf.gz']} \\
+          --tmp-dir `pwd`/tmp
+          
         tabix {j.output_vcf['vcf.gz']}"""
     )
     if out_bucket:
@@ -883,26 +695,6 @@ def make_vqsr_jobs(
     :param sibling_singletons: full path to sibling singletons VCF file and its index
     :return: a final Job, and a path to the VCF with VQSR annotations
     """
-    # Reference files. All options have defaults.
-    dbsnp_vcf = b.read_input_group(base=utils['dbsnp_vcf'], index=utils['dbsnp_vcf_index'])
-    hapmap_resource_vcf = b.read_input_group(
-        base=utils['hapmap_resource_vcf'], index=utils['hapmap_resource_vcf_index']
-    )
-    omni_resource_vcf = b.read_input_group(
-        base=utils['omni_resource_vcf'], index=utils['omni_resource_vcf_index']
-    )
-    one_thousand_genomes_resource_vcf = b.read_input_group(
-        base=utils['one_thousand_genomes_resource_vcf'],
-        index=utils['one_thousand_genomes_resource_vcf_index'],
-    )
-    mills_resource_vcf = b.read_input_group(
-        base=utils['mills_resource_vcf'], index=utils['mills_resource_vcf_index']
-    )
-    axiom_poly_resource_vcf = b.read_input_group(
-        base=utils['axiom_poly_resource_vcf'], index=utils['axiom_poly_resource_vcf_index']
-    )
-    dbsnp_resource_vcf = dbsnp_vcf
-
     # To fit only a sites-only VCF
     if is_small_callset:
         small_disk = 50
@@ -918,47 +710,22 @@ def make_vqsr_jobs(
     else:
         huge_disk = 2000
 
-    gathered_vcf = b.read_input_group(
-        **{
-            'vcf.gz': sites_only_vcf,
-            'vcf.gz.tbi': sites_only_vcf + '.tbi',
-        }
-    )
-
-    if transmitted_singletons:
-        transmitted_singletons_resource_vcf = b.read_input_group(
-            base=transmitted_singletons, index=f'{transmitted_singletons}.tbi'
-        )
-    else:
-        transmitted_singletons_resource_vcf = None
-
-    if sibling_singletons:
-        sibling_singletons_resource_vcf = b.read_input_group(
-            base=sibling_singletons, index=f'{sibling_singletons}.tbi'
-        )
-    else:
-        sibling_singletons_resource_vcf = None
-
     snp_max_gaussians = 6
     indel_max_gaussians = 4
 
     if is_huge_callset:
         # 1. Run SNP recalibrator in a scattered mode
         # file exists:
-        if hl.hadoop_exists(f'{out_bucket}model/SNPS/recalibration-snps-model-file.recal'):
-            snps_model_file = b.read_input(f'{out_bucket}model/SNPS/recalibration-snps-model-file.recal')
+        if hl.hadoop_exists(f'{out_bucket}model/SNPS/snps.model.report'):
+            print(f'Found existing model for SNPs: {out_bucket}model/SNPS/snps.model.report')
+            snps_model_file = b.read_input(f'{out_bucket}model/SNPS/snps.model.report')
         else:
-            snps_model_file = SNPsVariantRecalibratorCreateModel(
+            snps_model_file = snps_variant_recalibrator_create_model(
                 b=b,
-                sites_only_vcf=gathered_vcf,
-                transmitted_singletons_resource_vcf=transmitted_singletons_resource_vcf,
-                sibling_singletons_resource_vcf=sibling_singletons_resource_vcf,
-                hapmap_resource_vcf=hapmap_resource_vcf,
-                omni_resource_vcf=omni_resource_vcf,
-                one_thousand_genomes_resource_vcf=one_thousand_genomes_resource_vcf,
-                dbsnp_resource_vcf=dbsnp_resource_vcf,
+                sites_only_vcf=sites_only_vcf,
+                transmitted_singletons_resource_vcf=transmitted_singletons,
+                sibling_singletons_resource_vcf=sibling_singletons,
                 utils=utils,
-                disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
                 out_bucket=out_bucket,
                 is_small_callset=is_small_callset,
@@ -967,22 +734,17 @@ def make_vqsr_jobs(
             ).model_file
 
         snps_recalibrator_jobs = [
-            SNPsVariantRecalibratorScattered(
+            snps_variant_recalibrator(
                 b=b,
-                sites_only_vcf=gathered_vcf,
-                interval=intervals[f'interval_{idx}'],
-                model_file=snps_model_file,
-                hapmap_resource_vcf=hapmap_resource_vcf,
-                omni_resource_vcf=omni_resource_vcf,
-                one_thousand_genomes_resource_vcf=one_thousand_genomes_resource_vcf,
-                dbsnp_resource_vcf=dbsnp_resource_vcf,
+                sites_only_vcf=sites_only_vcf,
                 utils=utils,
-                disk_size=small_disk,
                 out_bucket=out_bucket,
-                tranche_idx=idx,
                 use_as_annotations=use_as_annotations,
-                transmitted_singletons_resource_vcf=transmitted_singletons_resource_vcf,
-                sibling_singletons_resource_vcf=sibling_singletons_resource_vcf,
+                interval=intervals[f'interval_{idx}'],
+                tranche_idx=idx,
+                model_file=snps_model_file,
+                transmitted_singletons_resource_vcf=transmitted_singletons,
+                sibling_singletons_resource_vcf=sibling_singletons,
                 max_gaussians=snp_max_gaussians,
             )
             for idx in range(utils['NUMBER_OF_GENOMICS_DB_INTERVALS'])
@@ -990,7 +752,7 @@ def make_vqsr_jobs(
 
         snps_recalibrations = [j.recalibration for j in snps_recalibrator_jobs]
         snps_tranches = [j.tranches for j in snps_recalibrator_jobs]
-        snps_gathered_tranches = GatherTranches(
+        snps_gathered_tranches = gather_tranches(
             b=b,
             tranches=snps_tranches,
             mode='SNP',
@@ -998,19 +760,16 @@ def make_vqsr_jobs(
         ).out_tranches
 
         # 2. Run INDEL recalibrator in a scattered mode
-        if hl.hadoop_exists(f'{out_bucket}model/INDELS/recalibration-indels-model-file.recal'):
-            indels_model_file = b.read_input(f'{out_bucket}model/INDELS/recalibration-indels-model-file.recal')
+        if hl.hadoop_exists(f'{out_bucket}model/INDELS/indels.model.report'):
+            print(f'Found existing model for INDELs: {out_bucket}model/INDELS/indels.model.report')
+            indels_model_file = b.read_input(f'{out_bucket}model/INDELS/indels.model.report')
         else:
-            indels_model_file = IndelsVariantRecalibratorCreateModel(
+            indels_model_file = indels_variant_recalibrator_create_model(
                 b=b,
-                sites_only_vcf=gathered_vcf,
-                transmitted_singletons_resource_vcf=transmitted_singletons_resource_vcf,
-                sibling_singletons_resource_vcf=sibling_singletons_resource_vcf,
-                mills_resource_vcf=hapmap_resource_vcf,
-                axiomPoly_resource_vcf=axiom_poly_resource_vcf,
-                dbsnp_resource_vcf=dbsnp_resource_vcf,
+                sites_only_vcf=sites_only_vcf,
+                transmitted_singletons_resource_vcf=transmitted_singletons,
+                sibling_singletons_resource_vcf=sibling_singletons,
                 utils=utils,
-                disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
                 out_bucket=out_bucket,
                 is_small_callset=is_small_callset,
@@ -1018,21 +777,17 @@ def make_vqsr_jobs(
             ).model_file
 
         indels_recalibrator_jobs = [
-            IndelsVariantRecalibratorScattered(
+            indels_variant_recalibrator(
                 b=b,
-                sites_only_vcf=gathered_vcf,
-                interval=intervals[f'interval_{idx}'],
-                model_file=indels_model_file,
-                mills_resource_vcf=hapmap_resource_vcf,
-                axiomPoly_resource_vcf=axiom_poly_resource_vcf,
-                dbsnp_resource_vcf=dbsnp_resource_vcf,
+                sites_only_vcf=sites_only_vcf,
                 utils=utils,
-                disk_size=small_disk,
                 out_bucket=out_bucket,
-                tranche_idx=idx,
                 use_as_annotations=use_as_annotations,
-                transmitted_singletons_resource_vcf=transmitted_singletons_resource_vcf,
-                sibling_singletons_resource_vcf=sibling_singletons_resource_vcf,
+                interval=intervals[f'interval_{idx}'],
+                tranche_idx=idx,
+                model_file=indels_model_file,
+                transmitted_singletons_resource_vcf=transmitted_singletons,
+                sibling_singletons_resource_vcf=sibling_singletons,
                 max_gaussians=indel_max_gaussians,
             )
             for idx in range(utils['NUMBER_OF_GENOMICS_DB_INTERVALS'])
@@ -1040,7 +795,7 @@ def make_vqsr_jobs(
 
         indels_recalibrations = [j.recalibration for j in indels_recalibrator_jobs]
         indels_tranches = [j.tranches for j in indels_recalibrator_jobs]
-        indels_gathered_tranches = GatherTranches(
+        indels_gathered_tranches = gather_tranches(
             b=b,
             tranches=indels_tranches,
             mode='INDEL',
@@ -1048,29 +803,28 @@ def make_vqsr_jobs(
         ).out_tranches
 
         # 3. Apply recalibration
+        # Doesn't require too much storage in scatter mode (<500MB on gnomad VCF for each scatter), use small_disk
         scattered_vcfs = [
-            ApplyRecalibration(
+            apply_recalibration(
                 b=b,
-                input_vcf=gathered_vcf,
+                input_vcf=sites_only_vcf,
                 out_vcf_name=output_vcf_name,
                 indels_recalibration=indels_recalibrations[idx],
                 indels_tranches=indels_gathered_tranches,
                 snps_recalibration=snps_recalibrations[idx],
                 snps_tranches=snps_gathered_tranches,
                 utils=utils,
-                disk_size=huge_disk,
+                disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
-                indel_filter_level=utils.INDEL_HARD_FILTER_LEVEL,
-                snp_filter_level=utils.SNP_HARD_FILTER_LEVEL,
                 scatter=idx,
                 interval=intervals[f'interval_{idx}'],
-                out_bucket = out_bucket,
+                out_bucket=out_bucket,
             ).output_vcf
             for idx in range(utils['NUMBER_OF_GENOMICS_DB_INTERVALS'])
         ]
 
         # 4. Gather VCFs
-        recalibrated_gathered_vcf_job = GatherVcfs(
+        recalibrated_gathered_vcf_job = gather_vcfs(
             b=b,
             input_vcfs=scattered_vcfs,
             out_vcf_name=output_vcf_name,
@@ -1080,42 +834,35 @@ def make_vqsr_jobs(
         )
 
     else:
-        snps_recalibrator_job = SNPsVariantRecalibrator(
+        snps_recalibrator_job = snps_variant_recalibrator(
             b=b,
-            sites_only_vcf=gathered_vcf,
-            transmitted_singletons_resource_vcf=transmitted_singletons_resource_vcf,
-            hapmap_resource_vcf=hapmap_resource_vcf,
-            omni_resource_vcf=omni_resource_vcf,
-            one_thousand_genomes_resource_vcf=one_thousand_genomes_resource_vcf,
-            dbsnp_resource_vcf=dbsnp_resource_vcf,
+            sites_only_vcf=sites_only_vcf,
             utils=utils,
-            disk_size=small_disk,
+            out_bucket=out_bucket,
             use_as_annotations=use_as_annotations,
+            transmitted_singletons_resource_vcf=transmitted_singletons,
+            sibling_singletons_resource_vcf=sibling_singletons,
             max_gaussians=snp_max_gaussians,
-            out_bucket=out_bucket
         )
         snps_recalibration = snps_recalibrator_job.recalibration
         snps_tranches = snps_recalibrator_job.tranches
 
-        indels_variant_recalibrator_job = IndelsVariantRecalibrator(
+        indels_variant_recalibrator_job = indels_variant_recalibrator(
             b=b,
-            sites_only_vcf=gathered_vcf,
-            transmitted_singletons_resource_vcf=transmitted_singletons_resource_vcf,
-            mills_resource_vcf=mills_resource_vcf,
-            axiomPoly_resource_vcf=axiom_poly_resource_vcf,
-            dbsnp_resource_vcf=dbsnp_resource_vcf,
+            sites_only_vcf=sites_only_vcf,
+            transmitted_singletons_resource_vcf=transmitted_singletons,
+            sibling_singletons_resource_vcf=sibling_singletons,
             utils=utils,
-            disk_size=small_disk,
+            out_bucket=out_bucket,
             use_as_annotations=use_as_annotations,
             max_gaussians=indel_max_gaussians,
-            out_bucket=out_bucket,
         )
         indels_recalibration = indels_variant_recalibrator_job.recalibration
         indels_tranches = indels_variant_recalibrator_job.tranches
 
-        recalibrated_gathered_vcf_job = ApplyRecalibration(
+        recalibrated_gathered_vcf_job = apply_recalibration(
             b=b,
-            input_vcf=gathered_vcf,
+            input_vcf=sites_only_vcf,
             out_vcf_name=output_vcf_name,
             indels_recalibration=indels_recalibration,
             indels_tranches=indels_tranches,
@@ -1124,8 +871,6 @@ def make_vqsr_jobs(
             utils=utils,
             disk_size=huge_disk,
             use_as_annotations=use_as_annotations,
-            indel_filter_level=utils.INDEL_HARD_FILTER_LEVEL,
-            snp_filter_level=utils.SNP_HARD_FILTER_LEVEL,
             out_bucket=out_bucket,
         )
 
@@ -1178,7 +923,7 @@ def vqsr_workflow(
         backend=backend,
     )
 
-    intervals_j = _add_split_intervals_job(
+    intervals_j = split_intervals(
         b=b,
         utils=utils
     )
@@ -1214,10 +959,14 @@ def main():
     parser.add_argument('--out-vcf-name', type=str, required=True)
     parser.add_argument('--resources', type=str, required=True)
     parser.add_argument('--n-samples', type=int, required=True)
+    parser.add_argument('--billing-project', type=str, required=True)
     parser.add_argument('--transmitted-singletons', type=str, required=False)
     parser.add_argument('--sibling-singletons', type=str, required=False)
+    parser.add_argument('--no-as-annotations', action='store_true')
 
     args = parser.parse_args()
+
+    use_as_annotations = False if args.no_as_annotations else True
 
     vqsr_workflow(sites_only_vcf=args.input_vcf,
                   output_vcf_filename=args.out_vcf_name,
@@ -1226,7 +975,8 @@ def main():
                   resources=args.resources,
                   out_bucket=args.out_bucket,
                   billing_project=args.billing_project,
-                  n_samples=args.n_samples)
+                  n_samples=args.n_samples,
+                  use_as_annotations=use_as_annotations)
 
 
 if __name__ == '__main__':

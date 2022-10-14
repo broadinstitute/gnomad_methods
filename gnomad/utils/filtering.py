@@ -3,7 +3,7 @@
 import functools
 import logging
 import operator
-from typing import Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import hail as hl
 
@@ -96,12 +96,6 @@ def filter_by_frequency(
             raise Exception("No downsampling data for subpopulations implemented")
     criteria.append(lambda f: f.meta.size() == size)
 
-    def combine_functions(func_list, x):
-        cond = func_list[0](x)
-        for c in func_list[1:]:
-            cond &= c(x)
-        return cond
-
     filt = lambda x: combine_functions(criteria, x)
     criteria = hl.any(filt, t.freq)
     return (
@@ -109,6 +103,29 @@ def filter_by_frequency(
         if isinstance(t, hl.MatrixTable)
         else t.filter(criteria, keep=keep)
     )
+
+
+def combine_functions(
+    func_list: List[Callable[[bool], bool]],
+    x: hl.expr.StructExpression,
+    operator_func: Callable[[bool, bool], bool] = operator.iand,
+) -> bool:
+    """
+    Combine a list of boolean functions to an Expression using the specified operator.
+
+    .. note::
+
+        The `operator_func` is applied cumulatively from left to right of the `func_list`.
+
+    :param func_list: A list of boolean functions that can be applied to `x`.
+    :param x: Expression to be passed to each function in `func_list`.
+    :param operator_func: Operator function to combine the functions in `func_list`. Default is `operator.iand`.
+    :return: A boolean from the combined operations.
+    """
+    cond = func_list[0](x)
+    for c in func_list[1:]:
+        cond = operator_func(cond, c(x))
+    return cond
 
 
 def filter_low_conf_regions(
@@ -382,3 +399,47 @@ def remove_fields_from_constant(
             logger.info("%s missing from %s", field, constant)
 
     return constant
+
+
+def filter_x_nonpar(
+    t: Union[hl.Table, hl.MatrixTable]
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Filter to loci that are in non-PAR regions on chromosome X.
+
+    :param t: Input Table or MatrixTable.
+    :return: Filtered Table or MatrixTable.
+    """
+    rg = t.locus.dtype.reference_genome
+    t = hl.filter_intervals(
+        t, [hl.parse_locus_interval(contig) for contig in rg.x_contigs]
+    )
+    non_par_expr = t.locus.in_x_nonpar()
+
+    return (
+        t.filter(non_par_expr)
+        if isinstance(t, hl.Table)
+        else t.filter_rows(non_par_expr)
+    )
+
+
+def filter_y_nonpar(
+    t: Union[hl.Table, hl.MatrixTable]
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Filter to loci that are in non-PAR regions on chromosome Y.
+
+    :param t: Input Table or MatrixTable.
+    :return: Filtered Table or MatrixTable.
+    """
+    rg = t.locus.dtype.reference_genome
+    t = hl.filter_intervals(
+        t, [hl.parse_locus_interval(contig) for contig in rg.y_contigs]
+    )
+    non_par_expr = t.locus.in_y_nonpar()
+
+    return (
+        t.filter(non_par_expr)
+        if isinstance(t, hl.Table)
+        else t.filter_rows(non_par_expr)
+    )

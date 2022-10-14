@@ -95,7 +95,6 @@ def snps_variant_recalibrator_create_model(
     j = b.new_job('VQSR: SNPsVariantRecalibratorCreateModel')
     j.image(utils['GATK_IMAGE'])
     j.memory('highmem')
-    j._preemptible = False
     if is_small_callset:
         ncpu = 8  # ~ 8G/core ~ 64G
     else:
@@ -307,7 +306,6 @@ def indels_variant_recalibrator_create_model(
     j.cpu(ncpu)
     java_mem = ncpu * 8 - 10
     j.storage('50G')
-    j._preemptible = False
 
     # downsample_factor = 75 if is_huge_callset else 10
     downsample_factor = 10

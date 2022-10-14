@@ -178,8 +178,7 @@ def count_variants_by_group(
             agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
                 freq_expr, freq_meta_expr, pop, singleton=True
             )
-    # Apply each variant count aggregation in `agg` to get counts for all
-    # combinations of `grouping`.
+    # Apply each variant count aggregation in `agg` to get counts for all combinations of `grouping`.
     if use_table_group_by:
         return ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg)
     else:

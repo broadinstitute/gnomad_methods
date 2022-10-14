@@ -16,6 +16,7 @@ repos:
     rev: v1.7.0 # This should be kept in sync with the version in requirements-dev.in
     hooks:
       - id: autopep8
+        args: ["--exit-code", "--in-place"]
         files: gnomad
   - repo: https://github.com/pycqa/pydocstyle
     rev: 6.1.1 # This should be kept in sync with the version in requirements-dev.in

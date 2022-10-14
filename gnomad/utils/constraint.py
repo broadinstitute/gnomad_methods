@@ -23,7 +23,8 @@ def annotate_with_mu(
 
     .. note::
 
-        `ht` is expected to include annotations that `mutation_ht` is keyed by, but these annotations don't need to be the keys of `ht`.
+        `ht` is expected to include annotations that `mutation_ht` is keyed by, but these annotations don't need to be
+        the keys of `ht`.
 
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.
@@ -52,39 +53,59 @@ def count_variants_by_group(
     """
     Count number of observed or possible variants by context, ref, alt, and optionally methylation_level.
 
-    Performs variant count aggregations based on specified criteria (`count_singletons`, `count_downsamplings`, and `max_af`), and grouped by: 'context', 'ref', 'alt', 'methylation_level' (optional), and all annotations provided in `additional_grouping`.
+    Performs variant count aggregations based on specified criteria (`count_singletons`, `count_downsamplings`, and
+    `max_af`), and grouped by: 'context', 'ref', 'alt', 'methylation_level' (optional), and all annotations provided
+    in `additional_grouping`.
 
-        If variant allele frequency information is required based on other parameter selections (described in detail below) and `freq_expr` is not supplied, `freq_expr` defaults to `ht.freq` if it exists. 
-        
-        `freq_expr` should be an ArrayExpression of Structs with 'AC' and 'AF' annotations. This is the same format as the `freq` annotation that is created using `annotate_freq()`. 
+    If variant allele frequency information is required based on other parameter selections (described in detail below)
+    and `freq_expr` is not supplied, `freq_expr` defaults to `ht.freq` if it exists.
+
+    `freq_expr` should be an ArrayExpression of Structs with 'AC' and 'AF' annotations. This is the same format as the
+    `freq` annotation that is created using `annotate_freq()`.
     
     Variant allele frequency information is needed when:
-        - `max_af` is not None - `freq_expr[0].AF` is used to filter to only variants with a maximum allele frequency of `max_af` prior to counting variants. In the standard `freq` ArrayExpression annotated by `annotate_freq()`, this first element corresponds to the allele frequency information for high quality genotypes (adj).
-        - `count_singletons` is True and `singleton_expr` is None - If singleton counts are requested and no expression is specified to determine whether a variant is a singleton, `singleton_expr` defaults to `freq_expr[0].AC == 1`. In the standard `freq` ArrayExpression annotated by `annotate_freq()`, this corresponds to allele count of only 1 in the callset after filtering to high quality genotypes.
-        - `count_downsamplings` is not empty - When dounsampling counts are requested, `freq_expr` needs to contain frequency information for downsamplings within each population requested. In addition to needing `freq_expr`, this also requires the use of `freq_meta_expr`. If `freq_meta_expr` is None, `freq_meta_expr` it defaults to `ht.freq_meta` if it exists. Similar to `freq_expr`, `freq_meta_expr` is expected to have the same format as the `freq_meta` global annotation that is created using `annotate_freq()`. `freq_meta_expr` is used to determine the index of allele frequency information within `freq_expr` for each population requested and it's downsamplings.
+        - `max_af` is not None - `freq_expr[0].AF` is used to filter to only variants with a maximum allele frequency
+          of `max_af` prior to counting variants. In the standard `freq` ArrayExpression annotated by
+          `annotate_freq()`, this first element corresponds to the allele frequency information for high quality
+          genotypes (adj).
+        - `count_singletons` is True and `singleton_expr` is None - If singleton counts are requested and no expression
+          is specified to determine whether a variant is a singleton, `singleton_expr` defaults to
+          `freq_expr[0].AC == 1`. In the standard `freq` ArrayExpression annotated by `annotate_freq()`, this
+          corresponds to allele count of only 1 in the callset after filtering to high quality genotypes.
+        - `count_downsamplings` is not empty - When downsampling counts are requested, `freq_expr` needs to contain
+          frequency information for downsamplings within each population requested. In addition to needing `freq_expr`,
+          this also requires the use of `freq_meta_expr`. If `freq_meta_expr` is None, `freq_meta_expr` it defaults to
+          `ht.freq_meta` if it exists. Similar to `freq_expr`, `freq_meta_expr` is expected to have the same format as
+          the `freq_meta` global annotation that is created using `annotate_freq()`. `freq_meta_expr` is used to
+          determine the index of allele frequency information within `freq_expr` for each population requested and
+          it's downsamplings.
     
-    This function will return a Table with annotations used for grouping ('context', 'ref', 'alt', 'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
+    This function will return a Table with annotations used for grouping ('context', 'ref', 'alt',
+    'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
+
+    .. note::
 
     .. note::
 
         The following annotations should be present in `ht`:
-        - ref - the reference allele
-        - alt - the alternate base
-        - context - trinucleotide genomic context
-        - methylation_level - methylation level (optional if omit_methylation==True)
-        - freq - Allele frequency information (AC, AN, AF, homozygote count)
-        - freq_meta - frequency metadata. An ordered list containing the frequency aggregation group for each element of the `freq` array row annotation.
+            - ref - the reference allele
+            - alt - the alternate base
+            - context - trinucleotide genomic context
+            - methylation_level - methylation level (optional if omit_methylation==True)
+            - freq - allele frequency information (AC, AN, AF, homozygote count; not required if `freq_expr` is given)
+            - freq_meta - an ordered list containing the frequency aggregation group for each element of the `freq`
+              array row annotation (not required if `freq_meta_expr` is given)
 
     :param ht: Input Hail Table.
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations. If `freq_expr` is None and any of `count_downsamplings`, `max_af`, and `count_singletons` is True, `freq_expr` would be `ht.freq`.
     :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to `freq_expr`. If `count_downsamplings` and `freq_meta_expr` is None, `freq_meta_expr` would be `ht.freq_meta`.
-    :param count_singletons: Whether to count singletons (defined by `singleton_expression`). Default is False.
+    :param count_singletons: Whether to count singletons (defined by `singleton_expr`). Default is False.
     :param count_downsamplings: Tuple of populations to use for downsampling counts. Default is ().
     :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'. Default is ().
     :param partition_hint: Target number of partitions for aggregation. Default is 100.
     :param omit_methylation: Whether to omit 'methylation_level' from the grouping when counting variants. Default is False.
     :param use_table_group_by: Whether to group `ht` before aggregating the variant counts. If `use_table_group_by` is False, function will return a hl.StructExpression. Default is False.
-    :param singleton_expression: Expression for defining a singleton. When `count_singletons` is True and `singleton_expression` is None, `singleton_expression` would be `freq_expr[0].AC == 1`. Default is None.
+    :param singleton_expr: Expression for defining a singleton. When `count_singletons` is True and `singleton_expr` is None, `singleton_expression` would be `freq_expr[0].AC == 1`. Default is None.
     :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is applied.
     :return: Table including 'variant_count' annotation and if requested, `singleton_count` and downsampling counts.
     """
@@ -120,13 +141,18 @@ def count_variants_by_group(
     )
 
     if max_af:
-        logger.info("The maximum variant allele frequency to be included in `variant_count` is %.3f.", max_af)
+        logger.info(
+            "The maximum variant allele frequency to be included in `variant_count` is %.3f.",
+            max_af,
+        )
         agg = {"variant_count": hl.agg.count_where(freq_expr[0].AF <= max_af)}
     else:
         agg = {"variant_count": hl.agg.count()}
 
     if count_singletons:
-        logger.info("Counting singleton variants and adding as 'singleton_count' annotation.")
+        logger.info(
+            "Counting singleton variants and adding as 'singleton_count' annotation."
+        )
         agg["singleton_count"] = hl.agg.count_where(singleton_expr)
 
     for pop in count_downsamplings:
@@ -167,8 +193,9 @@ def downsampling_counts_expr(
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
 
-    The meta data (`freq_meta_expr`) should be in a similar format to the `freq_meta` annotation added by  `annotate_freq()`. Each downsampling should have 'group',
-    'pop', and 'downsampling' keys. Included downsamplings are those where 'group' == `variant_quality` and 'pop' == `pop`.
+    The frequency metadata (`freq_meta_expr`) should be in a similar format to the `freq_meta` annotation added by 
+    `annotate_freq()`. Each downsampling should have 'group', 'pop', and 'downsampling' keys. Included downsamplings 
+    are those where 'group' == `variant_quality` and 'pop' == `pop`.
 
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations.
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
@@ -192,7 +219,7 @@ def downsampling_counts_expr(
 
     def _get_criteria(i: hl.expr.Int32Expression) -> hl.expr.Int32Expression:
         """
-        Returns 1 when variants meeting specified criteria (`singleton` or `max_af`), if requested, or with an AC > 0.
+        Return 1 when variant meets specified criteria (`singleton` or `max_af`), if requested, or with an AC > 0.
 
         :param i: The index of a downsampling.
         :return: Returns 1 if the variant in the downsampling with specified index met the criteria. Otherwise, returns 0.

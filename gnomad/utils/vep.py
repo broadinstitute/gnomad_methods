@@ -15,7 +15,8 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
+# Note that this is the current as of v81 with some included for backwards
+# compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
     "splice_acceptor_variant",
@@ -182,10 +183,10 @@ def vep_or_lookup_vep(
         vep_config = vep_config_file.read()
 
     if reference_vep_ht is None:
-
         if reference not in POSSIBLE_REFS:
             raise ValueError(
-                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(POSSIBLE_REFS)}'
+                f"vep_or_lookup_vep got {reference}. Expected one of"
+                f" {', '.join(POSSIBLE_REFS)}"
             )
 
         vep_context = get_vep_context(reference)
@@ -194,8 +195,8 @@ def vep_or_lookup_vep(
 
         if vep_version not in vep_context.versions:
             logger.warning(
-                "No VEPed context Table available for genome build %s and VEP version %s, "
-                "all variants will be VEPed using the following VEP:\n%s",
+                "No VEPed context Table available for genome build %s and VEP version"
+                " %s, all variants will be VEPed using the following VEP:\n%s",
                 reference,
                 vep_version,
                 vep_help,
@@ -213,13 +214,15 @@ def vep_or_lookup_vep(
         vep_context_config = hl.eval(reference_vep_ht.vep_config)
 
         assert vep_help == vep_context_help, (
-            f"The VEP context HT version does not match the version referenced in the VEP config file."
-            f"\nVEP context:\n{vep_context_help}\n\n VEP config:\n{vep_help}"
+            "The VEP context HT version does not match the version referenced in the"
+            f" VEP config file.\nVEP context:\n{vep_context_help}\n\n VEP"
+            f" config:\n{vep_help}"
         )
 
         assert vep_config == vep_context_config, (
-            f"The VEP context HT configuration does not match the configuration in {vep_config_path}."
-            f"\nVEP context:\n{vep_context_config}\n\n Current config:\n{vep_config}"
+            "The VEP context HT configuration does not match the configuration in"
+            f" {vep_config_path}.\nVEP context:\n{vep_context_config}\n\n Current"
+            f" config:\n{vep_config}"
         )
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)

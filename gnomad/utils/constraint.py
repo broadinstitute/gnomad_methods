@@ -116,31 +116,36 @@ def count_variants_by_group(
         freq_expr = ht.freq
     if count_downsamplings and freq_meta_expr is None:
         logger.warning(
-            "freq_meta_expr was not provided, using 'freq_meta' as the frequency metadata annotation."
+            "freq_meta_expr was not provided, using 'freq_meta' as the frequency"
+            " metadata annotation."
         )
         freq_meta_expr = ht.freq_meta
     if count_singletons and singleton_expr is None:
         logger.warning(
-            "count_singletons is True and singleton_expr was not provided, using freq_expr[0].AC == 1 as the singleton expression."
+            "count_singletons is True and singleton_expr was not provided, using"
+            " freq_expr[0].AC == 1 as the singleton expression."
         )
         singleton_expr = freq_expr[0].AC == 1
 
     grouping = hl.struct(context=ht.context, ref=ht.ref, alt=ht.alt)
     if not omit_methylation:
         logger.info(
-            "'methylation_level' annotation is included in the grouping when counting variants."
+            "'methylation_level' annotation is included in the grouping when counting"
+            " variants."
         )
         grouping = grouping.annotate(methylation_level=ht.methylation_level)
     for group in additional_grouping:
         grouping = grouping.annotate(**{group: ht[group]})
     logger.info(
-        "The following annotations will be used to group the input Table rows when counting variants: %s.",
+        "The following annotations will be used to group the input Table rows when"
+        " counting variants: %s.",
         ", ".join(grouping.keys()),
     )
 
     if max_af:
         logger.info(
-            "The maximum variant allele frequency to be included in `variant_count` is %.3f.",
+            "The maximum variant allele frequency to be included in `variant_count` is"
+            " %.3f.",
             max_af,
         )
         agg = {"variant_count": hl.agg.count_where(freq_expr[0].AF <= max_af)}
@@ -155,7 +160,8 @@ def count_variants_by_group(
 
     for pop in count_downsamplings:
         logger.info(
-            "Counting variants in downsamplings for population '%s', and adding as 'downsampling_counts_%s' annotation.",
+            "Counting variants in downsamplings for population '%s', and adding as"
+            " 'downsampling_counts_%s' annotation.",
             pop,
             pop,
         )
@@ -164,14 +170,16 @@ def count_variants_by_group(
         )
         if count_singletons:
             logger.info(
-                "Counting singleton variants in downsamplings for population '%s', and adding as 'singleton_downsampling_counts_%s' annotation.",
+                "Counting singleton variants in downsamplings for population '%s', and"
+                " adding as 'singleton_downsampling_counts_%s' annotation.",
                 pop,
                 pop,
             )
             agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
                 freq_expr, freq_meta_expr, pop, singleton=True
             )
-    # Apply each variant count aggregation in `agg` to get counts for all combinations of `grouping`.
+    # Apply each variant count aggregation in `agg` to get counts for all
+    # combinations of `grouping`.
     if use_table_group_by:
         return ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg)
     else:
@@ -203,7 +211,8 @@ def downsampling_counts_expr(
     :param max_af: Maximum variant allele frequency to keep. By default no allele frequency cutoff is applied.
     :return: Aggregation Expression for an array of the variant counts in downsamplings for specified population.
     """
-    # Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "group" and "pop" values.
+    # Get indices of dictionaries in meta dictionaries that only have the
+    # "downsampling" key with specified "group" and "pop" values.
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].size() == 3)
         & (f[1].get("group") == variant_quality)
@@ -251,11 +260,13 @@ def annotate_mutation_type(
     :param t: Input Table or MatrixTable.
     :return: Table with mutation type annotations added.
     """
-    # Determine the middle index of context by sampling the first 100 values of 'context'.
+    # Determine the middle index of context by sampling the first 100 values
+    # of 'context'.
     context_lengths = list(filter(None, set(hl.len(t.context).take(100))))
     if len(context_lengths) > 1:
         raise ValueError(
-            "More than one length was found among the first 100 'context' values. Length of 'context' should be consistent."
+            "More than one length was found among the first 100 'context' values."
+            " Length of 'context' should be consistent."
         )
     else:
         context_length = context_lengths[0]
@@ -267,7 +278,8 @@ def annotate_mutation_type(
         mid_index = 3
     else:
         raise ValueError(
-            f"The length of context should be either 3 or 7, instead of {context_length}."
+            "The length of context should be either 3 or 7, instead of"
+            f" {context_length}."
         )
 
     transition_expr = hl.is_transition(t.ref, t.alt)

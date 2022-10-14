@@ -82,7 +82,8 @@ def filter_by_frequency(
     if subpop:
         criteria.append(lambda f: f.meta.get("subpop", "") == subpop)
         size += 1
-        # If one supplies a subpop but not a population, this will ensure this gets it right
+        # If one supplies a subpop but not a population, this will ensure this
+        # gets it right
         if not population:
             size += 1
     if downsampling:
@@ -271,7 +272,8 @@ def subset_samples_and_variants(
     else:
         if remove_dead_alleles:
             raise ValueError(
-                "Removal of alleles observed in no samples is currently only implemented when the input dataset is a VariantDataset."
+                "Removal of alleles observed in no samples is currently only"
+                " implemented when the input dataset is a VariantDataset."
             )
         mt = mtds
     missing_ht = sample_ht.anti_join(mt.cols())
@@ -281,9 +283,10 @@ def subset_samples_and_variants(
     if missing_ht_count != 0:
         missing_samples = missing_ht.s.collect()
         raise DataException(
-            f"Only {sample_count - missing_ht_count} out of {sample_count} "
-            f"subsetting-table IDs matched IDs in the {'VariantDataset' if is_vds else 'MatrixTable'}.\n"
-            f"IDs that aren't in the MT: {missing_samples}\n"
+            f"Only {sample_count - missing_ht_count} out of"
+            f" {sample_count} subsetting-table IDs matched IDs in the"
+            f" {'VariantDataset' if is_vds else 'MatrixTable'}.\nIDs that aren't in the"
+            f" MT: {missing_samples}\n"
         )
 
     if is_vds:

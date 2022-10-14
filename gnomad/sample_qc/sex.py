@@ -120,7 +120,8 @@ def gaussian_mixture_model_karyotype_assignment(
         gmm = GaussianMixture(n_components=2)
         gmm.fit(df)
         probs = gmm.predict_proba(df)
-        # Assign cluster to karyotype based on cluster means and the order of `karyotypes`
+        # Assign cluster to karyotype based on cluster means and the order of
+        # `karyotypes`
         cluster_to_karyotype = dict(
             zip(np.argsort([m[0] for m in gmm.means_]), karyotypes)
         )
@@ -201,7 +202,8 @@ def get_ploidy_cutoffs(
             "One and only one of 'f_stat_cutoff' or 'group_by_expr' must be supplied!"
         )
 
-    # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
+    # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by
+    # f_stat cutoff
     if f_stat_cutoff is not None:
         group_by_expr = hl.if_else(ht.f_stat < f_stat_cutoff, "XX", "XY")
 
@@ -352,7 +354,8 @@ def get_sex_expr(
     """
     if sum([chr_x_frac_hom_alt_expr is None, chr_x_frac_hom_alt_cutoffs is None]) == 1:
         raise ValueError(
-            "None or both of `chr_x_frac_hom_alt_expr` and `chr_x_frac_hom_alt_cutoffs` must be set!"
+            "None or both of `chr_x_frac_hom_alt_expr` and `chr_x_frac_hom_alt_cutoffs`"
+            " must be set!"
         )
 
     if chr_x_frac_hom_alt_expr is not None:

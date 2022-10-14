@@ -114,11 +114,10 @@ def check_ht_fields_for_spark(ht: hl.Table, fields: List[str]) -> None:
 
     if bad_field_names or bad_types:
         raise ValueError(
-            "Only basic type fields can be converted from Hail to Spark. In addition, `.` are not allowed in field names in Spark.\n"
-            + "Offending fields (non basic type): {}".format(bad_types)
-            + "Offending fields (bad field name): {}\n".format(
-                ",".join(bad_field_names)
-            )
+            "Only basic type fields can be converted from Hail to Spark. In addition,"
+            " `.` are not allowed in field names in Spark.\n"
+            f"Offending fields (non basic type): {bad_types}"
+            f"Offending fields (bad field name): {', '.join(bad_field_names)}\n"
         )
 
     return
@@ -441,7 +440,8 @@ def train_rf(
     :return: Random Forest pipeline model
     """
     logger.info(
-        "Training RF model using:\nfeatures: %s\nlabels: %s\nnum_trees: %d\nmax_depth: %d",
+        "Training RF model using:\nfeatures: %s\nlabels: %s\nnum_trees:"
+        " %d\nmax_depth: %d",
         ",".join(features),
         label,
         num_trees,

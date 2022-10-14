@@ -21,7 +21,8 @@ POP_NAMES = {
     "eas": "East Asian",
     "eur": "European",
     "fin": "Finnish",
-    "mde": "Middle Eastern",  # NOTE: mde is kept for historical purposes, in gnomAD v3.1 mid was used instead
+    # NOTE: mde is kept for historical purposes, in gnomAD v3.1 mid was used instead
+    "mde": "Middle Eastern",
     "mid": "Middle Eastern",
     "nfe": "Non-Finnish European",
     "oth": "Other",
@@ -166,7 +167,8 @@ def assign_population_pcs(
     if hail_input:
         if not all(isinstance(n, int) for n in pc_cols):
             raise TypeError(
-                "Using a Hail Table with pc_cols requires all values of the pc_cols list to be integers"
+                "Using a Hail Table with pc_cols requires all values of the pc_cols"
+                " list to be integers"
             )
         pcs_to_pull = [pop_pca_scores.scores[i - 1] for i in pc_cols]
         if not fit:
@@ -183,7 +185,8 @@ def assign_population_pcs(
     else:
         if not all(isinstance(n, str) for n in pc_cols):
             raise TypeError(
-                "Using a Pandas DataFrame with pc_cols requires all values of the pc_cols list to be strings"
+                "Using a Pandas DataFrame with pc_cols requires all values of the"
+                " pc_cols list to be strings"
             )
         pop_pc_pd = pop_pca_scores
 

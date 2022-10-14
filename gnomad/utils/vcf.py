@@ -137,35 +137,64 @@ INFO_DICT = {
     },
     "InbreedingCoeff": {
         "Number": "A",
-        "Description": "Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium)",
+        "Description": (
+            "Inbreeding coefficient, the excess heterozygosity at a variant site,"
+            " computed as 1 - (the number of heterozygous genotypes)/(the number of"
+            " heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
+        ),
     },
     "MQ": {
-        "Description": "Root mean square of the mapping quality of reads across all samples"
+        "Description": (
+            "Root mean square of the mapping quality of reads across all samples"
+        )
     },
     "MQRankSum": {
-        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read mapping qualities"
+        "Description": (
+            "Z-score from Wilcoxon rank sum test of alternate vs. reference read"
+            " mapping qualities"
+        )
     },
     "QD": {
-        "Description": "Variant call confidence normalized by depth of sample reads supporting a variant"
+        "Description": (
+            "Variant call confidence normalized by depth of sample reads supporting a"
+            " variant"
+        )
     },
     "ReadPosRankSum": {
-        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference read position bias"
+        "Description": (
+            "Z-score from Wilcoxon rank sum test of alternate vs. reference read"
+            " position bias"
+        )
     },
     "SOR": {"Description": "Strand bias estimated by the symmetric odds ratio test"},
     "POSITIVE_TRAIN_SITE": {
-        "Description": "Variant was used to build the positive training set of high-quality variants for VQSR"
+        "Description": (
+            "Variant was used to build the positive training set of high-quality"
+            " variants for VQSR"
+        )
     },
     "NEGATIVE_TRAIN_SITE": {
-        "Description": "Variant was used to build the negative training set of low-quality variants for VQSR"
+        "Description": (
+            "Variant was used to build the negative training set of low-quality"
+            " variants for VQSR"
+        )
     },
     "BaseQRankSum": {
-        "Description": "Z-score from Wilcoxon rank sum test of alternate vs. reference base qualities",
+        "Description": (
+            "Z-score from Wilcoxon rank sum test of alternate vs. reference base"
+            " qualities"
+        ),
     },
     "VarDP": {
-        "Description": "Depth over variant genotypes (does not include depth of reference samples)"
+        "Description": (
+            "Depth over variant genotypes (does not include depth of reference samples)"
+        )
     },
     "VQSLOD": {
-        "Description": "Log-odds ratio of being a true variant versus being a false positive under the trained VQSR Gaussian mixture model",
+        "Description": (
+            "Log-odds ratio of being a true variant versus being a false positive under"
+            " the trained VQSR Gaussian mixture model"
+        ),
     },
     "culprit": {
         "Description": "Worst-performing annotation in the VQSR Gaussian mixture model",
@@ -173,22 +202,37 @@ INFO_DICT = {
     "decoy": {"Description": "Variant falls within a reference decoy region"},
     "lcr": {"Description": "Variant falls within a low complexity region"},
     "nonpar": {
-        "Description": "Variant (on sex chromosome) falls outside a pseudoautosomal region"
+        "Description": (
+            "Variant (on sex chromosome) falls outside a pseudoautosomal region"
+        )
     },
     "segdup": {"Description": "Variant falls within a segmental duplication region"},
     "rf_positive_label": {
-        "Description": "Variant was labelled as a positive example for training of random forest model"
+        "Description": (
+            "Variant was labelled as a positive example for training of random forest"
+            " model"
+        )
     },
     "rf_negative_label": {
-        "Description": "Variant was labelled as a negative example for training of random forest model"
+        "Description": (
+            "Variant was labelled as a negative example for training of random forest"
+            " model"
+        )
     },
     "rf_label": {"Description": "Random forest training label"},
     "rf_train": {"Description": "Variant was used in training random forest model"},
     "rf_tp_probability": {
-        "Description": "Probability of a called variant being a true variant as determined by random forest model"
+        "Description": (
+            "Probability of a called variant being a true variant as determined by"
+            " random forest model"
+        )
     },
     "transmitted_singleton": {
-        "Description": "Variant was a callset-wide doubleton that was transmitted within a family from a parent to a child (i.e., a singleton amongst unrelated samples in cohort)"
+        "Description": (
+            "Variant was a callset-wide doubleton that was transmitted within a family"
+            " from a parent to a child (i.e., a singleton amongst unrelated samples in"
+            " cohort)"
+        )
     },
     "original_alleles": {"Description": "Alleles before splitting multiallelics"},
     "variant_type": {
@@ -203,11 +247,17 @@ INFO_DICT = {
     },
     "was_mixed": {"Description": "Variant type was mixed"},
     "has_star": {
-        "Description": "Variant locus coincides with a spanning deletion (represented by a star) observed elsewhere in the callset"
+        "Description": (
+            "Variant locus coincides with a spanning deletion (represented by a star)"
+            " observed elsewhere in the callset"
+        )
     },
     "AS_pab_max": {
         "Number": "A",
-        "Description": "Maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of 0.5",
+        "Description": (
+            "Maximum p-value over callset for binomial test of observed allele balance"
+            " for a heterozygous genotype, given expectation of 0.5"
+        ),
     },
     "monoallelic": {
         "Description": "All samples are homozygous alternate for the variant"
@@ -218,7 +268,9 @@ INFO_DICT = {
     },
     "AS_SB_TABLE": {
         "Number": ".",
-        "Description": "Allele-specific forward/reverse read counts for strand bias tests",
+        "Description": (
+            "Allele-specific forward/reverse read counts for strand bias tests"
+        ),
     },
 }
 """
@@ -228,26 +280,48 @@ Dictionary used during VCF export to export row (variant) annotations.
 IN_SILICO_ANNOTATIONS_INFO_DICT = {
     "cadd_raw_score": {
         "Number": "1",
-        "Description": "Raw CADD scores are interpretable as the extent to which the annotation profile for a given variant suggests that the variant is likely to be 'observed' (negative values) vs 'simulated' (positive values). Larger values are more deleterious.",
+        "Description": (
+            "Raw CADD scores are interpretable as the extent to which the annotation"
+            " profile for a given variant suggests that the variant is likely to be"
+            " 'observed' (negative values) vs 'simulated' (positive values). Larger"
+            " values are more deleterious."
+        ),
     },
     "cadd_phred": {
         "Number": "1",
-        "Description": "Cadd Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious.",
+        "Description": (
+            "Cadd Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on"
+            " the rank of each variant relative to all possible 8.6 billion"
+            " substitutions in the human reference genome. Larger values are more"
+            " deleterious."
+        ),
     },
     "revel_score": {
         "Number": "1",
-        "Description": "dbNSFP's Revel score from 0 to 1. Variants with higher scores are predicted to be more likely to be deleterious.",
+        "Description": (
+            "dbNSFP's Revel score from 0 to 1. Variants with higher scores are"
+            " predicted to be more likely to be deleterious."
+        ),
     },
     "splice_ai_max_ds": {
         "Number": "1",
-        "Description": "Illumina's SpliceAI max delta score; interpreted as the probability of the variant being splice-altering.",
+        "Description": (
+            "Illumina's SpliceAI max delta score; interpreted as the probability of the"
+            " variant being splice-altering."
+        ),
     },
     "splice_ai_consequence": {
-        "Description": "The consequence term associated with the max delta score in 'splice_ai_max_ds'.",
+        "Description": (
+            "The consequence term associated with the max delta score in"
+            " 'splice_ai_max_ds'."
+        ),
     },
     "primate_ai_score": {
         "Number": "1",
-        "Description": "PrimateAI's deleteriousness score from 0 (less deleterious) to 1 (more deleterious).",
+        "Description": (
+            "PrimateAI's deleteriousness score from 0 (less deleterious) to 1 (more"
+            " deleterious)."
+        ),
     },
 }
 """
@@ -285,12 +359,18 @@ FORMAT_DICT = {
         "Type": "Integer",
     },
     "DP": {
-        "Description": "Approximate read depth (reads with MQ=255 or with bad mates are filtered)",
+        "Description": (
+            "Approximate read depth (reads with MQ=255 or with bad mates are filtered)"
+        ),
         "Number": "1",
         "Type": "Integer",
     },
     "GQ": {
-        "Description": "Phred-scaled confidence that the genotype assignment is correct. Value is the difference between the second lowest PL and the lowest PL (always normalized to 0).",
+        "Description": (
+            "Phred-scaled confidence that the genotype assignment is correct. Value is"
+            " the difference between the second lowest PL and the lowest PL (always"
+            " normalized to 0)."
+        ),
         "Number": "1",
         "Type": "Integer",
     },
@@ -300,22 +380,36 @@ FORMAT_DICT = {
         "Type": "Integer",
     },
     "PGT": {
-        "Description": "Physical phasing haplotype information, describing how the alternate alleles are phased in relation to one another",
+        "Description": (
+            "Physical phasing haplotype information, describing how the alternate"
+            " alleles are phased in relation to one another"
+        ),
         "Number": "1",
         "Type": "String",
     },
     "PID": {
-        "Description": "Physical phasing ID information, where each unique ID within a given sample (but not across samples) connects records within a phasing group",
+        "Description": (
+            "Physical phasing ID information, where each unique ID within a given"
+            " sample (but not across samples) connects records within a phasing group"
+        ),
         "Number": "1",
         "Type": "String",
     },
     "PL": {
-        "Description": "Normalized, phred-scaled likelihoods for genotypes as defined in the VCF specification",
+        "Description": (
+            "Normalized, phred-scaled likelihoods for genotypes as defined in the VCF"
+            " specification"
+        ),
         "Number": "G",
         "Type": "Integer",
     },
     "SB": {
-        "Description": "Per-sample component statistics which comprise the Fisher's exact test to detect strand bias. Values are: depth of reference allele on forward strand, depth of reference allele on reverse strand, depth of alternate allele on forward strand, depth of alternate allele on reverse strand.",
+        "Description": (
+            "Per-sample component statistics which comprise the Fisher's exact test to"
+            " detect strand bias. Values are: depth of reference allele on forward"
+            " strand, depth of reference allele on reverse strand, depth of alternate"
+            " allele on forward strand, depth of alternate allele on reverse strand."
+        ),
         "Number": "4",
         "Type": "Integer",
     },
@@ -352,7 +446,8 @@ def adjust_vcf_incompatible_types(
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                "Coercing field info.%s from int64 to int32 for VCF output. Value will be capped at int32 max value.",
+                "Coercing field info.%s from int64 to int32 for VCF output. Value will"
+                " be capped at int32 max value.",
                 f,
             )
             info_type_convert_expr.update(
@@ -360,8 +455,8 @@ def adjust_vcf_incompatible_types(
             )
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
-                "Coercing field info.%s from array<int64> to array<int32> for VCF output. Array values will be capped "
-                "at int32 max value.",
+                "Coercing field info.%s from array<int64> to array<int32> for VCF"
+                " output. Array values will be capped at int32 max value.",
                 f,
             )
             info_type_convert_expr.update(
@@ -374,7 +469,8 @@ def adjust_vcf_incompatible_types(
 
     # Make sure to pipe-delimit fields that need to.
     # Note: the expr needs to be prefixed by "|" because GATK expect one value for the ref (always empty)
-    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it is handled below
+    # Note2: this doesn't produce the correct annotation for AS_SB_TABLE, it
+    # is handled below
     for f in pipe_delimited_annotations:
         if f in ht.info and f != "AS_SB_TABLE":
             info_expr[f] = "|" + get_pipe_expr(ht.info[f])
@@ -573,27 +669,48 @@ def make_info_dict(
         age_hist_dict = {
             f"{prefix}age_hist_het_bin_freq": {
                 "Number": "A",
-                "Description": f"Histogram of ages of heterozygous individuals{description_text}; bin edges are: {bin_edges['het']}; total number of individuals of any genotype bin: {age_hist_data}",
+                "Description": (
+                    f"Histogram of ages of heterozygous individuals{description_text};"
+                    f" bin edges are: {bin_edges['het']}; total number of individuals"
+                    f" of any genotype bin: {age_hist_data}"
+                ),
             },
             f"{prefix}age_hist_het_n_smaller": {
                 "Number": "A",
-                "Description": f"Count of age values falling below lowest histogram bin edge for heterozygous individuals{description_text}",
+                "Description": (
+                    "Count of age values falling below lowest histogram bin edge for"
+                    f" heterozygous individuals{description_text}"
+                ),
             },
             f"{prefix}age_hist_het_n_larger": {
                 "Number": "A",
-                "Description": f"Count of age values falling above highest histogram bin edge for heterozygous individuals{description_text}",
+                "Description": (
+                    "Count of age values falling above highest histogram bin edge for"
+                    f" heterozygous individuals{description_text}"
+                ),
             },
             f"{prefix}age_hist_hom_bin_freq": {
                 "Number": "A",
-                "Description": f"Histogram of ages of homozygous alternate individuals{description_text}; bin edges are: {bin_edges['hom']}; total number of individuals of any genotype bin: {age_hist_data}",
+                "Description": (
+                    "Histogram of ages of homozygous alternate"
+                    f" individuals{description_text}; bin edges are:"
+                    f" {bin_edges['hom']}; total number of individuals of any genotype"
+                    f" bin: {age_hist_data}"
+                ),
             },
             f"{prefix}age_hist_hom_n_smaller": {
                 "Number": "A",
-                "Description": f"Count of age values falling below lowest histogram bin edge for homozygous alternate individuals{description_text}",
+                "Description": (
+                    "Count of age values falling below lowest histogram bin edge for"
+                    f" homozygous alternate individuals{description_text}"
+                ),
             },
             f"{prefix}age_hist_hom_n_larger": {
                 "Number": "A",
-                "Description": f"Count of age values falling above highest histogram bin edge for homozygous alternate individuals{description_text}",
+                "Description": (
+                    "Count of age values falling above highest histogram bin edge for"
+                    f" homozygous alternate individuals{description_text}"
+                ),
             },
         }
         info_dict.update(age_hist_dict)
@@ -602,27 +719,43 @@ def make_info_dict(
         popmax_dict = {
             f"{prefix}popmax": {
                 "Number": "A",
-                "Description": f"Population with maximum allele frequency{description_text}",
+                "Description": (
+                    f"Population with maximum allele frequency{description_text}"
+                ),
             },
             f"{prefix}AC{label_delimiter}popmax": {
                 "Number": "A",
-                "Description": f"Allele count in the population with the maximum allele frequency{description_text}",
+                "Description": (
+                    "Allele count in the population with the maximum allele"
+                    f" frequency{description_text}"
+                ),
             },
             f"{prefix}AN{label_delimiter}popmax": {
                 "Number": "A",
-                "Description": f"Total number of alleles in the population with the maximum allele frequency{description_text}",
+                "Description": (
+                    "Total number of alleles in the population with the maximum allele"
+                    f" frequency{description_text}"
+                ),
             },
             f"{prefix}AF{label_delimiter}popmax": {
                 "Number": "A",
-                "Description": f"Maximum allele frequency across populations{description_text}",
+                "Description": (
+                    f"Maximum allele frequency across populations{description_text}"
+                ),
             },
             f"{prefix}nhomalt{label_delimiter}popmax": {
                 "Number": "A",
-                "Description": f"Count of homozygous individuals in the population with the maximum allele frequency{description_text}",
+                "Description": (
+                    "Count of homozygous individuals in the population with the"
+                    f" maximum allele frequency{description_text}"
+                ),
             },
             f"{prefix}faf95{label_delimiter}popmax": {
                 "Number": "A",
-                "Description": f"Filtering allele frequency (using Poisson 95% CI) for the population with the maximum allele frequency{description_text}",
+                "Description": (
+                    "Filtering allele frequency (using Poisson 95% CI) for the"
+                    f" population with the maximum allele frequency{description_text}"
+                ),
             },
         }
         info_dict.update(popmax_dict)
@@ -654,19 +787,28 @@ def make_info_dict(
                 combo_dict = {
                     metric_label_dict["AC"]: {
                         "Number": "A",
-                        "Description": f"Alternate allele count{for_combo}{description_text}",
+                        "Description": (
+                            f"Alternate allele count{for_combo}{description_text}"
+                        ),
                     },
                     metric_label_dict["AN"]: {
                         "Number": "1",
-                        "Description": f"Total number of alleles{in_combo}{description_text}",
+                        "Description": (
+                            f"Total number of alleles{in_combo}{description_text}"
+                        ),
                     },
                     metric_label_dict["AF"]: {
                         "Number": "A",
-                        "Description": f"Alternate allele frequency{in_combo}{description_text}",
+                        "Description": (
+                            f"Alternate allele frequency{in_combo}{description_text}"
+                        ),
                     },
                     metric_label_dict["nhomalt"]: {
                         "Number": "A",
-                        "Description": f"Count of homozygous individuals{in_combo}{description_text}",
+                        "Description": (
+                            "Count of homozygous"
+                            f" individuals{in_combo}{description_text}"
+                        ),
                     },
                 }
             else:
@@ -679,11 +821,17 @@ def make_info_dict(
                 combo_dict = {
                     metric_label_dict["faf95"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 95% CI){for_combo}{faf_description_text}",
+                        "Description": (
+                            "Filtering allele frequency (using Poisson 95%"
+                            f" CI){for_combo}{faf_description_text}"
+                        ),
                     },
                     metric_label_dict["faf99"]: {
                         "Number": "A",
-                        "Description": f"Filtering allele frequency (using Poisson 99% CI){for_combo}{faf_description_text}",
+                        "Description": (
+                            "Filtering allele frequency (using Poisson 99%"
+                            f" CI){for_combo}{faf_description_text}"
+                        ),
                     },
                 }
             info_dict.update(combo_dict)
@@ -705,7 +853,6 @@ def add_as_info_dict(
     """
     as_dict = {}
     for field in as_fields:
-
         try:
             # Strip AS_ from field name
             site_field = field[3:]
@@ -749,21 +896,32 @@ def make_vcf_filter_dict(
     """
     variant_qc_filter_dict = {
         "RF": {
-            "Description": f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels (probabilities of being a true positive variant)"
+            "Description": (
+                f"Failed random forest filtering thresholds of {snp_cutoff} for SNPs"
+                f" and {indel_cutoff} for indels (probabilities of being a true"
+                " positive variant)"
+            )
         },
         "AS_VQSR": {
-            "Description": f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and {indel_cutoff} for indels"
+            "Description": (
+                f"Failed VQSR filtering thresholds of {snp_cutoff} for SNPs and"
+                f" {indel_cutoff} for indels"
+            )
         },
     }
 
     if variant_qc_filter not in variant_qc_filter_dict:
         raise ValueError(
-            f"{variant_qc_filter} is not a valid value for 'variant_qc_filter'. It must be 'RF' or 'AS_VQSR'"
+            f"{variant_qc_filter} is not a valid value for 'variant_qc_filter'. It must"
+            " be 'RF' or 'AS_VQSR'"
         )
 
     filter_dict = {
         "AC0": {
-            "Description": "Allele count is zero after filtering out low-confidence genotypes (GQ < 20; DP < 10; and AB < 0.2 for het calls)"
+            "Description": (
+                "Allele count is zero after filtering out low-confidence genotypes (GQ"
+                " < 20; DP < 10; and AB < 0.2 for het calls)"
+            )
         },
         "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
         "PASS": {"Description": "Passed all variant filters"},
@@ -809,10 +967,8 @@ def make_hist_bin_edges_expr(
         )
 
     for hist in hists:
-
         # Parse hists calculated on both raw and adj-filtered data
         for hist_type in [f"{prefix}raw_qual_hists", f"{prefix}qual_hists"]:
-
             hist_name = hist
             if "raw" in hist_type:
                 hist_name = f"{prefix}{hist}_raw"
@@ -865,11 +1021,17 @@ def make_hist_dict(
             },
             f"{hist}_n_smaller": {
                 "Number": "A",
-                "Description": f"Count of {hist_fields[0].upper()} values falling below lowest histogram bin edge {hist_text}",
+                "Description": (
+                    f"Count of {hist_fields[0].upper()} values falling below lowest"
+                    f" histogram bin edge {hist_text}"
+                ),
             },
             f"{hist}_n_larger": {
                 "Number": "A",
-                "Description": f"Count of {hist_fields[0].upper()} values falling above highest histogram bin edge {hist_text}",
+                "Description": (
+                    f"Count of {hist_fields[0].upper()} values falling above highest"
+                    f" histogram bin edge {hist_text}"
+                ),
             },
         }
 

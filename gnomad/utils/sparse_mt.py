@@ -40,7 +40,8 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
     mt = mt.select_entries("END")
 
-    # Localize entries, so that they can be viewed as an array and scanned over using hl.scan.array_agg
+    # Localize entries, so that they can be viewed as an array and scanned
+    # over using hl.scan.array_agg
     ht = mt._localize_entries("__entries", "__cols")
 
     # Compute the position by using hl.scan._prev_nonnull.
@@ -50,7 +51,8 @@ def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     # The following code computes the following annotation for each row:
     # 1. Keep a scan of the entries using _prev_nonnull, keeping the start (ht.locus) and end (entry.END) of each ref block  (1.1)
     # 2. For the current row locus, record the start of the block that starts the furthest away,
-    #    that is the minimum position in the current scan for any block that overlaps the current locus (2.1)
+    # that is the minimum position in the current scan for any block that
+    # overlaps the current locus (2.1)
     ht = ht.select(
         last_END_position=hl.or_else(
             hl.min(  # 2. For the current row locus, record the start of the block that starts the furthest away
@@ -188,9 +190,8 @@ def _get_info_agg_expr(
         missing_fields = [f for f in fields if f not in out_fields]
         if missing_fields:
             raise ValueError(
-                "Could not find the following field(s)in the MT entry schema (or nested under mt.gvcf_info: {}".format(
-                    ",".join(missing_fields)
-                )
+                "Could not find the following field(s)in the MT entry schema (or nested"
+                " under mt.gvcf_info: {}".format(",".join(missing_fields))
             )
 
         return out_fields
@@ -314,9 +315,9 @@ def get_as_info_expr(
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
-            "`DP` was included in allele-specific aggregation, "
-            "however `DP` is typically not aggregated by allele; `VarDP` is."
-            "Note that the resulting `AS_DP` field will NOT include reference genotypes."
+            "`DP` was included in allele-specific aggregation, however `DP` is"
+            " typically not aggregated by allele; `VarDP` is.Note that the resulting"
+            " `AS_DP` field will NOT include reference genotypes."
         )
 
     agg_expr = _get_info_agg_expr(
@@ -335,7 +336,10 @@ def get_as_info_expr(
     if alt_alleles_range_array_field not in mt.row or mt[
         alt_alleles_range_array_field
     ].dtype != hl.dtype("array<int32>"):
-        msg = f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}' of type array<int32>"
+        msg = (
+            f"'get_as_info_expr' expected a row field '{alt_alleles_range_array_field}'"
+            " of type array<int32>"
+        )
         logger.error(msg)
         raise ValueError(msg)
 
@@ -409,7 +413,8 @@ def get_site_info_expr(
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
         logger.warning(
-            "`DP` was included in site-level aggregation. This requires a densifying prior to running get_site_info_expr"
+            "`DP` was included in site-level aggregation. This requires a densifying"
+            " prior to running get_site_info_expr"
         )
 
     agg_expr = _get_info_agg_expr(
@@ -421,7 +426,8 @@ def get_site_info_expr(
     )
 
     # Add FS and SOR if SB is present
-    # This is done outside of _get_info_agg_expr as the behavior is different in site vs allele-specific versions
+    # This is done outside of _get_info_agg_expr as the behavior is different
+    # in site vs allele-specific versions
     if "SB" in agg_expr:
         agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
         agg_expr["SOR"] = sor_from_sb(agg_expr["SB"])
@@ -458,7 +464,8 @@ def default_compute_info(
     # Move gvcf info entries out from nested struct
     mt = mt.transmute_entries(**mt.gvcf_info)
 
-    # Adding alt_alleles_range_array as a required annotation for get_as_info_expr to reduce memory usage
+    # Adding alt_alleles_range_array as a required annotation for
+    # get_as_info_expr to reduce memory usage
     mt = mt.annotate_rows(alt_alleles_range_array=hl.range(1, hl.len(mt.alleles)))
 
     # Compute AS info expr
@@ -579,7 +586,10 @@ def impute_sex_ploidy(
     if chr_x is None:
         if len(ref.x_contigs) != 1:
             raise NotImplementedError(
-                "Found {0} X chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single X chromosome contig. Please use the `chr_x` argument to  specify which X chromosome contig to use ".format(
+                "Found {0} X chromosome contigs ({1}) in Genome reference."
+                " sparse_impute_sex_ploidy currently only supports a single X"
+                " chromosome contig. Please use the `chr_x` argument to  specify which"
+                " X chromosome contig to use ".format(
                     len(ref.x_contigs), ",".join(ref.x_contigs)
                 )
             )
@@ -587,7 +597,10 @@ def impute_sex_ploidy(
     if chr_y is None:
         if len(ref.y_contigs) != 1:
             raise NotImplementedError(
-                "Found {0} Y chromosome contigs ({1}) in Genome reference. sparse_impute_sex_ploidy currently only supports a single Y chromosome contig. Please use the `chr_y` argument to  specify which Y chromosome contig to use ".format(
+                "Found {0} Y chromosome contigs ({1}) in Genome reference."
+                " sparse_impute_sex_ploidy currently only supports a single Y"
+                " chromosome contig. Please use the `chr_y` argument to  specify which"
+                " Y chromosome contig to use ".format(
                     len(ref.y_contigs), ",".join(ref.y_contigs)
                 )
             )
@@ -763,20 +776,24 @@ def compute_coverage_stats(
     max_coverage_bin = coverage_over_x_bins[-1]
     hl_coverage_over_x_bins = hl.array(coverage_over_x_bins)
 
-    # This expression creates a counter DP -> number of samples for DP between 0 and max_coverage_bin
+    # This expression creates a counter DP -> number of samples for DP between
+    # 0 and max_coverage_bin
     coverage_counter_expr = hl.agg.counter(
         hl.min(max_coverage_bin, hl.or_else(mt.DP, 0))
     )
 
     # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
     # and computes the cumulative sum over them.
-    #  It needs to be in reverse order because we want the sum over samples covered by > X.
+    # It needs to be in reverse order because we want the sum over samples
+    # covered by > X.
     count_array_expr = hl.cumulative_sum(
         hl.array(
             [
                 hl.int32(coverage_counter_expr.get(max_coverage_bin, 0))
             ]  # The coverage was already floored to the max_coverage_bin, so no more aggregation is needed for the max bin
-        ).extend(  # For each of the other bins, coverage needs to be summed between the boundaries
+            # For each of the other bins, coverage needs to be summed between the
+            # boundaries
+        ).extend(
             hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
                 lambda i: hl.sum(
                     hl.range(

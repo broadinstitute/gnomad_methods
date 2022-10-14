@@ -62,7 +62,7 @@ def count_variants_by_group(
 
     `freq_expr` should be an ArrayExpression of Structs with 'AC' and 'AF' annotations. This is the same format as the
     `freq` annotation that is created using `annotate_freq()`.
-    
+
     Variant allele frequency information is needed when:
         - `max_af` is not None - `freq_expr[0].AF` is used to filter to only variants with a maximum allele frequency
           of `max_af` prior to counting variants. In the standard `freq` ArrayExpression annotated by
@@ -79,11 +79,9 @@ def count_variants_by_group(
           the `freq_meta` global annotation that is created using `annotate_freq()`. `freq_meta_expr` is used to
           determine the index of allele frequency information within `freq_expr` for each population requested and
           it's downsamplings.
-    
+
     This function will return a Table with annotations used for grouping ('context', 'ref', 'alt',
     'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
-
-    .. note::
 
     .. note::
 
@@ -193,8 +191,8 @@ def downsampling_counts_expr(
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
 
-    The frequency metadata (`freq_meta_expr`) should be in a similar format to the `freq_meta` annotation added by 
-    `annotate_freq()`. Each downsampling should have 'group', 'pop', and 'downsampling' keys. Included downsamplings 
+    The frequency metadata (`freq_meta_expr`) should be in a similar format to the `freq_meta` annotation added by
+    `annotate_freq()`. Each downsampling should have 'group', 'pop', and 'downsampling' keys. Included downsamplings
     are those where 'group' == `variant_quality` and 'pop' == `pop`.
 
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations.
@@ -205,14 +203,14 @@ def downsampling_counts_expr(
     :param max_af: Maximum variant allele frequency to keep. By default no allele frequency cutoff is applied.
     :return: Aggregation Expression for an array of the variant counts in downsamplings for specified population.
     """
-    # Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "group" and "pop" values
+    # Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "group" and "pop" values.
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].size() == 3)
         & (f[1].get("group") == variant_quality)
         & (f[1].get("pop") == pop)
         & f[1].contains("downsampling")
     )
-    # Get an array of indices sorted by "downsampling" key
+    # Get an array of indices sorted by "downsampling" key.
     sorted_indices = hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"])).map(
         lambda x: x[0]
     )
@@ -253,7 +251,7 @@ def annotate_mutation_type(
     :param t: Input Table or MatrixTable.
     :return: Table with mutation type annotations added.
     """
-    # Determine the middle index of context by sampling the first 100 values of 'context'
+    # Determine the middle index of context by sampling the first 100 values of 'context'.
     context_lengths = list(filter(None, set(hl.len(t.context).take(100))))
     if len(context_lengths) > 1:
         raise ValueError(

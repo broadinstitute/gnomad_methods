@@ -283,7 +283,9 @@ def run_pca_with_relateds(
         qc_mt = filter_to_autosomes(qc_mt)
 
     # 'pca_mt' is the MatrixTable to use for generating the PCs
-    # If samples to drop are provided in 'related_samples_to_drop' or 'additional_samples_to_drop', 'project_pca_mt' will also be generated and will contain the samples to project in the PC space
+    # If samples to drop are provided in 'related_samples_to_drop' or
+    # 'additional_samples_to_drop', 'project_pca_mt' will also be generated
+    # and will contain the samples to project in the PC space
     pca_mt = qc_mt
 
     if related_samples_to_drop:

@@ -13,7 +13,6 @@ from gnomad.resources.config import (
     gnomad_public_resource_configuration,
 )
 
-
 logger = logging.getLogger("gnomad.resources")
 
 
@@ -28,6 +27,8 @@ syncs to the public bucket `gcp-public-data--gnomad`.
 """
 
 # Resource classes
+
+
 class BaseResource(ABC):
     """
     Generic abstract resource class.
@@ -48,7 +49,8 @@ class BaseResource(ABC):
     ):
         if path is None and import_func is None:
             raise ValueError(
-                f"{self.__class__.__name__} requires at least one of path or import_func arguments."
+                f"{self.__class__.__name__} requires at least one of path or"
+                " import_func arguments."
             )
 
         self.path = path
@@ -323,12 +325,14 @@ class BaseVersionedResource:
         for version_resource in versions.values():
             if not isinstance(version_resource, self.resource_class):
                 raise TypeError(
-                    f"{self.__class__.__name__} requires all versions to be of type {self.resource_class.__name__}"
+                    f"{self.__class__.__name__} requires all versions to be of type"
+                    f" {self.resource_class.__name__}"
                 )
 
             if version_resource.__class__ is not default_resource.__class__:
                 raise TypeError(
-                    f"{self.__class__.__name__} requires all versions to be of the same type"
+                    f"{self.__class__.__name__} requires all versions to be of the same"
+                    " type"
                 )
 
         self.default_version = default_version
@@ -346,7 +350,8 @@ class BaseVersionedResource:
         )
 
     def __getattr__(self, name):
-        # If __getattr__ is called for 'default_version', 'version', etc. then something has gone wrong.
+        # If __getattr__ is called for 'default_version', 'version', etc. then
+        # something has gone wrong.
         if name in self.__slots__:
             raise ValueError("VersionedResource has not been initialized")
 
@@ -464,20 +469,33 @@ class GnomadPublicResource(BaseResource, ABC):
                 resource_source = gnomad_public_resource_configuration.source
                 if not self.is_resource_available():
                     if resource_source == GnomadPublicResourceSource.GNOMAD:
-                        message = "This resource is not currently available from the gnomAD project public buckets."
+                        message = (
+                            "This resource is not currently available from the gnomAD"
+                            " project public buckets."
+                        )
                     elif isinstance(resource_source, GnomadPublicResourceSource):
-                        message = f"This resource is not currently available from {resource_source.value}."
+                        message = (
+                            "This resource is not currently available from"
+                            f" {resource_source.value}."
+                        )
                     else:
-                        message = f"This resource is not currently available from {resource_source}."
+                        message = (
+                            "This resource is not currently available from"
+                            f" {resource_source}."
+                        )
 
                     raise ResourceNotAvailable(
-                        f"{message}\n\n"
-                        "To load resources from a different source (for example, Google Cloud Public Datasets) instead, use:\n\n"
-                        ">>> from gnomad.resources.config import gnomad_public_resource_configuration, GnomadPublicResourceSource\n"
-                        ">>> gnomad_public_resource_configuration.source = GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS\n\n"
-                        "To get all available sources for gnomAD resources, use:\n\n"
-                        ">>> from gnomad.resources.config import GnomadPublicResourceSource\n"
-                        ">>> list(GnomadPublicResourceSource)"
+                        f"{message}\n\nTo load resources from a different source (for"
+                        " example, Google Cloud Public Datasets) instead, use:\n\n>>>"
+                        " from gnomad.resources.config import"
+                        " gnomad_public_resource_configuration,"
+                        " GnomadPublicResourceSource\n>>>"
+                        " gnomad_public_resource_configuration.source ="
+                        " GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS\n\nTo"
+                        " get all available sources for gnomAD resources, use:\n\n>>>"
+                        " from gnomad.resources.config import"
+                        " GnomadPublicResourceSource\n>>>"
+                        " list(GnomadPublicResourceSource)"
                     )
 
                 return original_method(self, *args, **kwargs)
@@ -518,7 +536,8 @@ class GnomadPublicResource(BaseResource, ABC):
             path.startswith(f"gs://{bucket}/") for bucket in GNOMAD_PUBLIC_BUCKETS
         ):
             raise ValueError(
-                f"GnomadPublicResource requires a path to a file in one of the public gnomAD buckets ({', '.join(GNOMAD_PUBLIC_BUCKETS)})"
+                "GnomadPublicResource requires a path to a file in one of the public"
+                f" gnomAD buckets ({', '.join(GNOMAD_PUBLIC_BUCKETS)})"
             )
 
         return super()._set_path(path)

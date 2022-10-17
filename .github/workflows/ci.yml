@@ -29,8 +29,12 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Check formatting
         run: black --check gnomad tests
+      - name: Check imports
+        run: isort --check-only gnomad tests
       - name: Check docstrings
         run: pydocstyle gnomad tests
+      - name: Check comment formatting
+        run: autopep8 --exit-code --diff gnomad
       - name: Run Pylint
         run: ./lint
       - name: Run tests

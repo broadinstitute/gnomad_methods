@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import hail as hl
 import numpy as np
@@ -120,7 +120,8 @@ def gaussian_mixture_model_karyotype_assignment(
         gmm = GaussianMixture(n_components=2)
         gmm.fit(df)
         probs = gmm.predict_proba(df)
-        # Assign cluster to karyotype based on cluster means and the order of `karyotypes`
+        # Assign cluster to karyotype based on cluster means and the order of
+        # `karyotypes`
         cluster_to_karyotype = dict(
             zip(np.argsort([m[0] for m in gmm.means_]), karyotypes)
         )
@@ -201,7 +202,8 @@ def get_ploidy_cutoffs(
             "One and only one of 'f_stat_cutoff' or 'group_by_expr' must be supplied!"
         )
 
-    # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by f_stat cutoff
+    # If 'f_stat_cutoff' is supplied, group the sex chromosome ploidy table by
+    # f_stat cutoff
     if f_stat_cutoff is not None:
         group_by_expr = hl.if_else(ht.f_stat < f_stat_cutoff, "XX", "XY")
 
@@ -214,7 +216,7 @@ def get_ploidy_cutoffs(
     )
     if "XX" not in sex_stats:
         raise ValueError("No samples are grouped as XX!")
-    if "XX" not in sex_stats:
+    if "XY" not in sex_stats:
         raise ValueError("No samples are grouped as XY!")
     logger.info("XX stats: %s", sex_stats["XX"])
     logger.info("XY stats: %s", sex_stats["XY"])
@@ -246,50 +248,166 @@ def get_ploidy_cutoffs(
     return cutoffs
 
 
+def get_chr_x_hom_alt_cutoffs(
+    ht: hl.Table,
+    chr_x_frac_hom_alt_expr: hl.expr.NumericExpression,
+    f_stat_cutoff: float = None,
+    group_by_expr: hl.expr.StringExpression = None,
+    cutoff_stdev: int = 5,
+) -> Tuple[Tuple[float, float], float]:
+    """
+    Get cutoffs for the fraction homozygous alternate genotypes on chromosome X in 'XY' and 'XX' samples.
+
+    .. note::
+
+        This assumes the input hail Table has the field 'f_stat' if `f_stat_cutoff` is set.
+
+    Return a tuple of cutoffs for the fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on
+    chromosome X: ((lower cutoff for more than one X, upper cutoff for more than one X), lower cutoff for single X).
+
+    Uses the `cutoff_stdev` parameter to determine the fraction of homozygous alternate genotypes
+    (hom-alt/(hom-alt + het)) on chromosome X cutoffs for 'XX' and 'XY' karyotypes.
+
+    .. note::
+
+        `f_stat_cutoff` or `group_by_expr` must be supplied. If `f_stat_cutoff` is supplied then f-stat is used to
+        split the samples into roughly 'XX' and 'XY'. If `group_by_expr` is supplied instead, then it must include an
+        annotation grouping samples by 'XX' and 'XY'. These are both only used to divide samples into XX and XY to
+        determine means and standard deviations for these categories and are not used in the final karyotype annotation.
+
+    :param ht: Table with f_stat and fraction of homozygous alternate genotypes on chromosome X.
+    :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
+    :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
+        are above cutoff.
+    :param group_by_expr: Expression grouping samples into 'XX' and 'XY'. Can be used instead of `f_stat_cutoff`.
+    :param cutoff_stdev: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
+        for XX, XY karyotypes.
+    :return: Tuple of cutoffs: ((lower cutoff for more than one X, upper cutoff for more than one X), lower cutoff for
+        single X).
+    """
+    if (f_stat_cutoff is None and group_by_expr is None) or (
+        f_stat_cutoff is not None and group_by_expr is not None
+    ):
+        raise ValueError(
+            "One and only one of 'f_stat_cutoff' or 'group_by_expr' must be supplied!"
+        )
+
+    # If 'f_stat_cutoff' is supplied, group the input Table by f_stat cutoff
+    if f_stat_cutoff is not None:
+        group_by_expr = hl.if_else(ht.f_stat < f_stat_cutoff, "XX", "XY")
+
+    # Get mean/stdev based on 'group_by_expr'
+    sex_stats = ht.aggregate(
+        hl.agg.group_by(
+            group_by_expr,
+            hl.struct(chrx_homalt=hl.agg.stats(chr_x_frac_hom_alt_expr)),
+        )
+    )
+    if "XX" not in sex_stats:
+        raise ValueError("No samples are grouped as XX!")
+    if "XY" not in sex_stats:
+        raise ValueError("No samples are grouped as XY!")
+
+    logger.info("XX stats: %s", sex_stats["XX"])
+    logger.info("XY stats: %s", sex_stats["XY"])
+
+    cutoffs = (
+        (
+            sex_stats["XX"].chrx_homalt.mean
+            - (cutoff_stdev * sex_stats["XX"].chrx_homalt.stdev),
+            sex_stats["XX"].chrx_homalt.mean
+            + (cutoff_stdev * sex_stats["XX"].chrx_homalt.stdev),
+        ),
+        sex_stats["XY"].chrx_homalt.mean
+        - (cutoff_stdev * sex_stats["XY"].chrx_homalt.stdev),
+    )
+
+    logger.info("chrx_homalt cutoffs: %s", cutoffs)
+
+    return cutoffs
+
+
 def get_sex_expr(
     chr_x_ploidy: hl.expr.NumericExpression,
     chr_y_ploidy: hl.expr.NumericExpression,
     x_ploidy_cutoffs: Tuple[float, Tuple[float, float], float],
     y_ploidy_cutoffs: Tuple[Tuple[float, float], float],
+    chr_x_frac_hom_alt_expr: Optional[hl.expr.NumericExpression] = None,
+    chr_x_frac_hom_alt_cutoffs: Optional[Tuple[Tuple[float, float], float]] = None,
 ) -> hl.expr.StructExpression:
     """
     Create a struct with X_karyotype, Y_karyotype, and sex_karyotype.
 
     Note that X0 is currently returned as 'X'.
 
-    :param chr_x_ploidy: Chromosome X ploidy (or relative ploidy)
-    :param chr_y_ploidy: Chromosome Y ploidy (or relative ploidy)
+    :param chr_x_ploidy: Chromosome X ploidy (or relative ploidy).
+    :param chr_y_ploidy: Chromosome Y ploidy (or relative ploidy).
     :param x_ploidy_cutoffs: Tuple of X chromosome ploidy cutoffs: (upper cutoff for single X, (lower cutoff for
-        double X, upper cutoff for double X), lower cutoff for triple X)
+        double X, upper cutoff for double X), lower cutoff for triple X).
     :param y_ploidy_cutoffs: Tuple of Y chromosome ploidy cutoffs: ((lower cutoff for single Y, upper cutoff for
-        single Y), lower cutoff for double Y)
-    :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype
+        single Y), lower cutoff for double Y).
+    :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
+    :param chr_x_frac_hom_alt_cutoffs: Tuple of cutoffs for the fraction of homozygous alternate genotypes
+        (hom-alt/(hom-alt + het)) on chromosome X: ((lower cutoff for more than one X, upper cutoff for more than one X),
+        lower cutoff for single X).
+    :return: Struct containing X_karyotype, Y_karyotype, and sex_karyotype.
     """
+    if sum([chr_x_frac_hom_alt_expr is None, chr_x_frac_hom_alt_cutoffs is None]) == 1:
+        raise ValueError(
+            "None or both of `chr_x_frac_hom_alt_expr` and `chr_x_frac_hom_alt_cutoffs`"
+            " must be set!"
+        )
+
+    if chr_x_frac_hom_alt_expr is not None:
+        lower_cutoff_for_single_x = chr_x_frac_hom_alt_cutoffs[1]
+        lower_cutoff_for_multiple_x = chr_x_frac_hom_alt_cutoffs[0][0]
+        upper_cutoff_for_multiple_x = chr_x_frac_hom_alt_cutoffs[0][1]
+
+        add_x_condition = chr_x_frac_hom_alt_expr > lower_cutoff_for_single_x
+        add_xx_condition = (chr_x_frac_hom_alt_expr > lower_cutoff_for_multiple_x) & (
+            chr_x_frac_hom_alt_expr < upper_cutoff_for_multiple_x
+        )
+        add_xxx_condition = chr_x_frac_hom_alt_expr < upper_cutoff_for_multiple_x
+    else:
+        add_x_condition = add_xx_condition = add_xxx_condition = True
+
+    upper_ploidy_cutoff_for_x = x_ploidy_cutoffs[0]
+    lower_ploidy_cutoff_for_xx = x_ploidy_cutoffs[1][0]
+    upper_ploidy_cutoff_for_xx = x_ploidy_cutoffs[1][1]
+    lower_ploidy_cutoff_for_xxx = x_ploidy_cutoffs[2]
+
+    lower_ploidy_cutoff_for_y = y_ploidy_cutoffs[0][0]
+    upper_ploidy_cutoff_for_y = y_ploidy_cutoffs[0][1]
+    lower_ploidy_cutoff_for_yy = y_ploidy_cutoffs[1]
+
     sex_expr = hl.struct(
         X_karyotype=(
             hl.case()
-            .when(chr_x_ploidy < x_ploidy_cutoffs[0], "X")
+            .when((chr_x_ploidy < upper_ploidy_cutoff_for_x) & add_x_condition, "X")
             .when(
                 (
-                    (chr_x_ploidy > x_ploidy_cutoffs[1][0])
-                    & (chr_x_ploidy < x_ploidy_cutoffs[1][1])
+                    (chr_x_ploidy > lower_ploidy_cutoff_for_xx)
+                    & (chr_x_ploidy < upper_ploidy_cutoff_for_xx)
+                    & add_xx_condition
                 ),
                 "XX",
             )
-            .when((chr_x_ploidy >= x_ploidy_cutoffs[2]), "XXX")
+            .when(
+                (chr_x_ploidy >= lower_ploidy_cutoff_for_xxx) & add_xxx_condition, "XXX"
+            )
             .default("ambiguous")
         ),
         Y_karyotype=(
             hl.case()
-            .when(chr_y_ploidy < y_ploidy_cutoffs[0][0], "")
+            .when(chr_y_ploidy < lower_ploidy_cutoff_for_y, "")
             .when(
                 (
-                    (chr_y_ploidy > y_ploidy_cutoffs[0][0])
-                    & (chr_y_ploidy < y_ploidy_cutoffs[0][1])
+                    (chr_y_ploidy > lower_ploidy_cutoff_for_y)
+                    & (chr_y_ploidy < upper_ploidy_cutoff_for_y)
                 ),
                 "Y",
             )
-            .when(chr_y_ploidy >= y_ploidy_cutoffs[1], "YY")
+            .when(chr_y_ploidy >= lower_ploidy_cutoff_for_yy, "YY")
             .default("ambiguous")
         ),
     )

@@ -6,8 +6,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import POPS, SEXES
-from gnomad.utils.vcf import HISTS, make_label_combos, SORT_ORDER
-
+from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -148,9 +147,12 @@ def make_group_sum_expr_dict(
         subset += delimiter
 
     label_combos = make_label_combos(label_groups, label_delimiter=delimiter)
-    # Grab the first group for check and remove if from the label_group dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric counts for all sample groups so we do not check raw sample sums.
+    # Grab the first group for check and remove if from the label_group
+    # dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric
+    # counts for all sample groups so we do not check raw sample sums.
     group = label_groups.pop("group")[0]
-    # sum_group is a the type of high level annotation that you want to sum e.g. 'pop', 'pop-sex', 'sex'.
+    # sum_group is a the type of high level annotation that you want to sum
+    # e.g. 'pop', 'pop-sex', 'sex'.
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
@@ -160,7 +162,8 @@ def make_group_sum_expr_dict(
     # where the key is a string representing the sum_group annotations and the value is the sum of these annotations.
     # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is pop, then the values below are:
     # sum_group_exprs = ["AC-tgp-pop1", "AC-tgp-pop2", "AC-tgp-pop3"]
-    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1", "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])
+    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1",
+    # "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])}
     annot_dict = {}
     for metric in metrics:
         if metric_first_field:
@@ -182,7 +185,8 @@ def make_group_sum_expr_dict(
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
-    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict key from above
+    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict
+    # key from above
     field_check_expr = {}
     for metric in metrics:
         if metric_first_field:
@@ -309,7 +313,8 @@ def summarize_variant_filters(
     _filter_agg_order(t, {"allele_type": t.info.allele_type})
 
     logger.info(
-        "Checking distributions of variant type and region type amongst variant filters..."
+        "Checking distributions of variant type and region type amongst variant"
+        " filters..."
     )
     _filter_agg_order(
         t,
@@ -322,7 +327,8 @@ def summarize_variant_filters(
     )
 
     logger.info(
-        "Checking distributions of variant type, region type, and number of alt alleles amongst variant filters..."
+        "Checking distributions of variant type, region type, and number of alt alleles"
+        " amongst variant filters..."
     )
     _filter_agg_order(
         t,
@@ -742,7 +748,8 @@ def compute_missingness(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        "Missingness threshold (upper cutoff for what is allowed for missingness checks): %.2f",
+        "Missingness threshold (upper cutoff for what is allowed for missingness"
+        " checks): %.2f",
         missingness_threshold,
     )
     metrics_missing = {}
@@ -838,7 +845,8 @@ def vcf_field_check(
 
     if len(missing_fields) != 0 or len(missing_descriptions) != 0:
         logger.error(
-            "Some fields are either missing or missing descriptions in the VCF header! Please reconcile."
+            "Some fields are either missing or missing descriptions in the VCF header!"
+            " Please reconcile."
         )
         logger.error("Missing fields: %s", missing_fields)
         logger.error("Missing descriptions: %s", missing_descriptions)

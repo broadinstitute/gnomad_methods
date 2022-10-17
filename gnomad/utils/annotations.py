@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
+
 from gnomad.utils.gen_stats import to_phred
 
 logging.basicConfig(
@@ -478,7 +479,8 @@ def annotate_freq(
                 ]
             )
 
-    # Add all desired strata, starting with the full set and ending with downsamplings (if any)
+    # Add all desired strata, starting with the full set and ending with
+    # downsamplings (if any)
     sample_group_filters = (
         [({}, True)]
         + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
@@ -631,7 +633,8 @@ def get_annotations_hists(
     :return: Dictionary of merics and their histograms
     :rtype: Dict[str, hl.expr.StructExpression]
     """
-    # Check all fields in ht.info and create histograms if they are in annotations_hists dict
+    # Check all fields in ht.info and create histograms if they are in
+    # annotations_hists dict
     return {
         field: hl.agg.hist(
             hl.log10(ht.info[field]) if field in log10_annotations else ht.info[field],
@@ -749,7 +752,7 @@ def annotate_adj(
 
 
 def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpression:
-    """Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings (all alleles)."""
+    """Get Struct of variant_type and n_alt_alleles from ArrayExpression of Strings."""
     ref = alt_alleles[0]
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != "*", alts)

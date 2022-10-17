@@ -1,13 +1,14 @@
 # noqa: D100
 
+from typing import Optional
+
 from gnomad.resources.resource_utils import (
-    GnomadPublicTableResource,
+    DataException,
     GnomadPublicMatrixTableResource,
+    GnomadPublicTableResource,
     VersionedMatrixTableResource,
     VersionedTableResource,
-    DataException,
 )
-from typing import Optional
 
 CURRENT_EXOME_RELEASE = ""
 CURRENT_GENOME_RELEASE = "3.1.2"
@@ -269,7 +270,8 @@ def public_release(data_type: str) -> VersionedTableResource:
     """
     if data_type not in DATA_TYPES:
         raise DataException(
-            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+            f"{data_type} not in {DATA_TYPES}, please select a data type from"
+            f" {DATA_TYPES}"
         )
 
     if data_type == "exomes":
@@ -299,7 +301,8 @@ def coverage(data_type: str) -> VersionedTableResource:
     """
     if data_type not in DATA_TYPES:
         raise DataException(
-            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+            f"{data_type} not in {DATA_TYPES}, please select a data type from"
+            f" {DATA_TYPES}"
         )
 
     if data_type == "exomes":
@@ -329,7 +332,8 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
     """
     if data_type not in DATA_TYPES:
         raise DataException(
-            f"{data_type} not in {DATA_TYPES}, please select a data type from {DATA_TYPES}"
+            f"{data_type} not in {DATA_TYPES}, please select a data type from"
+            f" {DATA_TYPES}"
         )
 
     if data_type == "exomes":

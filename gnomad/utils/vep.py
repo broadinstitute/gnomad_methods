@@ -9,12 +9,14 @@ from typing import List, Optional, Union
 import hail as hl
 
 from gnomad.resources.resource_utils import VersionedTableResource
+from gnomad.utils.filtering import combine_functions
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Note that this is the current as of v81 with some included for backwards compatibility (VEP <= 75)
+# Note that this is the current as of v81 with some included for backwards
+# compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
     "splice_acceptor_variant",
@@ -181,10 +183,10 @@ def vep_or_lookup_vep(
         vep_config = vep_config_file.read()
 
     if reference_vep_ht is None:
-
         if reference not in POSSIBLE_REFS:
             raise ValueError(
-                f'vep_or_lookup_vep got {reference}. Expected one of {", ".join(POSSIBLE_REFS)}'
+                f"vep_or_lookup_vep got {reference}. Expected one of"
+                f" {', '.join(POSSIBLE_REFS)}"
             )
 
         vep_context = get_vep_context(reference)
@@ -193,8 +195,8 @@ def vep_or_lookup_vep(
 
         if vep_version not in vep_context.versions:
             logger.warning(
-                "No VEPed context Table available for genome build %s and VEP version %s, "
-                "all variants will be VEPed using the following VEP:\n%s",
+                "No VEPed context Table available for genome build %s and VEP version"
+                " %s, all variants will be VEPed using the following VEP:\n%s",
                 reference,
                 vep_version,
                 vep_help,
@@ -212,13 +214,15 @@ def vep_or_lookup_vep(
         vep_context_config = hl.eval(reference_vep_ht.vep_config)
 
         assert vep_help == vep_context_help, (
-            f"The VEP context HT version does not match the version referenced in the VEP config file."
-            f"\nVEP context:\n{vep_context_help}\n\n VEP config:\n{vep_help}"
+            "The VEP context HT version does not match the version referenced in the"
+            f" VEP config file.\nVEP context:\n{vep_context_help}\n\n VEP"
+            f" config:\n{vep_help}"
         )
 
         assert vep_config == vep_context_config, (
-            f"The VEP context HT configuration does not match the configuration in {vep_config_path}."
-            f"\nVEP context:\n{vep_context_config}\n\n Current config:\n{vep_config}"
+            "The VEP context HT configuration does not match the configuration in"
+            f" {vep_config_path}.\nVEP context:\n{vep_context_config}\n\n Current"
+            f" config:\n{vep_config}"
         )
 
     ht = ht.annotate(vep=reference_vep_ht[ht.key].vep)
@@ -344,32 +348,38 @@ def process_consequences(
 
 
 def filter_vep_to_canonical_transcripts(
-    mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
+    mt: Union[hl.MatrixTable, hl.Table],
+    vep_root: str = "vep",
+    filter_empty_csq: bool = False,
 ) -> Union[hl.MatrixTable, hl.Table]:
-    """Filter VEP transcript consequences to those in the canonical transcript."""
-    canonical = mt[vep_root].transcript_consequences.filter(
-        lambda csq: csq.canonical == 1
-    )
-    vep_data = mt[vep_root].annotate(transcript_consequences=canonical)
-    return (
-        mt.annotate_rows(**{vep_root: vep_data})
-        if isinstance(mt, hl.MatrixTable)
-        else mt.annotate(**{vep_root: vep_data})
+    """
+    Filter VEP transcript consequences to those in the canonical transcript.
+
+    :param mt: Input Table or MatrixTable.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Default is False.
+    :return: Table or MatrixTable with VEP transcript consequences filtered.
+    """
+    return filter_vep_transcript_csqs(
+        mt, vep_root, synonymous=False, filter_empty_csq=filter_empty_csq
     )
 
 
 def filter_vep_to_synonymous_variants(
-    mt: Union[hl.MatrixTable, hl.Table], vep_root: str = "vep"
+    mt: Union[hl.MatrixTable, hl.Table],
+    vep_root: str = "vep",
+    filter_empty_csq: bool = False,
 ) -> Union[hl.MatrixTable, hl.Table]:
-    """Filter VEP transcript consequences to those with a most severe consequence of synonymous_variant."""
-    synonymous = mt[vep_root].transcript_consequences.filter(
-        lambda csq: csq.most_severe_consequence == "synonymous_variant"
-    )
-    vep_data = mt[vep_root].annotate(transcript_consequences=synonymous)
-    return (
-        mt.annotate_rows(**{vep_root: vep_data})
-        if isinstance(mt, hl.MatrixTable)
-        else mt.annotate(**{vep_root: vep_data})
+    """
+    Filter VEP transcript consequences to those with a most severe consequence of 'synonymous_variant'.
+
+    :param mt: Input Table or MatrixTable.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Default is False.
+    :return: Table or MatrixTable with VEP transcript consequences filtered.
+    """
+    return filter_vep_transcript_csqs(
+        mt, vep_root, canonical=False, filter_empty_csq=filter_empty_csq
     )
 
 
@@ -560,6 +570,54 @@ def get_most_severe_consequence_for_summary(
         )
         .default(_get_most_severe_csq(ht.vep.intergenic_consequences, False))
     )
+
+
+def filter_vep_transcript_csqs(
+    t: Union[hl.Table, hl.MatrixTable],
+    vep_root: str = "vep",
+    synonymous: bool = True,
+    canonical: bool = True,
+    filter_empty_csq: bool = True,
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
+
+    Transcript consequences can be filtered to those where 'most_severe_consequence' is 'synonymous_variant' and/or the transcript is the canonical transcript,
+    if the `synonymous` and `canonical` parameter are set to True, respectively.
+
+    If `filter_empty_csq` parameter is set to True, the Table/MatrixTable is filtered to variants where 'transcript_consequences' within the VEP annotation
+    is not empty after the specified filtering criteria is applied.
+
+    :param t: Input Table or MatrixTable.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param synonymous: Whether to filter to variants where the most severe consequence is 'synonymous_variant'. Default is True.
+    :param canonical: Whether to filter to only canonical transcripts. Default is True.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Default is True.
+    :return: Table or MatrixTable filtered to specified criteria.
+    """
+    if not synonymous and not canonical and not filter_empty_csq:
+        logger.warning("No changes have been made to input Table/MatrixTable!")
+        return t
+
+    transcript_csqs = t[vep_root].transcript_consequences
+    criteria = [lambda csq: True]
+    if synonymous:
+        criteria.append(lambda csq: csq.most_severe_consequence == "synonymous_variant")
+    if canonical:
+        criteria.append(lambda csq: csq.canonical == 1)
+    transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
+    is_mt = isinstance(t, hl.MatrixTable)
+    vep_data = {vep_root: t[vep_root].annotate(transcript_consequences=transcript_csqs)}
+    t = t.annotate_rows(**vep_data) if is_mt else t.annotate(**vep_data)
+
+    if filter_empty_csq:
+        transcript_csq_expr = t[vep_root].transcript_consequences
+        filter_expr = hl.is_defined(transcript_csq_expr) & (
+            hl.len(transcript_csq_expr) > 0
+        )
+        t = t.filter_rows(filter_expr) if is_mt else t.filter(filter_expr)
+
+    return t
 
 
 def add_most_severe_csq_to_tc_within_vep_root(

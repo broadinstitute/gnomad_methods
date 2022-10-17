@@ -1,5 +1,7 @@
 # noqa: D100
 
+import hail as hl
+
 from gnomad.resources.resource_utils import (
     GnomadPublicMatrixTableResource,
     GnomadPublicTableResource,
@@ -7,7 +9,6 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
     import_sites_vcf,
 )
-import hail as hl
 
 na12878_giab = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt",
@@ -57,7 +58,9 @@ syndip = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch37/syndip/hybrid.m37m.mt",
     import_func=hl.import_vcf,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch37/syndip/hybrid.m37m.vcf.bgz",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch37/syndip/hybrid.m37m.vcf.bgz"
+        ),
         "min_partitions": 100,
         "reference_genome": "GRCh37",
     },

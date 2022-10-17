@@ -1,11 +1,12 @@
 # noqa: D100
 
-from gnomad.resources.resource_utils import (
-    GnomadPublicTableResource,
-    GnomadPublicBlockMatrixResource,
-)
-from gnomad.resources.grch37.gnomad import CURRENT_EXOME_RELEASE, CURRENT_GENOME_RELEASE
 from typing import Optional
+
+from gnomad.resources.grch37.gnomad import CURRENT_EXOME_RELEASE, CURRENT_GENOME_RELEASE
+from gnomad.resources.resource_utils import (
+    GnomadPublicBlockMatrixResource,
+    GnomadPublicTableResource,
+)
 
 
 def _ld_matrix_path(
@@ -20,7 +21,9 @@ def _ld_matrix_path(
             CURRENT_EXOME_RELEASE if data_type == "exomes" else CURRENT_GENOME_RELEASE
         )
     subdir = "sv/" if data_type == "genomes_snv_sv" else ""
-    return f'gs://gnomad-public-requester-pays/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.bm'
+    return (
+        f'gs://gnomad-public-requester-pays/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.bm'
+    )
 
 
 def _ld_index_path(
@@ -35,7 +38,9 @@ def _ld_index_path(
             CURRENT_EXOME_RELEASE if data_type == "exomes" else CURRENT_GENOME_RELEASE
         )
     subdir = "sv/" if data_type == "genomes_snv_sv" else ""
-    return f'gs://gnomad-public-requester-pays/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.variant_indices.ht'
+    return (
+        f'gs://gnomad-public-requester-pays/release/{version}/ld/{subdir}gnomad.{data_type}.r{version}.{pop}.{"common." if common_only else ""}{"adj." if adj else ""}ld.variant_indices.ht'
+    )
 
 
 def _ld_snv_sv_path(pop):
@@ -57,7 +62,9 @@ def _cross_pop_ld_scores_path(
         version = (
             CURRENT_EXOME_RELEASE if data_type == "exomes" else CURRENT_GENOME_RELEASE
         )
-    return f'gs://gnomad-public-requester-pays/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop1}.{pop2}.{"adj." if adj else ""}ld_scores.ht'
+    return (
+        f'gs://gnomad-public-requester-pays/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop1}.{pop2}.{"adj." if adj else ""}ld_scores.ht'
+    )
 
 
 def _ld_scores_path(
@@ -67,7 +74,9 @@ def _ld_scores_path(
         version = (
             CURRENT_EXOME_RELEASE if data_type == "exomes" else CURRENT_GENOME_RELEASE
         )
-    return f'gs://gnomad-public-requester-pays/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop}.{"adj." if adj else ""}ld_scores.ht'
+    return (
+        f'gs://gnomad-public-requester-pays/release/{version}/ld/scores/gnomad.{data_type}.r{version}.{pop}.{"adj." if adj else ""}ld_scores.ht'
+    )
 
 
 def ld_matrix(pop: str) -> GnomadPublicBlockMatrixResource:

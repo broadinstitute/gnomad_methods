@@ -3,10 +3,13 @@
 import functools
 import logging
 import operator
+from typing import List, Optional, Union
 
 import hail as hl
+
 from gnomad.sample_qc.sex import (
     gaussian_mixture_model_karyotype_assignment,
+    get_chr_x_hom_alt_cutoffs,
     get_ploidy_cutoffs,
     get_sex_expr,
 )
@@ -18,8 +21,6 @@ from gnomad.utils.annotations import (
 from gnomad.utils.filtering import filter_low_conf_regions, filter_to_adj
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.sparse_mt import impute_sex_ploidy
-
-from typing import List, Optional, Union
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -252,6 +253,8 @@ def infer_sex_karyotype(
     use_gaussian_mixture_model: bool = False,
     normal_ploidy_cutoff: int = 5,
     aneuploidy_cutoff: int = 6,
+    chr_x_frac_hom_alt_expr: Optional[hl.expr.NumericExpression] = None,
+    normal_chr_x_hom_alt_cutoff: int = 5,
 ) -> hl.Table:
     """
     Create a Table with X_karyotype, Y_karyotype, and sex_karyotype.
@@ -265,15 +268,22 @@ def infer_sex_karyotype(
 
     :param ploidy_ht: Input Table with chromosome X and chromosome Y ploidy values and optionally f-stat.
     :param f_stat_cutoff: f-stat to roughly divide 'XX' from 'XY' samples. Assumes XX samples are below cutoff and XY
-        are above cutoff. Default is 0.5
+        are above cutoff. Default is 0.5.
     :param use_gaussian_mixture_model: Use gaussian mixture model to split samples into 'XX' and 'XY' instead of f-stat.
-    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs.
+    :param normal_ploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs
         for XX, XY karyotypes.
     :param aneuploidy_cutoff: Number of standard deviations to use when determining sex chromosome ploidy cutoffs for
         aneuploidies.
+    :param chr_x_frac_hom_alt_expr: Fraction of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X.
+    :param normal_chr_x_hom_alt_cutoff: Number of standard deviations to use when determining cutoffs for the fraction
+        of homozygous alternate genotypes (hom-alt/(hom-alt + het)) on chromosome X for for XX and XY karyotypes. Only
+        used if `chr_x_frac_hom_alt_expr` is supplied.
     :return: Table of samples imputed sex karyotype.
     """
     logger.info("Inferring sex karyotype")
+    if chr_x_frac_hom_alt_expr is not None:
+        ploidy_ht = ploidy_ht.annotate(_chr_x_frac_hom_alt=chr_x_frac_hom_alt_expr)
+
     if use_gaussian_mixture_model:
         logger.info("Using Gaussian Mixture Model for karyotype assignment")
         gmm_sex_ht = gaussian_mixture_model_karyotype_assignment(ploidy_ht)
@@ -283,6 +293,11 @@ def infer_sex_karyotype(
             normal_ploidy_cutoff=normal_ploidy_cutoff,
             aneuploidy_cutoff=aneuploidy_cutoff,
         )
+        ploidy_ht = ploidy_ht.annotate(
+            gmm_karyotype=gmm_sex_ht[ploidy_ht.key].gmm_karyotype
+        )
+        group_by_expr = ploidy_ht.gmm_karyotype
+        f_stat_cutoff = None
     else:
         logger.info("Using f-stat for karyotype assignment")
         x_ploidy_cutoffs, y_ploidy_cutoffs = get_ploidy_cutoffs(
@@ -291,6 +306,26 @@ def infer_sex_karyotype(
             normal_ploidy_cutoff=normal_ploidy_cutoff,
             aneuploidy_cutoff=aneuploidy_cutoff,
         )
+        group_by_expr = None
+
+    if chr_x_frac_hom_alt_expr is not None:
+        logger.info(
+            "Including cutoffs for the fraction of homozygous alternate genotypes"
+            " (hom-alt/(hom-alt + het)) on chromosome X. Using %d standard deviations"
+            " to determine cutoffs.",
+            normal_chr_x_hom_alt_cutoff,
+        )
+        chr_x_frac_hom_alt_expr = ploidy_ht._chr_x_frac_hom_alt
+        chr_x_frac_hom_alt_cutoffs = get_chr_x_hom_alt_cutoffs(
+            ploidy_ht,
+            chr_x_frac_hom_alt_expr,
+            f_stat_cutoff=f_stat_cutoff,
+            group_by_expr=group_by_expr,
+            cutoff_stdev=normal_chr_x_hom_alt_cutoff,
+        )
+
+    else:
+        chr_x_frac_hom_alt_cutoffs = None
 
     karyotype_ht = ploidy_ht.select(
         **get_sex_expr(
@@ -298,9 +333,14 @@ def infer_sex_karyotype(
             ploidy_ht.chrY_ploidy,
             x_ploidy_cutoffs,
             y_ploidy_cutoffs,
+            chr_x_frac_hom_alt_expr=chr_x_frac_hom_alt_expr,
+            chr_x_frac_hom_alt_cutoffs=chr_x_frac_hom_alt_cutoffs,
         )
     )
     karyotype_ht = karyotype_ht.annotate_globals(
+        use_gaussian_mixture_model=use_gaussian_mixture_model,
+        normal_ploidy_cutoff=normal_ploidy_cutoff,
+        aneuploidy_cutoff=aneuploidy_cutoff,
         x_ploidy_cutoffs=hl.struct(
             upper_cutoff_X=x_ploidy_cutoffs[0],
             lower_cutoff_XX=x_ploidy_cutoffs[1][0],
@@ -312,11 +352,21 @@ def infer_sex_karyotype(
             upper_cutoff_Y=y_ploidy_cutoffs[0][1],
             lower_cutoff_YY=y_ploidy_cutoffs[1],
         ),
-        use_gaussian_mixture_model=use_gaussian_mixture_model,
-        normal_ploidy_cutoff=normal_ploidy_cutoff,
-        aneuploidy_cutoff=aneuploidy_cutoff,
     )
-    if not use_gaussian_mixture_model:
+    if chr_x_frac_hom_alt_expr is not None:
+        karyotype_ht = karyotype_ht.annotate_globals(
+            x_frac_hom_alt_cutoffs=hl.struct(
+                lower_cutoff_more_than_one_X=chr_x_frac_hom_alt_cutoffs[0][0],
+                upper_cutoff_more_than_one_X=chr_x_frac_hom_alt_cutoffs[0][1],
+                lower_cutoff_single_X=chr_x_frac_hom_alt_cutoffs[1],
+            )
+        )
+
+    if use_gaussian_mixture_model:
+        karyotype_ht = karyotype_ht.annotate(
+            gmm_sex_karyotype=ploidy_ht[karyotype_ht.key].gmm_karyotype
+        )
+    else:
         karyotype_ht = karyotype_ht.annotate_globals(f_stat_cutoff=f_stat_cutoff)
 
     return karyotype_ht
@@ -339,6 +389,7 @@ def annotate_sex(
     variants_filter_segdup: bool = True,
     variants_filter_decoy: bool = False,
     variants_snv_only: bool = False,
+    coverage_mt: Optional[hl.MatrixTable] = None,
     compute_x_frac_variants_hom_alt: bool = False,
     compute_fstat: bool = True,
     infer_karyotype: bool = True,
@@ -395,6 +446,7 @@ def annotate_sex(
         exist for GRCh38.
     :param variants_snv_only: Whether to filter to only single nucleotide variants for variants only ploidy estimation
         and fraction of homozygous alternate variants on chromosome X. Default is False.
+    :param coverage_mt: Optional precomputed coverage MatrixTable to use in reference based VDS ploidy estimation.
     :param compute_x_frac_variants_hom_alt: Whether to return an annotation for the fraction of homozygous alternate
         variants on chromosome X. Default is False.
     :param compute_fstat: Whether to compute f-stat. Default is True.
@@ -407,21 +459,21 @@ def annotate_sex(
 
     if infer_karyotype and not (compute_fstat or use_gaussian_mixture_model):
         raise ValueError(
-            "In order to infer sex karyotype (infer_karyotype=True), one of 'compute_fstat' or "
-            "'use_gaussian_mixture_model' must be set to True!"
+            "In order to infer sex karyotype (infer_karyotype=True), one of"
+            " 'compute_fstat' or 'use_gaussian_mixture_model' must be set to True!"
         )
 
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
         if excluded_intervals is not None:
             raise NotImplementedError(
-                "The use of the parameter 'excluded_intervals' is currently not implemented for imputing sex "
-                "chromosome ploidy on a VDS!"
+                "The use of the parameter 'excluded_intervals' is currently not"
+                " implemented for imputing sex chromosome ploidy on a VDS!"
             )
         if included_intervals is None:
             raise NotImplementedError(
-                "The current implementation for imputing sex chromosome ploidy on a VDS requires a list of "
-                "'included_intervals'!"
+                "The current implementation for imputing sex chromosome ploidy on a VDS"
+                " requires a list of 'included_intervals'!"
             )
         mt = mtds.variant_data
     else:
@@ -431,11 +483,13 @@ def annotate_sex(
             )
         mt = mtds
 
-    # Determine the contigs that are needed for variant only and reference block only sex ploidy imputation
+    # Determine the contigs that are needed for variant only and reference
+    # block only sex ploidy imputation
     rg = get_reference_genome(mt.locus)
     if normalization_contig not in rg.contigs:
         raise ValueError(
-            f"Normalization contig {normalization_contig} is not found in reference genome {rg.name}!"
+            f"Normalization contig {normalization_contig} is not found in reference"
+            f" genome {rg.name}!"
         )
 
     x_contigs = set(rg.x_contigs)
@@ -466,16 +520,28 @@ def annotate_sex(
 
     if ref_keep_contigs:
         logger.info(
-            "Imputing sex chromosome ploidy using only reference block depth information on the following contigs: %s",
+            "Imputing sex chromosome ploidy using only reference block depth"
+            " information on the following contigs: %s",
             ref_keep_contigs,
         )
         if is_vds:
-            ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
-                hl.vds.filter_intervals(mtds, ref_keep_locus_intervals),
-                calling_intervals=included_intervals,
-                normalization_contig=normalization_contig,
-                use_variant_dataset=False,
-            )
+            if coverage_mt is not None:
+                ploidy_ht = hl.vds.impute_sex_chr_ploidy_from_interval_coverage(
+                    coverage_mt.filter_rows(
+                        hl.is_defined(included_intervals[coverage_mt.row_key])
+                        & hl.literal(ref_keep_contigs).contains(
+                            coverage_mt.interval.start.contig
+                        )
+                    ),
+                    normalization_contig=normalization_contig,
+                )
+            else:
+                ploidy_ht = hl.vds.impute_sex_chromosome_ploidy(
+                    hl.vds.filter_intervals(mtds, ref_keep_locus_intervals),
+                    calling_intervals=included_intervals,
+                    normalization_contig=normalization_contig,
+                    use_variant_dataset=False,
+                )
             ploidy_ht = ploidy_ht.rename(
                 {
                     "x_ploidy": "chrX_ploidy",
@@ -500,8 +566,9 @@ def annotate_sex(
     add_globals = hl.struct()
     if compute_x_frac_variants_hom_alt or var_keep_contigs:
         logger.info(
-            "Filtering variants for variant only sex chromosome ploidy imputation and/or computation of the fraction "
-            "of homozygous alternate variants on chromosome X",
+            "Filtering variants for variant only sex chromosome ploidy imputation"
+            " and/or computation of the fraction of homozygous alternate variants on"
+            " chromosome X",
         )
         filtered_mt = hl.filter_intervals(
             mt, var_keep_locus_intervals + x_locus_intervals
@@ -534,7 +601,8 @@ def annotate_sex(
 
     if var_keep_contigs:
         logger.info(
-            "Imputing sex chromosome ploidy using only variant depth information on the following contigs: %s",
+            "Imputing sex chromosome ploidy using only variant depth information on the"
+            " following contigs: %s",
             var_keep_contigs,
         )
         var_filtered_mt = hl.filter_intervals(filtered_mt, var_keep_locus_intervals)
@@ -564,7 +632,9 @@ def annotate_sex(
             )
             var_ploidy_ht = var_ploidy_ht.rename(
                 {
-                    f"{normalization_contig}_mean_dp": f"var_data_{normalization_contig}_mean_dp"
+                    f"{normalization_contig}_mean_dp": (
+                        f"var_data_{normalization_contig}_mean_dp"
+                    )
                 }
             )
 
@@ -582,7 +652,8 @@ def annotate_sex(
 
     if compute_x_frac_variants_hom_alt:
         logger.info(
-            "Computing fraction of variants that are homozygous alternate on chromosome X"
+            "Computing fraction of variants that are homozygous alternate on"
+            " chromosome X"
         )
         filtered_mt = hl.filter_intervals(filtered_mt, x_locus_intervals)
         filtered_mt = filtered_mt.filter_rows(
@@ -619,8 +690,8 @@ def annotate_sex(
         if sites_ht is not None:
             if aaf_expr is None:
                 logger.warning(
-                    "sites_ht was provided, but aaf_expr is missing. Assuming name of field with alternate allele "
-                    "frequency is 'AF'."
+                    "sites_ht was provided, but aaf_expr is missing. Assuming name of"
+                    " field with alternate allele frequency is 'AF'."
                 )
                 aaf_expr = "AF"
             logger.info("Filtering to provided sites")

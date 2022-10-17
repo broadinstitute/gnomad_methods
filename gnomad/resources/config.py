@@ -5,7 +5,6 @@ import os
 from enum import Enum
 from typing import Union
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +62,8 @@ def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, st
                     cloud_spark_provider
                 ]
                 logger.info(
-                    "Using default source for gnomAD resources based on cloud provider: %s",
+                    "Using default source for gnomAD resources based on cloud"
+                    " provider: %s",
                     default_source_from_provider,
                 )
                 return default_source_from_provider

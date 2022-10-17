@@ -1,18 +1,18 @@
 # noqa: D100
 
+import hail as hl
+from hail import Table
+
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
-    GnomadPublicTableResource,
-    GnomadPublicMatrixTableResource,
-    VersionedTableResource,
-    VersionedMatrixTableResource,
-    import_sites_vcf,
     NO_CHR_TO_CHR_CONTIG_RECODING,
+    GnomadPublicMatrixTableResource,
+    GnomadPublicTableResource,
+    VersionedMatrixTableResource,
+    VersionedTableResource,
+    import_sites_vcf,
 )
 from gnomad.utils.vep import vep_or_lookup_vep
-import hail as hl
-
-from hail import Table
 
 
 def _import_purcell_5k(path) -> hl.Table:
@@ -47,7 +47,8 @@ def _import_clinvar(**kwargs) -> hl.Table:
 
 def _import_dbsnp(**kwargs) -> hl.Table:
     dbsnp = import_sites_vcf(**kwargs)
-    # Note: permit_shuffle is set because the dbsnp vcf has duplicate loci (turned into a set) so might be out of order
+    # Note: permit_shuffle is set because the dbsnp vcf has duplicate loci
+    # (turned into a set) so might be out of order
     dbsnp = hl.split_multi(dbsnp, permit_shuffle=True)
     dbsnp = dbsnp.group_by(dbsnp.locus, dbsnp.alleles).aggregate(
         rsid=hl.agg.collect_as_set(dbsnp.rsid)
@@ -185,7 +186,9 @@ hapmap = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/hapmap/hapmap_3.3.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
-        "path": "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz",
+        "path": (
+            "gs://genomics-public-data/resources/broad/hg38/v0/hapmap_3.3.hg38.vcf.gz"
+        ),
         "force_bgz": True,
         "reference_genome": "GRCh38",
     },

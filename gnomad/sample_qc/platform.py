@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 
 import hail as hl
 import numpy as np
+
 from gnomad.utils.annotations import bi_allelic_expr
 from gnomad.utils.filtering import filter_to_autosomes
 
@@ -44,7 +45,8 @@ def compute_callrate_mt(
         intervals_ht.key[0], hl.expr.IntervalExpression
     ):
         logger.warning(
-            "Call rate matrix computation expects `intervals_ht` with a key of type Interval. Found: %s",
+            "Call rate matrix computation expects `intervals_ht` with a key of type"
+            " Interval. Found: %s",
             intervals_ht.key,
         )
 

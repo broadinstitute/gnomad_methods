@@ -508,8 +508,8 @@ def build_models(
     # Build the coverage model.
     # TODO: consider weighting here as well
     coverage_model_expr = build_coverage_model(
-        low_coverage_obs_exp=low_coverage_ht.low_coverage_obs_exp,
-        log_coverage=low_coverage_ht.log_coverage,
+        low_coverage_obs_exp_expr=low_coverage_ht.low_coverage_obs_exp,
+        log_coverage_expr=low_coverage_ht.log_coverage,
     )
     coverage_model = tuple(low_coverage_ht.aggregate(coverage_model_expr).beta)
     return coverage_model, plateau_models

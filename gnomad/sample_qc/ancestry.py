@@ -258,8 +258,8 @@ def assign_population_pcs(
 
 def run_pca_with_relateds(
     qc_mt: hl.MatrixTable,
-    related_samples_to_drop: Optional[hl.Table],
-    additional_samples_to_drop: Optional[hl.Table],
+    related_samples_to_drop: Optional[hl.Table] = None,
+    additional_samples_to_drop: Optional[hl.Table] = None,
     n_pcs: int = 10,
     autosomes_only: bool = True,
 ) -> Tuple[List[float], hl.Table, hl.Table]:
@@ -279,12 +279,11 @@ def run_pca_with_relateds(
     :param autosomes_only: Whether to run the analysis on autosomes only
     :return: eigenvalues, scores and loadings
     """
-
     if autosomes_only:
         qc_mt = filter_to_autosomes(qc_mt)
 
     # 'pca_mt' is the MatrixTable to use for generating the PCs
-    # If samples to drop are provided in related_samples_to_drop or additional_samples_to_drop, 'project_pca_mt' will also be generated and will contain the samples to project in the PC space
+    # If samples to drop are provided in 'related_samples_to_drop' or 'additional_samples_to_drop', 'project_pca_mt' will also be generated and will contain the samples to project in the PC space
     pca_mt = qc_mt
 
     if related_samples_to_drop:

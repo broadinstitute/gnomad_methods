@@ -448,7 +448,7 @@ def build_models(
     coverage models. Defaults to `COVERAGE_CUTOFF`.
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage above `cov_cutoff`
+    # Filter to sites with coverage above `cov_cutoff`.
     all_high_coverage_ht = coverage_ht.filter(coverage_ht.exome_coverage >= cov_cutoff)
     agg_expr = {
         "observed_variants": hl.agg.sum(all_high_coverage_ht.observed_variants),
@@ -459,11 +459,12 @@ def build_models(
             all_high_coverage_ht[f"downsampling_counts_{pop}"]
         )
 
-    # Generate a Table with all necessary annotations (x and y listed above) for the plateau models
+    # Generate a Table with all necessary annotations (x and y listed above)
+    # for the plateau models.
     high_coverage_ht = all_high_coverage_ht.group_by(*keys).aggregate(**agg_expr)
     high_coverage_ht = annotate_mutation_type(high_coverage_ht)
 
-    # Build plateau models
+    # Build plateau models.
     plateau_models_agg_expr = build_plateau_models(
         cpg_expr=high_coverage_ht.cpg,
         mu_snp_expr=high_coverage_ht.mu_snp,
@@ -476,13 +477,13 @@ def build_models(
     )
     plateau_models = high_coverage_ht.aggregate(hl.struct(**plateau_models_agg_expr))
 
-    # Filter to sites with coverage below `cov_cutoff` and larger than 0
+    # Filter to sites with coverage below `cov_cutoff` and larger than 0.
     all_low_coverage_ht = coverage_ht.filter(
         (coverage_ht.exome_coverage < cov_cutoff) & (coverage_ht.exome_coverage > 0)
     )
 
     # Metric that represents the relative mutability of the exome calculated on high coverage sites
-    # This metric is used as scaling factor when building the coverage model
+    # This metric is used as scaling factor when building the coverage model.
     high_coverage_scale_factor = all_high_coverage_ht.aggregate(
         hl.agg.sum(all_high_coverage_ht.observed_variants)
         / hl.agg.sum(
@@ -490,7 +491,8 @@ def build_models(
         )
     )
 
-    # Generate a Table with all necessary annotations (x and y listed above) for the coverage model
+    # Generate a Table with all necessary annotations (x and y listed above)
+    # for the coverage model.
     low_coverage_ht = all_low_coverage_ht.group_by(
         log_coverage=hl.log10(all_low_coverage_ht.exome_coverage)
     ).aggregate(
@@ -503,7 +505,7 @@ def build_models(
         )
     )
 
-    # Build the coverage model
+    # Build the coverage model.
     # TODO: consider weighting here as well
     coverage_model_expr = build_coverage_model(
         low_coverage_obs_exp=low_coverage_ht.low_coverage_obs_exp,
@@ -536,7 +538,7 @@ def build_plateau_models(
     :param weighted: Whether to generalize the model to weighted least squares using 'possible_variants'. Default is False.
     :return: A Dictionary of intercepts and slopes for plateau models of each population. The key of the dictionary is population name, and the value is a dictionary (or a list of dictionary if `pop_observed_variants_exprs` is specified) mapping cpg BooleanExpression to a intercept and a slope.
     """
-    # Build a plateau model using all the sites in the Table
+    # Build a plateau model using all the sites in the Table.
     plateau_models_agg_expr = {
         "total": hl.agg.group_by(
             cpg_expr,
@@ -547,7 +549,8 @@ def build_plateau_models(
             ).beta,
         )
     }
-    # Build plateau models using sites in population downsamplings if population is specified
+    # Build plateau models using sites in population downsamplings if
+    # population is specified.
     for pop, pop_observed_variants_expr in pop_observed_variants_exprs.items():
         plateau_models_agg_expr[pop] = hl.agg.array_agg(
             lambda pop_observed_variants: hl.agg.group_by(
@@ -601,12 +604,12 @@ def get_all_pop_lengths(
     :param prefix: Prefix of population observed variant counts. Defaults to 'observed_'.
     :return: A Dictionary with the minimum array length for each population.
     """
-    # Get minimum length of downsamplings for each population
+    # Get minimum length of downsamplings for each population.
     pop_downsampling_lengths = ht.aggregate(
         [hl.agg.min(hl.len(ht[f"{prefix}{pop}"])) for pop in pops]
     )
 
-    # Zip population name with their downsampling length
+    # Zip population name with their downsampling length.
     pop_lengths = list(zip(pop_downsampling_lengths, pops))
     logger.info("Found: %s", "".join(map(str, pop_lengths)))
 

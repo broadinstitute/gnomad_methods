@@ -43,7 +43,8 @@ def annotate_mutation_type(
     context_lengths = list(filter(None, set(hl.len(t.context).collect())))
     if len(context_lengths) > 1:
         raise ValueError(
-            "More than one length was found among the first 100 'context' values. Length of 'context' should be consistent."
+            "More than one length was found among the first 100 'context' values."
+            " Length of 'context' should be consistent."
         )
     else:
         context_length = context_lengths[0]
@@ -55,7 +56,8 @@ def annotate_mutation_type(
         mid_index = 3
     else:
         raise ValueError(
-            f"The length of context should be either 3 or 7, instead of {context_length}."
+            "The length of context should be either 3 or 7, instead of"
+            f" {context_length}."
         )
 
     transition_expr = hl.is_transition(t.ref, t.alt)
@@ -300,7 +302,7 @@ def build_plateau_models(
     :param possible_variants_expr: The Int64Expression of the possible variant counts for each combination of keys in `ht`.
     :param pop_observed_variants_exprs: List of ArrayNumericExpression of observed variant counts for specified populations. Default is [].
     :param weighted: Whether to generalize the model to weighted least squares using 'possible_variants'. Default is False.
-    :return: A Dictionary of intercepts and slopes for plateau models of each population.
+    :return: A Dictionary of intercepts and slopes for plateau models of each population. The key of the dictionary is population name, and the value is a dictionary (or a list of dictionary if `pop_observed_variants_exprs` is specified) mapping cpg BooleanExpression to a intercept and a slope.
     """
     # Build a plateau model using all the sites in the Table
     plateau_models_agg_expr = {
@@ -381,6 +383,9 @@ def get_all_pop_lengths(
             lambda f: f,
             [hl.len(ht[f"{prefix}{pop}"]) == length for length, pop in pop_lengths],
         )
-    ), "The arrays of variant counts within population downsamplings have different lengths!"
+    ), (
+        "The arrays of variant counts within population downsamplings have different"
+        " lengths!"
+    )
 
     return pop_lengths

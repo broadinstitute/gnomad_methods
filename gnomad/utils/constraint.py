@@ -34,7 +34,7 @@ def annotate_mutation_type(
 
     ..note:
 
-        `variant_type` in gnomAD refers to any variant that is "multi-snv", "snv", "multi-indel", "indel", or "mixed".
+        This function uses the term 'mutation_type' because 'variant_type' is already used in this repo to indicate a variant's multiallelic and SNP/indel status.
 
     :param t: Input Table or MatrixTable.
     :return: Table with mutation type annotations added.
@@ -150,25 +150,31 @@ def build_models(
         "mu_snp",
     ),
     cov_cutoff: int = COVERAGE_CUTOFF,
-) -> Tuple[Tuple[float, float], hl.StructExpression]:
+) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
-
-    Plateau model: adjusts proportion of expected variation based on location in the genome and CpG status.
-    The x and y of the plateau models:
-        - x: `mu_snp` - mutation rate
-        - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
     This function builds models (plateau_models) using linear regression to calibrate mutation rate
     estimates against the proportion observed of each substitution, context, and methylation level in
     `coverage_ht`.
-
-    The plateau models only consider high coverage sites, or sites above a median coverage of
-    `cov_cutoff`.
-
+    
     Two plateau models are fit, one for CpG transitions, and one for the remainder of sites
     (transversions and non CpG transitions).
+    
+    The plateau models only consider high coverage sites, or sites above a median coverage of
+    `cov_cutoff`.
+    
+    Plateau model: adjusts proportion of expected variation based on location in the genome and CpG status.
+    The x and y of the plateau models:
+        - x: `mu_snp` - mutation rate
+        - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
+        
+    This function also builds models (coverage models) to calibrate the proportion of expected variation
+    at low coverage sites (sites below `cov_cutoff`).
 
+    The coverage models are built by creating a scaling factor across all high coverage sites,
+    applying this ratio to the low coverage sites, and running a linear regression.
+    
     Coverage model: corrects proportion of expected variation at low coverage sites.
     Low coverage sites are defined as sites with median coverage < `cov_cutoff`.
 
@@ -178,16 +184,11 @@ def build_models(
 
         `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage sites
 
-    This function also builds models (coverage models) to calibrate the proportion of expected variation
-    at low coverage sites (sites below `cov_cutoff`).
-
-    The coverage models are built by creating a scaling factor across all high coverage sites,
-    applying this ratio to the low coverage sites, and running a linear regression.
 
     .. note::
 
         This function expects that the input Table(`coverage_ht`) was created using
-        `get_proportion_observed_by_coverage`, which means that `coverage_ht` contains only high quality
+        `get_proportion_observed_by_coverage`, which means that `coverage_ht` should contain only high quality
         synonymous variants below 0.1% frequency.
 
         This function also expects that the following fields are present in `coverage_ht`:
@@ -207,6 +208,7 @@ def build_models(
     :param weighted: Whether to weight the high coverage model (a linear regression model) by 'possible_variants'. Defaults to False.
     :param pops: List of populations used to build coverage and plateau models. Defaults to ().
     :param keys: Keys to group observed and possible variant counts.
+        Default is ("context","ref", "alt", "methylation_level", "mu_snp").
     :param cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff are considered well covered
     and will be used to build plateau models. Sites below this cutoff have low coverage and will be used to build
     coverage models. Defaults to `COVERAGE_CUTOFF`.
@@ -222,9 +224,11 @@ def build_models(
         agg_expr[f"observed_{pop}"] = hl.agg.array_sum(
             all_high_coverage_ht[f"downsampling_counts_{pop}"]
         )
+        
     # Generate a Table with all necessary annotations (x and y listed above) for the plateau models
     high_coverage_ht = all_high_coverage_ht.group_by(*keys).aggregate(**agg_expr)
     high_coverage_ht = annotate_mutation_type(high_coverage_ht)
+
     # Build plateau models
     plateau_models_agg_expr = build_plateau_models(
         high_coverage_ht,
@@ -237,10 +241,11 @@ def build_models(
     )
     plateau_models = high_coverage_ht.aggregate(hl.struct(**plateau_models_agg_expr))
 
-    # Filter to sites with coverage below `cov_cutoff and larger than 0
+    # Filter to sites with coverage below `cov_cutoff` and larger than 0
     all_low_coverage_ht = coverage_ht.filter(
         (coverage_ht.exome_coverage < cov_cutoff) & (coverage_ht.exome_coverage > 0)
     )
+    
     # Metric that represents the relative mutability of the exome calculated on high coverage sites
     # This metric is used as scaling factor when building the coverage model
     high_coverage_scale_factor = all_high_coverage_ht.aggregate(
@@ -249,6 +254,7 @@ def build_models(
             all_high_coverage_ht.possible_variants * all_high_coverage_ht.mu_snp
         )
     )
+
     # Generate a Table with all necessary annotations (x and y listed above) for the coverage model
     low_coverage_ht = all_low_coverage_ht.group_by(
         log_coverage=hl.log10(all_low_coverage_ht.exome_coverage)
@@ -261,6 +267,7 @@ def build_models(
             )
         )
     )
+    
     # Build the coverage model
     # TODO: consider weighting here as well
     coverage_model_expr = build_coverage_model(
@@ -273,14 +280,14 @@ def build_models(
 
 def build_plateau_models(
     ht: hl.Table,
-    cpg: hl.BooleanExpression,
-    mu_snp: hl.Float64Expression,
-    observed_variants: hl.Int64Expression,
-    possible_variants: hl.Int64Expression,
+    cpg: hl.expr.BooleanExpression,
+    mu_snp: hl.expr.Float64Expression,
+    observed_variants: hl.expr.Int64Expression,
+    possible_variants: hl.expr.Int64Expression,
     prefix: str = "observed_",
     weighted: bool = False,
     pops: Tuple[str] = (),
-) -> dict:
+) -> Dict[str, Dict[bool, hl.expr.ArrayExpression]]
     """
     Build plateau models for all the sites in `ht` and sites in each `pop` population downsampling to calibrate mutation rate to compute predicted proportion observed value.
 
@@ -329,9 +336,9 @@ def build_plateau_models(
 
 
 def build_coverage_model(
-    low_coverage_obs_exp: hl.Float64Expression,
-    log_coverage: hl.Float64Expression,
-) -> hl.StructExpression:
+    low_coverage_obs_exp: hl.expr.Float64Expression,
+    log_coverage: hl.expr.Float64Expression,
+) -> hl.expr.StructExpression:
     """
     Build coverage model.
 
@@ -366,12 +373,12 @@ def get_all_pop_lengths(
     :param prefix: Prefix of population observed variant counts. Defaults to 'observed_'.
     :return: A Dictionary with the minimum array length for each population.
     """
-    # get minimum length of downsamplings for each population
+    # Get minimum length of downsamplings for each population
     pop_downsampling_lengths = ht.aggregate(
         [hl.agg.min(hl.len(ht[f"{prefix}{pop}"])) for pop in pops]
     )
 
-    # zip population name with their downsampling length
+    # Zip population name with their downsampling length
     pop_lengths = list(zip(pop_downsampling_lengths, pops))
     logger.info("Found: %s", "".join(map(str, pop_lengths)))
 

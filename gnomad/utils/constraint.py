@@ -592,7 +592,7 @@ def build_plateau_models(
       'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each
       population. The key of the dictionary is a population name, and the value is a
-      dictionary (or a list of dictionary if `pop_observed_variants_exprs` is
+      dictionary (or a list of dictionaries if `pop_observed_variants_exprs` is
       specified) mapping cpg BooleanExpression to a intercept and a slope.
     """
     # Build a plateau model using all the sites in the Table.

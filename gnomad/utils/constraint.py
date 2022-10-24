@@ -444,8 +444,7 @@ def build_models(
     genome and CpG status.
     The x and y of the plateau models:
     - x: `mu_snp` - mutation rate
-    - y: proportion observed ('observed_variants' or 'observed_{pop}' /
-        'possible_variants')
+    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
     This function also builds models (coverage models) to calibrate the proportion of
     expected variation at low coverage sites (sites below `cov_cutoff`).
@@ -459,8 +458,7 @@ def build_models(
 
     The x and y of the coverage model:
     - x: log10 groupings of exome coverage at low coverage sites
-    - y: sum('observed_variants')/ (`high_coverage_scale_factor` *
-                        sum('possible_variants' * 'mu_snp') at low coverage sites
+    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
 
     `high_coverage_scale_factor` = sum('observed_variants') /
                         sum('possible_variants' * 'mu_snp') at high coverage sites
@@ -579,8 +577,7 @@ def build_plateau_models(
 
     The x and y of the plateau models:
     - x: `mu_snp` - mutation rate
-    - y: proportion observed ('observed_variants' or 'observed_{pop}' /
-            'possible_variants')
+    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
     :param cpg_expr: The BooleanExpression noting whether a site is a CPG site.
     :param mu_snp_expr: The Float64Expression of the mutation rate.
@@ -636,10 +633,8 @@ def build_coverage_model(
 
     The x and y of the coverage model:
     - x: log10('exome_coverage') at low coverage site
-    - y: sum('observed_variants')/ (`high_coverage_scale_factor` *
-                            sum('possible_variants' * 'mu_snp') at low coverage site
-    where `high_coverage_scale_factor` = sum('observed_variants') /
-                            sum('possible_variants' * 'mu_snp') at high coverage site
+    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
+    where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
       for a given coverage level.

@@ -482,10 +482,10 @@ def build_models(
         variant. Note that the term "variant" here refers to a specific substitution,
         context, methylation level, and coverage combination.
         - downsampling_counts_{pop} (optional) - array of observed variant counts per
-          population after downsampling. Used only when `pops` is specified.
+        population after downsampling. Used only when `pops` is specified.
         - mu_snp - mutation rate
         - possible_variants - the number of possible variants in the dataset for each
-          variant.
+        variant.
 
     :param coverage_ht: Input coverage Table.
     :param weighted: Whether to weight the high coverage model (a linear regression

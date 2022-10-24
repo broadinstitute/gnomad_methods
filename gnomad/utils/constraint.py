@@ -14,11 +14,9 @@ logger.setLevel(logging.INFO)
 
 COVERAGE_CUTOFF = 40
 """
-Minimum median exome coverage differentiating high coverage sites from low coverage 
-sites.
+Minimum median exome coverage differentiating high coverage sites from low coverage sites.
 
-Low coverage sites require an extra calibration when computing the proportion of 
-expected variation.
+Low coverage sites require an extra calibration when computing the proportion of expected variation.
 """
 
 
@@ -396,7 +394,7 @@ def collapse_strand(
 
     :param ht: Input Table.
     :return: Table with deduplicated context annotation (ref, alt, context,
-    was_flipped).
+      was_flipped).
     """
     ref_g_or_t_expr = (t.ref == "G") | (t.ref == "T")
     collapse_expr = {

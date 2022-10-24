@@ -479,8 +479,8 @@ def build_models(
         - cpg - whether the site is CpG site
         - exome_coverage - median exome coverage at integer values between 1-100
         - observed_variants - the number of observed variants in the dataset for each
-          variant. Note that the term "variant" here refers to a specific substitution,
-          context, methylation level, and coverage combination.
+        variant. Note that the term "variant" here refers to a specific substitution,
+        context, methylation level, and coverage combination.
         - downsampling_counts_{pop} (optional) - array of observed variant counts per
           population after downsampling. Used only when `pops` is specified.
         - mu_snp - mutation rate

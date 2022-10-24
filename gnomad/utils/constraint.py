@@ -585,12 +585,13 @@ def build_plateau_models(
       for each combination of keys in `ht`.
     :param possible_variants_expr: The Int64Expression of the possible variant counts
       for each combination of keys in `ht`.
-    :param pop_observed_variants_exprs: List of ArrayNumericExpression of observed
-      variant counts for specified populations. Default is [].
+    :param pop_observed_variants_exprs: A dictionary where its key is a population name 
+      and its value is a ArrayNumericExpression of observed variant counts for 
+      specified populations. Default is {}.
     :param weighted: Whether to generalize the model to weighted least squares using
       'possible_variants'. Default is False.
-    :return: A Dictionary of intercepts and slopes for plateau models of each
-      population. The key of the dictionary is population name, and the value is a
+    :return: A dictionary of intercepts and slopes for plateau models of each
+      population. The key of the dictionary is a population name, and the value is a
       dictionary (or a list of dictionary if `pop_observed_variants_exprs` is
       specified) mapping cpg BooleanExpression to a intercept and a slope.
     """

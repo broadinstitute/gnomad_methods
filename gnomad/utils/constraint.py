@@ -531,7 +531,7 @@ def build_models(
     )
     plateau_models = high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
 
-    coverage_model= None
+    coverage_model = None
     if build_coverage_model:
         # Filter to sites with coverage below `cov_cutoff` and larger than 0.
         low_cov_ht = coverage_ht.filter(
@@ -589,8 +589,8 @@ def build_plateau_models(
       for each combination of keys in `ht`.
     :param possible_variants_expr: The Int64Expression of the possible variant counts
       for each combination of keys in `ht`.
-    :param pop_observed_variants_exprs: A dictionary where its key is a population name 
-      and its value is a ArrayNumericExpression of observed variant counts for 
+    :param pop_observed_variants_exprs: A dictionary where its key is a population name
+      and its value is a ArrayNumericExpression of observed variant counts for
       specified populations. Default is {}.
     :param weighted: Whether to generalize the model to weighted least squares using
       'possible_variants'. Default is False.

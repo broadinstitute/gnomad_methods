@@ -57,7 +57,7 @@ async def parallel_file_exists_async(
             return True
 
     with SimpleRichProgressBar(
-        total=len(fpaths), desc="check files for existence", disable=False
+        total=len(fpaths), description="check files for existence", disable=False
     ) as pbar:
         with ThreadPoolExecutor() as thread_pool:
             async with RouterAsyncFS(

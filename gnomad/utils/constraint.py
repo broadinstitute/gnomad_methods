@@ -661,7 +661,7 @@ def get_all_pop_lengths(
 
     :param ht: Input Table used to build population plateau models.
     :param pops: Populations used to categorize observed variant counts in downsampings.
-    :param prefix: Prefix of population observed variant counts. Default is observed_.
+    :param prefix: Prefix of population observed variant counts. Default is "observed".
     :return: A Dictionary with the minimum array length for each population.
     """
     # Get minimum length of downsamplings for each population.

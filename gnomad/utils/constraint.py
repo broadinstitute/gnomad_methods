@@ -30,8 +30,7 @@ def annotate_with_mu(
 
     .. note::
 
-        `ht` is expected to include annotations that `mutation_ht` is keyed by, but
-        these annotations don't need to be the keys of `ht`.
+        Function expects that`ht` includes`mutation_ht`'s key fields. Note that these annotations don't need to be the keys of `ht`.
 
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.
@@ -481,17 +480,17 @@ def build_models(
         - exome_coverage - median exome coverage at integer values between 1-100
         - observed_variants - the number of observed variants in the dataset for each
         variant. Note that the term "variant" here refers to a specific substitution,
-        context, methylation level, and coverage combination.
+        context, methylation level, and coverage combination
         - downsampling_counts_{pop} (optional) - array of observed variant counts per
         population after downsampling. Used only when `pops` is specified.
         - mu_snp - mutation rate
         - possible_variants - the number of possible variants in the dataset for each
-        variant.
+        variant
 
     :param coverage_ht: Input coverage Table.
-    :param weighted: Whether to weight the high coverage model (a linear regression
+    :param weighted: Whether to weight the plateau models (a linear regression
       model) by 'possible_variants'. Default is False.
-    :param pops: List of populations used to build coverage and plateau models.
+    :param pops: List of populations used to build plateau models.
       Default is ().
     :param keys: Keys to group observed and possible variant counts.
       Default is ("context","ref", "alt", "methylation_level", "mu_snp").
@@ -499,7 +498,7 @@ def build_models(
       are considered well covered and will be used to build plateau models. Sites below
       this cutoff have low coverage and will be used to build coverage models. Defaults
       to `COVERAGE_CUTOFF`.
-    :param coverage_model: Whether to build a coverage model. Default is False.
+    :param coverage_model: Whether to build coverage model. Default is False.
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage above `cov_cutoff`.
@@ -577,20 +576,20 @@ def build_plateau_models(
     weighted: bool = False,
 ) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
     """
-    Build plateau models for all the sites in `ht` and sites in each `pop` population downsampling to calibrate mutation rate to compute predicted proportion observed value.
+    Build plateau models to calibrate mutation rate to compute predicted proportion observed value.
 
     The x and y of the plateau models:
     - x: `mu_snp` - mutation rate
     - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
-    :param cpg_expr: The BooleanExpression noting whether a site is a CPG site.
-    :param mu_snp_expr: The Float64Expression of the mutation rate.
-    :param observed_variants_expr: The Int64Expression of the observed variant counts
+    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
+    :param mu_snp_expr: Float64Expression of the mutation rate.
+    :param observed_variants_expr: Int64Expression of the observed variant counts
       for each combination of keys in `ht`.
-    :param possible_variants_expr: The Int64Expression of the possible variant counts
+    :param possible_variants_expr: Int64Expression of the possible variant counts
       for each combination of keys in `ht`.
-    :param pop_observed_variants_exprs: A dictionary where its key is a population name
-      and its value is a ArrayNumericExpression of observed variant counts for
+    :param pop_observed_variants_exprs: Dictionary with population names (keys)
+      and observed variant counts ArrayNumericExpressions (values) for
       specified populations. Default is {}.
     :param weighted: Whether to generalize the model to weighted least squares using
       'possible_variants'. Default is False.

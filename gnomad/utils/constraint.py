@@ -360,3 +360,52 @@ def collapse_strand(
         if isinstance(t, hl.Table)
         else t.annotate_rows(**collapse_expr)
     )
+
+def annotate_constraint_groupings(ht: Union[hl.Table, hl.MatrixTable],
+                                  custom_model: str = None) -> Tuple[Union[hl.Table, hl.MatrixTable], List[str]]:
+    """
+    Add constraint annotations to be used for groupings.
+    
+    Function adds the following annotations:
+        - annotation - could be 'most_severe_consequence' of either 'worst_csq_by_gene' or 'transcript_consequences', or 'csq' of 'tx_annotation'
+        - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
+        - gene - gene_symbol
+        - coverage - exome coverage
+        - transcript (added when custom model isn't specified as worst_csq)
+        - canonical (added when custom model isn't specified as worst_csq)
+    
+    ..note::
+        HT must be exploded against whatever axis.
+
+    :param ht: Input Table or MatrixTable.
+    :param custom_model: The customized model (one of "standard" or "worst_csq" for now), defaults to None.
+    :return: A tuple of input Table or MatrixTable with grouping annotations added and the names of added annotations.
+    """
+    if custom_model == 'worst_csq':
+        groupings = {
+            'annotation': ht.worst_csq_by_gene.most_severe_consequence,
+            'modifier': hl.case()
+                .when(hl.is_defined(ht.worst_csq_by_gene.lof),
+                      ht.worst_csq_by_gene.lof)
+                .when(hl.is_defined(ht.worst_csq_by_gene.polyphen_prediction),
+                      ht.worst_csq_by_gene.polyphen_prediction)
+                .default('None'),
+            'gene': ht.worst_csq_by_gene.gene_symbol,
+            'coverage': ht.exome_coverage
+        }
+    else:
+        groupings = {
+            'annotation': ht.transcript_consequences.most_severe_consequence,
+            'modifier': hl.case()
+                .when(hl.is_defined(ht.transcript_consequences.lof),
+                      ht.transcript_consequences.lof)
+                .when(hl.is_defined(ht.transcript_consequences.polyphen_prediction),
+                      ht.transcript_consequences.polyphen_prediction)
+                .default('None'),
+            'transcript': ht.transcript_consequences.transcript_id,
+            'gene': ht.transcript_consequences.gene_symbol,
+            'canonical': hl.or_else(ht.transcript_consequences.canonical == 1, False),
+            'coverage': ht.exome_coverage
+        }
+    ht = ht.annotate(**groupings)
+    return ht, tuple(groupings.keys())

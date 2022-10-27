@@ -608,8 +608,8 @@ def build_plateau_models(
     }
     # Build plateau models using sites in population downsamplings if
     # population is specified.
-    for pop, pop_observed_variants_expr in pop_observed_variants_exprs.items():
-        plateau_models_agg_expr[pop] = hl.agg.array_agg(
+    plateau_models_agg_expr = {
+        pop: hl.agg.array_agg(
             lambda pop_observed_variants: hl.agg.group_by(
                 cpg_expr,
                 hl.agg.linreg(
@@ -619,7 +619,8 @@ def build_plateau_models(
                 ).beta,
             ),
             pop_observed_variants_expr,
-        )
+        ) for pop, pop_observed_variants_expr in pop_observed_variants_exprs.items()
+    }
     return plateau_models_agg_expr
 
 

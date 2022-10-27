@@ -142,7 +142,8 @@ def assign_population_pcs(
             - `pc_cols` should be one of::
                 - A list of integers where each element is one of the PCs to use
                 - A list of strings where each element is one of the PCs to use
-                - An ArrayExpression containing all the PCs to use
+                - An ArrayExpression of Floats where each element is one of the PCs
+                  to use
             - A Hail Table will be returned as output
         - A Pandas DataFrame. In this case:
             - Each PC should be in a separate column and `pc_cols` is the list of all

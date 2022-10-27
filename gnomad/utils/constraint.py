@@ -619,7 +619,8 @@ def build_plateau_models(
                 ).beta,
             ),
             pop_observed_variants_expr,
-        ) for pop, pop_observed_variants_expr in pop_observed_variants_exprs.items()
+        )
+        for pop, pop_observed_variants_expr in pop_observed_variants_exprs.items()
     }
     return plateau_models_agg_expr
 

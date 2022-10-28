@@ -521,7 +521,7 @@ def build_models(
         mu_snp_expr=high_cov_group_ht.mu_snp,
         observed_variants_expr=high_cov_group_ht.observed_variants,
         possible_variants_expr=high_cov_group_ht.possible_variants,
-        pop_observed_variants_exprs_arr=hl.array(
+        pop_observed_variants_array_expr=hl.array(
             [high_cov_group_ht[f"observed_{pop}"] for pop in pops]
         ),
         weighted=weighted,
@@ -616,7 +616,7 @@ def build_plateau_models(
             ).beta,
         )
     }
-    if pop_observed_variants_exprs_arr is not None:
+    if pop_observed_variants_array_expr is not None:
         # Build plateau models using sites in population downsamplings if
         # population is specified.
         plateau_models_agg_expr["pop"] = hl.agg.array_agg(
@@ -631,7 +631,7 @@ def build_plateau_models(
                 ),
                 pop_observed_variants_expr,
             ),
-            pop_observed_variants_exprs_arr,
+            pop_observed_variants_array_expr,
         )
     return plateau_models_agg_expr
 

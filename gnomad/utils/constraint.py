@@ -36,7 +36,7 @@ def annotate_with_mu(
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.
     :param mu_annotation: The name of mutation rate annotation in `mutation_ht`.
-      Default is 'mu_snp'.
+        Default is 'mu_snp'.
     :return: Table with mutational rate annotation added.
     """
     mu = mutation_ht.index(*[ht[k] for k in mutation_ht.key])[mu_annotation]
@@ -116,30 +116,30 @@ def count_variants_by_group(
 
     :param ht: Input Hail Table.
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations. If
-      `freq_expr` is None and any of `count_downsamplings`, `max_af`, and
-      `count_singletons` is True, `freq_expr` would be `ht.freq`.
+        `freq_expr` is None and any of `count_downsamplings`, `max_af`, and
+        `count_singletons` is True, `freq_expr` would be `ht.freq`.
     :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to
-      `freq_expr`. If `count_downsamplings` and `freq_meta_expr` is None,
-      `freq_meta_expr` would be `ht.freq_meta`.
+        `freq_expr`. If `count_downsamplings` and `freq_meta_expr` is None,
+        `freq_meta_expr` would be `ht.freq_meta`.
     :param count_singletons: Whether to count singletons (defined by `singleton_expr`).
-      Default is False.
+        Default is False.
     :param count_downsamplings: Tuple of populations to use for downsampling counts.
-      Default is ().
+        Default is ().
     :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'.
-      Default is ().
+        Default is ().
     :param partition_hint: Target number of partitions for aggregation. Default is 100.
     :param omit_methylation: Whether to omit 'methylation_level' from the grouping when
-      counting variants. Default is False.
+        counting variants. Default is False.
     :param use_table_group_by: Whether to group `ht` before aggregating the variant
-      counts. If `use_table_group_by` is False, function will return a hl.
-      StructExpression. Default is False.
+        counts. If `use_table_group_by` is False, function will return a hl.
+        StructExpression. Default is False.
     :param singleton_expr: Expression for defining a singleton. When `count_singletons`
-      is True and `singleton_expr` is None, `singleton_expression` would be `freq_expr
-      [0].AC == 1`. Default is None.
+        is True and `singleton_expr` is None, `singleton_expression` would be `freq_expr
+        [0].AC == 1`. Default is None.
     :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
-      applied.
+        applied.
     :return: Table including 'variant_count' annotation and if requested,
-      `singleton_count` and downsampling counts.
+        `singleton_count` and downsampling counts.
     """
     if freq_expr is None and (
         count_downsamplings or max_af or (count_singletons and singleton_expr is None)
@@ -240,18 +240,18 @@ def downsampling_counts_expr(
 
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations.
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
-      element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
-      'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
+        element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
+        'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
     :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`.
-      Default is 'global'.
+        Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
-      `freq_meta_expr`. Default is 'adj'.
+        `freq_meta_expr`. Default is 'adj'.
     :param singleton: Whether to filter to only singletons before counting (AC == 1).
-      Default is False.
+        Default is False.
     :param max_af: Maximum variant allele frequency to keep. By default no allele
-      frequency cutoff is applied.
+        frequency cutoff is applied.
     :return: Aggregation Expression for an array of the variant counts in downsamplings
-      for specified population.
+        for specified population.
     """
     # Get indices of dictionaries in meta dictionaries that only have the
     # "downsampling" key with specified "group" and "pop" values.
@@ -272,7 +272,7 @@ def downsampling_counts_expr(
 
         :param i: The index of a downsampling.
         :return: Returns 1 if the variant in the downsampling with specified index met
-          the criteria. Otherwise, returns 0.
+            the criteria. Otherwise, returns 0.
         """
         if singleton:
             return hl.int(freq_expr[i].AC == 1)
@@ -394,7 +394,7 @@ def collapse_strand(
 
     :param ht: Input Table.
     :return: Table with deduplicated context annotation (ref, alt, context,
-      was_flipped).
+        was_flipped).
     """
     ref_g_or_t_expr = (t.ref == "G") | (t.ref == "T")
     collapse_expr = {
@@ -488,15 +488,15 @@ def build_models(
 
     :param coverage_ht: Input coverage Table.
     :param weighted: Whether to weight the plateau models (a linear regression
-      model) by 'possible_variants'. Default is False.
+        model) by 'possible_variants'. Default is False.
     :param pops: List of populations used to build plateau models.
-      Default is ().
+        Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
-      Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
+        Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
     :param cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff
-      are considered well covered and will be used to build plateau models. Sites below
-      this cutoff have low coverage and will be used to build coverage models. Defaults
-      to `COVERAGE_CUTOFF`.
+        are considered well covered and will be used to build plateau models. Sites
+        below this cutoff have low coverage and will be used to build coverage models.
+        Default is `COVERAGE_CUTOFF`.
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage above `cov_cutoff`.
@@ -593,17 +593,19 @@ def build_plateau_models(
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param mu_snp_expr: Float64Expression of the mutation rate.
     :param observed_variants_expr: Int64Expression of the observed variant counts
-      for each combination of keys in `ht`.
+        for each combination of keys in `ht`.
     :param possible_variants_expr: Int64Expression of the possible variant counts
-      for each combination of keys in `ht`.
+        for each combination of keys in `ht`.
     :param pop_observed_variants_array_expr: ArrayExpression includes all observed
-      variant counts ArrayNumericExpressions for specified populations. Default is None.
+        variant counts ArrayNumericExpressions for specified populations. Default is
+        None.
     :param weighted: Whether to generalize the model to weighted least squares using
-      'possible_variants'. Default is False.
+        'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each
-      population. The possible keys for this dictionary are 'total' and 'pop', and the values
-      are a dictionary (for 'total') or a list of list of dictionaries (for 'pop').
-      The key of the value dictionary is CpG status (BooleanExpression), and the value is an ArrayExpression containing intercept and slope values.
+        population. The possible keys for this dictionary are 'total' and 'pop', and
+        the values are a dictionary (for 'total') or a list of list of dictionaries
+        (for 'pop'). The key of the value dictionary is CpG status (BooleanExpression),
+        and the value is an ArrayExpression containing intercept and slope values.
     """
     # Build a plateau model using all the sites in the Table.
     plateau_models_agg_expr = {
@@ -651,7 +653,7 @@ def build_coverage_model(
     where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
-      for a given coverage level.
+        for a given coverage level.
     :param log_coverage_expr: The Float64Expression of log10 coverage.
     :return: Tuple with intercept and slope of the model.
     """

@@ -1,6 +1,7 @@
 """Script containing generic constraint functions that may be used in the constraint pipeline."""
 
 import logging
+from re import T
 from typing import Any, Optional, Tuple, Union
 
 import hail as hl
@@ -11,6 +12,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
+
+from gnomad.utils.vep import process_consequences
 
 
 def annotate_with_mu(
@@ -363,89 +366,71 @@ def collapse_strand(
 
 
 def annotate_constraint_groupings(
-    most_severe_consequence_expr,
-    lof_expr,
-    polyphen_prediction_expr,
-    gene_symbol_expr,
-    exome_coverage_expr,
-    transcript_id_expr,
-    canonical_expr,
-    custom_model: str = None
+    t: Union[hl.Table, hl.MatrixTable],
+    vep_annotation: str,
+    vep_root: str = "vep",
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
     Add constraint annotations to be used for groupings.
 
     Function adds the following annotations:
-        - annotation -'most_severe_consequence' of either 'worst_csq_by_gene'
-          or 'transcript_consequences'
+        - annotation -'most_severe_consequence' annotation in `vep_annotation`
         - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
-          of either 'worst_csq_by_gene' or 'transcript_consequences'
-        - gene - 'gene_symbol' of either 'worst_csq_by_gene' or
-          'transcript_consequences'
-        - coverage - exome coverage
-        - transcript (added when custom model is specified as "standard")
-        - canonical (added when custom model is specified as "standard")
+          in `vep_annotation`
+        - gene - 'gene_symbol' annotation inside `vep_annotation`
+        - coverage - exome coverage in `t`
+        - transcript (added when `vep_annotation` is specified as "transcript_consequences")
+        - canonical (added when `vep_annotation` is specified as "transcript_consequences")
 
-    ..note::
-        HT must be exploded against whatever axis.
-
-    :param ht: Input Table or MatrixTable.
-    :param custom_model: The customized model (one of "standard" or "worst_csq").
-      Default is None.
+    :param t: Input Table or MatrixTable.
+    :param vep_annotation: Name of annotation in VEP annotation that will be used for 
+      constraint annotation. 
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
       the names of added annotations.
     """
-    if custom_model == "worst_csq":
-        context_ht = process_consequences(context_ht)
-        context_ht = context_ht.transmute(
-            worst_csq_by_gene=context_ht.vep.worst_csq_by_gene
-        )
-        context_ht = context_ht.explode(context_ht.worst_csq_by_gene)
-        exome_ht = process_consequences(exome_ht)
-        exome_ht = exome_ht.transmute(worst_csq_by_gene=exome_ht.vep.worst_csq_by_gene)
-        exome_ht = exome_ht.explode(exome_ht.worst_csq_by_gene)
-        groupings = {
-            "annotation": ht.worst_csq_by_gene.most_severe_consequence,
-            "modifier": hl.case()
-            .when(hl.is_defined(ht.worst_csq_by_gene.lof), ht.worst_csq_by_gene.lof)
-            .when(
-                hl.is_defined(ht.worst_csq_by_gene.polyphen_prediction),
-                ht.worst_csq_by_gene.polyphen_prediction,
-            )
-            .default("None"),
-            "gene": ht.worst_csq_by_gene.gene_symbol,
-            "coverage": ht.exome_coverage,
-        }
-    else:
-        context_ht = context_ht.transmute(
-            transcript_consequences=context_ht.vep.transcript_consequences
-        )
-        context_ht = context_ht.explode(context_ht.transcript_consequences)
-        exome_ht = exome_ht.transmute(
-            transcript_consequences=exome_ht.vep.transcript_consequences
-        )
-        exome_ht = exome_ht.explode(exome_ht.transcript_consequences)
+    if vep_annotation not in t[vep_root].keys():
+        raise ValueError(f'{vep_annotation} is not a row field of the VEP annotation in Table')
 
-        groupings = {
-            "annotation": ht.transcript_consequences.most_severe_consequence,
-            "modifier": hl.case()
-            .when(
-                hl.is_defined(ht.transcript_consequences.lof),
-                ht.transcript_consequences.lof,
-            )
-            .when(
-                hl.is_defined(ht.transcript_consequences.polyphen_prediction),
-                ht.transcript_consequences.polyphen_prediction,
-            )
-            .default("None"),
-            "transcript": ht.transcript_consequences.transcript_id,
-            "gene": ht.transcript_consequences.gene_symbol,
-            "canonical": hl.or_else(ht.transcript_consequences.canonical == 1, False),
-            "coverage": ht.exome_coverage,
-        }
-    ht = (
-        ht.annotate(**groupings)
-        if isinstance(ht, hl.Table)
-        else ht.annotate_rows(**groupings)
+    # Annotate 'worst_csq_by_gene' to t if t is used to build the "worst_cq" model.
+    if vep_annotation == "worst_csq_by_gene":
+        t = process_consequences(t)
+    # Create top-level annotation for `vep_annotation` by pulling out from `vep_root`
+    # annotation.
+    t = t.transmute(**{vep_annotation: t[vep_root][vep_annotation]})
+    # Explode the `vep_annotation`.
+    t = t.explode(t[vep_annotation])
+
+    vep_annotation_expr = t[vep_annotation]
+    lof_expr = vep_annotation_expr.lof
+    polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
+
+    # Create constraint annotations to be used for groupings.
+    groupings = {
+        "annotation": vep_annotation_expr.most_severe_consequence,
+        "modifier": hl.case()
+        .when(
+            hl.is_defined(lof_expr),
+            lof_expr,
+        )
+        .when(
+            hl.is_defined(polyphen_prediction_expr),
+            polyphen_prediction_expr,
+        )
+        .default("None"),
+        "gene": vep_annotation_expr.gene_symbol,
+        "coverage": t.exome_coverage,
+    }
+
+    # Add 'transcript' and 'canonical' annotation if grouping is used for the
+    # "standard" model.
+    if vep_annotation == "transcript_consequences":
+        groupings["transcript"] = vep_annotation_expr.transcript_id
+        groupings["canonical"] = hl.or_else(vep_annotation_expr.canonical == 1, False)
+
+    t = (
+        t.annotate(**groupings)
+        if isinstance(t, hl.Table)
+        else t.annotate_rows(**groupings)
     )
-    return ht, tuple(groupings.keys())
+    return t, tuple(groupings.keys())

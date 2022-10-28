@@ -473,7 +473,7 @@ def build_models(
         `coverage_ht`:
         - context - trinucleotide genomic context
         - ref - the reference allele
-        - alt - the alternate base
+        - alt - the alternate allele
         - methylation_level - methylation level
         - cpg - whether the site is CpG site
         - exome_coverage - median exome coverage at integer values between 1-100
@@ -529,13 +529,15 @@ def build_models(
     plateau_models = dict(
         high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
     )
-
-    if pops:
-        # Map the models to their corresponding populations.
-        pop_models_arr = plateau_models["pop"]
-        for idx, pop in enumerate(pops):
-            plateau_models[pop] = pop_models_arr[idx]
-        plateau_models.pop("pop")
+    _plateau_models = dict(
+        high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
+    )
+    # Map the models to their corresponding populations if pops is specified.
+    pop_models_expr = _plateau_models["pop"]
+    plateau_models = {
+        pop: hl.literal(pop_models_expr[idx]) for idx, pop in enumerate(pops)
+    }
+    plateau_models["total"] = (_plateau_models["total"],)
     plateau_models = hl.struct(**plateau_models)
 
     # Filter to sites with coverage below `cov_cutoff` and larger than 0.

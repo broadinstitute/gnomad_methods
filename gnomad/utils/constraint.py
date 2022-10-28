@@ -463,7 +463,6 @@ def build_models(
     `high_coverage_scale_factor` = sum('observed_variants') /
                         sum('possible_variants' * 'mu_snp') at high coverage sites
 
-
     .. note::
 
         This function expects that the input Table(`coverage_ht`) was created using
@@ -493,7 +492,7 @@ def build_models(
     :param pops: List of populations used to build plateau models.
       Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
-      Default is ("context","ref", "alt", "methylation_level", "mu_snp").
+      Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
     :param cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff
       are considered well covered and will be used to build plateau models. Sites below
       this cutoff have low coverage and will be used to build coverage models. Defaults
@@ -579,7 +578,7 @@ def build_plateau_models(
     mu_snp_expr: hl.expr.Float64Expression,
     observed_variants_expr: hl.expr.Int64Expression,
     possible_variants_expr: hl.expr.Int64Expression,
-    pop_observed_variants_exprs_arr: Dict[str, hl.ArrayNumericExpression] = None,
+    pop_observed_variants_array_expr: hl.expr.ArrayExpression = None,
     weighted: bool = False,
 ) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
     """
@@ -600,10 +599,9 @@ def build_plateau_models(
     :param weighted: Whether to generalize the model to weighted least squares using
       'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each
-      population. The key of the dictionary is either 'total' or 'pop', and the value
-      is a dictionary (or a list of list of dictionaries if
-      `pop_observed_variants_exprs` is specified) mapping cpg BooleanExpression to a
-      intercept and a slope.
+      population. The possible keys for this dictionary are 'total' and 'pop', and the values
+      are a dictionary (for 'total') or a list of list of dictionaries (for 'pop').
+      The key of the value dictionary is CpG status (BooleanExpression), and the value is an ArrayExpression containing intercept and slope values.
     """
     # Build a plateau model using all the sites in the Table.
     plateau_models_agg_expr = {

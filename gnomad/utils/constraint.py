@@ -596,9 +596,9 @@ def build_plateau_models(
         for each combination of keys in `ht`.
     :param possible_variants_expr: Int64Expression of the possible variant counts
         for each combination of keys in `ht`.
-    :param pop_observed_variants_array_expr: ArrayExpression includes all observed
-        variant counts ArrayNumericExpressions for specified populations. Default is
-        None.
+    :param pop_observed_variants_array_expr: Nested ArrayExpression with all observed
+        variant counts ArrayNumericExpressions for specified populations. e.g. [[1,1,1]
+        [1,1,1]] Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each

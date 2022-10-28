@@ -384,10 +384,10 @@ def annotate_constraint_groupings(
 
     :param t: Input Table or MatrixTable.
     :param vep_annotation: Name of annotation in VEP annotation that will be used for 
-      constraint annotation. 
+        constraint annotation. 
     :param vep_root: Name used for VEP annotation. Default is 'vep'.
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
-      the names of added annotations.
+        the names of added annotations.
     """
     if vep_annotation not in t[vep_root].keys():
         raise ValueError(f'{vep_annotation} is not a row field of the VEP annotation in Table')

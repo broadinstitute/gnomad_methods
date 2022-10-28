@@ -525,7 +525,7 @@ def build_models(
         pop_observed_variants_exprs_arr=hl.array(
             [high_cov_group_ht[f"observed_{pop}"] for pop in pops]
         ),
-        weighted=True,
+        weighted=weighted,
     )
     plateau_models = dict(
         high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))

@@ -363,7 +363,14 @@ def collapse_strand(
 
 
 def annotate_constraint_groupings(
-    ht: Union[hl.Table, hl.MatrixTable], custom_model: str = None
+    most_severe_consequence_expr,
+    lof_expr,
+    polyphen_prediction_expr,
+    gene_symbol_expr,
+    exome_coverage_expr,
+    transcript_id_expr,
+    canonical_expr,
+    custom_model: str = None
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
     Add constraint annotations to be used for groupings.
@@ -389,6 +396,14 @@ def annotate_constraint_groupings(
       the names of added annotations.
     """
     if custom_model == "worst_csq":
+        context_ht = process_consequences(context_ht)
+        context_ht = context_ht.transmute(
+            worst_csq_by_gene=context_ht.vep.worst_csq_by_gene
+        )
+        context_ht = context_ht.explode(context_ht.worst_csq_by_gene)
+        exome_ht = process_consequences(exome_ht)
+        exome_ht = exome_ht.transmute(worst_csq_by_gene=exome_ht.vep.worst_csq_by_gene)
+        exome_ht = exome_ht.explode(exome_ht.worst_csq_by_gene)
         groupings = {
             "annotation": ht.worst_csq_by_gene.most_severe_consequence,
             "modifier": hl.case()
@@ -402,6 +417,15 @@ def annotate_constraint_groupings(
             "coverage": ht.exome_coverage,
         }
     else:
+        context_ht = context_ht.transmute(
+            transcript_consequences=context_ht.vep.transcript_consequences
+        )
+        context_ht = context_ht.explode(context_ht.transcript_consequences)
+        exome_ht = exome_ht.transmute(
+            transcript_consequences=exome_ht.vep.transcript_consequences
+        )
+        exome_ht = exome_ht.explode(exome_ht.transcript_consequences)
+
         groupings = {
             "annotation": ht.transcript_consequences.most_severe_consequence,
             "modifier": hl.case()

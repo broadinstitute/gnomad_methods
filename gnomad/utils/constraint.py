@@ -522,12 +522,22 @@ def build_models(
         mu_snp_expr=high_cov_group_ht.mu_snp,
         observed_variants_expr=high_cov_group_ht.observed_variants,
         possible_variants_expr=high_cov_group_ht.possible_variants,
-        pop_observed_variants_exprs={
-            pop: high_cov_group_ht[f"observed_{pop}"] for pop in pops
-        },
-        weighted=weighted,
+        pop_observed_variants_exprs_arr=hl.array(
+            [high_cov_group_ht[f"observed_{pop}"] for pop in pops]
+        ),
+        weighted=True,
     )
-    plateau_models = high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
+    plateau_models = dict(
+        high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
+    )
+
+    if pops:
+        # Map the models to their corresponding populations.
+        pop_models_arr = plateau_models["pop"]
+        for idx, pop in enumerate(pops):
+            plateau_models[pop] = pop_models_arr[idx]
+        plateau_models.pop("pop")
+    plateau_models = hl.struct(**plateau_models)
 
     # Filter to sites with coverage below `cov_cutoff` and larger than 0.
     low_cov_ht = coverage_ht.filter(
@@ -569,7 +579,7 @@ def build_plateau_models(
     mu_snp_expr: hl.expr.Float64Expression,
     observed_variants_expr: hl.expr.Int64Expression,
     possible_variants_expr: hl.expr.Int64Expression,
-    pop_observed_variants_exprs: Dict[str, hl.ArrayNumericExpression] = {},
+    pop_observed_variants_exprs_arr: Dict[str, hl.ArrayNumericExpression] = None,
     weighted: bool = False,
 ) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
     """
@@ -585,15 +595,15 @@ def build_plateau_models(
       for each combination of keys in `ht`.
     :param possible_variants_expr: Int64Expression of the possible variant counts
       for each combination of keys in `ht`.
-    :param pop_observed_variants_exprs: Dictionary with population names (keys)
-      and observed variant counts ArrayNumericExpressions (values) for
-      specified populations. Default is {}.
+    :param pop_observed_variants_exprs_arr: ArrayExpression includes all observed
+      variant counts ArrayNumericExpressions for specified populations. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
       'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each
-      population. The key of the dictionary is a population name, and the value is a
-      dictionary (or a list of dictionaries if `pop_observed_variants_exprs` is
-      specified) mapping cpg BooleanExpression to a intercept and a slope.
+      population. The key of the dictionary is either 'total' or 'pop', and the value
+      is a dictionary (or a list of list of dictionaries if
+      `pop_observed_variants_exprs` is specified) mapping cpg BooleanExpression to a
+      intercept and a slope.
     """
     # Build a plateau model using all the sites in the Table.
     plateau_models_agg_expr = {
@@ -606,22 +616,23 @@ def build_plateau_models(
             ).beta,
         )
     }
-    # Build plateau models using sites in population downsamplings if
-    # population is specified.
-    plateau_models_agg_expr = {
-        pop: hl.agg.array_agg(
-            lambda pop_observed_variants: hl.agg.group_by(
-                cpg_expr,
-                hl.agg.linreg(
-                    pop_observed_variants / possible_variants_expr,
-                    [1, mu_snp_expr],
-                    weight=possible_variants_expr if weighted else None,
-                ).beta,
+    if pop_observed_variants_exprs_arr is not None:
+        # Build plateau models using sites in population downsamplings if
+        # population is specified.
+        plateau_models_agg_expr["pop"] = hl.agg.array_agg(
+            lambda pop_observed_variants_expr: hl.agg.array_agg(
+                lambda pop_observed_variants: hl.agg.group_by(
+                    cpg_expr,
+                    hl.agg.linreg(
+                        pop_observed_variants / possible_variants_expr,
+                        [1, mu_snp_expr],
+                        weight=possible_variants_expr,
+                    ).beta,
+                ),
+                pop_observed_variants_expr,
             ),
-            pop_observed_variants_expr,
+            pop_observed_variants_exprs_arr,
         )
-        for pop, pop_observed_variants_expr in pop_observed_variants_exprs.items()
-    }
     return plateau_models_agg_expr
 
 

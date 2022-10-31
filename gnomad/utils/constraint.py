@@ -527,6 +527,7 @@ def build_models(
     _plateau_models = dict(
         high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
     )
+    
     # Map the models to their corresponding populations if pops is specified.
     pop_models = _plateau_models["pop"]
     plateau_models = {pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)}
@@ -602,7 +603,7 @@ def build_plateau_models(
     dictionary in the nested list is CpG status (BooleanExpression), and the value is
     an ArrayExpression containing intercept and slope values.
     """
-    # Build a plateau model using all the sites in the Table.
+    # Build plateau models for all sites
     plateau_models_agg_expr = {
         "total": hl.agg.group_by(
             cpg_expr,
@@ -645,8 +646,8 @@ def build_coverage_model(
 
     The x and y of the coverage model:
     - x: log10('exome_coverage') at low coverage site
-    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage site
-    where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage site
+    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
+    where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage sites
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.

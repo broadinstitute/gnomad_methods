@@ -519,7 +519,7 @@ def build_models(
         mu_snp_expr=high_cov_group_ht.mu_snp,
         observed_variants_expr=high_cov_group_ht.observed_variants,
         possible_variants_expr=high_cov_group_ht.possible_variants,
-        pop_observed_variants_array_expr=[
+        pops_observed_variants_array_expr=[
             high_cov_group_ht[f"observed_{pop}"] for pop in pops
         ],
         weighted=weighted,
@@ -527,10 +527,13 @@ def build_models(
     _plateau_models = dict(
         high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
     )
-    
-    # Map the models to their corresponding populations if pops is specified.
-    pop_models = _plateau_models["pop"]
-    plateau_models = {pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)}
+    pop_models = {}
+    if pops:
+        # Map the models to their corresponding populations if pops is specified.
+        pop_models = _plateau_models["pop"]
+        plateau_models = {
+            pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
+        }
     plateau_models["total"] = _plateau_models["total"]
     plateau_models = hl.struct(**plateau_models)
 
@@ -574,7 +577,7 @@ def build_plateau_models(
     mu_snp_expr: hl.expr.Float64Expression,
     observed_variants_expr: hl.expr.Int64Expression,
     possible_variants_expr: hl.expr.Int64Expression,
-    pop_observed_variants_array_expr: hl.expr.ArrayExpression = None,
+    pops_observed_variants_array_expr: List[hl.expr.ArrayExpression] = [],
     weighted: bool = False,
 ) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
     """
@@ -586,11 +589,9 @@ def build_plateau_models(
 
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param mu_snp_expr: Float64Expression of the mutation rate.
-    :param observed_variants_expr: Int64Expression of the observed variant counts
-        for each combination of keys in `ht`.
-    :param possible_variants_expr: Int64Expression of the possible variant counts
-        for each combination of keys in `ht`.
-    :param pop_observed_variants_array_expr: Nested ArrayExpression with all observed
+    :param observed_variants_expr: Int64Expression of the observed variant counts.
+    :param possible_variants_expr: Int64Expression of the possible variant counts.
+    :param pops_observed_variants_array_expr: Nested ArrayExpression with all observed
         variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,
         1],[1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
@@ -614,11 +615,11 @@ def build_plateau_models(
             ).beta,
         )
     }
-    if pop_observed_variants_array_expr is not None:
+    if pops_observed_variants_array_expr:
         # Build plateau models using sites in population downsamplings if
         # population is specified.
         plateau_models_agg_expr["pop"] = hl.agg.array_agg(
-            lambda pop_observed_variants_expr: hl.agg.array_agg(
+            lambda pop_observed_variants_array_expr: hl.agg.array_agg(
                 lambda pop_observed_variants: hl.agg.group_by(
                     cpg_expr,
                     hl.agg.linreg(
@@ -627,9 +628,9 @@ def build_plateau_models(
                         weight=possible_variants_expr,
                     ).beta,
                 ),
-                pop_observed_variants_expr,
+                pop_observed_variants_array_expr,
             ),
-            pop_observed_variants_array_expr,
+            pops_observed_variants_array_expr,
         )
     return plateau_models_agg_expr
 

@@ -140,15 +140,15 @@ def assign_population_pcs(
     As input, this function can either take:
         - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
             - `pc_cols` should be one of::
-                - A list of integers where each element is one of the PCs to use
-                - A list of strings where each element is one of the PCs to use
-                - An ArrayExpression of Floats where each element is one of the PCs
+                - A list of integers where each element is one of the PCs to use.
+                - A list of strings where each element is one of the PCs to use.
+                - An ArrayExpression of Floats where each element is one of the PCs.
                   to use
-            - A Hail Table will be returned as output
+            - A Hail Table will be returned as output.
         - A Pandas DataFrame. In this case:
             - Each PC should be in a separate column and `pc_cols` is the list of all
               the columns containing the PCs to use.
-            - A pandas DataFrame is returned as output
+            - A pandas DataFrame is returned as output.
 
     .. note::
 

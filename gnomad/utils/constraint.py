@@ -494,9 +494,7 @@ def build_models(
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
     :param cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff
-        are considered well covered and will be used to build plateau models. Sites
-        below this cutoff have low coverage and will be used to build coverage models.
-        Default is `COVERAGE_CUTOFF`.
+        are considered well covered. Default is `COVERAGE_CUTOFF`.
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage above `cov_cutoff`.
@@ -526,18 +524,15 @@ def build_models(
         ),
         weighted=weighted,
     )
-    plateau_models = dict(
-        high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
-    )
     _plateau_models = dict(
         high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
     )
     # Map the models to their corresponding populations if pops is specified.
-    pop_models_expr = _plateau_models["pop"]
+    pop_models = _plateau_models["pop"]
     plateau_models = {
-        pop: hl.literal(pop_models_expr[idx]) for idx, pop in enumerate(pops)
+        pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
     }
-    plateau_models["total"] = (_plateau_models["total"],)
+    plateau_models["total"] = _plateau_models["total"]
     plateau_models = hl.struct(**plateau_models)
 
     # Filter to sites with coverage below `cov_cutoff` and larger than 0.
@@ -545,7 +540,7 @@ def build_models(
         (coverage_ht.exome_coverage < cov_cutoff) & (coverage_ht.exome_coverage > 0)
     )
 
-    # Metric that represents the relative mutability of the exome calculated on high
+    # Create metric that represents the relative mutability of the exome calculated on high
     # coverage sites and will be used as scaling factor when building the coverage
     # model.
     high_coverage_scale_factor = high_cov_ht.aggregate(
@@ -597,8 +592,8 @@ def build_plateau_models(
     :param possible_variants_expr: Int64Expression of the possible variant counts
         for each combination of keys in `ht`.
     :param pop_observed_variants_array_expr: Nested ArrayExpression with all observed
-        variant counts ArrayNumericExpressions for specified populations. e.g. [[1,1,1]
-        [1,1,1]] Default is None.
+        variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,1],
+        [1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each
@@ -655,13 +650,13 @@ def build_coverage_model(
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.
     :param log_coverage_expr: The Float64Expression of log10 coverage.
-    :return: Tuple with intercept and slope of the model.
+    :return: StructExpression with intercept and slope of the model.
     """
     return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
 
 
 def get_all_pop_lengths(
-    ht,
+    ht: hl.Table,
     pops: Tuple[str],
     prefix: str = "observed_",
 ) -> List[Tuple[str, str]]:

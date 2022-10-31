@@ -598,12 +598,12 @@ def build_plateau_models(
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes for plateau models of each
-    population. The keys for this dictionary are 'total' and 'pop'. The values for
-    'total' is a dictionary (e.g., <DictExpression of type dict<bool,
-    array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.g.,
-    <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The key of the
-    dictionary in the nested list is CpG status (BooleanExpression), and the value is
-    an ArrayExpression containing intercept and slope values.
+        population. The keys for this dictionary are 'total' and 'pop'. The values for
+        'total' is a dictionary (e.g., <DictExpression of type dict<bool,
+        array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
+        g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The 
+        key of the dictionary in the nested list is CpG status (BooleanExpression), and 
+        the value is an ArrayExpression containing intercept and slope values.
     """
     # Build plateau models for all sites
     plateau_models_agg_expr = {

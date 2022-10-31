@@ -527,6 +527,7 @@ def build_models(
     _plateau_models = dict(
         high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
     )
+
     pop_models = {}
     if pops:
         # Map the models to their corresponding populations if pops is specified.

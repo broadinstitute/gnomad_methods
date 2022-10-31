@@ -519,9 +519,7 @@ def build_models(
         mu_snp_expr=high_cov_group_ht.mu_snp,
         observed_variants_expr=high_cov_group_ht.observed_variants,
         possible_variants_expr=high_cov_group_ht.possible_variants,
-        pop_observed_variants_array_expr=hl.array(
-            [high_cov_group_ht[f"observed_{pop}"] for pop in pops]
-        ),
+        pop_observed_variants_array_expr=[high_cov_group_ht[f"observed_{pop}"] for pop in pops],
         weighted=weighted,
     )
     _plateau_models = dict(
@@ -540,9 +538,9 @@ def build_models(
         (coverage_ht.exome_coverage < cov_cutoff) & (coverage_ht.exome_coverage > 0)
     )
 
-    # Create metric that represents the relative mutability of the exome calculated on high
-    # coverage sites and will be used as scaling factor when building the coverage
-    # model.
+    # Create a metric that represents the relative mutability of the exome calculated 
+    # on high coverage sites and will be used as scaling factor when building the 
+    # coverage model.
     high_coverage_scale_factor = high_cov_ht.aggregate(
         hl.agg.sum(high_cov_ht.observed_variants)
         / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
@@ -592,15 +590,17 @@ def build_plateau_models(
     :param possible_variants_expr: Int64Expression of the possible variant counts
         for each combination of keys in `ht`.
     :param pop_observed_variants_array_expr: Nested ArrayExpression with all observed
-        variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,1],
-        [1,1,1]]`. Default is None.
+        variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,
+        1],[1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
-    :return: A dictionary of intercepts and slopes for plateau models of each
-        population. The possible keys for this dictionary are 'total' and 'pop', and
-        the values are a dictionary (for 'total') or a list of list of dictionaries
-        (for 'pop'). The key of the value dictionary is CpG status (BooleanExpression),
-        and the value is an ArrayExpression containing intercept and slope values.
+    :return: A dictionary of intercepts and slopes for plateau models of each 
+    population. The keys for this dictionary are 'total' and 'pop'. The values for 
+    'total' is a dictionary (e.g., <DictExpression of type dict<bool, 
+    array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.g., 
+    <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The key of the 
+    dictionary in the nested list is CpG status (BooleanExpression), and the value is 
+    an ArrayExpression containing intercept and slope values.
     """
     # Build a plateau model using all the sites in the Table.
     plateau_models_agg_expr = {
@@ -640,7 +640,8 @@ def build_coverage_model(
     """
     Build coverage model.
 
-    This function uses linear regression to build a model of log10(coverage) to correct proportion of expected variation at low coverage sites.
+    This function uses linear regression to build a model of log10(coverage) to correct 
+    proportion of expected variation at low coverage sites.
 
     The x and y of the coverage model:
     - x: log10('exome_coverage') at low coverage site
@@ -671,6 +672,8 @@ def get_all_pop_lengths(
     :param prefix: Prefix of population observed variant counts. Default is `observed_`.
     :return: A Dictionary with the minimum array length for each population.
     """
+    # TODO: This function will be converted into doing just the length check if there 
+    # is no usage of pop_lengths in the constraint pipeline.
     # Get minimum length of downsamplings for each population.
     pop_downsampling_lengths = ht.aggregate(
         [hl.agg.min(hl.len(ht[f"{prefix}{pop}"])) for pop in pops]

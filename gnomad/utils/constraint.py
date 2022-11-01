@@ -524,19 +524,21 @@ def build_models(
         ],
         weighted=weighted,
     )
-    _plateau_models = dict(
-        high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
-    )
-
-    pop_models = {}
     if pops:
+        _plateau_models = dict(
+            high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
+        )
         # Map the models to their corresponding populations if pops is specified.
         pop_models = _plateau_models["pop"]
         plateau_models = {
             pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
         }
-    plateau_models["total"] = _plateau_models["total"]
-    plateau_models = hl.struct(**plateau_models)
+        plateau_models["total"] = _plateau_models["total"]
+        plateau_models = hl.struct(**plateau_models)
+    else:
+        plateau_models = high_cov_group_ht.aggregate(
+            hl.struct(**plateau_models_agg_expr)
+        )
 
     # Filter to sites with coverage below `cov_cutoff` and larger than 0.
     low_cov_ht = coverage_ht.filter(
@@ -597,9 +599,9 @@ def build_plateau_models(
         1],[1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
-    :return: A dictionary of intercepts and slopes for plateau models of each
-        population. The keys for this dictionary are 'total' and 'pop'. The values for
-        'total' is a dictionary (e.g., <DictExpression of type dict<bool,
+    :return: A dictionary of intercepts and slopes of plateau models for all set and
+        for populations. The keys for this dictionary are 'total' and 'pop'. The values
+        for 'total' is a dictionary (e.g., <DictExpression of type dict<bool,
         array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
         g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The
         key of the dictionary in the nested list is CpG status (BooleanExpression), and
@@ -620,7 +622,7 @@ def build_plateau_models(
         # Build plateau models using sites in population downsamplings if
         # population is specified.
         plateau_models_agg_expr["pop"] = hl.agg.array_agg(
-            lambda pop_observed_variants_array_expr: hl.agg.array_agg(
+            lambda pop_obs_var_array_expr: hl.agg.array_agg(
                 lambda pop_observed_variants: hl.agg.group_by(
                     cpg_expr,
                     hl.agg.linreg(
@@ -629,7 +631,7 @@ def build_plateau_models(
                         weight=possible_variants_expr,
                     ).beta,
                 ),
-                pop_observed_variants_array_expr,
+                pop_obs_var_array_expr,
             ),
             pops_observed_variants_array_expr,
         )

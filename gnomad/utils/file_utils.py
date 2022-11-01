@@ -108,7 +108,7 @@ def file_exists(fname: str) -> bool:
     Check whether a file exists.
 
     Supports either local or Google cloud (gs://) paths.
-    If the file is a Hail file (.ht, .mt, .bm, .parquet, .he, and .vds extensions), it 
+    If the file is a Hail file (.ht, .mt, .bm, .parquet, .he, and .vds extensions), it
     checks that _SUCCESS is present.
 
     :param fname: File name.

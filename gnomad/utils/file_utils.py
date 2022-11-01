@@ -108,17 +108,19 @@ def file_exists(fname: str) -> bool:
     Check whether a file exists.
 
     Supports either local or Google cloud (gs://) paths.
-    If the file is a Hail file (.ht, .mt, .bm, .parquet, and .vds extensions), it checks that _SUCCESS is present.
+    If the file is a Hail file (.ht, .mt, .bm, .parquet, .he, and .vds extensions), it
+    checks that _SUCCESS is present.
 
     :param fname: File name.
     :return: Whether the file exists.
     """
     fext = os.path.splitext(fname)[1]
-    if fext in {".ht", ".mt", ".bm", ".parquet"}:
+    if fext in {".ht", ".mt", ".bm", ".parquet", ".he"}:
         paths = [f"{fname}/_SUCCESS"]
-
-    if fext == ".vds":
+    elif fext == ".vds":
         paths = [f"{fname}/reference_data/_SUCCESS", f"{fname}/variant_data/_SUCCESS"]
+    else:
+        paths = [fname]
 
     if fname.startswith("gs://"):
         exists_func = hl.hadoop_exists

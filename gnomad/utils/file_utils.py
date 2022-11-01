@@ -116,9 +116,10 @@ def file_exists(fname: str) -> bool:
     fext = os.path.splitext(fname)[1]
     if fext in {".ht", ".mt", ".bm", ".parquet", ".he"}:
         paths = [f"{fname}/_SUCCESS"]
-
-    if fext == ".vds":
+    elif fext == ".vds":
         paths = [f"{fname}/reference_data/_SUCCESS", f"{fname}/variant_data/_SUCCESS"]
+    else:
+        paths = [fname]
 
     if fname.startswith("gs://"):
         exists_func = hl.hadoop_exists

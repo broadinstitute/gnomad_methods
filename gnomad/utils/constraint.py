@@ -1,7 +1,6 @@
 """Script containing generic constraint functions that may be used in the constraint pipeline."""
 
 import logging
-from re import T
 from typing import Any, Optional, Tuple, Union
 
 import hail as hl

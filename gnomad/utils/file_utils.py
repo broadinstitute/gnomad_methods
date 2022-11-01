@@ -114,7 +114,7 @@ def file_exists(fname: str) -> bool:
     :return: Whether the file exists.
     """
     fext = os.path.splitext(fname)[1]
-    if fext in {".ht", ".mt", ".bm", ".parquet", "he"}:
+    if fext in {".ht", ".mt", ".bm", ".parquet", ".he"}:
         paths = [f"{fname}/_SUCCESS"]
 
     if fext == ".vds":

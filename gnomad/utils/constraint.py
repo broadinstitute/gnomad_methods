@@ -588,7 +588,9 @@ def build_plateau_models(
 
     The x and y of the plateau models:
     - x: `mu_snp_expr`
-    - y: `observed_variants_expr` (or `pops_observed_variants_array_expr`[index] if `pops` is specified) / `possible_variants_expr`
+    - y: `observed_variants_expr` / `possible_variants_expr`
+    or `pops_observed_variants_array_expr`[index] / `possible_variants_expr`
+    if `pops` is specified
 
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param mu_snp_expr: Float64Expression of the mutation rate.
@@ -650,7 +652,7 @@ def build_coverage_model(
 
     The x and y of the coverage model:
     - x: `log_coverage_expr`
-    - y: low_coverage_oe_expr`
+    - y: `low_coverage_oe_expr`
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.

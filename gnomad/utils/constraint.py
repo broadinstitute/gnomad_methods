@@ -587,8 +587,8 @@ def build_plateau_models(
     Build plateau models to calibrate mutation rate to compute predicted proportion observed value.
 
     The x and y of the plateau models:
-    - x: `mu_snp` - mutation rate
-    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
+    - x: `mu_snp_expr`
+    - y: `observed_variants_expr` (or `pops_observed_variants_array_expr`[index] if `pops` is specified) / `possible_variants_expr`
 
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param mu_snp_expr: Float64Expression of the mutation rate.
@@ -599,14 +599,13 @@ def build_plateau_models(
         1],[1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
-    :return: A dictionary of intercepts and slopes of plateau models for all sites and
-        populations (optional). The keys for this dictionary are 'total' and 'pop'
-        (optional). The values for 'total' is a dictionary (e.g., <DictExpression of
-        type dict<bool,array<float64>>>), and the value for 'pop' is a nested list of
-        dictionaries (e.g., <ArrayExpression of type array<array<dict<bool,
-        array<float64>>>>>). The key of the dictionary in the nested list is CpG status
-        (BooleanExpression), and the value is an ArrayExpression containing intercept
-        and slope values.
+    :return: A dictionary of intercepts and slopes of plateau models. The keys are
+        'total' (for all sites) and 'pop' (optional; for populations). The values for
+        'total' is a dictionary (e.g., <DictExpression of type dict<bool,
+        array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
+        g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The
+        key of the dictionary in the nested list is CpG status (BooleanExpression), and
+        the value is an ArrayExpression containing intercept and slope values.
     """
     # Build plateau models for all sites
     plateau_models_agg_expr = {
@@ -650,9 +649,8 @@ def build_coverage_model(
     proportion of expected variation at low coverage sites.
 
     The x and y of the coverage model:
-    - x: log10('exome_coverage') at low coverage site
-    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
-    where `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage sites
+    - x: `log_coverage_expr`
+    - y: low_coverage_oe_expr`
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.

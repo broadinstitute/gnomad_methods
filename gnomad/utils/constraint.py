@@ -434,4 +434,4 @@ def annotate_constraint_groupings(
         if isinstance(t, hl.Table)
         else t.annotate_rows(**groupings)
     )
-    return t, tuple(groupings.keys())
+    return t, list(groupings.keys())

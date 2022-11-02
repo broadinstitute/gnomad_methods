@@ -4,6 +4,7 @@ import logging
 from typing import Any, Optional, Tuple, Union
 
 import hail as hl
+from gnomad.utils.vep import process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -11,8 +12,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
-
-from gnomad.utils.vep import process_consequences
 
 
 def annotate_with_mu(
@@ -388,14 +387,14 @@ def annotate_constraint_groupings(
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
+    # Annotate 'worst_csq_by_gene' to t if t is used to build the "worst_cq" model.
+    if vep_annotation == "worst_csq_by_gene":
+        t = process_consequences(t)
+
     if vep_annotation not in t[vep_root].keys():
         raise ValueError(
             f"{vep_annotation} is not a row field of the VEP annotation in Table"
         )
-
-    # Annotate 'worst_csq_by_gene' to t if t is used to build the "worst_cq" model.
-    if vep_annotation == "worst_csq_by_gene":
-        t = process_consequences(t)
     # Create top-level annotation for `vep_annotation` by pulling out from `vep_root`
     # annotation.
     t = t.transmute(**{vep_annotation: t[vep_root][vep_annotation]})
@@ -434,4 +433,4 @@ def annotate_constraint_groupings(
         if isinstance(t, hl.Table)
         else t.annotate_rows(**groupings)
     )
-    return t, list(groupings.keys())
+    return t, tuple(groupings.keys())

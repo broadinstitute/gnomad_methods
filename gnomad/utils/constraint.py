@@ -4,6 +4,7 @@ import logging
 from typing import Any, Optional, Tuple, Union
 
 import hail as hl
+
 from gnomad.utils.vep import process_consequences
 
 logging.basicConfig(

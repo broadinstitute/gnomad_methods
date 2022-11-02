@@ -14,7 +14,8 @@ import hail as hl
 from hailtop.aiogoogle import GoogleStorageAsyncFS
 from hailtop.aiotools import AsyncFS, LocalAsyncFS
 from hailtop.aiotools.router_fs import RouterAsyncFS
-from hailtop.utils import bounded_gather, tqdm
+from hailtop.utils import bounded_gather
+from hailtop.utils.rich_progress_bar import SimpleRichProgressBar
 
 from gnomad.resources.resource_utils import DataException
 
@@ -55,8 +56,8 @@ async def parallel_file_exists_async(
         else:
             return True
 
-    with tqdm(
-        total=len(fpaths), desc="check files for existence", disable=False
+    with SimpleRichProgressBar(
+        total=len(fpaths), description="check files for existence", disable=False
     ) as pbar:
         with ThreadPoolExecutor() as thread_pool:
             async with RouterAsyncFS(

@@ -525,10 +525,10 @@ def build_models(
         weighted=weighted,
     )
     if pops:
+        # Map the models to their corresponding populations if pops is specified.
         _plateau_models = dict(
             high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
         )
-        # Map the models to their corresponding populations if pops is specified.
         pop_models = _plateau_models["pop"]
         plateau_models = {
             pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
@@ -599,13 +599,7 @@ def build_plateau_models(
         1],[1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
-    :return: A dictionary of intercepts and slopes of plateau models for all set and
-        for populations. The keys for this dictionary are 'total' and 'pop'. The values
-        for 'total' is a dictionary (e.g., <DictExpression of type dict<bool,
-        array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
-        g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The
-        key of the dictionary in the nested list is CpG status (BooleanExpression), and
-        the value is an ArrayExpression containing intercept and slope values.
+    :return: A dictionary of intercepts and slopes of plateau models for all sites and  populations (optional). The keys for this dictionary are 'total' and 'pop' (optional). The values for 'total' is a dictionary (e.g., <DictExpression of type dict<bool,array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The key of the dictionary in the nested list is CpG status (BooleanExpression), and the value is an ArrayExpression containing intercept and slope values.
     """
     # Build plateau models for all sites
     plateau_models_agg_expr = {

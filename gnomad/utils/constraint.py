@@ -421,7 +421,40 @@ def collapse_lof_ht(lof_ht: hl.Table, keys: Tuple[str], calculate_pop_pLI: bool 
     return lof_ht.annotate(
         **pLI(lof_ht, lof_ht.obs_lof, lof_ht.exp_lof)[lof_ht.key],
         oe_lof=lof_ht.obs_lof / lof_ht.exp_lof).key_by(*keys)
+
+def pLI(ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expression) -> hl.Table:
+    """
+    Compute the pLI score using the observed and expected variant counts.
     
+    The output Table will include the following annotations:
+        - pLI - Probability of loss-of-function intolerance; probability that transcript falls into 
+            distribution of haploinsufficient genes
+        - pNull - Probability that transcript falls into distribution of unconstrained genes
+        - pRec - Probability that transcript falls into distribution of recessive genes
+
+    :param ht: Input Table.
+    :param obs: Expression for the number of observed variants on each gene or transcript in `ht`.
+    :param exp: Expression for the number of expected variants on each gene or transcript in `ht`.
+    :return: StructExpression for the pLI score.
+    """
+    last_pi = {'Null': 0, 'Rec': 0, 'LI': 0}
+    pi = {'Null': 1 / 3, 'Rec': 1 / 3, 'LI': 1 / 3}
+    expected_values = {'Null': 1, 'Rec': 0.463, 'LI': 0.089}
+    ht = ht.annotate(_obs=obs, _exp=exp)
+
+    while abs(pi['LI'] - last_pi['LI']) > 0.001:
+        last_pi = copy.deepcopy(pi)
+        ht = ht.annotate(
+            **{k: v * hl.dpois(ht._obs, ht._exp * expected_values[k]) for k, v in pi.items()})
+        ht = ht.annotate(row_sum=hl.sum([ht[k] for k in pi]))
+        ht = ht.annotate(**{k: ht[k] / ht.row_sum for k, v in pi.items()})
+        pi = ht.aggregate({k: hl.agg.mean(ht[k]) for k in pi.keys()})
+
+    ht = ht.annotate(
+        **{k: v * hl.dpois(ht._obs, ht._exp * expected_values[k]) for k, v in pi.items()})
+    ht = ht.annotate(row_sum=hl.sum([ht[k] for k in pi]))
+    return ht.select(**{f'p{k}': ht[k] / ht.row_sum for k, v in pi.items()})
+
 def oe_confidence_interval(ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expression,
                            prefix: str = 'oe', alpha: float = 0.05, select_only_ci_metrics: bool = True) -> hl.Table:
     """

@@ -192,7 +192,19 @@ def assign_population_pcs(
                 pc_expr = pop_pca_scores[pc_expr]
             pcs_to_pull = [pc_expr[i - 1] for i in pc_cols]
         else:
+            pc_col_len = list(
+                filter(
+                    None,
+                    pop_pca_scores.aggregate(hl.agg.collect_as_set(hl.len(pc_cols))),
+                )
+            )
+            if len(pc_col_len) > 1:
+                raise ValueError(
+                    "More than one length was found among the 'pc_cols' "
+                    "ArrayExpression values. The length must be consistent!"
+                )
             pcs_to_pull = pc_cols
+            pc_cols = list(range(1, pc_col_len[0] + 1))
         if not fit:
             pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pcs_to_pull)
         else:

@@ -119,7 +119,7 @@ def pc_project(
 
 def assign_population_pcs(
     pop_pca_scores: Union[hl.Table, pd.DataFrame],
-    pc_cols: Union[List[int], List[str]],
+    pc_cols: Union[hl.expr.ArrayExpression, List[int], List[str]],
     known_col: str = "known_pop",
     fit: Any = None,  # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     seed: int = 42,
@@ -128,6 +128,7 @@ def assign_population_pcs(
     min_prob: float = 0.9,
     output_col: str = "pop",
     missing_label: str = "oth",
+    pc_expr: Union[hl.expr.ArrayExpression, str] = "scores",
 ) -> Tuple[
     Union[hl.Table, pd.DataFrame], Any
 ]:  # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
@@ -138,39 +139,72 @@ def assign_population_pcs(
 
     As input, this function can either take:
         - A Hail Table (typically the output of `hwe_normalized_pca`). In this case,
-            - `pc_cols` should be a list of integers where each element is one of the PCs to use.
-            - A Hail Table will be returned as output
+            - `pc_cols` should be one of::
+                - A list of integers where each element is one of the PCs to use.
+                - A list of strings where each element is one of the PCs to use.
+                - An ArrayExpression of Floats where each element is one of the PCs.
+                  to use
+            - A Hail Table will be returned as output.
         - A Pandas DataFrame. In this case:
-            - Each PC should be in a separate column and `pc_cols` is the list of all the columns containing the PCs to use.
-            - A pandas DataFrame is returned as output
+            - Each PC should be in a separate column and `pc_cols` is the list of all
+              the columns containing the PCs to use.
+            - A pandas DataFrame is returned as output.
 
     .. note::
 
-        If you have a Pandas Dataframe and have all PCs as an array in a single column, the `expand_pd_array_col`
-        can be used to expand this column into multiple `PC` columns.
+        If you have a Pandas Dataframe and have all PCs as an array in a single column,
+        the `expand_pd_array_col`can be used to expand this column into multiple `PC`
+        columns.
 
-    :param pop_pca_scores: Input Hail Table or Pandas Dataframe
-    :param pc_cols: List of which PCs to use/columns storing the PCs to use. Values provided should be 1-based and should be a list of integers when passing in a Hail Table (i.e. [1, 2, 4, 5]) or a list of strings when passing in a Pandas Dataframe (i.e. ["PC1", "PC2", "PC4", "PC5"]).
-    :param known_col: Column storing the known population labels
-    :param fit: Fit from a previously trained random forest model (i.e., the output from a previous RandomForestClassifier() call)
-    :param seed: Random seed
-    :param prop_train: Proportion of known data used for training
-    :param n_estimators: Number of trees to use in the RF model
-    :param min_prob: Minimum probability of belonging to a given population for the population to be set (otherwise set to `None`)
-    :param output_col: Output column storing the assigned population
-    :param missing_label: Label for samples for which the assignment probability is smaller than `min_prob`
-    :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs and imputed population labels, trained random forest model
+    :param pop_pca_scores: Input Hail Table or Pandas Dataframe.
+    :param pc_cols: List of which PCs to use/columns storing the PCs to use. Values
+        provided should be 1-based and should be a list of integers when passing in a
+        Hail Table (i.e. [1, 2, 4, 5]) or a list of strings when passing in a Pandas
+        Dataframe (i.e. ["PC1", "PC2", "PC4", "PC5"]). When passing a HT this can also
+        be an ArrayExpression containing all the PCs to use.
+    :param known_col: Column storing the known population labels.
+    :param fit: Fit from a previously trained random forest model (i.e., the output
+        from a previous RandomForestClassifier() call).
+    :param seed: Random seed.
+    :param prop_train: Proportion of known data used for training.
+    :param n_estimators: Number of trees to use in the RF model.
+    :param min_prob: Minimum probability of belonging to a given population for the
+        population to be set (otherwise set to `None`).
+    :param output_col: Output column storing the assigned population.
+    :param missing_label: Label for samples for which the assignment probability is
+        smaller than `min_prob`.
+    :param pc_expr: Column storing the list of PCs. Only used if `pc_cols` is a List of
+        integers. Default is scores.
+    :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs
+        and imputed population labels, trained random forest model.
     """
     from sklearn.ensemble import RandomForestClassifier
 
     hail_input = isinstance(pop_pca_scores, hl.Table)
     if hail_input:
-        if not all(isinstance(n, int) for n in pc_cols):
-            raise TypeError(
-                "Using a Hail Table with pc_cols requires all values of the pc_cols"
-                " list to be integers"
+        if isinstance(pc_cols, list):
+            if not all(isinstance(n, int) for n in pc_cols):
+                raise TypeError(
+                    "Using a Hail Table with a list of PC cols to use (pc_cols) "
+                    "requires all values of the pc_cols list to be integers."
+                )
+            if isinstance(pc_expr, str):
+                pc_expr = pop_pca_scores[pc_expr]
+            pcs_to_pull = [pc_expr[i - 1] for i in pc_cols]
+        else:
+            pc_col_len = list(
+                filter(
+                    None,
+                    pop_pca_scores.aggregate(hl.agg.collect_as_set(hl.len(pc_cols))),
+                )
             )
-        pcs_to_pull = [pop_pca_scores.scores[i - 1] for i in pc_cols]
+            if len(pc_col_len) > 1:
+                raise ValueError(
+                    "More than one length was found among the 'pc_cols' "
+                    "ArrayExpression values. The length must be consistent!"
+                )
+            pcs_to_pull = pc_cols
+            pc_cols = list(range(1, pc_col_len[0] + 1))
         if not fit:
             pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pcs_to_pull)
         else:
@@ -186,7 +220,7 @@ def assign_population_pcs(
         if not all(isinstance(n, str) for n in pc_cols):
             raise TypeError(
                 "Using a Pandas DataFrame with pc_cols requires all values of the"
-                " pc_cols list to be strings"
+                " pc_cols list to be strings."
             )
         pop_pc_pd = pop_pca_scores
 

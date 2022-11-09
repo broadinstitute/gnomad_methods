@@ -362,30 +362,31 @@ def collapse_strand(
         else t.annotate_rows(**collapse_expr)
     )
 
+
 def compute_oe_per_transcript(
     ht: hl.Table,
     annotation_name: str,
-    keys: Tuple[str] = ("gene", "transcript", "canonical"), 
+    keys: Tuple[str] = ("gene", "transcript", "canonical"),
     pops: Tuple[str] = (),
 ) -> hl.Table:
     """
     Compute the observed:expected ratio for pLoF variants, missense variants, or synonymous variants.
-    
-    Function sums the number of observed variants, possible variants, and expected 
-    variants across all the combinations of `keys`, and uses the expected variant 
+
+    Function sums the number of observed variants, possible variants, and expected
+    variants across all the combinations of `keys`, and uses the expected variant
     counts and observed variant counts to compute the observed:expected ratio.
-    
+
     The following annotations are added to the output Table:
         - obs_{annotation_name} - the sum of observed variants grouped by `keys`
         - mu_{annotation_name} - the sum of mutation rate grouped by `keys`
         - possible_{annotation_name} - possible number of variants grouped by `keys`
         - exp_{annotation_name} - expected number of variants grouped by `keys`
-        - exp_{annotation_name}_{pop} (pop defaults to `POPS`) - expected number of 
+        - exp_{annotation_name}_{pop} (pop defaults to `POPS`) - expected number of
             variants per population grouped by `keys`
-        - obs_{annotation_name}_{pop} (pop defaults to `POPS`) - observed number of 
+        - obs_{annotation_name}_{pop} (pop defaults to `POPS`) - observed number of
             variants per population grouped by `keys`
         - oe_{annotation_name} - observed:expected ratio
-        
+
     .. note::
         The following annotations should be present in `ht`:
             - observed_variants
@@ -393,16 +394,16 @@ def compute_oe_per_transcript(
             - possible_variants
             - expected_variants
 
-    :param ht: Input Table with pLoF variants, missense variants, or synonymous 
+    :param ht: Input Table with pLoF variants, missense variants, or synonymous
         variants.
-    :param annotation_name: Annotation name used for constraint metrics to distinguish 
+    :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
     :param keys: The keys of the output Table. Defaults is ('gene', 'transcript',
         'canonical').
     :param pops: List of populations used to compute constraint metrics. Default is ().
     :return: Table with observed:expected ratio.
     """
-    # Create aggregators that sum the number of observed variants, possible variants, 
+    # Create aggregators that sum the number of observed variants, possible variants,
     # and expected variants and compute observed:expected ratio.
     agg_expr = {
         f"obs_{annotation_name}": hl.agg.sum(ht.observed_variants),
@@ -411,13 +412,13 @@ def compute_oe_per_transcript(
         / hl.agg.sum(ht.expected_variants),
         f"possible_{annotation_name}": hl.agg.sum(ht.possible_variants),
     }
-    
+
     # Create a aggregator that sums the mutation rate.
     if annotation_name != "mis_pphen":
         agg_expr[f"mu_{annotation_name}"] = hl.agg.sum(ht.mu)
-    
-    # Create aggregators that sum the number of observed variants, possible variants, 
-    # and expected variants and compute observed:expected ratio for each population if 
+
+    # Create aggregators that sum the number of observed variants, possible variants,
+    # and expected variants and compute observed:expected ratio for each population if
     # `pops` is specified.
     for pop in pops:
         agg_expr[f"exp_{annotation_name}_{pop}"] = hl.agg.array_sum(
@@ -425,59 +426,66 @@ def compute_oe_per_transcript(
         )
         agg_expr[f"obs_{annotation_name}_{pop}"] = hl.agg.array_sum(
             ht[f"downsampling_counts_{pop}"]
-        ) 
+        )
     return ht.group_by(*keys).aggregate(**agg_expr)
 
 
 def compute_all_pLI_scores(
     ht: hl.Table,
     annotation_name: str,
-    keys: Tuple[str] = ("gene", "transcript", "canonical"), 
-    calculate_pop_pLI=False
+    keys: Tuple[str] = ("gene", "transcript", "canonical"),
+    calculate_pop_pLI=False,
 ) -> hl.Table:
     """
     Compute the pLI scores for pLoF variants.
 
     :param ht: Input Table with pLoF variants.
-    :param annotation_name: Annotation name used for constraint metrics to distinguish 
+    :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
     :param keys: The keys of the output Table. Defaults is ('gene', 'transcript',
         'canonical').
-    :param calculate_pop_pLI: Whether to compute the pLI scores for each populations,   
+    :param calculate_pop_pLI: Whether to compute the pLI scores for each populations,
         Defaults is False.
     :return: Table with pLI, pNull, and pRec scores.
     """
     ht = ht.persist()
     ht = ht.filter(ht[f"exp_{annotation_name}"] > 0)
     if calculate_pop_pLI:
-        pop_lengths = get_all_pop_lengths(lof_ht, 'obs_lof_')
+        pop_lengths = get_all_pop_lengths(lof_ht, "obs_lof_")
         print(pop_lengths)
         for pop_length, pop in pop_lengths:
-            print(f'Calculating pLI for {pop}...')
+            print(f"Calculating pLI for {pop}...")
             plis = []
             for i in range(8, pop_length):
                 print(i)
-                ht = lof_ht.filter(lof_ht[f'exp_lof_{pop}'][i] > 0)
-                pli_ht = pLI(ht, ht[f'obs_lof_{pop}'][i], ht[f'exp_lof_{pop}'][i])
+                ht = lof_ht.filter(lof_ht[f"exp_lof_{pop}"][i] > 0)
+                pli_ht = pLI(ht, ht[f"obs_lof_{pop}"][i], ht[f"exp_lof_{pop}"][i])
                 plis.append(pli_ht[lof_ht.key])
-            lof_ht = lof_ht.annotate(**{
-                f'pLI_{pop}': [pli.pLI for pli in plis],
-                f'pRec_{pop}': [pli.pRec for pli in plis],
-                f'pNull_{pop}': [pli.pNull for pli in plis],
-            })
+            lof_ht = lof_ht.annotate(
+                **{
+                    f"pLI_{pop}": [pli.pLI for pli in plis],
+                    f"pRec_{pop}": [pli.pRec for pli in plis],
+                    f"pNull_{pop}": [pli.pNull for pli in plis],
+                }
+            )
     print(list(ht.row_value))
-    pli_result = pLI(ht, ht[f"obs_{annotation_name}"], ht[f"exp_{annotation_name}"])[ht.key]
+    pli_result = pLI(ht, ht[f"obs_{annotation_name}"], ht[f"exp_{annotation_name}"])[
+        ht.key
+    ]
     pli_result = pli_result.rename(
-    {x: f"{x}_{annotation_name}" for x in list(pli_result.keys())}
-)
+        {x: f"{x}_{annotation_name}" for x in list(pli_result.keys())}
+    )
     return ht.annotate(**pli_result).key_by(*keys)
 
-def pLI(ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expression) -> hl.Table:
+
+def pLI(
+    ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expression
+) -> hl.Table:
     """
     Compute the pLI score using the observed and expected variant counts.
-    
+
     The output Table will include the following annotations:
-        - pLI - Probability of loss-of-function intolerance; probability that transcript falls into 
+        - pLI - Probability of loss-of-function intolerance; probability that transcript falls into
             distribution of haploinsufficient genes
         - pNull - Probability that transcript falls into distribution of unconstrained genes
         - pRec - Probability that transcript falls into distribution of recessive genes
@@ -487,36 +495,51 @@ def pLI(ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expressi
     :param exp: Expression for the number of expected variants on each gene or transcript in `ht`.
     :return: StructExpression for the pLI score.
     """
-    last_pi = {'Null': 0, 'Rec': 0, 'LI': 0}
-    pi = {'Null': 1 / 3, 'Rec': 1 / 3, 'LI': 1 / 3}
-    expected_values = {'Null': 1, 'Rec': 0.463, 'LI': 0.089}
+    last_pi = {"Null": 0, "Rec": 0, "LI": 0}
+    pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
+    expected_values = {"Null": 1, "Rec": 0.463, "LI": 0.089}
     ht = ht.annotate(_obs=obs, _exp=exp)
 
-    while abs(pi['LI'] - last_pi['LI']) > 0.001:
+    while abs(pi["LI"] - last_pi["LI"]) > 0.001:
         last_pi = copy.deepcopy(pi)
         ht = ht.annotate(
-            **{k: v * hl.dpois(ht._obs, ht._exp * expected_values[k]) for k, v in pi.items()})
+            **{
+                k: v * hl.dpois(ht._obs, ht._exp * expected_values[k])
+                for k, v in pi.items()
+            }
+        )
         ht = ht.annotate(row_sum=hl.sum([ht[k] for k in pi]))
         ht = ht.annotate(**{k: ht[k] / ht.row_sum for k, v in pi.items()})
         pi = ht.aggregate({k: hl.agg.mean(ht[k]) for k in pi.keys()})
 
     ht = ht.annotate(
-        **{k: v * hl.dpois(ht._obs, ht._exp * expected_values[k]) for k, v in pi.items()})
+        **{
+            k: v * hl.dpois(ht._obs, ht._exp * expected_values[k])
+            for k, v in pi.items()
+        }
+    )
     ht = ht.annotate(row_sum=hl.sum([ht[k] for k in pi]))
-    return ht.select(**{f'p{k}': ht[k] / ht.row_sum for k, v in pi.items()})
+    return ht.select(**{f"p{k}": ht[k] / ht.row_sum for k, v in pi.items()})
 
-def oe_confidence_interval(ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expression,
-                           prefix: str = 'oe', alpha: float = 0.05, select_only_ci_metrics: bool = True) -> hl.Table:
+
+def oe_confidence_interval(
+    ht: hl.Table,
+    obs: hl.expr.Int32Expression,
+    exp: hl.expr.Float32Expression,
+    prefix: str = "oe",
+    alpha: float = 0.05,
+    select_only_ci_metrics: bool = True,
+) -> hl.Table:
     """
     Determine the confidence interval around the observed:expected ratio.
-    
+
     For a given pair of observed (`obs`) and expected (`exp`) values, the function computes the density of the Poisson distribution
     (performed using Hail's `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of variants) over a range of
     lambda (`lamb` in `dpois`) values, which are given by the expected number of variants times a varying parameter ranging between
     0 and 2. The cumulative density function of the Poisson distribution density is computed and the value of the varying parameter
     is extracted at points corresponding to `alpha` (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
     bounds of the confidence interval.
-    
+
     Function will have following annotations in the output Table in addition to keys:
         - {prefix}_lower - the lower bound of confidence interval
         - {prefix}_upper - the upper bound of confidence interval
@@ -531,30 +554,48 @@ def oe_confidence_interval(ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.e
     """
     ht = ht.annotate(_obs=obs, _exp=exp)
     oe_ht = ht.annotate(_range=hl.range(0, 2000).map(lambda x: hl.float64(x) / 1000))
-    oe_ht = oe_ht.annotate(_range_dpois=oe_ht._range.map(lambda x: hl.dpois(oe_ht._obs, oe_ht._exp * x)))
+    oe_ht = oe_ht.annotate(
+        _range_dpois=oe_ht._range.map(lambda x: hl.dpois(oe_ht._obs, oe_ht._exp * x))
+    )
 
     oe_ht = oe_ht.transmute(_cumulative_dpois=hl.cumulative_sum(oe_ht._range_dpois))
     max_cumulative_dpois = oe_ht._cumulative_dpois[-1]
-    oe_ht = oe_ht.transmute(_norm_dpois=oe_ht._cumulative_dpois.map(lambda x: x / max_cumulative_dpois))
     oe_ht = oe_ht.transmute(
-        _lower_idx=hl.argmax(oe_ht._norm_dpois.map(lambda x: hl.or_missing(x < alpha, x))),
-        _upper_idx=hl.argmin(oe_ht._norm_dpois.map(lambda x: hl.or_missing(x > 1 - alpha, x)))
+        _norm_dpois=oe_ht._cumulative_dpois.map(lambda x: x / max_cumulative_dpois)
     )
-    oe_ht = oe_ht.transmute(**{
-        f'{prefix}_lower': hl.if_else(oe_ht._obs > 0, oe_ht._range[oe_ht._lower_idx], 0),
-        f'{prefix}_upper': oe_ht._range[oe_ht._upper_idx]
-    })
+    oe_ht = oe_ht.transmute(
+        _lower_idx=hl.argmax(
+            oe_ht._norm_dpois.map(lambda x: hl.or_missing(x < alpha, x))
+        ),
+        _upper_idx=hl.argmin(
+            oe_ht._norm_dpois.map(lambda x: hl.or_missing(x > 1 - alpha, x))
+        ),
+    )
+    oe_ht = oe_ht.transmute(
+        **{
+            f"{prefix}_lower": hl.if_else(
+                oe_ht._obs > 0, oe_ht._range[oe_ht._lower_idx], 0
+            ),
+            f"{prefix}_upper": oe_ht._range[oe_ht._upper_idx],
+        }
+    )
     if select_only_ci_metrics:
-        return oe_ht.select(f'{prefix}_lower', f'{prefix}_upper')
+        return oe_ht.select(f"{prefix}_lower", f"{prefix}_upper")
     else:
-        return oe_ht.drop('_exp')
-    
-def calculate_z(input_ht: hl.Table, obs: hl.expr.NumericExpression, exp: hl.expr.NumericExpression, output: str = 'z_raw') -> hl.Table:
+        return oe_ht.drop("_exp")
+
+
+def calculate_z(
+    input_ht: hl.Table,
+    obs: hl.expr.NumericExpression,
+    exp: hl.expr.NumericExpression,
+    output: str = "z_raw",
+) -> hl.Table:
     """
     Compute the signed raw z score using observed and expected variant counts.
-    
+
     The raw z scores are positive when the transcript had fewer variants than expected, and are negative when transcripts had more variants than expected.
-    
+
     The following annotation is included in the output Table in addition to the `input_ht` keys:
         - `output` - the raw z score
 
@@ -566,14 +607,17 @@ def calculate_z(input_ht: hl.Table, obs: hl.expr.NumericExpression, exp: hl.expr
     """
     ht = input_ht.select(_obs=obs, _exp=exp)
     ht = ht.annotate(_chisq=(ht._obs - ht._exp) ** 2 / ht._exp)
-    return ht.select(**{output: hl.sqrt(ht._chisq) * hl.if_else(ht._obs > ht._exp, -1, 1)})
-    
+    return ht.select(
+        **{output: hl.sqrt(ht._chisq) * hl.if_else(ht._obs > ht._exp, -1, 1)}
+    )
+
+
 def calculate_z_scores(ht: hl.Table, mutation_type) -> hl.Table:
     """
     Calculate z scores for synomynous variants, missense variants, and pLoF variants.
-    
+
     z score = {variant_annotation}_z_raw / {variant_annotation}_sd (variant_annotation could be syn, mis, or lof)
-    
+
     Function will add the following annotations to output Table:
         - {mutation_type}_sd (global) - standard deviation of raw z score
         - constraint_flag - Reason gene does not have constraint metrics. One of:
@@ -588,48 +632,93 @@ def calculate_z_scores(ht: hl.Table, mutation_type) -> hl.Table:
         - mis_z - z score of missense variants
         - lof_z - z score of pLoF variants
 
-    :param ht: Input Table with observed and expected variant counts for one of 
+    :param ht: Input Table with observed and expected variant counts for one of
         synomynous variants, missense variants, and pLoF variants.
-    :param mutation_type: The mutation type of variants in the input Table, one of 
+    :param mutation_type: The mutation type of variants in the input Table, one of
         'lof', 'mis', and 'syn'.
     :return: Table with z scores.
     """
     # Calculate z scores.
-    ht = ht.annotate(**calculate_z(ht, ht[f'obs_{mutation_type}'], ht[f'exp_{mutation_type}'], f'{mutation_type}_z_raw')[ht.key])
-    
+    ht = ht.annotate(
+        **calculate_z(
+            ht,
+            ht[f"obs_{mutation_type}"],
+            ht[f"exp_{mutation_type}"],
+            f"{mutation_type}_z_raw",
+        )[ht.key]
+    )
+
     # Create constraint flag to annotate if the variant is defined, has expected variant count, and is outlier.
     reasons = hl.empty_set(hl.tstr)
-    
-    reasons = hl.if_else(hl.or_else(ht[f'obs_{mutation_type}'], 0) == 0, reasons.add('no_variants'), reasons)
-    
-    reasons = hl.if_else(ht[f'exp_{mutation_type}'] > 0, reasons, reasons.add(f'no_exp_{mutation_type}'), missing_false=True)
 
-    # Compute the standard deviation after filtering to variant that is defined, is not 
-    # outlier, has expected variants, has raw z score, and its raw z score is less than 
+    reasons = hl.if_else(
+        hl.or_else(ht[f"obs_{mutation_type}"], 0) == 0,
+        reasons.add("no_variants"),
+        reasons,
+    )
+
+    reasons = hl.if_else(
+        ht[f"exp_{mutation_type}"] > 0,
+        reasons,
+        reasons.add(f"no_exp_{mutation_type}"),
+        missing_false=True,
+    )
+
+    # Compute the standard deviation after filtering to variant that is defined, is not
+    # outlier, has expected variants, has raw z score, and its raw z score is less than
     # 0 for LoF and missense variants.
-    if mutation_type != 'syn':
-        reasons = hl.if_else(ht[f'{mutation_type}_z_raw'] < -5, reasons.add(f'{mutation_type}_outlier'), reasons, missing_false=True)
+    if mutation_type != "syn":
+        reasons = hl.if_else(
+            ht[f"{mutation_type}_z_raw"] < -5,
+            reasons.add(f"{mutation_type}_outlier"),
+            reasons,
+            missing_false=True,
+        )
         ht = ht.annotate(constraint_flag=reasons)
-        sds = ht.aggregate(hl.struct(
-            **{f'{mutation_type}_sd':hl.agg.filter(
-                ~ht.constraint_flag.contains('no_variants') &
-                ~ht.constraint_flag.contains(f'{mutation_type}_outlier') &
-                ~ht.constraint_flag.contains(f'no_exp_{mutation_type}') &
-                hl.is_defined(ht[f'{mutation_type}_z_raw']) & (ht[f'{mutation_type}_z_raw'] < 0),
-                hl.agg.explode(lambda x: hl.agg.stats(x), [ht[f'{mutation_type}_z_raw'], -ht[f'{mutation_type}_z_raw']])
-            ).stdev}
-        ))
+        sds = ht.aggregate(
+            hl.struct(
+                **{
+                    f"{mutation_type}_sd": hl.agg.filter(
+                        ~ht.constraint_flag.contains("no_variants")
+                        & ~ht.constraint_flag.contains(f"{mutation_type}_outlier")
+                        & ~ht.constraint_flag.contains(f"no_exp_{mutation_type}")
+                        & hl.is_defined(ht[f"{mutation_type}_z_raw"])
+                        & (ht[f"{mutation_type}_z_raw"] < 0),
+                        hl.agg.explode(
+                            lambda x: hl.agg.stats(x),
+                            [
+                                ht[f"{mutation_type}_z_raw"],
+                                -ht[f"{mutation_type}_z_raw"],
+                            ],
+                        ),
+                    ).stdev
+                }
+            )
+        )
     else:
-        reasons = hl.if_else(hl.abs(ht.syn_z_raw) > 5, reasons.add('syn_outlier'), reasons, missing_false=True)
+        reasons = hl.if_else(
+            hl.abs(ht.syn_z_raw) > 5,
+            reasons.add("syn_outlier"),
+            reasons,
+            missing_false=True,
+        )
         ht = ht.annotate(constraint_flag=reasons)
-        sds = ht.aggregate(hl.struct(
-            syn_sd=hl.agg.filter(
-                ~ht.constraint_flag.contains('no_variants') &
-                ~ht.constraint_flag.contains('syn_outlier') &
-                ~ht.constraint_flag.contains('no_exp_syn') &
-                hl.is_defined(ht.syn_z_raw),
-                hl.agg.stats(ht.syn_z_raw)).stdev,
-        ))
+        sds = ht.aggregate(
+            hl.struct(
+                syn_sd=hl.agg.filter(
+                    ~ht.constraint_flag.contains("no_variants")
+                    & ~ht.constraint_flag.contains("syn_outlier")
+                    & ~ht.constraint_flag.contains("no_exp_syn")
+                    & hl.is_defined(ht.syn_z_raw),
+                    hl.agg.stats(ht.syn_z_raw),
+                ).stdev,
+            )
+        )
     print(sds)
     ht = ht.annotate_globals(**sds)
-    return ht.transmute(**{f'{mutation_type}_z': ht[f'{mutation_type}_z_raw'] / sds[f'{mutation_type}_sd']})
+    return ht.transmute(
+        **{
+            f"{mutation_type}_z": ht[f"{mutation_type}_z_raw"]
+            / sds[f"{mutation_type}_sd"]
+        }
+    )

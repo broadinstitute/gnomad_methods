@@ -1,7 +1,7 @@
 """Script containing generic constraint functions that may be used in the constraint pipeline."""
-
+# cSpell: disable
 import logging
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import hail as hl
 
@@ -364,31 +364,21 @@ def collapse_strand(
     )
 
 
-def annotate_constraint_groupings(
+def explode_by_vep_annotation(
     t: Union[hl.Table, hl.MatrixTable],
     vep_annotation: str,
     vep_root: str = "vep",
-) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
+) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Add constraint annotations to be used for groupings.
-
-    Function adds the following annotations:
-        - annotation -'most_severe_consequence' annotation in `vep_annotation`
-        - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
-          in `vep_annotation`
-        - gene - 'gene_symbol' annotation inside `vep_annotation`
-        - coverage - exome coverage in `t`
-        - transcript (added when `vep_annotation` is specified as "transcript_consequences")
-        - canonical (added when `vep_annotation` is specified as "transcript_consequences")
+    Annotate specified VEP annotation if it's not in the input Table or MatrixTable and explode the VEP annotation.
 
     :param t: Input Table or MatrixTable.
-    :param vep_annotation: Name of annotation in VEP annotation that will be used for
-        constraint annotation.
+    :param vep_annotation: Name of annotation in VEP annotation that will be annotated,
+        if necessary, and explode.
     :param vep_root: Name used for VEP annotation. Default is 'vep'.
-    :return: A tuple of input Table or MatrixTable with grouping annotations added and
-        the names of added annotations.
+    :return: Table or MatrixTable with exploded VEP annotation.
     """
-    # Annotate 'worst_csq_by_gene' to t if t is used to build the "worst_cq" model.
+    # Annotate 'worst_csq_by_gene' to t if it's specified for `vep_annotation`.
     if vep_annotation == "worst_csq_by_gene":
         t = process_consequences(t)
 
@@ -397,41 +387,99 @@ def annotate_constraint_groupings(
             f"{vep_annotation} is not a row field of the VEP annotation in Table"
         )
     # Create top-level annotation for `vep_annotation` by pulling out from `vep_root`
-    # annotation.
-    t = t.transmute(**{vep_annotation: t[vep_root][vep_annotation]})
-    # Explode the `vep_annotation`.
-    t = t.explode(t[vep_annotation])
+    # annotation and explode the `vep_annotation`.
+    if isinstance(t, hl.Table):
+        t = t.transmute(**{vep_annotation: t[vep_root][vep_annotation]})
+        t = t.explode(t[vep_annotation])
+    else:
+        t = t.transmute_rows(**{vep_annotation: t[vep_root][vep_annotation]})
+        t = t.explode_rows(t[vep_annotation])
 
-    vep_annotation_expr = t[vep_annotation]
+    return t
+
+
+def get_constraint_grouping_expr(
+    vep_annotation_expr: hl.StructExpression,
+    coverage_expr: hl.Int32Expression = None,
+    include_transcript_group: bool = True,
+    include_canonical_group: bool = True,
+) -> Dict[str, Union[hl.StringExpression, hl.nt32Expression, hl.BooleanExpression]]:
+    """
+    Collect annotations used for constraint groupings.
+
+    Function collects the following annotations:
+        - annotation - 'most_severe_consequence' annotation in `vep_annotation`
+        - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
+          in `vep_annotation`
+        - gene - 'gene_symbol' annotation inside `vep_annotation`
+        - coverage - exome coverage
+        - transcript (added when `include_transcript_group` is True)
+        - canonical (added when `include_canonical_group` is True)
+
+    :param vep_annotation_expr: StructExpression of VEP annotation.
+    :param coverage_expr: Int32Expression of exome coverage. Default is None.
+    :param include_transcript_group: Wether to include the transcript annotation in the
+        groupings. Default is True.
+    :param include_canonical_group: Wether to include canonical annotation in the
+        groupings. Default is True.
+    :return: A dictionary with keys as annotation names and values as actual
+        annotations.
+    """
     lof_expr = vep_annotation_expr.lof
     polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
 
     # Create constraint annotations to be used for groupings.
     groupings = {
         "annotation": vep_annotation_expr.most_severe_consequence,
-        "modifier": hl.case()
-        .when(
-            hl.is_defined(lof_expr),
-            lof_expr,
-        )
-        .when(
-            hl.is_defined(polyphen_prediction_expr),
-            polyphen_prediction_expr,
-        )
-        .default("None"),
+        "modifier": hl.coalesce(lof_expr, polyphen_prediction_expr, "None"),
         "gene": vep_annotation_expr.gene_symbol,
-        "coverage": t.exome_coverage,
     }
+    if coverage_expr is not None:
+        groupings["coverage"] = coverage_expr
 
-    # Add 'transcript' and 'canonical' annotation if grouping is used for the
-    # "standard" model.
-    if vep_annotation == "transcript_consequences":
+    # Add 'transcript' and 'canonical' annotation if requested
+    if include_transcript_group:
         groupings["transcript"] = vep_annotation_expr.transcript_id
+    if include_canonical_group:
         groupings["canonical"] = hl.or_else(vep_annotation_expr.canonical == 1, False)
 
-    t = (
-        t.annotate(**groupings)
-        if isinstance(t, hl.Table)
-        else t.annotate_rows(**groupings)
+    return groupings
+
+
+def annotate_constraint_groupings(
+    ht: hl.Table, vep_annotation: str = "transcript_consequences"
+) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
+    """
+    Annotate constraint annotations used for groupings.
+
+    Function explods the specified VEP annotation and annotates the following
+    annotations:
+        - annotation -'most_severe_consequence' annotation in `vep_annotation`
+        - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
+          in `vep_annotation`
+        - gene - 'gene_symbol' annotation inside `vep_annotation`
+        - coverage - exome coverage in `t`
+        - transcript (added when `vep_annotation` is specified as
+          "transcript_consequences")
+        - canonical (added when `vep_annotation` is specified as
+          "transcript_consequences")
+
+    :param t: Input Table or MatrixTable.
+    :param vep_annotation: Name of annotation in VEP annotation that will be used for
+        constraint annotation.
+    :return: A tuple of input Table or MatrixTable with grouping annotations added and
+        the names of added annotations.
+    """
+    ht = explode_by_vep_annotation(ht, vep_annotation)
+    if vep_annotation == "transcript_consequences":
+        include_transcript_group = include_canonical_group = True
+    else:
+        include_transcript_group = include_canonical_group = False
+    groupings = get_constraint_grouping_expr(
+        ht[vep_annotation],
+        coverage_expr=ht.exome_coverage,
+        include_transcript_group=include_transcript_group,
+        include_canonical_group=include_canonical_group,
     )
-    return t, tuple(groupings.keys())
+
+    return ht.annotate(**groupings), tuple(groupings.keys())

@@ -798,7 +798,7 @@ def get_constraint_grouping_expr(
     return groupings
 
 
-def annotate_constraint_groupings(
+def annotate_exploded_vep_for_constraint_groupings(
     ht: hl.Table, vep_annotation: str = "transcript_consequences"
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
@@ -844,3 +844,64 @@ def annotate_constraint_groupings(
     )
 
     return ht.annotate(**groupings), tuple(groupings.keys())
+
+def apply_plateau_models(
+    ht: hl.Table,
+    plateau_models: hl.StructExpression,
+    mu_expr: hl.Float64Expression,
+    cov_corr_expr: hl.Float64Expression,
+    pop: Optional[str] = None,
+) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:
+    """
+    Apply plateau models for all sites and for a population (if specified) to compute predicted proportion observed ratio and expected variant counts.
+
+    .. note:
+        Function expects following annotations to be present in `ht`:
+        - cpg
+        - observed_variants
+        - possible_variants
+
+    :param ht: Input Table.
+    :param plateau_models: Linear models (output of `build_models()` in
+        gnomad_methods`), with the values of the dictionary formatted as a
+        StrucExpression of intercept and slope, that calibrates mutation rate to
+        proportion observed for high coverage exome. It includes models for CpG s,
+        non-CpG sites, and each population in `POPS`.
+    :param mu_expr: Float64Expression of mutation rate.
+    :param cov_corr_expr: Float64Expression of corrected coverage expression.
+    :param pop: Population that will be used when applying plateau model. Default is
+        None.
+    :return: A dictionary with predicted proportion observed ratio and expected variant
+        counts.
+    """
+    if pop is None:
+        pop = ""
+        plateau_model = hl.literal(plateau_models.total)[ht.cpg]
+        slope = plateau_model[1]
+        intercept = plateau_model[0]
+        agg_func = hl.agg.sum
+        ann_to_sum = ["observed_variants", "possible_variants"]
+    else:
+        plateau_model = hl.literal(plateau_models[pop])
+        slope = hl.map(lambda f: f[ht.cpg][1], plateau_model)
+        intercept = hl.map(lambda f: f[ht.cpg][0], plateau_model)
+        agg_func = hl.agg.array_sum
+        pop = f"_{pop}"
+        ann_to_sum = [f"downsampling_counts{pop}"]
+
+    # Apply plateau models for specified population.
+    ppo_expr = mu_expr * slope + intercept
+
+    # Generate sum aggregators for 'predicted_proportion_observed' and
+    # 'expected_variants', for specified population.
+    agg_expr = {
+        f"predicted_proportion_observed{pop}": agg_func(ppo_expr),
+        f"expected_variants{pop}": agg_func(ppo_expr * cov_corr_expr),
+    }
+
+    # Generate sum aggregators for 'observed_variants' and 'possible_variants' on
+    # the entire dataset if pop is None, and for `downsampling_counts` for
+    # specified population if pop is not None.
+    agg_expr.update({ann: agg_func(ht[ann]) for ann in ann_to_sum})
+
+    return agg_expr

@@ -845,6 +845,7 @@ def annotate_exploded_vep_for_constraint_groupings(
 
     return ht.annotate(**groupings), tuple(groupings.keys())
 
+
 def apply_plateau_models(
     ht: hl.Table,
     plateau_models: hl.StructExpression,

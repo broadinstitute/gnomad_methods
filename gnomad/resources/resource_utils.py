@@ -302,17 +302,17 @@ class BlockMatrixResource(BaseResource):
         self.import_func(**self.import_args).write(
             self.path, overwrite=overwrite, **kwargs
         )
-        
+
 
 class ExpressionResource(BaseResource):
     """
     A Hail Expression resource.
 
     :param path: The Expression path (typically ending in .he).
-    :param import_args: Any sources that are required for the import and need to be 
-        kept track of and/or passed to the import_func (e.g. .vcf path for an imported 
+    :param import_args: Any sources that are required for the import and need to be
+        kept track of and/or passed to the import_func (e.g. .vcf path for an imported
         VCF).
-    :param import_func: A function used to import the Expression. `import_func` will be 
+    :param import_func: A function used to import the Expression. `import_func` will be
         passed the `import_args` dictionary as kwargs.
     """
 

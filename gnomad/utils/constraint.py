@@ -700,3 +700,23 @@ def get_all_pop_lengths(
     )
 
     return pop_lengths
+
+def get_downsamplings(freq_meta_expr: hl.expr.ArrayExpression) -> List[Tuple[int]]:
+    """
+    Get a list of downsampling size.
+    
+    Each downsamplings should have 'group', 'pop', and 'downsampling' keys. Included downsamplings are those where 'group' == "adj" and 'pop' == "global".
+
+    :param freq_meta_expr: ArrayExpression containing the set of groupings for each
+        element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
+        'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
+    :return: A list of downsampling size of specifed downsamplings.
+    """
+    downsamplings = [
+        (i, int(x.get("downsampling")))
+        for i, x in enumerate(freq_meta_expr)
+        if x.get("group") == "adj"
+        and x.get("pop") == "global"
+        and x.get("downsampling") is not None
+    ]
+    return downsamplings

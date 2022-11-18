@@ -449,6 +449,7 @@ def remove_coverage_outliers(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.Mat
     """
     Keep only loci where genome coverage was between 15 and 60
     """
+    ## make 15 and 60 to parameters
     criteria = (t.coverage.genomes.mean >= 15) & (t.coverage.genomes.mean <= 60)
     return t.filter_rows(criteria) if isinstance(t, hl.MatrixTable) else t.filter(criteria)
 
@@ -471,6 +472,7 @@ def filter_for_mu(t: Union[hl.MatrixTable, hl.Table]) -> Union[hl.MatrixTable, h
     # intergenic = (hl.is_missing(t.vep.transcript_consequences) | (hl.len(t.vep.transcript_consequences) == 0)
     #               ) & (hl.is_defined(t.vep.intergenic_consequences) | (hl.len(t.vep.intergenic_consequences) > 0))
     # criteria = (intronic | intergenic) & (t.gerp > -3.9885) & (t.gerp < 2.6607)
+    ## make the gerp to parameters
     criteria = ((t.gerp > -3.9885) & (t.gerp < 2.6607) &
                 ((t.vep.most_severe_consequence == 'intron_variant') |
                  (t.vep.most_severe_consequence == 'intergenic_variant')))

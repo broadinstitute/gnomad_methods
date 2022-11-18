@@ -846,11 +846,12 @@ def annotate_exploded_vep_for_constraint_groupings(
     return ht.annotate(**groupings), tuple(groupings.keys())
 
 
-def apply_plateau_models(
+def compute_expected_variants(
     ht: hl.Table,
     plateau_models: hl.StructExpression,
     mu_expr: hl.Float64Expression,
     cov_corr_expr: hl.Float64Expression,
+    cpg_expr: hl.BooleanExpression,
     pop: Optional[str] = None,
 ) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:
     """
@@ -870,6 +871,7 @@ def apply_plateau_models(
         non-CpG sites, and each population in `POPS`.
     :param mu_expr: Float64Expression of mutation rate.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
+    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param pop: Population that will be used when applying plateau model. Default is
         None.
     :return: A dictionary with predicted proportion observed ratio and expected variant
@@ -877,15 +879,15 @@ def apply_plateau_models(
     """
     if pop is None:
         pop = ""
-        plateau_model = hl.literal(plateau_models.total)[ht.cpg]
+        plateau_model = hl.literal(plateau_models.total)[cpg_expr]
         slope = plateau_model[1]
         intercept = plateau_model[0]
         agg_func = hl.agg.sum
         ann_to_sum = ["observed_variants", "possible_variants"]
     else:
         plateau_model = hl.literal(plateau_models[pop])
-        slope = hl.map(lambda f: f[ht.cpg][1], plateau_model)
-        intercept = hl.map(lambda f: f[ht.cpg][0], plateau_model)
+        slope = hl.map(lambda f: f[cpg_expr][1], plateau_model)
+        intercept = hl.map(lambda f: f[cpg_expr][0], plateau_model)
         agg_func = hl.agg.array_sum
         pop = f"_{pop}"
         ann_to_sum = [f"downsampling_counts{pop}"]

@@ -745,7 +745,7 @@ def get_constraint_grouping_expr(
     coverage_expr: hl.Int32Expression = None,
     include_transcript_group: bool = True,
     include_canonical_group: bool = True,
-) -> Dict[str, Union[hl.StringExpression, hl.nt32Expression, hl.BooleanExpression]]:
+) -> Dict[str, Union[hl.StringExpression, hl.Int32Expression, hl.BooleanExpression]]:
     """
     Collect annotations used for constraint groupings.
 

@@ -738,7 +738,7 @@ def compute_oe_per_transcript(
         variants.
     :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
-    :param keys: The keys of the output Table. Defaults is ('gene', 'transcript',
+    :param keys: The keys of the output Table. Default is ('gene', 'transcript',
         'canonical').
     :param pops: List of populations used to compute constraint metrics. Default is ().
     :return: Table with observed:expected ratio.
@@ -753,7 +753,7 @@ def compute_oe_per_transcript(
         f"possible_{annotation_name}": hl.agg.sum(ht.possible_variants),
     }
 
-    # Create a aggregator that sums the mutation rate.
+    # Create an aggregator that sums the mutation rate.
     if annotation_name != "mis_pphen":
         agg_expr[f"mu_{annotation_name}"] = hl.agg.sum(ht.mu)
 
@@ -782,13 +782,12 @@ def compute_all_pLI_scores(
     :param ht: Input Table with pLoF variants.
     :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
-    :param keys: The keys of the output Table. Defaults is ('gene', 'transcript',
+    :param keys: The keys of the output Table. Default is ('gene', 'transcript',
         'canonical').
-    :param calculate_pop_pLI: Whether to compute the pLI scores for each populations,
-        Defaults is False.
+    :param calculate_pop_pLI: Whether to compute the pLI scores for each population.
+        Default is False.
     :return: Table with pLI, pNull, and pRec scores.
     """
-    ht = ht.persist()
     ht = ht.filter(ht[f"exp_{annotation_name}"] > 0)
     if calculate_pop_pLI:
         pop_lengths = get_all_pop_lengths(lof_ht, "obs_lof_")
@@ -859,7 +858,7 @@ def pLI(
         }
     )
     ht = ht.annotate(row_sum=hl.sum([ht[k] for k in pi]))
-    return ht.select(**{f"p{k}": ht[k] / ht.row_sum for k, v in pi.items()})
+    return ht.select(**{f"p{k}": ht[k] / ht.row_sum for k in pi.keys()})
 
 
 def oe_confidence_interval(
@@ -888,7 +887,7 @@ def oe_confidence_interval(
     :param obs: Expression for the observed variant counts of pLoF, missense, or synonymous variants in `ht`.
     :param exp: Expression for the expected variant counts of pLoF, missense, or synonymous variants in `ht`.
     :param prefix: Prefix of upper and lower bounds, defaults to 'oe'.
-    :param alpha: The significance level used to compute the confidence interval, defaults to 0.05.
+    :param alpha: The significance level used to compute the confidence interval. Default is 0.05.
     :param select_only_ci_metrics: Whether to return only upper and lower bounds instead of keeping all the annotations except `_exp`, defaults to True.
     :return: Table with the confidence interval lower and upper bounds.
     """

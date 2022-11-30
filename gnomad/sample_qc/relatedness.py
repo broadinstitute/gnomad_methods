@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import hail as hl
+import networkx as nx
 
 from gnomad.utils.annotations import annotate_adj
 
@@ -645,6 +646,8 @@ def compute_related_samples_to_drop(
     kin_threshold: float,
     filtered_samples: Optional[hl.expr.SetExpression] = None,
     min_related_hard_filter: Optional[int] = None,
+    keep_samples: Optional[hl.expr.SetExpression] = None,
+    keep_samples_when_related: bool = False,
 ) -> hl.Table:
     """
     Compute a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
@@ -659,6 +662,7 @@ def compute_related_samples_to_drop(
     :param rank_ht: Table with a global rank for each sample (smaller is preferred)
     :param filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
     :param min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
+    :param keep_samples: An optional set of samples that must be kept. An error is raised if any two samples in the list are among the related pairs.
     :return: A Table with the list of the samples to drop along with their rank.
     """
     # Make sure that the key types are valid
@@ -708,6 +712,33 @@ def compute_related_samples_to_drop(
             keep=False,
         )
 
+    if keep_samples is not None:
+        logger.info(
+            "Number of samples in the provided list of samples to keep: %f",
+            len(keep_samples),
+        )
+        related_pairs = zip(
+            relatedness_ht.key[0].collect(),
+            relatedness_ht.key[1].collect(),
+        )
+        related_keep_samples = [
+            (i, j)
+            for i in keep_samples
+            for j in keep_samples
+            if (i, j) in related_pairs
+        ]
+        if len(related_keep_samples) > 0:
+            logger.warning(
+                "The following pairs are in the list of samples to keep, but are "
+                "related.\n%s",
+                related_keep_samples,
+            )
+            if not keep_samples_when_related:
+                raise ValueError(
+                    "Both samples can not be retained when 'keep_samples_when_related' "
+                    "is False!"
+                )
+
     logger.info("Annotating related sample pairs with rank.")
     i, j = list(relatedness_ht.key)
     relatedness_ht = relatedness_ht.key_by(s=relatedness_ht[i])
@@ -722,16 +753,69 @@ def compute_related_samples_to_drop(
     relatedness_ht = relatedness_ht.drop("s")
     relatedness_ht = relatedness_ht.persist()
 
-    related_samples_to_drop_ht = hl.maximal_independent_set(
-        relatedness_ht[i],
-        relatedness_ht[j],
-        keep=False,
-        tie_breaker=lambda l, r: l.rank - r.rank,
-    )
-    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
-    related_samples_to_drop_ht = related_samples_to_drop_ht.select(
-        **related_samples_to_drop_ht.node
-    )
+    def maximal_independent_set_keep_samples(
+        pair_graph: nx.Graph,
+        keep_samples: set = set(),
+    ) -> List:
+        """
+        Find maximal independent set with the ability to retain specific samples.
+
+        Results will be the same as Hail's maximal_independent_set when `keep_samples`
+        is empty. Otherwise, `keep_samples` will always be kept, while still being
+        included in the graph to compute the degree (number of samples each sample is
+        related to) of each node (sample).
+
+        :param pair_graph: A networkx graph of related sample pairs.
+        :param keep_samples: Set of samples that must be kept even when the degree
+            (number of total samples this sample is related to) is highest and would
+            typically be removed to get the maximal independent set.
+        :return: List of related samples to drop.
+        """
+        drop_samples = []
+        connected_samples = list(nx.connected_components(pair_graph))
+        for con in connected_samples:
+            if len(con) > 1:
+                con_idx = {i: s for i, s in enumerate(con)}
+                degree_rank_list = sorted(
+                    [(pair_graph.degree[s], s["rank"], i) for i, s in con_idx.items()]
+                )
+                last_i = len(degree_rank_list) - 1
+                last_s = con_idx[degree_rank_list[last_i][2]]
+                while last_s.s in keep_samples and last_i > 0:
+                    last_i -= 1
+                    last_s = con_idx[degree_rank_list[last_i][2]]
+                if last_s.s not in keep_samples:
+                    drop_samples.append(last_s)
+                    new_con = {con_idx[s[2]] for s in degree_rank_list[:-1]}
+                    if len(new_con) > 1:
+                        drop_samples.extend(
+                            maximal_independent_set_keep_samples(
+                                pair_graph.subgraph(new_con)
+                            )
+                        )
+        return drop_samples
+
+    if keep_samples is None:
+        related_samples_to_drop_ht = hl.maximal_independent_set(
+            relatedness_ht[i],
+            relatedness_ht[j],
+            keep=False,
+            tie_breaker=lambda l, r: l.rank - r.rank,
+        )
+        related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+        related_samples_to_drop_ht = related_samples_to_drop_ht.select(
+            **related_samples_to_drop_ht.node
+        )
+    else:
+        related_pair_graph = nx.Graph()
+        related_pair_graph.add_edges_from(
+            list(zip(relatedness_ht.i.collect(), relatedness_ht.j.collect()))
+        )
+        related_samples_to_drop_ht = hl.Table.parallelize(
+            maximal_independent_set_keep_samples(
+                related_pair_graph, keep_samples=keep_samples
+            )
+        )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")
 
     if len(filtered_samples_rel) > 0:

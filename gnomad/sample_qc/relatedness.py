@@ -715,23 +715,18 @@ def compute_related_samples_to_drop(
     if keep_samples is not None:
         logger.info(
             "Number of samples in the provided list of samples to keep: %f",
-            len(keep_samples),
+            hl.eval(hl.len(keep_samples)),
         )
-        related_pairs = zip(
-            relatedness_ht.key[0].collect(),
-            relatedness_ht.key[1].collect(),
-        )
-        related_keep_samples = [
-            (i, j)
-            for i in keep_samples
-            for j in keep_samples
-            if (i, j) in related_pairs
-        ]
-        if len(related_keep_samples) > 0:
+        keep_samples_rel = relatedness_ht.filter(
+            keep_samples.contains(relatedness_ht.key[0])
+            & keep_samples.contains(relatedness_ht.key[1])
+        ).key.collect()
+        num_keep_samples_rel = len(keep_samples_rel)
+        if num_keep_samples_rel > 0:
             logger.warning(
                 "The following pairs are in the list of samples to keep, but are "
-                "related.\n%s",
-                related_keep_samples,
+                "related:\n%s",
+                "\n".join(map(str, keep_samples_rel)),
             )
             if not keep_samples_when_related:
                 raise ValueError(
@@ -813,7 +808,7 @@ def compute_related_samples_to_drop(
         )
         related_samples_to_drop_ht = hl.Table.parallelize(
             maximal_independent_set_keep_samples(
-                related_pair_graph, keep_samples=keep_samples
+                related_pair_graph, keep_samples=keep_samples.collect()
             )
         )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")

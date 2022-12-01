@@ -879,19 +879,18 @@ def oe_confidence_interval(
     exp: hl.expr.Float32Expression,
     prefix: str = "oe",
     alpha: float = 0.05,
-    select_only_ci_metrics: bool = True,
 ) -> hl.Table:
     """
     Determine the confidence interval around the observed:expected ratio.
 
-    For a given pair of observed (`obs`) and expected (`exp`) values, the function 
-    computes the density of the Poisson distribution (performed using Hail's `dpois` 
-    module) with fixed k (`x` in `dpois` is set to the observed number of variants) 
-    over a range of lambda (`lamb` in `dpois`) values, which are given by the expected 
-    number of variants times a varying parameter ranging between 0 and 2. The 
-    cumulative density function of the Poisson distribution density is computed and the 
-    value of the varying parameter is extracted at points corresponding to `alpha` 
-    (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper 
+    For a given pair of observed (`obs`) and expected (`exp`) values, the function
+    computes the density of the Poisson distribution (performed using Hail's `dpois` module)
+    with fixed k (`x` in `dpois` is set to the observed number of variants)
+    over a range of lambda (`lamb` in `dpois`) values, which are given by the expected
+    number of variants times a varying parameter ranging between 0 and 2. The
+    cumulative density function of the Poisson distribution density is computed and the
+    value of the varying parameter is extracted at points corresponding to `alpha`
+    (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
     bounds of the confidence interval.
 
     Function will have following annotations in the output Table in addition to keys:
@@ -912,16 +911,18 @@ def oe_confidence_interval(
     :return: Table with the confidence interval lower and upper bounds.
     """
     ht = ht.annotate(_obs=obs, _exp=exp)
+    # Set up range between 0 and 2.
     oe_ht = ht.annotate(_range=hl.range(0, 2000).map(lambda x: hl.float64(x) / 1000))
     oe_ht = oe_ht.annotate(
         _range_dpois=oe_ht._range.map(lambda x: hl.dpois(oe_ht._obs, oe_ht._exp * x))
     )
-
+    # Compute cumulative density function of the Poisson distribution density.
     oe_ht = oe_ht.transmute(_cumulative_dpois=hl.cumulative_sum(oe_ht._range_dpois))
     max_cumulative_dpois = oe_ht._cumulative_dpois[-1]
     oe_ht = oe_ht.transmute(
         _norm_dpois=oe_ht._cumulative_dpois.map(lambda x: x / max_cumulative_dpois)
     )
+    # Extract the value of the varying parameter within specified range.
     oe_ht = oe_ht.transmute(
         _lower_idx=hl.argmax(
             oe_ht._norm_dpois.map(lambda x: hl.or_missing(x < alpha, x))

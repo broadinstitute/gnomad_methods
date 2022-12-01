@@ -662,7 +662,8 @@ def compute_related_samples_to_drop(
     :param rank_ht: Table with a global rank for each sample (smaller is preferred)
     :param filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
     :param min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
-    :param keep_samples: An optional set of samples that must be kept. An error is raised if any two samples in the list are among the related pairs.
+    :param keep_samples: An optional set of samples that must be kept. An error is raised (when `keep_samples_when_related` is False) if any two samples in the list are among the related pairs.
+    :param keep_samples_when_related: Don't raise an error if `keep_samples` contains related samples, and keep related samples. Default is False.
     :return: A Table with the list of the samples to drop along with their rank.
     """
     # Make sure that the key types are valid

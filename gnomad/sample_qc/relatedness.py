@@ -717,10 +717,14 @@ def compute_related_samples_to_drop(
             "Number of samples in the provided list of samples to keep: %f",
             hl.eval(hl.len(keep_samples)),
         )
-        keep_samples_rel = relatedness_ht.filter(
-            keep_samples.contains(relatedness_ht.key[0])
-            & keep_samples.contains(relatedness_ht.key[1])
-        ).key.collect()
+        i = relatedness_ht.key[0]
+        j = relatedness_ht.key[1]
+        keep_samples_rel = relatedness_ht.aggregate(
+            hl.agg.filter(
+                keep_samples.contains(i) & keep_samples.contains(j),
+                hl.agg.collect_as_set(hl.struct(i=i, j=j, kin=relatedness_ht.kin)),
+            )
+        )
         num_keep_samples_rel = len(keep_samples_rel)
         if num_keep_samples_rel > 0:
             logger.warning(

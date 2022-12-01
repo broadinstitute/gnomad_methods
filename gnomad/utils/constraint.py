@@ -757,9 +757,8 @@ def compute_oe_per_transcript(
     if annotation_name != "mis_pphen":
         agg_expr[f"mu_{annotation_name}"] = hl.agg.sum(ht.mu)
 
-    # Create aggregators that sum the number of observed variants, possible variants,
-    # and expected variants and compute observed:expected ratio for each population if
-    # `pops` is specified.
+    # Create aggregators that sum the number of observed variants
+    # and expected variants for each population if pops` is specified.
     for pop in pops:
         agg_expr[f"exp_{annotation_name}_{pop}"] = hl.agg.array_sum(
             ht[f"expected_variants_{pop}"]
@@ -773,8 +772,10 @@ def compute_oe_per_transcript(
 def compute_all_pLI_scores(
     ht: hl.Table,
     annotation_name: str,
+    pops: Tuple[str] = (),
     keys: Tuple[str] = ("gene", "transcript", "canonical"),
     calculate_pop_pLI=False,
+    n_ds_to_skip: int = 8,
 ) -> hl.Table:
     """
     Compute the pLI scores for pLoF variants.
@@ -782,32 +783,40 @@ def compute_all_pLI_scores(
     :param ht: Input Table with pLoF variants.
     :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
+    :param pops: Populations that need to compute pLI scores.
     :param keys: The keys of the output Table. Default is ('gene', 'transcript',
         'canonical').
     :param calculate_pop_pLI: Whether to compute the pLI scores for each population.
         Default is False.
+    :param n_ds_to_skip: The number of small downsamplings to skip when calculating pLI scores for populations. Default is 8.
     :return: Table with pLI, pNull, and pRec scores.
     """
+    # Filter to only variants with expected variant counts larger than 0.
     ht = ht.filter(ht[f"exp_{annotation_name}"] > 0)
+
+    # Calculate pLI scores for each population if specified.
     if calculate_pop_pLI:
-        pop_lengths = get_all_pop_lengths(lof_ht, "obs_lof_")
-        print(pop_lengths)
+        pop_lengths = get_all_pop_lengths(ht, pops, f"obs_{annotation_name}_{pop}")
         for pop_length, pop in pop_lengths:
-            print(f"Calculating pLI for {pop}...")
+            logger.info(f"Calculating pLI for {pop}...")
             plis = []
-            for i in range(8, pop_length):
-                print(i)
-                ht = lof_ht.filter(lof_ht[f"exp_lof_{pop}"][i] > 0)
-                pli_ht = pLI(ht, ht[f"obs_lof_{pop}"][i], ht[f"exp_lof_{pop}"][i])
-                plis.append(pli_ht[lof_ht.key])
-            lof_ht = lof_ht.annotate(
+            for i in range(n_ds_to_skip, pop_length):
+                logger.info(i)
+                ht = ht.filter(ht[f"exp_{annotation_name}_{pop}"][i] > 0)
+                pli_ht = pLI(
+                    ht,
+                    ht[f"obs_{annotation_name}_{pop}"][i],
+                    ht[f"exp_{annotation_name}_{pop}"][i],
+                )
+                plis.append(pli_ht[ht.key])
+            ht = ht.annotate(
                 **{
                     f"pLI_{pop}": [pli.pLI for pli in plis],
                     f"pRec_{pop}": [pli.pRec for pli in plis],
                     f"pNull_{pop}": [pli.pNull for pli in plis],
                 }
             )
-    print(list(ht.row_value))
+    # Calculate pLI scores for all variants.
     pli_result = pLI(ht, ht[f"obs_{annotation_name}"], ht[f"exp_{annotation_name}"])[
         ht.key
     ]
@@ -832,13 +841,15 @@ def pLI(
     :param ht: Input Table.
     :param obs: Expression for the number of observed variants on each gene or transcript in `ht`.
     :param exp: Expression for the number of expected variants on each gene or transcript in `ht`.
-    :return: StructExpression for the pLI score.
+    :return: Table with pLI scores.
     """
+    # Set up initial values.
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
     expected_values = {"Null": 1, "Rec": 0.463, "LI": 0.089}
     ht = ht.annotate(_obs=obs, _exp=exp)
 
+    # Calculate pLI scores.
     while abs(pi["LI"] - last_pi["LI"]) > 0.001:
         last_pi = copy.deepcopy(pi)
         ht = ht.annotate(
@@ -851,6 +862,7 @@ def pLI(
         ht = ht.annotate(**{k: ht[k] / ht.row_sum for k, v in pi.items()})
         pi = ht.aggregate({k: hl.agg.mean(ht[k]) for k in pi.keys()})
 
+    # Annotate pLI scores.
     ht = ht.annotate(
         **{
             k: v * hl.dpois(ht._obs, ht._exp * expected_values[k])
@@ -883,12 +895,17 @@ def oe_confidence_interval(
         - {prefix}_lower - the lower bound of confidence interval
         - {prefix}_upper - the upper bound of confidence interval
 
-    :param ht: Input Table with the observed and expected variant counts for pLoF, missense, and synonymous variants.
-    :param obs: Expression for the observed variant counts of pLoF, missense, or synonymous variants in `ht`.
-    :param exp: Expression for the expected variant counts of pLoF, missense, or synonymous variants in `ht`.
+    :param ht: Input Table with the observed and expected variant counts for either
+        pLoF, missense, or synonymous variants.
+    :param obs: Expression for the observed variant counts of pLoF, missense, or
+        synonymous variants in `ht`.
+    :param exp: Expression for the expected variant counts of pLoF, missense, or
+        synonymous variants in `ht`.
     :param prefix: Prefix of upper and lower bounds, defaults to 'oe'.
-    :param alpha: The significance level used to compute the confidence interval. Default is 0.05.
-    :param select_only_ci_metrics: Whether to return only upper and lower bounds instead of keeping all the annotations except `_exp`, defaults to True.
+    :param alpha: The significance level used to compute the confidence interval.
+        Default is 0.05.
+    :param select_only_ci_metrics: Whether to return only upper and lower bounds
+        instead of keeping all the annotations except `_exp`, defaults to True.
     :return: Table with the confidence interval lower and upper bounds.
     """
     ht = ht.annotate(_obs=obs, _exp=exp)
@@ -918,17 +935,15 @@ def oe_confidence_interval(
             f"{prefix}_upper": oe_ht._range[oe_ht._upper_idx],
         }
     )
-    if select_only_ci_metrics:
-        return oe_ht.select(f"{prefix}_lower", f"{prefix}_upper")
-    else:
-        return oe_ht.drop("_exp")
+
+    return oe_ht.select(f"{prefix}_lower", f"{prefix}_upper")
 
 
 def calculate_z(
     input_ht: hl.Table,
-    obs: hl.expr.NumericExpression,
-    exp: hl.expr.NumericExpression,
-    output: str = "z_raw",
+    obs: hl.expr.Int32Expression,
+    exp: hl.expr.Float32Expression,
+    z_score_output_annotation: str = "z_raw",
 ) -> hl.Table:
     """
     Compute the signed raw z score using observed and expected variant counts.
@@ -941,19 +956,22 @@ def calculate_z(
     :param input_ht: Input Table.
     :param obs: Observed variant count expression.
     :param exp: Expected variant count expression.
-    :param output: The annotation label to use for the raw z score output, defaults to 'z_raw'.
+    :param z_score_output_annotation: The annotation label to use for the raw z score output, defaults to 'z_raw'.
     :return: Table with raw z scores.
     """
     ht = input_ht.select(_obs=obs, _exp=exp)
     ht = ht.annotate(_chisq=(ht._obs - ht._exp) ** 2 / ht._exp)
     return ht.select(
-        **{output: hl.sqrt(ht._chisq) * hl.if_else(ht._obs > ht._exp, -1, 1)}
+        **{
+            z_score_output_annotation: hl.sqrt(ht._chisq)
+            * hl.if_else(ht._obs > ht._exp, -1, 1)
+        }
     )
 
 
-def calculate_z_scores(ht: hl.Table, mutation_type) -> hl.Table:
+def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
     """
-    Calculate z scores for synomynous variants, missense variants, and pLoF variants.
+    Calculate z scores for synomynous variants, missense variants, or pLoF variants.
 
     z score = {variant_annotation}_z_raw / {variant_annotation}_sd (variant_annotation could be syn, mis, or lof)
 
@@ -1018,9 +1036,8 @@ def calculate_z_scores(ht: hl.Table, mutation_type) -> hl.Table:
             hl.struct(
                 **{
                     f"{mutation_type}_sd": hl.agg.filter(
-                        ~ht.constraint_flag.contains("no_variants")
-                        & ~ht.constraint_flag.contains(f"{mutation_type}_outlier")
-                        & ~ht.constraint_flag.contains(f"no_exp_{mutation_type}")
+                        ~hl.len(ht.constraint_flag)
+                        == 0
                         & hl.is_defined(ht[f"{mutation_type}_z_raw"])
                         & (ht[f"{mutation_type}_z_raw"] < 0),
                         hl.agg.explode(
@@ -1045,15 +1062,12 @@ def calculate_z_scores(ht: hl.Table, mutation_type) -> hl.Table:
         sds = ht.aggregate(
             hl.struct(
                 syn_sd=hl.agg.filter(
-                    ~ht.constraint_flag.contains("no_variants")
-                    & ~ht.constraint_flag.contains("syn_outlier")
-                    & ~ht.constraint_flag.contains("no_exp_syn")
-                    & hl.is_defined(ht.syn_z_raw),
+                    ~hl.len(ht.constraint_flag) == 0 & hl.is_defined(ht.syn_z_raw),
                     hl.agg.stats(ht.syn_z_raw),
                 ).stdev,
             )
         )
-    print(sds)
+    logger.info(sds)
     ht = ht.annotate_globals(**sds)
     return ht.transmute(
         **{

@@ -706,6 +706,7 @@ def get_all_pop_lengths(
 def compute_oe_per_transcript(
     ht: hl.Table,
     annotation_name: str,
+    filter_expr: hl.BooleanExpression,
     keys: Tuple[str] = ("gene", "transcript", "canonical"),
     pops: Tuple[str] = (),
 ) -> hl.Table:
@@ -738,11 +739,16 @@ def compute_oe_per_transcript(
         variants.
     :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
+    :param filter_expr: Boolean expression used to filter `ht` according to
+        `annotation_name`.
     :param keys: The keys of the output Table. Default is ('gene', 'transcript',
         'canonical').
     :param pops: List of populations used to compute constraint metrics. Default is ().
     :return: Table with observed:expected ratio.
     """
+    ht = ht.filter(filter_expr)
+    if annotation_name == "syn":
+        ht = ht.key_by(*keys)
     # Create aggregators that sum the number of observed variants, possible variants,
     # and expected variants and compute observed:expected ratio.
     agg_expr = {

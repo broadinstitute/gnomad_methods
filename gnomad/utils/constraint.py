@@ -1,7 +1,7 @@
 """Script containing generic constraint functions that may be used in the constraint pipeline."""
 
-import logging
 import copy
+import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
@@ -884,16 +884,19 @@ def oe_confidence_interval(
     """
     Determine the confidence interval around the observed:expected ratio.
 
-    For a given pair of observed (`obs`) and expected (`exp`) values, the function computes the density of the Poisson distribution
-    (performed using Hail's `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of variants) over a range of
-    lambda (`lamb` in `dpois`) values, which are given by the expected number of variants times a varying parameter ranging between
-    0 and 2. The cumulative density function of the Poisson distribution density is computed and the value of the varying parameter
-    is extracted at points corresponding to `alpha` (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
+    For a given pair of observed (`obs`) and expected (`exp`) values, the function 
+    computes the density of the Poisson distribution (performed using Hail's `dpois` 
+    module) with fixed k (`x` in `dpois` is set to the observed number of variants) 
+    over a range of lambda (`lamb` in `dpois`) values, which are given by the expected 
+    number of variants times a varying parameter ranging between 0 and 2. The 
+    cumulative density function of the Poisson distribution density is computed and the 
+    value of the varying parameter is extracted at points corresponding to `alpha` 
+    (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper 
     bounds of the confidence interval.
 
     Function will have following annotations in the output Table in addition to keys:
-        - {prefix}_lower - the lower bound of confidence interval
-        - {prefix}_upper - the upper bound of confidence interval
+    - {prefix}_lower - the lower bound of confidence interval
+    - {prefix}_upper - the upper bound of confidence interval
 
     :param ht: Input Table with the observed and expected variant counts for either
         pLoF, missense, or synonymous variants.

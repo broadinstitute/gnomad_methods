@@ -706,39 +706,6 @@ def get_all_pop_lengths(
     return pop_lengths
 
 
-def explode_by_vep_annotation(
-    t: Union[hl.Table, hl.MatrixTable],
-    vep_annotation: str = "transcript_consequences",
-    vep_root: str = "vep",
-) -> Union[hl.Table, hl.MatrixTable]:
-    """
-    Explode the specified VEP annotation on the input Table/MatrixTable.
-
-    :param t: Input Table or MatrixTable.
-    :param vep_annotation: Name of annotation in `vep_root` to explode.
-    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
-    :return: Table or MatrixTable with exploded VEP annotation.
-    """
-    # Annotate 'worst_csq_by_gene' to t if it's specified for `vep_annotation`.
-    if vep_annotation == "worst_csq_by_gene":
-        t = process_consequences(t)
-
-    if vep_annotation not in t[vep_root].keys():
-        raise ValueError(
-            f"{vep_annotation} is not a row field of the {vep_root} annotation in"
-            " Table/MatrixTable!"
-        )
-    # Create top-level annotation for `vep_annotation` and explode it.
-    if isinstance(t, hl.Table):
-        t = t.transmute(**{vep_annotation: t[vep_root][vep_annotation]})
-        t = t.explode(t[vep_annotation])
-    else:
-        t = t.transmute_rows(**{vep_annotation: t[vep_root][vep_annotation]})
-        t = t.explode_rows(t[vep_annotation])
-
-    return t
-
-
 def get_constraint_grouping_expr(
     vep_annotation_expr: hl.StructExpression,
     coverage_expr: Optional[hl.Int32Expression] = None,
@@ -749,13 +716,17 @@ def get_constraint_grouping_expr(
     Collect annotations used for constraint groupings.
 
     Function collects the following annotations:
-        - annotation - 'most_severe_consequence' annotation in `vep_annotation`
-        - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
-          in `vep_annotation`
-        - gene - 'gene_symbol' annotation inside `vep_annotation`
+        - annotation - 'most_severe_consequence' annotation in `vep_annotation_expr`
+        - modifier - classic lof annotation from 'lof' annotation in
+            `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
+            `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
+            `vep_annotation_expr`, or "None" if neither is defined
+        - gene - 'gene_symbol' annotation inside `vep_annotation_expr`
         - coverage - exome coverage if `coverage_expr` is specified
-        - transcript (added when `include_transcript_group` is True)
-        - canonical (added when `include_canonical_group` is True)
+        - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
+            `include_transcript_group` is True)
+        - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
+            True)
 
     .. note::
         This function expects that the following fields are present in
@@ -806,14 +777,16 @@ def annotate_exploded_vep_for_constraint_groupings(
     Function explodes the specified VEP annotation (`vep_annotation`) and adds the following
     annotations:
         - annotation -'most_severe_consequence' annotation in `vep_annotation`
-        - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
-          in `vep_annotation`
+        - modifier - classic lof annotation from 'lof' annotation in
+            `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
+            `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
+            `vep_annotation_expr`, or "None" if neither is defined
         - gene - 'gene_symbol' annotation inside `vep_annotation`
         - coverage - exome coverage in `t`
-        - transcript (added when `vep_annotation` is specified as
-          "transcript_consequences")
-        - canonical (added when `vep_annotation` is specified as
-          "transcript_consequences")
+        - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
+            `include_transcript_group` is True)
+        - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
+            True)
 
     .. note::
         This function expects that the following annotations are present in `ht`:
@@ -827,12 +800,17 @@ def annotate_exploded_vep_for_constraint_groupings(
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
-    # Explode the specified VEP annotation.
-    ht = explode_by_vep_annotation(ht, vep_annotation)
     if vep_annotation == "transcript_consequences":
         include_transcript_group = include_canonical_group = True
     else:
         include_transcript_group = include_canonical_group = False
+
+    # Annotate 'worst_csq_by_gene' to `ht` if it's specified for `vep_annotation`.
+    if vep_annotation == "worst_csq_by_gene":
+        ht = process_consequences(ht)
+
+    # Explode the specified VEP annotation.
+    ht = explode_by_vep_annotation(ht, vep_annotation)
 
     # Collect the annotations used for groupings.
     groupings = get_constraint_grouping_expr(
@@ -856,18 +834,11 @@ def compute_expected_variants(
     """
     Apply plateau models for all sites and for a population (if specified) to compute predicted proportion observed ratio and expected variant counts.
 
-    .. note:
-        Function expects the following annotations to be present in `ht`:
-        - cpg
-        - observed_variants
-        - possible_variants
-
     :param ht: Input Table.
-    :param plateau_models: Linear models (output of `build_models()` in
-        gnomad_methods`), with the values of the dictionary formatted as a
-        StrucExpression of intercept and slope, that calibrates mutation rate to
-        proportion observed for high coverage exome. It includes models for CpG s,
-        non-CpG sites, and each population in `POPS`.
+    :param plateau_models: Linear models (output of `build_models()`, with the values
+        of the dictionary formatted as a StructExpression of intercept and slope, that
+        calibrates mutation rate to proportion observed for high coverage exomes. It
+        includes models for CpG, non-CpG sites, and each population in `POPS`.
     :param mu_expr: Float64Expression of mutation rate.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.

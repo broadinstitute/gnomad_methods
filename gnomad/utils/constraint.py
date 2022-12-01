@@ -5,7 +5,10 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.vep import process_consequences
+from gnomad.utils.vep import (
+    process_consequences,
+    explode_by_vep_annotation
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -776,17 +779,17 @@ def annotate_exploded_vep_for_constraint_groupings(
 
     Function explodes the specified VEP annotation (`vep_annotation`) and adds the following
     annotations:
-        - annotation -'most_severe_consequence' annotation in `vep_annotation`
-        - modifier - classic lof annotation from 'lof' annotation in
-            `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
-            `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
-            `vep_annotation_expr`, or "None" if neither is defined
-        - gene - 'gene_symbol' annotation inside `vep_annotation`
-        - coverage - exome coverage in `t`
-        - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
-            `include_transcript_group` is True)
-        - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
-            True)
+    - annotation -'most_severe_consequence' annotation in `vep_annotation`
+    - modifier - classic lof annotation from 'lof' annotation in
+        `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
+        `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
+        `vep_annotation_expr`, or "None" if neither is defined
+    - gene - 'gene_symbol' annotation inside `vep_annotation`
+    - coverage - exome coverage in `t`
+    - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
+        `include_transcript_group` is True)
+    - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
+        True)
 
     .. note::
         This function expects that the following annotations are present in `ht`:

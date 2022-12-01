@@ -708,16 +708,15 @@ def get_all_pop_lengths(
 
 def explode_by_vep_annotation(
     t: Union[hl.Table, hl.MatrixTable],
-    vep_annotation: str,
+    vep_annotation: str = "transcript_consequences",
     vep_root: str = "vep",
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Annotate specified VEP annotation if it's not in the input Table or MatrixTable and explode the VEP annotation.
+    Explode the specified VEP annotation on the input Table/MatrixTable.
 
     :param t: Input Table or MatrixTable.
-    :param vep_annotation: Name of annotation in VEP annotation that will be annotated,
-        if necessary, and explode.
-    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param vep_annotation: Name of annotation in `vep_root` to explode.
+    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
     :return: Table or MatrixTable with exploded VEP annotation.
     """
     # Annotate 'worst_csq_by_gene' to t if it's specified for `vep_annotation`.
@@ -726,7 +725,7 @@ def explode_by_vep_annotation(
 
     if vep_annotation not in t[vep_root].keys():
         raise ValueError(
-            f"{vep_annotation} is not a row field of the VEP annotation in"
+            f"{vep_annotation} is not a row field of the {vep_root} annotation in"
             " Table/MatrixTable!"
         )
     # Create top-level annotation for `vep_annotation` and explode it.
@@ -742,7 +741,7 @@ def explode_by_vep_annotation(
 
 def get_constraint_grouping_expr(
     vep_annotation_expr: hl.StructExpression,
-    coverage_expr: hl.Int32Expression = None,
+    coverage_expr: Optional[hl.Int32Expression] = None,
     include_transcript_group: bool = True,
     include_canonical_group: bool = True,
 ) -> Dict[str, Union[hl.StringExpression, hl.Int32Expression, hl.BooleanExpression]]:
@@ -754,7 +753,7 @@ def get_constraint_grouping_expr(
         - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
           in `vep_annotation`
         - gene - 'gene_symbol' annotation inside `vep_annotation`
-        - coverage - exome coverage
+        - coverage - exome coverage if `coverage_expr` is specified
         - transcript (added when `include_transcript_group` is True)
         - canonical (added when `include_canonical_group` is True)
 
@@ -769,10 +768,10 @@ def get_constraint_grouping_expr(
         - canonical (if `include_canonical_group` is True)
 
     :param vep_annotation_expr: StructExpression of VEP annotation.
-    :param coverage_expr: Int32Expression of exome coverage. Default is None.
-    :param include_transcript_group: Wether to include the transcript annotation in the
+    :param coverage_expr: Optional Int32Expression of exome coverage. Default is None.
+    :param include_transcript_group: Whether to include the transcript annotation in the
         groupings. Default is True.
-    :param include_canonical_group: Wether to include canonical annotation in the
+    :param include_canonical_group: Whether to include canonical annotation in the
         groupings. Default is True.
     :return: A dictionary with keys as annotation names and values as actual
         annotations.
@@ -802,9 +801,9 @@ def annotate_exploded_vep_for_constraint_groupings(
     ht: hl.Table, vep_annotation: str = "transcript_consequences"
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
-    Annotate constraint annotations used for groupings.
+    Annotate Table with annotations used for constraint groupings.
 
-    Function explodes the specified VEP annotation and annotates the following
+    Function explodes the specified VEP annotation (`vep_annotation`) and adds the following
     annotations:
         - annotation -'most_severe_consequence' annotation in `vep_annotation`
         - modifier - classic lof annotation, LOFTEE annotation, or PolyPhen annotation
@@ -817,14 +816,14 @@ def annotate_exploded_vep_for_constraint_groupings(
           "transcript_consequences")
 
     .. note::
-        This function expects that the following fields are present in `ht`:
+        This function expects that the following annotations are present in `ht`:
         - vep
         - exome_coverage
 
     :param t: Input Table or MatrixTable.
-    :param vep_annotation: Name of annotation in VEP annotation (one of
+    :param vep_annotation: Name of annotation in 'vep' annotation (one of
         "transcript_consequences" and "worst_csq_by_gene") that will be used for
-        constraint annotation. Defaults to "transcript_consequences".
+        obtaining constraint annotations. Default is "transcript_consequences".
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
@@ -848,7 +847,7 @@ def annotate_exploded_vep_for_constraint_groupings(
 
 def compute_expected_variants(
     ht: hl.Table,
-    plateau_models: hl.StructExpression,
+    plateau_models_expr: hl.StructExpression,
     mu_expr: hl.Float64Expression,
     cov_corr_expr: hl.Float64Expression,
     cpg_expr: hl.BooleanExpression,
@@ -858,7 +857,7 @@ def compute_expected_variants(
     Apply plateau models for all sites and for a population (if specified) to compute predicted proportion observed ratio and expected variant counts.
 
     .. note:
-        Function expects following annotations to be present in `ht`:
+        Function expects the following annotations to be present in `ht`:
         - cpg
         - observed_variants
         - possible_variants
@@ -872,20 +871,20 @@ def compute_expected_variants(
     :param mu_expr: Float64Expression of mutation rate.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
-    :param pop: Population that will be used when applying plateau model. Default is
+    :param pop: Optional population to use when applying plateau model. Default is
         None.
     :return: A dictionary with predicted proportion observed ratio and expected variant
         counts.
     """
     if pop is None:
         pop = ""
-        plateau_model = hl.literal(plateau_models.total)[cpg_expr]
+        plateau_model = hl.literal(plateau_models_expr.total)[cpg_expr]
         slope = plateau_model[1]
         intercept = plateau_model[0]
         agg_func = hl.agg.sum
         ann_to_sum = ["observed_variants", "possible_variants"]
     else:
-        plateau_model = hl.literal(plateau_models[pop])
+        plateau_model = hl.literal(plateau_models_expr[pop])
         slope = hl.map(lambda f: f[cpg_expr][1], plateau_model)
         intercept = hl.map(lambda f: f[cpg_expr][0], plateau_model)
         agg_func = hl.agg.array_sum

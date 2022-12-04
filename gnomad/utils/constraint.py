@@ -5,10 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.vep import (
-    process_consequences,
-    explode_by_vep_annotation
-)
+from gnomad.utils.vep import process_consequences, explode_by_vep_annotation
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -777,8 +774,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     """
     Annotate Table with annotations used for constraint groupings.
 
-    Function explodes the specified VEP annotation (`vep_annotation`) and adds the following
-    annotations:
+    Function explodes the specified VEP annotation (`vep_annotation`) and adds the following annotations:
     - annotation -'most_severe_consequence' annotation in `vep_annotation`
     - modifier - classic lof annotation from 'lof' annotation in
         `vep_annotation`, LOFTEE annotation from 'lof' annotation in

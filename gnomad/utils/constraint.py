@@ -781,14 +781,14 @@ def annotate_exploded_vep_for_constraint_groupings(
     annotations:
     - annotation -'most_severe_consequence' annotation in `vep_annotation`
     - modifier - classic lof annotation from 'lof' annotation in
-        `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
-        `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
-        `vep_annotation_expr`, or "None" if neither is defined
+        `vep_annotation`, LOFTEE annotation from 'lof' annotation in
+        `vep_annotation`, PolyPhen annotation from 'polyphen_prediction' in
+        `vep_annotation`, or "None" if neither is defined
     - gene - 'gene_symbol' annotation inside `vep_annotation`
-    - coverage - exome coverage in `t`
-    - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
+    - coverage - exome coverage in `ht`
+    - transcript - id from 'transcript_id' in `vep_annotation` (added when
         `include_transcript_group` is True)
-    - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
+    - canonical from `vep_annotation` (added when `include_canonical_group` is
         True)
 
     .. note::
@@ -838,7 +838,7 @@ def compute_expected_variants(
     Apply plateau models for all sites and for a population (if specified) to compute predicted proportion observed ratio and expected variant counts.
 
     :param ht: Input Table.
-    :param plateau_models: Linear models (output of `build_models()`, with the values
+    :param plateau_models_expr: Linear models (output of `build_models()`, with the values
         of the dictionary formatted as a StructExpression of intercept and slope, that
         calibrates mutation rate to proportion observed for high coverage exomes. It
         includes models for CpG, non-CpG sites, and each population in `POPS`.
@@ -876,7 +876,7 @@ def compute_expected_variants(
     }
 
     # Generate sum aggregators for 'observed_variants' and 'possible_variants' on
-    # the entire dataset if pop is None, and for `downsampling_counts` for
+    # the entire dataset if pop is None, and for 'downsampling_counts' for
     # specified population if pop is not None.
     agg_expr.update({ann: agg_func(ht[ann]) for ann in ann_to_sum})
 

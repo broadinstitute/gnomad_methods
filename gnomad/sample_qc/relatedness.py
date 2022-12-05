@@ -755,44 +755,62 @@ def compute_related_samples_to_drop(
 
     def maximal_independent_set_keep_samples(
         pair_graph: nx.Graph,
-        keep_samples: set = set(),
+        keep: set = set(),
     ) -> List:
         """
         Find maximal independent set with the ability to retain specific samples.
 
-        Results will be the same as Hail's maximal_independent_set when `keep_samples`
-        is empty. Otherwise, `keep_samples` will always be kept, while still being
+        Results will be the same as Hail's maximal_independent_set when `keep`
+        is empty. Otherwise, `keep` will always be kept, while still being
         included in the graph to compute the degree (number of samples each sample is
         related to) of each node (sample).
 
         :param pair_graph: A networkx graph of related sample pairs.
-        :param keep_samples: Set of samples that must be kept even when the degree
+        :param keep: Set of samples that must be kept even when the degree
             (number of total samples this sample is related to) is highest and would
             typically be removed to get the maximal independent set.
         :return: List of related samples to drop.
         """
         drop_samples = []
+        # Get a list of all connected components in pair_graph.
+        # This is a list of sample sets where each set contains samples that are
+        # connected in the graph and share no connections to samples in any other set.
         connected_samples = list(nx.connected_components(pair_graph))
+        # For each of the connected components, determine the sample with the largest
+        # degree (number of samples it is related to) that is not in keep.
+        # Add this sample to drop_samples and then compute the subgraph with this
+        # sample excluded. Repeat the process on this subgraph. Continue until all
+        # connected components contain only a single sample, unless connected samples
+        # are in keep.
         for con in connected_samples:
             if len(con) > 1:
-                con_idx = {i: s for i, s in enumerate(con)}
+                # Build a list of (degree, rank, sample) sorted by highest degree and
+                # then highest rank.
                 degree_rank_list = sorted(
-                    [(pair_graph.degree[s], s["rank"], i) for i, s in con_idx.items()]
+                    [(pair_graph.degree[s], s.rank, s) for s in con],
+                    reverse=True,
                 )
-                last_i = len(degree_rank_list) - 1
-                last_s = con_idx[degree_rank_list[last_i][2]]
-                while last_s.s in keep_samples and last_i > 0:
-                    last_i -= 1
-                    last_s = con_idx[degree_rank_list[last_i][2]]
-                if last_s.s not in keep_samples:
-                    drop_samples.append(last_s)
-                    new_con = con - {last_s}
+                # Get the sample with the highest degree and highest rank not in keep.
+                highest_degree_s = degree_rank_list.pop(0)[2]
+                while highest_degree_s.s in keep and len(degree_rank_list) > 0:
+                    highest_degree_s = degree_rank_list.pop(0)[2]
+                if highest_degree_s.s not in keep:
+                    # Add sample with the highest degree and highest rank not in keep
+                    # to the list of samples to drop.
+                    drop_samples.append(highest_degree_s)
+                    # Remove that sample from the samples in the current connected
+                    # component and if there is more than one sample left, get the
+                    # subgraph containing those samples and repeat this process.
+                    new_con = con - {highest_degree_s}
                     if len(new_con) > 1:
                         drop_samples.extend(
                             maximal_independent_set_keep_samples(
-                                pair_graph.subgraph(new_con)
+                                pair_graph.subgraph(new_con),
+                                keep=keep,
                             )
                         )
+                else:
+                    print("Must keep", highest_degree_s.s)
         return drop_samples
 
     if keep_samples is None:
@@ -807,13 +825,14 @@ def compute_related_samples_to_drop(
             **related_samples_to_drop_ht.node
         )
     else:
+        print("Running new method")
         related_pair_graph = nx.Graph()
         related_pair_graph.add_edges_from(
             list(zip(relatedness_ht.i.collect(), relatedness_ht.j.collect()))
         )
         related_samples_to_drop_ht = hl.Table.parallelize(
             maximal_independent_set_keep_samples(
-                related_pair_graph, keep_samples=keep_samples.collect()
+                related_pair_graph, keep=keep_samples.collect()[0]
             )
         )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")

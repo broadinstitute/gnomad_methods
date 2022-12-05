@@ -715,7 +715,7 @@ def compute_related_samples_to_drop(
 
     if keep_samples is not None:
         logger.info(
-            "Number of samples in the provided list of samples to keep: %f",
+            "Number of samples in the provided list of samples to keep: %d",
             hl.eval(hl.len(keep_samples)),
         )
         i = relatedness_ht.key[0]

@@ -777,11 +777,11 @@ def compute_related_samples_to_drop(
         # connected in the graph and share no connections to samples in any other set.
         connected_samples = list(nx.connected_components(pair_graph))
         # For each of the connected components, determine the sample with the largest
-        # degree (number of samples it is related to) that is not in keep.
+        # degree (number of samples it is related to), followed by highest rank, that is not in keep.
         # Add this sample to drop_samples and then compute the subgraph with this
         # sample excluded. Repeat the process on this subgraph. Continue until all
         # connected components contain only a single sample, unless connected samples
-        # are in keep.
+        # are in `keep`.
         for con in connected_samples:
             if len(con) > 1:
                 # Build a list of (degree, rank, sample) sorted by highest degree and

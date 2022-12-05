@@ -786,7 +786,7 @@ def compute_related_samples_to_drop(
                     last_s = con_idx[degree_rank_list[last_i][2]]
                 if last_s.s not in keep_samples:
                     drop_samples.append(last_s)
-                    new_con = {con_idx[s[2]] for s in degree_rank_list[:-1]}
+                    new_con = con - {last_s}
                     if len(new_con) > 1:
                         drop_samples.extend(
                             maximal_independent_set_keep_samples(

@@ -304,6 +304,45 @@ class BlockMatrixResource(BaseResource):
         )
 
 
+class ExpressionResource(BaseResource):
+    """
+    A Hail Expression resource.
+
+    :param path: The Expression path (typically ending in .he).
+    :param import_args: Any sources that are required for the import and need to be
+        kept track of and/or passed to the import_func (e.g. .vcf path for an imported
+        VCF).
+    :param import_func: A function used to import the Expression. `import_func` will be
+        passed the `import_args` dictionary as kwargs.
+    """
+
+    expected_file_extensions: List[str] = [".he"]
+
+    def he(self, force_import: bool = False) -> hl.expr.Expression:
+        """
+        Read and return the Hail Expression resource.
+
+        :return: Hail Expression resource.
+        """
+        if self.path is None or force_import:
+            return self.import_func(**self.import_args)
+        else:
+            return hl.experimental.read_expression(self.path)
+
+    def import_resource(self, overwrite: bool = True, **kwargs) -> None:
+        """
+        Import the Expression resource using its import_func and writes it in its path.
+
+        :param overwrite: If set, existing file(s) will be overwritten.
+        :param kwargs: Any other parameters to be passed to hl.experimental.
+            write_expression.
+        :return: Nothing.
+        """
+        self.import_func(**self.import_args).write(
+            self.path, overwrite=overwrite, **kwargs
+        )
+
+
 class BaseVersionedResource:
     """
     Class for a versioned resource.

@@ -809,8 +809,7 @@ def compute_related_samples_to_drop(
                                 keep=keep,
                             )
                         )
-                else:
-                    print("Must keep", highest_degree_s.s)
+
         return drop_samples
 
     if keep_samples is None:

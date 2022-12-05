@@ -824,14 +824,13 @@ def compute_related_samples_to_drop(
             **related_samples_to_drop_ht.node
         )
     else:
-        print("Running new method")
         related_pair_graph = nx.Graph()
         related_pair_graph.add_edges_from(
             list(zip(relatedness_ht.i.collect(), relatedness_ht.j.collect()))
         )
         related_samples_to_drop_ht = hl.Table.parallelize(
             maximal_independent_set_keep_samples(
-                related_pair_graph, keep=keep_samples.collect()[0]
+                related_pair_graph, keep=hl.eval(keep_samples)
             )
         )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")

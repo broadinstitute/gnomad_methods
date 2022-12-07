@@ -114,6 +114,7 @@ def compute_stratified_metrics_filter(
     upper_threshold: float = 4.0,
     metric_threshold: Optional[Dict[str, Tuple[float, float]]] = None,
     filter_name: str = "qc_metrics_filters",
+    comparison_sample_expr: Optional[hl.expr.CollectionExpression] = None,
 ) -> hl.Table:
     """
     Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering.
@@ -133,20 +134,21 @@ def compute_stratified_metrics_filter(
     if metric_threshold is not None:
         _metric_threshold.update(metric_threshold)
 
-    def make_filters_expr(
-        ht: hl.Table, qc_metrics: Iterable[str]
-    ) -> hl.expr.SetExpression:
-        return hl.set(
-            hl.filter(
-                lambda x: hl.is_defined(x),
-                [hl.or_missing(ht[f"fail_{metric}"], metric) for metric in qc_metrics],
-            )
-        )
-
     if strata is None:
         strata = {}
 
-    ht = ht.select(**qc_metrics, **strata).key_by("s").persist()
+    if comparison_sample_expr is not None:
+        ht = ht.select(
+            **qc_metrics, **strata, _comparison_sample=comparison_sample_expr
+        )
+        ht = ht.explode(ht._comparison_sample)
+        ht = ht.annotate(**ht[ht._comparison_sample])
+    else:
+        ht = ht.select(**qc_metrics, **strata)
+
+    ht = ht.checkpoint(
+        new_temp_file("compute_stratified_metrics_filter", extension="ht")
+    )
 
     agg_expr = hl.struct(
         **{
@@ -175,13 +177,20 @@ def compute_stratified_metrics_filter(
         )
         metrics_stats_expr = ht.qc_metrics_stats
 
-    fail_exprs = {
-        f"fail_{metric}": (ht[metric] <= metrics_stats_expr[metric].lower)
-        | (ht[metric] >= metrics_stats_expr[metric].upper)
-        for metric in qc_metrics
-    }
-    ht = ht.transmute(**fail_exprs)
-    stratified_filters = make_filters_expr(ht, qc_metrics)
+    ht = ht.transmute(
+        **{
+            f"fail_{metric}": (ht[metric] <= metrics_stats_expr[metric].lower)
+            | (ht[metric] >= metrics_stats_expr[metric].upper)
+            for metric in qc_metrics
+        }
+    )
+    stratified_filters = hl.set(
+        hl.filter(
+            lambda x: hl.is_defined(x),
+            [hl.or_missing(ht[f"fail_{metric}"], metric) for metric in qc_metrics],
+        )
+    )
+
     return ht.annotate(**{filter_name: stratified_filters})
 
 
@@ -378,12 +387,13 @@ def determine_nearest_neighbors(
     distance_metric: str = "euclidean",
     use_approximation: bool = False,
     n_trees: int = 50,
-):
+) -> hl.Table:
     """
     Add module docstring.
 
     :param ht:
     :param scores_expr:
+    :param strata:
     :param n_pcs:
     :param n_neighbors:
     :param n_jobs:

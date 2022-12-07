@@ -4,7 +4,10 @@ import logging
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import hail as hl
-from hail.utils.misc import divide_null
+import pandas as pd
+from annoy import AnnoyIndex
+from hail.utils.misc import divide_null, new_temp_file
+from sklearn.neighbors import NearestNeighbors
 
 from gnomad.utils.gen_stats import get_median_and_mad_expr, merge_stats_counters_expr
 
@@ -362,3 +365,132 @@ def merge_sample_qc_expr(
         )
 
     return hl.struct(**merged_exprs)
+
+
+def determine_nearest_neighbors(
+    ht: hl.Table,
+    scores_expr: hl.expr.ArrayNumericExpression,
+    strata: Optional[Dict[str, hl.expr.Expression]] = None,
+    n_pcs: int = 16,
+    n_neighbors: int = 50,
+    n_jobs: int = -2,
+    add_neighbor_distances: bool = False,
+    distance_metric: str = "euclidean",
+    use_approximation: bool = False,
+    n_trees: int = 50,
+):
+    """
+    Add module docstring.
+
+    :param ht:
+    :param scores_expr:
+    :param n_pcs:
+    :param n_neighbors:
+    :param n_jobs:
+    :param add_neighbor_distances:
+    :param distance_metric:
+    :param use_approximation:
+    :param n_trees:
+    :return:
+    """
+    # TODO: Add loggers and write docstring
+    # Annotate HT with fields necessary for nearest neighbors computation.
+    # Checkpoint before filtering and exporting to pandas dataframes.
+    ann_expr = {"scores": scores_expr}
+    if strata is not None:
+        ann_expr["strata"] = hl.tuple([ht[x] for x in strata])
+    else:
+        ann_expr["strata"] = True
+
+    _ht = ht.select(**ann_expr)
+    _ht = _ht.filter(hl.is_defined(_ht.scores))
+    _ht = _ht.transmute(**{f"PC{i + 1}": _ht.scores[i] for i in range(n_pcs)})
+    _ht = _ht.checkpoint(new_temp_file("determine_nearest_neighbors", extension="ht"))
+
+    all_strata_vals = _ht.aggregate(hl.agg.collect_as_set(_ht.strata))
+    all_nbr_hts = []
+    for group in all_strata_vals:
+        scores_pd = _ht.filter(_ht.strata == group).to_pandas()
+        scores_pd_s = scores_pd.s
+        scores_pd = scores_pd[[f"PC{i + 1}" for i in range(n_pcs)]]
+
+        if use_approximation:
+            nbrs = AnnoyIndex(n_pcs, distance_metric)
+            for i, row in scores_pd.iterrows():
+                nbrs.add_item(i, row)
+            nbrs.build(n_trees, n_jobs=n_jobs)
+
+            indexes = []
+            for i in range(scores_pd.shape[0]):
+                indexes.append(
+                    nbrs.get_nns_by_item(
+                        i, n_neighbors, include_distances=add_neighbor_distances
+                    )
+                )
+            if add_neighbor_distances:
+                distances = [d for i, d in indexes]
+                indexes = [i for i, d in indexes]
+        else:
+            scores = scores_pd.values
+            nbrs = NearestNeighbors(
+                n_neighbors=n_neighbors, n_jobs=n_jobs, metric=distance_metric
+            )
+            nbrs.fit(scores)
+            indexes = nbrs.kneighbors(scores, return_distance=add_neighbor_distances)
+            if add_neighbor_distances:
+                distances, indexes = indexes
+
+        # Format neighbor indexes as a Hail Table.
+        indexes_pd = pd.DataFrame(indexes)
+        indexes_pd = pd.concat([scores_pd_s, indexes_pd], axis=1)
+        indexes_pd = indexes_pd.rename(
+            columns={i: f"nbrs_index_{i}" for i in range(n_neighbors)}
+        )
+        indexes_ht = hl.Table.from_pandas(indexes_pd, key=["s"])
+        indexes_ht = indexes_ht.transmute(
+            nearest_neighbor_idxs=hl.array(
+                [indexes_ht[f"nbrs_index_{i}"] for i in range(n_neighbors)]
+            )
+        )
+
+        if add_neighbor_distances:
+            # Format neighbor distances as a Hail Table.
+            distances_pd = pd.DataFrame(distances)
+            distances_pd = distances_pd.rename(
+                columns={i: f"nbrs_{i}" for i in range(n_neighbors)}
+            )
+            distances_pd = pd.concat([scores_pd_s, distances_pd], axis=1)
+            distances_ht = hl.Table.from_pandas(distances_pd, key=["s"])
+            distances_ht = distances_ht.transmute(
+                nearest_neighbor_dists=hl.array(
+                    [distances_ht[f"nbrs_{str(i)}"] for i in range(n_neighbors)]
+                )
+            )
+
+            # Join neighbor distances Table and indexes Table.
+            nbrs_ht = indexes_ht.join(distances_ht)
+        else:
+            nbrs_ht = indexes_ht
+
+        # Add nearest_neighbors annotation to use instead of indexes.
+        nbrs_ht = nbrs_ht.add_index()
+        explode_nbrs_ht = nbrs_ht.key_by("idx").explode("nearest_neighbor_idxs")
+        explode_nbrs_ht = explode_nbrs_ht.transmute(
+            nbr=explode_nbrs_ht[hl.int64(explode_nbrs_ht.nearest_neighbor_idxs)].s
+        )
+        explode_nbrs_ht = explode_nbrs_ht.group_by("s").aggregate(
+            nearest_neighbors=hl.agg.collect_as_set(explode_nbrs_ht.nbr)
+        )
+        nbrs_ht = nbrs_ht.annotate(
+            nearest_neighbors=explode_nbrs_ht[nbrs_ht.key].nearest_neighbors
+        )
+
+        all_nbr_hts.append(nbrs_ht)
+
+    nbrs_ht = all_nbr_hts[0]
+    if len(all_nbr_hts) > 1:
+        nbrs_ht = nbrs_ht.union(all_nbr_hts[1:])
+
+    nbrs_ht = nbrs_ht.annotate_globals(n_pcs=n_pcs, n_neighbors=n_neighbors)
+
+    return ht.annotate(**nbrs_ht[ht.key])

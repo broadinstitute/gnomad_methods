@@ -135,62 +135,76 @@ def compute_stratified_metrics_filter(
         _metric_threshold.update(metric_threshold)
 
     if strata is None:
-        strata = {}
+        strata = {"all": True}
+
+    select_expr = {
+        "_qc_metrics": qc_metrics,
+        "_strata": hl.tuple([strata[x] for x in strata]),
+    }
 
     if comparison_sample_expr is not None:
-        ht = ht.select(
-            **qc_metrics, **strata, _comparison_sample=comparison_sample_expr
+        select_expr["_comparison_sample"] = comparison_sample_expr
+        pre_explode_ht = ht.select(**select_expr)
+        ht = pre_explode_ht.explode(pre_explode_ht._comparison_sample)
+        ht = ht.annotate(
+            _comparison_qc_metrics=ht[ht._comparison_sample]._qc_metrics,
+            _comparison_strata=ht[ht._comparison_sample]._strata,
         )
-        ht = ht.explode(ht._comparison_sample)
-        ht = ht.annotate(**ht[ht._comparison_sample])
+        metric_ann = "_comparison_qc_metrics"
+        strata_ann = "_comparison_strata"
     else:
-        ht = ht.select(**qc_metrics, **strata)
+        ht = ht.select(**select_expr)
+        metric_ann = "_qc_metrics"
+        strata_ann = "_strata"
 
     ht = ht.checkpoint(
         new_temp_file("compute_stratified_metrics_filter", extension="ht")
     )
 
-    agg_expr = hl.struct(
-        **{
-            metric: hl.bind(
-                lambda x: x.annotate(
-                    lower=x.median - _metric_threshold[metric][0] * x.mad,
-                    upper=x.median + _metric_threshold[metric][1] * x.mad,
-                ),
-                get_median_and_mad_expr(ht[metric]),
-            )
-            for metric in qc_metrics
-        }
+    agg_expr = hl.agg.group_by(
+        ht[strata_ann],
+        hl.struct(
+            **{
+                metric: hl.bind(
+                    lambda x: x.annotate(
+                        lower=x.median - _metric_threshold[metric][0] * x.mad,
+                        upper=x.median + _metric_threshold[metric][1] * x.mad,
+                    ),
+                    get_median_and_mad_expr(ht[metric_ann][metric]),
+                )
+                for metric in qc_metrics
+            }
+        ),
     )
 
-    if strata:
-        ht = ht.annotate_globals(
-            qc_metrics_stats=ht.aggregate(
-                hl.agg.group_by(hl.tuple([ht[x] for x in strata]), agg_expr),
-                _localize=False,
-            )
+    if comparison_sample_expr is not None:
+        ht = pre_explode_ht.annotate(
+            **ht.group_by(ht.s).aggregate(qc_metrics_stats=agg_expr)[pre_explode_ht.key]
         )
-        metrics_stats_expr = ht.qc_metrics_stats[hl.tuple([ht[x] for x in strata])]
+        select_expr = {"qc_metrics_stats": ht.qc_metrics_stats}
     else:
         ht = ht.annotate_globals(
             qc_metrics_stats=ht.aggregate(agg_expr, _localize=False)
         )
-        metrics_stats_expr = ht.qc_metrics_stats
 
-    ht = ht.transmute(
+    metrics_stats_expr = ht.qc_metrics_stats[ht._strata]
+    select_expr.update(
         **{
-            f"fail_{metric}": (ht[metric] <= metrics_stats_expr[metric].lower)
-            | (ht[metric] >= metrics_stats_expr[metric].upper)
+            f"fail_{metric}": (
+                ht._qc_metrics[metric] <= metrics_stats_expr[metric].lower
+            )
+            | (ht._qc_metrics[metric] >= metrics_stats_expr[metric].upper)
             for metric in qc_metrics
         }
     )
+    ht = ht.select(**select_expr)
+
     stratified_filters = hl.set(
         hl.filter(
             lambda x: hl.is_defined(x),
             [hl.or_missing(ht[f"fail_{metric}"], metric) for metric in qc_metrics],
         )
     )
-
     return ht.annotate(**{filter_name: stratified_filters})
 
 

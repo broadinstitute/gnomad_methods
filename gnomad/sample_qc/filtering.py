@@ -177,6 +177,7 @@ def compute_stratified_metrics_filter(
         ),
     )
 
+    select_expr = {}
     if comparison_sample_expr is not None:
         ht = pre_explode_ht.annotate(
             **ht.group_by(ht.s).aggregate(qc_metrics_stats=agg_expr)[pre_explode_ht.key]

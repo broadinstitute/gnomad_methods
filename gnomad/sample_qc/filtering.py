@@ -23,6 +23,7 @@ def compute_qc_metrics_residuals(
     use_pc_square: bool = True,
     n_pcs: Optional[int] = None,
     regression_sample_inclusion_expr: hl.expr.BooleanExpression = hl.bool(True),
+    strata: Optional[Dict[str, hl.expr.Expression]] = None,
 ) -> hl.Table:
     """
     Compute QC metrics residuals after regressing out PCs (and optionally PC^2).
@@ -40,9 +41,18 @@ def compute_qc_metrics_residuals(
     :param regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
     :return: Table with QC metrics residuals
     """
+    if strata is None:
+        strata = {"all": True}
+        collapse_lms = True
+    else:
+        collapse_lms = False
+
     # Annotate QC HT with fields necessary for computation
     _sample_qc_ht = ht.select(
-        **qc_metrics, scores=pc_scores, _keep=regression_sample_inclusion_expr
+        **qc_metrics,
+        scores=pc_scores,
+        _keep=regression_sample_inclusion_expr,
+        _strata=hl.tuple([strata[x] for x in strata]),
     )
 
     # If n_pcs wasn't provided, use all PCs
@@ -65,31 +75,41 @@ def compute_qc_metrics_residuals(
 
     # Compute linear regressions
     lms = _sample_qc_ht.aggregate(
-        hl.struct(
-            **{
-                metric: hl.agg.filter(
-                    _sample_qc_ht._keep,
-                    hl.agg.linreg(y=_sample_qc_ht[metric], x=x_expr),
-                )
-                for metric in qc_metrics
-            }
+        hl.agg.group_by(
+            _sample_qc_ht._strata,
+            hl.struct(
+                **{
+                    metric: hl.agg.filter(
+                        _sample_qc_ht._keep,
+                        hl.agg.linreg(y=_sample_qc_ht[metric], x=x_expr),
+                    )
+                    for metric in qc_metrics
+                }
+            ),
         )
     )
 
-    _sample_qc_ht = _sample_qc_ht.annotate_globals(lms=lms).persist()
+    _sample_qc_ht = _sample_qc_ht.annotate_globals(lms=lms)
+    _sample_qc_ht = _sample_qc_ht.checkpoint(
+        new_temp_file("compute_qc_metrics_residuals.lms", extension="ht")
+    )
 
     # Compute residuals
     def get_lm_prediction_expr(metric: str):
-        lm_pred_expr = _sample_qc_ht.lms[metric].beta[0] + hl.sum(
+        lm_pred_expr = _sample_qc_ht.lms[_sample_qc_ht._strata][metric].beta[
+            0
+        ] + hl.sum(
             hl.range(n_pcs).map(
-                lambda i: _sample_qc_ht.lms[metric].beta[i + 1]
+                lambda i: _sample_qc_ht.lms[_sample_qc_ht._strata][metric].beta[i + 1]
                 * _sample_qc_ht.scores[i]
             )
         )
         if use_pc_square:
             lm_pred_expr = lm_pred_expr + hl.sum(
                 hl.range(n_pcs).map(
-                    lambda i: _sample_qc_ht.lms[metric].beta[i + n_pcs + 1]
+                    lambda i: _sample_qc_ht.lms[_sample_qc_ht._strata][metric].beta[
+                        i + n_pcs + 1
+                    ]
                     * _sample_qc_ht.scores[i]
                     * _sample_qc_ht.scores[i]
                 )
@@ -99,11 +119,16 @@ def compute_qc_metrics_residuals(
     residuals_ht = _sample_qc_ht.select(
         **{
             f"{metric}_residual": _sample_qc_ht[metric] - get_lm_prediction_expr(metric)
-            for metric in _sample_qc_ht.lms
+            for metric in qc_metrics
         }
     )
+    if collapse_lms:
+        residuals_ht = residuals_ht.annotate_globals(lms=residuals_ht.lms["all"])
+    residuals_ht = residuals_ht.checkpoint(
+        new_temp_file("compute_qc_metrics_residuals.residuals", extension="ht")
+    )
 
-    return residuals_ht.persist()
+    return residuals_ht
 
 
 def compute_stratified_metrics_filter(

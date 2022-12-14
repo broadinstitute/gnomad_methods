@@ -481,7 +481,6 @@ def determine_nearest_neighbors(
     :return: Table with an annotation for the nearest neighbors and optionally their
         distances.
     """
-    # TODO: Add loggers
     # Annotate HT with fields necessary for nearest neighbors computation.
     # Checkpoint before filtering and exporting to pandas dataframes.
     ann_expr = {"scores": scores_expr}
@@ -494,20 +493,39 @@ def determine_nearest_neighbors(
     if n_pcs is None:
         n_pcs = ht.aggregate(hl.agg.min(hl.len(scores_expr)))
 
-    # TODO: add check for strata size, nn might be bigger than the strata, how
-    #  do we handle that
     _ht = ht.select(**ann_expr)
     _ht = _ht.filter(hl.is_defined(_ht.scores))
     _ht = _ht.transmute(**{f"PC{i + 1}": _ht.scores[i] for i in range(n_pcs)})
+    logger.info("Checkpointing intermediate Table before converting to pandas...")
     _ht = _ht.checkpoint(new_temp_file("determine_nearest_neighbors", extension="ht"))
 
     all_strata_vals = _ht.aggregate(hl.agg.collect_as_set(_ht.strata))
     all_nbr_hts = []
     for group in all_strata_vals:
+        logger_str = ""
+        if strata is not None:
+            logger_str += ", for the following stratification group: %s"
+        logger.info(
+            "Finding %d %s,nearest neighbors, using the %s distance metric%s.",
+            n_neighbors,
+            "approximate" if use_approximation else "",
+            distance_metric,
+            logger_str,
+        )
         scores_pd = _ht.filter(_ht.strata == group).to_pandas()
         scores_pd_s = scores_pd.s
         scores_pd = scores_pd[[f"PC{i + 1}" for i in range(n_pcs)]]
-
+        group_n = scores_pd.shape[0]
+        if n_neighbors > group_n:
+            logger.warning(
+                "The requested number of nearest neighbors (%d) is larger than the "
+                "number of samples in the %s stratification group (%d). Only %d "
+                "neighbors will be returned for all samples in this group.",
+                n_neighbors,
+                group,
+                group_n,
+                group_n,
+            )
         if use_approximation:
             nbrs = AnnoyIndex(n_pcs, distance_metric)
             for i, row in scores_pd.iterrows():
@@ -515,7 +533,7 @@ def determine_nearest_neighbors(
             nbrs.build(n_trees, n_jobs=n_jobs)
 
             indexes = []
-            for i in range(scores_pd.shape[0]):
+            for i in range(group_n):
                 indexes.append(
                     nbrs.get_nns_by_item(
                         i, n_neighbors, include_distances=add_neighbor_distances
@@ -578,6 +596,9 @@ def determine_nearest_neighbors(
         nbrs_ht = nbrs_ht.annotate(
             nearest_neighbors=explode_nbrs_ht[nbrs_ht.key].nearest_neighbors
         )
+        logger.info(
+            "Checkpointing intermediate Table with nearest neighbor information..."
+        )
         nbrs_ht = nbrs_ht.checkpoint(
             new_temp_file("determine_nearest_neighbors.strata", extension="ht")
         )
@@ -585,6 +606,7 @@ def determine_nearest_neighbors(
 
     nbrs_ht = all_nbr_hts[0]
     if len(all_nbr_hts) > 1:
+        logger.info("Combining all nearest neighbor stratification Tables...")
         nbrs_ht = nbrs_ht.union(*all_nbr_hts[1:])
 
     nbrs_ht = nbrs_ht.annotate_globals(n_pcs=n_pcs, n_neighbors=n_neighbors)

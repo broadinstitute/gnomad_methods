@@ -86,7 +86,8 @@ def compute_qc_metrics_residuals(
                     for metric in qc_metrics
                 }
             ),
-        )
+        ),
+        _localize=False,
     )
 
     _sample_qc_ht = _sample_qc_ht.annotate_globals(lms=lms)
@@ -123,7 +124,9 @@ def compute_qc_metrics_residuals(
         }
     )
     if collapse_lms:
-        residuals_ht = residuals_ht.annotate_globals(lms=residuals_ht.lms["all"])
+        residuals_ht = residuals_ht.annotate_globals(
+            lms=residuals_ht.lms[hl.tuple([True])]
+        )
     residuals_ht = residuals_ht.checkpoint(
         new_temp_file("compute_qc_metrics_residuals.residuals", extension="ht")
     )
@@ -448,7 +451,7 @@ def determine_nearest_neighbors(
     # Checkpoint before filtering and exporting to pandas dataframes.
     ann_expr = {"scores": scores_expr}
     if strata is not None:
-        ann_expr["strata"] = hl.tuple([ht[x] for x in strata])
+        ann_expr["strata"] = hl.tuple([strata[x] for x in strata])
     else:
         ann_expr["strata"] = True
 
@@ -534,12 +537,15 @@ def determine_nearest_neighbors(
         nbrs_ht = nbrs_ht.annotate(
             nearest_neighbors=explode_nbrs_ht[nbrs_ht.key].nearest_neighbors
         )
+        nbrs_ht = nbrs_ht.checkpoint(
+            new_temp_file("determine_nearest_neighbors.strata", extension="ht")
+        )
 
         all_nbr_hts.append(nbrs_ht)
 
     nbrs_ht = all_nbr_hts[0]
     if len(all_nbr_hts) > 1:
-        nbrs_ht = nbrs_ht.union(all_nbr_hts[1:])
+        nbrs_ht = nbrs_ht.union(*all_nbr_hts[1:])
 
     nbrs_ht = nbrs_ht.annotate_globals(n_pcs=n_pcs, n_neighbors=n_neighbors)
 

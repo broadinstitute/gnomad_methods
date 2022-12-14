@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
 import pandas as pd
@@ -30,16 +30,22 @@ def compute_qc_metrics_residuals(
 
     .. note::
 
-        The `regression_sample_inclusion_expr` can be used to select a subset of the samples to include in the regression calculation.
-        Residuals are always computed for all samples.
+        The `regression_sample_inclusion_expr` can be used to select a subset of the
+        samples to include in the regression calculation. Residuals are always computed
+        for all samples.
 
-    :param ht: Input sample QC metrics HT
-    :param pc_scores: The expression in the input HT that stores the PC scores
-    :param qc_metrics: A dictionary with the name of each QC metric to compute residuals for and their corresponding expression in the input HT.
-    :param use_pc_square: Whether to  use PC^2 in the regression or not
+    :param ht: Input sample QC metrics HT.
+    :param pc_scores: The expression in the input HT that stores the PC scores.
+    :param qc_metrics: A dictionary with the name of each QC metric to compute
+        residuals for and their corresponding expression in the input HT.
+    :param use_pc_square: Whether to  use PC^2 in the regression or not.
     :param n_pcs: Numer of PCs to use. If not set, then all PCs in `pc_scores` are used.
-    :param regression_sample_inclusion_expr: An optional expression to select samples to include in the regression calculation.
-    :return: Table with QC metrics residuals
+    :param regression_sample_inclusion_expr: An optional expression to select samples
+        to include in the regression calculation.
+    :param strata: Optional dictionary used for stratification. Keys are strata names
+        and values are filtering expressions. These expressions should refer to
+        data with discrete types!
+    :return: Table with QC metrics residuals.
     """
     if strata is None:
         strata = {"all": True}
@@ -147,14 +153,22 @@ def compute_stratified_metrics_filter(
     """
     Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering.
 
-    :param ht: HT containing relevant sample QC metric annotations
-    :param qc_metrics: list of metrics (name and expr) for which to compute the critical values for filtering outliers
-    :param strata: List of annotations used for stratification. These metrics should be discrete types!
-    :param lower_threshold: Lower MAD threshold
-    :param upper_threshold: Upper MAD threshold
-    :param metric_threshold: Can be used to specify different (lower, upper) thresholds for one or more metrics
-    :param filter_name: Name of resulting filters annotation
-    :return: Table grouped by strata, with upper and lower threshold values computed for each sample QC metric
+    :param ht: HT containing relevant sample QC metric annotations.
+    :param qc_metrics: list of metrics (name and expr) for which to compute the
+        critical values for filtering outliers.
+    :param strata: List of annotations used for stratification. These metrics should be
+        discrete types!
+    :param lower_threshold: Lower MAD threshold.
+    :param upper_threshold: Upper MAD threshold.
+    :param metric_threshold: Can be used to specify different (lower, upper) thresholds
+        for one or more metrics.
+    :param filter_name: Name of resulting filters annotation.
+    :param comparison_sample_expr: Optional CollectionExpression of sample IDs to use
+        for computation of the metric median, MAD, and upper and lower thresholds to
+        use for each sample. For instance, this works well with the output of
+        `determine_nearest_neighbors`.
+    :return: Table grouped by strata, with upper and lower threshold values computed
+        for each sample QC metric.
     """
     _metric_threshold = {
         metric: (lower_threshold, upper_threshold) for metric in qc_metrics
@@ -423,7 +437,7 @@ def determine_nearest_neighbors(
     ht: hl.Table,
     scores_expr: hl.expr.ArrayNumericExpression,
     strata: Optional[Dict[str, hl.expr.Expression]] = None,
-    n_pcs: int = 16,
+    n_pcs: Optional[int] = None,
     n_neighbors: int = 50,
     n_jobs: int = -2,
     add_neighbor_distances: bool = False,
@@ -432,21 +446,42 @@ def determine_nearest_neighbors(
     n_trees: int = 50,
 ) -> hl.Table:
     """
-    Add module docstring.
+    Determine the nearest neighbors of each sample with information in `scores_expr`.
 
-    :param ht:
-    :param scores_expr:
-    :param strata:
-    :param n_pcs:
-    :param n_neighbors:
-    :param n_jobs:
-    :param add_neighbor_distances:
-    :param distance_metric:
-    :param use_approximation:
-    :param n_trees:
-    :return:
+    .. note::
+
+        If strata is provided, the nearest neighbors for each sample is limited to the
+        other samples with the same strata values. If `n_neighbors` is greater than the
+        number of samples in a stratification grouping, all samples within the
+        stratification are returned and a warning is raised indicating that any sample
+        within the stratification group has less than the expected `n_neighbors`.
+
+    The following annotations are in the returned Table:
+        - nearest_neighbors
+        - nearest_neighbor_dists (if `add_neighbor_distances` is True)
+
+    :param ht: Input Table.
+    :param scores_expr: Expression in the input HT that stores the PC scores.
+    :param strata: Optional dictionary used for stratification. Keys are strata names
+        and values are filtering expressions. These expressions should refer to
+        data with discrete types!
+    :param n_pcs: Number of PCs to use. If not set, then all PCs in `pc_scores` are used.
+    :param n_neighbors: Number of nearest neighbors to identify for each sample.
+        Default is 50.
+    :param n_jobs: Number of threads to use when finding the nearest neighbors. Default
+        is -1 which uses the number of CPUs on the head node - 2.
+    :param add_neighbor_distances: Whether to return an annotation for the nearest
+        neighbor distances.
+    :param distance_metric: Distance metric to use. Default is euclidean. Options are:
+    :param use_approximation: Whether to use the package annoy to determine approximate
+        nearest neighbors instead of exact. This method is faster, but only needed for
+        very large datasets, for instance > 500,000 samples.
+    :param n_trees: Number of trees to use in the annoy approximation approach. Default
+        is 10.
+    :return: Table with an annotation for the nearest neighbors and optionally their
+        distances.
     """
-    # TODO: Add loggers and write docstring
+    # TODO: Add loggers
     # Annotate HT with fields necessary for nearest neighbors computation.
     # Checkpoint before filtering and exporting to pandas dataframes.
     ann_expr = {"scores": scores_expr}
@@ -455,6 +490,12 @@ def determine_nearest_neighbors(
     else:
         ann_expr["strata"] = True
 
+    # If `n_pcs` wasn't provided, use all PCs.
+    if n_pcs is None:
+        n_pcs = ht.aggregate(hl.agg.min(hl.len(scores_expr)))
+
+    # TODO: add check for strata size, nn might be bigger than the strata, how
+    #  do we handle that
     _ht = ht.select(**ann_expr)
     _ht = _ht.filter(hl.is_defined(_ht.scores))
     _ht = _ht.transmute(**{f"PC{i + 1}": _ht.scores[i] for i in range(n_pcs)})
@@ -540,7 +581,6 @@ def determine_nearest_neighbors(
         nbrs_ht = nbrs_ht.checkpoint(
             new_temp_file("determine_nearest_neighbors.strata", extension="ht")
         )
-
         all_nbr_hts.append(nbrs_ht)
 
     nbrs_ht = all_nbr_hts[0]

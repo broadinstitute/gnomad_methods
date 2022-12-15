@@ -1,9 +1,11 @@
 """Script containing generic constraint functions that may be used in the constraint pipeline."""
 
 import logging
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
+
+from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -11,6 +13,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
+
+COVERAGE_CUTOFF = 40
+"""
+Minimum median exome coverage differentiating high coverage sites from low coverage sites.
+
+Low coverage sites require an extra calibration when computing the proportion of expected variation.
+"""
 
 
 def annotate_with_mu(
@@ -23,12 +32,13 @@ def annotate_with_mu(
 
     .. note::
 
-        `ht` is expected to include annotations that `mutation_ht` is keyed by, but these annotations don't need to be
-        the keys of `ht`.
+        Function expects that`ht` includes`mutation_ht`'s key fields. Note that these
+        annotations don't need to be the keys of `ht`.
 
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.
-    :param mu_annotation: The name of mutation rate annotation in `mutation_ht`. Default is 'mu_snp'.
+    :param mu_annotation: The name of mutation rate annotation in `mutation_ht`.
+        Default is 'mu_snp'.
     :return: Table with mutational rate annotation added.
     """
     mu = mutation_ht.index(*[ht[k] for k in mutation_ht.key])[mu_annotation]
@@ -53,35 +63,45 @@ def count_variants_by_group(
     """
     Count number of observed or possible variants by context, ref, alt, and optionally methylation_level.
 
-    Performs variant count aggregations based on specified criteria (`count_singletons`, `count_downsamplings`, and
-    `max_af`), and grouped by: 'context', 'ref', 'alt', 'methylation_level' (optional), and all annotations provided
-    in `additional_grouping`.
+    Performs variant count aggregations based on specified criteria
+    (`count_singletons`, `count_downsamplings`, and `max_af`), and grouped by:
+    'context', 'ref', 'alt', 'methylation_level' (optional), and all annotations
+    provided in `additional_grouping`.
 
-    If variant allele frequency information is required based on other parameter selections (described in detail below)
-    and `freq_expr` is not supplied, `freq_expr` defaults to `ht.freq` if it exists.
+    If variant allele frequency information is required based on other parameter
+    selections (described in detail below) and `freq_expr` is not supplied, `freq_expr`
+    defaults to `ht.freq` if it exists.
 
-    `freq_expr` should be an ArrayExpression of Structs with 'AC' and 'AF' annotations. This is the same format as the
-    `freq` annotation that is created using `annotate_freq()`.
+    `freq_expr` should be an ArrayExpression of Structs with 'AC' and 'AF' annotations.
+    This is the same format as the `freq` annotation that is created using
+    `annotate_freq()`.
 
     Variant allele frequency information is needed when:
-        - `max_af` is not None - `freq_expr[0].AF` is used to filter to only variants with a maximum allele frequency
-          of `max_af` prior to counting variants. In the standard `freq` ArrayExpression annotated by
-          `annotate_freq()`, this first element corresponds to the allele frequency information for high quality
+        - `max_af` is not None - `freq_expr[0].AF` is used to filter to only variants
+          with a maximum allele frequency of `max_af` prior to counting variants. In
+          the standard `freq` ArrayExpression annotated by `annotate_freq()`, this
+          first element corresponds to the allele frequency information for high quality
           genotypes (adj).
-        - `count_singletons` is True and `singleton_expr` is None - If singleton counts are requested and no expression
-          is specified to determine whether a variant is a singleton, `singleton_expr` defaults to
-          `freq_expr[0].AC == 1`. In the standard `freq` ArrayExpression annotated by `annotate_freq()`, this
-          corresponds to allele count of only 1 in the callset after filtering to high quality genotypes.
-        - `count_downsamplings` is not empty - When downsampling counts are requested, `freq_expr` needs to contain
-          frequency information for downsamplings within each population requested. In addition to needing `freq_expr`,
-          this also requires the use of `freq_meta_expr`. If `freq_meta_expr` is None, `freq_meta_expr` it defaults to
-          `ht.freq_meta` if it exists. Similar to `freq_expr`, `freq_meta_expr` is expected to have the same format as
-          the `freq_meta` global annotation that is created using `annotate_freq()`. `freq_meta_expr` is used to
-          determine the index of allele frequency information within `freq_expr` for each population requested and
-          it's downsamplings.
+        - `count_singletons` is True and `singleton_expr` is None - If singleton counts
+          are requested and no expression is specified to determine whether a variant
+          is a singleton, `singleton_expr` defaults to `freq_expr[0].AC == 1`. In the
+          standard `freq` ArrayExpression annotated by `annotate_freq()`, this
+          corresponds to allele count of only 1 in the callset after filtering to high
+          quality genotypes.
+        - `count_downsamplings` is not empty - When downsampling counts are requested,
+          `freq_expr` needs to contain frequency information for downsamplings within
+          each population requested. In addition to needing `freq_expr`, this also
+          requires the use of `freq_meta_expr`. If `freq_meta_expr` is None,
+          `freq_meta_expr` it defaults to `ht.freq_meta` if it exists. Similar to
+          `freq_expr`, `freq_meta_expr` is expected to have the same format as
+          the `freq_meta` global annotation that is created using `annotate_freq()`.
+          `freq_meta_expr` is used to determine the index of allele frequency
+          information within `freq_expr` for each population requested and it's
+          downsamplings.
 
-    This function will return a Table with annotations used for grouping ('context', 'ref', 'alt',
-    'methylation_level' (optional), `additional_grouping`) and 'variant_count' annotation.
+    This function will return a Table with annotations used for grouping ('context',
+    'ref', 'alt', 'methylation_level' (optional), `additional_grouping`) and
+    'variant_count' annotation.
 
     .. note::
 
@@ -90,22 +110,38 @@ def count_variants_by_group(
             - alt - the alternate base
             - context - trinucleotide genomic context
             - methylation_level - methylation level (optional if omit_methylation==True)
-            - freq - allele frequency information (AC, AN, AF, homozygote count; not required if `freq_expr` is given)
-            - freq_meta - an ordered list containing the frequency aggregation group for each element of the `freq`
-              array row annotation (not required if `freq_meta_expr` is given)
+            - freq - allele frequency information (AC, AN, AF, homozygote count; not
+              required if `freq_expr` is given)
+            - freq_meta - an ordered list containing the frequency aggregation group
+              for each element of the `freq` array row annotation (not required if
+              `freq_meta_expr` is given)
 
     :param ht: Input Hail Table.
-    :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations. If `freq_expr` is None and any of `count_downsamplings`, `max_af`, and `count_singletons` is True, `freq_expr` would be `ht.freq`.
-    :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to `freq_expr`. If `count_downsamplings` and `freq_meta_expr` is None, `freq_meta_expr` would be `ht.freq_meta`.
-    :param count_singletons: Whether to count singletons (defined by `singleton_expr`). Default is False.
-    :param count_downsamplings: Tuple of populations to use for downsampling counts. Default is ().
-    :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'. Default is ().
+    :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations. If
+        `freq_expr` is None and any of `count_downsamplings`, `max_af`, and
+        `count_singletons` is True, `freq_expr` would be `ht.freq`.
+    :param freq_meta_expr: ArrayExpression of meta dictionaries corresponding to
+        `freq_expr`. If `count_downsamplings` and `freq_meta_expr` is None,
+        `freq_meta_expr` would be `ht.freq_meta`.
+    :param count_singletons: Whether to count singletons (defined by `singleton_expr`).
+        Default is False.
+    :param count_downsamplings: Tuple of populations to use for downsampling counts.
+        Default is ().
+    :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'.
+        Default is ().
     :param partition_hint: Target number of partitions for aggregation. Default is 100.
-    :param omit_methylation: Whether to omit 'methylation_level' from the grouping when counting variants. Default is False.
-    :param use_table_group_by: Whether to group `ht` before aggregating the variant counts. If `use_table_group_by` is False, function will return a hl.StructExpression. Default is False.
-    :param singleton_expr: Expression for defining a singleton. When `count_singletons` is True and `singleton_expr` is None, `singleton_expression` would be `freq_expr[0].AC == 1`. Default is None.
-    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is applied.
-    :return: Table including 'variant_count' annotation and if requested, `singleton_count` and downsampling counts.
+    :param omit_methylation: Whether to omit 'methylation_level' from the grouping when
+        counting variants. Default is False.
+    :param use_table_group_by: Whether to group `ht` before aggregating the variant
+        counts. If `use_table_group_by` is False, function will return a hl.
+        StructExpression. Default is False.
+    :param singleton_expr: Expression for defining a singleton. When `count_singletons`
+        is True and `singleton_expr` is None, `singleton_expression` would be `freq_expr
+        [0].AC == 1`. Default is None.
+    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
+        applied.
+    :return: Table including 'variant_count' annotation and if requested,
+        `singleton_count` and downsampling counts.
     """
     if freq_expr is None and (
         count_downsamplings or max_af or (count_singletons and singleton_expr is None)
@@ -199,17 +235,25 @@ def downsampling_counts_expr(
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
 
-    The frequency metadata (`freq_meta_expr`) should be in a similar format to the `freq_meta` annotation added by
-    `annotate_freq()`. Each downsampling should have 'group', 'pop', and 'downsampling' keys. Included downsamplings
-    are those where 'group' == `variant_quality` and 'pop' == `pop`.
+    The frequency metadata (`freq_meta_expr`) should be in a similar format to the
+    `freq_meta` annotation added by `annotate_freq()`. Each downsampling should have
+    'group', 'pop', and 'downsampling' keys. Included downsamplings are those where
+    'group' == `variant_quality` and 'pop' == `pop`.
 
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations.
-    :param freq_meta_expr: ArrayExpression containing the set of groupings for each element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`. Default is 'global'.
-    :param variant_quality: Variant quality to use for filtering by the 'group' key in `freq_meta_expr`. Default is 'adj'.
-    :param singleton: Whether to filter to only singletons before counting (AC == 1). Default is False.
-    :param max_af: Maximum variant allele frequency to keep. By default no allele frequency cutoff is applied.
-    :return: Aggregation Expression for an array of the variant counts in downsamplings for specified population.
+    :param freq_meta_expr: ArrayExpression containing the set of groupings for each
+        element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
+        'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
+    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`.
+        Default is 'global'.
+    :param variant_quality: Variant quality to use for filtering by the 'group' key in
+        `freq_meta_expr`. Default is 'adj'.
+    :param singleton: Whether to filter to only singletons before counting (AC == 1).
+        Default is False.
+    :param max_af: Maximum variant allele frequency to keep. By default no allele
+        frequency cutoff is applied.
+    :return: Aggregation Expression for an array of the variant counts in downsamplings
+        for specified population.
     """
     # Get indices of dictionaries in meta dictionaries that only have the
     # "downsampling" key with specified "group" and "pop" values.
@@ -229,7 +273,8 @@ def downsampling_counts_expr(
         Return 1 when variant meets specified criteria (`singleton` or `max_af`), if requested, or with an AC > 0.
 
         :param i: The index of a downsampling.
-        :return: Returns 1 if the variant in the downsampling with specified index met the criteria. Otherwise, returns 0.
+        :return: Returns 1 if the variant in the downsampling with specified index met
+            the criteria. Otherwise, returns 0.
         """
         if singleton:
             return hl.int(freq_expr[i].AC == 1)
@@ -238,9 +283,11 @@ def downsampling_counts_expr(
         else:
             return hl.int(freq_expr[i].AC > 0)
 
-    # Map `_get_criteria` function to each downsampling indexed by `sorted_indices` to generate a list of 1's and 0's for
-    # each variant, where the length of the array is the total number of downsamplings for the specified population and each
-    # element in the array indicates if the variant in the downsampling indexed by `sorted_indices` meets the specified criteria.
+    # Map `_get_criteria` function to each downsampling indexed by `sorted_indices` to
+    # generate a list of 1's and 0's for each variant, where the length of the array is
+    # the total number of downsamplings for the specified population and each element
+    # in the array indicates if the variant in the downsampling indexed by
+    # `sorted_indices` meets the specified criteria.
     # Return an array sum aggregation that aggregates arrays generated from mapping.
     return hl.agg.array_sum(hl.map(_get_criteria, sorted_indices))
 
@@ -257,12 +304,18 @@ def annotate_mutation_type(
         - mutation_type - one of "CpG", "non-CpG transition", or "transversion"
         - mutation_type_model
 
+    ..note:
+
+        This function uses the term 'mutation_type' because 'variant_type' is already
+        used in this repo to indicate a variant's multiallelic and SNP/indel status.
+
     :param t: Input Table or MatrixTable.
     :return: Table with mutation type annotations added.
     """
-    # Determine the middle index of context by sampling the first 100 values
-    # of 'context'.
-    context_lengths = list(filter(None, set(hl.len(t.context).take(100))))
+    # Determine the context length by collecting all the context lengths.
+    context_lengths = list(
+        filter(None, t.aggregate(hl.agg.collect_as_set(hl.len(t.context))))
+    )
     if len(context_lengths) > 1:
         raise ValueError(
             "More than one length was found among the first 100 'context' values."
@@ -271,7 +324,7 @@ def annotate_mutation_type(
     else:
         context_length = context_lengths[0]
         logger.info("Detected a length of %d for context length", context_length)
-
+    # Determine the middle index of the context annotation.
     if context_length == 3:
         mid_index = 1
     elif context_length == 7:
@@ -336,13 +389,16 @@ def collapse_strand(
     """
     Return the deduplicated context by collapsing DNA strands.
 
-    Function returns the reverse complement for 'ref, 'alt', and 'context' if the reference allele is either 'G' or 'T'.
+    Function returns the reverse complement for 'ref, 'alt', and 'context' if the
+    reference allele is either 'G' or 'T'.
 
     The following annotations are added to the output Table:
-        - was_flipped - whether the 'ref, 'alt', and 'context' were flipped (reverse complement taken)
+        - was_flipped - whether the 'ref, 'alt', and 'context' were flipped (reverse
+          complement taken)
 
     :param ht: Input Table.
-    :return: Table with deduplicated context annotation (ref, alt, context, was_flipped).
+    :return: Table with deduplicated context annotation (ref, alt, context,
+        was_flipped).
     """
     ref_g_or_t_expr = (t.ref == "G") | (t.ref == "T")
     collapse_expr = {
@@ -360,3 +416,464 @@ def collapse_strand(
         if isinstance(t, hl.Table)
         else t.annotate_rows(**collapse_expr)
     )
+
+
+def build_models(
+    coverage_ht: hl.Table,
+    weighted: bool = False,
+    pops: Tuple[str] = (),
+    keys: Tuple[str] = (
+        "context",
+        "ref",
+        "alt",
+        "methylation_level",
+        "mu_snp",
+    ),
+    cov_cutoff: int = COVERAGE_CUTOFF,
+) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
+    """
+    Build coverage and plateau models.
+
+    This function builds models (plateau_models) using linear regression to calibrate
+    mutation rate estimates against the proportion observed of each substitution,
+    context, and methylation level in `coverage_ht`.
+
+    Two plateau models are fit, one for CpG transitions, and one for the remainder of
+    sites (transversions and non CpG transitions).
+
+    The plateau models only consider high coverage sites, or sites above a median
+    coverage of `cov_cutoff`.
+
+    Plateau model: adjusts proportion of expected variation based on location in the
+    genome and CpG status.
+    The x and y of the plateau models:
+    - x: `mu_snp` - mutation rate
+    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
+
+    This function also builds models (coverage models) to calibrate the proportion of
+    expected variation at low coverage sites (sites below `cov_cutoff`).
+
+    The coverage models are built by creating a scaling factor across all high coverage
+    sites, applying this ratio to the low coverage sites, and running a linear
+    regression.
+
+    Coverage model: corrects proportion of expected variation at low coverage sites.
+    Low coverage sites are defined as sites with median coverage < `cov_cutoff`.
+
+    The x and y of the coverage model:
+    - x: log10 groupings of exome coverage at low coverage sites
+    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
+
+    `high_coverage_scale_factor` = sum('observed_variants') /
+                        sum('possible_variants' * 'mu_snp') at high coverage sites
+
+    .. note::
+
+        This function expects that the input Table(`coverage_ht`) was created using
+        `get_proportion_observed_by_coverage`, which means that `coverage_ht` should
+        contain only high quality synonymous variants below 0.1% frequency.
+
+        This function also expects that the following fields are present in
+        `coverage_ht`:
+        - context - trinucleotide genomic context
+        - ref - the reference allele
+        - alt - the alternate allele
+        - methylation_level - methylation level
+        - cpg - whether the site is CpG site
+        - exome_coverage - median exome coverage at integer values between 1-100
+        - observed_variants - the number of observed variants in the dataset for each
+        variant. Note that the term "variant" here refers to a specific substitution,
+        context, methylation level, and coverage combination
+        - downsampling_counts_{pop} (optional) - array of observed variant counts per
+        population after downsampling. Used only when `pops` is specified.
+        - mu_snp - mutation rate
+        - possible_variants - the number of possible variants in the dataset for each
+        variant
+
+    :param coverage_ht: Input coverage Table.
+    :param weighted: Whether to weight the plateau models (a linear regression
+        model) by 'possible_variants'. Default is False.
+    :param pops: List of populations used to build plateau models.
+        Default is ().
+    :param keys: Annotations used to group observed and possible variant counts.
+        Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
+    :param cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff
+        are considered well covered. Default is `COVERAGE_CUTOFF`.
+    :return: Coverage model and plateau models.
+    """
+    # Filter to sites with coverage above `cov_cutoff`.
+    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= cov_cutoff)
+    agg_expr = {
+        "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
+        "possible_variants": hl.agg.sum(high_cov_ht.possible_variants),
+    }
+    for pop in pops:
+        agg_expr[f"observed_{pop}"] = hl.agg.array_sum(
+            high_cov_ht[f"downsampling_counts_{pop}"]
+        )
+
+    # Generate a Table with all necessary annotations (x and y listed above)
+    # for the plateau models.
+    high_cov_group_ht = high_cov_ht.group_by(*keys).aggregate(**agg_expr)
+    high_cov_group_ht = annotate_mutation_type(high_cov_group_ht)
+
+    # Build plateau models.
+    plateau_models_agg_expr = build_plateau_models(
+        cpg_expr=high_cov_group_ht.cpg,
+        mu_snp_expr=high_cov_group_ht.mu_snp,
+        observed_variants_expr=high_cov_group_ht.observed_variants,
+        possible_variants_expr=high_cov_group_ht.possible_variants,
+        pops_observed_variants_array_expr=[
+            high_cov_group_ht[f"observed_{pop}"] for pop in pops
+        ],
+        weighted=weighted,
+    )
+    if pops:
+        # Map the models to their corresponding populations if pops is specified.
+        _plateau_models = dict(
+            high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
+        )
+        pop_models = _plateau_models["pop"]
+        plateau_models = {
+            pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
+        }
+        plateau_models["total"] = _plateau_models["total"]
+        plateau_models = hl.struct(**plateau_models)
+    else:
+        plateau_models = high_cov_group_ht.aggregate(
+            hl.struct(**plateau_models_agg_expr)
+        )
+
+    # Filter to sites with coverage below `cov_cutoff` and larger than 0.
+    low_cov_ht = coverage_ht.filter(
+        (coverage_ht.exome_coverage < cov_cutoff) & (coverage_ht.exome_coverage > 0)
+    )
+
+    # Create a metric that represents the relative mutability of the exome calculated
+    # on high coverage sites and will be used as scaling factor when building the
+    # coverage model.
+    high_coverage_scale_factor = high_cov_ht.aggregate(
+        hl.agg.sum(high_cov_ht.observed_variants)
+        / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
+    )
+
+    # Generate a Table with all necessary annotations (x and y listed above)
+    # for the coverage model.
+    low_cov_group_ht = low_cov_ht.group_by(
+        log_coverage=hl.log10(low_cov_ht.exome_coverage)
+    ).aggregate(
+        low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
+        / (
+            high_coverage_scale_factor
+            * hl.agg.sum(low_cov_ht.possible_variants * low_cov_ht.mu_snp)
+        )
+    )
+
+    # Build the coverage model.
+    # TODO: consider weighting here as well
+    coverage_model_expr = build_coverage_model(
+        low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
+        log_coverage_expr=low_cov_group_ht.log_coverage,
+    )
+    coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
+    return coverage_model, plateau_models
+
+
+def build_plateau_models(
+    cpg_expr: hl.expr.BooleanExpression,
+    mu_snp_expr: hl.expr.Float64Expression,
+    observed_variants_expr: hl.expr.Int64Expression,
+    possible_variants_expr: hl.expr.Int64Expression,
+    pops_observed_variants_array_expr: List[hl.expr.ArrayExpression] = [],
+    weighted: bool = False,
+) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
+    """
+    Build plateau models to calibrate mutation rate to compute predicted proportion observed value.
+
+    The x and y of the plateau models:
+    - x: `mu_snp_expr`
+    - y: `observed_variants_expr` / `possible_variants_expr`
+    or `pops_observed_variants_array_expr`[index] / `possible_variants_expr`
+    if `pops` is specified
+
+    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
+    :param mu_snp_expr: Float64Expression of the mutation rate.
+    :param observed_variants_expr: Int64Expression of the observed variant counts.
+    :param possible_variants_expr: Int64Expression of the possible variant counts.
+    :param pops_observed_variants_array_expr: Nested ArrayExpression with all observed
+        variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,
+        1],[1,1,1]]`. Default is None.
+    :param weighted: Whether to generalize the model to weighted least squares using
+        'possible_variants'. Default is False.
+    :return: A dictionary of intercepts and slopes of plateau models. The keys are
+        'total' (for all sites) and 'pop' (optional; for populations). The values for
+        'total' is a dictionary (e.g., <DictExpression of type dict<bool,
+        array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
+        g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The
+        key of the dictionary in the nested list is CpG status (BooleanExpression), and
+        the value is an ArrayExpression containing intercept and slope values.
+    """
+    # Build plateau models for all sites
+    plateau_models_agg_expr = {
+        "total": hl.agg.group_by(
+            cpg_expr,
+            hl.agg.linreg(
+                observed_variants_expr / possible_variants_expr,
+                [1, mu_snp_expr],
+                weight=possible_variants_expr if weighted else None,
+            ).beta,
+        )
+    }
+    if pops_observed_variants_array_expr:
+        # Build plateau models using sites in population downsamplings if
+        # population is specified.
+        plateau_models_agg_expr["pop"] = hl.agg.array_agg(
+            lambda pop_obs_var_array_expr: hl.agg.array_agg(
+                lambda pop_observed_variants: hl.agg.group_by(
+                    cpg_expr,
+                    hl.agg.linreg(
+                        pop_observed_variants / possible_variants_expr,
+                        [1, mu_snp_expr],
+                        weight=possible_variants_expr,
+                    ).beta,
+                ),
+                pop_obs_var_array_expr,
+            ),
+            pops_observed_variants_array_expr,
+        )
+    return plateau_models_agg_expr
+
+
+def build_coverage_model(
+    low_coverage_oe_expr: hl.expr.Float64Expression,
+    log_coverage_expr: hl.expr.Float64Expression,
+) -> hl.expr.StructExpression:
+    """
+    Build coverage model.
+
+    This function uses linear regression to build a model of log10(coverage) to correct
+    proportion of expected variation at low coverage sites.
+
+    The x and y of the coverage model:
+    - x: `log_coverage_expr`
+    - y: `low_coverage_oe_expr`
+
+    :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
+        for a given coverage level.
+    :param log_coverage_expr: The Float64Expression of log10 coverage.
+    :return: StructExpression with intercept and slope of the model.
+    """
+    return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
+
+
+def get_all_pop_lengths(
+    ht: hl.Table,
+    pops: Tuple[str],
+    prefix: str = "observed_",
+) -> List[Tuple[str, str]]:
+    """
+    Get the minimum length of observed variant counts array for each population downsamping.
+
+    The annotations are specified by the combination of `prefix` and each population in
+    `pops`.
+
+    :param ht: Input Table used to build population plateau models.
+    :param pops: Populations used to categorize observed variant counts in downsampings.
+    :param prefix: Prefix of population observed variant counts. Default is `observed_`.
+    :return: A Dictionary with the minimum array length for each population.
+    """
+    # TODO: This function will be converted into doing just the length check if there
+    # is no usage of pop_lengths in the constraint pipeline.
+    # Get minimum length of downsamplings for each population.
+    pop_downsampling_lengths = ht.aggregate(
+        [hl.agg.min(hl.len(ht[f"{prefix}{pop}"])) for pop in pops]
+    )
+
+    # Zip population name with their downsampling length.
+    pop_lengths = list(zip(pop_downsampling_lengths, pops))
+    logger.info("Found: %s", "".join(map(str, pop_lengths)))
+
+    assert ht.all(
+        hl.all(
+            lambda f: f,
+            [hl.len(ht[f"{prefix}{pop}"]) == length for length, pop in pop_lengths],
+        )
+    ), (
+        "The arrays of variant counts within population downsamplings have different"
+        " lengths!"
+    )
+
+    return pop_lengths
+
+
+def get_constraint_grouping_expr(
+    vep_annotation_expr: hl.StructExpression,
+    coverage_expr: Optional[hl.Int32Expression] = None,
+    include_transcript_group: bool = True,
+    include_canonical_group: bool = True,
+) -> Dict[str, Union[hl.StringExpression, hl.Int32Expression, hl.BooleanExpression]]:
+    """
+    Collect annotations used for constraint groupings.
+
+    Function collects the following annotations:
+        - annotation - 'most_severe_consequence' annotation in `vep_annotation_expr`
+        - modifier - classic lof annotation from 'lof' annotation in
+            `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
+            `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
+            `vep_annotation_expr`, or "None" if neither is defined
+        - gene - 'gene_symbol' annotation inside `vep_annotation_expr`
+        - coverage - exome coverage if `coverage_expr` is specified
+        - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
+            `include_transcript_group` is True)
+        - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
+            True)
+
+    .. note::
+        This function expects that the following fields are present in
+        `vep_annotation_expr`:
+        - lof
+        - polyphen_prediction
+        - most_severe_consequence
+        - gene_symbol
+        - transcript_id (if `include_transcript_group` is True)
+        - canonical (if `include_canonical_group` is True)
+
+    :param vep_annotation_expr: StructExpression of VEP annotation.
+    :param coverage_expr: Optional Int32Expression of exome coverage. Default is None.
+    :param include_transcript_group: Whether to include the transcript annotation in the
+        groupings. Default is True.
+    :param include_canonical_group: Whether to include canonical annotation in the
+        groupings. Default is True.
+    :return: A dictionary with keys as annotation names and values as actual
+        annotations.
+    """
+    lof_expr = vep_annotation_expr.lof
+    polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
+
+    # Create constraint annotations to be used for groupings.
+    groupings = {
+        "annotation": vep_annotation_expr.most_severe_consequence,
+        "modifier": hl.coalesce(lof_expr, polyphen_prediction_expr, "None"),
+        "gene": vep_annotation_expr.gene_symbol,
+    }
+    if coverage_expr is not None:
+        groupings["coverage"] = coverage_expr
+
+    # Add 'transcript' and 'canonical' annotation if requested.
+    if include_transcript_group:
+        groupings["transcript"] = vep_annotation_expr.transcript_id
+    if include_canonical_group:
+        groupings["canonical"] = hl.or_else(vep_annotation_expr.canonical == 1, False)
+
+    return groupings
+
+
+def annotate_exploded_vep_for_constraint_groupings(
+    ht: hl.Table, vep_annotation: str = "transcript_consequences"
+) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
+    """
+    Annotate Table with annotations used for constraint groupings.
+
+    Function explodes the specified VEP annotation (`vep_annotation`) and adds the following annotations:
+        - annotation -'most_severe_consequence' annotation in `vep_annotation`
+        - modifier - classic lof annotation from 'lof' annotation in
+            `vep_annotation`, LOFTEE annotation from 'lof' annotation in
+            `vep_annotation`, PolyPhen annotation from 'polyphen_prediction' in
+            `vep_annotation`, or "None" if neither is defined
+        - gene - 'gene_symbol' annotation inside `vep_annotation`
+        - coverage - exome coverage in `ht`
+        - transcript - id from 'transcript_id' in `vep_annotation` (added when
+            `include_transcript_group` is True)
+        - canonical from `vep_annotation` (added when `include_canonical_group` is
+            True)
+
+    .. note::
+        This function expects that the following annotations are present in `ht`:
+        - vep
+        - exome_coverage
+
+    :param t: Input Table or MatrixTable.
+    :param vep_annotation: Name of annotation in 'vep' annotation (one of
+        "transcript_consequences" and "worst_csq_by_gene") that will be used for
+        obtaining constraint annotations. Default is "transcript_consequences".
+    :return: A tuple of input Table or MatrixTable with grouping annotations added and
+        the names of added annotations.
+    """
+    if vep_annotation == "transcript_consequences":
+        include_transcript_group = include_canonical_group = True
+    else:
+        include_transcript_group = include_canonical_group = False
+
+    # Annotate 'worst_csq_by_gene' to `ht` if it's specified for `vep_annotation`.
+    if vep_annotation == "worst_csq_by_gene":
+        ht = process_consequences(ht)
+
+    # Explode the specified VEP annotation.
+    ht = explode_by_vep_annotation(ht, vep_annotation)
+
+    # Collect the annotations used for groupings.
+    groupings = get_constraint_grouping_expr(
+        ht[vep_annotation],
+        coverage_expr=ht.exome_coverage,
+        include_transcript_group=include_transcript_group,
+        include_canonical_group=include_canonical_group,
+    )
+
+    return ht.annotate(**groupings), tuple(groupings.keys())
+
+
+def compute_expected_variants(
+    ht: hl.Table,
+    plateau_models_expr: hl.StructExpression,
+    mu_expr: hl.Float64Expression,
+    cov_corr_expr: hl.Float64Expression,
+    cpg_expr: hl.BooleanExpression,
+    pop: Optional[str] = None,
+) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:
+    """
+    Apply plateau models for all sites and for a population (if specified) to compute predicted proportion observed ratio and expected variant counts.
+
+    :param ht: Input Table.
+    :param plateau_models_expr: Linear models (output of `build_models()`, with the values
+        of the dictionary formatted as a StructExpression of intercept and slope, that
+        calibrates mutation rate to proportion observed for high coverage exomes. It
+        includes models for CpG, non-CpG sites, and each population in `POPS`.
+    :param mu_expr: Float64Expression of mutation rate.
+    :param cov_corr_expr: Float64Expression of corrected coverage expression.
+    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
+    :param pop: Optional population to use when applying plateau model. Default is
+        None.
+    :return: A dictionary with predicted proportion observed ratio and expected variant
+        counts.
+    """
+    if pop is None:
+        pop = ""
+        plateau_model = hl.literal(plateau_models_expr.total)[cpg_expr]
+        slope = plateau_model[1]
+        intercept = plateau_model[0]
+        agg_func = hl.agg.sum
+        ann_to_sum = ["observed_variants", "possible_variants"]
+    else:
+        plateau_model = hl.literal(plateau_models_expr[pop])
+        slope = hl.map(lambda f: f[cpg_expr][1], plateau_model)
+        intercept = hl.map(lambda f: f[cpg_expr][0], plateau_model)
+        agg_func = hl.agg.array_sum
+        pop = f"_{pop}"
+        ann_to_sum = [f"downsampling_counts{pop}"]
+
+    # Apply plateau models for specified population.
+    ppo_expr = mu_expr * slope + intercept
+
+    # Generate sum aggregators for 'predicted_proportion_observed' and
+    # 'expected_variants', for specified population.
+    agg_expr = {
+        f"predicted_proportion_observed{pop}": agg_func(ppo_expr),
+        f"expected_variants{pop}": agg_func(ppo_expr * cov_corr_expr),
+    }
+
+    # Generate sum aggregators for 'observed_variants' and 'possible_variants' on
+    # the entire dataset if pop is None, and for 'downsampling_counts' for
+    # specified population if pop is not None.
+    agg_expr.update({ann: agg_func(ht[ann]) for ann in ann_to_sum})
+
+    return agg_expr

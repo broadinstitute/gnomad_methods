@@ -481,6 +481,10 @@ def determine_nearest_neighbors(
     :return: Table with an annotation for the nearest neighbors and optionally their
         distances.
     """
+    # Get spark session for conversion of pandas DataFrame to a spark DataFrame.
+    # This method is faster and uses less memory than hl.Table.from_pandas.
+    spark = hl.utils.java.Env.spark_session()
+
     # Annotate HT with fields necessary for nearest neighbors computation.
     # Checkpoint before filtering and exporting to pandas dataframes.
     ann_expr = {"scores": scores_expr}
@@ -504,7 +508,7 @@ def determine_nearest_neighbors(
     for group in all_strata_vals:
         logger_str = ""
         if strata is not None:
-            logger_str += ", for the following stratification group: %s"
+            logger_str += f", for the following stratification group: {group}"
         logger.info(
             "Finding %d %s,nearest neighbors, using the %s distance metric%s.",
             n_neighbors,
@@ -558,7 +562,7 @@ def determine_nearest_neighbors(
         indexes_pd = indexes_pd.rename(
             columns={i: f"nbrs_index_{i}" for i in range(n_neighbors)}
         )
-        indexes_ht = hl.Table.from_pandas(indexes_pd, key=["s"])
+        indexes_ht = hl.Table.from_spark(spark.createDataFrame(indexes_pd), key=["s"])
         indexes_ht = indexes_ht.transmute(
             nearest_neighbor_idxs=hl.array(
                 [indexes_ht[f"nbrs_index_{i}"] for i in range(n_neighbors)]
@@ -572,7 +576,9 @@ def determine_nearest_neighbors(
                 columns={i: f"nbrs_{i}" for i in range(n_neighbors)}
             )
             distances_pd = pd.concat([scores_pd_s, distances_pd], axis=1)
-            distances_ht = hl.Table.from_pandas(distances_pd, key=["s"])
+            distances_ht = hl.Table.from_spark(
+                spark.createDataFrame(distances_pd), key=["s"]
+            )
             distances_ht = distances_ht.transmute(
                 nearest_neighbor_dists=hl.array(
                     [distances_ht[f"nbrs_{str(i)}"] for i in range(n_neighbors)]

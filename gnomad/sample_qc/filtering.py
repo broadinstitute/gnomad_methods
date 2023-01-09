@@ -176,7 +176,9 @@ def compute_stratified_metrics_filter(
     if metric_threshold is not None:
         _metric_threshold.update(metric_threshold)
 
+    no_strata = False
     if strata is None:
+        no_strata = True
         strata = {"all": True}
 
     select_expr = {
@@ -248,7 +250,16 @@ def compute_stratified_metrics_filter(
             [hl.or_missing(ht[f"fail_{metric}"], metric) for metric in qc_metrics],
         )
     )
-    return ht.annotate(**{filter_name: stratified_filters})
+    ht = ht.annotate(**{filter_name: stratified_filters})
+
+    if no_strata:
+        ann_expr = {"qc_metrics_stats": ht.qc_metrics_stats[(True,)]}
+        if comparison_sample_expr is None:
+            ht = ht.annotate_globals(**ann_expr)
+        else:
+            ht = ht.annotate(**ann_expr)
+
+    return ht
 
 
 def compute_stratified_sample_qc(
@@ -469,15 +480,21 @@ def determine_nearest_neighbors(
     :param n_neighbors: Number of nearest neighbors to identify for each sample.
         Default is 50.
     :param n_jobs: Number of threads to use when finding the nearest neighbors. Default
-        is -1 which uses the number of CPUs on the head node - 2.
+        is -1 which uses the number of CPUs on the head node -1.
     :param add_neighbor_distances: Whether to return an annotation for the nearest
         neighbor distances.
-    :param distance_metric: Distance metric to use. Default is euclidean. Options are:
-    :param use_approximation: Whether to use the package annoy to determine approximate
-        nearest neighbors instead of exact. This method is faster, but only needed for
-        very large datasets, for instance > 500,000 samples.
-    :param n_trees: Number of trees to use in the annoy approximation approach. Default
-        is 10.
+    :param distance_metric: Distance metric to use. Default is euclidean. Options
+        using scikit-learn are: "euclidean", "cityblock", "cosine", "haversine", "l1",
+        "l2", and "manhattan". Options using Annoy: "angular", "euclidean", "manhattan",
+        "hamming", and "dot".
+    :param use_approximation: Whether to use the package Annoy to determine approximate
+        nearest neighbors instead of using scikit-learn's `NearestNeighbors`. This
+        method is faster, but only needed for very large datasets, for instance
+        > 500,000 samples.
+    :param n_trees: Number of trees to use in the annoy approximation approach.
+        `n_trees` is provided during build time and affects the build time and the
+        index size. A larger value will give more accurate results, but larger indexes.
+        Default is 10.
     :return: Table with an annotation for the nearest neighbors and optionally their
         distances.
     """
@@ -510,9 +527,9 @@ def determine_nearest_neighbors(
         if strata is not None:
             logger_str += f", for the following stratification group: {group}"
         logger.info(
-            "Finding %d %s,nearest neighbors, using the %s distance metric%s.",
+            "Finding %d %snearest neighbors, using the %s distance metric%s.",
             n_neighbors,
-            "approximate" if use_approximation else "",
+            "approximate " if use_approximation else "",
             distance_metric,
             logger_str,
         )

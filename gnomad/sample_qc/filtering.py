@@ -450,11 +450,11 @@ def determine_nearest_neighbors(
     strata: Optional[Dict[str, hl.expr.Expression]] = None,
     n_pcs: Optional[int] = None,
     n_neighbors: int = 50,
-    n_jobs: int = -2,
+    n_jobs: int = -1,
     add_neighbor_distances: bool = False,
     distance_metric: str = "euclidean",
     use_approximation: bool = False,
-    n_trees: int = 50,
+    n_trees: int = 10,
 ) -> hl.Table:
     """
     Determine the nearest neighbors of each sample with information in `scores_expr`.
@@ -476,7 +476,8 @@ def determine_nearest_neighbors(
     :param strata: Optional dictionary used for stratification. Keys are strata names
         and values are filtering expressions. These expressions should refer to
         data with discrete types!
-    :param n_pcs: Number of PCs to use. If not set, then all PCs in `pc_scores` are used.
+    :param n_pcs: Number of PCs to use. If not set, then all PCs in `scores_expr` are
+        used.
     :param n_neighbors: Number of nearest neighbors to identify for each sample.
         Default is 50.
     :param n_jobs: Number of threads to use when finding the nearest neighbors. Default
@@ -536,6 +537,7 @@ def determine_nearest_neighbors(
         scores_pd = _ht.filter(_ht.strata == group).to_pandas()
         scores_pd_s = scores_pd.s
         scores_pd = scores_pd[[f"PC{i + 1}" for i in range(n_pcs)]]
+        # Get the number of rows/samples in the stratification group.
         group_n = scores_pd.shape[0]
         if n_neighbors > group_n:
             logger.warning(

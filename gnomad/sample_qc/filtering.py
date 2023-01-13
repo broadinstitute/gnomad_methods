@@ -598,14 +598,15 @@ def determine_nearest_neighbors(
             distances_ht = hl.Table.from_spark(
                 spark.createDataFrame(distances_pd), key=["s"]
             )
-            distances_ht = distances_ht.transmute(
+            # Annotate indexes Table with neighbor distances.
+            nbrs_ht = indexes_ht.annotate(
                 nearest_neighbor_dists=hl.array(
-                    [distances_ht[f"nbrs_{str(i)}"] for i in range(n_neighbors)]
+                    [
+                        distances_ht[indexes_ht.key][f"nbrs_{str(i)}"]
+                        for i in range(n_neighbors)
+                    ]
                 )
             )
-
-            # Join neighbor distances Table and indexes Table.
-            nbrs_ht = indexes_ht.join(distances_ht)
         else:
             nbrs_ht = indexes_ht
 
@@ -616,7 +617,7 @@ def determine_nearest_neighbors(
             nbr=explode_nbrs_ht[hl.int64(explode_nbrs_ht.nearest_neighbor_idxs)].s
         )
         explode_nbrs_ht = explode_nbrs_ht.group_by("s").aggregate(
-            nearest_neighbors=hl.agg.collect_as_set(explode_nbrs_ht.nbr)
+            nearest_neighbors=hl.agg.collect(explode_nbrs_ht.nbr)
         )
         nbrs_ht = nbrs_ht.annotate(
             nearest_neighbors=explode_nbrs_ht[nbrs_ht.key].nearest_neighbors

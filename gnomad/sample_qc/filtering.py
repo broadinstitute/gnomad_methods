@@ -154,7 +154,7 @@ def compute_stratified_metrics_filter(
     Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering.
 
     :param ht: HT containing relevant sample QC metric annotations.
-    :param qc_metrics: list of metrics (name and expr) for which to compute the
+    :param qc_metrics: List of metrics (name and expr) for which to compute the
         critical values for filtering outliers.
     :param strata: List of annotations used for stratification. These metrics should be
         discrete types!

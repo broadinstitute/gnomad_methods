@@ -539,6 +539,7 @@ def determine_nearest_neighbors(
         scores_pd = scores_pd[[f"PC{i + 1}" for i in range(n_pcs)]]
         # Get the number of rows/samples in the stratification group.
         group_n = scores_pd.shape[0]
+        group_n_neighbors = min(n_neighbors, group_n)
         if n_neighbors > group_n:
             logger.warning(
                 "The requested number of nearest neighbors (%d) is larger than the "
@@ -559,7 +560,7 @@ def determine_nearest_neighbors(
             for i in range(group_n):
                 indexes.append(
                     nbrs.get_nns_by_item(
-                        i, n_neighbors, include_distances=add_neighbor_distances
+                        i, group_n_neighbors, include_distances=add_neighbor_distances
                     )
                 )
             if add_neighbor_distances:
@@ -568,7 +569,7 @@ def determine_nearest_neighbors(
         else:
             scores = scores_pd.values
             nbrs = NearestNeighbors(
-                n_neighbors=n_neighbors, n_jobs=n_jobs, metric=distance_metric
+                n_neighbors=group_n_neighbors, n_jobs=n_jobs, metric=distance_metric
             )
             nbrs.fit(scores)
             indexes = nbrs.kneighbors(scores, return_distance=add_neighbor_distances)
@@ -579,12 +580,12 @@ def determine_nearest_neighbors(
         indexes_pd = pd.DataFrame(indexes)
         indexes_pd = pd.concat([scores_pd_s, indexes_pd], axis=1)
         indexes_pd = indexes_pd.rename(
-            columns={i: f"nbrs_index_{i}" for i in range(n_neighbors)}
+            columns={i: f"nbrs_index_{i}" for i in range(group_n_neighbors)}
         )
         indexes_ht = hl.Table.from_spark(spark.createDataFrame(indexes_pd), key=["s"])
         indexes_ht = indexes_ht.transmute(
             nearest_neighbor_idxs=hl.array(
-                [indexes_ht[f"nbrs_index_{i}"] for i in range(n_neighbors)]
+                [indexes_ht[f"nbrs_index_{i}"] for i in range(group_n_neighbors)]
             )
         )
 
@@ -592,18 +593,18 @@ def determine_nearest_neighbors(
             # Format neighbor distances as a Hail Table.
             distances_pd = pd.DataFrame(distances)
             distances_pd = distances_pd.rename(
-                columns={i: f"nbrs_{i}" for i in range(n_neighbors)}
+                columns={i: f"nbrs_{i}" for i in range(group_n_neighbors)}
             )
             distances_pd = pd.concat([scores_pd_s, distances_pd], axis=1)
             distances_ht = hl.Table.from_spark(
                 spark.createDataFrame(distances_pd), key=["s"]
             )
-            # Annotate indexes Table with neighbor distances.
+            distances_indexed = distances_ht[indexes_ht.key]
             nbrs_ht = indexes_ht.annotate(
                 nearest_neighbor_dists=hl.array(
                     [
-                        distances_ht[indexes_ht.key][f"nbrs_{str(i)}"]
-                        for i in range(n_neighbors)
+                        distances_indexed[f"nbrs_{str(i)}"]
+                        for i in range(group_n_neighbors)
                     ]
                 )
             )

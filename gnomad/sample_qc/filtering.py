@@ -613,16 +613,23 @@ def determine_nearest_neighbors(
 
         # Add nearest_neighbors annotation to use instead of indexes.
         nbrs_ht = nbrs_ht.add_index()
-        explode_nbrs_ht = nbrs_ht.key_by("idx").explode("nearest_neighbor_idxs")
+        nbrs_ht = nbrs_ht.annotate(
+            _nearest_neighbor_idxs=hl.enumerate(nbrs_ht.nearest_neighbor_idxs)
+        )
+        explode_nbrs_ht = nbrs_ht.key_by("idx").explode("_nearest_neighbor_idxs")
+        nbrs_idx_expr = explode_nbrs_ht._nearest_neighbor_idxs
         explode_nbrs_ht = explode_nbrs_ht.transmute(
-            nbr=explode_nbrs_ht[hl.int64(explode_nbrs_ht.nearest_neighbor_idxs)].s
+            nbr=(nbrs_idx_expr[0], explode_nbrs_ht[hl.int64(nbrs_idx_expr[1])].s)
         )
         explode_nbrs_ht = explode_nbrs_ht.group_by("s").aggregate(
-            nearest_neighbors=hl.agg.collect(explode_nbrs_ht.nbr)
+            nearest_neighbors=hl.sorted(hl.agg.collect(explode_nbrs_ht.nbr)).map(
+                lambda x: x[1]
+            )
         )
         nbrs_ht = nbrs_ht.annotate(
             nearest_neighbors=explode_nbrs_ht[nbrs_ht.key].nearest_neighbors
         )
+        nbrs_ht = nbrs_ht.drop("_nearest_neighbor_idxs")
         logger.info(
             "Checkpointing intermediate Table with nearest neighbor information..."
         )

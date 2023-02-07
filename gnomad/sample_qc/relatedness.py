@@ -681,7 +681,7 @@ def compute_related_samples_to_drop(
             "Computing samples related to too many individuals (>%d) for exclusion",
             min_related_hard_filter,
         )
-        gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
+        gbi = relatedness_ht.annotate(s=[relatedness_ht.key[0], relatedness_ht.key[1]])
         gbi = gbi.explode(gbi.s)
         gbi = gbi.group_by(gbi.s).aggregate(n=hl.agg.count())
         filtered_samples_rel = gbi.aggregate(
@@ -698,7 +698,7 @@ def compute_related_samples_to_drop(
             relatedness_ht.aggregate(
                 hl.agg.explode(
                     lambda s: hl.agg.collect_as_set(s),
-                    hl.array(list(relatedness_ht.key)).filter(
+                    hl.array([relatedness_ht.key[0], relatedness_ht.key[1]]).filter(
                         lambda s: filtered_samples.contains(s)
                     ),
                 )
@@ -832,7 +832,8 @@ def compute_related_samples_to_drop(
         related_samples_to_drop_ht = hl.Table.parallelize(
             maximal_independent_set_keep_samples(
                 related_pair_graph, keep=hl.eval(keep_samples)
-            )
+            ),
+            hl.tstruct(s=hl.tstr, rank=hl.tint64),
         )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")
 

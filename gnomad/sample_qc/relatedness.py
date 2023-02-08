@@ -265,6 +265,118 @@ def get_relationship_expr(  # TODO: The threshold detection could be easily auto
     )
 
 
+def get_slope_int_relationship_expr(
+    kin_expr: hl.expr.NumericExpression,
+    y_expr: hl.expr.NumericExpression,
+    parent_child_max_y: float,
+    second_degree_sibling_lower_cutoff_slope: float,
+    second_degree_sibling_lower_cutoff_intercept: float,
+    second_degree_upper_sibling_lower_cutoff_slope: float,
+    second_degree_upper_sibling_lower_cutoff_intercept: float,
+    duplicate_twin_min_kin: float = 0.42,
+    second_degree_min_kin: float = 0.1,
+    duplicate_twin_ibd1_min: float = -0.15,
+    duplicate_twin_ibd1_max: float = 0.1,
+    ibd1_expr: Optional[hl.expr.NumericExpression] = None,
+):
+    """
+    Return an expression indicating the relationship between a pair of samples given slope and intercept cutoffs.
+
+    The kinship coefficient (`kin_expr`) and an additional metric (`y_expr`) are used
+    to define the relationship between a pair of samples. For this function the
+    slope and intercepts should refer to cutoff lines where the x-axis, or independent
+    variable is the kinship coefficient and the y-axis, or dependent variable, is
+    the metric defined by `y_expr`. Typically, the y-axis metric IBS0, IBS0/IBS2, or
+    IBD0.
+
+    .. note::
+
+        No defaults are provided for the slope and intercept cutoffs because they are
+        highly dependent on the dataset and the metric used in `y_expr`.
+
+    The relationship expression is determined as follows:
+        - If `kin_expr` < `second_degree_min_kin` ->  UNRELATED
+        - If `kin_expr` > `duplicate_twin_min_kin`:
+            - If `y_expr` < `parent_child_max_y`:
+                - If `ibd1_expr` is defined:
+                    - If `duplicate_twin_ibd1_min` <= `ibd1_expr` <= `
+                      duplicate_twin_ibd1_max` -> DUPLICATE_OR_TWINS
+                    - Else -> AMBIGUOUS_RELATIONSHIP
+                - Else -> DUPLICATE_OR_TWINS
+        - If `y_expr` < `parent_child_max_y` -> PARENT_CHILD
+        - If pair is over second_degree_sibling_lower_cutoff line:
+            - If pair is over second_degree_upper_sibling_lower_cutoff line -> SIBLINGS
+            - Else -> SECOND_DEGREE_RELATIVES
+        - If none of the above conditions are met -> AMBIGUOUS_RELATIONSHIP
+
+    :param kin_expr: Kin coefficient expression. Used as the x-axis, or independent
+        variable, for the slope and intercept cutoffs.
+    :param y_expr: Expression for the metric to use as the y-axis, or dependent
+        variable, for the slope and intercept cutoffs. This is typically an expression
+        for IBS0, IBS0/IBS2, or IBD0.
+    :param parent_child_max_y: Maximum value of the metric defined by `y_expr` for a
+        parent-child pair.
+    :param second_degree_sibling_lower_cutoff_slope: Slope of the line to use as a
+        lower cutoff for second degree relatives and siblings from parent-child pairs.
+    :param second_degree_sibling_lower_cutoff_intercept: Intercept of the line to use
+        as a lower cutoff for second degree relatives and siblings from parent-child
+        pairs.
+    :param second_degree_upper_sibling_lower_cutoff_slope: Slope of the line to use as
+        an upper cutoff for second degree relatives and a lower cutoff for siblings.
+    :param second_degree_upper_sibling_lower_cutoff_intercept: Intercept of the line to
+        use as an upper cutoff for second degree relatives and a lower cutoff for
+        siblings.
+    :param duplicate_twin_min_kin: Minimum kinship for duplicate or twin pairs.
+        Default is 0.42.
+    :param second_degree_min_kin: Minimum kinship threshold for 2nd degree relatives.
+        Default is 0.08838835. Bycroft et al. (2018) calculates a theoretical kinship
+        of 0.08838835 for a second degree relationship cutoff, but this cutoff should be
+        determined by evaluation of the kinship distribution.
+    :param ibd1_expr: Optional IBD1 expression. If this expression is provided,
+        `duplicate_twin_ibd1_min` and `duplicate_twin_ibd1_max` will be used as an
+        additional cutoff for duplicate or twin pairs.
+    :param duplicate_twin_ibd1_min: Minimum IBD1 cutoff for duplicate or twin pairs.
+        Note: the min is because pc_relate can output large negative values in some
+        corner cases.
+    :param duplicate_twin_ibd1_max: Maximum IBD1 cutoff for duplicate or twin pairs.
+    :return: The relationship annotation using the constants defined in this module.
+    """
+    # Only use a duplicate/twin IBD1 cutoff if an ibd1_expr is supplied.
+    if ibd1_expr is not None:
+        dup_twin_ibd1_expr = (ibd1_expr >= duplicate_twin_ibd1_min) & (
+            ibd1_expr <= duplicate_twin_ibd1_max
+        )
+    else:
+        dup_twin_ibd1_expr = True
+
+    return (
+        hl.case()
+        .when(kin_expr < second_degree_min_kin, UNRELATED)
+        .when(
+            kin_expr > duplicate_twin_min_kin,
+            hl.if_else(
+                dup_twin_ibd1_expr & (y_expr < parent_child_max_y),
+                DUPLICATE_OR_TWINS,
+                AMBIGUOUS_RELATIONSHIP,
+            ),
+        )
+        .when(y_expr < parent_child_max_y, PARENT_CHILD)
+        .when(
+            y_expr
+            > second_degree_sibling_lower_cutoff_slope * kin_expr
+            + second_degree_sibling_lower_cutoff_intercept,
+            hl.if_else(
+                y_expr
+                > second_degree_upper_sibling_lower_cutoff_slope * kin_expr
+                + second_degree_upper_sibling_lower_cutoff_intercept,
+                SIBLINGS,
+                SECOND_DEGREE_RELATIVES,
+            ),
+        )
+        .default(AMBIGUOUS_RELATIONSHIP)
+    )
+
+
 def infer_families(
     relationship_ht: hl.Table,
     sex: Union[hl.Table, Dict[str, bool]],

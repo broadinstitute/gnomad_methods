@@ -287,9 +287,10 @@ def repartition_for_join(
     new_partition_percent: float = 1.1,
 ) -> List[hl.expr.IntervalExpression]:
     """
-    Repartition a Table prior to joining with another Table(s).
+    Calculate  partitions' intervals using the passed Table. 
 
-    This repartitioning makes the join(s) much more efficient.
+    Reading in all Tables using these partition intervals using  `_intervals` 
+    before they are joined, makes the join(s) much more efficient.
     For more information, see:
     https://discuss.hail.is/t/room-for-improvement-when-joining-multiple-hts/2278/8
 

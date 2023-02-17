@@ -284,9 +284,8 @@ def read_list_data(input_file_path: str) -> List[str]:
 
 def repartition_for_join(
     ht_path: str,
-    new_partition_percent: Optional[float] = None,
-    n_partitions: Optional[int] = None,
-) -> hl.Table:
+    new_partition_percent: float,
+) -> List[hl.expr.IntervalExpression]:
     """
     Repartition a Table prior to joining with another Table(s).
 
@@ -294,30 +293,15 @@ def repartition_for_join(
 
     :param ht_path: Path to Table to repartition.
     :param new_partition_percent: Percent of initial dataset partitions to use.
-        Value should be greater than 1.
-        Default is None.
-        Should not be specified if `n_partitions` is not None.
-    :param n_partitions: Number of partitions desired after repartition.
-        Default is None.
-        Should not be specified if `new_partition_percent` is not None.
-    :return: hl.Table
+        Value should be greater than 1 so that input HT will have more
+        partitions for the join.
+    :return: List of IntervalExpressions calculated over new set of partitions
+        (number of partitions in HT * desired percent increase).
     """
-    if not new_partition_percent and not n_partitions:
-        raise DataException(
-            "Must specify either new_partition_percent or n_partitions!"
-        )
-
     ht = hl.read_table(ht_path)
-    if new_partition_percent:
-        if new_partition_percent < 1:
-            logger.warning(
-                "new_partition_percent value is less than 1! The new HT will have fewer"
-                " partitions than the original HT!"
-            )
-        partition_intervals = ht._calculate_new_partitions(
-            ht.n_partitions() * new_partition_percent
+    if new_partition_percent < 1:
+        logger.warning(
+            "new_partition_percent value is less than 1! The new HT will have fewer"
+            " partitions than the original HT!"
         )
-    if n_partitions:
-        partition_intervals = ht._calculate_new_partitions(n_partitions)
-
-    return hl.read_table(ht_path, _intervals=partition_intervals)
+    return ht._calculate_new_partitions(ht.n_partitions() * new_partition_percent)

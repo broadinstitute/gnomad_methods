@@ -295,7 +295,7 @@ def repartition_for_join(
 
     :param ht_path: Path to Table to use for interval partition calculation. 
     :param new_partition_percent: Percent of initial dataset partitions to use.
-        Value should be greater than 1 so that input HT will have more
+        Value should be greater than 1 so that input Table will have more
         partitions for the join. Defaults to 1.1.
     :return: List of IntervalExpressions calculated over new set of partitions
         (number of partitions in HT * desired percent increase).

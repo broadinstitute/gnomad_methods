@@ -284,7 +284,7 @@ def read_list_data(input_file_path: str) -> List[str]:
 
 def repartition_for_join(
     ht_path: str,
-    new_partition_percent: float,
+    new_partition_percent: float = 1.1,
 ) -> List[hl.expr.IntervalExpression]:
     """
     Repartition a Table prior to joining with another Table(s).

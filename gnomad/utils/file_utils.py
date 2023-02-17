@@ -293,7 +293,7 @@ def repartition_for_join(
     For more information, see:
     https://discuss.hail.is/t/room-for-improvement-when-joining-multiple-hts/2278/8
 
-    :param ht_path: Path to Table to repartition.
+    :param ht_path: Path to Table to use for interval partition calculation. 
     :param new_partition_percent: Percent of initial dataset partitions to use.
         Value should be greater than 1 so that input HT will have more
         partitions for the join. Defaults to 1.1.

@@ -290,6 +290,8 @@ def repartition_for_join(
     Repartition a Table prior to joining with another Table(s).
 
     This repartitioning makes the join(s) much more efficient.
+    For more information, see:
+    https://discuss.hail.is/t/room-for-improvement-when-joining-multiple-hts/2278/8
 
     :param ht_path: Path to Table to repartition.
     :param new_partition_percent: Percent of initial dataset partitions to use.

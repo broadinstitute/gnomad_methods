@@ -560,7 +560,8 @@ def apply_recalibration(
     j.memory('8G')
     j.storage(f'{disk_size}G')
     j.declare_resource_group(
-        output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
+        output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'},
+        intermediate_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
     )
 
     j.command(
@@ -583,7 +584,7 @@ def apply_recalibration(
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
         gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
-          -O intermediate.vcf.gz \\
+          -O {j.output_vcf['vcf.gz']} \\
           -V tmp.indel.recalibrated.vcf \\
           --recal-file {snps_recalibration} \\
           --tranches-file {snps_tranches} \\
@@ -593,15 +594,21 @@ def apply_recalibration(
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
           -mode SNP
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        
-        # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
-        # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
-        interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
-        bcftools view -t $interval intermediate.vcf.gz --output-file {j.output_vcf['vcf.gz']} --output-type z
-        tabix {j.output_vcf['vcf.gz']}
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        """
+                """
     )
+
+    # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
+    # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
+    if interval:
+        # overwrite VCF with overlap issue addressed
+        j.command(
+            f"""
+                interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+                bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
+                tabix {j.output_vcf['vcf.gz']}
+                df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
+            """
+        )
 
     if out_bucket:
         b.write_output(j.output_vcf, f'{outpath}{filename}')

@@ -711,9 +711,11 @@ def compute_oe_per_transcript(
     pops: Tuple[str] = (),
 ) -> hl.Table:
     """
-    Compute the observed:expected ratio for pLoF variants, missense variants, or synonymous variants.
+    Compute the observed:expected ratio for pLoF variants defined by `annotation_name`.
+    
+    For example: , missense variants, or synonymous variants.
 
-    Function sums the number of observed variants, possible variants, and expected
+    Perform an aggregation to sum the number of observed variants, possible variants, and expected
     variants across all the combinations of `keys`, and uses the expected variant
     counts and observed variant counts to compute the observed:expected ratio.
 
@@ -722,11 +724,13 @@ def compute_oe_per_transcript(
         - mu_{annotation_name} - the sum of mutation rate grouped by `keys`
         - possible_{annotation_name} - possible number of variants grouped by `keys`
         - exp_{annotation_name} - expected number of variants grouped by `keys`
-        - exp_{annotation_name}_{pop} (pop defaults to `POPS`) - expected number of
-            variants per population grouped by `keys`
-        - obs_{annotation_name}_{pop} (pop defaults to `POPS`) - observed number of
-            variants per population grouped by `keys`
         - oe_{annotation_name} - observed:expected ratio
+        
+        If `pops` is specified:
+            - exp_{annotation_name}_{pop} (pop defaults to `POPS`) - expected number of
+                variants per population grouped by `keys`
+            - obs_{annotation_name}_{pop} (pop defaults to `POPS`) - observed number of
+                variants per population grouped by `keys`
 
     .. note::
         The following annotations should be present in `ht`:
@@ -735,8 +739,7 @@ def compute_oe_per_transcript(
             - possible_variants
             - expected_variants
 
-    :param ht: Input Table with pLoF variants, missense variants, or synonymous
-        variants.
+    :param ht: Input Table with variants defined by `annotation_name` to compute the observed:expected ratio for.
     :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
     :param filter_expr: Boolean expression used to filter `ht` according to
@@ -747,17 +750,14 @@ def compute_oe_per_transcript(
     :return: Table with observed:expected ratio.
     """
     ht = ht.filter(filter_expr)
-    if annotation_name == "syn":
-        ht = ht.key_by(*keys)
     # Create aggregators that sum the number of observed variants, possible variants,
     # and expected variants and compute observed:expected ratio.
     agg_expr = {
         f"obs_{annotation_name}": hl.agg.sum(ht.observed_variants),
         f"exp_{annotation_name}": hl.agg.sum(ht.expected_variants),
-        f"oe_{annotation_name}": hl.agg.sum(ht.observed_variants)
-        / hl.agg.sum(ht.expected_variants),
         f"possible_{annotation_name}": hl.agg.sum(ht.possible_variants),
     }
+    agg_expr[f"oe_{annotation_name}"] = agg_expr[f"obs_{annotation_name}"] /  agg_expr[f"exp_{annotation_name}"]
 
     # Create an aggregator that sums the mutation rate.
     if annotation_name != "mis_pphen":
@@ -775,25 +775,22 @@ def compute_oe_per_transcript(
     return ht.group_by(*keys).aggregate(**agg_expr)
 
 
-def compute_all_pLI_scores(
+def annotate_pLI_scores(
     ht: hl.Table,
     annotation_name: str,
-    pops: Tuple[str] = (),
     keys: Tuple[str] = ("gene", "transcript", "canonical"),
-    calculate_pop_pLI=False,
+    pops: Tuple[str] = (),
     n_ds_to_skip: int = 8,
 ) -> hl.Table:
     """
-    Compute the pLI scores for pLoF variants.
+    Annotate the input `ht` with the pLI scores for pLoF variants.
 
     :param ht: Input Table with pLoF variants.
     :param annotation_name: Annotation name used for constraint metrics to distinguish
         mutation types.
-    :param pops: Populations that need to compute pLI scores.
     :param keys: The keys of the output Table. Default is ('gene', 'transcript',
         'canonical').
-    :param calculate_pop_pLI: Whether to compute the pLI scores for each population.
-        Default is False.
+    :param pops: Populations for which to compute pLI scores.
     :param n_ds_to_skip: The number of small downsamplings to skip when calculating pLI scores for populations. Default is 8.
     :return: Table with pLI, pNull, and pRec scores.
     """
@@ -801,7 +798,7 @@ def compute_all_pLI_scores(
     ht = ht.filter(ht[f"exp_{annotation_name}"] > 0)
 
     # Calculate pLI scores for each population if specified.
-    if calculate_pop_pLI:
+    if pops:
         pop_lengths = get_all_pop_lengths(ht, pops, f"obs_{annotation_name}_{pop}")
         for pop_length, pop in pop_lengths:
             logger.info(f"Calculating pLI for {pop}...")
@@ -809,7 +806,7 @@ def compute_all_pLI_scores(
             for i in range(n_ds_to_skip, pop_length):
                 logger.info(i)
                 ht = ht.filter(ht[f"exp_{annotation_name}_{pop}"][i] > 0)
-                pli_ht = pLI(
+                pli_ht = compute_pLI(
                     ht,
                     ht[f"obs_{annotation_name}_{pop}"][i],
                     ht[f"exp_{annotation_name}_{pop}"][i],
@@ -823,7 +820,7 @@ def compute_all_pLI_scores(
                 }
             )
     # Calculate pLI scores for all variants.
-    pli_result = pLI(ht, ht[f"obs_{annotation_name}"], ht[f"exp_{annotation_name}"])[
+    pli_result = compute_pLI(ht, ht[f"obs_{annotation_name}"], ht[f"exp_{annotation_name}"])[
         ht.key
     ]
     pli_result = pli_result.rename(
@@ -832,8 +829,8 @@ def compute_all_pLI_scores(
     return ht.annotate(**pli_result).key_by(*keys)
 
 
-def pLI(
-    ht: hl.Table, obs: hl.expr.Int32Expression, exp: hl.expr.Float32Expression
+def compute_pLI(
+    ht: hl.Table, obs_expr: hl.expr.Int32Expression, exp_expr: hl.expr.Float32Expression
 ) -> hl.Table:
     """
     Compute the pLI score using the observed and expected variant counts.
@@ -845,15 +842,15 @@ def pLI(
         - pRec - Probability that transcript falls into distribution of recessive genes
 
     :param ht: Input Table.
-    :param obs: Expression for the number of observed variants on each gene or transcript in `ht`.
-    :param exp: Expression for the number of expected variants on each gene or transcript in `ht`.
+    :param obs_expr: Expression for the number of observed variants on each gene or transcript in `ht`.
+    :param exp_expr: Expression for the number of expected variants on each gene or transcript in `ht`.
     :return: Table with pLI scores.
     """
     # Set up initial values.
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
     expected_values = {"Null": 1, "Rec": 0.463, "LI": 0.089}
-    ht = ht.annotate(_obs=obs, _exp=exp)
+    ht = ht.annotate(_obs=obs_expr, _exp=exp_expr)
 
     # Calculate pLI scores.
     while abs(pi["LI"] - last_pi["LI"]) > 0.001:
@@ -881,15 +878,15 @@ def pLI(
 
 def oe_confidence_interval(
     ht: hl.Table,
-    obs: hl.expr.Int32Expression,
-    exp: hl.expr.Float32Expression,
+    obs_expr: hl.expr.Int32Expression,
+    exp_expr: hl.expr.Float32Expression,
     prefix: str = "oe",
     alpha: float = 0.05,
 ) -> hl.Table:
     """
     Determine the confidence interval around the observed:expected ratio.
 
-    For a given pair of observed (`obs`) and expected (`exp`) values, the function
+    For a given pair of observed (`obs_expr`) and expected (`exp_expr`) values, the function
     computes the density of the Poisson distribution (performed using Hail's `dpois` module)
     with fixed k (`x` in `dpois` is set to the observed number of variants)
     over a range of lambda (`lamb` in `dpois`) values, which are given by the expected
@@ -905,18 +902,16 @@ def oe_confidence_interval(
 
     :param ht: Input Table with the observed and expected variant counts for either
         pLoF, missense, or synonymous variants.
-    :param obs: Expression for the observed variant counts of pLoF, missense, or
+    :param obs_expr: Expression for the observed variant counts of pLoF, missense, or
         synonymous variants in `ht`.
-    :param exp: Expression for the expected variant counts of pLoF, missense, or
+    :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
         synonymous variants in `ht`.
     :param prefix: Prefix of upper and lower bounds, defaults to 'oe'.
     :param alpha: The significance level used to compute the confidence interval.
         Default is 0.05.
-    :param select_only_ci_metrics: Whether to return only upper and lower bounds
-        instead of keeping all the annotations except `_exp`, defaults to True.
     :return: Table with the confidence interval lower and upper bounds.
     """
-    ht = ht.annotate(_obs=obs, _exp=exp)
+    ht = ht.annotate(_obs=obs_expr, _exp=exp_expr)
     # Set up range between 0 and 2.
     oe_ht = ht.annotate(_range=hl.range(0, 2000).map(lambda x: hl.float64(x) / 1000))
     oe_ht = oe_ht.annotate(
@@ -949,8 +944,8 @@ def oe_confidence_interval(
     return oe_ht.select(f"{prefix}_lower", f"{prefix}_upper")
 
 
-def calculate_z(
-    input_ht: hl.Table,
+def calculate_z_score(
+    ht: hl.Table,
     obs: hl.expr.Int32Expression,
     exp: hl.expr.Float32Expression,
     z_score_output_annotation: str = "z_raw",
@@ -960,16 +955,16 @@ def calculate_z(
 
     The raw z scores are positive when the transcript had fewer variants than expected, and are negative when transcripts had more variants than expected.
 
-    The following annotation is included in the output Table in addition to the `input_ht` keys:
+    The following annotation is included in the output Table in addition to the `ht` keys:
         - `output` - the raw z score
 
-    :param input_ht: Input Table.
+    :param ht: Input Table.
     :param obs: Observed variant count expression.
     :param exp: Expected variant count expression.
     :param z_score_output_annotation: The annotation label to use for the raw z score output, defaults to 'z_raw'.
     :return: Table with raw z scores.
     """
-    ht = input_ht.select(_obs=obs, _exp=exp)
+    ht = ht.select(_obs=obs, _exp=exp)
     ht = ht.annotate(_chisq=(ht._obs - ht._exp) ** 2 / ht._exp)
     return ht.select(
         **{
@@ -1005,16 +1000,6 @@ def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
         'lof', 'mis', and 'syn'.
     :return: Table with z scores.
     """
-    # Calculate z scores.
-    ht = ht.annotate(
-        **calculate_z(
-            ht,
-            ht[f"obs_{mutation_type}"],
-            ht[f"exp_{mutation_type}"],
-            f"{mutation_type}_z_raw",
-        )[ht.key]
-    )
-
     # Create constraint flag to annotate if the variant is defined, has expected variant count, and is outlier.
     reasons = hl.empty_set(hl.tstr)
 

@@ -6,6 +6,7 @@ from collections import defaultdict
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import hail as hl
+import networkx as nx
 
 from gnomad.utils.annotations import annotate_adj
 
@@ -259,6 +260,118 @@ def get_relationship_expr(  # TODO: The threshold detection could be easily auto
             & (ibd2_expr >= ibd2_100_thresholds[0])
             & (ibd2_expr <= ibd2_100_thresholds[1]),
             DUPLICATE_OR_TWINS,
+        )
+        .default(AMBIGUOUS_RELATIONSHIP)
+    )
+
+
+def get_slope_int_relationship_expr(
+    kin_expr: hl.expr.NumericExpression,
+    y_expr: hl.expr.NumericExpression,
+    parent_child_max_y: float,
+    second_degree_sibling_lower_cutoff_slope: float,
+    second_degree_sibling_lower_cutoff_intercept: float,
+    second_degree_upper_sibling_lower_cutoff_slope: float,
+    second_degree_upper_sibling_lower_cutoff_intercept: float,
+    duplicate_twin_min_kin: float = 0.42,
+    second_degree_min_kin: float = 0.1,
+    duplicate_twin_ibd1_min: float = -0.15,
+    duplicate_twin_ibd1_max: float = 0.1,
+    ibd1_expr: Optional[hl.expr.NumericExpression] = None,
+):
+    """
+    Return an expression indicating the relationship between a pair of samples given slope and intercept cutoffs.
+
+    The kinship coefficient (`kin_expr`) and an additional metric (`y_expr`) are used
+    to define the relationship between a pair of samples. For this function the
+    slope and intercepts should refer to cutoff lines where the x-axis, or independent
+    variable is the kinship coefficient and the y-axis, or dependent variable, is
+    the metric defined by `y_expr`. Typically, the y-axis metric IBS0, IBS0/IBS2, or
+    IBD0.
+
+    .. note::
+
+        No defaults are provided for the slope and intercept cutoffs because they are
+        highly dependent on the dataset and the metric used in `y_expr`.
+
+    The relationship expression is determined as follows:
+        - If `kin_expr` < `second_degree_min_kin` ->  UNRELATED
+        - If `kin_expr` > `duplicate_twin_min_kin`:
+            - If `y_expr` < `parent_child_max_y`:
+                - If `ibd1_expr` is defined:
+                    - If `duplicate_twin_ibd1_min` <= `ibd1_expr` <= `
+                      duplicate_twin_ibd1_max` -> DUPLICATE_OR_TWINS
+                    - Else -> AMBIGUOUS_RELATIONSHIP
+                - Else -> DUPLICATE_OR_TWINS
+        - If `y_expr` < `parent_child_max_y` -> PARENT_CHILD
+        - If pair is over second_degree_sibling_lower_cutoff line:
+            - If pair is over second_degree_upper_sibling_lower_cutoff line -> SIBLINGS
+            - Else -> SECOND_DEGREE_RELATIVES
+        - If none of the above conditions are met -> AMBIGUOUS_RELATIONSHIP
+
+    :param kin_expr: Kin coefficient expression. Used as the x-axis, or independent
+        variable, for the slope and intercept cutoffs.
+    :param y_expr: Expression for the metric to use as the y-axis, or dependent
+        variable, for the slope and intercept cutoffs. This is typically an expression
+        for IBS0, IBS0/IBS2, or IBD0.
+    :param parent_child_max_y: Maximum value of the metric defined by `y_expr` for a
+        parent-child pair.
+    :param second_degree_sibling_lower_cutoff_slope: Slope of the line to use as a
+        lower cutoff for second degree relatives and siblings from parent-child pairs.
+    :param second_degree_sibling_lower_cutoff_intercept: Intercept of the line to use
+        as a lower cutoff for second degree relatives and siblings from parent-child
+        pairs.
+    :param second_degree_upper_sibling_lower_cutoff_slope: Slope of the line to use as
+        an upper cutoff for second degree relatives and a lower cutoff for siblings.
+    :param second_degree_upper_sibling_lower_cutoff_intercept: Intercept of the line to
+        use as an upper cutoff for second degree relatives and a lower cutoff for
+        siblings.
+    :param duplicate_twin_min_kin: Minimum kinship for duplicate or twin pairs.
+        Default is 0.42.
+    :param second_degree_min_kin: Minimum kinship threshold for 2nd degree relatives.
+        Default is 0.08838835. Bycroft et al. (2018) calculates a theoretical kinship
+        of 0.08838835 for a second degree relationship cutoff, but this cutoff should be
+        determined by evaluation of the kinship distribution.
+    :param ibd1_expr: Optional IBD1 expression. If this expression is provided,
+        `duplicate_twin_ibd1_min` and `duplicate_twin_ibd1_max` will be used as an
+        additional cutoff for duplicate or twin pairs.
+    :param duplicate_twin_ibd1_min: Minimum IBD1 cutoff for duplicate or twin pairs.
+        Note: the min is because pc_relate can output large negative values in some
+        corner cases.
+    :param duplicate_twin_ibd1_max: Maximum IBD1 cutoff for duplicate or twin pairs.
+    :return: The relationship annotation using the constants defined in this module.
+    """
+    # Only use a duplicate/twin IBD1 cutoff if an ibd1_expr is supplied.
+    if ibd1_expr is not None:
+        dup_twin_ibd1_expr = (ibd1_expr >= duplicate_twin_ibd1_min) & (
+            ibd1_expr <= duplicate_twin_ibd1_max
+        )
+    else:
+        dup_twin_ibd1_expr = True
+
+    return (
+        hl.case()
+        .when(kin_expr < second_degree_min_kin, UNRELATED)
+        .when(
+            kin_expr > duplicate_twin_min_kin,
+            hl.if_else(
+                dup_twin_ibd1_expr & (y_expr < parent_child_max_y),
+                DUPLICATE_OR_TWINS,
+                AMBIGUOUS_RELATIONSHIP,
+            ),
+        )
+        .when(y_expr < parent_child_max_y, PARENT_CHILD)
+        .when(
+            y_expr
+            > second_degree_sibling_lower_cutoff_slope * kin_expr
+            + second_degree_sibling_lower_cutoff_intercept,
+            hl.if_else(
+                y_expr
+                > second_degree_upper_sibling_lower_cutoff_slope * kin_expr
+                + second_degree_upper_sibling_lower_cutoff_intercept,
+                SIBLINGS,
+                SECOND_DEGREE_RELATIVES,
+            ),
         )
         .default(AMBIGUOUS_RELATIONSHIP)
     )
@@ -645,6 +758,8 @@ def compute_related_samples_to_drop(
     kin_threshold: float,
     filtered_samples: Optional[hl.expr.SetExpression] = None,
     min_related_hard_filter: Optional[int] = None,
+    keep_samples: Optional[hl.expr.SetExpression] = None,
+    keep_samples_when_related: bool = False,
 ) -> hl.Table:
     """
     Compute a Table with the list of samples to drop (and their global rank) to get the maximal independent set of unrelated samples.
@@ -659,6 +774,8 @@ def compute_related_samples_to_drop(
     :param rank_ht: Table with a global rank for each sample (smaller is preferred)
     :param filtered_samples: An optional set of samples to exclude (e.g. these samples were hard-filtered)  These samples will then appear in the resulting samples to drop.
     :param min_related_hard_filter: If provided, any sample that is related to more samples than this parameter will be filtered prior to computing the maximal independent set and appear in the results.
+    :param keep_samples: An optional set of samples that must be kept. An error is raised (when `keep_samples_when_related` is False) if any two samples in the list are among the related pairs.
+    :param keep_samples_when_related: Don't raise an error if `keep_samples` contains related samples, and keep related samples. Default is False.
     :return: A Table with the list of the samples to drop along with their rank.
     """
     # Make sure that the key types are valid
@@ -676,7 +793,7 @@ def compute_related_samples_to_drop(
             "Computing samples related to too many individuals (>%d) for exclusion",
             min_related_hard_filter,
         )
-        gbi = relatedness_ht.annotate(s=list(relatedness_ht.key))
+        gbi = relatedness_ht.annotate(s=[relatedness_ht.key[0], relatedness_ht.key[1]])
         gbi = gbi.explode(gbi.s)
         gbi = gbi.group_by(gbi.s).aggregate(n=hl.agg.count())
         filtered_samples_rel = gbi.aggregate(
@@ -693,7 +810,7 @@ def compute_related_samples_to_drop(
             relatedness_ht.aggregate(
                 hl.agg.explode(
                     lambda s: hl.agg.collect_as_set(s),
-                    hl.array(list(relatedness_ht.key)).filter(
+                    hl.array([relatedness_ht.key[0], relatedness_ht.key[1]]).filter(
                         lambda s: filtered_samples.contains(s)
                     ),
                 )
@@ -707,6 +824,32 @@ def compute_related_samples_to_drop(
             | filtered_samples_lit.contains(relatedness_ht.key[1]),
             keep=False,
         )
+
+    if keep_samples is not None:
+        logger.info(
+            "Number of samples in the provided list of samples to keep: %d",
+            hl.eval(hl.len(keep_samples)),
+        )
+        i = relatedness_ht.key[0]
+        j = relatedness_ht.key[1]
+        keep_samples_rel = relatedness_ht.aggregate(
+            hl.agg.filter(
+                keep_samples.contains(i) & keep_samples.contains(j),
+                hl.agg.collect_as_set(hl.struct(i=i, j=j, kin=relatedness_ht.kin)),
+            )
+        )
+        num_keep_samples_rel = len(keep_samples_rel)
+        if num_keep_samples_rel > 0:
+            logger.warning(
+                "The following pairs are in the list of samples to keep, but are "
+                "related:\n%s",
+                "\n".join(map(str, keep_samples_rel)),
+            )
+            if not keep_samples_when_related:
+                raise ValueError(
+                    "Both samples can not be retained when 'keep_samples_when_related' "
+                    "is False!"
+                )
 
     logger.info("Annotating related sample pairs with rank.")
     i, j = list(relatedness_ht.key)
@@ -722,16 +865,88 @@ def compute_related_samples_to_drop(
     relatedness_ht = relatedness_ht.drop("s")
     relatedness_ht = relatedness_ht.persist()
 
-    related_samples_to_drop_ht = hl.maximal_independent_set(
-        relatedness_ht[i],
-        relatedness_ht[j],
-        keep=False,
-        tie_breaker=lambda l, r: l.rank - r.rank,
-    )
-    related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
-    related_samples_to_drop_ht = related_samples_to_drop_ht.select(
-        **related_samples_to_drop_ht.node
-    )
+    def maximal_independent_set_keep_samples(
+        pair_graph: nx.Graph,
+        keep: set = set(),
+    ) -> List:
+        """
+        Find maximal independent set with the ability to retain specific samples.
+
+        Results will be the same as Hail's maximal_independent_set when `keep`
+        is empty. Otherwise, `keep` will always be kept, while still being
+        included in the graph to compute the degree (number of samples each sample is
+        related to) of each node (sample).
+
+        :param pair_graph: A networkx graph of related sample pairs.
+        :param keep: Set of samples that must be kept even when the degree
+            (number of total samples this sample is related to) is highest and would
+            typically be removed to get the maximal independent set.
+        :return: List of related samples to drop.
+        """
+        drop_samples = []
+        # Get a list of all connected components in pair_graph.
+        # This is a list of sample sets where each set contains samples that are
+        # connected in the graph and share no connections to samples in any other set.
+        connected_samples = list(nx.connected_components(pair_graph))
+        # For each of the connected components, determine the sample with the largest
+        # degree (number of samples it is related to), followed by highest rank, that
+        # is not in keep.
+        # Add this sample to drop_samples and then compute the subgraph with this
+        # sample excluded. Repeat the process on this subgraph. Continue until all
+        # connected components contain only a single sample, unless connected samples
+        # are in `keep`.
+        for con in connected_samples:
+            if len(con) > 1:
+                # Build a list of (degree, rank, sample) sorted by highest degree and
+                # then highest rank.
+                degree_rank_list = sorted(
+                    [(pair_graph.degree[s], s.rank, s) for s in con],
+                    reverse=True,
+                )
+                # Get the sample with the highest degree and highest rank not in keep.
+                highest_degree_s = degree_rank_list.pop(0)[2]
+                while highest_degree_s.s in keep and len(degree_rank_list) > 0:
+                    highest_degree_s = degree_rank_list.pop(0)[2]
+                if highest_degree_s.s not in keep:
+                    # Add sample with the highest degree and highest rank not in keep
+                    # to the list of samples to drop.
+                    drop_samples.append(highest_degree_s)
+                    # Remove that sample from the samples in the current connected
+                    # component and if there is more than one sample left, get the
+                    # subgraph containing those samples and repeat this process.
+                    new_con = con - {highest_degree_s}
+                    if len(new_con) > 1:
+                        drop_samples.extend(
+                            maximal_independent_set_keep_samples(
+                                pair_graph.subgraph(new_con),
+                                keep=keep,
+                            )
+                        )
+
+        return drop_samples
+
+    if keep_samples is None:
+        related_samples_to_drop_ht = hl.maximal_independent_set(
+            relatedness_ht[i],
+            relatedness_ht[j],
+            keep=False,
+            tie_breaker=lambda l, r: l.rank - r.rank,
+        )
+        related_samples_to_drop_ht = related_samples_to_drop_ht.key_by()
+        related_samples_to_drop_ht = related_samples_to_drop_ht.select(
+            **related_samples_to_drop_ht.node
+        )
+    else:
+        related_pair_graph = nx.Graph()
+        related_pair_graph.add_edges_from(
+            list(zip(relatedness_ht.i.collect(), relatedness_ht.j.collect()))
+        )
+        related_samples_to_drop_ht = hl.Table.parallelize(
+            maximal_independent_set_keep_samples(
+                related_pair_graph, keep=hl.eval(keep_samples)
+            ),
+            hl.tstruct(s=hl.tstr, rank=hl.tint64),
+        )
     related_samples_to_drop_ht = related_samples_to_drop_ht.key_by("s")
 
     if len(filtered_samples_rel) > 0:

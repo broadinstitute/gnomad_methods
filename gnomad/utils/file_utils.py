@@ -280,3 +280,31 @@ def read_list_data(input_file_path: str) -> List[str]:
         output.append(line.strip())
     f.close()
     return output
+
+
+def repartition_for_join(
+    ht_path: str,
+    new_partition_percent: float = 1.1,
+) -> List[hl.expr.IntervalExpression]:
+    """
+    Calculate new partition intervals using input Table.
+
+    Reading in all Tables using the same partition intervals (via
+    `_intervals`) before they are joined makes the joins much more efficient.
+    For more information, see:
+    https://discuss.hail.is/t/room-for-improvement-when-joining-multiple-hts/2278/8
+
+    :param ht_path: Path to Table to use for interval partition calculation.
+    :param new_partition_percent: Percent of initial dataset partitions to use.
+        Value should be greater than 1 so that input Table will have more
+        partitions for the join. Defaults to 1.1.
+    :return: List of IntervalExpressions calculated over new set of partitions
+        (number of partitions in HT * desired percent increase).
+    """
+    ht = hl.read_table(ht_path)
+    if new_partition_percent < 1:
+        logger.warning(
+            "new_partition_percent value is less than 1! The new HT will have fewer"
+            " partitions than the original HT!"
+        )
+    return ht._calculate_new_partitions(ht.n_partitions() * new_partition_percent)

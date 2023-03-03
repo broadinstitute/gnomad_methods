@@ -1,5 +1,7 @@
+annoy
 hail
 hdbscan
 ipywidgets
+networkx
 scikit-learn
 slackclient==2.5.0

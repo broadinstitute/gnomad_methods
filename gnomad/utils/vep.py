@@ -640,3 +640,32 @@ def add_most_severe_csq_to_tc_within_vep_root(
         if isinstance(t, hl.MatrixTable)
         else t.annotate(**{vep_root: annotation})
     )
+
+
+def explode_by_vep_annotation(
+    t: Union[hl.Table, hl.MatrixTable],
+    vep_annotation: str = "transcript_consequences",
+    vep_root: str = "vep",
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Explode the specified VEP annotation on the input Table/MatrixTable.
+
+    :param t: Input Table or MatrixTable.
+    :param vep_annotation: Name of annotation in `vep_root` to explode.
+    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
+    :return: Table or MatrixTable with exploded VEP annotation.
+    """
+    if vep_annotation not in t[vep_root].keys():
+        raise ValueError(
+            f"{vep_annotation} is not a row field of the {vep_root} annotation in"
+            " Table/MatrixTable!"
+        )
+    # Create top-level annotation for `vep_annotation` and explode it.
+    if isinstance(t, hl.Table):
+        t = t.transmute(**{vep_annotation: t[vep_root][vep_annotation]})
+        t = t.explode(t[vep_annotation])
+    else:
+        t = t.transmute_rows(**{vep_annotation: t[vep_root][vep_annotation]})
+        t = t.explode_rows(t[vep_annotation])
+
+    return t

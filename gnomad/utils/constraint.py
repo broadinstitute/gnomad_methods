@@ -841,7 +841,6 @@ def compute_expected_variants(
     return agg_expr
 
 
-# TODO: Check this doc string again
 def oe_aggregation_expr(
     ht: hl.Table,
     filter_expr: hl.expr.BooleanExpression,
@@ -856,18 +855,18 @@ def oe_aggregation_expr(
     `exclude_mu_sum` is not True) for rows defined by `filter_expr`. The Struct also
     includes an aggregation expression for the observed:expected ratio.
 
-    The following annotations are added to the output Table:
-        - obs_{postfix} - the sum of observed variants filtered to `filter_expr`
-        - mu_{postfix} - the sum of mutation rate of variants filtered to `filter_expr`
-        - possible_{postfix} - possible number of variants filtered to `filter_expr`
-        - exp_{postfix} - expected number of variants filtered to `filter_expr`
-        - oe_{postfix} - observed:expected ratio of variants filtered to `filter_expr`
+    The following annotations are on the returned StructExpression:
+        - obs - the sum of observed variants filtered to `filter_expr`.
+        - mu - the sum of mutation rate of variants filtered to `filter_expr`.
+        - possible - possible number of variants filtered to `filter_expr`.
+        - exp - expected number of variants filtered to `filter_expr`.
+        - oe - observed:expected ratio of variants filtered to `filter_expr`.
 
         If `pops` is specified:
-            - exp_{postfix}_{pop} (for all pop in `pops`) - expected number of
-                variants per population filtered to `filter_expr`
-            - obs_{postfix}_{pop} (for all pop in `pops`) - observed number of
-                variants per population filtered to `filter_expr`
+            - pop_exp - Struct with the expected number of variants per population (for
+              all pop in `pops`) filtered to `filter_expr`.
+            - pop_obs - Struct with the observed number of variants per population (for
+              all pop in `pops`) filtered to `filter_expr`.
 
     .. note::
         The following annotations should be present in `ht`:
@@ -879,12 +878,12 @@ def oe_aggregation_expr(
             - expected_variants_{pop} for all pop in `pops`
             - downsampling_counts_{pop} for all pop in `pops`
 
-    :param ht: Input Table create observed:expected ratio aggregation expressions for.
+    :param ht: Input Table to create observed:expected ratio aggregation expressions for.
     :param filter_expr: Boolean expression used to filter `ht` before aggregation.
     :param pops: List of populations to compute constraint metrics for. Default is ().
     :param exclude_mu_sum: Whether to exclude mu sum aggregation expression from
         returned struct. Default is False.
-    :return: Struct Expression with observed:expected ratio aggregation expressions.
+    :return: StructExpression with observed:expected ratio aggregation expressions.
     """
     # Create aggregators that sum the number of observed variants, possible variants,
     # and expected variants and compute observed:expected ratio.
@@ -909,6 +908,7 @@ def oe_aggregation_expr(
             **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
         )
 
+    # TODO: ask hail team why the agg.filter statement returns an error.
     # return hl.agg.filter(filter_expr, hl.struct(**agg_expr))
     return hl.agg.group_by(filter_expr, hl.struct(**agg_expr)).get(True)
 
@@ -916,21 +916,25 @@ def oe_aggregation_expr(
 def get_all_pop_lengths(
     ht: hl.Table,
     pops: Tuple[str],
-    obs_expr,
+    obs_expr: hl.expr.StructExpression,
 ) -> List[Tuple[str, str]]:
     """
-    Get the minimum length of observed variant counts array for each population downsamping.
+    Get the minimum length of observed variant counts array for each population downsampling.
 
-    The annotations are specified by the combination of `prefix` and each population in
-    `pops`.
+    The observed variant counts for each population in `pops` are specified by
+    annotations on the `obs_expr` expression.
 
-    :param ht: Input Table used to build population plateau models.
-    :param pops: Populations used to categorize observed variant counts in downsampings.
-    :param prefix: Prefix of population observed variant counts. Default is `observed_`.
+    The function also performs a check that arrays of variant counts within population
+    downsamplings all have the same lengths.
+
+    :param ht: Input Table containing `obs_expr`.
+    :param pops: Populations used to categorize observed variant counts in downsamplings.
+    :param obs_expr: Expression for the population observed variant counts. Should be a
+        struct containing an array for each pop in `pops`.
     :return: A Dictionary with the minimum array length for each population.
     """
     # TODO: This function will be converted into doing just the length check if there
-    # is no usage of pop_lengths in the constraint pipeline.
+    #  is no usage of pop_lengths in the constraint pipeline.
     # Get minimum length of downsamplings for each population.
     pop_downsampling_lengths = ht.aggregate(
         [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
@@ -953,92 +957,60 @@ def get_all_pop_lengths(
     return pop_lengths
 
 
-# TODO: Add in option to run with on pops downsampling if needed
-def get_pli_scores_expr(
-    ht: hl.Table,
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
-    pops: tuple = (),
-    pop_obs_expr: Optional[hl.expr.StructExpression] = None,
-    pop_exp_expr: Optional[hl.expr.StructExpression] = None,
-    n_ds_to_skip: int = 8,
-) -> hl.expr.StructExpression:
-    """
-    Annotate the input `ht` with the pLI scores for pLoF variants.
-
-    :param ht: Input Table with pLoF variants.
-    :param pops: Populations for which to compute pLI scores.
-    :param n_ds_to_skip: The number of small downsamplings to skip when calculating pLI scores for populations. Default is 8.
-    :return: Table with pLI, pNull, and pRec scores.
-    """
-    # Calculate pLI scores for all variants.
-    full_pli_expr = compute_pli(ht, obs_expr, exp_expr)
-
-    # Calculate pLI scores for each population if specified.
-    # TODO: Add in option to run with on pops downsampling if needed
-    if pops:
-        pop_lengths = get_all_pop_lengths(ht, pops, pop_obs_expr)
-        # TODO: Add check for pop_obs_expr and pop_exp_expr
-        pop_pli_expr = {
-            pop: [
-                compute_pli(ht, pop_obs_expr[pop][i], pop_exp_expr[pop][i])
-                for i in range(n_ds_to_skip, pop_length)
-            ]
-            for pop_length, pop in pop_lengths
-        }
-        full_pli_expr = full_pli_expr.annotate(
-            pop_pLI=hl.struct(
-                **{
-                    pop: [
-                        pop_pli_expr[pop][i].pLI
-                        for i in range(pop_length - n_ds_to_skip)
-                    ]
-                    for pop_length, pop in pop_lengths
-                }
-            ),
-            pop_pRec=hl.struct(
-                **{
-                    pop: [
-                        pop_pli_expr[pop][i].pRec
-                        for i in range(pop_length - n_ds_to_skip)
-                    ]
-                    for pop_length, pop in pop_lengths
-                }
-            ),
-            pop_pNull=hl.struct(
-                **{
-                    pop: [
-                        pop_pli_expr[pop][i].pNull
-                        for i in range(pop_length - n_ds_to_skip)
-                    ]
-                    for pop_length, pop in pop_lengths
-                }
-            ),
-        )
-
-    return hl.struct(**full_pli_expr)
-
-
 def compute_pli(
     ht: hl.Table,
     obs_expr: hl.expr.Int32Expression,
     exp_expr: hl.expr.Float32Expression,
-    expected_values: Dict[str, float] = {"Null": 1, "Rec": 0.463, "LI": 0.089},
+    expected_values: Dict[str, float] = {"Null": 1.0, "Rec": 0.463, "LI": 0.089},
     min_diff_convergence: float = 0.001,
 ) -> hl.StructExpression:
     """
     Compute the pLI score using the observed and expected variant counts.
 
-    The output Table will include the following annotations:
-        - pLI - Probability of loss-of-function intolerance; probability that transcript falls into
-            distribution of haploinsufficient genes
-        - pNull - Probability that transcript falls into distribution of unconstrained genes
-        - pRec - Probability that transcript falls into distribution of recessive genes
+    Full details on pLI can be found in the ExAC paper: Lek, M., Karczewski, K.,
+    Minikel, E. et al. Analysis of protein-coding genetic variation in 60,706 humans.
+    Nature 536, 285–291 (2016).
 
-    :param ht: Input Table.
-    :param obs_expr: Expression for the number of observed variants on each gene or transcript in `ht`.
-    :param exp_expr: Expression for the number of expected variants on each gene or transcript in `ht`.
-    :return: Table with pLI scores.
+    pLI is the probability of being loss-of-function intolerant, and this function
+    computes that probability using the expectation-maximization (EM) algorithm.
+
+    We assume a 3 state model, where each gene fits into one of three categories
+    with respect loss-of-function variation sensitivity:
+        - Null - where protein truncating variation is completely tolerated by natural
+          selection.
+        - Recessive (Rec) - where heterozygous pLoFs are tolerated but homozygous pLoFs
+          are not.
+        - haploinsufficient (LI) - where heterozygous pLoFs are not tolerated.
+
+    The function requires the expected amount of loss-of-function depletion for each of
+    these states. The default provided is based on the observed depletion of
+    protein-truncating variation in the Blekhman autosomal recessive and ClinGen
+    dosage sensitivity gene sets (Supplementary Information Table 12 of the above
+    reference):
+         - Null - 1.0 - assume tolerant genes have the expected amount of truncating
+           variation.
+         - Rec - 0.463 - derived from the empirical mean observed/expected rate of
+           truncating variation for recessive disease genes (0.463).
+         - LI - 0.089 - derived from the empirical mean observed/expected rate of
+           truncating variation for severe haploinsufficient genes.
+
+    The output StructExpression will include the following annotations:
+        - pLI - Probability of loss-of-function intolerance; probability that transcript
+          falls into distribution of haploinsufficient genes.
+        - pNull - Probability that transcript falls into distribution of unconstrained
+          genes.
+        - pRec - Probability that transcript falls into distribution of recessive genes.
+
+    :param ht: Input Table containing `obs_expr` and `exp_expr`.
+    :param obs_expr: Expression for the number of observed variants on each gene or
+        transcript in `ht`.
+    :param exp_expr: Expression for the number of expected variants on each gene or
+        transcript in `ht`.
+    :param expected_values: Dictionary containing the expected values for 'Null',
+        'Rec', and 'LI' to use as starting values.
+    :param min_diff_convergence: Minimum iteration change in LI to consider the EM
+        model convergence criteria as met. Default is 0.001.
+    :return: StructExpression for pLI scores.
     """
     # Set up initial values.
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
@@ -1075,17 +1047,17 @@ def oe_confidence_interval(
     """
     Determine the confidence interval around the observed:expected ratio.
 
-    For a given pair of observed (`obs_expr`) and expected (`exp_expr`) values, the function
-    computes the density of the Poisson distribution (performed using Hail's `dpois` module)
-    with fixed k (`x` in `dpois` is set to the observed number of variants)
-    over a range of lambda (`lamb` in `dpois`) values, which are given by the expected
-    number of variants times a varying parameter ranging between 0 and 2. The
+    For a given pair of observed (`obs_expr`) and expected (`exp_expr`) values, the
+    function computes the density of the Poisson distribution (performed using Hail's
+    `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of
+    variants) over a range of lambda (`lamb` in `dpois`) values, which are given by the
+    expected number of variants times a varying parameter ranging between 0 and 2. The
     cumulative density function of the Poisson distribution density is computed and the
     value of the varying parameter is extracted at points corresponding to `alpha`
     (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
     bounds of the confidence interval.
 
-    Function will have the following annotations in the output Table in addition to keys:
+    The following annotations are in the output StructExpression:
     - lower - the lower bound of confidence interval
     - upper - the upper bound of confidence interval
 
@@ -1095,7 +1067,7 @@ def oe_confidence_interval(
         synonymous variants in `ht`.
     :param alpha: The significance level used to compute the confidence interval.
         Default is 0.05.
-    :return: Table with the confidence interval lower and upper bounds.
+    :return: StructExpression for the confidence interval lower and upper bounds.
     """
     # Set up range between 0 and 2.
     range_expr = hl.range(0, 2000).map(lambda x: hl.float64(x) / 1000)
@@ -1139,6 +1111,8 @@ def calculate_z_score(
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
 
 
+# TODO: This is no longer needed for computing the z score, it should be changed to
+#  specify that this is adding the reasons that a gene doesn't have a constraint metric.
 def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
     """
     Calculate z scores for synomynous variants, missense variants, or pLoF variants.

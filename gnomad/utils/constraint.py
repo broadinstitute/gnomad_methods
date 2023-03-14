@@ -2,10 +2,10 @@
 
 import copy
 import logging
-from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
+from hail.utils.misc import new_temp_file
 
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
@@ -668,46 +668,6 @@ def build_coverage_model(
     return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
 
 
-def get_all_pop_lengths(
-    ht: hl.Table,
-    pops: Tuple[str],
-    prefix: str = "observed_",
-) -> List[Tuple[str, str]]:
-    """
-    Get the minimum length of observed variant counts array for each population downsamping.
-
-    The annotations are specified by the combination of `prefix` and each population in
-    `pops`.
-
-    :param ht: Input Table used to build population plateau models.
-    :param pops: Populations used to categorize observed variant counts in downsampings.
-    :param prefix: Prefix of population observed variant counts. Default is `observed_`.
-    :return: A Dictionary with the minimum array length for each population.
-    """
-    # TODO: This function will be converted into doing just the length check if there
-    #  is no usage of pop_lengths in the constraint pipeline.
-    # Get minimum length of downsamplings for each population.
-    pop_downsampling_lengths = ht.aggregate(
-        [hl.agg.min(hl.len(ht[f"{prefix}{pop}"])) for pop in pops]
-    )
-
-    # Zip population name with their downsampling length.
-    pop_lengths = list(zip(pop_downsampling_lengths, pops))
-    logger.info("Found: %s", "".join(map(str, pop_lengths)))
-
-    assert ht.all(
-        hl.all(
-            lambda f: f,
-            [hl.len(ht[f"{prefix}{pop}"]) == length for length, pop in pop_lengths],
-        )
-    ), (
-        "The arrays of variant counts within population downsamplings have different"
-        " lengths!"
-    )
-
-    return pop_lengths
-
-
 def get_constraint_grouping_expr(
     vep_annotation_expr: hl.StructExpression,
     coverage_expr: Optional[hl.Int32Expression] = None,
@@ -884,7 +844,6 @@ def compute_expected_variants(
 # TODO: Check this doc string again
 def oe_aggregation_expr(
     ht: hl.Table,
-    postfix: str,
     filter_expr: hl.expr.BooleanExpression,
     pops: Tuple[str] = (),
     exclude_mu_sum: bool = False,
@@ -921,142 +880,196 @@ def oe_aggregation_expr(
             - downsampling_counts_{pop} for all pop in `pops`
 
     :param ht: Input Table create observed:expected ratio aggregation expressions for.
-    :param postfix: Postfix to use for the labels of each aggregation expression.
     :param filter_expr: Boolean expression used to filter `ht` before aggregation.
     :param pops: List of populations to compute constraint metrics for. Default is ().
     :param exclude_mu_sum: Whether to exclude mu sum aggregation expression from
         returned struct. Default is False.
     :return: Struct Expression with observed:expected ratio aggregation expressions.
     """
-
-    def filter_agg_expr(expr, agg=hl.agg.sum):
-        return hl.agg.filter(hl.is_defined(expr) & filter_expr, agg(expr))
-
     # Create aggregators that sum the number of observed variants, possible variants,
     # and expected variants and compute observed:expected ratio.
     agg_expr = {
-        f"obs_{postfix}": filter_agg_expr(ht.observed_variants),
-        f"exp_{postfix}": filter_agg_expr(ht.expected_variants),
-        f"possible_{postfix}": filter_agg_expr(ht.possible_variants),
+        f"obs": hl.agg.sum(ht.observed_variants),
+        f"exp": hl.agg.sum(ht.expected_variants),
+        f"possible": hl.agg.sum(ht.possible_variants),
     }
-    agg_expr[f"oe_{postfix}"] = agg_expr[f"obs_{postfix}"] / agg_expr[f"exp_{postfix}"]
+    agg_expr[f"oe"] = agg_expr[f"obs"] / agg_expr[f"exp"]
 
     # Create an aggregator that sums the mutation rate.
     if not exclude_mu_sum:
-        agg_expr[f"mu_{postfix}"] = filter_agg_expr(ht.mu)
+        agg_expr["mu"] = hl.agg.sum(ht.mu)
 
     # Create aggregators that sum the number of observed variants
     # and expected variants for each population if pops is specified.
-    for pop in pops:
-        agg_expr[f"exp_{postfix}_{pop}"] = filter_agg_expr(
-            ht[f"expected_variants_{pop}"], hl.agg.array_sum
+    if pops:
+        agg_expr["pop_exp"] = hl.struct(
+            **{pop: hl.agg.array_sum(ht[f"expected_variants_{pop}"]) for pop in pops}
         )
-        agg_expr[f"obs_{postfix}_{pop}"] = filter_agg_expr(
-            ht[f"downsampling_counts_{pop}"], hl.agg.array_sum
+        agg_expr[f"pop_obs"] = hl.struct(
+            **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
         )
 
-    return hl.struct(**agg_expr)
+    # return hl.agg.filter(filter_expr, hl.struct(**agg_expr))
+    return hl.agg.group_by(filter_expr, hl.struct(**agg_expr)).get(True)
 
 
-def pli_scores_expr(
+def get_all_pop_lengths(
     ht: hl.Table,
-    annotation_name: str,
-    pops: Tuple[str] = (),
+    pops: Tuple[str],
+    obs_expr,
+) -> List[Tuple[str, str]]:
+    """
+    Get the minimum length of observed variant counts array for each population downsamping.
+
+    The annotations are specified by the combination of `prefix` and each population in
+    `pops`.
+
+    :param ht: Input Table used to build population plateau models.
+    :param pops: Populations used to categorize observed variant counts in downsampings.
+    :param prefix: Prefix of population observed variant counts. Default is `observed_`.
+    :return: A Dictionary with the minimum array length for each population.
+    """
+    # TODO: This function will be converted into doing just the length check if there
+    # is no usage of pop_lengths in the constraint pipeline.
+    # Get minimum length of downsamplings for each population.
+    pop_downsampling_lengths = ht.aggregate(
+        [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
+    )
+
+    # Zip population name with their downsampling length.
+    pop_lengths = list(zip(pop_downsampling_lengths, pops))
+    logger.info("Found: %s", "".join(map(str, pop_lengths)))
+
+    assert ht.all(
+        hl.all(
+            lambda f: f,
+            [hl.len(obs_expr[pop]) == length for length, pop in pop_lengths],
+        )
+    ), (
+        "The arrays of variant counts within population downsamplings have different"
+        " lengths!"
+    )
+
+    return pop_lengths
+
+
+# TODO: Add in option to run with on pops downsampling if needed
+def get_pli_scores_expr(
+    ht: hl.Table,
+    obs_expr: hl.expr.Int32Expression,
+    exp_expr: hl.expr.Float32Expression,
+    pops: tuple = (),
+    pop_obs_expr: Optional[hl.expr.StructExpression] = None,
+    pop_exp_expr: Optional[hl.expr.StructExpression] = None,
     n_ds_to_skip: int = 8,
 ) -> hl.expr.StructExpression:
     """
     Annotate the input `ht` with the pLI scores for pLoF variants.
 
     :param ht: Input Table with pLoF variants.
-    :param annotation_name: Annotation name used for constraint metrics to distinguish
-        mutation types.
     :param pops: Populations for which to compute pLI scores.
     :param n_ds_to_skip: The number of small downsamplings to skip when calculating pLI scores for populations. Default is 8.
     :return: Table with pLI, pNull, and pRec scores.
     """
-    full_pli_expr = defaultdict(list)
-    # Calculate pLI scores for each population if specified.
-    if pops:
-        pop_lengths = get_all_pop_lengths(ht, pops, f"obs_{annotation_name}_")
-        for pop_length, pop in pop_lengths:
-            logger.info(f"Calculating pLI for {pop}...")
-            for i in range(n_ds_to_skip, pop_length):
-                logger.info(i)
-                pli_expr = compute_pli(
-                    ht,
-                    ht[f"obs_{annotation_name}_{pop}"][i],
-                    ht[f"exp_{annotation_name}_{pop}"][i],
-                )
-                # TODO: Should this have annotation_name in it?
-                full_pli_expr[f"pLI_{pop}"].append(pli_expr.pLI)
-                full_pli_expr[f"pRec_{pop}"].append(pli_expr.pRec)
-                full_pli_expr[f"pNull_{pop}"].append(pli_expr.pNull)
-
     # Calculate pLI scores for all variants.
-    pli_expr = compute_pli(
-        ht, ht[f"obs_{annotation_name}"], ht[f"exp_{annotation_name}"]
-    )
-    full_pli_expr.update(
-        {f"{k}_{annotation_name}": v for k, v in list(pli_expr.items())}
-    )
+    full_pli_expr = compute_pli(ht, obs_expr, exp_expr)
+
+    # Calculate pLI scores for each population if specified.
+    # TODO: Add in option to run with on pops downsampling if needed
+    if pops:
+        pop_lengths = get_all_pop_lengths(ht, pops, pop_obs_expr)
+        # TODO: Add check for pop_obs_expr and pop_exp_expr
+        pop_pli_expr = {
+            pop: [
+                compute_pli(ht, pop_obs_expr[pop][i], pop_exp_expr[pop][i])
+                for i in range(n_ds_to_skip, pop_length)
+            ]
+            for pop_length, pop in pop_lengths
+        }
+        full_pli_expr = full_pli_expr.annotate(
+            pop_pLI=hl.struct(
+                **{
+                    pop: [
+                        pop_pli_expr[pop][i].pLI
+                        for i in range(pop_length - n_ds_to_skip)
+                    ]
+                    for pop_length, pop in pop_lengths
+                }
+            ),
+            pop_pRec=hl.struct(
+                **{
+                    pop: [
+                        pop_pli_expr[pop][i].pRec
+                        for i in range(pop_length - n_ds_to_skip)
+                    ]
+                    for pop_length, pop in pop_lengths
+                }
+            ),
+            pop_pNull=hl.struct(
+                **{
+                    pop: [
+                        pop_pli_expr[pop][i].pNull
+                        for i in range(pop_length - n_ds_to_skip)
+                    ]
+                    for pop_length, pop in pop_lengths
+                }
+            ),
+        )
+
     return hl.struct(**full_pli_expr)
 
 
 def compute_pli(
-    ht: hl.Table, obs_expr: hl.expr.Int32Expression, exp_expr: hl.expr.Float32Expression
-) -> hl.expr.StructExpression:
+    ht: hl.Table,
+    obs_expr: hl.expr.Int32Expression,
+    exp_expr: hl.expr.Float32Expression,
+    expected_values: Dict[str, float] = {"Null": 1, "Rec": 0.463, "LI": 0.089},
+    min_diff_convergence: float = 0.001,
+) -> hl.StructExpression:
     """
     Compute the pLI score using the observed and expected variant counts.
 
     The output Table will include the following annotations:
-        - pLI - Probability of loss-of-function intolerance; probability that transcript
-          falls into distribution of haploinsufficient genes
-        - pNull - Probability that transcript falls into distribution of unconstrained
-          genes
+        - pLI - Probability of loss-of-function intolerance; probability that transcript falls into
+            distribution of haploinsufficient genes
+        - pNull - Probability that transcript falls into distribution of unconstrained genes
         - pRec - Probability that transcript falls into distribution of recessive genes
 
     :param ht: Input Table.
-    :param obs_expr: Expression for the number of observed variants on each gene or
-        transcript in `ht`.
-    :param exp_expr: Expression for the number of expected variants on each gene or
-        transcript in `ht`.
+    :param obs_expr: Expression for the number of observed variants on each gene or transcript in `ht`.
+    :param exp_expr: Expression for the number of expected variants on each gene or transcript in `ht`.
     :return: Table with pLI scores.
     """
     # Set up initial values.
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
-    # TODO: check these initial values and add a comment for where they come from.
-    expected_values = {"Null": 1, "Rec": 0.463, "LI": 0.089}
 
-    def get_pi(pi):
-        pi_expr = {
-            k: v * hl.dpois(obs_expr, exp_expr * expected_values[k])
-            for k, v in pi.items()
-        }
-        pi_expr["row_sum"] = hl.sum([pi_expr[k] for k in pi])
-        pi_expr = {
-            k: hl.or_missing(exp_expr > 0, pi_expr[k] / pi_expr["row_sum"])
-            for k, v in pi.items()
-        }
-        return pi_expr, ht.aggregate({k: hl.agg.mean(pi_expr[k]) for k in pi.keys()})
+    _ht = ht.select(
+        dpois={k: hl.dpois(obs_expr, exp_expr * expected_values[k]) for k in pi}
+    )
+    # Checkpoint the temp HT because it will need to be aggregated several times.
+    _ht = _ht.checkpoint(new_temp_file(prefix="compute_pli", extension="ht"))
 
     # Calculate pLI scores.
-    # TODO: should 0.001 be a parameter, and why is it 0.001?
-    while abs(pi["LI"] - last_pi["LI"]) > 0.001:
+    while abs(pi["LI"] - last_pi["LI"]) > min_diff_convergence:
         last_pi = copy.deepcopy(pi)
-        _, pi = get_pi(pi)
+        pi_expr = {k: v * _ht.dpois[k] for k, v in pi.items()}
+        row_sum_expr = hl.sum([pi_expr[k] for k in pi])
+        pi_expr = {k: pi_expr[k] / row_sum_expr for k, v in pi.items()}
+        pi = _ht.aggregate({k: hl.agg.mean(pi_expr[k]) for k in pi.keys()})
 
-    # TODO: Confirm this extra get_pi is needed to get the correct final pLI.
-    # Annotate pLI scores.
-    pi_expr, _ = get_pi(pi)
+    # Get expression for pLI scores.
+    pli_expr = {
+        k: v * hl.dpois(obs_expr, exp_expr * expected_values[k]) for k, v in pi.items()
+    }
+    row_sum_expr = hl.sum([pli_expr[k] for k in pi])
 
-    return hl.struct(**pi_expr)
+    return hl.struct(**{f"p{k}": pli_expr[k] / row_sum_expr for k in pi.keys()})
 
 
 def oe_confidence_interval(
     obs_expr: hl.expr.Int32Expression,
     exp_expr: hl.expr.Float32Expression,
-    prefix: str = "oe",
     alpha: float = 0.05,
 ) -> hl.expr.StructExpression:
     """
@@ -1073,14 +1086,13 @@ def oe_confidence_interval(
     bounds of the confidence interval.
 
     Function will have the following annotations in the output Table in addition to keys:
-    - {prefix}_lower - the lower bound of confidence interval
-    - {prefix}_upper - the upper bound of confidence interval
+    - lower - the lower bound of confidence interval
+    - upper - the upper bound of confidence interval
 
     :param obs_expr: Expression for the observed variant counts of pLoF, missense, or
         synonymous variants in `ht`.
     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
         synonymous variants in `ht`.
-    :param prefix: Prefix of upper and lower bounds, defaults to 'oe'.
     :param alpha: The significance level used to compute the confidence interval.
         Default is 0.05.
     :return: Table with the confidence interval lower and upper bounds.
@@ -1102,17 +1114,14 @@ def oe_confidence_interval(
         norm_dpois_expr.map(lambda x: hl.or_missing(x > 1 - alpha, x))
     )
     return hl.struct(
-        **{
-            f"{prefix}_lower": hl.if_else(obs_expr > 0, range_expr[lower_idx_expr], 0),
-            f"{prefix}_upper": range_expr[upper_idx_expr],
-        }
+        lower=hl.if_else(obs_expr > 0, range_expr[lower_idx_expr], 0),
+        upper=range_expr[upper_idx_expr],
     )
 
 
 def calculate_z_score(
     obs_expr: hl.expr.Int32Expression,
     exp_expr: hl.expr.Float32Expression,
-    z_score_output_annotation: str = "z_raw",
 ) -> hl.expr.StructExpression:
     """
     Compute the signed raw z score using observed and expected variant counts.
@@ -1124,16 +1133,10 @@ def calculate_z_score(
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
-    :param z_score_output_annotation: The annotation label to use for the raw z score output, defaults to 'z_raw'.
     :return: Table with raw z scores.
     """
     chisq_expr = (obs_expr - exp_expr) ** 2 / exp_expr
-    return hl.struct(
-        **{
-            z_score_output_annotation: hl.sqrt(chisq_expr)
-            * hl.if_else(obs_expr > exp_expr, -1, 1)
-        }
-    )
+    return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
 
 
 def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
@@ -1166,6 +1169,7 @@ def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
     # expected variant count, and is outlier.
     reasons = hl.empty_set(hl.tstr)
 
+    # TODO: This should be across all mutation types, not just this one
     reasons = hl.if_else(
         hl.or_else(ht[f"obs_{mutation_type}"], 0) == 0,
         reasons.add("no_variants"),
@@ -1182,6 +1186,7 @@ def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
     # Compute the standard deviation after filtering to variant that is defined, is not
     # outlier, has expected variants, has raw z score, and its raw z score is less than
     # 0 for LoF and missense variants.
+    # TODO: Where is the -5 and the 5 coming from?
     if mutation_type != "syn":
         reasons = hl.if_else(
             ht[f"{mutation_type}_z_raw"] < -5,

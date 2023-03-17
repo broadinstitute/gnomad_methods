@@ -868,6 +868,7 @@ def oe_aggregation_expr(
             - pop_obs - Struct with the observed number of variants per population (for
               all pop in `pops`) filtered to `filter_expr`.
 
+
     .. note::
         The following annotations should be present in `ht`:
             - observed_variants
@@ -888,11 +889,11 @@ def oe_aggregation_expr(
     # Create aggregators that sum the number of observed variants, possible variants,
     # and expected variants and compute observed:expected ratio.
     agg_expr = {
-        f"obs": hl.agg.sum(ht.observed_variants),
-        f"exp": hl.agg.sum(ht.expected_variants),
-        f"possible": hl.agg.sum(ht.possible_variants),
+        "obs": hl.agg.sum(ht.observed_variants),
+        "exp": hl.agg.sum(ht.expected_variants),
+        "possible": hl.agg.sum(ht.possible_variants),
     }
-    agg_expr[f"oe"] = agg_expr[f"obs"] / agg_expr[f"exp"]
+    agg_expr["oe"] = agg_expr["obs"] / agg_expr["exp"]
 
     # Create an aggregator that sums the mutation rate.
     if not exclude_mu_sum:
@@ -904,7 +905,7 @@ def oe_aggregation_expr(
         agg_expr["pop_exp"] = hl.struct(
             **{pop: hl.agg.array_sum(ht[f"expected_variants_{pop}"]) for pop in pops}
         )
-        agg_expr[f"pop_obs"] = hl.struct(
+        agg_expr["pop_obs"] = hl.struct(
             **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
         )
 

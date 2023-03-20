@@ -855,7 +855,7 @@ def oe_aggregation_expr(
     `exclude_mu_sum` is not True) for rows defined by `filter_expr`. The Struct also
     includes an aggregation expression for the observed:expected ratio.
 
-    The following annotations are on the returned StructExpression:
+    The following annotations are in the returned StructExpression:
         - obs - the sum of observed variants filtered to `filter_expr`.
         - mu - the sum of mutation rate of variants filtered to `filter_expr`.
         - possible - possible number of variants filtered to `filter_expr`.
@@ -1052,7 +1052,7 @@ def oe_confidence_interval(
     function computes the density of the Poisson distribution (performed using Hail's
     `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of
     variants) over a range of lambda (`lamb` in `dpois`) values, which are given by the
-    expected number of variants times a varying parameter ranging between 0 and 2. The
+    expected number of variants times a varying parameter ranging between 0 and 2 (the observed:expected ratio is typically between 0 and 1, so we want to extend the upper bound of the confidence interval to capture this). The
     cumulative density function of the Poisson distribution density is computed and the
     value of the varying parameter is extracted at points corresponding to `alpha`
     (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
@@ -1092,7 +1092,7 @@ def oe_confidence_interval(
     )
 
 
-def calculate_z_score(
+def calculate_raw_z_score(
     obs_expr: hl.expr.Int32Expression,
     exp_expr: hl.expr.Float32Expression,
 ) -> hl.expr.StructExpression:

@@ -1099,14 +1099,12 @@ def calculate_raw_z_score(
     """
     Compute the signed raw z score using observed and expected variant counts.
 
-    The raw z scores are positive when the transcript had fewer variants than expected, and are negative when transcripts had more variants than expected.
-
-    The following annotation is included in the output Table in addition to the `ht` keys:
-        - `output` - the raw z score
+    The raw z scores are positive when the transcript had fewer variants than expected,
+    and are negative when transcripts had more variants than expected.
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
-    :return: Table with raw z scores.
+    :return: StrucExpression for the raw z score.
     """
     chisq_expr = (obs_expr - exp_expr) ** 2 / exp_expr
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)

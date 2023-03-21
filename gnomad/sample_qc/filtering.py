@@ -261,7 +261,7 @@ def compute_stratified_metrics_filter(
             ht = ht.annotate(**ann_expr)
     else:
         ht = ht.annotate_globals(strata=hl.tuple([x[0] for x in strata]))
-    ht = ht.annotate_globals(qc_metrics=qc_metrics.keys())
+    ht = ht.annotate_globals(qc_metrics=list(qc_metrics.keys()))
 
     return ht
 

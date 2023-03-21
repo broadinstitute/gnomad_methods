@@ -1097,14 +1097,14 @@ def calculate_raw_z_score(
     exp_expr: hl.expr.Float32Expression,
 ) -> hl.expr.StructExpression:
     """
-    Compute the signed raw z score using observed and expected variant counts.
+    Compute the signed raw z-score using observed and expected variant counts.
 
-    The raw z scores are positive when the transcript had fewer variants than expected,
+    The raw z-scores are positive when the transcript had fewer variants than expected,
     and are negative when transcripts had more variants than expected.
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
-    :return: StrucExpression for the raw z score.
+    :return: StrucExpression for the raw z-score.
     """
     chisq_expr = (obs_expr - exp_expr) ** 2 / exp_expr
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
@@ -1120,11 +1120,12 @@ def add_constraint_flags(
         - "no_exp" - for genes that have zero expected variants
         - "outlier" - for genes that are outliers according to the supplied `outlier_expr`
 
-     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or synonymous variants.
-     :param outlier_expr: Boolean expression used to decide if an 'outlier' flag should be applied (example: ht['lof'].z_raw < -5).
+     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
+        synonymous variants.
+     :param outlier_expr: Boolean expression used to decide if an 'outlier' flag should
+        be applied (example: ht['lof'].z_raw < -5).
      :return: SetExpression containing constraint flags.
     """
-
     constraint_flags = hl.empty_set(hl.tstr)
     constraint_flags = hl.if_else(
         exp_expr <= 0,
@@ -1142,21 +1143,26 @@ def add_constraint_flags(
 
 
 def calculate_z_score(
+    ht: hl.Table,
     raw_z_expr: hl.expr.StringExpression,
     flag_expr: hl.expr.StringExpression,
     additional_requirements_expr: hl.expr.BooleanExpression,
     both: bool = True,
 ) -> hl.expr.StructExpression:
     """
-    Calculate the standard deviation of the raw Z-Score and the Z-score.
+    Calculate the standard deviation of the raw z-Score and the z-score.
 
-    :param raw_z_expr: Expression for the raw Z-score.
-    :param flag_expr: Expression for the constraint flags. Z-score will not be calculated if flags are present.
-    :param additional_requirements_expr: Expression for additional requirements that must be met for Z-scores to be calculated.
-    :param both: Whether to use both the positive and negative `raw_z_expr` when calculating standard deviations.
-    :return: StructExpression containing standard deviation of the raw Z-score and the Z-score.
+    :param ht: Input Table with raw z-score and constraint flag expression.
+    :param raw_z_expr: Expression for the raw z-score.
+    :param flag_expr: Expression for the constraint flags. z-score will not be
+        calculated if flags are present.
+    :param additional_requirements_expr: Expression for additional requirements that
+        must be met for z-scores to be calculated.
+    :param both: Whether to use both the positive and negative `raw_z_expr` when
+        calculating standard deviations.
+    :return: StructExpression containing standard deviation of the raw z-score and
+        the z-score.
     """
-
     sd = ht.aggregate(
         hl.struct(
             sd=hl.agg.filter(
@@ -1174,104 +1180,3 @@ def calculate_z_score(
 
     z_score = raw_z_expr / sd.sd
     return hl.struct(sd=sd, z_score=z_score)
-    
-#  specify that this is adding the reasons that a gene doesn't have a constraint metric.
-def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
-    """
-    Calculate z scores for synomynous variants, missense variants, or pLoF variants.
-
-    z score = {variant_annotation}_z_raw / {variant_annotation}_sd (variant_annotation could be syn, mis, or lof)
-
-    Function will add the following annotations to output Table:
-        - {mutation_type}_sd (global) - standard deviation of raw z score
-        - constraint_flag - Reason gene does not have constraint metrics. One of:
-            no variants: Zero observed synonymous, missense, pLoF variants
-            no_exp_syn: Zero expected synonymous variants
-            no_exp_mis: Zero expected missense variants
-            no_exp_lof: Zero expected pLoF variants
-            syn_outlier: Too many or too few synonymous variants; synonymous z score < -5 or synonymous z score > 5
-            mis_too_many: Too many missense variants; missense z score < -5
-            lof_too_many: Too many pLoF variants; pLoF z score < -5
-        - syn_z - z score of synonymous variants
-        - mis_z - z score of missense variants
-        - lof_z - z score of pLoF variants
-
-    :param ht: Input Table with observed and expected variant counts for one of
-        synomynous variants, missense variants, and pLoF variants.
-    :param mutation_type: The mutation type of variants in the input Table, one of
-        'lof', 'mis', and 'syn'.
-    :return: Table with z scores.
-    """
-    # Create constraint flag to annotate if the variant is defined, has
-    # expected variant count, and is outlier.
-    reasons = hl.empty_set(hl.tstr)
-
-    # TODO: This should be across all mutation types, not just this one
-    reasons = hl.if_else(
-        hl.or_else(ht[f"obs_{mutation_type}"], 0) == 0,
-        reasons.add("no_variants"),
-        reasons,
-    )
-
-    reasons = hl.if_else(
-        ht[f"exp_{mutation_type}"] > 0,
-        reasons,
-        reasons.add(f"no_exp_{mutation_type}"),
-        missing_false=True,
-    )
-
-    # Compute the standard deviation after filtering to variant that is defined, is not
-    # outlier, has expected variants, has raw z score, and its raw z score is less than
-    # 0 for LoF and missense variants.
-    # TODO: Where is the -5 and the 5 coming from?
-    if mutation_type != "syn":
-        reasons = hl.if_else(
-            ht[f"{mutation_type}_z_raw"] < -5,
-            reasons.add(f"{mutation_type}_outlier"),
-            reasons,
-            missing_false=True,
-        )
-        ht = ht.annotate(constraint_flag=reasons)
-        sds = ht.aggregate(
-            hl.struct(
-                **{
-                    f"{mutation_type}_sd": hl.agg.filter(
-                        ~hl.len(ht.constraint_flag)
-                        == 0
-                        & hl.is_defined(ht[f"{mutation_type}_z_raw"])
-                        & (ht[f"{mutation_type}_z_raw"] < 0),
-                        hl.agg.explode(
-                            lambda x: hl.agg.stats(x),
-                            [
-                                ht[f"{mutation_type}_z_raw"],
-                                -ht[f"{mutation_type}_z_raw"],
-                            ],
-                        ),
-                    ).stdev
-                }
-            )
-        )
-    else:
-        reasons = hl.if_else(
-            hl.abs(ht.syn_z_raw) > 5,
-            reasons.add("syn_outlier"),
-            reasons,
-            missing_false=True,
-        )
-        ht = ht.annotate(constraint_flag=reasons)
-        sds = ht.aggregate(
-            hl.struct(
-                syn_sd=hl.agg.filter(
-                    ~hl.len(ht.constraint_flag) == 0 & hl.is_defined(ht.syn_z_raw),
-                    hl.agg.stats(ht.syn_z_raw),
-                ).stdev,
-            )
-        )
-    logger.info(sds)
-    ht = ht.annotate_globals(**sds)
-    return ht.transmute(
-        **{
-            f"{mutation_type}_z": ht[f"{mutation_type}_z_raw"]
-            / sds[f"{mutation_type}_sd"]
-        }
-    )

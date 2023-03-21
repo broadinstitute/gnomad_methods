@@ -1110,7 +1110,71 @@ def calculate_raw_z_score(
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
 
 
-# TODO: This is no longer needed for computing the z score, it should be changed to
+def add_constraint_flags(
+    exp_expr: hl.expr.Float32Expression, outlier_expr: hl.expr.BooleanExpression
+) -> hl.expr.SetExpression:
+    """
+    Determine the constraint flags that define why constraint will not be calculated.
+
+    Flags which are added:
+        - "no_exp" - for genes that have zero expected variants
+        - "outlier" - for genes that are outliers according to the supplied `outlier_expr`
+
+     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or synonymous variants.
+     :param outlier_expr: Boolean expression used to decide if an 'outlier' flag should be applied (example: ht['lof'].z_raw < -5).
+     :return: SetExpression containing constraint flags.
+    """
+
+    constraint_flags = hl.empty_set(hl.tstr)
+    constraint_flags = hl.if_else(
+        exp_expr <= 0,
+        constraint_flags.add(f"no_exp"),
+        constraint_flags,
+    )
+
+    constraint_flags = hl.if_else(
+        outlier_expr,
+        constraint_flags.add(f"outlier"),
+        constraint_flags,
+    )
+
+    return constraint_flags
+
+
+def calculate_z_score(
+    raw_z_expr: hl.expr.StringExpression,
+    flag_expr: hl.expr.StringExpression,
+    additional_requirements_expr: hl.expr.BooleanExpression,
+    both: bool = True,
+) -> hl.expr.StructExpression:
+    """
+    Calculate the standard deviation of the raw Z-Score and the Z-score.
+
+    :param raw_z_expr: Expression for the raw Z-score.
+    :param flag_expr: Expression for the constraint flags. Z-score will not be calculated if flags are present.
+    :param additional_requirements_expr: Expression for additional requirements that must be met for Z-scores to be calculated.
+    :param both: Whether to use both the positive and negative `raw_z_expr` when calculating standard deviations.
+    :return: StructExpression containing standard deviation of the raw Z-score and the Z-score.
+    """
+
+    sd = ht.aggregate(
+        hl.struct(
+            sd=hl.agg.filter(
+                (hl.len(flag_expr) == 0)
+                & (hl.is_defined(raw_z_expr))
+                & (additional_requirements_expr),
+                hl.agg.explode(
+                    lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]
+                ).stdev
+                if both
+                else hl.agg.stats(ht.raw_z_expr).stdev,
+            )
+        )
+    )
+
+    z_score = raw_z_expr / sd.sd
+    return hl.struct(sd=sd, z_score=z_score)
+    
 #  specify that this is adding the reasons that a gene doesn't have a constraint metric.
 def calculate_z_scores(ht: hl.Table, mutation_type: str) -> hl.Table:
     """

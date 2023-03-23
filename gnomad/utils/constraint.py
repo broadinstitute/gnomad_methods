@@ -1179,4 +1179,4 @@ def calculate_z_score(
     )
 
     z_score = raw_z_expr / sd.sd
-    return hl.struct(sd=sd, z_score=z_score)
+    return hl.struct(sd=sd.sd, z_score=z_score)

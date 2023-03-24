@@ -32,7 +32,7 @@ SUBSETS = {
     "v4": ["ukb", "non-ukb", "non-topmed"],
 }
 """
-Order to sort subgroupings during VCF export.
+Order to sort subgroupings during VCF export by version.
 
 Ensures that INFO labels in VCF are in desired order (e.g., tgp_raw_AC_esn_XX).
 """
@@ -65,7 +65,7 @@ POPS = {
     ],
 }
 """
-Global populations in gnomAD v3.
+Global populations in gnomAD by version.
 """
 
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
@@ -250,7 +250,7 @@ DOWNSAMPLINGS = {
     ],
 }
 """
-List of the downsampling numbers to use for frequency calculations.
+List of the downsampling numbers to use for frequency calculations by version.
 """
 
 gnomad_syndip = VersionedMatrixTableResource(

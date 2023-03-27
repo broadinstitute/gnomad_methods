@@ -65,7 +65,7 @@ POPS = {
     ],
 }
 """
-Global populations in gnomAD by version.
+Global ancestry groups in gnomAD by version.
 """
 
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]

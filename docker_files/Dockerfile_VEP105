@@ -11,6 +11,6 @@ RUN wget https://github.com/samtools/samtools/releases/download/1.7/samtools-1.7
 WORKDIR /opt/vep/
 
 RUN git clone https://github.com/Ensembl/VEP_plugins.git Plugins/
-RUN mkdir /opt/vep/Plugins/loftee && git clone -b grch38 https://github.com/konradjk/loftee.git && mv /opt/vep/loftee/* /opt/vep/Plugins/loftee
+RUN git clone -b grch38 https://github.com/konradjk/loftee.git && mv /opt/vep/loftee/* /opt/vep/Plugins/
 
 USER vep

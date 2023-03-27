@@ -40,7 +40,7 @@ gsutil -u $PROJECT cat gs://gcp-public-data--gnomad/resources/vep/v105/homo_sapi
 
 wait
 
-# FASTA file from Hail's VEP 105 data
+# FASTA file from Hail's VEP 95 data
 gsutil -u "$PROJECT" cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz /vep_data/
 gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.fai /vep_data/
 gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.gzi /vep_data/

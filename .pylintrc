@@ -1,7 +1,7 @@
 [MESSAGES CONTROL]
 
 disable=
-  # Disable because ~ is used in a lot the hail code where it is not an error
+  # Disable because ~ is used in a lot of hail code where it is not an error
   invalid-unary-operand-type,
   # Ignore refactor and convention categories
   R,

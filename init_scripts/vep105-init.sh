@@ -21,12 +21,13 @@ apt-get -y install \
     tabix
 curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
 sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
 apt-get update
 apt-get install -y --allow-unauthenticated docker-ce
 
 
-gsutil -u $PROJECT cat gs://${VEP_BUCKET}/loftee-beta/${ASSEMBLY}.tar | tar -xf - -C /vep_data/ &
-#gsutil -u $PROJECT cat gs://${VEP_BUCKET}/Plugins.tar /vep_data/Plugins.tar | tar -xf - -C /vep_data
+gsutil -u ${PROJECT} cat gs://${VEP_BUCKET}/loftee-beta/${ASSEMBLY}.tar | tar -xf - -C /vep_data/ &
+
 docker pull ${VEP_DOCKER_IMAGE} &
 wait
 
@@ -35,12 +36,12 @@ wait
 ################################################################
 
 # GCS copy of ftp://ftp.ensembl.org/pub/release-105/variation/indexed_vep_cache/homo_sapiens_merged_vep_105_GRCh38.tar.gz
-gsutil -u $PROJECT cat gs://gnomad/resources/vep/v105/homo_sapiens_merged_vep_105_GRCh38.tar.gz | tar -xzf - -C /vep_data
+gsutil -u $PROJECT cat gs://gcp-public-data--gnomad/resources/vep/v105/homo_sapiens_merged_vep_105_GRCh38.tar.gz | tar -xzf - -C /vep_data
 
 wait
 
 # FASTA file from Hail's VEP 105 data
-gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz /vep_data/
+gsutil -u "$PROJECT" cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz /vep_data/
 gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.fai /vep_data/
 gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.gzi /vep_data/
 
@@ -59,7 +60,7 @@ cat > /vep_data/vep105-GRCh38.json <<EOF
     "--assembly", "GRCh38",
     "--merged",
     "--fasta", "/opt/vep/.vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz",
-    "--plugin", "LoF,loftee_path:/opt/vep/Plugins/,gerp_bigwig:/opt/vep/.vep/gerp_conservation_scores.homo_sapiens.GRCh38.bw,human_ancestor_fa:/opt/vep/.vep/human_ancestor.fa.gz,conservation_file:/opt/vep/.vep/loftee.sql",
+    "--plugin", "LoF,loftee_path:/opt/vep/Plugins,gerp_bigwig:/opt/vep/.vep/gerp_conservation_scores.homo_sapiens.GRCh38.bw,human_ancestor_fa:/opt/vep/.vep/human_ancestor.fa.gz,conservation_file:/opt/vep/.vep/loftee.sql",
     "--dir_plugins", "/opt/vep/Plugins/",
     "-o", "STDOUT"
 ],

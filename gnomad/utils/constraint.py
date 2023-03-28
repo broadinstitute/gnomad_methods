@@ -668,6 +668,50 @@ def build_coverage_model(
     return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
 
 
+def get_all_pop_lengths(
+    ht: hl.Table,
+    pops: Tuple[str],
+    obs_expr: hl.expr.StructExpression,
+) -> List[Tuple[str, str]]:
+    """
+    Get the minimum length of observed variant counts array for each population downsampling.
+
+    The observed variant counts for each population in `pops` are specified by
+    annotations on the `obs_expr` expression.
+
+    The function also performs a check that arrays of variant counts within population
+    downsamplings all have the same lengths.
+
+    :param ht: Input Table containing `obs_expr`.
+    :param pops: Populations used to categorize observed variant counts in downsamplings.
+    :param obs_expr: Expression for the population observed variant counts. Should be a
+        struct containing an array for each pop in `pops`.
+    :return: A Dictionary with the minimum array length for each population.
+    """
+    # TODO: This function will be converted into doing just the length check if there
+    #  is no usage of pop_lengths in the constraint pipeline.
+    # Get minimum length of downsamplings for each population.
+    pop_downsampling_lengths = ht.aggregate(
+        [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
+    )
+
+    # Zip population name with their downsampling length.
+    pop_lengths = list(zip(pop_downsampling_lengths, pops))
+    logger.info("Found: %s", "".join(map(str, pop_lengths)))
+
+    assert ht.all(
+        hl.all(
+            lambda f: f,
+            [hl.len(obs_expr[pop]) == length for length, pop in pop_lengths],
+        )
+    ), (
+        "The arrays of variant counts within population downsamplings have different"
+        " lengths!"
+    )
+
+    return pop_lengths
+
+
 def get_constraint_grouping_expr(
     vep_annotation_expr: hl.StructExpression,
     coverage_expr: Optional[hl.Int32Expression] = None,
@@ -914,50 +958,6 @@ def oe_aggregation_expr(
     return hl.agg.group_by(filter_expr, hl.struct(**agg_expr)).get(True)
 
 
-def get_all_pop_lengths(
-    ht: hl.Table,
-    pops: Tuple[str],
-    obs_expr: hl.expr.StructExpression,
-) -> List[Tuple[str, str]]:
-    """
-    Get the minimum length of observed variant counts array for each population downsampling.
-
-    The observed variant counts for each population in `pops` are specified by
-    annotations on the `obs_expr` expression.
-
-    The function also performs a check that arrays of variant counts within population
-    downsamplings all have the same lengths.
-
-    :param ht: Input Table containing `obs_expr`.
-    :param pops: Populations used to categorize observed variant counts in downsamplings.
-    :param obs_expr: Expression for the population observed variant counts. Should be a
-        struct containing an array for each pop in `pops`.
-    :return: A Dictionary with the minimum array length for each population.
-    """
-    # TODO: This function will be converted into doing just the length check if there
-    #  is no usage of pop_lengths in the constraint pipeline.
-    # Get minimum length of downsamplings for each population.
-    pop_downsampling_lengths = ht.aggregate(
-        [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
-    )
-
-    # Zip population name with their downsampling length.
-    pop_lengths = list(zip(pop_downsampling_lengths, pops))
-    logger.info("Found: %s", "".join(map(str, pop_lengths)))
-
-    assert ht.all(
-        hl.all(
-            lambda f: f,
-            [hl.len(obs_expr[pop]) == length for length, pop in pop_lengths],
-        )
-    ), (
-        "The arrays of variant counts within population downsamplings have different"
-        " lengths!"
-    )
-
-    return pop_lengths
-
-
 def compute_pli(
     ht: hl.Table,
     obs_expr: hl.expr.Int32Expression,
@@ -1142,9 +1142,10 @@ def add_constraint_flags(
     return constraint_flags
 
 
+# TODO: Just change this to sd
 def calculate_z_score(
     ht: hl.Table,
-    raw_z_expr: hl.expr.StringExpression,
+    raw_z_expr: hl.expr.Float64Expression,
     flag_expr: hl.expr.StringExpression,
     additional_requirements_expr: hl.expr.BooleanExpression,
     both: bool = True,
@@ -1163,20 +1164,13 @@ def calculate_z_score(
     :return: StructExpression containing standard deviation of the raw z-score and
         the z-score.
     """
-    sd = ht.aggregate(
-        hl.struct(
-            sd=hl.agg.filter(
-                (hl.len(flag_expr) == 0)
-                & (hl.is_defined(raw_z_expr))
-                & (additional_requirements_expr),
-                hl.agg.explode(
-                    lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]
-                ).stdev
-                if both
-                else hl.agg.stats(ht.raw_z_expr).stdev,
-            )
+    return ht.aggregate(
+        hl.agg.filter(
+            (hl.len(flag_expr) == 0)
+            & hl.is_defined(raw_z_expr)
+            & additional_requirements_expr,
+            hl.agg.explode(lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]).stdev
+            if both
+            else hl.agg.stats(raw_z_expr).stdev,
         )
     )
-
-    z_score = raw_z_expr / sd.sd
-    return hl.struct(sd=sd.sd, z_score=z_score)

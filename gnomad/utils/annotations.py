@@ -334,6 +334,9 @@ def annotate_freq(
     pop_expr: Optional[hl.expr.StringExpression] = None,
     subpop_expr: Optional[hl.expr.StringExpression] = None,
     additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
+    additional_strata_grouping_expr: Optional[
+        Dict[str, hl.expr.StringExpression]
+    ] = None,
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
@@ -410,7 +413,10 @@ def annotate_freq(
     # Annotate cols with provided cuts
     mt = mt.annotate_cols(_freq_meta=_freq_meta_expr)
 
-    # Get counters for sex, pop and subpop if set
+    if additional_strata_grouping_expr is None:
+        additional_strata_grouping_expr = {}
+
+    # Get counters for sex, pop and if set subpop and additional strata
     cut_dict = {
         cut: hl.agg.filter(
             hl.is_defined(mt._freq_meta[cut]), hl.agg.counter(mt._freq_meta[cut])
@@ -508,6 +514,28 @@ def annotate_freq(
         ]
         + sample_group_filters
     )
+
+    # Add additional groupings to strata, e.g. strata-pop, strata-sex
+    if additional_strata_grouping_expr is not None:
+        for strata in additional_strata_grouping_expr:
+            if strata not in cut_data.keys():
+                raise KeyError(
+                    "%s is not an existing annotation and thus cannot be combined with"
+                    " additional strata"
+                )
+        sample_group_filters.extend(
+            [
+                (
+                    {strata: str(s_value), add_strata: str(as_value)},
+                    (mt._freq_meta[strata] == s_value)
+                    & (mt._freq_meta[add_strata] == as_value),
+                )
+                for strata in additional_strata_expr
+                for s_value in cut_data.get(strata, {})
+                for add_strata in additional_strata_grouping_expr
+                for as_value in cut_data.get(add_strata, {})
+            ]
+        )
 
     freq_sample_count = mt.aggregate_cols(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]

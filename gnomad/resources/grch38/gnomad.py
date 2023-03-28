@@ -29,7 +29,7 @@ SUBSETS = {
         "tgp",
         "hgdp",
     ],
-    "v4": ["ukb", "non-ukb", "non-topmed"],
+    "v4": ["ukb", "non_ukb", "non_topmed"],
 }
 """
 Order to sort subgroupings during VCF export by version.

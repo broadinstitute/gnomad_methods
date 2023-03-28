@@ -403,6 +403,8 @@ def annotate_freq(
         additional_strata_expr = {}
 
     _freq_meta_expr = hl.struct(**additional_strata_expr)
+    if additional_strata_grouping_expr is not None:
+        _freq_meta_expr = _freq_meta_expr.annotate(**additional_strata_grouping_expr)
     if sex_expr is not None:
         _freq_meta_expr = _freq_meta_expr.annotate(sex=sex_expr)
     if pop_expr is not None:

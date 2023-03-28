@@ -391,12 +391,19 @@ def annotate_freq(
     :param pop_expr: When specified, frequencies are stratified by population. If `sex_expr` is also specified, then a pop/sex stratifiction is added.
     :param subpop_expr: When specified, frequencies are stratified by sub-continental population. Note that `pop_expr` is required as well when using this option.
     :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata found in the dict. This can e.g. be used to stratify by platform.
+    :param additional_strata_grouping_expr: When specified, frequencies are further stratified by groups within the additional_strata_expr. This can e.g. be used to stratify by platform-population.
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
     if subpop_expr is not None and pop_expr is None:
         raise NotImplementedError(
             "annotate_freq requires pop_expr when using subpop_expr"
+        )
+
+    if additional_strata_grouping_expr is not None and additional_strata_expr is None:
+        raise NotImplementedError(
+            "annotate_freq requires additional_strata_expr when using"
+            " additional_strata_grouping_expr"
         )
 
     if additional_strata_expr is None:
@@ -517,7 +524,7 @@ def annotate_freq(
         + sample_group_filters
     )
 
-    # Add additional groupings to strata, e.g. strata-pop, strata-sex
+    # Add additional groupings to strata, e.g. strata-pop, strata-sex, strata-pop-sex
     if additional_strata_grouping_expr is not None:
         for strata in additional_strata_grouping_expr:
             if strata not in cut_data.keys():

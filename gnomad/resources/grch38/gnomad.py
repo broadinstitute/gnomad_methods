@@ -19,17 +19,20 @@ GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
 DATA_TYPES = ["genomes"]
 
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
-SUBSETS = [
-    "non_v2",
-    "non_topmed",
-    "non_cancer",
-    "controls_and_biobanks",
-    "non_neuro",
-    "tgp",
-    "hgdp",
-]
+SUBSETS = {
+    "v3": [
+        "non_v2",
+        "non_topmed",
+        "non_cancer",
+        "controls_and_biobanks",
+        "non_neuro",
+        "tgp",
+        "hgdp",
+    ],
+    "v4": ["ukb", "non_ukb", "non_topmed"],
+}
 """
-Order to sort subgroupings during VCF export.
+Order to sort subgroupings during VCF export by version.
 
 Ensures that INFO labels in VCF are in desired order (e.g., tgp_raw_AC_esn_XX).
 """
@@ -48,9 +51,21 @@ Sample sexes used in VCF export.
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
-POPS = ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"]
+POPS = {
+    "v3": ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"],
+    "v4": [
+        "afr",
+        "amr",
+        "asj",
+        "eas",
+        "fin",
+        "mid",
+        "remaining",
+        "sas",
+    ],
+}
 """
-Global populations in gnomAD v3.
+Global ancestry groups in gnomAD by version.
 """
 
 COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
@@ -186,36 +201,56 @@ POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
 Populations that are removed before popmax calculations.
 """
 
-DOWNSAMPLINGS = [
-    10,
-    20,
-    50,
-    100,
-    200,
-    500,
-    1000,
-    2000,
-    5000,
-    10000,
-    15000,
-    20000,
-    25000,
-    30000,
-    40000,
-    50000,
-    60000,
-    70000,
-    75000,
-    80000,
-    85000,
-    90000,
-    95000,
-    100000,
-    110000,
-    120000,
-]
+DOWNSAMPLINGS = {
+    "v3": [
+        10,
+        20,
+        50,
+        100,
+        200,
+        500,
+        1000,
+        2000,
+        5000,
+        10000,
+        15000,
+        20000,
+        25000,
+        30000,
+        40000,
+        50000,
+        60000,
+        70000,
+        75000,
+        80000,
+        85000,
+        90000,
+        95000,
+        100000,
+        110000,
+        120000,
+    ],
+    "v4": [
+        10,
+        100,
+        1000,
+        2000,
+        5000,
+        10000,
+        15000,
+        20000,
+        25000,
+        50000,
+        100000,
+        150000,
+        200000,
+        300000,
+        400000,
+        500000,
+    ],
+}
 """
-List of the downsampling numbers to use for frequency calculations.
+List of the downsampling numbers to use for frequency calculations by version.
 """
 
 gnomad_syndip = VersionedMatrixTableResource(

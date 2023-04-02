@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import hail as hl
 from hail.utils.misc import new_temp_file
 
+from gnomad.utils.filtering import add_filters_expr
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
@@ -1111,35 +1112,48 @@ def calculate_raw_z_score(
 
 
 def add_constraint_flags(
-    exp_expr: hl.expr.Float32Expression, outlier_expr: hl.expr.BooleanExpression
+    exp_expr: hl.expr.Float32Expression,
+    raw_z_expr: hl.expr.BooleanExpression,
+    no_var_expr: hl.expr.BooleanExpression,
+    raw_z_lower_threshold: Optional[float] = -5.0,
+    raw_z_upper_threshold: Optional[float] = 5.0,
 ) -> hl.expr.SetExpression:
     """
     Determine the constraint flags that define why constraint will not be calculated.
 
     Flags which are added:
-        - "no_exp" - for genes that have zero expected variants
-        - "outlier" - for genes that are outliers according to the supplied `outlier_expr`
+        - "no_exp" - for genes that have missing or zero expected variants.
+        - "outlier" - for genes that are raw z-score outliers: (`raw_z_expr` <
+          `raw_z_lower_threshold`) or (`raw_z_expr` > `raw_z_upper_threshold`).
+        - "no_variants" - for genes that have no observed variants according to the
+          supplied `no_var_expr`.
 
-     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
+    :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
         synonymous variants.
-     :param outlier_expr: Boolean expression used to decide if an 'outlier' flag should
-        be applied (example: ht['lof'].z_raw < -5).
-     :return: SetExpression containing constraint flags.
+    :param raw_z_expr: Expression for the signed raw z-score of pLoF, missense, or
+        synonymous variants.
+    :param no_var_expr: Boolean expression used to indicate whether a 'no_variants' flag
+        should be applied. Typically, this is an expression indicating that there are
+        zero observed variants summed across pLoF, missense, and synonymous variants.
+    :param raw_z_lower_threshold: Lower threshold for the raw z-score. When `raw_z_expr`
+        is less than this threshold it is considered an 'outlier'. Default is -5.0.
+    :param raw_z_upper_threshold: Upper threshold for the raw z-score. When `raw_z_expr`
+        is greater than this threshold it is considered an 'outlier'. Default is 5.0.
+    :return: SetExpression containing constraint flags.
     """
-    constraint_flags = hl.empty_set(hl.tstr)
-    constraint_flags = hl.if_else(
-        exp_expr <= 0,
-        constraint_flags.add(f"no_exp"),
-        constraint_flags,
-    )
+    outlier_expr = False
+    if raw_z_lower_threshold is not None:
+        outlier_expr |= raw_z_expr < raw_z_lower_threshold
+    if raw_z_upper_threshold is not None:
+        outlier_expr |= raw_z_expr > raw_z_upper_threshold
 
-    constraint_flags = hl.if_else(
-        outlier_expr,
-        constraint_flags.add(f"outlier"),
-        constraint_flags,
-    )
+    constraint_flags = {
+        "no_exp": hl.is_missing(exp_expr) | (exp_expr <= 0),
+        "outlier": outlier_expr,
+        "no_variants": no_var_expr,
+    }
 
-    return constraint_flags
+    return add_filters_expr(filters=constraint_flags)
 
 
 def calculate_raw_z_score_sd(

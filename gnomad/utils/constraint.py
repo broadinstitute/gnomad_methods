@@ -1053,11 +1053,13 @@ def oe_confidence_interval(
     function computes the density of the Poisson distribution (performed using Hail's
     `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of
     variants) over a range of lambda (`lamb` in `dpois`) values, which are given by the
-    expected number of variants times a varying parameter ranging between 0 and 2 (the observed:expected ratio is typically between 0 and 1, so we want to extend the upper bound of the confidence interval to capture this). The
-    cumulative density function of the Poisson distribution density is computed and the
-    value of the varying parameter is extracted at points corresponding to `alpha`
-    (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
-    bounds of the confidence interval.
+    expected number of variants times a varying parameter ranging between 0 and 2 (the
+    observed:expected ratio is typically between 0 and 1, so we want to extend the
+    upper bound of the confidence interval to capture this). The cumulative density
+    function of the Poisson distribution density is computed and the value of the
+    varying parameter is extracted at points corresponding to `alpha` (defaults to 5%)
+    and 1-`alpha`(defaults to 95%) to indicate the lower and upper bounds of the
+    confidence interval.
 
     The following annotations are in the output StructExpression:
     - lower - the lower bound of confidence interval
@@ -1105,7 +1107,7 @@ def calculate_raw_z_score(
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
-    :return: StrucExpression for the raw z-score.
+    :return: StructExpression for the raw z-score.
     """
     chisq_expr = (obs_expr - exp_expr) ** 2 / exp_expr
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)

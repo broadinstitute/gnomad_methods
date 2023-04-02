@@ -1142,35 +1142,33 @@ def add_constraint_flags(
     return constraint_flags
 
 
-# TODO: Just change this to sd
-def calculate_z_score(
-    ht: hl.Table,
+def calculate_raw_z_score_sd(
     raw_z_expr: hl.expr.Float64Expression,
     flag_expr: hl.expr.StringExpression,
-    additional_requirements_expr: hl.expr.BooleanExpression,
+    neg_raw_z_only: bool = True,
     both: bool = True,
-) -> hl.expr.StructExpression:
+) -> hl.expr.Expression:
     """
-    Calculate the standard deviation of the raw z-Score and the z-score.
+    Calculate the standard deviation of the raw z-score.
 
-    :param ht: Input Table with raw z-score and constraint flag expression.
     :param raw_z_expr: Expression for the raw z-score.
     :param flag_expr: Expression for the constraint flags. z-score will not be
         calculated if flags are present.
-    :param additional_requirements_expr: Expression for additional requirements that
-        must be met for z-scores to be calculated.
+    :param neg_raw_z_only: Whether the standard deviation should be computed using only
+        negative `raw_z_expr`.
     :param both: Whether to use both the positive and negative `raw_z_expr` when
         calculating standard deviations.
     :return: StructExpression containing standard deviation of the raw z-score and
         the z-score.
     """
-    return ht.aggregate(
-        hl.agg.filter(
-            (hl.len(flag_expr) == 0)
-            & hl.is_defined(raw_z_expr)
-            & additional_requirements_expr,
-            hl.agg.explode(lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]).stdev
-            if both
-            else hl.agg.stats(raw_z_expr).stdev,
-        )
+    filter_expr = (hl.len(flag_expr) == 0) & hl.is_defined(raw_z_expr)
+
+    if neg_raw_z_only:
+        filter_expr &= raw_z_expr < 0
+
+    return hl.agg.filter(
+        filter_expr,
+        hl.agg.explode(lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]).stdev
+        if both
+        else hl.agg.stats(raw_z_expr).stdev,
     )

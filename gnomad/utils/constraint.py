@@ -913,7 +913,6 @@ def oe_aggregation_expr(
             - pop_obs - Struct with the observed number of variants per population (for
               all pop in `pops`) filtered to `filter_expr`.
 
-
     .. note::
         The following annotations should be present in `ht`:
             - observed_variants
@@ -1019,7 +1018,12 @@ def compute_pli(
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
 
     _ht = ht.select(
-        dpois={k: hl.dpois(obs_expr, exp_expr * expected_values[k]) for k in pi}
+        dpois={
+            k: hl.or_missing(
+                exp_expr > 0, hl.dpois(obs_expr, exp_expr * expected_values[k])
+            )
+            for k in pi
+        }
     )
     # Checkpoint the temp HT because it will need to be aggregated several times.
     _ht = _ht.checkpoint(new_temp_file(prefix="compute_pli", extension="ht"))

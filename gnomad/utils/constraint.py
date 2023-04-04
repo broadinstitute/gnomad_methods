@@ -1069,8 +1069,8 @@ def oe_confidence_interval(
     confidence interval.
 
     The following annotations are in the output StructExpression:
-    - lower - the lower bound of confidence interval
-    - upper - the upper bound of confidence interval
+        - lower - the lower bound of confidence interval
+        - upper - the upper bound of confidence interval
 
     :param obs_expr: Expression for the observed variant counts of pLoF, missense, or
         synonymous variants in `ht`.

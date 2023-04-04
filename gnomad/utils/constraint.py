@@ -1123,15 +1123,16 @@ def get_constraint_flags(
     raw_z_expr: hl.expr.BooleanExpression,
     raw_z_lower_threshold: Optional[float] = -5.0,
     raw_z_upper_threshold: Optional[float] = 5.0,
-    flag_prefix: str = "",
+    flag_postfix: str = "",
 ) -> Dict[str, hl.expr.Expression]:
     """
     Determine the constraint flags that define why constraint will not be calculated.
 
     Flags which are added:
-        - "{prefix}_no_exp" - for genes that have missing or zero expected variants.
-        - "{prefix}_outlier" - for genes that are raw z-score outliers: (`raw_z_expr` <
-          `raw_z_lower_threshold`) or (`raw_z_expr` > `raw_z_upper_threshold`).
+        - "no_exp_{flag_postfix}" - for genes that have missing or zero expected variants.
+        - "outlier_{flag_postfix}" - for genes that are raw z-score outliers:
+          (`raw_z_expr` < `raw_z_lower_threshold`) or (`raw_z_expr` >
+          `raw_z_upper_threshold`).
 
     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
         synonymous variants.
@@ -1141,7 +1142,7 @@ def get_constraint_flags(
         is less than this threshold it is considered an 'outlier'. Default is -5.0.
     :param raw_z_upper_threshold: Upper threshold for the raw z-score. When `raw_z_expr`
         is greater than this threshold it is considered an 'outlier'. Default is 5.0.
-    :param flag_prefix: Prefix to add to the beginning of the constraint flag names.
+    :param flag_postfix: Postfix to add to the end of the constraint flag names.
     :return: Dictionary containing expressions for constraint flags.
     """
     outlier_expr = False
@@ -1150,12 +1151,12 @@ def get_constraint_flags(
     if raw_z_upper_threshold is not None:
         outlier_expr |= raw_z_expr > raw_z_upper_threshold
 
-    if flag_prefix:
-        flag_prefix = f"{flag_prefix}_"
+    if flag_postfix:
+        flag_postfix = f"_{flag_postfix}"
 
     constraint_flags = {
-        f"{flag_prefix}no_exp": hl.or_else(exp_expr <= 0, True),
-        f"{flag_prefix}outlier": hl.or_else(outlier_expr, False),
+        f"no_exp{flag_postfix}": hl.or_else(exp_expr <= 0, True),
+        f"outlier{flag_postfix}": hl.or_else(outlier_expr, False),
     }
 
     return constraint_flags

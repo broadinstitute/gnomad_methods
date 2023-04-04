@@ -962,7 +962,7 @@ def compute_pli(
     ht: hl.Table,
     obs_expr: hl.expr.Int32Expression,
     exp_expr: hl.expr.Float32Expression,
-    expected_values: Dict[str, float] = {"Null": 1.0, "Rec": 0.463, "LI": 0.089},
+    expected_values: Optional[Dict[str, float]] = None,
     min_diff_convergence: float = 0.001,
 ) -> hl.StructExpression:
     """
@@ -1013,6 +1013,9 @@ def compute_pli(
         model convergence criteria as met. Default is 0.001.
     :return: StructExpression for pLI scores.
     """
+    if expected_values is None:
+        expected_values = {"Null": 1.0, "Rec": 0.463, "LI": 0.089}
+
     # Set up initial values.
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}

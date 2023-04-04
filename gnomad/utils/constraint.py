@@ -1018,14 +1018,14 @@ def compute_pli(
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
 
-    _ht = ht.select(
-        exp_expr_filter=exp_expr > 0,
-        dpois={
-            k: hl.dpois(obs_expr, exp_expr * expected_values[k])
-            for k in pi
-        }
-    )
-    _ht = _ht.filter(_ht.exp_expr_filter).select("dpois")
+    dpois_expr = {
+        k: hl.or_missing(
+            exp_expr > 0,
+            hl.dpois(obs_expr, exp_expr * expected_values[k])
+        )
+        for k in pi
+    }
+    _ht = ht.select(dpois=dpois_expr)
     # Checkpoint the temp HT because it will need to be aggregated several times.
     _ht = _ht.checkpoint(new_temp_file(prefix="compute_pli", extension="ht"))
 
@@ -1038,9 +1038,7 @@ def compute_pli(
         pi = _ht.aggregate({k: hl.agg.mean(pi_expr[k]) for k in pi.keys()})
 
     # Get expression for pLI scores.
-    pli_expr = {
-        k: v * hl.dpois(obs_expr, exp_expr * expected_values[k]) for k, v in pi.items()
-    }
+    pli_expr = {k: v * dpois_expr[k] for k, v in pi.items()}
     row_sum_expr = hl.sum([pli_expr[k] for k in pi])
 
     return hl.struct(**{f"p{k}": pli_expr[k] / row_sum_expr for k in pi.keys()})

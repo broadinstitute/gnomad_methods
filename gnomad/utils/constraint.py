@@ -1117,35 +1117,31 @@ def calculate_raw_z_score(
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
 
 
-def add_constraint_flags(
+def get_constraint_flags(
     exp_expr: hl.expr.Float32Expression,
     raw_z_expr: hl.expr.BooleanExpression,
-    no_var_expr: hl.expr.BooleanExpression,
     raw_z_lower_threshold: Optional[float] = -5.0,
     raw_z_upper_threshold: Optional[float] = 5.0,
-) -> hl.expr.SetExpression:
+    flag_prefix: str = "",
+) -> Dict[str, hl.expr.Expression]:
     """
     Determine the constraint flags that define why constraint will not be calculated.
 
     Flags which are added:
-        - "no_exp" - for genes that have missing or zero expected variants.
-        - "outlier" - for genes that are raw z-score outliers: (`raw_z_expr` <
+        - "{prefix}_no_exp" - for genes that have missing or zero expected variants.
+        - "{prefix}_outlier" - for genes that are raw z-score outliers: (`raw_z_expr` <
           `raw_z_lower_threshold`) or (`raw_z_expr` > `raw_z_upper_threshold`).
-        - "no_variants" - for genes that have no observed variants according to the
-          supplied `no_var_expr`.
 
     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
         synonymous variants.
     :param raw_z_expr: Expression for the signed raw z-score of pLoF, missense, or
         synonymous variants.
-    :param no_var_expr: Boolean expression used to indicate whether a 'no_variants' flag
-        should be applied. Typically, this is an expression indicating that there are
-        zero observed variants summed across pLoF, missense, and synonymous variants.
     :param raw_z_lower_threshold: Lower threshold for the raw z-score. When `raw_z_expr`
         is less than this threshold it is considered an 'outlier'. Default is -5.0.
     :param raw_z_upper_threshold: Upper threshold for the raw z-score. When `raw_z_expr`
         is greater than this threshold it is considered an 'outlier'. Default is 5.0.
-    :return: SetExpression containing constraint flags.
+    :param flag_prefix: Prefix to add to the beginning of the constraint flag names.
+    :return: Dictionary containing expressions for constraint flags.
     """
     outlier_expr = False
     if raw_z_lower_threshold is not None:
@@ -1153,13 +1149,15 @@ def add_constraint_flags(
     if raw_z_upper_threshold is not None:
         outlier_expr |= raw_z_expr > raw_z_upper_threshold
 
+    if flag_prefix:
+        flag_prefix = f"{flag_prefix}_"
+
     constraint_flags = {
-        "no_exp": hl.is_missing(exp_expr) | (exp_expr <= 0),
-        "outlier": outlier_expr,
-        "no_variants": no_var_expr,
+        f"{flag_prefix}no_exp": hl.or_else(exp_expr <= 0, True),
+        f"{flag_prefix}outlier": hl.or_else(outlier_expr, False),
     }
 
-    return add_filters_expr(filters=constraint_flags)
+    return constraint_flags
 
 
 def calculate_raw_z_score_sd(

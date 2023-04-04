@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
-from gnomad.utils.filtering import add_filters_expr
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
@@ -953,9 +952,8 @@ def oe_aggregation_expr(
             **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
         )
 
-    # TODO: ask hail team why the agg.filter statement returns an error.
-    # return hl.agg.filter(filter_expr, hl.struct(**agg_expr))
-    return hl.agg.group_by(filter_expr, hl.struct(**agg_expr)).get(True)
+    agg_expr = hl.struct(**agg_expr)
+    return hl.agg.group_by(filter_expr, agg_expr).get(True, hl.missing(agg_expr.dtype))
 
 
 def compute_pli(

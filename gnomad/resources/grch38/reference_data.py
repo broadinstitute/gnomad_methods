@@ -157,7 +157,8 @@ dbsnp = VersionedTableResource(
     default_version="b156",
     versions={
         "b156": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b156_grch38_all_20221116.ht", # can't find this path anymore, is it temporary for intermediate files?
+            # can't find this path anymore, is it temporary for intermediate files?
+            path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b156_grch38_all_20221116.ht",
             import_func=_import_dbsnp,
             import_args={
                 "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.bgz",

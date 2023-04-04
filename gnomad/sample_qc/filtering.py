@@ -156,7 +156,7 @@ def compute_stratified_metrics_filter(
     :param ht: HT containing relevant sample QC metric annotations.
     :param qc_metrics: List of metrics (name and expr) for which to compute the
         critical values for filtering outliers.
-    :param strata: List of annotations used for stratification. These metrics should be
+    :param strata: Dictionary of annotations used for stratification. These metrics should be
         discrete types!
     :param lower_threshold: Lower MAD threshold.
     :param upper_threshold: Upper MAD threshold.

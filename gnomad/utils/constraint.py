@@ -1020,8 +1020,7 @@ def compute_pli(
 
     dpois_expr = {
         k: hl.or_missing(
-            exp_expr > 0,
-            hl.dpois(obs_expr, exp_expr * expected_values[k])
+            exp_expr > 0, hl.dpois(obs_expr, exp_expr * expected_values[k])
         )
         for k in pi
     }
@@ -1112,7 +1111,7 @@ def calculate_raw_z_score(
     :param exp_expr: Expected variant count expression.
     :return: StructExpression for the raw z-score.
     """
-    chisq_expr = (obs_expr - exp_expr) ** 2 / exp_expr
+    chisq_expr = divide_null((obs_expr - exp_expr) ** 2, exp_expr)
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
 
 

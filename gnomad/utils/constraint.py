@@ -1021,13 +1021,13 @@ def compute_pli(
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
 
     _ht = ht.select(
+        exp_expr_filter=exp_expr > 0,
         dpois={
-            k: hl.or_missing(
-                exp_expr > 0, hl.dpois(obs_expr, exp_expr * expected_values[k])
-            )
+            k: hl.dpois(obs_expr, exp_expr * expected_values[k])
             for k in pi
         }
     )
+    _ht = _ht.filter(_ht.exp_expr_filter).select("dpois")
     # Checkpoint the temp HT because it will need to be aggregated several times.
     _ht = _ht.checkpoint(new_temp_file(prefix="compute_pli", extension="ht"))
 

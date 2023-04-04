@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
-from hail.utils.misc import new_temp_file
+from hail.utils.misc import divide_null, new_temp_file
 
 from gnomad.utils.filtering import add_filters_expr
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
@@ -937,7 +937,7 @@ def oe_aggregation_expr(
         "exp": hl.agg.sum(ht.expected_variants),
         "possible": hl.agg.sum(ht.possible_variants),
     }
-    agg_expr["oe"] = agg_expr["obs"] / agg_expr["exp"]
+    agg_expr["oe"] = divide_null(agg_expr["obs"], agg_expr["exp"])
 
     # Create an aggregator that sums the mutation rate.
     if not exclude_mu_sum:

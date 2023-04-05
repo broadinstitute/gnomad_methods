@@ -8,7 +8,7 @@ astroid==2.15.1
     # via pylint
 attrs==21.4.0
     # via pytest
-autopep8==1.7.0
+autopep8==2.0.2
     # via -r requirements-dev.in
 backports-entry-points-selectable==1.1.1
     # via virtualenv
@@ -28,7 +28,7 @@ identify==2.4.0
     # via pre-commit
 iniconfig==1.1.1
     # via pytest
-isort==5.10.1
+isort==5.12.0
     # via
     #   -r requirements-dev.in
     #   pylint
@@ -55,9 +55,9 @@ pre-commit==2.15.0
     # via -r requirements-dev.in
 py==1.11.0
     # via pytest
-pycodestyle==2.9.1
+pycodestyle==2.10.0
     # via autopep8
-pydocstyle==6.1.1
+pydocstyle==6.3.0
     # via -r requirements-dev.in
 pylint==2.17.1
     # via -r requirements-dev.in
@@ -71,11 +71,11 @@ snowballstemmer==2.2.0
     # via pydocstyle
 toml==0.10.2
     # via
-    #   autopep8
     #   pre-commit
     #   pytest
 tomli==2.0.1
     # via
+    #   autopep8
     #   black
     #   pylint
 tomlkit==0.11.7

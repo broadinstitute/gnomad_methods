@@ -179,9 +179,9 @@ def make_group_sum_expr_dict(
             else:
                 logger.warning("%s is not in table's info field", field)
 
-        annot_dict[f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"] = (
-            hl.sum(sum_group_exprs)
-        )
+        annot_dict[
+            f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"
+        ] = hl.sum(sum_group_exprs)
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
@@ -748,10 +748,8 @@ def compute_missingness(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        (
-            "Missingness threshold (upper cutoff for what is allowed for missingness"
-            " checks): %.2f"
-        ),
+        "Missingness threshold (upper cutoff for what is allowed for missingness"
+        " checks): %.2f",
         missingness_threshold,
     )
     metrics_missing = {}

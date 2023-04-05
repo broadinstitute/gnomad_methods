@@ -410,7 +410,9 @@ def annotate_freq(
         additional_strata_expr = {}
 
     _freq_meta_expr = hl.struct(**additional_strata_expr)
-    if additional_strata_grouping_expr is not None:
+    if additional_strata_grouping_expr is None:
+        additional_strata_grouping_expr = {}
+    else:
         _freq_meta_expr = _freq_meta_expr.annotate(**additional_strata_grouping_expr)
     if sex_expr is not None:
         _freq_meta_expr = _freq_meta_expr.annotate(sex=sex_expr)
@@ -421,9 +423,6 @@ def annotate_freq(
 
     # Annotate cols with provided cuts
     mt = mt.annotate_cols(_freq_meta=_freq_meta_expr)
-
-    if additional_strata_grouping_expr is None:
-        additional_strata_grouping_expr = {}
 
     # Get counters for sex, pop and if set subpop and additional strata
     cut_dict = {
@@ -526,12 +525,6 @@ def annotate_freq(
 
     # Add additional groupings to strata, e.g. strata-pop, strata-sex, strata-pop-sex
     if additional_strata_grouping_expr is not None:
-        for strata in additional_strata_grouping_expr:
-            if strata not in cut_data.keys():
-                raise KeyError(
-                    "%s is not an existing annotation and thus cannot be combined with"
-                    " additional strata"
-                )
         sample_group_filters.extend(
             [
                 (

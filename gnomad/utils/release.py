@@ -49,7 +49,7 @@ def make_freq_index_dict(
     groups: List[str] = GROUPS,
     pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
     sexes: List[str] = SEXES,
-    subsets: List[str] = SUBSETS,
+    subsets: List[str] = SUBSETS[CURRENT_MAJOR_RELEASE],
     downsamplings: Optional[List[int]] = None,
     label_delimiter: str = "_",
 ) -> Dict[str, int]:
@@ -65,7 +65,7 @@ def make_freq_index_dict(
     :param groups: List of sample groups [adj, raw]. Default is GROUPS
     :param pops: List of sample global population names for gnomAD genomes. Default is POPS[CURRENT_MAJOR_RELEASE]
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
-    :param subsets: List of sample subsets in dataset. Default is SUBSETS
+    :param subsets: List of sample subsets in dataset. Default is SUBSETS[CURRENT_MAJOR_RELEASE]
     :param downsamplings: List of downsampling cohort sizes present in global frequency array
     :param label_delimiter: String used as delimiter when making group label combinations
     :return: Dictionary keyed by the grouping combinations found in the frequency array, where values are the corresponding

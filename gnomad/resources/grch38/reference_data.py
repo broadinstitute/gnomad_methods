@@ -164,7 +164,7 @@ dbsnp = VersionedTableResource(
                 "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.bgz",
                 "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.header",
                 "force_bgz": True,
-                "contig_recoding": DBSNP_B156_CHR_CONTIG_RECODING,
+                "contig_recoding": DBSNP_B154_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
                 "min_partitions": 400,
                 "reference_genome": "GRCh38",

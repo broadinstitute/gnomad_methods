@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Union
 
 import hail as hl
 
-from gnomad.resources.grch38.gnomad import POPS, SEXES
+from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -179,9 +179,9 @@ def make_group_sum_expr_dict(
             else:
                 logger.warning("%s is not in table's info field", field)
 
-        annot_dict[
-            f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"
-        ] = hl.sum(sum_group_exprs)
+        annot_dict[f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"] = (
+            hl.sum(sum_group_exprs)
+        )
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
@@ -459,7 +459,7 @@ def sum_group_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     sexes: List[str] = SEXES,
     subsets: List[str] = [""],
-    pops: List[str] = POPS,
+    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
     groups: List[str] = ["adj"],
     additional_subsets_and_pops: Dict[str, List[str]] = None,
     verbose: bool = False,
@@ -477,7 +477,7 @@ def sum_group_callstats(
     :param t: Input Table.
     :param sexes: List of sexes in table.
     :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
-    :param pops: List of pops contained within the subsets. Default is POPS.
+    :param pops: List of pops contained within the subsets. Default is POPS[CURRENT_MAJOR_RELEASE].
     :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
     :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
@@ -748,8 +748,10 @@ def compute_missingness(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        "Missingness threshold (upper cutoff for what is allowed for missingness"
-        " checks): %.2f",
+        (
+            "Missingness threshold (upper cutoff for what is allowed for missingness"
+            " checks): %.2f"
+        ),
         missingness_threshold,
     )
     metrics_missing = {}
@@ -859,7 +861,7 @@ def vcf_field_check(
 def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
-    pops: List[str] = POPS,
+    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
     missingness_threshold: float = 0.5,
     monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
     verbose: bool = False,

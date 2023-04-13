@@ -93,7 +93,7 @@ def filter_by_frequency(
             size += 1
             criteria.append(lambda f: f.meta.get("pop", "") == "global")
         if subpop:
-            raise Exception("No downsampling data for subpopulations implemented")
+            raise ValueError("No downsampling data for subpopulations implemented")
     criteria.append(lambda f: f.meta.size() == size)
 
     filt = lambda x: combine_functions(criteria, x)

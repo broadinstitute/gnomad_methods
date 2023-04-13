@@ -156,7 +156,7 @@ def compute_stratified_metrics_filter(
     :param ht: HT containing relevant sample QC metric annotations.
     :param qc_metrics: List of metrics (name and expr) for which to compute the
         critical values for filtering outliers.
-    :param strata: List of annotations used for stratification. These metrics should be
+    :param strata: Dictionary of annotations used for stratification. These metrics should be
         discrete types!
     :param lower_threshold: Lower MAD threshold.
     :param upper_threshold: Upper MAD threshold.
@@ -181,9 +181,10 @@ def compute_stratified_metrics_filter(
         no_strata = True
         strata = {"all": True}
 
+    strata = list(strata.items())
     select_expr = {
         "_qc_metrics": qc_metrics,
-        "_strata": hl.tuple([strata[x] for x in strata]),
+        "_strata": hl.tuple([x[1] for x in strata]),
     }
 
     if comparison_sample_expr is not None:
@@ -258,6 +259,9 @@ def compute_stratified_metrics_filter(
             ht = ht.annotate_globals(**ann_expr)
         else:
             ht = ht.annotate(**ann_expr)
+    else:
+        ht = ht.annotate_globals(strata=hl.tuple([x[0] for x in strata]))
+    ht = ht.annotate_globals(qc_metrics=list(qc_metrics.keys()))
 
     return ht
 

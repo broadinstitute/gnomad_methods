@@ -331,9 +331,8 @@ def annotate_mutation_type(
         context_lengths = list(filter(None, set(context_lengths)))
         if len(context_lengths) > 1:
             raise ValueError(
-                "More than one length was found among %s 'context' values. Length of "
-                "'context' should be consistent.",
-                msg,
+                f"More than one length was found among {msg} 'context' values. Length "
+                "of 'context' should be consistent.",
             )
         else:
             context_length = context_lengths[0]

@@ -337,7 +337,11 @@ def annotate_mutation_type(
             )
         else:
             context_length = context_lengths[0]
-            logger.info("Detected a length of %d for context length", context_length)
+            logger.info(
+                "Detected a length of %d for context length using %s 'context' values.",
+                context_length,
+                msg,
+            )
 
     # Determine the middle index of the context annotation.
     if context_length == 3:

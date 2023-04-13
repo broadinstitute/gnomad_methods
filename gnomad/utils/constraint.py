@@ -958,8 +958,8 @@ def oe_aggregation_expr(
 
 def compute_pli(
     ht: hl.Table,
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
     expected_values: Optional[Dict[str, float]] = None,
     min_diff_convergence: float = 0.001,
 ) -> hl.StructExpression:
@@ -1044,8 +1044,8 @@ def compute_pli(
 
 
 def oe_confidence_interval(
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
     alpha: float = 0.05,
 ) -> hl.expr.StructExpression:
     """
@@ -1098,8 +1098,8 @@ def oe_confidence_interval(
 
 
 def calculate_raw_z_score(
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
     Compute the signed raw z-score using observed and expected variant counts.
@@ -1116,8 +1116,8 @@ def calculate_raw_z_score(
 
 
 def get_constraint_flags(
-    exp_expr: hl.expr.Float32Expression,
-    raw_z_expr: hl.expr.BooleanExpression,
+    exp_expr: hl.expr.Float64Expression,
+    raw_z_expr: hl.expr.Float64Expression,
     raw_z_lower_threshold: Optional[float] = -5.0,
     raw_z_upper_threshold: Optional[float] = 5.0,
     flag_postfix: str = "",

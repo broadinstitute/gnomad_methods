@@ -975,30 +975,30 @@ def compute_pli(
 
     We assume a 3 state model, where each gene fits into one of three categories
     with respect loss-of-function variation sensitivity:
-        - Null - where protein truncating variation is completely tolerated by natural
+        - Null: where protein truncating variation is completely tolerated by natural
           selection.
-        - Recessive (Rec) - where heterozygous pLoFs are tolerated but homozygous pLoFs
+        - Recessive (Rec): where heterozygous pLoFs are tolerated but homozygous pLoFs
           are not.
-        - haploinsufficient (LI) - where heterozygous pLoFs are not tolerated.
+        - Haploinsufficient (LI): where heterozygous pLoFs are not tolerated.
 
     The function requires the expected amount of loss-of-function depletion for each of
     these states. The default provided is based on the observed depletion of
     protein-truncating variation in the Blekhman autosomal recessive and ClinGen
     dosage sensitivity gene sets (Supplementary Information Table 12 of the above
     reference):
-         - Null - 1.0 - assume tolerant genes have the expected amount of truncating
-           variation.
-         - Rec - 0.463 - derived from the empirical mean observed/expected rate of
-           truncating variation for recessive disease genes (0.463).
-         - LI - 0.089 - derived from the empirical mean observed/expected rate of
+        - Null: 1.0, assume tolerant genes have the expected amount of truncating
+          variation.
+        - Rec: 0.463, derived from the empirical mean observed/expected rate of
+          truncating variation for recessive disease genes (0.463).
+        - LI: 0.089, derived from the empirical mean observed/expected rate of
            truncating variation for severe haploinsufficient genes.
 
     The output StructExpression will include the following annotations:
-        - pLI - Probability of loss-of-function intolerance; probability that transcript
+        - pLI: Probability of loss-of-function intolerance; probability that transcript
           falls into distribution of haploinsufficient genes.
-        - pNull - Probability that transcript falls into distribution of unconstrained
+        - pNull: Probability that transcript falls into distribution of unconstrained
           genes.
-        - pRec - Probability that transcript falls into distribution of recessive genes.
+        - pRec: Probability that transcript falls into distribution of recessive genes.
 
     :param ht: Input Table containing `obs_expr` and `exp_expr`.
     :param obs_expr: Expression for the number of observed variants on each gene or

@@ -975,6 +975,7 @@ def compute_pli(
 
     We assume a 3 state model, where each gene fits into one of three categories
     with respect loss-of-function variation sensitivity:
+
         - Null: where protein truncating variation is completely tolerated by natural
           selection.
         - Recessive (Rec): where heterozygous pLoFs are tolerated but homozygous pLoFs
@@ -986,14 +987,16 @@ def compute_pli(
     protein-truncating variation in the Blekhman autosomal recessive and ClinGen
     dosage sensitivity gene sets (Supplementary Information Table 12 of the above
     reference):
+
         - Null: 1.0, assume tolerant genes have the expected amount of truncating
           variation.
         - Rec: 0.463, derived from the empirical mean observed/expected rate of
           truncating variation for recessive disease genes (0.463).
         - LI: 0.089, derived from the empirical mean observed/expected rate of
-           truncating variation for severe haploinsufficient genes.
+          truncating variation for severe haploinsufficient genes.
 
     The output StructExpression will include the following annotations:
+
         - pLI: Probability of loss-of-function intolerance; probability that transcript
           falls into distribution of haploinsufficient genes.
         - pNull: Probability that transcript falls into distribution of unconstrained
@@ -1060,7 +1063,7 @@ def oe_confidence_interval(
     upper bound of the confidence interval to capture this). The cumulative density
     function of the Poisson distribution density is computed and the value of the
     varying parameter is extracted at points corresponding to `alpha` (defaults to 5%)
-    and 1-`alpha`(defaults to 95%) to indicate the lower and upper bounds of the
+    and 1-`alpha` (defaults to 95%) to indicate the lower and upper bounds of the
     confidence interval.
 
     The following annotations are in the output StructExpression:

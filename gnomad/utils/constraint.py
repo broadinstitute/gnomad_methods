@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
-from hail.utils.misc import new_temp_file
+from hail.utils.misc import divide_null, new_temp_file
 
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
@@ -668,6 +668,50 @@ def build_coverage_model(
     return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
 
 
+def get_all_pop_lengths(
+    ht: hl.Table,
+    pops: Tuple[str],
+    obs_expr: hl.expr.StructExpression,
+) -> List[Tuple[str, str]]:
+    """
+    Get the minimum length of observed variant counts array for each population downsampling.
+
+    The observed variant counts for each population in `pops` are specified by
+    annotations on the `obs_expr` expression.
+
+    The function also performs a check that arrays of variant counts within population
+    downsamplings all have the same lengths.
+
+    :param ht: Input Table containing `obs_expr`.
+    :param pops: Populations used to categorize observed variant counts in downsamplings.
+    :param obs_expr: Expression for the population observed variant counts. Should be a
+        struct containing an array for each pop in `pops`.
+    :return: A Dictionary with the minimum array length for each population.
+    """
+    # TODO: This function will be converted into doing just the length check if there
+    #  is no usage of pop_lengths in the constraint pipeline.
+    # Get minimum length of downsamplings for each population.
+    pop_downsampling_lengths = ht.aggregate(
+        [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
+    )
+
+    # Zip population name with their downsampling length.
+    pop_lengths = list(zip(pop_downsampling_lengths, pops))
+    logger.info("Found: %s", "".join(map(str, pop_lengths)))
+
+    assert ht.all(
+        hl.all(
+            lambda f: f,
+            [hl.len(obs_expr[pop]) == length for length, pop in pop_lengths],
+        )
+    ), (
+        "The arrays of variant counts within population downsamplings have different"
+        " lengths!"
+    )
+
+    return pop_lengths
+
+
 def get_constraint_grouping_expr(
     vep_annotation_expr: hl.StructExpression,
     coverage_expr: Optional[hl.Int32Expression] = None,
@@ -868,7 +912,6 @@ def oe_aggregation_expr(
             - pop_obs - Struct with the observed number of variants per population (for
               all pop in `pops`) filtered to `filter_expr`.
 
-
     .. note::
         The following annotations should be present in `ht`:
             - observed_variants
@@ -893,7 +936,7 @@ def oe_aggregation_expr(
         "exp": hl.agg.sum(ht.expected_variants),
         "possible": hl.agg.sum(ht.possible_variants),
     }
-    agg_expr["oe"] = agg_expr["obs"] / agg_expr["exp"]
+    agg_expr["oe"] = divide_null(agg_expr["obs"], agg_expr["exp"])
 
     # Create an aggregator that sums the mutation rate.
     if not exclude_mu_sum:
@@ -909,60 +952,15 @@ def oe_aggregation_expr(
             **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
         )
 
-    # TODO: ask hail team why the agg.filter statement returns an error.
-    # return hl.agg.filter(filter_expr, hl.struct(**agg_expr))
-    return hl.agg.group_by(filter_expr, hl.struct(**agg_expr)).get(True)
-
-
-def get_all_pop_lengths(
-    ht: hl.Table,
-    pops: Tuple[str],
-    obs_expr: hl.expr.StructExpression,
-) -> List[Tuple[str, str]]:
-    """
-    Get the minimum length of observed variant counts array for each population downsampling.
-
-    The observed variant counts for each population in `pops` are specified by
-    annotations on the `obs_expr` expression.
-
-    The function also performs a check that arrays of variant counts within population
-    downsamplings all have the same lengths.
-
-    :param ht: Input Table containing `obs_expr`.
-    :param pops: Populations used to categorize observed variant counts in downsamplings.
-    :param obs_expr: Expression for the population observed variant counts. Should be a
-        struct containing an array for each pop in `pops`.
-    :return: A Dictionary with the minimum array length for each population.
-    """
-    # TODO: This function will be converted into doing just the length check if there
-    #  is no usage of pop_lengths in the constraint pipeline.
-    # Get minimum length of downsamplings for each population.
-    pop_downsampling_lengths = ht.aggregate(
-        [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
-    )
-
-    # Zip population name with their downsampling length.
-    pop_lengths = list(zip(pop_downsampling_lengths, pops))
-    logger.info("Found: %s", "".join(map(str, pop_lengths)))
-
-    assert ht.all(
-        hl.all(
-            lambda f: f,
-            [hl.len(obs_expr[pop]) == length for length, pop in pop_lengths],
-        )
-    ), (
-        "The arrays of variant counts within population downsamplings have different"
-        " lengths!"
-    )
-
-    return pop_lengths
+    agg_expr = hl.struct(**agg_expr)
+    return hl.agg.group_by(filter_expr, agg_expr).get(True, hl.missing(agg_expr.dtype))
 
 
 def compute_pli(
     ht: hl.Table,
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
-    expected_values: Dict[str, float] = {"Null": 1.0, "Rec": 0.463, "LI": 0.089},
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
+    expected_values: Optional[Dict[str, float]] = None,
     min_diff_convergence: float = 0.001,
 ) -> hl.StructExpression:
     """
@@ -977,30 +975,33 @@ def compute_pli(
 
     We assume a 3 state model, where each gene fits into one of three categories
     with respect loss-of-function variation sensitivity:
-        - Null - where protein truncating variation is completely tolerated by natural
+
+        - Null: where protein truncating variation is completely tolerated by natural
           selection.
-        - Recessive (Rec) - where heterozygous pLoFs are tolerated but homozygous pLoFs
+        - Recessive (Rec): where heterozygous pLoFs are tolerated but homozygous pLoFs
           are not.
-        - haploinsufficient (LI) - where heterozygous pLoFs are not tolerated.
+        - Haploinsufficient (LI): where heterozygous pLoFs are not tolerated.
 
     The function requires the expected amount of loss-of-function depletion for each of
     these states. The default provided is based on the observed depletion of
     protein-truncating variation in the Blekhman autosomal recessive and ClinGen
     dosage sensitivity gene sets (Supplementary Information Table 12 of the above
     reference):
-         - Null - 1.0 - assume tolerant genes have the expected amount of truncating
-           variation.
-         - Rec - 0.463 - derived from the empirical mean observed/expected rate of
-           truncating variation for recessive disease genes (0.463).
-         - LI - 0.089 - derived from the empirical mean observed/expected rate of
-           truncating variation for severe haploinsufficient genes.
+
+        - Null: 1.0, assume tolerant genes have the expected amount of truncating
+          variation.
+        - Rec: 0.463, derived from the empirical mean observed/expected rate of
+          truncating variation for recessive disease genes (0.463).
+        - LI: 0.089, derived from the empirical mean observed/expected rate of
+          truncating variation for severe haploinsufficient genes.
 
     The output StructExpression will include the following annotations:
-        - pLI - Probability of loss-of-function intolerance; probability that transcript
+
+        - pLI: Probability of loss-of-function intolerance; probability that transcript
           falls into distribution of haploinsufficient genes.
-        - pNull - Probability that transcript falls into distribution of unconstrained
+        - pNull: Probability that transcript falls into distribution of unconstrained
           genes.
-        - pRec - Probability that transcript falls into distribution of recessive genes.
+        - pRec: Probability that transcript falls into distribution of recessive genes.
 
     :param ht: Input Table containing `obs_expr` and `exp_expr`.
     :param obs_expr: Expression for the number of observed variants on each gene or
@@ -1013,13 +1014,20 @@ def compute_pli(
         model convergence criteria as met. Default is 0.001.
     :return: StructExpression for pLI scores.
     """
+    if expected_values is None:
+        expected_values = {"Null": 1.0, "Rec": 0.463, "LI": 0.089}
+
     # Set up initial values.
     last_pi = {"Null": 0, "Rec": 0, "LI": 0}
     pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
 
-    _ht = ht.select(
-        dpois={k: hl.dpois(obs_expr, exp_expr * expected_values[k]) for k in pi}
-    )
+    dpois_expr = {
+        k: hl.or_missing(
+            exp_expr > 0, hl.dpois(obs_expr, exp_expr * expected_values[k])
+        )
+        for k in pi
+    }
+    _ht = ht.select(dpois=dpois_expr)
     # Checkpoint the temp HT because it will need to be aggregated several times.
     _ht = _ht.checkpoint(new_temp_file(prefix="compute_pli", extension="ht"))
 
@@ -1032,17 +1040,15 @@ def compute_pli(
         pi = _ht.aggregate({k: hl.agg.mean(pi_expr[k]) for k in pi.keys()})
 
     # Get expression for pLI scores.
-    pli_expr = {
-        k: v * hl.dpois(obs_expr, exp_expr * expected_values[k]) for k, v in pi.items()
-    }
+    pli_expr = {k: v * dpois_expr[k] for k, v in pi.items()}
     row_sum_expr = hl.sum([pli_expr[k] for k in pi])
 
     return hl.struct(**{f"p{k}": pli_expr[k] / row_sum_expr for k in pi.keys()})
 
 
 def oe_confidence_interval(
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
     alpha: float = 0.05,
 ) -> hl.expr.StructExpression:
     """
@@ -1052,15 +1058,17 @@ def oe_confidence_interval(
     function computes the density of the Poisson distribution (performed using Hail's
     `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of
     variants) over a range of lambda (`lamb` in `dpois`) values, which are given by the
-    expected number of variants times a varying parameter ranging between 0 and 2 (the observed:expected ratio is typically between 0 and 1, so we want to extend the upper bound of the confidence interval to capture this). The
-    cumulative density function of the Poisson distribution density is computed and the
-    value of the varying parameter is extracted at points corresponding to `alpha`
-    (defaults to 5%) and 1-`alpha`(defaults to 95%) to indicate the lower and upper
-    bounds of the confidence interval.
+    expected number of variants times a varying parameter ranging between 0 and 2 (the
+    observed:expected ratio is typically between 0 and 1, so we want to extend the
+    upper bound of the confidence interval to capture this). The cumulative density
+    function of the Poisson distribution density is computed and the value of the
+    varying parameter is extracted at points corresponding to `alpha` (defaults to 5%)
+    and 1-`alpha` (defaults to 95%) to indicate the lower and upper bounds of the
+    confidence interval.
 
     The following annotations are in the output StructExpression:
-    - lower - the lower bound of confidence interval
-    - upper - the upper bound of confidence interval
+        - lower - the lower bound of confidence interval
+        - upper - the upper bound of confidence interval
 
     :param obs_expr: Expression for the observed variant counts of pLoF, missense, or
         synonymous variants in `ht`.
@@ -1093,8 +1101,8 @@ def oe_confidence_interval(
 
 
 def calculate_raw_z_score(
-    obs_expr: hl.expr.Int32Expression,
-    exp_expr: hl.expr.Float32Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
     Compute the signed raw z-score using observed and expected variant counts.
@@ -1104,79 +1112,84 @@ def calculate_raw_z_score(
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
-    :return: StrucExpression for the raw z-score.
+    :return: StructExpression for the raw z-score.
     """
-    chisq_expr = (obs_expr - exp_expr) ** 2 / exp_expr
+    chisq_expr = divide_null((obs_expr - exp_expr) ** 2, exp_expr)
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
 
 
-def add_constraint_flags(
-    exp_expr: hl.expr.Float32Expression, outlier_expr: hl.expr.BooleanExpression
-) -> hl.expr.SetExpression:
+def get_constraint_flags(
+    exp_expr: hl.expr.Float64Expression,
+    raw_z_expr: hl.expr.Float64Expression,
+    raw_z_lower_threshold: Optional[float] = -5.0,
+    raw_z_upper_threshold: Optional[float] = 5.0,
+    flag_postfix: str = "",
+) -> Dict[str, hl.expr.Expression]:
     """
     Determine the constraint flags that define why constraint will not be calculated.
 
     Flags which are added:
-        - "no_exp" - for genes that have zero expected variants
-        - "outlier" - for genes that are outliers according to the supplied `outlier_expr`
+        - "no_exp_{flag_postfix}" - for genes that have missing or zero expected variants.
+        - "outlier_{flag_postfix}" - for genes that are raw z-score outliers:
+          (`raw_z_expr` < `raw_z_lower_threshold`) or (`raw_z_expr` >
+          `raw_z_upper_threshold`).
 
-     :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
+    :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
         synonymous variants.
-     :param outlier_expr: Boolean expression used to decide if an 'outlier' flag should
-        be applied (example: ht['lof'].z_raw < -5).
-     :return: SetExpression containing constraint flags.
+    :param raw_z_expr: Expression for the signed raw z-score of pLoF, missense, or
+        synonymous variants.
+    :param raw_z_lower_threshold: Lower threshold for the raw z-score. When `raw_z_expr`
+        is less than this threshold it is considered an 'outlier'. Default is -5.0.
+    :param raw_z_upper_threshold: Upper threshold for the raw z-score. When `raw_z_expr`
+        is greater than this threshold it is considered an 'outlier'. Default is 5.0.
+    :param flag_postfix: Postfix to add to the end of the constraint flag names.
+    :return: Dictionary containing expressions for constraint flags.
     """
-    constraint_flags = hl.empty_set(hl.tstr)
-    constraint_flags = hl.if_else(
-        exp_expr <= 0,
-        constraint_flags.add(f"no_exp"),
-        constraint_flags,
-    )
+    outlier_expr = False
+    if raw_z_lower_threshold is not None:
+        outlier_expr |= raw_z_expr < raw_z_lower_threshold
+    if raw_z_upper_threshold is not None:
+        outlier_expr |= raw_z_expr > raw_z_upper_threshold
 
-    constraint_flags = hl.if_else(
-        outlier_expr,
-        constraint_flags.add(f"outlier"),
-        constraint_flags,
-    )
+    if flag_postfix:
+        flag_postfix = f"_{flag_postfix}"
+
+    constraint_flags = {
+        f"no_exp{flag_postfix}": hl.or_else(exp_expr <= 0, True),
+        f"outlier{flag_postfix}": hl.or_else(outlier_expr, False),
+    }
 
     return constraint_flags
 
 
-def calculate_z_score(
-    ht: hl.Table,
-    raw_z_expr: hl.expr.StringExpression,
+def calculate_raw_z_score_sd(
+    raw_z_expr: hl.expr.Float64Expression,
     flag_expr: hl.expr.StringExpression,
-    additional_requirements_expr: hl.expr.BooleanExpression,
-    both: bool = True,
-) -> hl.expr.StructExpression:
+    mirror_neg_raw_z: bool = True,
+) -> hl.expr.Expression:
     """
-    Calculate the standard deviation of the raw z-Score and the z-score.
+    Calculate the standard deviation of the raw z-score.
 
-    :param ht: Input Table with raw z-score and constraint flag expression.
+    When using `mirror_neg_raw_z` is True, all the negative raw z-scores (defined by
+    `raw_z_expr`) are combined with those same z-scores multiplied by -1 (to create a
+    mirrored distribution).
+
     :param raw_z_expr: Expression for the raw z-score.
     :param flag_expr: Expression for the constraint flags. z-score will not be
         calculated if flags are present.
-    :param additional_requirements_expr: Expression for additional requirements that
-        must be met for z-scores to be calculated.
-    :param both: Whether to use both the positive and negative `raw_z_expr` when
-        calculating standard deviations.
+    :param mirror_neg_raw_z: Whether the standard deviation should be computed using a
+        mirrored distribution of negative `raw_z_expr`.
     :return: StructExpression containing standard deviation of the raw z-score and
         the z-score.
     """
-    sd = ht.aggregate(
-        hl.struct(
-            sd=hl.agg.filter(
-                (hl.len(flag_expr) == 0)
-                & (hl.is_defined(raw_z_expr))
-                & (additional_requirements_expr),
-                hl.agg.explode(
-                    lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]
-                ).stdev
-                if both
-                else hl.agg.stats(ht.raw_z_expr).stdev,
-            )
-        )
-    )
+    filter_expr = (hl.len(flag_expr) == 0) & hl.is_defined(raw_z_expr)
 
-    z_score = raw_z_expr / sd.sd
-    return hl.struct(sd=sd.sd, z_score=z_score)
+    if mirror_neg_raw_z:
+        filter_expr &= raw_z_expr < 0
+        sd_expr = hl.agg.explode(
+            lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]
+        ).stdev
+    else:
+        sd_expr = hl.agg.stats(raw_z_expr).stdev
+
+    return hl.agg.filter(filter_expr, sd_expr)

@@ -1165,30 +1165,31 @@ def get_constraint_flags(
 def calculate_raw_z_score_sd(
     raw_z_expr: hl.expr.Float64Expression,
     flag_expr: hl.expr.StringExpression,
-    neg_raw_z_only: bool = True,
-    both: bool = True,
+    mirror_neg_raw_z: bool = True,
 ) -> hl.expr.Expression:
     """
     Calculate the standard deviation of the raw z-score.
 
+    When using `mirror_neg_raw_z` is True, all the negative raw z-scores (defined by
+    `raw_z_expr`) are combined with those same z-scores multiplied by -1 (to create a
+    mirrored distribution).
+
     :param raw_z_expr: Expression for the raw z-score.
     :param flag_expr: Expression for the constraint flags. z-score will not be
         calculated if flags are present.
-    :param neg_raw_z_only: Whether the standard deviation should be computed using only
-        negative `raw_z_expr`.
-    :param both: Whether to use both the positive and negative `raw_z_expr` when
-        calculating standard deviations.
+    :param mirror_neg_raw_z: Whether the standard deviation should be computed using a
+        mirrored distribution of negative `raw_z_expr`.
     :return: StructExpression containing standard deviation of the raw z-score and
         the z-score.
     """
     filter_expr = (hl.len(flag_expr) == 0) & hl.is_defined(raw_z_expr)
 
-    if neg_raw_z_only:
+    if mirror_neg_raw_z:
         filter_expr &= raw_z_expr < 0
+        sd_expr = hl.agg.explode(
+            lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]
+        ).stdev
+    else:
+        sd_expr = hl.agg.stats(raw_z_expr).stdev
 
-    return hl.agg.filter(
-        filter_expr,
-        hl.agg.explode(lambda x: hl.agg.stats(x), [raw_z_expr, -raw_z_expr]).stdev
-        if both
-        else hl.agg.stats(raw_z_expr).stdev,
-    )
+    return hl.agg.filter(filter_expr, sd_expr)

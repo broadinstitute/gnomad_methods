@@ -9,6 +9,7 @@ from gnomad.utils.annotations import (
     fs_from_sb,
     get_adj_expr,
     get_lowqual_expr,
+    pab_max_expr,
     sor_from_sb,
 )
 from gnomad.utils.intervals import interval_length, union_intervals
@@ -471,6 +472,11 @@ def default_compute_info(
     # Compute AS info expr
     info_expr = get_as_info_expr(mt)
 
+    # Add allele specific pab_max
+    info_expr = info_expr.annotate(
+        AS_pab_max=pab_max_expr(mt.LGT, mt.LAD, mt.LA, hl.len(mt.alleles))
+    )
+
     if site_annotations:
         info_expr = info_expr.annotate(**get_site_info_expr(mt))
 
@@ -488,7 +494,7 @@ def default_compute_info(
                 ),
             ),
         ),
-        hl.range(1, hl.len(mt.alleles)),
+        mt.alt_alleles_range_array,
     )
 
     # Then, for each non-ref allele, compute

@@ -447,7 +447,10 @@ def get_site_info_expr(
 
 
 def default_compute_info(
-    mt: hl.MatrixTable, site_annotations: bool = False, n_partitions: int = 5000
+    mt: hl.MatrixTable,
+    site_annotations: bool = False,
+    n_partitions: int = 5000,
+    lowqual_indel_phred_het_prior: int = 40,
 ) -> hl.Table:
     """
     Compute a HT with the typical GATK allele-specific (AS) info fields as well as ACs and lowqual fields.
@@ -459,6 +462,9 @@ def default_compute_info(
     :param mt: Input MatrixTable. Note that this table should be filtered to nonref sites.
     :param site_annotations: Whether to also generate site level info fields. Default is False.
     :param n_partitions: Number of desired partitions for output Table. Default is 5000.
+    :param lowqual_indel_phred_het_prior: Phred-scaled prior for a het genotype at a
+        site with a low quality indel. Default is 40. We use 1/10k bases (phred=40) to
+        be more consistent with the filtering used by DSP for VQSR.
     :return: Table with info fields
     :rtype: Table
     """
@@ -509,13 +515,21 @@ def default_compute_info(
 
     # Add AS lowqual flag
     info_ht = info_ht.annotate(
-        AS_lowqual=get_lowqual_expr(info_ht.alleles, info_ht.info.AS_QUALapprox)
+        AS_lowqual=get_lowqual_expr(
+            info_ht.alleles,
+            info_ht.info.AS_QUALapprox,
+            indel_phred_het_prior=lowqual_indel_phred_het_prior,
+        )
     )
 
     if site_annotations:
         # Add lowqual flag
         info_ht = info_ht.annotate(
-            lowqual=get_lowqual_expr(info_ht.alleles, info_ht.info.QUALapprox)
+            lowqual=get_lowqual_expr(
+                info_ht.alleles,
+                info_ht.info.QUALapprox,
+                indel_phred_het_prior=lowqual_indel_phred_het_prior,
+            )
         )
 
     return info_ht.naive_coalesce(n_partitions)

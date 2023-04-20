@@ -483,7 +483,6 @@ def filter_for_mu(
     :param gerp_lower_cutoff: Minimum gerp score for variant to be included.
     :param gerp_higher_cutoff: Maximum gerp score for variant to be included.
     :return: Table filtered to intron_ or intergenic variants with gerp outliers removed.
-
     """
 
     ht = filter_by_numeric_expr_range(

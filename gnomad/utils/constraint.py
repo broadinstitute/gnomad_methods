@@ -222,27 +222,6 @@ def count_variants_by_group(
         )
 
 
-def get_downsamplings(freq_meta_expr: hl.expr.ArrayExpression) -> List[Tuple[int]]:
-    """
-    Get a list of downsampling size.
-
-    Each downsamplings should have 'group', 'pop', and 'downsampling' keys. Included downsamplings are those where 'group' == "adj" and 'pop' == "global".
-
-    :param freq_meta_expr: ArrayExpression containing the set of groupings for each
-        element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
-        'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :return: A list of downsampling size of specifed downsamplings.
-    """
-    indices = hl.enumerate(freq_meta_expr).filter(
-        lambda f: (f[1].size() == 3)
-        & (f[1].get("group") == variant_quality)
-        & (f[1].get("pop") == pop)
-        & f[1].contains("downsampling")
-    )
-    # Get an array of indices and meta dictionaries sorted by "downsampling" key.
-    return hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"]))
-
-
 def get_downsampling_freq_indices(
     freq_meta_expr: hl.expr.ArrayExpression,
     pop: str = "global",
@@ -258,9 +237,7 @@ def get_downsampling_freq_indices(
         Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
-
     """
-    #
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].size() == 3)
         & (f[1].get("group") == variant_quality)

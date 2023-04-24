@@ -97,6 +97,9 @@ vep_context = VersionedTableResource(
         "101": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.v101.ht",
         ),
+        "105": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.v105.ht",
+        ),
     },
 )
 
@@ -151,8 +154,21 @@ clinvar = VersionedTableResource(
 )
 
 dbsnp = VersionedTableResource(
-    default_version="b154",
+    default_version="b156",
     versions={
+        "b156": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b156_grch38_all_20221116.ht",
+            import_func=_import_dbsnp,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.bgz",
+                "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.header",
+                "force_bgz": True,
+                "contig_recoding": DBSNP_B154_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 400,
+                "reference_genome": "GRCh38",
+            },
+        ),
         "b154": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
             import_func=_import_dbsnp,

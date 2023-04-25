@@ -980,10 +980,19 @@ def pab_max_expr(
     """
     Compute the maximum p-value of the binomial test for the alternate allele balance (PAB) for each allele.
 
+    .. note::
+
+        This function can take a `gt_expr` and `ad_expr` that use local or global
+        alleles. If they use local alleles, `la_expr` and `n_alleles_expr` should be
+        provided to transform `gt_expr` and `ad_expr` to global alleles.
+
     :param gt_expr: Genotype call expression.
     :param ad_expr: Allele depth expression.
-    :param la_expr: Allele local index expression that when provided transforms AD and GT expressions from local to global expressions.
-    :param n_alleles_expr: Number of alleles expression required when 'la_expr' is passed.
+    :param la_expr: Allele local index expression. When provided `gt_expr` and
+        `ad_expr` are transformed from using local alleles to global alleles using
+        `la_expr`.
+    :param n_alleles_expr: Number of alleles expression. Required when 'la_expr' is
+        provided.
     :return: Array expression of maximum p-values.
     """
     if la_expr is not None:

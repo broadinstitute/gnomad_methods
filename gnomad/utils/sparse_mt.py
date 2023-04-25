@@ -464,7 +464,8 @@ def default_compute_info(
     :param n_partitions: Number of desired partitions for output Table. Default is 5000.
     :param lowqual_indel_phred_het_prior: Phred-scaled prior for a het genotype at a
         site with a low quality indel. Default is 40. We use 1/10k bases (phred=40) to
-        be more consistent with the filtering used by Broad's Data Sciences Platform for VQSR.
+        be more consistent with the filtering used by Broad's Data Sciences Platform
+        for VQSR.
     :return: Table with info fields
     :rtype: Table
     """

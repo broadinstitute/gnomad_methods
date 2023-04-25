@@ -971,6 +971,50 @@ def sor_from_sb(
     return sor
 
 
+def pab_max_expr(
+    gt_expr: hl.expr.CallExpression,
+    ad_expr: hl.expr.ArrayExpression,
+    la_expr: Optional[hl.expr.ArrayExpression] = None,
+    n_alleles_expr: Optional[hl.expr.Int32Expression] = None,
+) -> hl.expr.ArrayExpression:
+    """
+    Compute the maximum p-value of the binomial test for the alternate allele balance (PAB) for each allele.
+
+    .. note::
+
+        This function can take a `gt_expr` and `ad_expr` that use local or global
+        alleles. If they use local alleles, `la_expr` and `n_alleles_expr` should be
+        provided to transform `gt_expr` and `ad_expr` to global alleles.
+
+    :param gt_expr: Genotype call expression.
+    :param ad_expr: Allele depth expression.
+    :param la_expr: Allele local index expression. When provided `gt_expr` and
+        `ad_expr` are transformed from using local alleles to global alleles using
+        `la_expr`.
+    :param n_alleles_expr: Number of alleles expression. Required when 'la_expr' is
+        provided.
+    :return: Array expression of maximum p-values.
+    """
+    if la_expr is not None:
+        if n_alleles_expr is None:
+            raise ValueError("Must provide `n_alleles_expr` if `la_expr` is provided!")
+
+        ad_expr = hl.vds.local_to_global(
+            ad_expr, la_expr, n_alleles_expr, fill_value=0, number="R"
+        )
+        gt_expr = hl.vds.lgt_to_gt(gt_expr, la_expr)
+
+    expr = hl.agg.array_agg(
+        lambda x: hl.agg.filter(
+            gt_expr.is_het(),
+            hl.agg.max(hl.binom_test(x, hl.sum(ad_expr), 0.5, "two-sided")),
+        ),
+        ad_expr[1:],  # Skip ref allele
+    )
+
+    return expr
+
+
 def bi_allelic_expr(t: Union[hl.Table, hl.MatrixTable]) -> hl.expr.BooleanExpression:
     """
     Return a boolean expression selecting bi-allelic sites only, accounting for whether the input MT/HT was split.

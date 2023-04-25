@@ -982,13 +982,13 @@ def pab_max_expr(
 
     :param gt_expr: Genotype call expression.
     :param ad_expr: Allele depth expression.
-    :param la_expr: Allele local index expression.
-    :param n_alleles_expr: Number of alleles expression.
+    :param la_expr: Allele local index expression that when provided transforms AD and GT expressions from local to global expressions.
+    :param n_alleles_expr: Number of alleles expression required when 'la_expr' is passed.
     :return: Array expression of maximum p-values.
     """
     if la_expr is not None:
         if n_alleles_expr is None:
-            raise ValueError("Must provide `n_alleles` if `la_expr` is provided!")
+            raise ValueError("Must provide `n_alleles_expr` if `la_expr` is provided!")
 
         ad_expr = hl.vds.local_to_global(
             ad_expr, la_expr, n_alleles_expr, fill_value=0, number="R"

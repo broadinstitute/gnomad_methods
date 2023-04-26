@@ -457,10 +457,10 @@ def filter_by_numeric_expr_range(
 
     :param t: Input Table/MatrixTable.
     :param filter_expr: NumericExpression to apply `filter_range` to.
-    :param filter_range: Range of values to which filter should be applied
-    :param keep_between: Whether or not to keep the values between the range.
-    :param inclusive: Whether or not to include the range values themselves.
-    :return: Table/MatrixTable filtered to specified criteria.
+    :param filter_range: Range of values to apply to `filter_expr`.
+    :param keep_between: Whether to keep the values between `filter_range` instead of keeping values outside `filter_range`. Default is True.
+    :param inclusive: Whether or not to include the `filter_range` values themselves. Default is True.
+    :return: Table/MatrixTable filtered to rows with specified criteria.
     """
     if inclusive and keep_between or not inclusive and not keep_between:
         criteria = (filter_expr >= filter_range[0]) & (filter_expr <= filter_range[1])
@@ -480,9 +480,9 @@ def filter_for_mu(
     Filter to non-coding annotations and remove GERP outliers.
 
     :param ht: Input Table.
-    :param gerp_lower_cutoff: Minimum gerp score for variant to be included.
-    :param gerp_higher_cutoff: Maximum gerp score for variant to be included.
-    :return: Table filtered to intron_ or intergenic variants with gerp outliers removed.
+    :param gerp_lower_cutoff: Minimum GERP score for variant to be included.
+    :param gerp_higher_cutoff: Maximum GERP score for variant to be included.
+    :return: Table filtered to intron or intergenic variants with GERP outliers removed.
     """
 
     ht = filter_by_numeric_expr_range(

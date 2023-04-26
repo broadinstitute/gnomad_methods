@@ -480,7 +480,10 @@ def filter_for_mu(
     Filter to non-coding annotations and remove GERP outliers.
 
     .. note::
-        Values for `gerp_lower_cutoff` and `gerp_upper_cutoff` default to -3.9885 and 2.6607, respectively. These values were precalculated on the GRCh37 context table and define the 5th and 95th percentiles.
+        
+        Values for `gerp_lower_cutoff` and `gerp_upper_cutoff` default to -3.9885 and 
+        2.6607, respectively. These values were precalculated on the GRCh37 context 
+        table and define the 5th and 95th percentiles.
 
     :param ht: Input Table.
     :param gerp_lower_cutoff: Minimum GERP score for variant to be included. Default is -3.9885.

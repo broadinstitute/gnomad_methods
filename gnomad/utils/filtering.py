@@ -456,7 +456,7 @@ def filter_by_numeric_expr_range(
     Filter rows in the Table/MatrixTable based on the range of a numeric expression.
 
     :param t: Input Table/MatrixTable.
-    :param filter_expr: Expression to which filter should be applied.
+    :param filter_expr: NumericExpression to apply `filter_range` to.
     :param filter_range: Range of values to which filter should be applied
     :param keep_between: Whether or not to keep the values between the range.
     :param inclusive: Whether or not to include the range values themselves.

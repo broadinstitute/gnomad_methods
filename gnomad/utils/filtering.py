@@ -483,7 +483,7 @@ def filter_for_mu(
         Values for `gerp_lower_cutoff` and `gerp_upper_cutoff` default to -3.9885 and 2.6607, respectively. These values were precalculated on the GRCh37 context table and define the 5th and 95th percentiles.
 
     :param ht: Input Table.
-    :param gerp_lower_cutoff: Minimum GERP score for variant to be included. Default is  -3.9885.
+    :param gerp_lower_cutoff: Minimum GERP score for variant to be included. Default is -3.9885.
     :param gerp_upper_cutoff: Maximum GERP score for variant to be included. Default is 2.6607.
     :return: Table filtered to intron or intergenic variants with GERP outliers removed.
     """

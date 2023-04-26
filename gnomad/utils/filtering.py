@@ -443,3 +443,63 @@ def filter_y_nonpar(
         if isinstance(t, hl.Table)
         else t.filter_rows(non_par_expr)
     )
+
+
+def filter_by_numeric_expr_range(
+    t: Union[hl.MatrixTable, hl.Table],
+    filter_expr: hl.NumericExpression,
+    filter_range: tuple,
+    keep_between: bool = True,
+    inclusive: bool = True,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filter rows in the Table/MatrixTable based on the range of a numeric expression.
+
+    :param t: Input Table/MatrixTable.
+    :param filter_expr: NumericExpression to apply `filter_range` to.
+    :param filter_range: Range of values to apply to `filter_expr`.
+    :param keep_between: Whether to keep the values between `filter_range` instead of keeping values outside `filter_range`. Default is True.
+    :param inclusive: Whether or not to include the `filter_range` values themselves. Default is True.
+    :return: Table/MatrixTable filtered to rows with specified criteria.
+    """
+    if inclusive and keep_between or not inclusive and not keep_between:
+        criteria = (filter_expr >= filter_range[0]) & (filter_expr <= filter_range[1])
+    else:
+        criteria = (filter_expr > filter_range[0]) & (filter_expr < filter_range[1])
+
+    if isinstance(t, hl.MatrixTable):
+        return t.filter_rows(criteria, keep=keep_between)
+    else:
+        return t.filter(criteria, keep=keep_between)
+
+
+def filter_for_mu(
+    ht: hl.Table, gerp_lower_cutoff: float = -3.9885, gerp_upper_cutoff: float = 2.6607
+) -> hl.Table:
+    """
+    Filter to non-coding annotations and remove GERP outliers.
+
+    .. note::
+
+        Values for `gerp_lower_cutoff` and `gerp_upper_cutoff` default to -3.9885 and
+        2.6607, respectively. These values were precalculated on the GRCh37 context
+        table and define the 5th and 95th percentiles.
+
+    :param ht: Input Table.
+    :param gerp_lower_cutoff: Minimum GERP score for variant to be included. Default is -3.9885.
+    :param gerp_upper_cutoff: Maximum GERP score for variant to be included. Default is 2.6607.
+    :return: Table filtered to intron or intergenic variants with GERP outliers removed.
+    """
+    ht = filter_by_numeric_expr_range(
+        ht,
+        filter_expr=ht.gerp,
+        filter_range=(gerp_lower_cutoff, gerp_upper_cutoff),
+        keep_between=True,
+        inclusive=False,
+    )
+    ht = ht.filter(
+        (ht.vep.most_severe_consequence == "intron_variant")
+        | (ht.vep.most_severe_consequence == "intergenic_variant")
+    )
+
+    return ht

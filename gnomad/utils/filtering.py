@@ -474,21 +474,24 @@ def filter_by_numeric_expr_range(
 
 
 def filter_for_mu(
-    ht: hl.Table, gerp_lower_cutoff: float = -3.9885, gerp_higher_cutoff: float = 2.6607
+    ht: hl.Table, gerp_lower_cutoff: float = -3.9885, gerp_upper_cutoff: float = 2.6607
 ) -> hl.Table:
     """
     Filter to non-coding annotations and remove GERP outliers.
 
+    .. note::
+        Values for `gerp_lower_cutoff` and `gerp_upper_cutoff` default to -3.9885 and 2.6607, respectively. These values were precalcualted on the GRCh37 context table and define the 5th and 95th percentiles.
+
     :param ht: Input Table.
-    :param gerp_lower_cutoff: Minimum GERP score for variant to be included.
-    :param gerp_higher_cutoff: Maximum GERP score for variant to be included.
+    :param gerp_lower_cutoff: Minimum GERP score for variant to be included. Default is  -3.9885.
+    :param gerp_upper_cutoff: Maximum GERP score for variant to be included. Default is 2.6607.
     :return: Table filtered to intron or intergenic variants with GERP outliers removed.
     """
 
     ht = filter_by_numeric_expr_range(
         ht,
         filter_expr=ht.gerp,
-        filter_range=(gerp_lower_cutoff, gerp_higher_cutoff),
+        filter_range=(gerp_lower_cutoff, gerp_upper_cutoff),
         keep_between=True,
         inclusive=False,
     )

@@ -243,8 +243,7 @@ def get_downsampling_freq_indices(
         `freq_meta_expr`. Default is 'adj'.
     """
     indices = hl.enumerate(freq_meta_expr).filter(
-        lambda f: (f[1].size() == 3)
-        & (f[1].get("group") == variant_quality)
+        lambda f: (f[1].get("group") == variant_quality)
         & (f[1].get("pop") == pop)
         & f[1].contains("downsampling")
     )
@@ -283,14 +282,6 @@ def downsampling_counts_expr(
     :return: Aggregation Expression for an array of the variant counts in downsamplings
         for specified population.
     """
-    # Get indices of dictionaries in meta dictionaries that only have the
-    # "downsampling" key with specified "group" and "pop" values.
-    indices = hl.enumerate(freq_meta_expr).filter(
-        lambda f: (f[1].size() == 3)
-        & (f[1].get("group") == variant_quality)
-        & (f[1].get("pop") == pop)
-        & f[1].contains("downsampling")
-    )
     # Get an array of indices sorted by "downsampling" key.
     sorted_indices = get_downsampling_freq_indices(
         freq_meta_expr, pop, variant_quality

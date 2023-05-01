@@ -237,7 +237,7 @@ def add_filters_expr(
         lambda x, y: x.union(y),
         current_filters,
         [
-            hl.cond(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
+            hl.if_else(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
             for filter_name, filter_condition in filters.items()
         ],
     )

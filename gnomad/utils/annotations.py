@@ -601,7 +601,7 @@ def get_lowqual_expr(
 
     if isinstance(qual_approx_expr, hl.expr.ArrayNumericExpression):
         return hl.range(1, hl.len(alleles)).map(
-            lambda ai: hl.cond(
+            lambda ai: hl.if_else(
                 hl.is_snp(alleles[0], alleles[ai]),
                 qual_approx_expr[ai - 1] < min_snv_qual,
                 qual_approx_expr[ai - 1] < min_indel_qual,
@@ -728,7 +728,7 @@ def get_adj_expr(
     """
     return (
         (gq_expr >= adj_gq)
-        & hl.cond(gt_expr.is_haploid(), dp_expr >= haploid_adj_dp, dp_expr >= adj_dp)
+        & hl.if_else(gt_expr.is_haploid(), dp_expr >= haploid_adj_dp, dp_expr >= adj_dp)
         & (
             hl.case()
             .when(~gt_expr.is_het(), True)
@@ -778,12 +778,12 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     alts = alt_alleles[1:]
     non_star_alleles = hl.filter(lambda a: a != "*", alts)
     return hl.struct(
-        variant_type=hl.cond(
+        variant_type=hl.if_else(
             hl.all(lambda a: hl.is_snp(ref, a), non_star_alleles),
-            hl.cond(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
-            hl.cond(
+            hl.if_else(hl.len(non_star_alleles) > 1, "multi-snv", "snv"),
+            hl.if_else(
                 hl.all(lambda a: hl.is_indel(ref, a), non_star_alleles),
-                hl.cond(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
+                hl.if_else(hl.len(non_star_alleles) > 1, "multi-indel", "indel"),
                 "mixed",
             ),
         ),
@@ -971,7 +971,7 @@ def fs_from_sb(
     # Normalize table if counts get too large
     if normalize:
         fs_expr = hl.bind(
-            lambda sb, sb_sum: hl.cond(
+            lambda sb, sb_sum: hl.if_else(
                 sb_sum <= 2 * min_cell_count,
                 sb,
                 sb.map(lambda x: hl.int(x / (sb_sum / min_cell_count))),

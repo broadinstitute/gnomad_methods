@@ -493,7 +493,7 @@ def default_compute_info(
     if site_annotations:
         info_expr = info_expr.annotate(**get_site_info_expr(mt))
 
-    # Add 'ac' and 'ac_raw' for each allele count filter group requested.
+    # Add 'AC' and 'AC_raw' for each allele count filter group requested.
     # First compute ACs for each non-ref allele, grouped by adj.
     grp_ac_expr = {
         f: hl.agg.array_agg(
@@ -514,17 +514,17 @@ def default_compute_info(
     }
 
     # Then, for each non-ref allele, compute
-    # 'ac' as the adj group
-    # 'ac_raw' as the sum of adj and non-adj groups
+    # 'AC' as the adj group
+    # 'AC_raw' as the sum of adj and non-adj groups
     info_expr = info_expr.annotate(
         **{
-            f"ac{'_'+f if f else f}_raw": grp.map(
+            f"AC{'_'+f if f else f}_raw": grp.map(
                 lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))
             )
             for f, grp in grp_ac_expr.items()
         },
         **{
-            f"ac{'_'+f if f else f}": grp.map(lambda i: hl.int32(i.get(True, 0)))
+            f"AC{'_'+f if f else f}": grp.map(lambda i: hl.int32(i.get(True, 0)))
             for f, grp in grp_ac_expr.items()
         },
     )

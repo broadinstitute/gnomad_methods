@@ -518,7 +518,9 @@ def default_compute_info(
     # 'ac_raw' as the sum of adj and non-adj groups
     info_expr = info_expr.annotate(
         **{
-            f"ac_{f}_raw": grp.map(lambda i: hl.int32(i.get(True, 0) + i.get(False, 0)))
+            f"ac{'_'+f if f else f}_raw": grp.map(
+                lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))
+            )
             for f, grp in grp_ac_expr.items()
         },
         **{

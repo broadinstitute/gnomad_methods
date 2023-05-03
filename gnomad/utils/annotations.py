@@ -4,6 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
+from hail.utils.misc import new_temp_file
 
 from gnomad.utils.gen_stats import to_phred
 
@@ -460,15 +461,25 @@ def annotate_freq(
         downsampling_ht = mt.cols()
         downsampling_ht = downsampling_ht.annotate(r=hl.rand_unif(0, 1))
         downsampling_ht = downsampling_ht.order_by(downsampling_ht.r)
+        downsampling_ht = downsampling_ht.checkpoint(
+            new_temp_file(prefix="freq_downsampling", extension="ht")
+        )
         scan_expr = {"global_idx": hl.scan.count()}
         if cut_data.get("pop"):
             scan_expr["pop_idx"] = hl.scan.counter(downsampling_ht._freq_meta.pop).get(
                 downsampling_ht._freq_meta.pop, 0
             )
         downsampling_ht = downsampling_ht.annotate(**scan_expr)
+        downsampling_ht = downsampling_ht.checkpoint(
+            new_temp_file(prefix="freq_downsampling", extension="ht")
+        )
         downsampling_ht = downsampling_ht.key_by("s").select(*scan_expr)
+        downsampling_ht = downsampling_ht.checkpoint(
+            new_temp_file(prefix="freq_downsampling", extension="ht")
+        )
         mt = mt.annotate_cols(downsampling=downsampling_ht[mt.s])
         mt = mt.annotate_globals(downsamplings=downsamplings)
+        logger.info("AHHHHHHHHHHH 1")
 
         # Create downsampled sample groups
         sample_group_filters.extend(
@@ -538,14 +549,14 @@ def annotate_freq(
                 for as_value in cut_data.get(add_strata, {})
             ]
         )
-
     freq_sample_count = mt.aggregate_cols(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
     )
-
+    logger.info("AHHHHHHHHHHH 2")
+    logger.info(f"freq_sample_count: {freq_sample_count}")
+    logger.info("AHHHHHHHHHHH 3")
     # Annotate columns with group_membership
     mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
-
     # Create and annotate global expression with meta and sample count information
     freq_meta_expr = [
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
@@ -562,12 +573,18 @@ def annotate_freq(
     mt = mt.annotate_rows(
         sample_group_filters_range_array=hl.range(len(sample_group_filters))
     )
+    logger.info("AHHHHHHHHHHH 4")
     freq_expr = hl.agg.array_agg(
         lambda i: hl.agg.filter(
             mt.group_membership[i] & mt.adj, hl.agg.call_stats(mt.GT, mt.alleles)
         ),
         mt.sample_group_filters_range_array,
     )
+    _mt = mt.annotate_rows(freq=freq_expr)
+    _freq_intermediate = _mt.rows().checkpoint(
+        new_temp_file(prefix="freq", extension="ht")
+    )
+    logger.info(f"AHHHHHHHHHHH 5: {_freq_intermediate.freq.take(1)}")
 
     # Insert raw as the second element of the array
     freq_expr = (
@@ -575,6 +592,11 @@ def annotate_freq(
         .extend([hl.agg.call_stats(mt.GT, mt.alleles)])
         .extend(freq_expr[1:])
     )
+    _mt = mt.annotate_rows(freq=freq_expr)
+    _freq_intermediate = _mt.rows().checkpoint(
+        new_temp_file(prefix="freq", extension="ht")
+    )
+    logger.info(f"AHHHHHHHHHHH 6: {_freq_intermediate.freq.take(1)}")
 
     # Select non-ref allele (assumes bi-allelic)
     freq_expr = freq_expr.map(
@@ -586,6 +608,11 @@ def annotate_freq(
             homozygote_count=cs.homozygote_count[1],
         )
     )
+    _mt = mt.annotate_rows(freq=freq_expr)
+    _freq_intermediate = _mt.rows().checkpoint(
+        new_temp_file(prefix="freq", extension="ht")
+    )
+    logger.info(f"AHHHHHHHHHHH 7: {_freq_intermediate.freq.take(1)}")
 
     # Return MT with freq row annotation
     return mt.annotate_rows(freq=freq_expr).drop("_freq_meta")

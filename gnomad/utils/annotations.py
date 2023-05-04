@@ -800,6 +800,55 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     )
 
 
+def annotate_allele_info(ht: hl.Table) -> hl.Table:
+    """
+    Return bi-allelic sites Table with an 'allele_info' annotation.
+
+    .. note::
+
+        This function requires that the input `ht` is unsplit, and a split `ht` is
+        returned.
+
+    'allele_info' is a struct with the following information:
+        - nonsplit_alleles - Array of alleles before splitting.
+        - Allele_type - Allele type (snv, insertion, deletion, or mixed).
+        - has_star - True if the variant contains a star allele.
+        - was_mixed - True if the variant was mixed (i.e. contained both SNVs and indels).
+        - variant_type - Variant type (snv, indel, multi-snv, multi-indel, or mixed).
+        - n_alt_alleles - Total number of alternate alleles observed at variant locus.
+
+    :param Table ht: Unsplit input Table.
+    :return: Table with allele data annotation added,
+    """
+    ht = ht.annotate(
+        allele_info=hl.struct(
+            **add_variant_type(ht.alleles),
+            has_star=hl.any(lambda a: a == "*", ht.alleles),
+        )
+    )
+
+    ht = hl.split_multi(ht)
+
+    ref_expr = ht.alleles[0]
+    alt_expr = ht.alleles[1]
+    allele_type_expr = (
+        hl.case()
+        .when(hl.is_snp(ref_expr, alt_expr), "snv")
+        .when(hl.is_insertion(ref_expr, alt_expr), "ins")
+        .when(hl.is_deletion(ref_expr, alt_expr), "del")
+        .default("complex")
+    )
+    ht = ht.transmute(
+        allele_info=ht.allele_info.annotate(
+            allele_type=allele_type_expr,
+            was_mixed=ht.allele_info.variant_type == "mixed",
+            nonsplit_alleles=ht.old_alleles,
+        )
+    )
+
+    return ht
+
+
 def annotation_type_is_numeric(t: Any) -> bool:
     """
     Given an annotation type, return whether it is a numerical type or not.

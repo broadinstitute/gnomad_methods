@@ -328,6 +328,231 @@ def age_hists_expr(
     )
 
 
+def annotate_freq_and_high_ab_hets(
+        mt: hl.MatrixTable,
+        sex_expr: Optional[hl.expr.StringExpression] = None,
+        pop_expr: Optional[hl.expr.StringExpression] = None,
+        subpop_expr: Optional[hl.expr.StringExpression] = None,
+        additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
+        additional_strata_grouping_expr: Optional[
+            Dict[str, hl.expr.StringExpression]
+        ] = None,
+        downsamplings: Optional[List[int]] = None,
+        ab_cutoff: float = 0.9,
+) -> hl.Table:
+    if subpop_expr is not None and pop_expr is None:
+        raise NotImplementedError(
+            "annotate_freq requires pop_expr when using subpop_expr"
+        )
+
+    if additional_strata_grouping_expr is not None and additional_strata_expr is None:
+        raise NotImplementedError(
+            "annotate_freq requires additional_strata_expr when using"
+            " additional_strata_grouping_expr"
+        )
+
+    if additional_strata_expr is None:
+        additional_strata_expr = {}
+
+    _freq_meta_expr = hl.struct(**additional_strata_expr)
+    if additional_strata_grouping_expr is None:
+        additional_strata_grouping_expr = {}
+    else:
+        _freq_meta_expr = _freq_meta_expr.annotate(**additional_strata_grouping_expr)
+    if sex_expr is not None:
+        _freq_meta_expr = _freq_meta_expr.annotate(sex=sex_expr)
+    if pop_expr is not None:
+        _freq_meta_expr = _freq_meta_expr.annotate(pop=pop_expr)
+    if subpop_expr is not None:
+        _freq_meta_expr = _freq_meta_expr.annotate(subpop=subpop_expr)
+
+    # Annotate cols with provided cuts
+    mt = mt.annotate_cols(_freq_meta=_freq_meta_expr)
+
+    # Get counters for sex, pop and if set subpop and additional strata
+    cut_dict = {
+        cut: hl.agg.filter(
+            hl.is_defined(mt._freq_meta[cut]), hl.agg.counter(mt._freq_meta[cut])
+        )
+        for cut in mt._freq_meta
+        if cut != "subpop"
+    }
+    if "subpop" in mt._freq_meta:
+        cut_dict["subpop"] = hl.agg.filter(
+            hl.is_defined(mt._freq_meta.pop) & hl.is_defined(mt._freq_meta.subpop),
+            hl.agg.counter(
+                hl.struct(subpop=mt._freq_meta.subpop, pop=mt._freq_meta.pop)
+            ),
+            )
+
+    cut_data = mt.aggregate_cols(hl.struct(**cut_dict))
+    sample_group_filters = []
+
+    # Create downsamplings if needed
+    if downsamplings is not None:
+        # Add exact pop size downsampling if pops were provided
+        if cut_data.get("pop"):
+            downsamplings = list(
+                set(downsamplings + list(cut_data.get("pop").values()))
+            )  # Add the pops values if not in yet
+            downsamplings = sorted(
+                [x for x in downsamplings if x <= sum(cut_data.get("pop").values())]
+            )
+        logger.info("Found %d downsamplings: %s", len(downsamplings), downsamplings)
+
+        # Shuffle the samples, then create a global index for downsampling
+        # And a pop-index if pops were provided
+        downsampling_ht = mt.cols()
+        downsampling_ht = downsampling_ht.annotate(r=hl.rand_unif(0, 1))
+        downsampling_ht = downsampling_ht.order_by(downsampling_ht.r)
+        scan_expr = {"global_idx": hl.scan.count()}
+        if cut_data.get("pop"):
+            scan_expr["pop_idx"] = hl.scan.counter(downsampling_ht._freq_meta.pop).get(
+                downsampling_ht._freq_meta.pop, 0
+            )
+        downsampling_ht = downsampling_ht.annotate(**scan_expr)
+        downsampling_ht = downsampling_ht.key_by("s").select(*scan_expr)
+        mt = mt.annotate_cols(downsampling=downsampling_ht[mt.s])
+        mt = mt.annotate_globals(downsamplings=downsamplings)
+
+        # Create downsampled sample groups
+        sample_group_filters.extend(
+            [
+                (
+                    {"downsampling": str(ds), "pop": "global"},
+                    mt.downsampling.global_idx < ds,
+                )
+                for ds in downsamplings
+            ]
+        )
+        if cut_data.get("pop"):
+            sample_group_filters.extend(
+                [
+                    (
+                        {"downsampling": str(ds), "pop": pop},
+                        (mt.downsampling.pop_idx < ds) & (mt._freq_meta.pop == pop),
+                    )
+                    for ds in downsamplings
+                    for pop, pop_count in cut_data.get("pop", {}).items()
+                    if ds <= pop_count
+                ]
+            )
+
+    # Add all desired strata, starting with the full set and ending with
+    # downsamplings (if any)
+    sample_group_filters = (
+            [({}, True)]
+            + [({"pop": pop}, mt._freq_meta.pop == pop) for pop in cut_data.get("pop", {})]
+            + [({"sex": sex}, mt._freq_meta.sex == sex) for sex in cut_data.get("sex", {})]
+            + [
+                (
+                    {"pop": pop, "sex": sex},
+                    (mt._freq_meta.sex == sex) & (mt._freq_meta.pop == pop),
+                )
+                for sex in cut_data.get("sex", {})
+                for pop in cut_data.get("pop", {})
+            ]
+            + [
+                (
+                    {"subpop": subpop.subpop, "pop": subpop.pop},
+                    (mt._freq_meta.pop == subpop.pop)
+                    & (mt._freq_meta.subpop == subpop.subpop),
+                )
+                for subpop in cut_data.get("subpop", {})
+            ]
+            + [
+                ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
+                for strata in additional_strata_expr
+                for s_value in cut_data.get(strata, {})
+            ]
+            + sample_group_filters
+    )
+
+    # Add additional groupings to strata, e.g. strata-pop, strata-sex, strata-pop-sex
+    if additional_strata_grouping_expr is not None:
+        sample_group_filters.extend(
+            [
+                (
+                    {strata: str(s_value), add_strata: str(as_value)},
+                    (mt._freq_meta[strata] == s_value)
+                    & (mt._freq_meta[add_strata] == as_value),
+                )
+                for strata in additional_strata_expr
+                for s_value in cut_data.get(strata, {})
+                for add_strata in additional_strata_grouping_expr
+                for as_value in cut_data.get(add_strata, {})
+            ]
+        )
+
+    freq_sample_count = mt.aggregate_cols(
+        [hl.agg.count_where(x[1]) for x in sample_group_filters]
+    )
+
+    logger.info(f"number of filters: {len(sample_group_filters)}")
+    # Annotate columns with group_membership
+    mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
+
+    # Create and annotate global expression with meta and sample count information
+    freq_meta_expr = [
+        dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
+    ]
+    freq_meta_expr.insert(1, {"group": "raw"})
+    freq_sample_count.insert(1, freq_sample_count[0])
+    mt = mt.annotate_globals(
+        freq_meta=freq_meta_expr,
+        freq_sample_count=freq_sample_count,
+    )
+
+    mt = mt.annotate_globals(
+        sample_group_filters_range_array=hl.range(len(sample_group_filters))
+    )
+
+    ht = mt.localize_entries('entries', 'cols')
+    ht = ht.annotate_globals(indices_by_category=
+                             hl.agg.aggregate_local_array(hl.range(hl.len(ht.cols)), lambda i: hl.agg.array_agg(
+                                 lambda j: hl.agg.filter(ht.cols[i].group_membership[j], hl.agg.collect(hl.int(i))),
+                                 ht.sample_group_filters_range_array)))
+
+    ht = ht.annotate(adj_array=ht.entries.map(lambda e: e.adj), gt_array=ht.entries.map(lambda e: e.GT))
+
+    def needs_high_ab_het_fix(entry, col):
+        return ((entry.AD[1] / entry.DP > ab_cutoff)
+                & entry.adj
+                & ~col.meta.project_meta.fixed_homalt_model
+                & ~entry._het_non_ref)  # Skip adjusting genotypes if sample originally had a het nonref genotype
+
+    ht = ht.annotate(
+        high_ab_hets_by_group_membership=ht.indices_by_category.map(lambda sample_indices:
+                                                                    hl.len(sample_indices.filter(
+                                                                        lambda i: ht.gt_array[i].is_het_ref() & needs_high_ab_het_fix(ht.entries[i], ht.cols[i])))))
+
+    tmp_path = hl.utils.new_temp_file('just_gt_adj', 'ht')
+    ht = ht.select('gt_array', 'adj_array', 'high_ab_hets_by_group_membership').checkpoint(tmp_path)
+
+    freq_expr = ht.indices_by_category.map(lambda sample_indices: hl.agg.aggregate_local_array(sample_indices, lambda
+        i: hl.agg.filter(ht.adj_array[i], hl.agg.call_stats(ht.gt_array[i], ht.alleles))))
+
+    freq_expr = (
+        freq_expr[:1]
+        .extend([hl.agg.aggregate_local_array(ht.gt_array, lambda gt: hl.agg.call_stats(gt, ht.alleles))])
+        .extend(freq_expr[1:])
+    )
+
+    # Select non-ref allele (assumes bi-allelic)
+    freq_expr = freq_expr.map(
+        lambda cs: cs.annotate(
+            AC=cs.AC[1],
+            AF=cs.AF[
+                1
+            ],  # TODO This is NA in case AC and AN are 0 -- should we set it to 0?
+            homozygote_count=cs.homozygote_count[1],
+        )
+    )
+
+    ht = ht.annotate(freq=freq_expr)
+    return ht.select('freq', 'high_ab_hets_by_group_membership')
+
+
 def annotate_freq(
     mt: hl.MatrixTable,
     sex_expr: Optional[hl.expr.StringExpression] = None,

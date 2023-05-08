@@ -1138,3 +1138,63 @@ def hemi_expr(
         # mt.GT[0] is alternate allele
         gt.is_haploid() & (sex_expr == male_str) & (gt[0] == 1),
     )
+
+
+def variant_report(
+    table_to_parse: hl.Table,
+    variant: str,
+    output_path: str,
+    template: str = "",
+    ref_input: str = "GRCh38",
+) -> None:
+    """
+    Thise code reads in
+    1) A reference table to parse containing the variant of interest and its VRS Annotations
+    2) A string of the Chr, Pos, Ref, and Alt of a Variant
+    3) A GA4GH-VRS JSON Template
+
+    and reports back a JSON containing the GA4GH-VRS Information of the variant
+
+    prints it and reports it to the desired location
+
+    """
+    import json
+
+    chr_in, pos_in, ref_in, alt_in = variant.split("-")
+    table_filtered = table_to_parse.filter(
+        table_to_parse.locus
+        == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=ref_input)
+    )
+    table_filtered = table_filtered.filter(table_filtered.alleles == [ref_in, alt_in])
+
+    if table_filtered.count() != 1:
+        raise ValueError(
+            "Error: can only work with one variant for this code, 0 or multiple"
+            " returned"
+        )
+
+    with open("gs://gnomad-vrs-io-finals/chromosome_seqID_dictionary.json", "r") as f:
+        chr_reread = json.load(f)
+
+    with open("gs://gnomad-vrs-io-finals/example_schema.json", "r") as f:
+        model_schema = json.load(f)
+
+    # update the model schema with: chromosome ID, sequence ID, start, end, and allele
+
+    variant_report = model_schema.replace("'", '"')  # formatting quirk to change ' to "
+    variant_report = json.loads(variant_report)  # loads it as a dictionary
+
+    variant_report["_id"] = table_filtered.info.vrs.VRS_Allele_IDs[1].collect()[0]
+    variant_report["location"]["sequence_id"] = chr_reread[chr_in]
+    variant_report["location"]["start"] = str(
+        table_filtered.info.vrs.VRS_Starts[1].collect()[0]
+    )
+    variant_report["location"]["end"] = str(
+        table_filtered.info.vrs.VRS_Ends[1].collect()[0]
+    )
+    variant_report["state"] = table_filtered.info.vrs.VRS_States[1].collect()[0]
+
+    logger.info(variant_report)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(variant_report, f, ensure_ascii=False, indent=4)

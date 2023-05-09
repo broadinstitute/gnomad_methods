@@ -1173,10 +1173,14 @@ def variant_report(
             " returned"
         )
 
-    with open("gs://gnomad-vrs-io-finals/chromosome_seqID_dictionary.json", "r") as f:
+    with hl.utils.hadoop_open(
+        "gs://gnomad-vrs-io-finals/chromosome_seqID_dictionary.json", "r"
+    ) as f:
         chr_reread = json.load(f)
 
-    with open("gs://gnomad-vrs-io-finals/example_schema.json", "r") as f:
+    with hl.utils.hadoop_open(
+        "gs://gnomad-vrs-io-finals/example_schema.json", "r"
+    ) as f:
         model_schema = json.load(f)
 
     # update the model schema with: chromosome ID, sequence ID, start, end, and allele
@@ -1186,15 +1190,15 @@ def variant_report(
 
     variant_report["_id"] = table_filtered.info.vrs.VRS_Allele_IDs[1].collect()[0]
     variant_report["location"]["sequence_id"] = chr_reread[chr_in]
-    variant_report["location"]["start"] = str(
+    variant_report["location"]["interval"]["start"] = str(
         table_filtered.info.vrs.VRS_Starts[1].collect()[0]
     )
-    variant_report["location"]["end"] = str(
+    variant_report["location"]["interval"]["end"] = str(
         table_filtered.info.vrs.VRS_Ends[1].collect()[0]
     )
     variant_report["state"] = table_filtered.info.vrs.VRS_States[1].collect()[0]
 
     logger.info(variant_report)
 
-    with open(output_path, "w", encoding="utf-8") as f:
+    with hl.utils.hadoop_open(output_path, "w") as f:
         json.dump(variant_report, f, ensure_ascii=False, indent=4)

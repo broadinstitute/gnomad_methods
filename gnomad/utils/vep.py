@@ -235,6 +235,10 @@ def vep_or_lookup_vep(
     if "vep_proc_id" in list(vep_ht.row):
         vep_ht = vep_ht.drop("vep_proc_id")
 
+    vep_ht = vep_ht.annotate_globals(
+        vep_version=f"v{vep_version}", vep_help=vep_help, vep_config=vep_config
+    )
+
     return vep_ht.union(revep_ht)
 
 

@@ -451,6 +451,7 @@ def default_compute_info(
     site_annotations: bool = False,
     n_partitions: int = 5000,
     lowqual_indel_phred_het_prior: int = 40,
+    ac_filter_groups: Optional[Dict[str, hl.Expression]] = None,
 ) -> hl.Table:
     """
     Compute a HT with the typical GATK allele-specific (AS) info fields as well as ACs and lowqual fields.
@@ -466,9 +467,15 @@ def default_compute_info(
         site with a low quality indel. Default is 40. We use 1/10k bases (phred=40) to
         be more consistent with the filtering used by Broad's Data Sciences Platform
         for VQSR.
+    :param ac_filter_groups: Optional dictionary of sample filter expressions to compute
+        additional groupings of ACs. Default is None.
     :return: Table with info fields
     :rtype: Table
     """
+    # Add a temporary annotation for allele count groupings.
+    ac_filter_groups = {"": True, **(ac_filter_groups or {})}
+    mt = mt.annotate_cols(_ac_filter_groups=ac_filter_groups)
+
     # Move gvcf info entries out from nested struct
     mt = mt.transmute_entries(**mt.gvcf_info)
 
@@ -483,33 +490,43 @@ def default_compute_info(
     info_expr = info_expr.annotate(
         AS_pab_max=pab_max_expr(mt.LGT, mt.LAD, mt.LA, hl.len(mt.alleles))
     )
-
     if site_annotations:
         info_expr = info_expr.annotate(**get_site_info_expr(mt))
 
-    # Add AC and AC_raw:
-    # First compute ACs for each non-ref allele, grouped by adj
-    grp_ac_expr = hl.agg.array_agg(
-        lambda ai: hl.agg.filter(
-            mt.LA.contains(ai),
-            hl.agg.group_by(
-                get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD),
-                hl.agg.sum(
-                    mt.LGT.one_hot_alleles(mt.LA.map(lambda x: hl.str(x)))[
-                        mt.LA.index(ai)
-                    ]
+    # Add 'AC' and 'AC_raw' for each allele count filter group requested.
+    # First compute ACs for each non-ref allele, grouped by adj.
+    grp_ac_expr = {
+        f: hl.agg.array_agg(
+            lambda ai: hl.agg.filter(
+                mt.LA.contains(ai) & mt._ac_filter_groups[f],
+                hl.agg.group_by(
+                    get_adj_expr(mt.LGT, mt.GQ, mt.DP, mt.LAD),
+                    hl.agg.sum(
+                        mt.LGT.one_hot_alleles(mt.LA.map(lambda x: hl.str(x)))[
+                            mt.LA.index(ai)
+                        ]
+                    ),
                 ),
             ),
-        ),
-        mt.alt_alleles_range_array,
-    )
+            mt.alt_alleles_range_array,
+        )
+        for f in ac_filter_groups
+    }
 
     # Then, for each non-ref allele, compute
-    # AC as the adj group
-    # AC_raw as the sum of adj and non-adj groups
+    # 'AC' as the adj group
+    # 'AC_raw' as the sum of adj and non-adj groups
     info_expr = info_expr.annotate(
-        AC_raw=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))),
-        AC=grp_ac_expr.map(lambda i: hl.int32(i.get(True, 0))),
+        **{
+            f"AC{'_'+f if f else f}_raw": grp.map(
+                lambda i: hl.int32(i.get(True, 0) + i.get(False, 0))
+            )
+            for f, grp in grp_ac_expr.items()
+        },
+        **{
+            f"AC{'_'+f if f else f}": grp.map(lambda i: hl.int32(i.get(True, 0)))
+            for f, grp in grp_ac_expr.items()
+        },
     )
 
     info_ht = mt.select_rows(info=info_expr).rows()

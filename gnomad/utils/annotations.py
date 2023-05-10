@@ -808,19 +808,18 @@ def annotate_allele_info(ht: hl.Table) -> hl.Table:
 
     .. note::
 
-        This function requires that the input `ht` is unsplit, and a split `ht` is
-        returned.
+        This function requires that the input `ht` is unsplit and returns a split `ht`.
 
     'allele_info' is a struct with the following information:
-        - variant_type - Variant type (snv, indel, multi-snv, multi-indel, or mixed).
-        - n_alt_alleles - Total number of alternate alleles observed at variant locus.
-        - has_star - True if the variant contains a star allele.
-        - allele_type - Allele type (snv, insertion, deletion, or mixed).
-        - was_mixed - True if the variant was mixed (i.e. contained both SNVs and indels).
-        - nonsplit_alleles - Array of alleles before splitting.
+        - variant_type: Variant type (snv, indel, multi-snv, multi-indel, or mixed).
+        - n_alt_alleles: Total number of alternate alleles observed at variant locus.
+        - has_star: True if the variant contains a star allele.
+        - allele_type: Allele type (snv, insertion, deletion, or mixed).
+        - was_mixed: True if the variant was mixed (i.e. contained both SNVs and indels).
+        - nonsplit_alleles: Array of alleles before splitting.
 
     :param Table ht: Unsplit input Table.
-    :return: Table with allele data annotation added,
+    :return: Split Table with allele data annotation added,
     """
     ht = ht.annotate(
         allele_info=hl.struct(

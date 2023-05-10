@@ -350,9 +350,11 @@ def annotate_freq(
     .. note::
 
         Currently this only supports bi-allelic sites.
+
         The input `mt` needs to have the following entry fields:
-        - GT: a CallExpression containing the genotype
-        - adj: a BooleanExpression containing whether the genotype is of high quality or not.
+          - GT: a CallExpression containing the genotype
+          - adj: a BooleanExpression containing whether the genotype is of high quality or not.
+
         All expressions arguments need to be expression on the input `mt`.
 
     .. rubric:: `freq` row annotation

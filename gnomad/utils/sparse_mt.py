@@ -27,6 +27,11 @@ INFO_INT32_SUM_AGG_FIELDS = ["VarDP"]
 INFO_MEDIAN_AGG_FIELDS = ["ReadPosRankSum", "MQRankSum"]
 INFO_ARRAY_SUM_AGG_FIELDS = ["SB", "RAW_MQandDP"]
 
+AS_INFO_SUM_AGG_FIELDS = ["AS_QUALapprox", "AS_RAW_MQ"]
+AS_INFO_INT32_SUM_AGG_FIELDS = ["AS_VarDP"]
+AS_INFO_MEDIAN_AGG_FIELDS = ["AS_RAW_ReadPosRankSum", "AS_RAW_MQRankSum"]
+AS_INFO_ARRAY_SUM_AGG_FIELDS = ["AS_SB_TABLE", "AS_RAW_MQ"]
+
 
 def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
     """
@@ -155,27 +160,34 @@ def _get_info_agg_expr(
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
     ] = INFO_ARRAY_SUM_AGG_FIELDS,
     prefix: str = "",
+    treat_fields_as_allele_specific: bool = False,
 ) -> Dict[str, hl.expr.Aggregation]:
     """
     Create Aggregators for both site or AS info expression aggregations.
 
     .. note::
 
-        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
-        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as
-          list of str, then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as
+          `AS_SB_TABLE`, according to GATK standard nomenclature.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for
+          the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation
+          and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`,
+          `median_agg_fields`) are passed as list of str, then they should correspond
+          to entry fields in `mt` or in mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in
+          case of a name clash.
 
     :param mt: Input MT
     :param sum_agg_fields: Fields to aggregate using sum.
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
     :param median_agg_fields: Fields to aggregate using (approximate) median.
-    :param median_agg_fields: Fields to aggregate using element-wise summing over an array.
+    :param median_agg_fields: Fields to aggregate using element-wise summing over an
+        array.
     :param prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
-
-    :return: Dictionary of expression names and their corresponding aggregation Expression
+    :return: Dictionary of expression names and their corresponding aggregation
+        Expression.
     """
 
     def _agg_list_to_dict(
@@ -194,6 +206,27 @@ def _get_info_agg_expr(
                 "Could not find the following field(s)in the MT entry schema (or nested"
                 " under mt.gvcf_info: {}".format(",".join(missing_fields))
             )
+
+        if treat_fields_as_allele_specific:
+            if "AS_QUALapprox" in out_fields:
+                expr = out_fields["AS_QUALapprox"]
+                if hl.len(expr) == 1 and hl.is_missing(expr[0]):
+                    out_fields["AS_QUALapprox"] = out_fields["AS_QUALapprox"] + [
+                        mt.gvcf_info["QUALapprox"]
+                    ]
+
+            for f in fields:
+                print(f, out_fields[f].dtype)
+            out_fields = {
+                f: hl.vds.local_to_global(
+                    out_fields[f],
+                    mt.LA,
+                    hl.len(mt.alleles),
+                    fill_value=hl.missing(out_fields[f].dtype),
+                    number="R",
+                )
+                for f in fields
+            }
 
         return out_fields
 
@@ -293,25 +326,32 @@ def get_as_info_expr(
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
     ] = INFO_ARRAY_SUM_AGG_FIELDS,
     alt_alleles_range_array_field: str = "alt_alleles_range_array",
+    treat_fields_as_allele_specific: bool = False,
 ) -> hl.expr.StructExpression:
     """
     Return an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
 
     .. note::
 
-        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as `AS_SB_TABLE`, according to GATK standard nomenclature.
-        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as list of str,
-          then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `SB` is specified in array_sum_agg_fields, it will be aggregated as
+          `AS_SB_TABLE`, according to GATK standard nomenclature.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for
+          the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation
+          and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`,
+          `median_agg_fields`) are passed as list of str, then they should correspond
+          to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in
+          case of a name clash.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
     :param median_agg_fields: Fields to aggregate using (approximate) median.
     :param array_sum_agg_fields: Fields to aggregate using array sum.
-    :param alt_alleles_range_array_field: Annotation containing an array of the range of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
+    :param alt_alleles_range_array_field: Annotation containing an array of the range
+        of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
     :return: Expression containing the AS info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -327,12 +367,9 @@ def get_as_info_expr(
         int32_sum_agg_fields=int32_sum_agg_fields,
         median_agg_fields=median_agg_fields,
         array_sum_agg_fields=array_sum_agg_fields,
-        prefix="AS_",
+        prefix="" if treat_fields_as_allele_specific else "AS_",
+        treat_fields_as_allele_specific=treat_fields_as_allele_specific,
     )
-
-    # Rename AS_SB to AS_SB_TABLE if present
-    if "AS_SB" in agg_expr:
-        agg_expr["AS_SB_TABLE"] = agg_expr.pop("AS_SB")
 
     if alt_alleles_range_array_field not in mt.row or mt[
         alt_alleles_range_array_field
@@ -344,29 +381,41 @@ def get_as_info_expr(
         logger.error(msg)
         raise ValueError(msg)
 
-    # Modify aggregations to aggregate per allele
-    agg_expr = {
-        f: hl.agg.array_agg(
-            lambda ai: hl.agg.filter(mt.LA.contains(ai), expr),
-            mt[alt_alleles_range_array_field],
-        )
-        for f, expr in agg_expr.items()
-    }
+    if treat_fields_as_allele_specific:
+        agg_expr = {
+            f: hl.agg.array_agg(
+                lambda ai: hl.agg.filter(mt.LA.contains(ai), expr),
+                mt[alt_alleles_range_array_field],
+            )
+            for f, expr in agg_expr.items()
+        }
+    else:
+        # Modify aggregations to aggregate per allele
+        agg_expr = {
+            f: hl.agg.array_agg(
+                lambda ai: hl.agg.filter(mt.LA.contains(ai), expr),
+                mt[alt_alleles_range_array_field],
+            )
+            for f, expr in agg_expr.items()
+        }
 
     # Run aggregations
     info = hl.struct(**agg_expr)
 
-    # Add SB Ax2 aggregation logic and FS if SB is present
-    if "AS_SB_TABLE" in info:
-        as_sb_table = hl.array(
-            [
-                info.AS_SB_TABLE.filter(lambda x: hl.is_defined(x)).fold(
-                    lambda i, j: i[:2] + j[:2], [0, 0]
-                )  # ref
-            ]
-        ).extend(
-            info.AS_SB_TABLE.map(lambda x: x[2:])  # each alt
-        )
+    # Add FS and SOR if SB is present.
+    if "AS_SB_TABLE" in info or "AS_SB" in info:
+        # Rename AS_SB to AS_SB_TABLE if present and add SB Ax2 aggregation logic.
+        if "AS_SB" in agg_expr:
+            agg_expr["AS_SB_TABLE"] = agg_expr.pop("AS_SB")
+            as_sb_table = hl.array(
+                [
+                    info.AS_SB_TABLE.filter(lambda x: hl.is_defined(x)).fold(
+                        lambda i, j: i[:2] + j[:2], [0, 0]
+                    )  # ref
+                ]
+            ).extend(
+                info.AS_SB_TABLE.map(lambda x: x[2:])  # each alt
+            )
         info = info.annotate(
             AS_SB_TABLE=as_sb_table,
             AS_FS=hl.range(1, hl.len(mt.alleles)).map(
@@ -400,11 +449,15 @@ def get_site_info_expr(
 
     .. note::
 
-        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation and then dropped according to GATK recommendation.
-        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`, `median_agg_fields`) are passed as
-          list of str, then they should correspond to entry fields in `mt` or in `mt.gvcf_info`.
-        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in case of a name clash.
+        - If `RAW_MQandDP` is specified in array_sum_agg_fields, it will be used for
+          the `MQ` calculation and then dropped according to GATK recommendation.
+        - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation
+          and then dropped according to GATK recommendation.
+        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`,
+          `median_agg_fields`) are passed as list of str, then they should correspond
+          to entry fields in `mt` or in `mt.gvcf_info`.
+        - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in
+          case of a name clash.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.

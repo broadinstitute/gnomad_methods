@@ -1148,29 +1148,19 @@ def variant_report(
     ref_input: str = "GRCh38",
 ) -> None:
     """
-    Thise code reads in
-    1) A reference table to parse containing the variant of interest and its VRS Annotations
-    2) A string of the Chr, Pos, Ref, and Alt of a Variant
-    3) A GA4GH-VRS JSON Template
-
-    and reports back a JSON containing the GA4GH-VRS Information of the variant
-
-    prints it and reports it to the desired location
+Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
 
     """
     import json
 
     chr_in, pos_in, ref_in, alt_in = variant.split("-")
-    table_filtered = table_to_parse.filter(
-        table_to_parse.locus
-        == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=ref_input)
-    )
-    table_filtered = table_filtered.filter(table_filtered.alleles == [ref_in, alt_in])
+ht = ht.filter((ht.locus== hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build)) & (ht.alleles == [ref_in, alt_in]))
+
 
     if table_filtered.count() != 1:
         raise ValueError(
             "Error: can only work with one variant for this code, 0 or multiple"
-            " returned"
+            " returned."
         )
 
     with hl.utils.hadoop_open(

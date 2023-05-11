@@ -1,12 +1,13 @@
 # noqa: D100
 
+import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
-import json
 
 import hail as hl
 
 from gnomad.utils.gen_stats import to_phred
+from gnomad.utils.filtering import get_reference_genome
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -1168,20 +1169,17 @@ def hemi_expr(
     )
 
 
-def get_variant_json(
+def get_vrs_json(
     ht: hl.Table,
     variant: str,
-    output_path: str,
-    template: str = "",
-    ref_input: str = "GRCh38",
-) -> None:
+) -> str:
     """
     Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
 
     """
 
     chr_in, pos_in, ref_in, alt_in = variant.split("-")
-    # build_in = gnomad.utils.filtering.get_reference_genome(ht.locus).name
+    build_in = get_reference_genome(ht.locus).name
     ht = ht.filter(
         (
             ht.locus
@@ -1196,40 +1194,32 @@ def get_variant_json(
             " returned."
         )
 
-    variant_report = {
-        "_id": "Insert VRS_Allele_IDs",
+    vrs_dict = {
+        "_id": f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}",
         "type": "Allele",
         "location": {
             "type": "SequenceLocation",
-            "sequence_id": "Insert ID from VRS_Chrom_IDs",
+            "sequence_id": f"{VRS_CHROM_IDS[chr_in]}",
             "interval": {
                 "type": "SequenceInterval",
                 "start": {
                     "type": "Number",
-                    "value": "Insert Integer start location from VRS_Starts[1]",
+                    "value": f"{str(ht.info.vrs.VRS_Starts[1].collect()[0])}",
                 },
                 "end": {
                     "type": "Number",
-                    "value": "Insert Integer end location from VRS_Ends[1]",
+                    "value": f"{str(ht.info.vrs.VRS_Ends[1].collect()[0])}",
                 },
             },
         },
         "state": {
             "type": "LiteralSequenceExpression",
-            "sequence": "Insert string state from VRS_States[1]",
+            "sequence": f"{ht.info.vrs.VRS_States[1].collect()[0]}",
         },
     }
 
-    variant_report["_id"] = ht.info.vrs.VRS_Allele_IDs[1].collect()[0]
-    variant_report["location"]["sequence_id"] = VRS_CHROM_IDS[chr_in]
-    variant_report["location"]["interval"]["start"]["value"] = str(
-        ht.info.vrs.VRS_Starts[1].collect()[0]
-    )
-    variant_report["location"]["interval"]["end"]["value"] = str(
-        ht.info.vrs.VRS_Ends[1].collect()[0]
-    )
-    variant_report["state"]["sequence"] = ht.info.vrs.VRS_States[1].collect()[0]
+    logger.info(vrs_dict)
 
-    logger.info(variant_report)
+    vrs_json = json.dumps(vrs_dict)
 
-    return variant_report
+    return vrs_json

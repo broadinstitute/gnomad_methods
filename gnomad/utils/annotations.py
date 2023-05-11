@@ -2,6 +2,7 @@
 
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+import json
 
 import hail as hl
 
@@ -30,6 +31,33 @@ ANNOTATIONS_HISTS = {
     "AS_VQSLOD": (-30, 30, 60),
     "rf_tp_probability": (0, 1, 50),
     "pab_max": (0, 1, 50),
+}
+
+VRS_CHROM_IDS = {
+    "chr1": "ga4gh:SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
+    "chr2": "ga4gh:SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
+    "chr3": "ga4gh:SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
+    "chr4": "ga4gh:SQ.HxuclGHh0XCDuF8x6yQrpHUBL7ZntAHc",
+    "chr5": "ga4gh:SQ.aUiQCzCPZ2d0csHbMSbh2NzInhonSXwI",
+    "chr6": "ga4gh:SQ.0iKlIQk2oZLoeOG9P1riRU6hvL5Ux8TV",
+    "chr7": "ga4gh:SQ.F-LrLMe1SRpfUZHkQmvkVKFEGaoDeHul",
+    "chr8": "ga4gh:SQ.209Z7zJ-mFypBEWLk4rNC6S_OxY5p7bs",
+    "chr9": "ga4gh:SQ.KEO-4XBcm1cxeo_DIQ8_ofqGUkp4iZhI",
+    "chr10": "ga4gh:SQ.ss8r_wB0-b9r44TQTMmVTI92884QvBiB",
+    "chr11": "ga4gh:SQ.2NkFm8HK88MqeNkCgj78KidCAXgnsfV1",
+    "chr12": "ga4gh:SQ.6wlJpONE3oNb4D69ULmEXhqyDZ4vwNfl",
+    "chr13": "ga4gh:SQ._0wi-qoDrvram155UmcSC-zA5ZK4fpLT",
+    "chr14": "ga4gh:SQ.eK4D2MosgK_ivBkgi6FVPg5UXs1bYESm",
+    "chr15": "ga4gh:SQ.AsXvWL1-2i5U_buw6_niVIxD6zTbAuS6",
+    "chr16": "ga4gh:SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0",
+    "chr17": "ga4gh:SQ.dLZ15tNO1Ur0IcGjwc3Sdi_0A6Yf4zm7",
+    "chr18": "ga4gh:SQ.vWwFhJ5lQDMhh-czg06YtlWqu0lvFAZV",
+    "chr19": "ga4gh:SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl",
+    "chr20": "ga4gh:SQ.-A1QmD_MatoqxvgVxBLZTONHz9-c7nQo",
+    "chr21": "ga4gh:SQ.5ZUqxCmDDgN4xTRbaSjN8LwgZironmB8",
+    "chr22": "ga4gh:SQ.7B7SHsmchAR0dFcDCuSFjJAo7tX87krQ",
+    "chrX": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
+    "chrY": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
 }
 
 
@@ -1140,55 +1168,68 @@ def hemi_expr(
     )
 
 
-def variant_report(
-    table_to_parse: hl.Table,
+def get_variant_json(
+    ht: hl.Table,
     variant: str,
     output_path: str,
     template: str = "",
     ref_input: str = "GRCh38",
 ) -> None:
     """
-Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
+    Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
 
     """
-    import json
 
     chr_in, pos_in, ref_in, alt_in = variant.split("-")
-ht = ht.filter((ht.locus== hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build)) & (ht.alleles == [ref_in, alt_in]))
+    # build_in = gnomad.utils.filtering.get_reference_genome(ht.locus).name
+    ht = ht.filter(
+        (
+            ht.locus
+            == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+        )
+        & (ht.alleles == [ref_in, alt_in])
+    )
 
-
-    if table_filtered.count() != 1:
+    if ht.count() != 1:
         raise ValueError(
             "Error: can only work with one variant for this code, 0 or multiple"
             " returned."
         )
 
-    with hl.utils.hadoop_open(
-        "gs://gnomad-vrs-io-finals/chromosome_seqID_dictionary.json", "r"
-    ) as f:
-        chr_reread = json.load(f)
+    variant_report = {
+        "_id": "Insert VRS_Allele_IDs",
+        "type": "Allele",
+        "location": {
+            "type": "SequenceLocation",
+            "sequence_id": "Insert ID from VRS_Chrom_IDs",
+            "interval": {
+                "type": "SequenceInterval",
+                "start": {
+                    "type": "Number",
+                    "value": "Insert Integer start location from VRS_Starts[1]",
+                },
+                "end": {
+                    "type": "Number",
+                    "value": "Insert Integer end location from VRS_Ends[1]",
+                },
+            },
+        },
+        "state": {
+            "type": "LiteralSequenceExpression",
+            "sequence": "Insert string state from VRS_States[1]",
+        },
+    }
 
-    with hl.utils.hadoop_open(
-        "gs://gnomad-vrs-io-finals/example_schema.json", "r"
-    ) as f:
-        model_schema = json.load(f)
-
-    # update the model schema with: chromosome ID, sequence ID, start, end, and allele
-
-    variant_report = model_schema.replace("'", '"')  # formatting quirk to change ' to "
-    variant_report = json.loads(variant_report)  # loads it as a dictionary
-
-    variant_report["_id"] = table_filtered.info.vrs.VRS_Allele_IDs[1].collect()[0]
-    variant_report["location"]["sequence_id"] = chr_reread[chr_in]
-    variant_report["location"]["interval"]["start"] = str(
-        table_filtered.info.vrs.VRS_Starts[1].collect()[0]
+    variant_report["_id"] = ht.info.vrs.VRS_Allele_IDs[1].collect()[0]
+    variant_report["location"]["sequence_id"] = VRS_CHROM_IDS[chr_in]
+    variant_report["location"]["interval"]["start"]["value"] = str(
+        ht.info.vrs.VRS_Starts[1].collect()[0]
     )
-    variant_report["location"]["interval"]["end"] = str(
-        table_filtered.info.vrs.VRS_Ends[1].collect()[0]
+    variant_report["location"]["interval"]["end"]["value"] = str(
+        ht.info.vrs.VRS_Ends[1].collect()[0]
     )
-    variant_report["state"] = table_filtered.info.vrs.VRS_States[1].collect()[0]
+    variant_report["state"]["sequence"] = ht.info.vrs.VRS_States[1].collect()[0]
 
     logger.info(variant_report)
 
-    with hl.utils.hadoop_open(output_path, "w") as f:
-        json.dump(variant_report, f, ensure_ascii=False, indent=4)
+    return variant_report

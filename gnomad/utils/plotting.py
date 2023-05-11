@@ -19,9 +19,10 @@ from bokeh.models import (
     Grid,
     HoverTool,
     Legend,
+    TabPanel,
+    Tabs,
     Title,
 )
-from bokeh.models.widgets import Panel, Tabs
 from bokeh.palettes import Spectral8, d3, viridis  # pylint: disable=no-name-in-module
 from bokeh.plotting import figure
 from bokeh.transform import factor_cmap
@@ -113,7 +114,7 @@ def plot_hail_hist(
     line_color: str = "#033649",
     hover_mode: str = "mouse",
     hide_zeros: bool = False,
-) -> bokeh.plotting.Figure:
+) -> bokeh.plotting.figure:
     """
     Plot histogram from Hail hist aggregation.
 
@@ -152,7 +153,7 @@ def plot_multi_hail_hist(
     hover_mode: str = "mouse",
     hide_zeros: bool = False,
     alpha: float = None,
-) -> bokeh.plotting.Figure:
+) -> bokeh.plotting.figure:
     """
     Plot multiple histograms on the same plot.
 
@@ -273,7 +274,7 @@ def plot_hail_hist_cumulative(
     line_width: int = 3,
     log: bool = False,
     hover_mode: str = "mouse",
-) -> bokeh.plotting.Figure:
+) -> bokeh.plotting.figure:
     """
     Plot cumulative histogram from Hail hist aggregation.
 
@@ -319,7 +320,7 @@ def plot_hail_hist_both(
         hist_data, f"{title} (Cumulative)", normalize, log=log
     )
     return Tabs(
-        tabs=[Panel(child=p1, title="Raw"), Panel(child=p2, title="Cumulative")]
+        tabs=[TabPanel(child=p1, title="Raw"), TabPanel(child=p2, title="Cumulative")]
     )
 
 
@@ -339,7 +340,7 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:  # noqa: D103
     panels = []
     for axis_type in ["linear", "log"]:
         fig = plot_func(**kwargs, axis_type=axis_type)
-        panel = Panel(child=fig, title=axis_type)
+        panel = TabPanel(child=fig, title=axis_type)
         panels.append(panel)
 
     return Tabs(tabs=panels)
@@ -347,7 +348,7 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:  # noqa: D103
 
 def plot_hail_file_metadata(
     t_path: str,
-) -> Optional[Union[Grid, Tabs, bokeh.plotting.Figure]]:
+) -> Optional[Union[Grid, Tabs, bokeh.plotting.figure]]:
     """
     Take path to hail Table or MatrixTable (gs://bucket/path/hail.mt), output Grid or Tabs, respectively.
 
@@ -581,8 +582,8 @@ def plot_hail_file_metadata(
 
         return Tabs(
             tabs=[
-                Panel(child=entries_grid, title="Entries"),
-                Panel(child=rows_grid, title="Rows"),
+                TabPanel(child=entries_grid, title="Entries"),
+                TabPanel(child=rows_grid, title="Rows"),
             ]
         )
     else:

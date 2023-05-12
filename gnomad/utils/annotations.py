@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.gen_stats import to_phred
 from gnomad.utils.filtering import get_reference_genome
+from gnomad.utils.gen_stats import to_phred
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -34,7 +34,7 @@ ANNOTATIONS_HISTS = {
     "pab_max": (0, 1, 50),
 }
 
-VRS_CHROM_IDS = {
+VRS_CHROM_GRCH38_IDS = {
     "chr1": "ga4gh:SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
     "chr2": "ga4gh:SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
     "chr3": "ga4gh:SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
@@ -1169,12 +1169,25 @@ def hemi_expr(
     )
 
 
-def get_vrs_json(
+def get_gks(
     ht: hl.Table,
     variant: str,
-) -> str:
+    population: bool = False,
+) -> dict:
     """
     Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
+
+    Example Code:
+    > from gnomad_methods.utils.annotation import get_gks
+    > from gnomad_qc.v4.resources.release import release_sites
+    >
+    > ht = release_sites(public=True).ht()
+    > variant_dict_return = get_gks(ht, 'chr5-38258681-C-T', population=False)
+
+    :param ht: Hail Table to parse for desired variant
+    :param variant: String of variant to search for in the following format: "chr5-38258681-C-T"
+    :param population: If True, include population information in output dictionary. Default: False
+    :return: Dictionary containing VRS information (and population if desired) for passed variant
 
     """
 
@@ -1194,32 +1207,50 @@ def get_vrs_json(
             " returned."
         )
 
+    if build_in == "GRCh38":
+        chrom_dict = VRS_CHROM_GRCH38_IDS
+    else:
+        pass
+
+    vrs_id = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
+    vrs_chrom_id = f"{chrom_dict[chr_in]}"
+    vrs_start_value = f"{str(ht.info.vrs.VRS_Starts[1].collect()[0])}"
+    vrs_end_value = f"{str(ht.info.vrs.VRS_Ends[1].collect()[0])}"
+    vrs_state_sequence = f"{ht.info.vrs.VRS_States[1].collect()[0]}"
+
     vrs_dict = {
-        "_id": f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}",
+        "_id": vrs_id,
         "type": "Allele",
         "location": {
             "type": "SequenceLocation",
-            "sequence_id": f"{VRS_CHROM_IDS[chr_in]}",
+            "sequence_id": vrs_chrom_id,
             "interval": {
                 "type": "SequenceInterval",
                 "start": {
                     "type": "Number",
-                    "value": f"{str(ht.info.vrs.VRS_Starts[1].collect()[0])}",
+                    "value": vrs_start_value,
                 },
                 "end": {
                     "type": "Number",
-                    "value": f"{str(ht.info.vrs.VRS_Ends[1].collect()[0])}",
+                    "value": vrs_end_value,
                 },
             },
         },
         "state": {
             "type": "LiteralSequenceExpression",
-            "sequence": f"{ht.info.vrs.VRS_States[1].collect()[0]}",
+            "sequence": vrs_state_sequence,
         },
     }
 
     logger.info(vrs_dict)
 
-    vrs_json = json.dumps(vrs_dict)
+    if population == True:
+        population_dict = {}
+        vrs_dict = vrs_dict.update(population_dict)
 
-    return vrs_json
+    try:
+        vrs_json = json.dumps(vrs_dict)
+    except:
+        raise SyntaxError("The dictionary did not convert to a valid JSON")
+
+    return vrs_dict

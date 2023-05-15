@@ -1169,6 +1169,50 @@ def hemi_expr(
     )
 
 
+def generate_pop_json(
+    ht: hl.Table,
+    id_str: str,
+    pop_str: str,
+    index_int: int,
+    full_name_dict: dict,
+    vrs_variant_id: str = None,
+    subpop_str: str = None,
+) -> dict:
+    pop_id = f"{id_str}.{pop_str}"
+    label_str = f"{full_name_dict[pop_str]}"
+
+    if subpop_str:
+        pop_id = f"{pop_id}.{subpop_str}"
+        label_str = f"{label_str} {subpop_str}"
+
+    if vrs_variant_id is None:
+        vrs_id_for_pop = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
+    else:
+        vrs_id_for_pop = f"{vrs_variant_id}"
+
+    variant_freq = ht.freq[index_int]
+
+    subpop_record = {
+        "subpopulationFrequency": [
+            {
+                "id": pop_id,
+                "type": "PopulationAlleleFrequency",
+                "label": f"{label_str} Population Allele Frequency for ID",
+                "focusAllele": vrs_id_for_pop,
+                "focusAlleleCount": variant_freq["AC"].collect()[0],
+                "locusAlleleCount": variant_freq["AN"].collect()[0],
+                "alleleFrequency": variant_freq["AF"].collect()[0],
+                "population": f"gnomad3:{pop_id}",
+                "ancillaryResults": {
+                    "homozygotes": variant_freq["homozygote_count"].collect()[0]
+                },
+            }
+        ]
+    }
+
+    return subpop_record
+
+
 def get_gks(
     ht: hl.Table,
     variant: str,
@@ -1245,8 +1289,56 @@ def get_gks(
     logger.info(vrs_dict)
 
     if population == True:
-        population_dict = {}
-        vrs_dict = vrs_dict.update(population_dict)
+        # Assemble a list of sub-pops we would like to include - these and their XX and XY Subpops
+        short = ["afr", "ami", "amr", "asj", "eas", "fin", "mid", "nfe", "oth", "sas"]
+        full_names = {
+            "afr": "African/African American",
+            "ami": "Amish",
+            "amr": "Latino/Admixed American",
+            "asj": "Ashkenazi Jewish",
+            "eas": "East Asian",
+            "fin": "European (Finnish)",
+            "mid": "Middle Eastern",
+            "nfe": "European (non-Finnish)",
+            "oth": "Other",
+            "sas": "South Asian",
+        }
+        relevant_keys = []
+        for abrev in short:
+            relevant_keys.append(f"{abrev}-adj")
+            relevant_keys.append(f"{abrev}-XX-adj")
+            relevant_keys.append(f"{abrev}-XY-adj")
+
+        # Retrieve indices for these pops via ht.freq_index_dict
+        relevant_dict = {}
+        for key, value in ht.freq_index_dict.collect()[0].items():
+            if key in relevant_keys:
+                relevant_dict[key] = value
+
+        list_of_pop_jsons = []
+
+        # Generate pop JSON for each pop and add it to a list of population JSONs
+        for incoming, index_here in relevant_dict.items():
+            pop_split = incoming.split("-")[:-1][0]
+            try:
+                sub_split = incoming.split("-")[:-1][1]
+            except:
+                sub_split = None
+
+            ret_pop_json = generate_pop_json(
+                ht,
+                variant,
+                pop_split,
+                index_here,
+                full_name_dict=full_names,
+                vrs_variant_id=vrs_id,
+                subpop_str=sub_split,
+            )
+
+            list_of_pop_jsons.append(ret_pop_json)
+
+        # Add list of population JSONS to the dictionary to return
+        vrs_dict["subpopulationFrequency"] = list_of_pop_jsons
 
     try:
         vrs_json = json.dumps(vrs_dict)

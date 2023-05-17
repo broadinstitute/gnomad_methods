@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
+from gnomad.resources.grch38.gnomad import coverage
 from gnomad.utils.filtering import get_reference_genome
 from gnomad.utils.gen_stats import to_phred
 from gnomad.sample_qc.ancestry import POP_NAMES
@@ -1375,6 +1376,14 @@ def get_gnomad_gks(
     # Overall frequency, via label 'adj' which is currently stored at position #1
     overall_freq = ht.freq[0]
 
+    # Read coverage statistics
+    coverage_table = hl.read_table(coverage("genomes").path)
+    coverage_table = coverage_table.filter(
+        coverage_table.locus
+        == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+    )
+    coverage_stat = coverage_table.mean.collect()[0]
+
     # Final dictionary to be returned
     ret_final = {
         "id": f"gnomad3:{variant}",
@@ -1398,7 +1407,7 @@ def get_gnomad_gks(
                 "popFreqID": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
             },
             "homozygotes": ht.popmax.homozygote_count.collect()[0],
-            "meanDepth": "to be incorporated",
+            "meanDepth": coverage_stat,
         },
         "subpopulationFrequency": list_of_ancestry_dicts,
     }

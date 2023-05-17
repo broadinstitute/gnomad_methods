@@ -103,7 +103,9 @@ def make_freq_index_dict(
                 # Note: Tack the new strata onto the end of the sort order so the labels
                 # can be made
                 if k not in sort_order:
-                    sort_order.append(k)
+                    sort_order.append(
+                        k
+                    )  # TODO: Should we add the additional strata before group, aka adj? sort_order.insert(-1,k)
             index_dict.update({**_get_index(dict(group=groups, **strata))})
 
     return index_dict

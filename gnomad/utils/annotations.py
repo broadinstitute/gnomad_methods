@@ -1228,10 +1228,10 @@ def get_gks(
     > ht = release_sites(public=True).ht()
     > variant_dict_return = get_gks(ht, 'chr5-38258681-C-T', population=False)
 
-    :param ht: Hail Table to parse for desired variant
-    :param variant: String of variant to search for in the following format: "chr5-38258681-C-T"
+    :param ht: Hail Table to parse for desired variant.
+    :param variant: String of variant to search for(chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param population: If True, include population information in output dictionary. Default: False
-    :return: Dictionary containing VRS information (and population if desired) for passed variant
+    :return: Dictionary containing VRS information (and population if desired) for specified variant.
 
     """
 

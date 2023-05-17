@@ -1,5 +1,5 @@
 # noqa: D100
-
+import copy
 from typing import Dict, List, Optional
 
 from gnomad.resources.grch38.gnomad import (
@@ -9,7 +9,7 @@ from gnomad.resources.grch38.gnomad import (
     SEXES,
     SUBSETS,
 )
-from gnomad.utils.vcf import index_globals
+from gnomad.utils.vcf import SORT_ORDER, index_globals
 
 
 def make_faf_index_dict(
@@ -52,6 +52,8 @@ def make_freq_index_dict(
     subsets: List[str] = SUBSETS[CURRENT_MAJOR_RELEASE],
     downsamplings: Optional[List[int]] = None,
     label_delimiter: str = "_",
+    sort_order: List[str] = SORT_ORDER,
+    additional_strata: Optional[List[Dict[str, List[str]]]] = None,
 ) -> Dict[str, int]:
     """
     Create a look-up Dictionary for entries contained in the frequency annotation array.
@@ -68,12 +70,16 @@ def make_freq_index_dict(
     :param subsets: List of sample subsets in dataset. Default is SUBSETS[CURRENT_MAJOR_RELEASE]
     :param downsamplings: List of downsampling cohort sizes present in global frequency array
     :param label_delimiter: String used as delimiter when making group label combinations
+    :param sort_order: List of strings specifying the order to sort subgroupings in frequency dictionary.
+    :param additional_strata: Optional List of additional strata as dictionaries to include in the index dictionary.
+        Key is strata, value is list of strata values.
     :return: Dictionary keyed by the grouping combinations found in the frequency array, where values are the corresponding
         0-based indices for the groupings in the freq_meta array
     """
+    sort_order = copy.deepcopy(sort_order)
 
     def _get_index(label_groups):
-        return index_globals(freq_meta, label_groups, label_delimiter)
+        return index_globals(freq_meta, label_groups, label_delimiter, sort_order)
 
     index_dict = {
         **_get_index(dict(group=groups)),
@@ -90,5 +96,14 @@ def make_freq_index_dict(
         index_dict.update(
             {**_get_index(dict(downsampling=downsamplings, group=["adj"], pop=pops))}
         )
+
+    if additional_strata:
+        for strata in additional_strata:
+            for k, v in strata.items():
+                # Note: Tack the new strata onto the end of the sort order so the labels
+                # can be made
+                if k not in sort_order:
+                    sort_order.append(k)
+            index_dict.update({**_get_index(dict(group=groups, **strata))})
 
     return index_dict

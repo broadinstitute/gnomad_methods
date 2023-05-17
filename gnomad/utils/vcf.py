@@ -446,8 +446,8 @@ def adjust_vcf_incompatible_types(
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                "Coercing field info.%s from int64 to int32 for VCF output. Value will"
-                " be capped at int32 max value.",
+                "Coercing field info.%s from int64 to int32 for VCF output. Value"
+                " will be capped at int32 max value.",
                 f,
             )
             info_type_convert_expr.update(
@@ -517,7 +517,7 @@ def make_label_combos(
     combos = []
     for x, y in itertools.product(
         anchor_val,
-        make_label_combos(copy_label_groups, label_delimiter=label_delimiter),
+        make_label_combos(copy_label_groups, sort_order, label_delimiter),
     ):
         combos.append(f"{x}{label_delimiter}{y}")
     return combos
@@ -527,6 +527,7 @@ def index_globals(
     globals_array: List[Dict[str, str]],
     label_groups: Dict[str, List[str]],
     label_delimiter: str = "_",
+    sort_order: List[str] = SORT_ORDER,
 ) -> Dict[str, int]:
     """
     Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry in the meta_array annotation.
@@ -536,10 +537,11 @@ def index_globals(
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
     :param label_delimiter: String used as delimiter when making group label combinations.
+    :param sort_order: List of strings specifying the order to sort subgroupings in labels.
     :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index
         of each grouping entry in the globals
     """
-    combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
+    combos = make_label_combos(label_groups, sort_order, label_delimiter)
     index_dict = {}
 
     for combo in combos:

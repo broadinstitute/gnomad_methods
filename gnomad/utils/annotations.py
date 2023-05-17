@@ -8,6 +8,7 @@ import hail as hl
 
 from gnomad.utils.filtering import get_reference_genome
 from gnomad.utils.gen_stats import to_phred
+from gnomad.sample_qc.ancestry import POP_NAMES
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -34,31 +35,34 @@ ANNOTATIONS_HISTS = {
     "pab_max": (0, 1, 50),
 }
 
-VRS_CHROM_GRCH38_IDS = {
-    "chr1": "ga4gh:SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
-    "chr2": "ga4gh:SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
-    "chr3": "ga4gh:SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
-    "chr4": "ga4gh:SQ.HxuclGHh0XCDuF8x6yQrpHUBL7ZntAHc",
-    "chr5": "ga4gh:SQ.aUiQCzCPZ2d0csHbMSbh2NzInhonSXwI",
-    "chr6": "ga4gh:SQ.0iKlIQk2oZLoeOG9P1riRU6hvL5Ux8TV",
-    "chr7": "ga4gh:SQ.F-LrLMe1SRpfUZHkQmvkVKFEGaoDeHul",
-    "chr8": "ga4gh:SQ.209Z7zJ-mFypBEWLk4rNC6S_OxY5p7bs",
-    "chr9": "ga4gh:SQ.KEO-4XBcm1cxeo_DIQ8_ofqGUkp4iZhI",
-    "chr10": "ga4gh:SQ.ss8r_wB0-b9r44TQTMmVTI92884QvBiB",
-    "chr11": "ga4gh:SQ.2NkFm8HK88MqeNkCgj78KidCAXgnsfV1",
-    "chr12": "ga4gh:SQ.6wlJpONE3oNb4D69ULmEXhqyDZ4vwNfl",
-    "chr13": "ga4gh:SQ._0wi-qoDrvram155UmcSC-zA5ZK4fpLT",
-    "chr14": "ga4gh:SQ.eK4D2MosgK_ivBkgi6FVPg5UXs1bYESm",
-    "chr15": "ga4gh:SQ.AsXvWL1-2i5U_buw6_niVIxD6zTbAuS6",
-    "chr16": "ga4gh:SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0",
-    "chr17": "ga4gh:SQ.dLZ15tNO1Ur0IcGjwc3Sdi_0A6Yf4zm7",
-    "chr18": "ga4gh:SQ.vWwFhJ5lQDMhh-czg06YtlWqu0lvFAZV",
-    "chr19": "ga4gh:SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl",
-    "chr20": "ga4gh:SQ.-A1QmD_MatoqxvgVxBLZTONHz9-c7nQo",
-    "chr21": "ga4gh:SQ.5ZUqxCmDDgN4xTRbaSjN8LwgZironmB8",
-    "chr22": "ga4gh:SQ.7B7SHsmchAR0dFcDCuSFjJAo7tX87krQ",
-    "chrX": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
-    "chrY": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
+VRS_CHROM_IDS = {
+    "GRCh38": {
+        "chr1": "ga4gh:SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
+        "chr2": "ga4gh:SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
+        "chr3": "ga4gh:SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
+        "chr4": "ga4gh:SQ.HxuclGHh0XCDuF8x6yQrpHUBL7ZntAHc",
+        "chr5": "ga4gh:SQ.aUiQCzCPZ2d0csHbMSbh2NzInhonSXwI",
+        "chr6": "ga4gh:SQ.0iKlIQk2oZLoeOG9P1riRU6hvL5Ux8TV",
+        "chr7": "ga4gh:SQ.F-LrLMe1SRpfUZHkQmvkVKFEGaoDeHul",
+        "chr8": "ga4gh:SQ.209Z7zJ-mFypBEWLk4rNC6S_OxY5p7bs",
+        "chr9": "ga4gh:SQ.KEO-4XBcm1cxeo_DIQ8_ofqGUkp4iZhI",
+        "chr10": "ga4gh:SQ.ss8r_wB0-b9r44TQTMmVTI92884QvBiB",
+        "chr11": "ga4gh:SQ.2NkFm8HK88MqeNkCgj78KidCAXgnsfV1",
+        "chr12": "ga4gh:SQ.6wlJpONE3oNb4D69ULmEXhqyDZ4vwNfl",
+        "chr13": "ga4gh:SQ._0wi-qoDrvram155UmcSC-zA5ZK4fpLT",
+        "chr14": "ga4gh:SQ.eK4D2MosgK_ivBkgi6FVPg5UXs1bYESm",
+        "chr15": "ga4gh:SQ.AsXvWL1-2i5U_buw6_niVIxD6zTbAuS6",
+        "chr16": "ga4gh:SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0",
+        "chr17": "ga4gh:SQ.dLZ15tNO1Ur0IcGjwc3Sdi_0A6Yf4zm7",
+        "chr18": "ga4gh:SQ.vWwFhJ5lQDMhh-czg06YtlWqu0lvFAZV",
+        "chr19": "ga4gh:SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl",
+        "chr20": "ga4gh:SQ.-A1QmD_MatoqxvgVxBLZTONHz9-c7nQo",
+        "chr21": "ga4gh:SQ.5ZUqxCmDDgN4xTRbaSjN8LwgZironmB8",
+        "chr22": "ga4gh:SQ.7B7SHsmchAR0dFcDCuSFjJAo7tX87krQ",
+        "chrX": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
+        "chrY": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
+    },
+    "CRCh37": {"chromosome": "ID"},
 }
 
 
@@ -1213,10 +1217,11 @@ def generate_pop_json(
     return subpop_record
 
 
-def get_gks(
+def get_gnomad_gks(
     ht: hl.Table,
     variant: str,
-    population: bool = False,
+    ancestry_groups: list = None,
+    by_sex: bool = True,
 ) -> dict:
     """
     Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
@@ -1230,7 +1235,8 @@ def get_gks(
 
     :param ht: Hail Table to parse for desired variant.
     :param variant: String of variant to search for(chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
-    :param population: If True, include population information in output dictionary. Default: False
+    :param ancestry_groups: List of strings of shortened names of ancestry groups to return results for. Example: ['afr','fin','nfe'] .
+    :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well.
     :return: Dictionary containing VRS information (and population if desired) for specified variant.
 
     """
@@ -1245,17 +1251,16 @@ def get_gks(
         & (ht.alleles == [ref_in, alt_in])
     )
 
+    # Check to ensure the ht is successfully filtered to 1 variant
     if ht.count() != 1:
         raise ValueError(
             "Error: can only work with one variant for this code, 0 or multiple"
             " returned."
         )
 
-    if build_in == "GRCh38":
-        chrom_dict = VRS_CHROM_GRCH38_IDS
-    else:
-        pass
+    chrom_dict = VRS_CHROM_IDS[build_in]
 
+    # Define VRS Attributes that will later be read into the JSON
     vrs_id = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
     vrs_chrom_id = f"{chrom_dict[chr_in]}"
     vrs_start_value = f"{str(ht.info.vrs.VRS_Starts[1].collect()[0])}"
@@ -1288,61 +1293,119 @@ def get_gks(
 
     logger.info(vrs_dict)
 
-    if population == True:
-        # Assemble a list of sub-pops we would like to include - these and their XX and XY Subpops
-        short = ["afr", "ami", "amr", "asj", "eas", "fin", "mid", "nfe", "oth", "sas"]
-        full_names = {
-            "afr": "African/African American",
-            "ami": "Amish",
-            "amr": "Latino/Admixed American",
-            "asj": "Ashkenazi Jewish",
-            "eas": "East Asian",
-            "fin": "European (Finnish)",
-            "mid": "Middle Eastern",
-            "nfe": "European (non-Finnish)",
-            "oth": "Other",
-            "sas": "South Asian",
+    # Creating a list to add dictionaries for ancestry groups to
+    list_of_ancestry_dicts = []
+
+    # Function to return a frequency report dictionary for a given ancestry group
+    def create_subpops(
+        ht_subpop,
+        index_subpop,
+        id_subpop,
+        label_subpop,
+        vrs_id_subpop,
+    ) -> dict:
+        """
+        Return a dictionary for the frequency information of a given variant for a given subpopulation
+
+        :param ht_subpop: Hail Table with 1 row, only containing desired variant
+        :param index_subpop: Index of Frequency in ht.freq containing the desired ancestry group
+        :param id_subpop: String containing Variant, Pop, and Sex. Example: chr19-41094895-C-T.afr.XX
+        :param label_subpop: String containing the full name of pop requested. Example: African/African American
+        :param vrs_id_subpop: String containing the VRS ID of the variant in ht_subpop
+        :return: Dictionary containing VRS information (and population if desired) for specified variant.
+
+        """
+
+        # Frequency of desired variant to be parsed
+        variant_freq_to_parse = ht_subpop.freq[index_subpop]
+
+        # Dictionary to be returned containing the subpop's information
+        subpop_record = {
+            "subpopulationFrequency": [
+                {
+                    "id": id_subpop,
+                    "type": "PopulationAlleleFrequency",
+                    "label": f"{label_subpop} Population Allele Frequency for ID",
+                    "focusAllele": vrs_id_subpop,
+                    "focusAlleleCount": variant_freq_to_parse["AC"].collect()[0],
+                    "locusAlleleCount": variant_freq_to_parse["AN"].collect()[0],
+                    "alleleFrequency": variant_freq_to_parse["AF"].collect()[0],
+                    "population": f"gnomad3:{id_subpop}",
+                    "ancillaryResults": {
+                        "homozygotes": variant_freq_to_parse[
+                            "homozygote_count"
+                        ].collect()[0]
+                    },
+                }
+            ]
         }
-        relevant_keys = []
-        for abrev in short:
-            relevant_keys.append(f"{abrev}-adj")
-            relevant_keys.append(f"{abrev}-XX-adj")
-            relevant_keys.append(f"{abrev}-XY-adj")
 
-        # Retrieve indices for these pops via ht.freq_index_dict
-        relevant_dict = {}
-        for key, value in ht.freq_index_dict.collect()[0].items():
-            if key in relevant_keys:
-                relevant_dict[key] = value
+        return subpop_record
 
-        list_of_pop_jsons = []
+    # Iterate through provided ancestry groups and generate dictionaries
+    # If none are supplied, this is elegantly skipped!
+    for group in ancestry_groups:
+        key = f"{group}-adj"
+        index_value = ht.freq_index_dict.get(key)
+        result = create_subpops(
+            ht_subpop=ht,
+            index_subpop=index_value,
+            id_subpop=group,
+            label_subpop=POP_NAMES[group],
+            vrs_id_subpop=vrs_id,
+        )
 
-        # Generate pop JSON for each pop and add it to a list of population JSONs
-        for incoming, index_here in relevant_dict.items():
-            pop_split = incoming.split("-")[:-1][0]
-            try:
-                sub_split = incoming.split("-")[:-1][1]
-            except:
-                sub_split = None
+        # Nest information for a subpop's sexes inside of the general information of the boolean is passed
+        if by_sex:
+            for sex in ["XX", "XY"]:
+                sex_key = f"{group}-{sex}-adj"
+                sex_index_value = ht.freq_index_dict.get(sex_key)
+                sex_label = f"{group}.{sex}"
+                sex_result = create_subpops(
+                    ht_subpop=ht,
+                    index_subpop=sex_index_value,
+                    id_subpop=sex_label,
+                    label_subpop=POP_NAMES[group],
+                    vrs_id_subpop=vrs_id,
+                )
+                result["subpopulationFrequency"].append(sex_result)
 
-            ret_pop_json = generate_pop_json(
-                ht,
-                variant,
-                pop_split,
-                index_here,
-                full_name_dict=full_names,
-                vrs_variant_id=vrs_id,
-                subpop_str=sub_split,
-            )
+        list_of_ancestry_dicts.append(result)
 
-            list_of_pop_jsons.append(ret_pop_json)
+    # Overall frequency, via label 'adj' which is currently stored at position #1
+    overall_freq = ht.freq[0]
 
-        # Add list of population JSONS to the dictionary to return
-        vrs_dict["subpopulationFrequency"] = list_of_pop_jsons
+    # Final dictionary to be returned
+    ret_final = {
+        "id": f"gnomad3:{variant}",
+        "type": "PopulationAlleleFrequency",
+        "label": f"Overall Population Allele Frequency for {variant}",
+        "derivedFrom": {
+            "id": "gnomad3.1.2",
+            "type": "DataSet",
+            "label": "gnomAD v3.1.2",
+            "version": "3.1.2",
+        },
+        "focusAllele": vrs_dict,
+        "focusAlleleCount": overall_freq["AC"].collect()[0],
+        "locusAlleleCount": overall_freq["AN"].collect()[0],
+        "alleleFrequency": overall_freq["AF"].collect()[0],
+        "population": "gnomad3:global",
+        "ancillaryResults": {
+            "popMaxFAF95": {
+                "frequency": ht.popmax.AF.collect()[0],
+                "confidenceInterval": 0.95,
+                "popFreqID": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
+            },
+            "homozygotes": ht.popmax.homozygote_count.collect()[0],
+            "meanDepth": "to be incorporated",
+        },
+        "subpopulationFrequency": list_of_ancestry_dicts,
+    }
 
     try:
-        vrs_json = json.dumps(vrs_dict)
+        ret_json = json.dumps(ret_final)
     except:
         raise SyntaxError("The dictionary did not convert to a valid JSON")
 
-    return vrs_dict
+    return ret_final

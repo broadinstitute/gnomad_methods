@@ -7,9 +7,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import hail as hl
 
 from gnomad.resources.grch38.gnomad import coverage
+from gnomad.sample_qc.ancestry import POP_NAMES as ancestry_group_names
 from gnomad.utils.filtering import get_reference_genome
 from gnomad.utils.gen_stats import to_phred
-from gnomad.sample_qc.ancestry import POP_NAMES
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -63,7 +63,32 @@ VRS_CHROM_IDS = {
         "chrX": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
         "chrY": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
     },
-    "GRCh37": {"chromosome": "ID"},
+    "GRCh37": {
+        "1": "ga4gh:SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
+        "2": "ga4gh:SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
+        "3": "ga4gh:SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
+        "4": "ga4gh:SQ.HxuclGHh0XCDuF8x6yQrpHUBL7ZntAHc",
+        "5": "ga4gh:SQ.aUiQCzCPZ2d0csHbMSbh2NzInhonSXwI",
+        "6": "ga4gh:SQ.0iKlIQk2oZLoeOG9P1riRU6hvL5Ux8TV",
+        "7": "ga4gh:SQ.F-LrLMe1SRpfUZHkQmvkVKFEGaoDeHul",
+        "8": "ga4gh:SQ.209Z7zJ-mFypBEWLk4rNC6S_OxY5p7bs",
+        "9": "ga4gh:SQ.KEO-4XBcm1cxeo_DIQ8_ofqGUkp4iZhI",
+        "10": "ga4gh:SQ.ss8r_wB0-b9r44TQTMmVTI92884QvBiB",
+        "11": "ga4gh:SQ.2NkFm8HK88MqeNkCgj78KidCAXgnsfV1",
+        "12": "ga4gh:SQ.6wlJpONE3oNb4D69ULmEXhqyDZ4vwNfl",
+        "13": "ga4gh:SQ._0wi-qoDrvram155UmcSC-zA5ZK4fpLT",
+        "14": "ga4gh:SQ.eK4D2MosgK_ivBkgi6FVPg5UXs1bYESm",
+        "15": "ga4gh:SQ.AsXvWL1-2i5U_buw6_niVIxD6zTbAuS6",
+        "16": "ga4gh:SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0",
+        "17": "ga4gh:SQ.dLZ15tNO1Ur0IcGjwc3Sdi_0A6Yf4zm7",
+        "18": "ga4gh:SQ.vWwFhJ5lQDMhh-czg06YtlWqu0lvFAZV",
+        "19": "ga4gh:SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl",
+        "20": "ga4gh:SQ.-A1QmD_MatoqxvgVxBLZTONHz9-c7nQo",
+        "21": "ga4gh:SQ.5ZUqxCmDDgN4xTRbaSjN8LwgZironmB8",
+        "22": "ga4gh:SQ.7B7SHsmchAR0dFcDCuSFjJAo7tX87krQ",
+        "X": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
+        "Y": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
+    },
 }
 
 
@@ -1174,55 +1199,12 @@ def hemi_expr(
     )
 
 
-def generate_pop_json(
-    ht: hl.Table,
-    id_str: str,
-    pop_str: str,
-    index_int: int,
-    full_name_dict: dict,
-    vrs_variant_id: str = None,
-    subpop_str: str = None,
-) -> dict:
-    pop_id = f"{id_str}.{pop_str}"
-    label_str = f"{full_name_dict[pop_str]}"
-
-    if subpop_str:
-        pop_id = f"{pop_id}.{subpop_str}"
-        label_str = f"{label_str} {subpop_str}"
-
-    if vrs_variant_id is None:
-        vrs_id_for_pop = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
-    else:
-        vrs_id_for_pop = f"{vrs_variant_id}"
-
-    variant_freq = ht.freq[index_int]
-
-    subpop_record = {
-        "subpopulationFrequency": [
-            {
-                "id": pop_id,
-                "type": "PopulationAlleleFrequency",
-                "label": f"{label_str} Population Allele Frequency for ID",
-                "focusAllele": vrs_id_for_pop,
-                "focusAlleleCount": variant_freq["AC"].collect()[0],
-                "locusAlleleCount": variant_freq["AN"].collect()[0],
-                "alleleFrequency": variant_freq["AF"].collect()[0],
-                "population": f"gnomad3:{pop_id}",
-                "ancillaryResults": {
-                    "homozygotes": variant_freq["homozygote_count"].collect()[0]
-                },
-            }
-        ]
-    }
-
-    return subpop_record
-
-
-def get_gnomad_gks(
+def get_gks(
     ht: hl.Table,
     variant: str,
     ancestry_groups: list = None,
     by_sex: bool = True,
+    vrs_only: bool = False,
 ) -> dict:
     """
     Filter to a specified variant and return a JSON string containing the GA4GH-VRS annotations.
@@ -1242,24 +1224,9 @@ def get_gnomad_gks(
 
     """
 
-    chr_in, pos_in, ref_in, alt_in = variant.split("-")
     build_in = get_reference_genome(ht.locus).name
-    ht = ht.filter(
-        (
-            ht.locus
-            == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
-        )
-        & (ht.alleles == [ref_in, alt_in])
-    )
-
-    # Check to ensure the ht is successfully filtered to 1 variant
-    if ht.count() != 1:
-        raise ValueError(
-            "Error: can only work with one variant for this code, 0 or multiple"
-            " returned."
-        )
-
     chrom_dict = VRS_CHROM_IDS[build_in]
+    chr_in, pos_in, ref_in, alt_in = variant.split("-")
 
     # Define VRS Attributes that will later be read into the JSON
     vrs_id = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
@@ -1293,13 +1260,14 @@ def get_gnomad_gks(
     }
 
     logger.info(vrs_dict)
-if vrs_only:
-    return(vrs_dict)
+    if vrs_only:
+        return vrs_dict 
+
     # Creating a list to add dictionaries for ancestry groups to
     list_of_ancestry_dicts = []
 
     # Function to return a frequency report dictionary for a given ancestry group
-    def create_subpops(
+    def _create_subpops(
         variant_ht,
         group_index,
         group_id,
@@ -1309,30 +1277,30 @@ if vrs_only:
         """
         Return a dictionary for the frequency information of a given variant for a given subpopulation
 
-        :param ht_subpop: Hail Table with 1 row, only containing desired variant
-        :param index_subpop: Index of Frequency in ht.freq containing the desired ancestry group
-        :param id_subpop: String containing Variant, Pop, and Sex. Example: chr19-41094895-C-T.afr.XX
-        :param label_subpop: String containing the full name of pop requested. Example: African/African American
-        :param vrs_id_subpop: String containing the VRS ID of the variant in ht_subpop
+        :param ht_subpop: Hail Table with 1 row, only containing desired variant.
+        :param index_subpop: Index of frequency in ht.freq containing the desired ancestry group.
+        :param id_subpop: String containing variant, pop, and xex. Example: chr19-41094895-C-T.afr.XX .
+        :param label_subpop: String containing the full name of pop requested. Example: African/African American.
+        :param vrs_id_subpop: String containing the VRS ID of the variant in ht_subpop.
         :return: Dictionary containing VRS information (and population if desired) for specified variant.
 
         """
 
         # Obtain frequency information for the specified variant
-        variant_freq_to_parse = ht_subpop.freq[index_subpop]
+        variant_freq_to_parse = variant_ht.freq[group_index]
 
         # Dictionary to be returned containing information for a specified group
         subpop_record = {
             "subpopulationFrequency": [
                 {
-                    "id": id_subpop,
+                    "id": group_id,
                     "type": "PopulationAlleleFrequency",
-                    "label": f"{label_subpop} Population Allele Frequency for ID",
-                    "focusAllele": vrs_id_subpop,
+                    "label": f"{group_label} Population Allele Frequency for ID",
+                    "focusAllele": vrs_id,
                     "focusAlleleCount": variant_freq_to_parse["AC"].collect()[0],
                     "locusAlleleCount": variant_freq_to_parse["AN"].collect()[0],
                     "alleleFrequency": variant_freq_to_parse["AF"].collect()[0],
-                    "population": f"gnomad3:{id_subpop}",
+                    "population": f"gnomad3:{group_id}",
                     "ancillaryResults": {
                         "homozygotes": variant_freq_to_parse[
                             "homozygote_count"
@@ -1349,7 +1317,7 @@ if vrs_only:
     for group in ancestry_groups:
         key = f"{group}-adj"
         index_value = ht.freq_index_dict.get(key)
-        result = create_subpops(
+        result = _create_subpops(
             ht_subpop=ht,
             index_subpop=index_value,
             id_subpop=group,
@@ -1363,11 +1331,11 @@ if vrs_only:
                 sex_key = f"{group}-{sex}-adj"
                 sex_index_value = ht.freq_index_dict.get(sex_key)
                 sex_label = f"{group}.{sex}"
-                sex_result = create_subpops(
+                sex_result = _create_subpops(
                     ht_subpop=ht,
                     index_subpop=sex_index_value,
                     id_subpop=sex_label,
-                    label_subpop=POP_NAMES[group],
+                    label_subpop=ancestry_group_names[group],
                     vrs_id_subpop=vrs_id,
                 )
                 result["subpopulationFrequency"].append(sex_result)
@@ -1419,3 +1387,58 @@ if vrs_only:
         raise SyntaxError("The dictionary did not convert to a valid JSON")
 
     return ret_final
+
+
+def gnomad_gks(
+    version: str,
+    variant: str,
+    pops: list = None,
+    by_sex: bool = True,
+    vrs_only: bool = False,
+) -> dict:
+    ht = hl.read_table(
+        f"gs://gcp-public-data--gnomad/release/{version}/ht/genomes/gnomad.genomes.{version}.sites.ht"
+    )
+
+    chr_in, pos_in, ref_in, alt_in = variant.split("-")
+    build_in = get_reference_genome(ht.locus).name
+    ht = ht.filter(
+        (
+            ht.locus
+            == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+        )
+        & (ht.alleles == [ref_in, alt_in])
+    )
+
+    # Check to ensure the ht is successfully filtered to 1 variant
+    if ht.count() != 1:
+        raise ValueError(
+            "Error: can only work with one variant for this code, 0 or multiple"
+            " returned."
+        )
+
+    # Read coverage statistics
+    coverage_ht = hl.read_table(coverage("genomes").path)
+    coverage_ht = coverage_ht.filter(
+        coverage_ht.locus
+        == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+    )
+
+    # Annotate outgoing HT with mean coverage
+    ht = ht.annotate(mean_coverage=coverage_ht.mean.collect()[0])
+
+    if pops and vrs_only:
+        logger.warning(
+            "You cannot pass both a pops list and vrs_only. Ignoring pops list."
+        )
+        outer_result = get_gks(ht, variant, pops=None, by_sex=False, vrs_only=vrs_only)
+    elif by_sex and not pops:
+        logger.warning(
+            "You have called by_sex but not provided pops to split by sex. Splitting"
+            " whole database by sex is not yet supported"
+        )
+        outer_result = get_gks(ht, variant, pops=pops, by_sex=False, vrs_only=vrs_only)
+    else:
+        outer_result = get_gks(ht, variant, pops=pops, by_sex=by_sex, vrs_only=vrs_only)
+
+    return outer_result

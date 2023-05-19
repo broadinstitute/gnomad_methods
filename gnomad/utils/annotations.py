@@ -63,7 +63,7 @@ VRS_CHROM_IDS = {
         "chrX": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
         "chrY": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
     },
-    "CRCh37": {"chromosome": "ID"},
+    "GRCh37": {"chromosome": "ID"},
 }
 
 
@@ -1235,10 +1235,10 @@ def get_gnomad_gks(
     > variant_dict_return = get_gks(ht, 'chr5-38258681-C-T', population=False)
 
     :param ht: Hail Table to parse for desired variant.
-    :param variant: String of variant to search for(chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
+    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param ancestry_groups: List of strings of shortened names of ancestry groups to return results for. Example: ['afr','fin','nfe'] .
     :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well.
-    :return: Dictionary containing VRS information (and population if desired) for specified variant.
+    :return: Dictionary containing VRS information (and population and sex if desired) for specified variant.
 
     """
 
@@ -1293,17 +1293,18 @@ def get_gnomad_gks(
     }
 
     logger.info(vrs_dict)
-
+if vrs_only:
+    return(vrs_dict)
     # Creating a list to add dictionaries for ancestry groups to
     list_of_ancestry_dicts = []
 
     # Function to return a frequency report dictionary for a given ancestry group
     def create_subpops(
-        ht_subpop,
-        index_subpop,
-        id_subpop,
-        label_subpop,
-        vrs_id_subpop,
+        variant_ht,
+        group_index,
+        group_id,
+        group_label,
+        vrs_id,
     ) -> dict:
         """
         Return a dictionary for the frequency information of a given variant for a given subpopulation
@@ -1317,10 +1318,10 @@ def get_gnomad_gks(
 
         """
 
-        # Frequency of desired variant to be parsed
+        # Obtain frequency information for the specified variant
         variant_freq_to_parse = ht_subpop.freq[index_subpop]
 
-        # Dictionary to be returned containing the subpop's information
+        # Dictionary to be returned containing information for a specified group
         subpop_record = {
             "subpopulationFrequency": [
                 {
@@ -1352,7 +1353,7 @@ def get_gnomad_gks(
             ht_subpop=ht,
             index_subpop=index_value,
             id_subpop=group,
-            label_subpop=POP_NAMES[group],
+            label_subpop=ancestry_group_names[group],
             vrs_id_subpop=vrs_id,
         )
 
@@ -1402,7 +1403,7 @@ def get_gnomad_gks(
         "population": "gnomad3:global",
         "ancillaryResults": {
             "popMaxFAF95": {
-                "frequency": ht.popmax.AF.collect()[0],
+                "frequency": ht.popmax.faf95.collect()[0],
                 "confidenceInterval": 0.95,
                 "popFreqID": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
             },

@@ -1207,7 +1207,7 @@ def get_gks(
     ht_version: str,
     groups: list = None,
     groups_dict: dict = None,
-    by_sex: bool = True,
+    by_sex: bool = False,
     vrs_only: bool = False,
 ) -> dict:
     """
@@ -1221,24 +1221,24 @@ def get_gks(
     > variant_dict_return = get_gks(ht, 'chr5-38258681-C-T', population=False)
 
     :param ht: Hail Table to parse for desired variant.
-    :param coverage_ht: Hail Table containing coverage statistics, mean_depth stored in "mean" annotation.
+    :param coverage_ht: Hail Table containing coverage statistics, with mean depth stored in "mean" annotation.
     :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
-    :param ht_name: String of name to give to passed Hail Table. Example: gnomAD.
-    :param ht_version: String listing the version of the HT (likely gnomAD) being used. Example: "3.1.2" .
+    :param ht_name: Label name to use within the returned dictionary. Example: "gnomAD".
+    :param ht_version: String listing the version of the HT being used. Example: "3.1.2" .
     :param groups: List of strings of shortened names of groups to return results for. Example: ['afr','fin','nfe'] .
     :param groups_dict: Dict mapping shortened names to full names. Example: {'afr':'African/African American'} .
     :param by_sex: Boolean to include breakdown of groups by inferred sex (XX and XY) as well.
-    :param vrs_only: Boolean to include include VRS information and no general frequency or other information.
-    :return: Dictionary containing VRS information (and population and sex if desired) for specified variant.
+    :param vrs_only: Boolean to return only the VRS information and no general frequency information. Default is False.
+    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
 
-    # Define some incoming variables
+    # Define variables for variant information
     build_in = get_reference_genome(ht.locus).name
     chrom_dict = VRS_CHROM_IDS[build_in]
     chr_in, pos_in, ref_in, alt_in = variant.split("-")
 
-    # Filter HT to desirved variant
+    # Filter HT to desired variant
     ht = ht.filter(
         (
             ht.locus
@@ -1289,24 +1289,24 @@ def get_gks(
     if vrs_only:
         return vrs_dict
 
-    # Creating a list to add dictionaries for groups to
+    # Create a list to add dictionaries for groups to
     list_of_group_info_dicts = []
 
-    # Function to return a frequency report dictionary for a given group
+    # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
-        variant_ht,
-        group_index,
-        group_id,
-        group_label,
-        vrs_id,
+        variant_ht: hl.Table,
+        group_index: int,
+        group_id: str,
+        group_label: str,
+        vrs_id: str,
     ) -> dict:
         """
         Return a dictionary for the frequency information of a given variant for a given subpopulation
 
-        :param variant_ht: Hail Table with 1 row, only containing desired variant.
-        :param group_index: Index of frequency in variant_ht.freq containing the desired group.
-        :param group_id: String containing variant, pop, and sex. Example: chr19-41094895-C-T.afr.XX .
-        :param group_label: String containing the full name of pop requested. Example: African/African American.
+        :param variant_ht: Hail Table with only row, only containing the desired variant.
+        :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
+        :param group_id: String containing variant, pop, and sex. Example: "chr19-41094895-C-T.afr.XX".
+        :param group_label: String containing the full name of pop requested. Example: "African/African American".
         :param vrs_id: String containing the VRS ID of the variant in ht_subpop.
         :return: Dictionary containing VRS information (and population if desired) for specified variant.
 
@@ -1316,7 +1316,7 @@ def get_gks(
         group_freq = variant_ht.freq[group_index]
 
         # Dictionary to be returned containing information for a specified group
-        subpop_record = {
+        freq_record = {
             "subpopulationFrequency": [
                 {
                     "id": group_id,
@@ -1334,7 +1334,7 @@ def get_gks(
             ]
         }
 
-        return subpop_record
+        return freq_record
 
     # Iterate through provided groups and generate dictionaries
     if groups:
@@ -1349,7 +1349,8 @@ def get_gks(
                 vrs_id=vrs_id,
             )
 
-            # Nest information for a subpop's sexes inside of the general information of the boolean is passed
+            # If specified, stratify group information by sex.
+``
             if by_sex:
                 for sex in ["XX", "XY"]:
                     sex_key = f"{group}-{sex}-adj"
@@ -1374,7 +1375,7 @@ def get_gks(
         coverage_ht.locus
         == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
     )
-    coverage_stat = coverage_ht.mean.collect()[0]
+    mean_coverage = coverage_ht.mean.collect()[0]
 
     # Final dictionary to be returned
     ret_final = {
@@ -1399,7 +1400,7 @@ def get_gks(
                 "popFreqID": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
             },
             "homozygotes": overall_freq["homozygote_count"].collect()[0],
-            "meanDepth": coverage_stat,
+            "meanDepth": mean_coverage,
         },
     }
 
@@ -1424,12 +1425,12 @@ def gnomad_gks(
     """
     Call get_gks() for a specified gnomAD release version, variant, and ancestry groups. Splitting by sex or only returning VRS information is optional.
 
-    :param version: String of version of gnomAD release to call .
-    :param variant: String of variant to filter to. Example: 'chr1-1376025-T-C' .
+    :param version: String of version of gnomAD release to use .
+    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T"..
     :param groups: List of ancestry group appreviations to call. Example: ['amr','nfe','fin'] .
-    :param by_sex: Boolean to pass if you want to return frequecy information for each ancestry group split by chromosomal sex.
-    :param vrs_only: Boolean to pass if you only want VRS information returned - no frequency or other information.
-    :return: result of get_gks as a 'Dictionary containing VRS information (and population and sex if desired) for specified variant'.
+    :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
+    :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
+    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
     ht = hl.read_table(
@@ -1441,15 +1442,14 @@ def gnomad_gks(
 
     if groups and vrs_only:
         logger.warning(
-            "You cannot pass both a pops list and vrs_only. Ignoring pops list."
+            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring 'by_ancestry_groups' list and returning only vrs information."
         )
         outer_result = get_gks(
             ht, variant, groups=None, by_sex=False, vrs_only=vrs_only
         )
     elif by_sex and not groups:
         logger.warning(
-            "You have called by_sex but not provided pops to split by sex. Splitting"
-            " whole database by sex is not yet supported"
+            "Splitting whole database by sex is not yet supported. If using 'by_sex', please also specify 'by_ancestry_group' to stratify by."
         )
         outer_result = get_gks(
             ht, variant, groups=None, by_sex=False, vrs_only=vrs_only

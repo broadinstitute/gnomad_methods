@@ -4,9 +4,19 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+import ga4gh
 import hail as hl
 
-from gnomad.resources.grch38.gnomad import coverage
+from gnomad.resources.grch38.gnomad import (
+    POPS,
+    _public_coverage_ht_path,
+    _public_release_ht_path,
+    coverage,
+)
+from gnomad.resources.resource_utils import (
+    GnomadPublicTableResource,
+    VersionedTableResource,
+)
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.filtering import get_reference_genome
 from gnomad.utils.gen_stats import to_phred
@@ -1201,12 +1211,12 @@ def hemi_expr(
 
 def get_gks(
     ht: hl.Table,
-    coverage_ht: hl.Table,
     variant: str,
-    ht_name: str,
-    ht_version: str,
-    groups: list = None,
-    groups_dict: dict = None,
+    label_name: str,
+    label_version: str,
+    coverage_ht: hl.Table,
+    ancestry_groups: list = None,
+    ancestry_groups_dict: dict = None,
     by_sex: bool = False,
     vrs_only: bool = False,
 ) -> dict:
@@ -1263,27 +1273,28 @@ def get_gks(
 
     vrs_dict = {
         "_id": vrs_id,
-        "type": "Allele",
         "location": {
-            "type": "SequenceLocation",
-            "sequence_id": vrs_chrom_id,
+            "_id": "dependent",
             "interval": {
-                "type": "SequenceInterval",
+                "end": {"type": "Number", "value": vrs_end_value},
                 "start": {
                     "type": "Number",
                     "value": vrs_start_value,
                 },
-                "end": {
-                    "type": "Number",
-                    "value": vrs_end_value,
-                },
+                "type": "SequenceInterval",
             },
+            "sequence_id": vrs_chrom_id,
+            "type": "SequenceLocation",
         },
-        "state": {
-            "type": "LiteralSequenceExpression",
-            "sequence": vrs_state_sequence,
-        },
+        "state": {"sequence": vrs_state_sequence, "type": "LiteralSequenceExpression"},
+        "type": "Allele",
     }
+
+    location_d = vrs_dict["location"]
+    location_d.pop("_id")
+    location = ga4gh.vrs.models.SequenceLocation(**location_d)
+    location_id = ga4gh.core._internal.identifiers.ga4gh_identify(location)
+    vrs_dict["location"] = location_id
 
     logger.info(vrs_dict)
     if vrs_only:
@@ -1321,7 +1332,7 @@ def get_gks(
                 {
                     "id": group_id,
                     "type": "PopulationAlleleFrequency",
-                    "label": f"{group_label} Population Allele Frequency for ID",
+                    "label": f"{group_label} Population Allele Frequency for {variant}",
                     "focusAllele": vrs_id,
                     "focusAlleleCount": group_freq["AC"].collect()[0],
                     "locusAlleleCount": group_freq["AN"].collect()[0],
@@ -1337,20 +1348,19 @@ def get_gks(
         return freq_record
 
     # Iterate through provided groups and generate dictionaries
-    if groups:
-        for group in groups:
+    if ancestry_groups:
+        for group in ancestry_groups:
             key = f"{group}-adj"
             index_value = ht.freq_index_dict.get(key)
             group_result = _create_group_dicts(
                 variant_ht=ht,
                 group_index=index_value,
                 group_id=group,
-                group_label=groups_dict[group],
+                group_label=ancestry_groups_dict[group],
                 vrs_id=vrs_id,
             )
 
             # If specified, stratify group information by sex.
-``
             if by_sex:
                 for sex in ["XX", "XY"]:
                     sex_key = f"{group}-{sex}-adj"
@@ -1360,7 +1370,7 @@ def get_gks(
                         variant_ht=ht,
                         group_index=sex_index_value,
                         group_id=sex_label,
-                        group_label=groups_dict[group],
+                        group_label=ancestry_groups_dict[group],
                         vrs_id=vrs_id,
                     )
                     group_result["subpopulationFrequency"].append(sex_result)
@@ -1378,15 +1388,15 @@ def get_gks(
     mean_coverage = coverage_ht.mean.collect()[0]
 
     # Final dictionary to be returned
-    ret_final = {
-        "id": f"{ht_name}{ht_version}:{variant}",
+    final_freq_dict = {
+        "id": f"{label_name}{label_version}:{variant}",
         "type": "PopulationAlleleFrequency",
         "label": f"Overall Population Allele Frequency for {variant}",
         "derivedFrom": {
-            "id": f"{ht_name}{ht_version}",
+            "id": f"{label_name}{label_version}",
             "type": "DataSet",
-            "label": f"{ht_name} v{ht_version}",
-            "version": f"{ht_version}",
+            "label": f"{label_name} v{label_version}",
+            "version": f"{label_version}",
         },
         "focusAllele": vrs_dict,
         "focusAlleleCount": overall_freq["AC"].collect()[0],
@@ -1404,23 +1414,26 @@ def get_gks(
         },
     }
 
-    if groups:
-        ret_final["subpopulationFrequency"] = list_of_group_info_dicts
+    if ancestry_groups:
+        final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts
 
     try:
-        validated_json = json.dumps(ret_final)
+        validated_json = json.dumps(final_freq_dict)
     except:
         raise SyntaxError("The dictionary did not convert to a valid JSON")
 
-    return ret_final
+    return final_freq_dict
 
 
 def gnomad_gks(
     version: str,
     variant: str,
-    groups: list = None,
+    data_type: str = "genomes",
+    coverage_version: str = "3.0.1",
+    by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
+    custom_path: str = None,
 ) -> dict:
     """
     Call get_gks() for a specified gnomAD release version, variant, and ancestry groups. Splitting by sex or only returning VRS information is optional.
@@ -1433,38 +1446,56 @@ def gnomad_gks(
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
-    ht = hl.read_table(
-        f"gs://gcp-public-data--gnomad/release/{version}/ht/genomes/gnomad.genomes.{version}.sites.ht"
-    )
+    if custom_path:
+        ht = hl.read_table(custom_path)
+    else:
+        ht_vtr = VersionedTableResource(
+            version,
+            {
+                version: GnomadPublicTableResource(
+                    path=_public_release_ht_path(data_type, version)
+                )
+            },
+        )
+        ht = hl.read_table(ht_vtr.path)
 
     # Read coverage statistics
-    coverage_ht = hl.read_table(coverage("genomes").path)
+    coverage_vtr = VersionedTableResource(
+        coverage_version,
+        {
+            coverage_version: GnomadPublicTableResource(
+                path=_public_coverage_ht_path(data_type, coverage_version)
+            )
+        },
+    )
 
-    if groups and vrs_only:
+    coverage_ht = hl.read_table(coverage_vtr.path)
+
+    pops_key = f"v{version.split('.')[0]}"
+
+    pops_list = list(POPS[pops_key])
+
+    if by_ancestry_group and vrs_only:
         logger.warning(
-            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring 'by_ancestry_groups' list and returning only vrs information."
+            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
+            " 'by_ancestry_groups' list and returning only vrs information."
         )
-        outer_result = get_gks(
-            ht, variant, groups=None, by_sex=False, vrs_only=vrs_only
-        )
-    elif by_sex and not groups:
+    elif by_sex and not by_ancestry_group:
         logger.warning(
-            "Splitting whole database by sex is not yet supported. If using 'by_sex', please also specify 'by_ancestry_group' to stratify by."
-        )
-        outer_result = get_gks(
-            ht, variant, groups=None, by_sex=False, vrs_only=vrs_only
-        )
-    else:
-        outer_result = get_gks(
-            ht,
-            coverage_ht,
-            variant,
-            "gnomAD",
-            version,
-            groups=groups,
-            groups_dict=POP_NAMES,
-            by_sex=by_sex,
-            vrs_only=vrs_only,
+            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
+            " please also specify 'by_ancestry_group' to stratify by."
         )
 
-    return outer_result
+    gks_info = get_gks(
+        ht,
+        variant,
+        "gnomAD",
+        version,
+        coverage_ht,
+        ancestry_groups=pops_list,
+        ancestry_groups_dict=POP_NAMES,
+        by_sex=by_sex,
+        vrs_only=vrs_only,
+    )
+
+    return gks_info

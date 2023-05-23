@@ -1356,6 +1356,7 @@ def get_gks(
 
             # If specified, stratify group information by sex.
             if by_sex:
+                sex_list = []
                 for sex in ["XX", "XY"]:
                     sex_key = f"{group}-{sex}-adj"
                     sex_index_value = ht.freq_index_dict.get(sex_key)
@@ -1367,7 +1368,9 @@ def get_gks(
                         group_label=ancestry_groups_dict[group],
                         vrs_id=vrs_id,
                     )
-                    group_result["subpopulationFrequency"].append(sex_result)
+                    sex_list.append(sex_result)
+                    
+                group_result["subpopulationFrequency"] = sex_list
 
             list_of_group_info_dicts.append(group_result)
 
@@ -1410,7 +1413,9 @@ def get_gks(
 
     # If ancestry_groups were passed, and the dictionary which would have ben created to the dictionary to be returned
     if ancestry_groups:
-        final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts
+        final_freq_dict["subpopulationFrequency"] = []
+        for info_dict in list_of_group_info_dicts:
+            final_freq_dict["subpopulationFrequency"].append(info_dict)
 
     # Validate that our constructed dict would validate to a valid JSON
     try:
@@ -1433,7 +1438,7 @@ def gnomad_gks(
     custom_path: str = None,
 ) -> dict:
     """
-    Call get_gks() for a specified gnomAD release version, variant, and coverage version. Returning only VRS information and ancestry group information (split by sex) is also possible.
+    Call get_gks() and returns its resultingfor a specified gnomAD release version, variant, and coverage version. Returning only VRS information and ancestry group information (split by sex) is also possible.
 
     :param version: String of version of gnomAD release to use .
     :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T"..

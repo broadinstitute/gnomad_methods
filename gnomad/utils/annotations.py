@@ -1271,10 +1271,10 @@ def get_gks(
         "location": {
             "_id": "to-be-defined",
             "interval": {
-                "end": {"type": "Number", "value": vrs_end_value},
+                "end": {"type": "Number", "value": int(vrs_end_value)},
                 "start": {
                     "type": "Number",
-                    "value": vrs_start_value,
+                    "value": int(vrs_start_value),
                 },
                 "type": "SequenceInterval",
             },
@@ -1325,9 +1325,7 @@ def get_gks(
         group_freq = variant_ht.freq[group_index]
 
         # Dictionary to be returned containing information for a specified group
-        freq_record = {
-            "subpopulationFrequency": [
-                {
+        freq_record =  {
                     "id": group_id,
                     "type": "PopulationAlleleFrequency",
                     "label": f"{group_label} Population Allele Frequency for {variant}",
@@ -1340,8 +1338,6 @@ def get_gks(
                         "homozygotes": group_freq["homozygote_count"].collect()[0]
                     },
                 }
-            ]
-        }
 
         return freq_record
 
@@ -1405,7 +1401,7 @@ def get_gks(
             "popMaxFAF95": {
                 "frequency": ht.popmax.faf95.collect()[0],
                 "confidenceInterval": 0.95,
-                "popFreqID": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
+                "popFreqId": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
             },
             "homozygotes": overall_freq["homozygote_count"].collect()[0],
             "meanDepth": mean_coverage,

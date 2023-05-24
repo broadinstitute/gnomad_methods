@@ -4,8 +4,10 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-import ga4gh
+import ga4gh.vrs as ga4gh_vrs
+import ga4gh.core as ga4gh_core
 import hail as hl
+from hail.utils.misc import new_temp_file # format and run isort on later when pulled 
 
 from gnomad.resources.grch38.gnomad import (
     POPS,
@@ -1222,15 +1224,14 @@ def get_gks(
 ) -> dict:
     """
     Filter to a specified variant and return a Python dictionary containing the GA4GH variant report schema.
-    Can be called itself or via gnomad_gks() below
 
     :param ht: Hail Table to parse for desired variant.
     :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
     :param coverage_ht: Hail Table containing coverage statistics, with mean depth stored in "mean" annotation.
-    :param ancestry_groups: List of strings of shortened names of groups to return results for. Example: ['afr','fin','nfe'] .
-    :param ancestry_groups_dict: Dict mapping shortened names to full names. Example: {'afr':'African/African American'} .
+    :param ancestry_groups: List of strings of shortened names of genetic ancestry groups to return results for. Example: ['afr','fin','nfe'] .
+    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names. Example: {'afr':'African/African American'} .
     :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well.
     :param vrs_only: Boolean to return only the VRS information and no general frequency information. Default is False.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
@@ -1250,7 +1251,8 @@ def get_gks(
         )
         & (ht.alleles == [ref_in, alt_in])
     )
-
+ht = ht.checkpoint(
+        new_temp_file("get_gks", extension="ht"))
     # Check to ensure the ht is successfully filtered to 1 variant.
     if ht.count() != 1:
         raise ValueError(
@@ -1285,11 +1287,11 @@ def get_gks(
         "type": "Allele",
     }
 
-    # Set Location ID via code provided by Kyle F.
+    # Set location ID
     location_dict = vrs_dict["location"]
     location_dict.pop("_id")
-    location = ga4gh.vrs.models.SequenceLocation(**location_dict)
-    location_id = ga4gh.core._internal.identifiers.ga4gh_identify(location)
+    location = ga4gh_vrs.models.SequenceLocation(**location_dict)
+    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(location)
     vrs_dict["location"]["_id"] = location_id
 
     logger.info(vrs_dict)
@@ -1314,8 +1316,8 @@ def get_gks(
 
         :param variant_ht: Hail Table with only one row, only containing the desired variant.
         :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
-        :param group_id: String containing variant, pop, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
-        :param group_label: String containing the full name of pop requested. Example: "African/African American".
+        :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
+        :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
         :param vrs_id: String containing the VRS ID of the variant in ht_subpop.
         :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
 
@@ -1411,13 +1413,13 @@ def get_gks(
         },
     }
 
-    # If ancestry_groups were passed, and the dictionary which would have ben created to the dictionary to be returned
+    # If ancestry_groups were passed, add the ancestry group dictionary to the final frequency dictionary to be returned.
     if ancestry_groups:
         final_freq_dict["subpopulationFrequency"] = []
         for info_dict in list_of_group_info_dicts:
             final_freq_dict["subpopulationFrequency"].append(info_dict)
 
-    # Validate that our constructed dict would validate to a valid JSON
+    # Validate that our constructed dictionary would convert to a JSON string.
     try:
         validated_json = json.dumps(final_freq_dict)
     except:
@@ -1438,11 +1440,11 @@ def gnomad_gks(
     custom_path: str = None,
 ) -> dict:
     """
-    Call get_gks() and returns its resultingfor a specified gnomAD release version, variant, and coverage version. Returning only VRS information and ancestry group information (split by sex) is also possible.
+    Call get_gks() and return VRS information and frequency information for the specified gnomAD release version, and variant.
 
     :param version: String of version of gnomAD release to use .
     :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T"..
-    :param groups: List of ancestry group appreviations to call. Example: ['amr','nfe','fin'] .
+    :param groups: List of ancestry group abbreviations for which to obtain frequency information. Example: ['amr', 'nfe', 'fin'] .
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
@@ -1475,11 +1477,11 @@ def gnomad_gks(
     coverage_ht = hl.read_table(coverage_vtr.path)
 
     # Retrieve ancestry group keys from the imported POPS dictionary.
-    pops_key = f"v{version.split('.')[0]}"
+    high_level_version = f"v{version.split('.')[0]}"
 
-    pops_list = list(POPS[pops_key])
+    pops_list = list(POPS[high_level_version])
 
-    # Throw warnings if odd or contradictary arguments passed.
+    # Throw warnings if contradictory arguments passed.
     if by_ancestry_group and vrs_only:
         logger.warning(
             "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
@@ -1493,10 +1495,10 @@ def gnomad_gks(
 
     # Call and return get_gks() for chosen arguments.
     gks_info = get_gks(
-        ht,
-        variant,
-        "gnomAD",
-        version,
+        ht = ht,
+        variant=variant,
+        label_name="gnomAD",
+        label_version=version,
         coverage_ht,
         ancestry_groups=pops_list,
         ancestry_groups_dict=POP_NAMES,

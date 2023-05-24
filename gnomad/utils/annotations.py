@@ -9,9 +9,8 @@ import ga4gh.vrs as ga4gh_vrs
 import hail as hl
 from hail.utils.misc import new_temp_file  # format and run isort on later when pulled
 
-from gnomad.sample_qc.ancestry import POP_NAMES
-from gnomad.utils.filtering import get_reference_genome
 from gnomad.utils.gen_stats import to_phred
+
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -1227,6 +1226,7 @@ def get_gks(
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
+    from gnomad.utils.filtering import get_reference_genome
 
     # Define variables for variant information.
     build_in = get_reference_genome(ht.locus).name

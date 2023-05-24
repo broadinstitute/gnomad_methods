@@ -9,16 +9,6 @@ import ga4gh.vrs as ga4gh_vrs
 import hail as hl
 from hail.utils.misc import new_temp_file  # format and run isort on later when pulled
 
-from gnomad.resources.grch38.gnomad import (
-    POPS,
-    _public_coverage_ht_path,
-    _public_release_ht_path,
-    coverage,
-)
-from gnomad.resources.resource_utils import (
-    GnomadPublicTableResource,
-    VersionedTableResource,
-)
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.filtering import get_reference_genome
 from gnomad.utils.gen_stats import to_phred
@@ -1424,84 +1414,3 @@ def get_gks(
 
     # Returns the constructed dictionary.
     return final_freq_dict
-
-
-def gnomad_gks(
-    version: str,
-    variant: str,
-    data_type: str = "genomes",
-    by_ancestry_group: bool = False,
-    by_sex: bool = False,
-    vrs_only: bool = False,
-    custom_path: str = None,
-) -> dict:
-    """
-    Call get_gks() and return VRS information and frequency information for the specified gnomAD release version, and variant.
-
-    :param version: String of version of gnomAD release to use .
-    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T"..
-    :param groups: List of ancestry group abbreviations for which to obtain frequency information. Example: ['amr', 'nfe', 'fin'] .
-    :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
-    :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
-    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
-
-    """
-    # Read in gnomAD release table to filter to chosen variant.
-    if custom_path:
-        ht = hl.read_table(custom_path)
-    else:
-        ht_vtr = VersionedTableResource(
-            version,
-            {
-                version: GnomadPublicTableResource(
-                    path=_public_release_ht_path(data_type, version)
-                )
-            },
-        )
-        ht = hl.read_table(ht_vtr.path)
-
-    high_level_version = f"v{version.split('.')[0]}"
-
-    # Read coverage statistics.
-    coverage_vtr = VersionedTableResource(
-        high_level_version,
-        {
-            high_level_version: GnomadPublicTableResource(
-                path=_public_coverage_ht_path(data_type, high_level_version)
-            )
-        },
-    )
-
-    coverage_ht = hl.read_table(coverage_vtr.path)
-
-    # Retrieve ancestry group keys from the imported POPS dictionary.
-    pops_list = None
-    if by_ancestry_group:
-        pops_list = list(POPS[high_level_version])
-
-    # Throw warnings if contradictory arguments passed.
-    if by_ancestry_group and vrs_only:
-        logger.warning(
-            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
-            " 'by_ancestry_groups' list and returning only vrs information."
-        )
-    elif by_sex and not by_ancestry_group:
-        logger.warning(
-            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
-            " please also specify 'by_ancestry_group' to stratify by."
-        )
-
-    # Call and return get_gks() for chosen arguments.
-    gks_info = get_gks(
-        ht=ht,
-        variant=variant,
-        label_name="gnomAD",
-        label_version=version,
-        coverage_ht=coverage_ht,
-        ancestry_groups=pops_list,
-        ancestry_groups_dict=POP_NAMES,
-        by_sex=by_sex,
-        vrs_only=vrs_only,
-    )
-
-    return gks_info

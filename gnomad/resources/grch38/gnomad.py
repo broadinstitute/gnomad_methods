@@ -453,17 +453,6 @@ def gnomad_gks(
         coverage_version = "3.0.1"
         coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
 
-    else:
-        coverage_vtr = VersionedTableResource(
-            high_level_version,
-            {
-                high_level_version: GnomadPublicTableResource(
-                    path=_public_coverage_ht_path(data_type, high_level_version)
-                )
-            },
-        )
-        coverage_ht = hl.read_table(coverage_vtr.path)
-
     # Retrieve ancestry group keys from the imported POPS dictionary.
     pops_list = None
     if by_ancestry_group:

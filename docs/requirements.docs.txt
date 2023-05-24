@@ -46,7 +46,7 @@ pytz==2023.3
     # via babel
 pyyaml==6.0
     # via myst-parser
-requests==2.28.2
+requests==2.31.0
     # via
     #   -r docs/requirements.docs.in
     #   sphinx

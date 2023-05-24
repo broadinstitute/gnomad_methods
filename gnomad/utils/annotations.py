@@ -4,10 +4,10 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-import ga4gh.vrs as ga4gh_vrs
 import ga4gh.core as ga4gh_core
+import ga4gh.vrs as ga4gh_vrs
 import hail as hl
-from hail.utils.misc import new_temp_file # format and run isort on later when pulled 
+from hail.utils.misc import new_temp_file  # format and run isort on later when pulled
 
 from gnomad.resources.grch38.gnomad import (
     POPS,
@@ -1251,8 +1251,7 @@ def get_gks(
         )
         & (ht.alleles == [ref_in, alt_in])
     )
-ht = ht.checkpoint(
-        new_temp_file("get_gks", extension="ht"))
+    ht = ht.checkpoint(new_temp_file("get_gks", extension="ht"))
     # Check to ensure the ht is successfully filtered to 1 variant.
     if ht.count() != 1:
         raise ValueError(
@@ -1263,8 +1262,8 @@ ht = ht.checkpoint(
     # Define VRS Attributes that will later be read into the dictionary to be returned.
     vrs_id = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
     vrs_chrom_id = f"{chrom_dict[chr_in]}"
-    vrs_start_value = f"{str(ht.info.vrs.VRS_Starts[1].collect()[0])}"
-    vrs_end_value = f"{str(ht.info.vrs.VRS_Ends[1].collect()[0])}"
+    vrs_start_value = ht.info.vrs.VRS_Starts[1].collect()[0]
+    vrs_end_value = ht.info.vrs.VRS_Ends[1].collect()[0]
     vrs_state_sequence = f"{ht.info.vrs.VRS_States[1].collect()[0]}"
 
     # Defining the dictionary for VRS information.
@@ -1273,10 +1272,10 @@ ht = ht.checkpoint(
         "location": {
             "_id": "to-be-defined",
             "interval": {
-                "end": {"type": "Number", "value": int(vrs_end_value)},
+                "end": {"type": "Number", "value": vrs_end_value},
                 "start": {
                     "type": "Number",
-                    "value": int(vrs_start_value),
+                    "value": vrs_start_value,
                 },
                 "type": "SequenceInterval",
             },
@@ -1327,19 +1326,19 @@ ht = ht.checkpoint(
         group_freq = variant_ht.freq[group_index]
 
         # Dictionary to be returned containing information for a specified group
-        freq_record =  {
-                    "id": group_id,
-                    "type": "PopulationAlleleFrequency",
-                    "label": f"{group_label} Population Allele Frequency for {variant}",
-                    "focusAllele": vrs_id,
-                    "focusAlleleCount": group_freq["AC"].collect()[0],
-                    "locusAlleleCount": group_freq["AN"].collect()[0],
-                    "alleleFrequency": group_freq["AF"].collect()[0],
-                    "population": f"gnomad3:{group_id}",
-                    "ancillaryResults": {
-                        "homozygotes": group_freq["homozygote_count"].collect()[0]
-                    },
-                }
+        freq_record = {
+            "id": group_id,
+            "type": "PopulationAlleleFrequency",
+            "label": f"{group_label} Population Allele Frequency for {variant}",
+            "focusAllele": vrs_id,
+            "focusAlleleCount": group_freq["AC"].collect()[0],
+            "locusAlleleCount": group_freq["AN"].collect()[0],
+            "alleleFrequency": group_freq["AF"].collect()[0],
+            "population": f"{label_name}{label_version}:{group_id}",
+            "ancillaryResults": {
+                "homozygotes": group_freq["homozygote_count"].collect()[0]
+            },
+        }
 
         return freq_record
 
@@ -1371,7 +1370,7 @@ ht = ht.checkpoint(
                         vrs_id=vrs_id,
                     )
                     sex_list.append(sex_result)
-                    
+
                 group_result["subpopulationFrequency"] = sex_list
 
             list_of_group_info_dicts.append(group_result)
@@ -1401,7 +1400,7 @@ ht = ht.checkpoint(
         "focusAlleleCount": overall_freq["AC"].collect()[0],
         "locusAlleleCount": overall_freq["AN"].collect()[0],
         "alleleFrequency": overall_freq["AF"].collect()[0],
-        "population": "gnomad3:global",
+        "population": f"{label_name}{label_version}:global",
         "ancillaryResults": {
             "popMaxFAF95": {
                 "frequency": ht.popmax.faf95.collect()[0],
@@ -1415,9 +1414,7 @@ ht = ht.checkpoint(
 
     # If ancestry_groups were passed, add the ancestry group dictionary to the final frequency dictionary to be returned.
     if ancestry_groups:
-        final_freq_dict["subpopulationFrequency"] = []
-        for info_dict in list_of_group_info_dicts:
-            final_freq_dict["subpopulationFrequency"].append(info_dict)
+        final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts
 
     # Validate that our constructed dictionary would convert to a JSON string.
     try:
@@ -1433,7 +1430,6 @@ def gnomad_gks(
     version: str,
     variant: str,
     data_type: str = "genomes",
-    coverage_version: str = "3.0.1",
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
@@ -1464,12 +1460,14 @@ def gnomad_gks(
         )
         ht = hl.read_table(ht_vtr.path)
 
+    high_level_version = f"v{version.split('.')[0]}"
+
     # Read coverage statistics.
     coverage_vtr = VersionedTableResource(
-        coverage_version,
+        high_level_version,
         {
-            coverage_version: GnomadPublicTableResource(
-                path=_public_coverage_ht_path(data_type, coverage_version)
+            high_level_version: GnomadPublicTableResource(
+                path=_public_coverage_ht_path(data_type, high_level_version)
             )
         },
     )
@@ -1477,9 +1475,9 @@ def gnomad_gks(
     coverage_ht = hl.read_table(coverage_vtr.path)
 
     # Retrieve ancestry group keys from the imported POPS dictionary.
-    high_level_version = f"v{version.split('.')[0]}"
-
-    pops_list = list(POPS[high_level_version])
+    pops_list = None
+    if by_ancestry_group:
+        pops_list = list(POPS[high_level_version])
 
     # Throw warnings if contradictory arguments passed.
     if by_ancestry_group and vrs_only:
@@ -1495,11 +1493,11 @@ def gnomad_gks(
 
     # Call and return get_gks() for chosen arguments.
     gks_info = get_gks(
-        ht = ht,
+        ht=ht,
         variant=variant,
         label_name="gnomAD",
         label_version=version,
-        coverage_ht,
+        coverage_ht=coverage_ht,
         ancestry_groups=pops_list,
         ancestry_groups_dict=POP_NAMES,
         by_sex=by_sex,

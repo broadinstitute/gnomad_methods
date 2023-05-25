@@ -430,11 +430,11 @@ def gnomad_gks(
     custom_path: str = None,
 ) -> dict:
     """
-    Call get_gks() and return VRS information and frequency information for the specified gnomAD release version, and variant.
+    Call get_gks() and return VRS information and frequency information for the specified gnomAD release version and variant.
 
-    :param version: String of version of gnomAD release to use .
-    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T"..
-    :param groups: List of ancestry group abbreviations for which to obtain frequency information. Example: ['amr', 'nfe', 'fin'] .
+    :param version: String of version of gnomAD release to use.
+    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
+    :param groups: List of ancestry group abbreviations for which to obtain frequency information. Example: ['amr', 'nfe', 'fin'].
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
@@ -453,16 +453,14 @@ def gnomad_gks(
         coverage_version = "3.0.1"
         coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
 
-    # Retrieve ancestry group keys from the imported POPS dictionary.
-    pops_list = None
-    if by_ancestry_group:
-        pops_list = list(POPS[high_level_version])
+    # Retrieve ancestry groups from the imported POPS dictionary.
+    pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
 
     # Throw warnings if contradictory arguments passed.
     if by_ancestry_group and vrs_only:
         logger.warning(
             "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
-            " 'by_ancestry_groups' list and returning only vrs information."
+            " 'by_ancestry_groups' list and returning only VRS information."
         )
     elif by_sex and not by_ancestry_group:
         logger.warning(

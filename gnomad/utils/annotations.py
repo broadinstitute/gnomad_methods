@@ -7,10 +7,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 import ga4gh.core as ga4gh_core
 import ga4gh.vrs as ga4gh_vrs
 import hail as hl
-from hail.utils.misc import new_temp_file  # format and run isort on later when pulled
+from hail.utils.misc import new_temp_file
 
 from gnomad.utils.gen_stats import to_phred
-
+from gnomad.utils.reference_genome import get_reference_genome
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -88,7 +88,7 @@ VRS_CHROM_IDS = {
         "21": "ga4gh:SQ.LpTaNW-hwuY_yARP0rtarCnpCQLkgVCg",
         "22": "ga4gh:SQ.XOgHwwR3Upfp5sZYk6ZKzvV25a4RBVu8",
         "X": "ga4gh:SQ.v7noePfnNpK8ghYXEqZ9NukMXW7YeNsm",
-        "Y": "ga4gh:SQ.BT7QyW5iXaX_1PSX-msSGYsqRdMKqkj-"
+        "Y": "ga4gh:SQ.BT7QyW5iXaX_1PSX-msSGYsqRdMKqkj-",
     },
 }
 
@@ -1226,7 +1226,6 @@ def get_gks(
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
-    from gnomad.utils.filtering import get_reference_genome
 
     # Define variables for variant information.
     build_in = get_reference_genome(ht.locus).name

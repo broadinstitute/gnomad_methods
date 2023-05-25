@@ -1287,7 +1287,8 @@ def get_gks(
     if vrs_only:
         return vrs_dict
 
-    # Create a list to then add the dictionaries for frequency reports for different ancestry groups to.
+    # Create a list to then add the dictionaries for frequency reports for 
+    # different ancestry groups to.
     list_of_group_info_dicts = []
 
     # Define function to return a frequency report dictionary for a given group
@@ -1362,7 +1363,8 @@ def get_gks(
 
             list_of_group_info_dicts.append(group_result)
 
-    # Overall frequency, via label 'adj' which is currently stored at position #1 (index 0)
+    # Overall frequency, via label 'adj' which is currently stored at 
+    # position #1 (index 0)
     overall_freq = ht.freq[0]
 
     # Read coverage statistics
@@ -1399,14 +1401,15 @@ def get_gks(
         },
     }
 
-    # If ancestry_groups were passed, add the ancestry group dictionary to the final frequency dictionary to be returned.
+    # If ancestry_groups were passed, add the ancestry group dictionary to the 
+    # final frequency dictionary to be returned.
     if ancestry_groups:
         final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts
 
     # Validate that the constructed dictionary will convert to a JSON string.
     try:
         validated_json = json.dumps(final_freq_dict)
-    except:
+    except BaseException:
         raise SyntaxError("The dictionary did not convert to a valid JSON")
 
     # Returns the constructed dictionary.

@@ -123,18 +123,24 @@ def get_variant_count_in_protein_coding_gene(
     )
 
     # output the number of genes and the name of genes
-    na_genes = i.filter(i.all_variants == 0).gene_stable_ID.collect()
+    na_genes = i.filter(hl.is_missing(i.all_variants)).gene_stable_ID.collect()
     logger.info(
-        f"{len(na_genes)} gene(s) have no variants in their defined intervals,"
-        f" including: {na_genes}"
+        f"{len(na_genes)} gene(s) have no overlapped intervals with this gnomAD release"
+    )
+
+    variant0_genes = i.filter(i.all_variants == 0).gene_stable_ID.collect()
+    logger.info(
+        f"{len(variant0_genes)} gene(s) have their intervals overlapped but have no"
+        " variants found in their defined intervals"
     )
 
     non_pcg_genes = i.filter(
         (i.all_variants != 0) & (i.variants_in_pcg == 0)
     ).gene_stable_ID.collect()
     logger.info(
-        f"{len(non_pcg_genes)} gene(s) have no variants annotated as protein-coding"
-        f" biotype in their defined intervals, including {non_pcg_genes}"
+        f"{len(non_pcg_genes)} gene(s) have variants found in overlapped interval"
+        " but no variants annotated as protein-coding"
+        f" biotype in their intervals, including {non_pcg_genes}"
     )
 
     partial_pcg_genes = i.filter(

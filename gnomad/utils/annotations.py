@@ -1226,7 +1226,6 @@ def get_gks(
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
-
     # Define variables for variant information.
     build_in = get_reference_genome(ht.locus).name
     chrom_dict = VRS_CHROM_IDS[build_in]
@@ -1300,7 +1299,7 @@ def get_gks(
         vrs_id: str,
     ) -> dict:
         """
-        Return a dictionary for the frequency information of a given variant for a given subpopulation
+        Return a dictionary for the frequency information of a given variant for a given subpopulation.
 
         :param variant_ht: Hail Table with only one row, only containing the desired variant.
         :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
@@ -1310,7 +1309,6 @@ def get_gks(
         :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
 
         """
-
         # Obtain frequency information for the specified variant
         group_freq = variant_ht.freq[group_index]
 

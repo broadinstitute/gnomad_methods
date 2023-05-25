@@ -451,9 +451,12 @@ def gnomad_gks(
     high_level_version = f"v{version.split('.')[0]}"
 
     # Read coverage statistics.
+    coverage_version = version
+
     if high_level_version == "v3":
         coverage_version = "3.0.1"
-        coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+
+    coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None

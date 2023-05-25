@@ -1315,7 +1315,7 @@ def get_gks(
 
         # Dictionary to be returned containing information for a specified group
         freq_record = {
-            "id": group_id,
+            "id": f"{variant}.{group_id.upper()}",
             "type": "PopulationAlleleFrequency",
             "label": f"{group_label} Population Allele Frequency for {variant}",
             "focusAllele": vrs_id,

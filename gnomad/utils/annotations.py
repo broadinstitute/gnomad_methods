@@ -336,7 +336,12 @@ def annotate_freq(
     sex_expr: Optional[hl.expr.StringExpression] = None,
     pop_expr: Optional[hl.expr.StringExpression] = None,
     subpop_expr: Optional[hl.expr.StringExpression] = None,
-    additional_strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
+    additional_strata_expr: Optional[
+        Union[
+            List[Dict[str, hl.expr.StringExpression]],
+            Dict[str, hl.expr.StringExpression],
+        ]
+    ] = None,
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
     """
@@ -388,11 +393,18 @@ def annotate_freq(
     In addition, if `pop_expr` is specified, a downsampling to each of the exact number of samples present in each population is added.
     Note that samples are randomly sampled only once, meaning that the lower downsamplings are subsets of the higher ones.
 
+    .. rubric:: The `additional_strata_expr` parameter
+
+    If the `additional_strata_expr` parameter is used, frequencies will be computed for each of the strata dictionaries across all
+    values. For example, if `additional_strata_expr` is set to `[{'platform': mt.platform}, {'platform':mt.platform, 'pop': mt.pop},
+     {'age_bin': mt.age_bin}]`, then frequencies will be computed for each of the values of `mt.platform`, each of the combined values
+     of `mt.platform` and `mt.pop`, and each of the values of `mt.age_bin`.
+
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr` is also specified, then a pop/sex stratifiction is added.
     :param pop_expr: When specified, frequencies are stratified by population. If `sex_expr` is also specified, then a pop/sex stratifiction is added.
     :param subpop_expr: When specified, frequencies are stratified by sub-continental population. Note that `pop_expr` is required as well when using this option.
-    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata dictionaries found in the List. This can e.g. be used to stratify by platform, platform-pop, platform-pop-sex.
+    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata. This can e.g. be used to stratify by platform, platform-pop, platform-pop-sex.
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
@@ -402,7 +414,10 @@ def annotate_freq(
         )
 
     if additional_strata_expr is None:
-        additional_strata_expr = {}
+        additional_strata_expr = [{}]
+
+    if isinstance(additional_strata_expr, dict):
+        additional_strata_expr = [additional_strata_expr]
 
     _freq_meta_expr = hl.struct(
         **{k: v for d in additional_strata_expr for k, v in d.items()}

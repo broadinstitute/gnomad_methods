@@ -1405,7 +1405,7 @@ def get_gks(
     if ancestry_groups:
         final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts
 
-    # Validate that our constructed dictionary would convert to a JSON string.
+    # Validate that the constructed dictionary will convert to a JSON string.
     try:
         validated_json = json.dumps(final_freq_dict)
     except:

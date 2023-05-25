@@ -434,7 +434,7 @@ def gnomad_gks(
 
     :param version: String of version of gnomAD release to use.
     :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
-    :param groups: List of ancestry group abbreviations for which to obtain frequency information. Example: ['amr', 'nfe', 'fin'].
+    :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
@@ -451,7 +451,7 @@ def gnomad_gks(
     # Read coverage statistics.
     if high_level_version == "v3":
         coverage_version = "3.0.1"
-        coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+   coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None

@@ -1287,7 +1287,7 @@ def get_gks(
     if vrs_only:
         return vrs_dict
 
-    # Create a list to then add the dictionaries for frequency reports for 
+    # Create a list to then add the dictionaries for frequency reports for
     # different ancestry groups to.
     list_of_group_info_dicts = []
 
@@ -1363,7 +1363,7 @@ def get_gks(
 
             list_of_group_info_dicts.append(group_result)
 
-    # Overall frequency, via label 'adj' which is currently stored at 
+    # Overall frequency, via label 'adj' which is currently stored at
     # position #1 (index 0)
     overall_freq = ht.freq[0]
 
@@ -1401,7 +1401,7 @@ def get_gks(
         },
     }
 
-    # If ancestry_groups were passed, add the ancestry group dictionary to the 
+    # If ancestry_groups were passed, add the ancestry group dictionary to the
     # final frequency dictionary to be returned.
     if ancestry_groups:
         final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts

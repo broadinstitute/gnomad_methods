@@ -427,22 +427,24 @@ def gnomad_gks(
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
-    custom_path: str = None,
+    custom_ht_path: str = None,
 ) -> dict:
     """
     Call get_gks() and return VRS information and frequency information for the specified gnomAD release version and variant.
 
     :param version: String of version of gnomAD release to use.
     :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
+    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
     :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
+    :param custom_ht_path: Path of Hail Table to parse if different from what the public_release() method would return for the version.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
     # Read in gnomAD release table to filter to chosen variant.
-    if custom_path:
-        ht = hl.read_table(custom_path)
+    if custom_ht_path:
+        ht = hl.read_table(custom_ht_path)
     else:
         ht = hl.read_table(public_release(data_type).versions[version].path)
 
@@ -451,7 +453,7 @@ def gnomad_gks(
     # Read coverage statistics.
     if high_level_version == "v3":
         coverage_version = "3.0.1"
-   coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+        coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None

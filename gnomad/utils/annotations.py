@@ -1229,7 +1229,7 @@ def get_gks(
     # Throw warnings if contradictory arguments passed.
     if ancestry_groups and vrs_only:
         logger.warning(
-            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
+            "Both 'vrs_only' and 'ancestry_groups' have been specified. Ignoring"
             " 'ancestry_groups' list and returning only VRS information."
         )
     elif by_sex and not ancestry_groups:

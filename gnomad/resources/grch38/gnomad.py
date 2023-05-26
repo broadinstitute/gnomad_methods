@@ -454,6 +454,10 @@ def gnomad_gks(
 
     if high_level_version == "v3":
         coverage_version = "3.0.1"
+    else:
+        raise NotImplementedError(
+            "gnomad_gks() is currently only implemented gnomAD v3."
+        )
 
     coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
 

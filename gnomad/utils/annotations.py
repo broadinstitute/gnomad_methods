@@ -1226,6 +1226,18 @@ def get_gks(
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
+    # Throw warnings if contradictory arguments passed.
+    if ancestry_groups and vrs_only:
+        logger.warning(
+            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
+            " 'ancestry_groups' list and returning only VRS information."
+        )
+    elif by_sex and not ancestry_groups:
+        logger.warning(
+            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
+            " please also specify 'ancestry_groups' to stratify by."
+        )
+
     # Define variables for variant information.
     build_in = get_reference_genome(ht.locus).name
     chrom_dict = VRS_CHROM_IDS[build_in]

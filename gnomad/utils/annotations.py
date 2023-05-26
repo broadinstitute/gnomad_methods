@@ -1322,7 +1322,7 @@ def get_gks(
             "focusAlleleCount": group_freq["AC"].collect()[0],
             "locusAlleleCount": group_freq["AN"].collect()[0],
             "alleleFrequency": group_freq["AF"].collect()[0],
-            "population": f"{label_name}{label_version}:{group_id}",
+            "population": f"{label_name}{label_version}:{group_id.upper()}",
             "ancillaryResults": {
                 "homozygotes": group_freq["homozygote_count"].collect()[0]
             },

@@ -13,29 +13,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def count_variant_per_interval(i_ht: hl.Table(), vep_ht: hl.Table()) -> hl.Table():
+def count_variant_per_interval(i_ht, vep_ht) -> hl.Table:
     """
     Count how many variants in each interval.
 
-    :param i_ht: hl.Table(), interval information of protein-coding genes, downloaded from Ensembl Archive for 101 & 105
+    :param i_ht: hl.Table(), containing interval information of protein-coding genes
     :param vep_ht: hl.Table(), VEP-annotated HT, only selected the vep.transcript_consequences field
     :return: hl.Table(), interval information with variant count
     """
-    # convert the interval information to locus_interval in Hail format
-    i_ht = i_ht.key_by(
-        interval=hl.locus_interval(
-            hl.literal("chr") + hl.str(i_ht.chr),
-            i_ht.start,
-            i_ht.end,
-            reference_genome="GRCh38",
-        )
-    )
-
     # join the interval information with the VEP-annotated HT by locus
     i_ht = i_ht.annotate(interval_copy=i_ht.interval)
-    vep_ht = vep_ht.annotate(
-        the_interval_or_NA=i_ht[vep_ht.locus].interval_copy
-    )  # join by locus
+    vep_ht = vep_ht.annotate(the_interval_or_NA=i_ht[vep_ht.locus].interval_copy)
     vep_ht = vep_ht.filter(hl.is_defined(vep_ht.the_interval_or_NA))
     vep_ht = vep_ht.annotate(the_interval=vep_ht.the_interval_or_NA)
 
@@ -46,29 +34,36 @@ def count_variant_per_interval(i_ht: hl.Table(), vep_ht: hl.Table()) -> hl.Table
             vep_ht.transcript_consequences.biotype.contains("protein_coding")
         ),
     )
+
+    re.checkpoint("gs://gnomad-tmp-4day/count_tmp.ht", overwrite=True)
+
     i_ht = i_ht.annotate(
         all_variants=re[i_ht.interval].all_variants,
         variants_in_pcg=re[i_ht.interval].variants_in_pcg,
     )
-    na_genes = i_ht.filter(hl.is_missing(i_ht.all_variants))
+
+    i_ht.checkpoint("gs://gnomad-tmp-4day/count_tmp.ht", overwrite=True)
+
+    na_genes = i_ht.filter(
+        hl.is_missing(i_ht.variants_in_pcg) | (i_ht.variants_in_pcg == 0)
+    )
     logger.info(
-        f"{len(na_genes).gene_stable_ID.collect()} gene(s) have no variants annotated"
-        " as protein-coding in biotype."
+        f"{len(na_genes.gene_stable_ID.collect())} gene(s) have no variants annotated"
+        " as protein-coding in Biotype."
     )
     return i_ht
 
 
 def import_filter_vep_data(
-    release: str("v4.0"), dataset, vep_version: str("105"), test=False
-) -> hl.Table():
+    release: str("v4.0"), dataset: str("exomes"), vep_version: str("105")
+) -> hl.Table:
     """
     Count how many variants annotated by VEP in each protein-coding gene according to its interval information.
 
     :param release: str, "v4.0" or "v3.1"
     :param dataset: str, "exomes" or "genomes"
     :param vep_version: str, "101" or "105"
-    :param test: bool, if True, only run on 3 protein-coding genes
-    :return:
+    :return: vep_ht: hl.Table(), VEP-annotated HT, only selected the vep.transcript_consequences field
     """
     if release == "v4.0" and vep_version == "101" and dataset == "exomes":
         logger.warning(
@@ -94,18 +89,6 @@ def import_filter_vep_data(
     if vep_version not in ["101", "105"]:
         logger.warning("vep_version should be 101 or 105 only")
 
-    # import interval information of protein-coding genes
-    if test == True:
-        i_ht = hl.import_table(
-            "gs://gnomad-qin/test_3pc_genes.tsv", delimiter="\t", impute=True
-        )
-    else:
-        i_ht = hl.import_table(
-            f"gs://gnomad-qin/ensembl_v{vep_version}_pc_genes.tsv",
-            delimiter="\t",
-            impute=True,
-        )
-
     # define the path of the VEP-annotated HT
     if release == "v4.0" and dataset == "exomes":
         vep_ht = hl.read_table(
@@ -126,49 +109,80 @@ def import_filter_vep_data(
 
     vep_ht = vep_ht.select(vep_ht.vep.transcript_consequences)
 
-    return i_ht, vep_ht
+    return vep_ht
 
 
-def filter_na_genes(i_ht: hl.Table()) -> hl.Table():
-    """Filter genes with no variants annotated as protein-coding in biotype.
-
-    :param i_ht: hl.Table, interval HT with count of variants per gene.
+def import_parse_interval(interval_file) -> hl.Table:
     """
-    na_genes = i_ht.filter(hl.is_missing(i_ht.all_variants))
-    logger.info(
-        "Filtering genes with no variants annotated as protein-coding in biotype."
+    Import and parse interval of protein-coding genes to HT.
+
+    Downloaded from Ensembl Archive for 101 & 105.
+    :param interval_file: str, the name of the interval file
+    """
+    i_ht = hl.import_table(
+        f"gs://gnomad-qin/{interval_file}.tsv",
+        delimiter="\t",
+        impute=True,
     )
-    return na_genes
+
+    i_ht = i_ht.key_by(
+        interval=hl.locus_interval(
+            hl.literal("chr") + hl.str(i_ht.chr),
+            i_ht.start,
+            i_ht.end,
+            reference_genome="GRCh38",
+        )
+    )
+    return i_ht
 
 
 def main(args):
     """Validate number of variants by VEP in protein-coding genes."""
     hl.init(log="/tmp/hail.log", tmp_dir="gs://gnomad-tmp-4day")
     startTime = datetime.now()
+
+    logger.info("importing and parsing interval file: {}".format(args.interval_file))
+    interval_raw = import_parse_interval(args.interval_file)
+
     logger.info(
         "importing vep_HT on dataset:"
         f" gnomAD_{args.release}_{args.dataset}_vep{args.vep_version}"
     )
-    i_ht, vep_ht = import_filter_vep_data(
-        args.release, args.dataset, args.vep_version, args.test
-    )
+    vep_ht = import_filter_vep_data(args.release, args.dataset, args.vep_version)
+
     logger.info(f"counting variants in each protein-coding gene: 1st round")
-    i_ht = count_variant_per_interval(i_ht, vep_ht)
+    i_ht_count1 = count_variant_per_interval(interval_raw, vep_ht)
+
     logger.info(
-        f"filtering genes with no variants annotated as protein-coding in biotype"
+        "filtering genes with no variants annotated as protein-coding in biotype"
     )
-    na_genes = filter_na_genes(i_ht)
-    logger.info(f"counting variants in each protein-coding gene: 2nd round")
-    na_genes_counted = count_variant_per_interval(na_genes)
-    logger.info(f"combining 2 rounds of counting")
-    i_ht = i_ht.annotate(
-        all_variants=na_genes_counted[i_ht.interval].all_variants,
-        variants_in_pcg=na_genes_counted[i_ht.interval].variants_in_pcg,
+    na_genes = i_ht_count1.filter(
+        (
+            hl.is_missing(i_ht_count1.variants_in_pcg)
+            | (i_ht_count1.variants_in_pcg == 0)
+        )
     )
+    na_genes = na_genes.checkpoint(
+        "gs://gnomad-tmp-4day/tmp_na_genes.ht", overwrite=True
+    )
+
+    logger.info("counting variants in each protein-coding gene: 2nd round")
+    i_ht_count2 = count_variant_per_interval(na_genes, vep_ht)
+
+    logger.info("combining 2 rounds of counting")
+    i_ht_count1 = i_ht_count1.filter(
+        (
+            hl.is_defined(i_ht_count1.variants_in_pcg)
+            | (i_ht_count1.variants_in_pcg != 0)
+        )
+    )
+    i_ht = i_ht_count1.union(i_ht_count2)
+
     i_ht.checkpoint(
-        f"gs://gnomad-qin/validate_vep_results/interval_info_with_count_{args.release}_{args.dataset}_vep{args.vep_version}.ht",
+        f"gs://gnomad-qin/validate_vep_results/interval_with_count_{args.release}_{args.dataset}_vep{args.vep_version}.ht",
         overwrite=True,
     )
+
     logger.info(f"Time elapsed: {datetime.now() - startTime}")
 
 
@@ -176,6 +190,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         "--release", default="v4.0", help="gnomAD release version", required=True
+    )
+    parser.add_argument(
+        "--interval-file", help="prefix of interval file", required=True
     )
     parser.add_argument(
         "--dataset",
@@ -189,9 +206,5 @@ if __name__ == "__main__":
         help="VEP version, either 101 or 105",
         required=True,
     )
-    parser.add_argument(
-        "--test",
-        action="store_true",
-        help="whether to run on test interval file, default is false",
-    )
+
     main(parser.parse_args())

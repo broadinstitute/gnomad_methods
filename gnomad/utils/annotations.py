@@ -1205,7 +1205,7 @@ def get_gks(
     variant: str,
     label_name: str,
     label_version: str,
-    coverage_ht: hl.Table,
+    coverage_ht: hl.Table = None,
     ancestry_groups: list = None,
     ancestry_groups_dict: dict = None,
     by_sex: bool = False,

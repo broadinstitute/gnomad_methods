@@ -451,7 +451,6 @@ def gnomad_gks(
     high_level_version = f"v{version.split('.')[0]}"
 
     # Read coverage statistics.
-    coverage_version = version
 
     if high_level_version == "v3":
         coverage_version = "3.0.1"

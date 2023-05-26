@@ -397,8 +397,8 @@ def annotate_freq(
 
     If the `additional_strata_expr` parameter is used, frequencies will be computed for each of the strata dictionaries across all
     values. For example, if `additional_strata_expr` is set to `[{'platform': mt.platform}, {'platform':mt.platform, 'pop': mt.pop},
-     {'age_bin': mt.age_bin}]`, then frequencies will be computed for each of the values of `mt.platform`, each of the combined values
-     of `mt.platform` and `mt.pop`, and each of the values of `mt.age_bin`.
+    {'age_bin': mt.age_bin}]`, then frequencies will be computed for each of the values of `mt.platform`, each of the combined values
+    of `mt.platform` and `mt.pop`, and each of the values of `mt.age_bin`.
 
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr` is also specified, then a pop/sex stratifiction is added.

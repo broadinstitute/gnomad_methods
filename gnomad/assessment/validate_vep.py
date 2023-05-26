@@ -13,45 +13,60 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def count_variant_per_interval(i_ht, vep_ht) -> hl.Table:
+def count_variant_per_interval(ht, vep_ht) -> hl.Table:
     """
-    Count how many variants in each interval.
+    Count total number of variants and variants annotated to be protein-coding in each interval.
 
-    :param i_ht: hl.Table(), containing interval information of protein-coding genes
+    :param ht: hl.Table(), containing interval information of protein-coding genes
     :param vep_ht: hl.Table(), VEP-annotated HT, only selected the vep.transcript_consequences field
     :return: hl.Table(), interval information with variant count
     """
-    # join the interval information with the VEP-annotated HT by locus
-    i_ht = i_ht.annotate(interval_copy=i_ht.interval)
-    vep_ht = vep_ht.annotate(the_interval_or_NA=i_ht[vep_ht.locus].interval_copy)
-    vep_ht = vep_ht.filter(hl.is_defined(vep_ht.the_interval_or_NA))
-    vep_ht = vep_ht.annotate(the_interval=vep_ht.the_interval_or_NA)
+    # join two tables by interval and locus as index key
+    vep_ht = vep_ht.annotate(
+        interval_annotations=ht.index(vep_ht.locus, all_matches=True)
+    )
+
+    vep_ht = vep_ht.filter(hl.is_defined(vep_ht.interval_annotations))
+
+    vep_ht = vep_ht.annotate(
+        gene_stable_ID=vep_ht.interval_annotations.gene_stable_ID,
+        biotype=vep_ht.transcript_consequences.biotype,
+    )
+
+    # select only the gene_stable_ID and biotype to save space
+    vep_ht = vep_ht.select("gene_stable_ID", "biotype")
+
+    # explode the vep_ht by gene_stable_ID
+    vep_ht = vep_ht.explode(vep_ht.gene_stable_ID)
 
     # count the number of total variants and "protein-coding" variants in each interval
-    re = vep_ht.group_by(vep_ht.the_interval).aggregate(
+    count_ht = vep_ht.group_by(vep_ht.gene_stable_ID).aggregate(
         all_variants=hl.agg.count(),
-        variants_in_pcg=hl.agg.count_where(
-            vep_ht.transcript_consequences.biotype.contains("protein_coding")
-        ),
+        variants_in_pcg=hl.agg.count_where(vep_ht.biotype.contains("protein_coding")),
     )
 
-    re.checkpoint("gs://gnomad-tmp-4day/count_tmp.ht", overwrite=True)
+    count_ht.checkpoint("gs://gnomad-tmp-4day/count_tmp.ht", overwrite=True)
 
-    i_ht = i_ht.annotate(
-        all_variants=re[i_ht.interval].all_variants,
-        variants_in_pcg=re[i_ht.interval].variants_in_pcg,
-    )
+    ht = ht.annotate(**count_ht[ht.gene_stable_ID])
 
-    i_ht.checkpoint("gs://gnomad-tmp-4day/count_tmp.ht", overwrite=True)
-
-    na_genes = i_ht.filter(
-        hl.is_missing(i_ht.variants_in_pcg) | (i_ht.variants_in_pcg == 0)
-    )
+    na_genes = ht.filter(hl.is_missing(ht.variants_in_pcg) | (ht.variants_in_pcg == 0))
     logger.info(
         f"{len(na_genes.gene_stable_ID.collect())} gene(s) have no variants annotated"
-        " as protein-coding in Biotype."
+        " as protein-coding in Biotype. It is likely these genes are not covered by"
+        f" gnomAD data. These genes are: {na_genes.gene_stable_ID.collect()}"
     )
-    return i_ht
+
+    partial_pcg_genes = ht.filter(
+        (ht.all_variants != 0)
+        & (ht.variants_in_pcg != 0)
+        & (ht.all_variants != ht.variants_in_pcg)
+    ).gene_stable_ID.collect()
+    logger.info(
+        f"{len(partial_pcg_genes)} gene(s) have a subset of variants annotated as"
+        " protein-coding biotype in their defined intervals"
+    )
+
+    return ht
 
 
 def import_filter_vep_data(
@@ -119,21 +134,25 @@ def import_parse_interval(interval_file) -> hl.Table:
     Downloaded from Ensembl Archive for 101 & 105.
     :param interval_file: str, the name of the interval file
     """
-    i_ht = hl.import_table(
+    ht = hl.import_table(
         f"gs://gnomad-qin/{interval_file}.tsv",
         delimiter="\t",
+        min_partitions=100,
         impute=True,
     )
 
-    i_ht = i_ht.key_by(
+    ht = ht.key_by(
         interval=hl.locus_interval(
-            hl.literal("chr") + hl.str(i_ht.chr),
-            i_ht.start,
-            i_ht.end,
+            hl.literal("chr") + hl.str(ht.chr),
+            ht.start,
+            ht.end,
             reference_genome="GRCh38",
         )
     )
-    return i_ht
+    ht = ht.checkpoint(
+        f"gs://gnomad-tmp-4day/qin/{interval_file}.ht", _read_if_exists=True
+    )
+    return ht
 
 
 def main(args):
@@ -142,7 +161,7 @@ def main(args):
     startTime = datetime.now()
 
     logger.info("importing and parsing interval file: {}".format(args.interval_file))
-    interval_raw = import_parse_interval(args.interval_file)
+    ht = import_parse_interval(args.interval_file)
 
     logger.info(
         "importing vep_HT on dataset:"
@@ -150,36 +169,12 @@ def main(args):
     )
     vep_ht = import_filter_vep_data(args.release, args.dataset, args.vep_version)
 
-    logger.info(f"counting variants in each protein-coding gene: 1st round")
-    i_ht_count1 = count_variant_per_interval(interval_raw, vep_ht)
+    logger.info(f"counting variants in the interval of each protein-coding gene: ")
+    ht = count_variant_per_interval(ht, vep_ht)
 
-    logger.info(
-        "filtering genes with no variants annotated as protein-coding in biotype"
-    )
-    na_genes = i_ht_count1.filter(
-        (
-            hl.is_missing(i_ht_count1.variants_in_pcg)
-            | (i_ht_count1.variants_in_pcg == 0)
-        )
-    )
-    na_genes = na_genes.checkpoint(
-        "gs://gnomad-tmp-4day/tmp_na_genes.ht", overwrite=True
-    )
-
-    logger.info("counting variants in each protein-coding gene: 2nd round")
-    i_ht_count2 = count_variant_per_interval(na_genes, vep_ht)
-
-    logger.info("combining 2 rounds of counting")
-    i_ht_count1 = i_ht_count1.filter(
-        (
-            hl.is_defined(i_ht_count1.variants_in_pcg)
-            | (i_ht_count1.variants_in_pcg != 0)
-        )
-    )
-    i_ht = i_ht_count1.union(i_ht_count2)
-
-    i_ht.checkpoint(
-        f"gs://gnomad-qin/validate_vep_results/interval_with_count_{args.release}_{args.dataset}_vep{args.vep_version}.ht",
+    logger.info("writing out the count by interval HT: ")
+    ht.checkpoint(
+        f"gs://gnomad-tmp-4day/count_interval_{args.release}_{args.dataset}_{args.vep_version}.ht",
         overwrite=True,
     )
 

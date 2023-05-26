@@ -125,7 +125,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -219,8 +219,10 @@ def faf_expr(
                 ~locus.in_autosome_or_par(),
                 hl.struct(
                     **{
-                        f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
-                            freq[i].AC, freq[i].AN, threshold
+                        f"faf{str(threshold)[2:]}": (
+                            hl.experimental.filtering_allele_frequency(
+                                freq[i].AC, freq[i].AN, threshold
+                            )
                         )
                         for threshold in faf_thresholds
                     }
@@ -882,7 +884,8 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
 
 
 def bi_allelic_site_inbreeding_expr(
-    call: hl.expr.CallExpression,
+    call: Optional[hl.expr.CallExpression] = None,
+    callstats_expr: Optional[hl.expr.StructExpression] = None,
 ) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
@@ -895,8 +898,12 @@ def bi_allelic_site_inbreeding_expr(
         The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param call: Expression giving the calls in the MT
+    :param callstats_expr: StructExpression containing AC, AN, and homozygote_count. If passed, used to create expression in place of call.
+
     :return: Site inbreeding coefficient expression
     """
+    if call is None and callstats_expr is None:
+        raise ValueError("One of `call` or `callstats_expr` must be passed.")
 
     def inbreeding_coeff(
         gt_counts: hl.expr.DictExpression,
@@ -906,7 +913,24 @@ def bi_allelic_site_inbreeding_expr(
         q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
-    return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
+    if callstats_expr is not None:
+        # Compute the counts of alternate alleles by individual from the callstats
+        gt_counts = hl.dict(
+            {
+                0: (
+                    callstats_expr.AN
+                    - callstats_expr.AC
+                    - (callstats_expr.AC - (2 * callstats_expr.homozygote_count))
+                )
+                / 2,
+                1: callstats_expr.AC - (2 * callstats_expr.homozygote_count),
+                2: callstats_expr.homozygote_count,
+            }
+        )
+    else:
+        gt_counts = hl.agg.counter(call.n_alt_alleles())
+
+    return hl.bind(inbreeding_coeff, gt_counts)
 
 
 def fs_from_sb(
@@ -1106,7 +1130,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
     )
 
     if prob_regions is not None:

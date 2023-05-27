@@ -175,7 +175,7 @@ ensembl_interval = VersionedTableResource(
         ),
         "101": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.ht",
-            import_func=_import_ensembl,
+            import_func=_import_ensembl_interval,
             import_args={
                 "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.tsv",
                 "delimiter": "\t",

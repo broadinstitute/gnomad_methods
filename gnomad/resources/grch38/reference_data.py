@@ -57,6 +57,31 @@ def _import_dbsnp(**kwargs) -> hl.Table:
     return dbsnp
 
 
+def _import_ensembl_interval(**kwargs) -> hl.Table:
+    """
+    Import and parse interval of protein-coding genes to HT.
+
+    Downloaded from Ensembl Archive for 101 & 105.
+    Only including the following fields: gene_stable_ID, chr, start, end, source_gene, gene_name, type
+    :param interval_file: str, the name of the interval file
+    """
+    ensembl = hl.import_table(
+        **kwargs,
+        min_partitions=100,
+        impute=True,
+    )
+
+    ensembl = ensembl.key_by(
+        interval=hl.locus_interval(
+            hl.literal("chr") + hl.str(ensembl.chr),
+            ensembl.start,
+            ensembl.end,
+            reference_genome="GRCh38",
+        )
+    )
+    return ensembl
+
+
 # Resources with no versioning needed
 purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.ht",
@@ -132,6 +157,32 @@ syndip_hc_intervals = VersionedTableResource(
                 "min_partitions": 10,
             },
         )
+    },
+)
+
+ensembl_interval = VersionedTableResource(
+    default_version="105",
+    versions={
+        "105": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.ht",
+            import_func=_import_ensembl_interval,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.tsv",
+                "delimiter": "\t",
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
+            },
+        ),
+        "101": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.ht",
+            import_func=_import_ensembl,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.tsv",
+                "delimiter": "\t",
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
+            },
+        ),
     },
 )
 

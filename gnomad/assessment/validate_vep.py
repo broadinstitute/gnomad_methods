@@ -145,7 +145,7 @@ def main(args):
     ht = ensembl_interval.ht()
     # TODO: ask Julia to copy HT and raw *.tsv to resources location
 
-    logger.info(f"counting variants in the interval of each protein-coding gene: ")
+    logger.info("counting variants in the interval of each protein-coding gene: ")
 
     count_variant_per_interval(ht, args.release, args.dataset, args.vep_version)
 
@@ -155,7 +155,10 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
-        "--release", default="v4.0", help="gnomAD release version", required=True
+        "--release",
+        default="v4.0",
+        help="gnomAD release version",
+        required=True,
     )
     parser.add_argument(
         "--dataset",

@@ -28,7 +28,7 @@ def count_variant_per_interval(
     :return: vep_ht: hl.Table(), VEP-annotated HT, only selected the vep.transcript_consequences field
     """
     logger.info(
-        f"importing vep_HT on dataset: gnomAD_{release}_{dataset}_vep{vep_version}"
+        "importing vep_HT on dataset: gnomAD_%s_%s_vep%s", release, dataset, vep_version
     )
     # check the input parameters
     if release == "v4.0" and vep_version == "101" and dataset == "exomes":
@@ -118,9 +118,11 @@ def count_variant_per_interval(
     ).gene_stable_ID.collect()
 
     logger.info(
-        f"{len(na_genes)} gene(s) have no variants annotated"
-        " as protein-coding in Biotype. It is likely these genes are not covered by"
-        f" this gnomAD release. These genes are: {na_genes}"
+        f"%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
+        f" likely these genes are not covered by this gnomAD release. These genes"
+        f" are: %s",
+        len(na_genes),
+        na_genes,
     )
 
     partial_pcg_genes = ht.filter(
@@ -129,8 +131,9 @@ def count_variant_per_interval(
         & (ht.all_variants != ht.variants_in_pcg)
     ).gene_stable_ID.collect()
     logger.info(
-        f"{len(partial_pcg_genes)} gene(s) have a subset of variants annotated as"
-        " protein-coding biotype in their defined intervals"
+        f"%s gene(s) have a subset of variants annotated as"
+        f" protein-coding biotype in their defined intervals",
+        {len(partial_pcg_genes)},
     )
 
     return ht
@@ -149,7 +152,7 @@ def main(args):
 
     count_variant_per_interval(ht, args.release, args.dataset, args.vep_version)
 
-    logger.info(f"Time elapsed: {datetime.now() - startTime}")
+    logger.info("Time elapsed: %s", datetime.now() - startTime)
 
 
 if __name__ == "__main__":

@@ -118,9 +118,9 @@ def count_variant_per_interval(
     ).gene_stable_ID.collect()
 
     logger.info(
-        f"%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
-        f" likely these genes are not covered by this gnomAD release. These genes"
-        f" are: %s",
+        "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
+        " likely these genes are not covered by this gnomAD release. These genes"
+        " are: %s",
         len(na_genes),
         na_genes,
     )
@@ -131,8 +131,8 @@ def count_variant_per_interval(
         & (ht.all_variants != ht.variants_in_pcg)
     ).gene_stable_ID.collect()
     logger.info(
-        f"%s gene(s) have a subset of variants annotated as"
-        f" protein-coding biotype in their defined intervals",
+        "%s gene(s) have a subset of variants annotated as protein-coding biotype in"
+        " their defined intervals",
         {len(partial_pcg_genes)},
     )
 

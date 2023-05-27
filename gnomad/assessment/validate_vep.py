@@ -5,6 +5,8 @@ from datetime import datetime
 
 import hail as hl
 
+from gnomad.resources.grch38.reference_data import ensembl_interval
+
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
@@ -54,6 +56,8 @@ def count_variant_per_interval(
         logger.warning("vep_version should be 101 or 105 only")
 
     # define the path of the VEP-annotated HT
+    # TODO: changed this part and relevant function to import the vep HT
+    # resources, instead of hard-coding the path
     if release == "v4.0" and dataset == "exomes":
         vep_ht = hl.read_table(
             "gs://gnomad/v4.0/annotations/exomes/gnomad.exomes.v4.0.vep.ht"
@@ -103,7 +107,7 @@ def count_variant_per_interval(
 
     logger.info("checkpointing the count by interval HT: ")
     ht.checkpoint(
-        f"gs://gnomad-qin/validate_vep/count_interval_{release}_{dataset}_{vep_version}.ht",
+        f"gs://gnomad-tmp-4day/validate_vep/count_interval_{release}_{dataset}_{vep_version}.ht",
         overwrite=True,
     )
     # TODO: change the path after PR review
@@ -138,12 +142,8 @@ def main(args):
     startTime = datetime.now()
 
     logger.info("importing and parsing interval file: ")
-    ht = hl.read_table(
-        f"gs://gnomad-qin/ensembl/ensembl_{args.vep_version}_pc_genes_grch38.ht"
-    )
-    # TODO: copy HT to resources location
-
-    # TODO: changed this part and relevant function to import the vep HT resources
+    ht = ensembl_interval.ht()
+    # TODO: ask Julia to copy HT and raw *.tsv to resources location
 
     logger.info(f"counting variants in the interval of each protein-coding gene: ")
 

@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 
 
 def count_variant_per_interval(
-    ht, release: str("v4.0"), dataset: str("exomes"), vep_version: str("105")
+    ht, release: str, dataset: str, vep_version: str
 ) -> hl.Table:
     """
     Count how many variants annotated by VEP in each protein-coding gene according to its interval information.
@@ -49,10 +49,10 @@ def count_variant_per_interval(
             " instead"
         )
 
-    if release not in ["v4.0", "v3.1"]:
+    if release not in ("v4.0", "v3.1"):
         logger.warning("release should be v4.0 or v3.1 only")
 
-    if vep_version not in ["101", "105"]:
+    if vep_version not in ("101", "105"):
         logger.warning("vep_version should be 101 or 105 only")
 
     # define the path of the VEP-annotated HT
@@ -160,20 +160,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--release",
         default="v4.0",
-        help="gnomAD release version",
-        required=True,
+        choices=["v4.0", "v3.1"],
+        help="gnomAD release version (default: %(default)s)",
     )
     parser.add_argument(
         "--dataset",
         default="exomes",
-        help="gnomAD dataset, either exomes or genomes",
-        required=True,
+        choices=["exomes", "genomes"],
+        help="gnomAD dataset, either exomes or genomes (default: %(default)s)",
     )
     parser.add_argument(
         "--vep-version",
         default="105",
-        help="VEP version, either 101 or 105",
-        required=True,
+        choices=["101", "105"],
+        help="VEP version, either 101 or 105, (default: %(default)s)",
     )
 
     main(parser.parse_args())

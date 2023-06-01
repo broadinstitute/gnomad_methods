@@ -338,7 +338,7 @@ VRS_FIELDS_DICT = {
         ),
     },
     "VRS_Starts": {
-        "Number": "1",
+        "Number": "R",
         "Description": (
             "Interresidue coordinates used as the location starts for the GA4GH VRS"
             " Alleles corresponding to the values in the REF and ALT fields"

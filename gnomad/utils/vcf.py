@@ -352,7 +352,7 @@ VRS_FIELDS_DICT = {
         ),
     },
     "VRS_States": {
-        "Number": "1",
+        "Number": "R",
         "Description": (
             "The literal sequence states used for the GA4GH VRS Alleles corresponding"
             " to the values in the REF and ALT fields"

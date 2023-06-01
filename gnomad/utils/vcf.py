@@ -331,7 +331,7 @@ Dictionary with in silico score descriptions to include in the VCF INFO header.
 
 VRS_FIELDS_DICT = {
     "VRS_Allele_IDs": {
-        "Number": "1",
+        "Number": "R",
         "Description": (
             "The computed identifiers for the GA4GH VRS Alleles corresponding to the"
             " values in the REF and ALT fields"

@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Optional, Union
 
 import hail as hl
+from hail.utils.misc import new_temp_file
 
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
@@ -982,3 +983,79 @@ def validate_release_t(
             t, info_metrics, non_info_metrics, n_sites, missingness_threshold
         )
     logger.info("VALIDITY CHECKS COMPLETE")
+
+
+def count_variant_per_interval(vep_ht: hl.Table(), interval_ht: hl.Table()) -> hl.Table:
+    """
+    Count how many variants annotated by VEP in each protein-coding gene according to its interval information.
+
+    :param vep_ht: hl.Table(), VEP-annotated HT
+    :param interval_ht: hl.Table(), interval HT
+    :return: hl.Table(), interval information with counts of total variants and variants annotated as "protein-coding" in biotype per gene
+    """
+    logger.info(
+        "Selecting the vep.transcript_consequences field and joining with the"
+        " interval_HT"
+    )
+
+    vep_ht = vep_ht.select(vep_ht.vep.transcript_consequences)
+
+    # join two tables by interval and locus as index key
+    vep_ht = vep_ht.annotate(
+        interval_annotations=interval_ht.index(vep_ht.locus, all_matches=True)
+    )
+
+    vep_ht = vep_ht.filter(hl.is_defined(vep_ht.interval_annotations))
+
+    # select only the gene_stable_ID and biotype to save space
+    vep_ht = vep_ht.select(
+        gene_stable_ID=vep_ht.interval_annotations.gene_stable_ID,
+        biotype=vep_ht.transcript_consequences.biotype,
+    )
+
+    # explode the vep_ht by gene_stable_ID
+    vep_ht = vep_ht.explode(vep_ht.gene_stable_ID)
+
+    # count the number of total variants and "protein-coding" variants in each interval
+    count_ht = vep_ht.group_by(vep_ht.gene_stable_ID).aggregate(
+        all_variants=hl.agg.count(),
+        variants_in_pcg=hl.agg.count_where(vep_ht.biotype.contains("protein_coding")),
+    )
+
+    count_ht = count_ht.checkpoint(
+        new_temp_file("count_tmp", extension="ht"), overwrite=True
+    )
+
+    interval_ht = interval_ht.annotate(**count_ht[interval_ht.gene_stable_ID])
+
+    logger.info("checkpointing the count by interval HT: ")
+    interval_ht = interval_ht.checkpoint(
+        new_temp_file("count_per_interval", extension="ht"), overwrite=True
+    )
+    # TODO: maybe we need a path to store this file instead of a temp file?
+
+    logger.info("Reporting genes without variants annotated: ")
+    na_genes = interval_ht.filter(
+        hl.is_missing(interval_ht.variants_in_pcg) | (interval_ht.variants_in_pcg == 0)
+    ).gene_stable_ID.collect()
+
+    logger.info(
+        "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
+        " likely these genes are not covered by this gnomAD release. These genes"
+        " are: %s",
+        len(na_genes),
+        na_genes,
+    )
+
+    partial_pcg_genes = interval_ht.filter(
+        (interval_ht.all_variants != 0)
+        & (interval_ht.variants_in_pcg != 0)
+        & (interval_ht.all_variants != interval_ht.variants_in_pcg)
+    ).gene_stable_ID.collect()
+    logger.info(
+        "%s gene(s) have a subset of variants annotated as protein-coding biotype in"
+        " their defined intervals",
+        {len(partial_pcg_genes)},
+    )
+
+    return interval_ht

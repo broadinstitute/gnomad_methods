@@ -985,7 +985,7 @@ def validate_release_t(
     logger.info("VALIDITY CHECKS COMPLETE")
 
 
-def count_variant_per_interval(vep_ht: hl.Table(), interval_ht: hl.Table()) -> hl.Table:
+def count_variant_per_interval(vep_ht: hl.Table, interval_ht: hl.Table) -> hl.Table:
     """
     Count how many variants annotated by VEP in each protein-coding gene according to its interval information.
 

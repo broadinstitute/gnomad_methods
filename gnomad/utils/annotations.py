@@ -125,7 +125,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -219,8 +219,10 @@ def faf_expr(
                 ~locus.in_autosome_or_par(),
                 hl.struct(
                     **{
-                        f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
-                            freq[i].AC, freq[i].AN, threshold
+                        f"faf{str(threshold)[2:]}": (
+                            hl.experimental.filtering_allele_frequency(
+                                freq[i].AC, freq[i].AN, threshold
+                            )
                         )
                         for threshold in faf_thresholds
                     }
@@ -1106,7 +1108,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
     )
 
     if prob_regions is not None:
@@ -1188,3 +1190,129 @@ def hemi_expr(
         # mt.GT[0] is alternate allele
         gt.is_haploid() & (sex_expr == male_str) & (gt[0] == 1),
     )
+
+
+def make_freq_index_dict_from_meta(
+    freq_meta: List[Dict[str, str]],
+    label_delimiter: str = "_",
+    sort_order: Optional[List[str]] = SORT_ORDER,
+) -> Dict[str, int]:
+    """
+    Create a dictionary for accessing frequency array.
+
+    :param freq_meta: List of dictionaries containing frequency metadata.
+    :param label_delimiter: Delimiter to use when joining frequency metadata labels.
+    :param sort_order: List of frequency metadata labels to use when sorting the dictionary.
+    :return: Dictionary of frequency metadata.
+    """
+    index_dict = {}
+    for i, f in enumerate(hl.eval(freq_meta)):
+        if sort_order and len(set(f.keys()) - set(sort_order)) < 1:
+            index_dict[
+                label_delimiter.join(
+                    [
+                        f[g]
+                        for g in sorted(
+                            f.keys(),
+                            key=(lambda x: sort_order.index(x)) if sort_order else None,
+                        )
+                    ]
+                )
+            ] = i
+
+    return index_dict
+
+
+def merge_freq_arrays(
+    farrays: List[hl.expr.ArrayExpression],
+    fmeta: List[List[Dict[str, str]]],
+    operation: str = "sum",
+    sort_order: Optional[List[str]] = SORT_ORDER,
+) -> hl.expr.ArrayExpression:
+    """
+    Merge frequency arrays from multiple datasets.
+
+    Farrays and fmeta do not need to be the same or in the same order. They will be
+    merged based on the join type and operation. Missing values are dependent on the
+    join type and operation.
+    :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. Array must be on the same HT.
+    :param fmeta: List of frequency metadata for arrays being merged.
+    :param fill_missing: If False, return an array with length equal to the shortest length of the arrays. If True, return an array equal to the longest length of the arrays, by extending the shorter arrays with missing values.
+    :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum" and "diff".
+    :return: Merged frequency array.
+    """
+    if len(farrays) < 2:
+        raise ValueError("Must provide at least two frequency arrays to merge")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'")
+    if len(farrays) != len(fmeta):
+        raise ValueError("Length of farrays and fmeta must be equal")
+
+    # Create dictionary of frequency metadata, use first entry in fmeta as primary to
+    # anchor ordering, add other indices as needed, basically build freq_meta_dict
+    #  before the actual freq array is created
+    fmeta_dict = make_freq_index_dict_from_meta(
+        freq_meta=fmeta[0], sort_order=sort_order
+    )
+    # Create list of all groups in fmeta and if they exist in fmeta_dict,
+    # use the end of the list as the index in the array and add the group to freq dict
+    for meta in fmeta[1:]:
+        meta_dict = make_freq_index_dict_from_meta(meta, sort_order=sort_order)
+        for group in meta_dict.keys():
+            if group not in fmeta_dict.keys():
+                fmeta_dict[group] = len(
+                    fmeta_dict.keys()
+                )  # TODO: See if can update to hail expr  all_groups = hl.array(hl.set(hl.flatten(hl.map(lambda d: d.keys(), fmeta_dict)))) does it but not sorted, look into sorted?
+
+    # Create  freq array where entry is group then use map to transform to freq struct
+    merged_farray = hl.map(
+        lambda x: x[0], hl.sorted(fmeta_dict, key=lambda item: item[1])
+    )
+    # Make a single merged freq array by finding farray index in corresponding
+    # fmeta_dict for each group in all_groups set
+    zfreq = hl.zip(farrays, fmeta_dict)
+    merged_farray = merged_farray.map(
+        lambda x: hl.struct(
+            AC=hl.sum(
+                hl.map(
+                    lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AC, 0), zfreq
+                )
+            ),
+            AN=hl.sum(
+                hl.map(
+                    lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AN, 0), zfreq
+                )
+            ),
+            AF=hl.if_else(
+                hl.sum(
+                    hl.map(
+                        lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AN, 0),
+                        zfreq,
+                    )
+                )
+                > 0,
+                hl.sum(
+                    hl.map(
+                        lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AC, 0),
+                        zfreq,
+                    )
+                )
+                / hl.sum(
+                    hl.map(
+                        lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AN, 0),
+                        zfreq,
+                    )
+                ),
+                0,
+            ),
+            homozygote_count=hl.sum(
+                hl.map(
+                    lambda f: hl.if_else(
+                        f[1].contains(x), f[0][f[1][x]].homozygote_count, 0
+                    ),
+                    zfreq,
+                )
+            ),
+        )
+    )
+    return merged_farray

@@ -63,6 +63,7 @@ POPS = {
         "eas",
         "fin",
         "mid",
+        "nfe",
         "remaining",
         "sas",
     ],

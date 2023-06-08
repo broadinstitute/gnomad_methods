@@ -1237,8 +1237,8 @@ def merge_freq_arrays(
     join type and operation.
     :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. Array must be on the same HT.
     :param fmeta: List of frequency metadata for arrays being merged.
-    :param fill_missing: If False, return an array with length equal to the shortest length of the arrays. If True, return an array equal to the longest length of the arrays, by extending the shorter arrays with missing values.
-    :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum" and "diff".
+    :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum" and "diff". IF "diff" is passed, the first array in the list will have the other arrays subtracted from it.
+    :param sort_order: Order of frequency metadata labels to use when building label when building key for the freq dictionary.
     :return: Merged frequency array.
     """
     if len(farrays) < 2:
@@ -1248,71 +1248,135 @@ def merge_freq_arrays(
     if len(farrays) != len(fmeta):
         raise ValueError("Length of farrays and fmeta must be equal")
 
-    # Create dictionary of frequency metadata, use first entry in fmeta as primary to
-    # anchor ordering, add other indices as needed, basically build freq_meta_dict
-    #  before the actual freq array is created
-    fmeta_dict = make_freq_index_dict_from_meta(
-        freq_meta=fmeta[0], sort_order=sort_order
-    )
-    # Create list of all groups in fmeta and if they exist in fmeta_dict,
-    # use the end of the list as the index in the array and add the group to freq dict
-    for meta in fmeta[1:]:
-        meta_dict = make_freq_index_dict_from_meta(meta, sort_order=sort_order)
-        for group in meta_dict.keys():
-            if group not in fmeta_dict.keys():
-                fmeta_dict[group] = len(
-                    fmeta_dict.keys()
-                )  # TODO: See if can update to hail expr  all_groups = hl.array(hl.set(hl.flatten(hl.map(lambda d: d.keys(), fmeta_dict)))) does it but not sorted, look into sorted?
+    # Make list of freq_dicts, one for each entry in the fmeta array
+    fmeta_dicts = [
+        make_freq_index_dict_from_meta(meta, sort_order=sort_order) for meta in fmeta
+    ]
+    # Create dictionary from the first entry in fmeta to anchor ordering of groups
+    # in the merged freq array
+    merged_freq_dict = fmeta_dicts[0]
 
-    # Create  freq array where entry is group then use map to transform to freq struct
-    merged_farray = hl.map(
-        lambda x: x[0], hl.sorted(fmeta_dict, key=lambda item: item[1])
+    # Go through each freq array dictionary, if they contain a group not present in the anchor
+    # dictionary, add the group and use the length of the anchor dictionary as
+    # it's index in the array
+    for fmeta_dict in fmeta_dicts[1:]:
+        for group in fmeta_dict.keys():
+            if group not in merged_freq_dict.keys():
+                merged_freq_dict[group] = len(
+                    merged_freq_dict.keys()
+                )  # TODO: See if can update to hail, i.e  all_groups = hl.array(hl.set(hl.flatten(hl.map(lambda d: d.keys(), fmeta_dict)))) does it but wont be sorted, look into hl.sorted?
+
+    # Create array where the entries are the freq agg groupings which will
+    # then be transformed into our merged freqeunecy array of callstat structs
+    merged_freq_array = hl.map(
+        lambda x: x[0], hl.sorted(merged_freq_dict, key=lambda item: item[1])
     )
+
+    def _AC_merge(
+        group, zipped_array_dicts, operation="sum"
+    ) -> hl.expr.Int32Expression:
+        """
+        Merge allele counts from multiple frequency arrays.
+
+        :param group: Group to merge across freq arrays.
+        :param zipped_array_dicts: Zipped list of frequency arrays and their corresponding dictionaries.
+        :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum"
+            and "diff". If "diff" is passed, the first array in the list will have the other arrays AC subtracted from it.
+        :return: Merged allele count.
+        """
+        merged_AC = hl.sum(
+            hl.map(
+                lambda f: hl.if_else(f[1].contains(group), f[0][f[1][group]].AC, 0),
+                zipped_array_dicts,
+            )
+        )
+        # If operation is diff, subtract the sum of all ACs from 2* AC of the
+        # first entry in the freq array
+        if operation == "diff":
+            merged = 2 * hl.sum(zfreq[0][0][zfreq[0][1][group]].AC) - merged_AC
+        return merged
+
+    def _AN_merge(
+        group, zipped_array_dicts, operation="sum"
+    ) -> hl.expr.Int32Expression:
+        """
+        Merge allele numbers from multiple frequency arrays.
+
+        :param group: Group to merge across freq arrays.
+        :param zipped_array_dicts: Zipped list of frequency arrays and their corresponding dictionaries.
+        :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum"
+            and "diff". If "diff" is passed, the first array in the list will have the other arrays AN subtracted from it.
+        :return: Merged allele number.
+        """
+        merged_AN = hl.sum(
+            hl.map(
+                lambda f: hl.if_else(f[1].contains(group), f[0][f[1][group]].AN, 0),
+                zipped_array_dicts,
+            )
+        )
+        # If operation is diff, subtract the sum of all ANs from 2*AN of the first
+        # entry in the freq array
+        if operation == "diff":
+            merged_AN = 2 * hl.sum(zfreq[0][0][zfreq[0][1][group]].AN) - merged_AN
+
+        return merged_AN
+
+    def _AF_merge(
+        group, zipped_array_dicts, operation="sum"
+    ) -> hl.expr.Float32Expression:
+        """
+        Calculate new allele frequencies using merged AC and AN from multiple frequency arrays.
+
+        :param group: Group to merge across freq arrays.
+        :param zipped_array_dicts: Zipped list of frequency arrays and their corresponding dictionaries.
+        :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum" and "diff".
+        If "diff" is passed, the first array in the list will have the other arrays AC and AN subtracted from its own.
+        :return: Merged allele frequency.
+        """
+        merged_AC = _AC_merge(group, zipped_array_dicts, operation=operation)
+        merged_AN = _AN_merge(group, zipped_array_dicts, operation=operation)
+        return hl.if_else(
+            merged_AN > 0,
+            merged_AC / merged_AN,
+            0,
+        )
+
+    def _homozygote_count_merge(
+        group, zipped_array_dicts, operation="sum"
+    ) -> hl.expr.Int32Expression:
+        """
+        Merge homozygote counts from multiple frequency arrays.
+
+        :param group: Group to merge across freq arrays.
+        :param zipped_array_dicts: Zipped list of frequency arrays and their corresponding dictionaries.
+        :param operation: Operation to perform on the frequency arrays. Default is "sum". Options are "sum"
+            and "diff". If "diff" is passed, the first array in the list will have the other arrays' homozygote count subtracted from it.
+        :return: Merged homozygote count.
+        """
+        sum_homozygote_count = hl.sum(
+            hl.map(
+                lambda f: hl.if_else(
+                    f[1].contains(group), f[0][f[1][group]].homozygote_count, 0
+                ),
+                zipped_array_dicts,
+            )
+        )
+        if operation == "diff":
+            sum_homozygote_count = (
+                2 * hl.sum(zfreq[0][zfreq[1][group]].homozygote_count)
+                - sum_homozygote_count
+            )
+        return sum_homozygote_count
+
     # Make a single merged freq array by finding farray index in corresponding
     # fmeta_dict for each group in all_groups set
-    zfreq = hl.zip(farrays, fmeta_dict)
-    merged_farray = merged_farray.map(
-        lambda x: hl.struct(
-            AC=hl.sum(
-                hl.map(
-                    lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AC, 0), zfreq
-                )
-            ),
-            AN=hl.sum(
-                hl.map(
-                    lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AN, 0), zfreq
-                )
-            ),
-            AF=hl.if_else(
-                hl.sum(
-                    hl.map(
-                        lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AN, 0),
-                        zfreq,
-                    )
-                )
-                > 0,
-                hl.sum(
-                    hl.map(
-                        lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AC, 0),
-                        zfreq,
-                    )
-                )
-                / hl.sum(
-                    hl.map(
-                        lambda f: hl.if_else(f[1].contains(x), f[0][f[1][x]].AN, 0),
-                        zfreq,
-                    )
-                ),
-                0,
-            ),
-            homozygote_count=hl.sum(
-                hl.map(
-                    lambda f: hl.if_else(
-                        f[1].contains(x), f[0][f[1][x]].homozygote_count, 0
-                    ),
-                    zfreq,
-                )
-            ),
+    zfreq = hl.zip(farrays, fmeta_dicts)
+    merged_freq_array = merged_freq_array.map(
+        lambda group: hl.struct(
+            AC=_AC_merge(group, zfreq, operation=operation),
+            AN=_AN_merge(group, zfreq, operation=operation),
+            AF=_AF_merge(group, zfreq, operation=operation),
+            homozygote_count=_homozygote_count_merge(group, zfreq, operation=operation),
         )
     )
-    return merged_farray
+    return merged_freq_array

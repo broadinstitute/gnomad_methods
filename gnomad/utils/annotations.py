@@ -898,9 +898,7 @@ def bi_allelic_site_inbreeding_expr(
         The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param call: Expression giving the calls in the MT
-    :param callstats_expr: StructExpression containing only alternate allele AC, AN,
-    and homozygote_count as integers. If passed, used to create expression in place of GT calls.
-
+    :param callstats_expr: StructExpression containing only alternate allele AC, AN, and homozygote_count as integers. If passed, used to create expression in place of GT calls.
     :return: Site inbreeding coefficient expression
     """
     if call is None and callstats_expr is None:

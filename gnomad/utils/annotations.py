@@ -914,23 +914,12 @@ def bi_allelic_site_inbreeding_expr(
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
     if callstats_expr is not None:
-        # Compute the counts of alternate alleles by individual from the callstats
-        gt_counts = hl.dict(
-            {
-                0: (
-                    callstats_expr.AN
-                    - callstats_expr.AC
-                    - (callstats_expr.AC - (2 * callstats_expr.homozygote_count))
-                )
-                / 2,
-                1: callstats_expr.AC - (2 * callstats_expr.homozygote_count),
-                2: callstats_expr.homozygote_count,
-            }
-        )
+        n = callstats_expr.AN / 2
+        q = callstats_expr.AC / callstats_expr.AN
+        p = 1 - q
+        return 1 - (callstats_expr.AC - (2 * callstats_expr.hom)) / (2 * p * q * n)
     else:
-        gt_counts = hl.agg.counter(call.n_alt_alleles())
-
-    return hl.bind(inbreeding_coeff, gt_counts)
+        return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
 
 
 def fs_from_sb(

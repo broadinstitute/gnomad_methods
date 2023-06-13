@@ -898,7 +898,8 @@ def bi_allelic_site_inbreeding_expr(
         The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param call: Expression giving the calls in the MT
-    :param callstats_expr: StructExpression containing AC, AN, and homozygote_count. If passed, used to create expression in place of call.
+    :param callstats_expr: StructExpression containing only alternate allele AC, AN,
+    and hom (homozygote_count). If passed, used to create expression in place of GT calls.
 
     :return: Site inbreeding coefficient expression
     """
@@ -914,10 +915,31 @@ def bi_allelic_site_inbreeding_expr(
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
     if callstats_expr is not None:
+        # Check that AC, AN, and homozygote count are all ints
+        if not (
+            (
+                (callstats_expr.AC.dtype == hl.tint32)
+                | (callstats_expr.AC.dtype == hl.tint64)
+            )
+            & (
+                (callstats_expr.AN.dtype == hl.tint32)
+                | (callstats_expr.AN.dtype == hl.tint64)
+            )
+            & (
+                (callstats_expr.homozygote_count.dtype == hl.tint32)
+                | (callstats_expr.homozygote_count.dtype == hl.tint64)
+            )
+        ):
+            raise ValueError(
+                "callstats_expr must be a StructExpression containing int32 fields AC,"
+                " AN, and homozygote_count."
+            )
         n = callstats_expr.AN / 2
         q = callstats_expr.AC / callstats_expr.AN
         p = 1 - q
-        return 1 - (callstats_expr.AC - (2 * callstats_expr.hom)) / (2 * p * q * n)
+        return 1 - (callstats_expr.AC - (2 * callstats_expr.homozygote_count)) / (
+            2 * p * q * n
+        )
     else:
         return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
 

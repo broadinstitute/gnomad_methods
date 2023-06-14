@@ -1139,7 +1139,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
+        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
     )
 
     if prob_regions is not None:

@@ -125,7 +125,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -1108,7 +1108,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
     )
 
     if prob_regions is not None:
@@ -1216,8 +1216,7 @@ def merge_freq_arrays(
     :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. Array must be on the same HT.
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
-    :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN,
-    AF, and homozygote_count. If False, raise a ValueError. Default is True.
+    :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
     :return: Tuple of merged frequency array and its freq index dictionary.
     """
     if len(farrays) < 2:

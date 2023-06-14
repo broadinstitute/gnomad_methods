@@ -125,7 +125,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai],
+                lambda x: -x[1].AF[ai]
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct

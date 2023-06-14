@@ -1270,9 +1270,7 @@ def merge_freq_arrays(
     fmeta = hl.fold(
         lambda i, j: hl.dict(
             (
-                hl.if_else(
-                    operation == "sum", (i.key_set() | j.key_set()), i.key_set()
-                )  # TODO: confirms this works on freq meta arrays with more than two entires
+                hl.if_else(operation == "sum", (i.key_set() | j.key_set()), i.key_set())
             ).map(
                 lambda k: (
                     k,

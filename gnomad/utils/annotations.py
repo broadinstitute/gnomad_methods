@@ -1193,37 +1193,6 @@ def hemi_expr(
     )
 
 
-def make_freq_index_dict_from_meta(
-    freq_meta: List[Dict[str, str]],
-    label_delimiter: str = "_",
-    sort_order: Optional[List[str]] = SORT_ORDER,
-) -> Dict[str, int]:
-    """
-    Create a dictionary for accessing frequency array.
-
-    :param freq_meta: List of dictionaries containing frequency metadata.
-    :param label_delimiter: Delimiter to use when joining frequency metadata labels.
-    :param sort_order: List of frequency metadata labels to use when sorting the dictionary.
-    :return: Dictionary of frequency metadata.
-    """
-    index_dict = {}
-    for i, f in enumerate(hl.eval(freq_meta)):
-        if sort_order and len(set(f.keys()) - set(sort_order)) < 1:
-            index_dict[
-                label_delimiter.join(
-                    [
-                        f[g]
-                        for g in sorted(
-                            f.keys(),
-                            key=(lambda x: sort_order.index(x)) if sort_order else None,
-                        )
-                    ]
-                )
-            ] = i
-
-    return index_dict
-
-
 def merge_freq_arrays(
     farrays: List[hl.expr.ArrayExpression],
     fmeta: List[List[Dict[str, str]]],

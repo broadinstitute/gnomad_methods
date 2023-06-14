@@ -57,6 +57,33 @@ def _import_dbsnp(**kwargs) -> hl.Table:
     return dbsnp
 
 
+def _import_methylation_sites(path) -> hl.Table:
+    """
+    Import methylation data from bed file.
+
+    Methylation scores range from 0-15 and are described in Chen et al
+    (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
+
+    :param path: Path to bed file.
+    :return: Table with methylation data.
+    """
+    ht = hl.import_table(
+        path,
+        no_header=True,
+        delimiter=r"\s+",
+        impute=False,
+        skip_blank_lines=True,
+        min_partitions=100,
+        types={"f0": hl.tstr, "f1": hl.tint32, "f2": hl.tint32, "f3": hl.tint32},
+    )
+    ht = ht.select(
+        locus=hl.locus(ht.f0, ht.f1, reference_genome="GRCh38"),
+        methylation_level=ht.f3,
+    )
+
+    return ht
+
+
 # Resources with no versioning needed
 purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.ht",
@@ -242,6 +269,14 @@ mills = GnomadPublicTableResource(
         "path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
         "force_bgz": True,
         "reference_genome": "GRCh38",
+    },
+)
+
+methylation_sites = GnomadPublicTableResource(
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
+    import_func=_import_methylation_sites,
+    import_args={
+        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.bed",
     },
 )
 

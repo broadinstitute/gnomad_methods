@@ -1231,18 +1231,22 @@ def merge_freq_arrays(
     set_negatives_to_zero: bool = True,
 ) -> Tuple[hl.expr.ArrayExpression, Dict[str, int]]:
     """
-    Merge frequency arrays from multiple datasets.
+    Merge frequency arrays on the same HT.
 
-    Farrays and fmeta do not need to be the same or in the same order. They will be
-    merged based on the join type and operation. Missing values are dependent on the
-    join type and operation.
-    :param farrays: List of frequency arrays to merge. First entry in the list is the
-     primary array to which other arrays will be added or subtracted. Array must be on
-     the same HT.
+    .. note::
+        Arrays do not have to contain the same groupings or order of groupings but
+        the array indices for a freq array in farrays must be the same as its associated
+        frequency metadata index in fmeta i.e., farrays = [freq1, freq2] then fmeta
+        must equal [fmeta1, fmeta2] where fmeta1 contains the metadata information
+        for freq1. If th merge operation is set to "sum", groups in the merged array
+        will be the union of groupings found within the arrays' metadata and all arrays
+        with be summed by grouping. If the operation is set to "diff", the merged array
+        will contain groups only found in the first array of fmeta. Any array containing
+        any of these groups will have thier values subtracted from the values of the first array.
+
+    :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. Array must be on the same HT.
     :param fmeta: List of frequency metadata for arrays being merged.
-    :param operation: Merge operation to perform. Options are "sum" and "diff". If
-    "diff" is passed, the first array in the list will have the other arrays subtracted
-    from it.
+    :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN,
     AF, and homozygote_count. If False, raise a ValueError. Default is True.
     :return: Tuple of merged frequency array and its freq index dictionary.

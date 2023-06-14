@@ -1,5 +1,6 @@
 # noqa: D100
 
+import itertools
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -125,7 +126,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -219,8 +220,10 @@ def faf_expr(
                 ~locus.in_autosome_or_par(),
                 hl.struct(
                     **{
-                        f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
-                            freq[i].AC, freq[i].AN, threshold
+                        f"faf{str(threshold)[2:]}": (
+                            hl.experimental.filtering_allele_frequency(
+                                freq[i].AC, freq[i].AN, threshold
+                            )
                         )
                         for threshold in faf_thresholds
                     }
@@ -333,9 +336,11 @@ def annotate_freq(
     sex_expr: Optional[hl.expr.StringExpression] = None,
     pop_expr: Optional[hl.expr.StringExpression] = None,
     subpop_expr: Optional[hl.expr.StringExpression] = None,
-    additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
-    additional_strata_grouping_expr: Optional[
-        Dict[str, hl.expr.StringExpression]
+    additional_strata_expr: Optional[
+        Union[
+            List[Dict[str, hl.expr.StringExpression]],
+            Dict[str, hl.expr.StringExpression],
+        ]
     ] = None,
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
@@ -388,12 +393,18 @@ def annotate_freq(
     In addition, if `pop_expr` is specified, a downsampling to each of the exact number of samples present in each population is added.
     Note that samples are randomly sampled only once, meaning that the lower downsamplings are subsets of the higher ones.
 
+    .. rubric:: The `additional_strata_expr` parameter
+
+    If the `additional_strata_expr` parameter is used, frequencies will be computed for each of the strata dictionaries across all
+    values. For example, if `additional_strata_expr` is set to `[{'platform': mt.platform}, {'platform':mt.platform, 'pop': mt.pop},
+    {'age_bin': mt.age_bin}]`, then frequencies will be computed for each of the values of `mt.platform`, each of the combined values
+    of `mt.platform` and `mt.pop`, and each of the values of `mt.age_bin`.
+
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr` is also specified, then a pop/sex stratifiction is added.
     :param pop_expr: When specified, frequencies are stratified by population. If `sex_expr` is also specified, then a pop/sex stratifiction is added.
     :param subpop_expr: When specified, frequencies are stratified by sub-continental population. Note that `pop_expr` is required as well when using this option.
-    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata found in the dict. This can e.g. be used to stratify by platform.
-    :param additional_strata_grouping_expr: When specified, frequencies are further stratified by groups within the additional_strata_expr. This can e.g. be used to stratify by platform-population.
+    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata. This can e.g. be used to stratify by platform, platform-pop, platform-pop-sex.
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
@@ -402,20 +413,15 @@ def annotate_freq(
             "annotate_freq requires pop_expr when using subpop_expr"
         )
 
-    if additional_strata_grouping_expr is not None and additional_strata_expr is None:
-        raise NotImplementedError(
-            "annotate_freq requires additional_strata_expr when using"
-            " additional_strata_grouping_expr"
-        )
-
     if additional_strata_expr is None:
-        additional_strata_expr = {}
+        additional_strata_expr = [{}]
 
-    _freq_meta_expr = hl.struct(**additional_strata_expr)
-    if additional_strata_grouping_expr is None:
-        additional_strata_grouping_expr = {}
-    else:
-        _freq_meta_expr = _freq_meta_expr.annotate(**additional_strata_grouping_expr)
+    if isinstance(additional_strata_expr, dict):
+        additional_strata_expr = [additional_strata_expr]
+
+    _freq_meta_expr = hl.struct(
+        **{k: v for d in additional_strata_expr for k, v in d.items()}
+    )
     if sex_expr is not None:
         _freq_meta_expr = _freq_meta_expr.annotate(sex=sex_expr)
     if pop_expr is not None:
@@ -495,6 +501,32 @@ def annotate_freq(
                 ]
             )
 
+    # Build a list of strata filters from the additional strata
+    additional_strata_filters = []
+    for additional_strata in additional_strata_expr:
+        additional_strata_values = [
+            cut_data.get(strata, {}) for strata in additional_strata
+        ]
+        additional_strata_combinations = itertools.product(*additional_strata_values)
+
+        additional_strata_filters.extend(
+            [
+                (
+                    {
+                        strata: str(value)
+                        for strata, value in zip(additional_strata, combination)
+                    },
+                    hl.all(
+                        list(
+                            mt._freq_meta[strata] == value
+                            for strata, value in zip(additional_strata, combination)
+                        )
+                    ),
+                )
+                for combination in additional_strata_combinations
+            ]
+        )
+
     # Add all desired strata, starting with the full set and ending with
     # downsamplings (if any)
     sample_group_filters = (
@@ -517,29 +549,9 @@ def annotate_freq(
             )
             for subpop in cut_data.get("subpop", {})
         ]
-        + [
-            ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
-            for strata in additional_strata_expr
-            for s_value in cut_data.get(strata, {})
-        ]
+        + additional_strata_filters
         + sample_group_filters
     )
-
-    # Add additional groupings to strata, e.g. strata-pop, strata-sex, strata-pop-sex
-    if additional_strata_grouping_expr is not None:
-        sample_group_filters.extend(
-            [
-                (
-                    {strata: str(s_value), add_strata: str(as_value)},
-                    (mt._freq_meta[strata] == s_value)
-                    & (mt._freq_meta[add_strata] == as_value),
-                )
-                for strata in additional_strata_expr
-                for s_value in cut_data.get(strata, {})
-                for add_strata in additional_strata_grouping_expr
-                for as_value in cut_data.get(add_strata, {})
-            ]
-        )
 
     freq_sample_count = mt.aggregate_cols(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]

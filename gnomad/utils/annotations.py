@@ -1202,6 +1202,7 @@ def merge_freq_arrays(
     Merge frequency arrays on the same HT.
 
     .. note::
+
         Arrays do not have to contain the same groupings or order of groupings but
         the array indices for a freq array in farrays must be the same as its associated
         frequency metadata index in fmeta i.e., farrays = [freq1, freq2] then fmeta

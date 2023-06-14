@@ -81,7 +81,7 @@ def _import_methylation_sites(path) -> hl.Table:
         methylation_level=ht.f3,
     )
 
-    return ht
+    return ht.key_by("locus")
 
 
 # Resources with no versioning needed

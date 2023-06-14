@@ -1227,6 +1227,8 @@ def make_freq_index_dict_from_meta(
 def merge_freq_arrays(
     farrays: List[hl.expr.ArrayExpression],
     fmeta: List[List[Dict[str, str]]],
+    operation="sum",
+    set_negatives_to_zero: bool = True,
 ) -> Tuple[hl.expr.ArrayExpression, Dict[str, int]]:
     """
     Merge frequency arrays from multiple datasets.
@@ -1235,26 +1237,39 @@ def merge_freq_arrays(
     merged based on the join type and operation. Missing values are dependent on the
     join type and operation.
     :param farrays: List of frequency arrays to merge. First entry in the list is the
-     primary array to which other arrays will be added or subtracted. Array must be on the same HT.
+     primary array to which other arrays will be added or subtracted. Array must be on
+     the same HT.
     :param fmeta: List of frequency metadata for arrays being merged.
-    Options are "sum" and "diff". IF "diff" is passed, the first array in the list will have the other arrays subtracted from it.
+    :param operation: Merge operation to perform. Options are "sum" and "diff". If
+    "diff" is passed, the first array in the list will have the other arrays subtracted
+    from it.
+    :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN,
+    AF, and homozygote_count. If False, raise a ValueError. Default is True.
     :return: Tuple of merged frequency array and its freq index dictionary.
     """
     if len(farrays) < 2:
         raise ValueError("Must provide at least two frequency arrays to merge")
     if len(farrays) != len(fmeta):
         raise ValueError("Length of farrays and fmeta must be equal")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'")
 
     # Create a list where each entry is a dictionary whose the key is an aggregation
-    # group and the value is the corresponding index in the freq array.
+    # group and the value is the corresponding index in the freq array. If operation is
+    # set to diff, only use the first entry's meta.
     fmeta = [hl.dict(hl.enumerate(f).map(lambda x: (x[1], [x[0]]))) for f in fmeta]
 
     # Merge dictionaries in the list into a single dictionary where key is aggregation
     # group and the value is a list of the group's index in each of the freq arrays, if
-    # it exists.
+    # it exists. For sum operation, use keys, aka groups, found in all freq dictionaries.
+    # For "diff" operations, only use key_set from the first entry.
     fmeta = hl.fold(
         lambda i, j: hl.dict(
-            (i.key_set() | j.key_set()).map(
+            (
+                hl.if_else(
+                    operation == "sum", (i.key_set() | j.key_set()), i.key_set()
+                )  # TODO: confirms this works on freq meta arrays with more than two entires
+            ).map(
                 lambda k: (
                     k,
                     i.get(k, [hl.missing(hl.tint32)]).extend(
@@ -1278,21 +1293,59 @@ def merge_freq_arrays(
     # values from each freq array
     freq_meta_idx = fmeta.map(lambda x: hl.zip(farrays, x[1]).map(lambda i: i[0][i[1]]))
 
+    def _sum_or_diff_fields(
+        field_1_expr: str, field_2_expr: str
+    ) -> hl.expr.Int32Expression:
+        """
+        Sum or subtract fields in call statistics struct.
+
+        :param field_1_expr: First field to sum or diff.
+        :param field_2_expr: Second field to sum or diff.
+        :return: Merged field value.
+        """
+        return hl.if_else(
+            operation == "sum",
+            hl.or_else(field_1_expr, 0) + hl.or_else(field_2_expr, 0),
+            hl.or_else(field_1_expr, 0) - hl.or_else(field_2_expr, 0),
+        )
+
     # Iterate through the groups and their freq lists to merge callstats
     new_freq = freq_meta_idx.map(
         lambda x: hl.bind(
-            lambda y: y.annotate(AF=hl.if_else(y.AN == 0, 0, y.AC / y.AN)),
+            lambda y: y.annotate(AF=hl.if_else(y.AN > 0, y.AC / y.AN, 0)),
             hl.fold(
                 lambda i, j: hl.struct(
-                    AC=hl.or_else(i.AC, 0) + hl.or_else(j.AC, 0),
-                    AN=hl.or_else(i.AN, 0) + hl.or_else(j.AN, 0),
-                    homozygote_count=hl.or_else(i.homozygote_count, 0)
-                    + hl.or_else(j.homozygote_count, 0),
+                    AC=_sum_or_diff_fields(i.AC, j.AC),
+                    AN=_sum_or_diff_fields(i.AN, j.AN),
+                    homozygote_count=_sum_or_diff_fields(
+                        i.homozygote_count, j.homozygote_count
+                    ),
                 ),
                 x[0].select("AC", "AN", "homozygote_count"),
                 x[1:],
             ),
         )
     )
+    # Check and see if any annotation within the merged array is negative. If so,
+    # raise an error if set_negatives_to_zero is False or set the value to 0 if
+    # set_negatives_to_zero is True.
+    if operation == "diff":
+        negative_value_error_msg = (
+            "Negative values found in merged frequency array. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+        new_freq = new_freq.map(
+            lambda x: x.annotate(
+                AC=hl.case()
+                .when(set_negatives_to_zero, hl.max(x.AC, 0))
+                .or_error(negative_value_error_msg),
+                AN=hl.case()
+                .when(set_negatives_to_zero, hl.max(x.AN, 0))
+                .or_error(negative_value_error_msg),
+                homozygote_count=hl.case()
+                .when(set_negatives_to_zero, hl.max(x.homozygote_count, 0))
+                .or_error(negative_value_error_msg),
+            )
+        )
 
     return new_freq, new_freq_meta

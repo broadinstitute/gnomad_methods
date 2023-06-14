@@ -2,6 +2,8 @@
 
 from typing import Dict, List, Optional
 
+import hail as hl
+
 from gnomad.resources.grch38.gnomad import (
     CURRENT_MAJOR_RELEASE,
     GROUPS,
@@ -9,7 +11,7 @@ from gnomad.resources.grch38.gnomad import (
     SEXES,
     SUBSETS,
 )
-from gnomad.utils.vcf import index_globals
+from gnomad.utils.vcf import SORT_ORDER, index_globals
 
 
 def make_faf_index_dict(

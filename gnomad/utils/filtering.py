@@ -412,7 +412,11 @@ def filter_x_nonpar(
     """
     rg = t.locus.dtype.reference_genome
     t = hl.filter_intervals(
-        t, [hl.parse_locus_interval(contig) for contig in rg.x_contigs]
+        t,
+        [
+            hl.parse_locus_interval(contig, reference_genome=rg.name)
+            for contig in rg.x_contigs
+        ],
     )
     non_par_expr = t.locus.in_x_nonpar()
 
@@ -434,7 +438,11 @@ def filter_y_nonpar(
     """
     rg = t.locus.dtype.reference_genome
     t = hl.filter_intervals(
-        t, [hl.parse_locus_interval(contig) for contig in rg.y_contigs]
+        t,
+        [
+            hl.parse_locus_interval(contig, reference_genome=rg.name)
+            for contig in rg.y_contigs
+        ],
     )
     non_par_expr = t.locus.in_y_nonpar()
 

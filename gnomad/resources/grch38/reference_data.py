@@ -57,23 +57,23 @@ def _import_dbsnp(**kwargs) -> hl.Table:
     return dbsnp
 
 
-def _import_ensembl_interval(**kwargs) -> hl.Table:
+def _import_ensembl_interval(path) -> hl.Table:
     """
-    Import and parse interval of protein-coding genes to HT.
+    Import and parse Ensembl intervals of protein-coding genes to a Hail Table.
 
-    Downloaded from Ensembl Archive for 101 & 105.
-    Only including the following fields: gene_stable_ID, chr, start, end, source_gene, gene_name, type
-    :param interval_file: str, the name of the interval file
+    File is expected to include only the following fields: gene_stable_ID, chr, start, end, source_gene, gene_name, and type.
+    :param path: Path to the interval Table file.
     """
     ensembl = hl.import_table(
-        **kwargs,
+        path,
+        delimiter="\t",
         min_partitions=100,
         impute=True,
     )
 
     ensembl = ensembl.key_by(
         interval=hl.locus_interval(
-            hl.literal("chr") + hl.str(ensembl.chr),
+            "chr" + ensembl.chr,
             ensembl.start,
             ensembl.end,
             reference_genome="GRCh38",
@@ -160,6 +160,11 @@ syndip_hc_intervals = VersionedTableResource(
     },
 )
 
+# These Ensembl Interval Tables are focused on protein-coding genes on chr1-22,X,Y.
+# Downloaded from the biomart of Ensembl Archive (https://useast.ensembl.org/info/website/archives/index.html)
+# Ensembl 101 & 105 are included, since 101 was used to annotated gnomAD v3 and 105 to gnomAD v4.
+# Basic stats: 19924 protein-coding genes in Ensembl 101, and1 19951
+# protein-coding genes in Ensembl 105.
 ensembl_interval = VersionedTableResource(
     default_version="105",
     versions={
@@ -168,9 +173,6 @@ ensembl_interval = VersionedTableResource(
             import_func=_import_ensembl_interval,
             import_args={
                 "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.tsv",
-                "delimiter": "\t",
-                "min_partitions": 100,
-                "reference_genome": "GRCh38",
             },
         ),
         "101": GnomadPublicTableResource(
@@ -178,9 +180,6 @@ ensembl_interval = VersionedTableResource(
             import_func=_import_ensembl_interval,
             import_args={
                 "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.tsv",
-                "delimiter": "\t",
-                "min_partitions": 100,
-                "reference_genome": "GRCh38",
             },
         ),
     },

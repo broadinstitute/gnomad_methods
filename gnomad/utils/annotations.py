@@ -929,8 +929,8 @@ def bi_allelic_site_inbreeding_expr(
             )
         ):
             raise ValueError(
-                "callstats_expr must be a StructExpression containing int32 fields AC,"
-                " AN, and homozygote_count."
+                "callstats_expr must be a StructExpression containing fields 'AC',"
+                " 'AN', and 'homozygote_count' of types int32 or int64."
             )
         n = callstats_expr.AN / 2
         q = callstats_expr.AC / callstats_expr.AN

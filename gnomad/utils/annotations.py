@@ -1402,7 +1402,8 @@ def get_gks(
         group_index: int,
         group_id: str,
         group_label: str,
-        vrs_id: str,
+        group_sex: str = None
+        #vrs_id: str,
     ) -> dict:
         """
         Return a dictionary for the frequency information of a given variant for a given subpopulation.
@@ -1418,16 +1419,33 @@ def get_gks(
         # Obtain frequency information for the specified variant
         group_freq = variant_ht.freq[group_index]
 
+        # Cohort characteristics
+        characteristics = []
+        characteristics.append({
+            "name": "genetic ancestry",
+            "value": group_label
+        })
+        if group_sex != None:
+            characteristics.append({
+                "name": "biological sex",
+                "value": group_sex
+            })
+
         # Dictionary to be returned containing information for a specified group
         freq_record = {
             "id": f"{variant}.{group_id.upper()}",
-            "type": "PopulationAlleleFrequency",
-            "label": f"{group_label} Population Allele Frequency for {variant}",
-            "focusAllele": vrs_id,
+            "type": "CohortAlleleFrequency",
+            "label": f"{group_label} Cohort Allele Frequency for {variant}",
+            #"focusAllele": vrs_id,
+            "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"].collect()[0],
             "locusAlleleCount": group_freq["AN"].collect()[0],
             "alleleFrequency": group_freq["AF"].collect()[0],
-            "population": f"{label_name}{label_version}:{group_id.upper()}",
+            #"population": f"{label_name}{label_version}:{group_id.upper()}",
+            "cohort": {
+                "id": group_id.upper(),
+                "characteristics": characteristics
+            },
             "ancillaryResults": {
                 "homozygotes": group_freq["homozygote_count"].collect()[0]
             },
@@ -1444,8 +1462,7 @@ def get_gks(
                 variant_ht=ht,
                 group_index=index_value,
                 group_id=group,
-                group_label=ancestry_groups_dict[group],
-                vrs_id=vrs_id,
+                group_label=ancestry_groups_dict[group]
             )
 
             # If specified, stratify group information by sex.
@@ -1460,11 +1477,11 @@ def get_gks(
                         group_index=sex_index_value,
                         group_id=sex_label,
                         group_label=ancestry_groups_dict[group],
-                        vrs_id=vrs_id,
+                        group_sex=sex
                     )
                     sex_list.append(sex_result)
 
-                group_result["subpopulationFrequency"] = sex_list
+                group_result["subcohortFrequency"] = sex_list
 
             list_of_group_info_dicts.append(group_result)
 
@@ -1472,18 +1489,11 @@ def get_gks(
     # position #1 (index 0)
     overall_freq = ht.freq[0]
 
-    # Read coverage statistics
-    coverage_ht = coverage_ht.filter(
-        coverage_ht.locus
-        == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
-    )
-    mean_coverage = coverage_ht.mean.collect()[0]
-
     # Final dictionary to be returned
     final_freq_dict = {
         "id": f"{label_name}{label_version}:{variant}",
-        "type": "PopulationAlleleFrequency",
-        "label": f"Overall Population Allele Frequency for {variant}",
+        "type": "CohortAlleleFrequency",
+        "label": f"Overall Cohort Allele Frequency for {variant}",
         "derivedFrom": {
             "id": f"{label_name}{label_version}",
             "type": "DataSet",
@@ -1494,22 +1504,36 @@ def get_gks(
         "focusAlleleCount": overall_freq["AC"].collect()[0],
         "locusAlleleCount": overall_freq["AN"].collect()[0],
         "alleleFrequency": overall_freq["AF"].collect()[0],
-        "population": f"{label_name}{label_version}:global",
+        "cohort": {
+            "id": "ALL"
+        },
         "ancillaryResults": {
-            "popMaxFAF95": {
-                "frequency": ht.popmax.faf95.collect()[0],
-                "confidenceInterval": 0.95,
-                "popFreqId": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
-            },
-            "homozygotes": overall_freq["homozygote_count"].collect()[0],
-            "meanDepth": mean_coverage,
+            "homozygotes": overall_freq["homozygote_count"].collect()[0]
         },
     }
+
+    # popmax 95%
+    popmax_95 = {
+        "frequency": ht.popmax.faf95.collect()[0],
+        "confidenceInterval": 0.95,
+        "popFreqId": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
+    }
+    if popmax_95:
+        final_freq_dict["ancillaryResults"]["popMaxFAF95"] = popmax_95
+
+    # Read coverage statistics if a table is provdied
+    if coverage_ht:
+        coverage_ht = coverage_ht.filter(
+            coverage_ht.locus
+            == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+        )
+        mean_coverage = coverage_ht.mean.collect()[0]
+        final_freq_dict["ancillaryResults"]["meanDepth"] = mean_coverage
 
     # If ancestry_groups were passed, add the ancestry group dictionary to the
     # final frequency dictionary to be returned.
     if ancestry_groups:
-        final_freq_dict["subpopulationFrequency"] = list_of_group_info_dicts
+        final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
 
     # Validate that the constructed dictionary will convert to a JSON string.
     try:

@@ -991,27 +991,23 @@ def count_vep_annotated_variants_per_interval(
     """
     Calculate the count of VEP annotated variants in `vep_ht` per interval defined by `interval_ht`.
 
-    :param vep_ht: VEP-annotated Table.
-    :param interval_ht: Interval Table.
+    :param vep_ht: VEP-annotated Table. Must contain the `vep.transcript_consequences` array field, which contains a`biotype` field to determine whether a variant is in a "protein-coding" gene.
+    :param interval_ht: Interval Table, indexed by locus, containing the `gene_stable_ID` field. For example, an Interval Table containing the intervals of protein-coding genes of a specific Ensembl release.
     :return: Interval Table with annotations for the counts of total variants and variants annotated as "protein-coding" in biotype.
     """
     logger.info(
-        "Selecting the vep.transcript_consequences field and joining with the"
-        " interval_ht..."
+        "Counting the number of total variants and protein-coding variants in each"
+        " interval..."
     )
 
-    vep_ht = vep_ht.select(
-        transcript_consequences=vep_ht.vep.transcript_consequences,
-        interval_annotations=interval_ht.index(vep_ht.locus, all_matches=True),
-    )
-
-    vep_ht = vep_ht.filter(hl.is_defined(vep_ht.interval_annotations))
-
-    # Select only the gene_stable_ID and biotype to save space.
+    # Select the vep_ht and annotate genes that have a matched interval from
+    # the interval_ht and are protein-coding.
     vep_ht = vep_ht.select(
         gene_stable_ID=interval_ht.index(vep_ht.locus, all_matches=True).gene_stable_ID,
         in_pcg=vep_ht.vep.transcript_consequences.biotype.contains("protein_coding"),
     )
+
+    vep_ht = vep_ht.filter(hl.is_defined(vep_ht.gene_stable_ID))
 
     # Explode the vep_ht by gene_stable_ID.
     vep_ht = vep_ht.explode(vep_ht.gene_stable_ID)

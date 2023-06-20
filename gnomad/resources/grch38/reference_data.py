@@ -62,6 +62,7 @@ def _import_ensembl_interval(path) -> hl.Table:
     Import and parse Ensembl intervals of protein-coding genes to a Hail Table.
 
     File is expected to include only the following fields: gene_stable_ID, chr, start, end, source_gene, gene_name, and type.
+
     :param path: Path to the interval Table file.
     """
     ensembl = hl.import_table(

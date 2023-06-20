@@ -991,9 +991,24 @@ def count_vep_annotated_variants_per_interval(
     """
     Calculate the count of VEP annotated variants in `vep_ht` per interval defined by `interval_ht`.
 
-    :param vep_ht: VEP-annotated Table. Must contain the `vep.transcript_consequences` array field, which contains a`biotype` field to determine whether a variant is in a "protein-coding" gene.
-    :param interval_ht: Interval Table, indexed by locus, containing the `gene_stable_ID` field. For example, an Interval Table containing the intervals of protein-coding genes of a specific Ensembl release.
-    :return: Interval Table with annotations for the counts of total variants and variants annotated as "protein-coding" in biotype.
+    .. note::
+
+        - `vep_ht` must contain the 'vep.transcript_consequences' array field, which
+          contains a 'biotype' field to determine whether a variant is in a
+          "protein-coding" gene.
+        - `interval_ht` should be indexed by 'locus' and contain a 'gene_stable_ID'
+          field. For example, an interval Table containing the intervals of
+          protein-coding genes of a specific Ensembl release.
+
+    The returned Table will have the following fields added:
+        - n_total_variants: The number of total variants in the interval.
+        - n_pcg_variants: The number of variants in the interval that are annotated as
+          "protein-coding".
+
+    :param vep_ht: VEP-annotated Table.
+    :param interval_ht: Interval Table.
+    :return: Interval Table with annotations for the counts of total variants and
+        variants annotated as "protein-coding" in biotype.
     """
     logger.info(
         "Counting the number of total variants and protein-coding variants in each"

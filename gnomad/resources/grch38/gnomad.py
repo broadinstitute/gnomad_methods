@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import hail as hl
 
@@ -420,7 +420,6 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     version_prefix = "r" if version.startswith("3.0") else "v"
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
-
 def gnomad_gks(
     version: str,
     variant: str,
@@ -428,7 +427,7 @@ def gnomad_gks(
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
-    custom_ht_path: str = None,
+    ht: Union[str,hl.Table] = None,
 ) -> dict:
     """
     Call get_gks() and return VRS information and frequency information for the specified gnomAD release version and variant.
@@ -443,11 +442,13 @@ def gnomad_gks(
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
-    # Read in gnomAD release table to filter to chosen variant.
-    if custom_ht_path:
-        ht = hl.read_table(custom_ht_path)
-    else:
-        ht = hl.read_table(public_release(data_type).versions[version].path)
+    # If ht is not already a table,
+    # read in gnomAD release table to filter to chosen variant.
+    if not isinstance(ht, hl.Table):
+        if ht:
+            ht = hl.read_table(ht)
+        else:
+            ht = hl.read_table(public_release(data_type).versions[version].path)
 
     high_level_version = f"v{version.split('.')[0]}"
 

@@ -1197,43 +1197,42 @@ def merge_freq_arrays(
     fmeta: List[List[Dict[str, str]]],
     operation="sum",
     set_negatives_to_zero: bool = True,
-) -> Tuple[hl.expr.ArrayExpression, Dict[str, int]]:
+) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
     """
-    Merge frequency arrays on the same HT.
+    Merge a list of frequency arrays based on the supplied `operation`.
 
     .. note::
 
         Arrays do not have to contain the same groupings or order of groupings but
-        the array indices for a freq array in farrays must be the same as its associated
-        frequency metadata index in fmeta i.e., farrays = [freq1, freq2] then fmeta
-        must equal [fmeta1, fmeta2] where fmeta1 contains the metadata information
-        for freq1. If th merge operation is set to "sum", groups in the merged array
+        the array indices for a freq array in `farrays` must be the same as its associated
+        frequency metadata index in `fmeta` i.e., `farrays = [freq1, freq2]` then `fmeta`
+        must equal `[fmeta1, fmeta2]` where fmeta1 contains the metadata information
+        for freq1. If `operation` is set to "sum", groups in the merged array
         will be the union of groupings found within the arrays' metadata and all arrays
-        with be summed by grouping. If the operation is set to "diff", the merged array
-        will contain groups only found in the first array of fmeta. Any array containing
+        with be summed by grouping. If `operation` is set to "diff", the merged array
+        will contain groups only found in the first array of `fmeta`. Any array containing
         any of these groups will have thier values subtracted from the values of the first array.
 
-    :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. Array must be on the same HT.
+    :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
     :return: Tuple of merged frequency array and its freq index dictionary.
     """
     if len(farrays) < 2:
-        raise ValueError("Must provide at least two frequency arrays to merge")
+        raise ValueError("Must provide at least two frequency arrays to merge!")
     if len(farrays) != len(fmeta):
-        raise ValueError("Length of farrays and fmeta must be equal")
+        raise ValueError("Length of farrays and fmeta must be equal!")
     if operation not in ["sum", "diff"]:
-        raise ValueError("Operation must be either 'sum' or 'diff'")
+        raise ValueError("Operation must be either 'sum' or 'diff'!")
 
-    # Create a list where each entry is a dictionary whose the key is an aggregation
-    # group and the value is the corresponding index in the freq array. If operation is
-    # set to diff, only use the first entry's meta.
+    # Create a list where each entry is a dictionary whose key is an aggregation
+    # group and the value is the corresponding index in the freq array.
     fmeta = [hl.dict(hl.enumerate(f).map(lambda x: (x[1], [x[0]]))) for f in fmeta]
 
     # Merge dictionaries in the list into a single dictionary where key is aggregation
     # group and the value is a list of the group's index in each of the freq arrays, if
-    # it exists. For sum operation, use keys, aka groups, found in all freq dictionaries.
+    # it exists. For "sum" operation, use keys, aka groups, found in all freq dictionaries.
     # For "diff" operations, only use key_set from the first entry.
     fmeta = hl.fold(
         lambda i, j: hl.dict(
@@ -1256,11 +1255,11 @@ def merge_freq_arrays(
     # each aggregation group.
     fmeta = hl.sorted(fmeta.items(), key=lambda f: f[1])
 
-    # Create a list of the aggregation groups, maintaining the sorted order
+    # Create a list of the aggregation groups, maintaining the sorted order.
     new_freq_meta = fmeta.map(lambda x: x[0])
 
     # Create array for each aggregation group of arrays containing the group's freq
-    # values from each freq array
+    # values from each freq array.
     freq_meta_idx = fmeta.map(lambda x: hl.zip(farrays, x[1]).map(lambda i: i[0][i[1]]))
 
     def _sum_or_diff_fields(
@@ -1280,16 +1279,16 @@ def merge_freq_arrays(
         )
 
     # Iterate through the groups and their freq lists to merge callstats
+    callstat_ann = ["AC", "AN", "homozygote_count"]
     new_freq = freq_meta_idx.map(
         lambda x: hl.bind(
             lambda y: y.annotate(AF=hl.if_else(y.AN > 0, y.AC / y.AN, 0)),
             hl.fold(
                 lambda i, j: hl.struct(
-                    AC=_sum_or_diff_fields(i.AC, j.AC),
-                    AN=_sum_or_diff_fields(i.AN, j.AN),
-                    homozygote_count=_sum_or_diff_fields(
-                        i.homozygote_count, j.homozygote_count
-                    ),
+                    **{
+                        ann: _sum_or_diff_fields(i[ann], j[ann])
+                        for ann in callstat_ann
+                    }
                 ),
                 x[0].select("AC", "AN", "homozygote_count"),
                 x[1:],

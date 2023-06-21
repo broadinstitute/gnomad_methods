@@ -125,7 +125,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -1108,7 +1108,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
     )
 
     if prob_regions is not None:
@@ -1195,11 +1195,14 @@ def hemi_expr(
 def merge_freq_arrays(
     farrays: List[hl.expr.ArrayExpression],
     fmeta: List[List[Dict[str, str]]],
-    operation="sum",
+    operation: str = "sum",
     set_negatives_to_zero: bool = True,
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
     """
     Merge a list of frequency arrays based on the supplied `operation`.
+
+    .. warning::
+        Arrays must be on the same Table.
 
     .. note::
 
@@ -1278,17 +1281,14 @@ def merge_freq_arrays(
             hl.or_else(field_1_expr, 0) - hl.or_else(field_2_expr, 0),
         )
 
-    # Iterate through the groups and their freq lists to merge callstats
+    # Iterate through the groups and their freq lists to merge callstats.
     callstat_ann = ["AC", "AN", "homozygote_count"]
     new_freq = freq_meta_idx.map(
         lambda x: hl.bind(
             lambda y: y.annotate(AF=hl.if_else(y.AN > 0, y.AC / y.AN, 0)),
             hl.fold(
                 lambda i, j: hl.struct(
-                    **{
-                        ann: _sum_or_diff_fields(i[ann], j[ann])
-                        for ann in callstat_ann
-                    }
+                    **{ann: _sum_or_diff_fields(i[ann], j[ann]) for ann in callstat_ann}
                 ),
                 x[0].select("AC", "AN", "homozygote_count"),
                 x[1:],
@@ -1303,17 +1303,17 @@ def merge_freq_arrays(
             "Negative values found in merged frequency array. Review data or set"
             " `set_negatives_to_zero` to True to set negative values to 0."
         )
+        callstat_ann.append("AF")
         new_freq = new_freq.map(
             lambda x: x.annotate(
-                AC=hl.case()
-                .when(set_negatives_to_zero, hl.max(x.AC, 0))
-                .or_error(negative_value_error_msg),
-                AN=hl.case()
-                .when(set_negatives_to_zero, hl.max(x.AN, 0))
-                .or_error(negative_value_error_msg),
-                homozygote_count=hl.case()
-                .when(set_negatives_to_zero, hl.max(x.homozygote_count, 0))
-                .or_error(negative_value_error_msg),
+                **{
+                    ann: (
+                        hl.case()
+                        .when(set_negatives_to_zero, hl.max(x[ann], 0))
+                        .or_error(negative_value_error_msg)
+                    )
+                    for ann in callstat_ann
+                }
             )
         )
 

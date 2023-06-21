@@ -1403,7 +1403,6 @@ def get_gks(
         group_id: str,
         group_label: str,
         group_sex: str = None
-        #vrs_id: str,
     ) -> dict:
         """
         Return a dictionary for the frequency information of a given variant for a given subpopulation.
@@ -1436,12 +1435,10 @@ def get_gks(
             "id": f"{variant}.{group_id.upper()}",
             "type": "CohortAlleleFrequency",
             "label": f"{group_label} Cohort Allele Frequency for {variant}",
-            #"focusAllele": vrs_id,
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"].collect()[0],
             "locusAlleleCount": group_freq["AN"].collect()[0],
             "alleleFrequency": group_freq["AF"].collect()[0],
-            #"population": f"{label_name}{label_version}:{group_id.upper()}",
             "cohort": {
                 "id": group_id.upper(),
                 "characteristics": characteristics
@@ -1512,14 +1509,13 @@ def get_gks(
         },
     }
 
-    # popmax 95%
+    # popmax FAF95
     popmax_95 = {
         "frequency": ht.popmax.faf95.collect()[0],
         "confidenceInterval": 0.95,
         "popFreqId": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
     }
-    if popmax_95:
-        final_freq_dict["ancillaryResults"]["popMaxFAF95"] = popmax_95
+    final_freq_dict["ancillaryResults"]["popMaxFAF95"] = popmax_95
 
     # Read coverage statistics if a table is provdied
     if coverage_ht:

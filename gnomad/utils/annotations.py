@@ -1196,7 +1196,7 @@ def merge_freq_arrays(
     farrays: List[hl.expr.ArrayExpression],
     fmeta: List[List[Dict[str, str]]],
     operation: str = "sum",
-    set_negatives_to_zero: bool = True,
+    set_negatives_to_zero: bool = False,
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
     """
     Merge a list of frequency arrays based on the supplied `operation`.

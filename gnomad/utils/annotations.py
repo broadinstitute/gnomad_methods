@@ -1402,7 +1402,7 @@ def get_gks(
         group_index: int,
         group_id: str,
         group_label: str,
-        group_sex: str = None
+        group_sex: str = None,
     ) -> dict:
         """
         Return a dictionary for the frequency information of a given variant for a given subpopulation.
@@ -1420,15 +1420,9 @@ def get_gks(
 
         # Cohort characteristics
         characteristics = []
-        characteristics.append({
-            "name": "genetic ancestry",
-            "value": group_label
-        })
+        characteristics.append({"name": "genetic ancestry", "value": group_label})
         if group_sex != None:
-            characteristics.append({
-                "name": "biological sex",
-                "value": group_sex
-            })
+            characteristics.append({"name": "biological sex", "value": group_sex})
 
         # Dictionary to be returned containing information for a specified group
         freq_record = {
@@ -1439,10 +1433,7 @@ def get_gks(
             "focusAlleleCount": group_freq["AC"].collect()[0],
             "locusAlleleCount": group_freq["AN"].collect()[0],
             "alleleFrequency": group_freq["AF"].collect()[0],
-            "cohort": {
-                "id": group_id.upper(),
-                "characteristics": characteristics
-            },
+            "cohort": {"id": group_id.upper(), "characteristics": characteristics},
             "ancillaryResults": {
                 "homozygotes": group_freq["homozygote_count"].collect()[0]
             },
@@ -1459,7 +1450,7 @@ def get_gks(
                 variant_ht=ht,
                 group_index=index_value,
                 group_id=group,
-                group_label=ancestry_groups_dict[group]
+                group_label=ancestry_groups_dict[group],
             )
 
             # If specified, stratify group information by sex.
@@ -1474,7 +1465,7 @@ def get_gks(
                         group_index=sex_index_value,
                         group_id=sex_label,
                         group_label=ancestry_groups_dict[group],
-                        group_sex=sex
+                        group_sex=sex,
                     )
                     sex_list.append(sex_result)
 
@@ -1501,9 +1492,7 @@ def get_gks(
         "focusAlleleCount": overall_freq["AC"].collect()[0],
         "locusAlleleCount": overall_freq["AN"].collect()[0],
         "alleleFrequency": overall_freq["AF"].collect()[0],
-        "cohort": {
-            "id": "ALL"
-        },
+        "cohort": {"id": "ALL"},
         "ancillaryResults": {
             "homozygotes": overall_freq["homozygote_count"].collect()[0]
         },

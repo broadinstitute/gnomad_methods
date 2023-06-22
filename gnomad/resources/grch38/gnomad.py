@@ -420,6 +420,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     version_prefix = "r" if version.startswith("3.0") else "v"
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
+
 def gnomad_gks(
     version: str,
     variant: str,
@@ -427,7 +428,7 @@ def gnomad_gks(
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
-    ht: Union[str,hl.Table] = None,
+    ht: Union[str, hl.Table] = None,
 ) -> dict:
     """
     Call get_gks() and return VRS information and frequency information for the specified gnomAD release version and variant.

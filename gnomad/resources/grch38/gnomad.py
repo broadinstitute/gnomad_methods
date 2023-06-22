@@ -438,7 +438,7 @@ def gnomad_gks(
     :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
-    :param custom_ht_path: Path of Hail Table to parse if different from what the public_release() method would return for the version.
+    :param ht: Path of Hail Table to parse if different from what the public_release() method would return for the version, or an existing hail.Table object.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """

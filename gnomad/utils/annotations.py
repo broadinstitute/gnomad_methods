@@ -1421,7 +1421,7 @@ def get_gks(
         # Cohort characteristics
         characteristics = []
         characteristics.append({"name": "genetic ancestry", "value": group_label})
-        if group_sex != None:
+        if group_sex is not None:
             characteristics.append({"name": "biological sex", "value": group_sex})
 
         # Dictionary to be returned containing information for a specified group

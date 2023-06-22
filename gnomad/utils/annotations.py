@@ -1,5 +1,6 @@
 # noqa: D100
 
+import itertools
 import json
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -185,7 +186,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -279,8 +280,10 @@ def faf_expr(
                 ~locus.in_autosome_or_par(),
                 hl.struct(
                     **{
-                        f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
-                            freq[i].AC, freq[i].AN, threshold
+                        f"faf{str(threshold)[2:]}": (
+                            hl.experimental.filtering_allele_frequency(
+                                freq[i].AC, freq[i].AN, threshold
+                            )
                         )
                         for threshold in faf_thresholds
                     }
@@ -393,9 +396,11 @@ def annotate_freq(
     sex_expr: Optional[hl.expr.StringExpression] = None,
     pop_expr: Optional[hl.expr.StringExpression] = None,
     subpop_expr: Optional[hl.expr.StringExpression] = None,
-    additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
-    additional_strata_grouping_expr: Optional[
-        Dict[str, hl.expr.StringExpression]
+    additional_strata_expr: Optional[
+        Union[
+            List[Dict[str, hl.expr.StringExpression]],
+            Dict[str, hl.expr.StringExpression],
+        ]
     ] = None,
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
@@ -410,9 +415,11 @@ def annotate_freq(
     .. note::
 
         Currently this only supports bi-allelic sites.
+
         The input `mt` needs to have the following entry fields:
-        - GT: a CallExpression containing the genotype
-        - adj: a BooleanExpression containing whether the genotype is of high quality or not.
+          - GT: a CallExpression containing the genotype
+          - adj: a BooleanExpression containing whether the genotype is of high quality or not.
+
         All expressions arguments need to be expression on the input `mt`.
 
     .. rubric:: `freq` row annotation
@@ -446,12 +453,18 @@ def annotate_freq(
     In addition, if `pop_expr` is specified, a downsampling to each of the exact number of samples present in each population is added.
     Note that samples are randomly sampled only once, meaning that the lower downsamplings are subsets of the higher ones.
 
+    .. rubric:: The `additional_strata_expr` parameter
+
+    If the `additional_strata_expr` parameter is used, frequencies will be computed for each of the strata dictionaries across all
+    values. For example, if `additional_strata_expr` is set to `[{'platform': mt.platform}, {'platform':mt.platform, 'pop': mt.pop},
+    {'age_bin': mt.age_bin}]`, then frequencies will be computed for each of the values of `mt.platform`, each of the combined values
+    of `mt.platform` and `mt.pop`, and each of the values of `mt.age_bin`.
+
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr` is also specified, then a pop/sex stratifiction is added.
     :param pop_expr: When specified, frequencies are stratified by population. If `sex_expr` is also specified, then a pop/sex stratifiction is added.
     :param subpop_expr: When specified, frequencies are stratified by sub-continental population. Note that `pop_expr` is required as well when using this option.
-    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata found in the dict. This can e.g. be used to stratify by platform.
-    :param additional_strata_grouping_expr: When specified, frequencies are further stratified by groups within the additional_strata_expr. This can e.g. be used to stratify by platform-population.
+    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata. This can e.g. be used to stratify by platform, platform-pop, platform-pop-sex.
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
@@ -460,20 +473,15 @@ def annotate_freq(
             "annotate_freq requires pop_expr when using subpop_expr"
         )
 
-    if additional_strata_grouping_expr is not None and additional_strata_expr is None:
-        raise NotImplementedError(
-            "annotate_freq requires additional_strata_expr when using"
-            " additional_strata_grouping_expr"
-        )
-
     if additional_strata_expr is None:
-        additional_strata_expr = {}
+        additional_strata_expr = [{}]
 
-    _freq_meta_expr = hl.struct(**additional_strata_expr)
-    if additional_strata_grouping_expr is None:
-        additional_strata_grouping_expr = {}
-    else:
-        _freq_meta_expr = _freq_meta_expr.annotate(**additional_strata_grouping_expr)
+    if isinstance(additional_strata_expr, dict):
+        additional_strata_expr = [additional_strata_expr]
+
+    _freq_meta_expr = hl.struct(
+        **{k: v for d in additional_strata_expr for k, v in d.items()}
+    )
     if sex_expr is not None:
         _freq_meta_expr = _freq_meta_expr.annotate(sex=sex_expr)
     if pop_expr is not None:
@@ -553,6 +561,32 @@ def annotate_freq(
                 ]
             )
 
+    # Build a list of strata filters from the additional strata
+    additional_strata_filters = []
+    for additional_strata in additional_strata_expr:
+        additional_strata_values = [
+            cut_data.get(strata, {}) for strata in additional_strata
+        ]
+        additional_strata_combinations = itertools.product(*additional_strata_values)
+
+        additional_strata_filters.extend(
+            [
+                (
+                    {
+                        strata: str(value)
+                        for strata, value in zip(additional_strata, combination)
+                    },
+                    hl.all(
+                        list(
+                            mt._freq_meta[strata] == value
+                            for strata, value in zip(additional_strata, combination)
+                        )
+                    ),
+                )
+                for combination in additional_strata_combinations
+            ]
+        )
+
     # Add all desired strata, starting with the full set and ending with
     # downsamplings (if any)
     sample_group_filters = (
@@ -575,29 +609,9 @@ def annotate_freq(
             )
             for subpop in cut_data.get("subpop", {})
         ]
-        + [
-            ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
-            for strata in additional_strata_expr
-            for s_value in cut_data.get(strata, {})
-        ]
+        + additional_strata_filters
         + sample_group_filters
     )
-
-    # Add additional groupings to strata, e.g. strata-pop, strata-sex, strata-pop-sex
-    if additional_strata_grouping_expr is not None:
-        sample_group_filters.extend(
-            [
-                (
-                    {strata: str(s_value), add_strata: str(as_value)},
-                    (mt._freq_meta[strata] == s_value)
-                    & (mt._freq_meta[add_strata] == as_value),
-                )
-                for strata in additional_strata_expr
-                for s_value in cut_data.get(strata, {})
-                for add_strata in additional_strata_grouping_expr
-                for as_value in cut_data.get(add_strata, {})
-            ]
-        )
 
     freq_sample_count = mt.aggregate_cols(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
@@ -860,6 +874,54 @@ def add_variant_type(alt_alleles: hl.expr.ArrayExpression) -> hl.expr.StructExpr
     )
 
 
+def annotate_allele_info(ht: hl.Table) -> hl.Table:
+    """
+    Return bi-allelic sites Table with an 'allele_info' annotation.
+
+    .. note::
+
+        This function requires that the input `ht` is unsplit and returns a split `ht`.
+
+    'allele_info' is a struct with the following information:
+        - variant_type: Variant type (snv, indel, multi-snv, multi-indel, or mixed).
+        - n_alt_alleles: Total number of alternate alleles observed at variant locus.
+        - has_star: True if the variant contains a star allele.
+        - allele_type: Allele type (snv, insertion, deletion, or mixed).
+        - was_mixed: True if the variant was mixed (i.e. contained both SNVs and indels).
+        - nonsplit_alleles: Array of alleles before splitting.
+
+    :param Table ht: Unsplit input Table.
+    :return: Split Table with allele data annotation added,
+    """
+    ht = ht.annotate(
+        allele_info=hl.struct(
+            **add_variant_type(ht.alleles),
+            has_star=hl.any(lambda a: a == "*", ht.alleles),
+        )
+    )
+
+    ht = hl.split_multi(ht)
+
+    ref_expr = ht.alleles[0]
+    alt_expr = ht.alleles[1]
+    allele_type_expr = (
+        hl.case()
+        .when(hl.is_snp(ref_expr, alt_expr), "snv")
+        .when(hl.is_insertion(ref_expr, alt_expr), "ins")
+        .when(hl.is_deletion(ref_expr, alt_expr), "del")
+        .default("complex")
+    )
+    ht = ht.transmute(
+        allele_info=ht.allele_info.annotate(
+            allele_type=allele_type_expr,
+            was_mixed=ht.allele_info.variant_type == "mixed",
+            nonsplit_alleles=ht.old_alleles,
+        )
+    )
+
+    return ht
+
+
 def annotation_type_is_numeric(t: Any) -> bool:
     """
     Given an annotation type, return whether it is a numerical type or not.
@@ -892,7 +954,8 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
 
 
 def bi_allelic_site_inbreeding_expr(
-    call: hl.expr.CallExpression,
+    call: Optional[hl.expr.CallExpression] = None,
+    callstats_expr: Optional[hl.expr.StructExpression] = None,
 ) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
@@ -905,8 +968,11 @@ def bi_allelic_site_inbreeding_expr(
         The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param call: Expression giving the calls in the MT
+    :param callstats_expr: StructExpression containing only alternate allele AC, AN, and homozygote_count as integers. If passed, used to create expression in place of GT calls.
     :return: Site inbreeding coefficient expression
     """
+    if call is None and callstats_expr is None:
+        raise ValueError("One of `call` or `callstats_expr` must be passed.")
 
     def inbreeding_coeff(
         gt_counts: hl.expr.DictExpression,
@@ -916,7 +982,34 @@ def bi_allelic_site_inbreeding_expr(
         q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
-    return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
+    if callstats_expr is not None:
+        # Check that AC, AN, and homozygote count are all ints
+        if not (
+            (
+                (callstats_expr.AC.dtype == hl.tint32)
+                | (callstats_expr.AC.dtype == hl.tint64)
+            )
+            & (
+                (callstats_expr.AN.dtype == hl.tint32)
+                | (callstats_expr.AN.dtype == hl.tint64)
+            )
+            & (
+                (callstats_expr.homozygote_count.dtype == hl.tint32)
+                | (callstats_expr.homozygote_count.dtype == hl.tint64)
+            )
+        ):
+            raise ValueError(
+                "callstats_expr must be a StructExpression containing fields 'AC',"
+                " 'AN', and 'homozygote_count' of types int32 or int64."
+            )
+        n = callstats_expr.AN / 2
+        q = callstats_expr.AC / callstats_expr.AN
+        p = 1 - q
+        return 1 - (callstats_expr.AC - (2 * callstats_expr.homozygote_count)) / (
+            2 * p * q * n
+        )
+    else:
+        return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
 
 
 def fs_from_sb(

@@ -242,14 +242,16 @@ def qual_hist_expr(
     dp_expr: Optional[hl.expr.NumericExpression] = None,
     ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
     adj_expr: Optional[hl.expr.BooleanExpression] = None,
+    ab_expr: Optional[hl.expr.NumericExpression] = None,
 ) -> hl.expr.StructExpression:
     """
-    Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
+    Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad, ab).
 
     .. note::
 
         - If `gt_expr` is provided, will return histograms for non-reference samples only as well as all samples.
         - `gt_expr` is required for the allele-balance histogram, as it is only computed on het samples.
+        - If `ab_expr` is provided, the allele-balance histogram is computed using this expression instead of the ad_expr.
         - If `adj_expr` is provided, additional histograms are computed using only adj samples.
 
     :param gt_expr: Entry expression containing genotype
@@ -257,6 +259,7 @@ def qual_hist_expr(
     :param dp_expr: Entry expression containing depth
     :param ad_expr: Entry expression containing allelic depth (bi-allelic here)
     :param adj_expr: Entry expression containing adj (high quality) genotype status
+    :param ab_expr: Entry expression containing allele balance (bi-allelic here)
     :return: Genotype quality histograms expression
     """
     qual_hists = {}
@@ -278,7 +281,14 @@ def qual_hist_expr(
                 for qual_hist_name, qual_hist_expr in qual_hists.items()
             },
         }
-        if ad_expr is not None:
+        ab_hist_msg = "Using the %s to compute allele balance histogram..."
+        if ab_expr is not None:
+            logger.info(ab_hist_msg, "ab_expr")
+            qual_hists["ab_hist_alt"] = hl.agg.filter(
+                gt_expr.is_het(), hl.agg.hist(ab_expr, 0, 1, 20)
+            )
+        elif ad_expr is not None:
+            logger.info(ab_hist_msg, "ad_expr")
             qual_hists["ab_hist_alt"] = hl.agg.filter(
                 gt_expr.is_het(), hl.agg.hist(ad_expr[1] / hl.sum(ad_expr), 0, 1, 20)
             )

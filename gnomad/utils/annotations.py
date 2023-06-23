@@ -1210,7 +1210,9 @@ def merge_freq_arrays(
         the array indices for a freq array in `farrays` must be the same as its associated
         frequency metadata index in `fmeta` i.e., `farrays = [freq1, freq2]` then `fmeta`
         must equal `[fmeta1, fmeta2]` where fmeta1 contains the metadata information
-        for freq1. If `operation` is set to "sum", groups in the merged array
+        for freq1. 
+        
+        If `operation` is set to "sum", groups in the merged array
         will be the union of groupings found within the arrays' metadata and all arrays
         with be summed by grouping. If `operation` is set to "diff", the merged array
         will contain groups only found in the first array of `fmeta`. Any array containing

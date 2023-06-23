@@ -114,9 +114,9 @@ def make_freq_index_dict_from_meta(
 
     The dictionary is keyed by the grouping combinations found in the frequency metadata
     array, where values are the corresponding 0-based indices for the groupings in the
-    frequency array. For example, if the freq_meta entry [{'pop': 'nfe'}, {'sex': 'XX'}]
+    frequency array. For example, if the `freq_meta` entry [{'pop': 'nfe'}, {'sex': 'XX'}]
     corresponds to the 5th entry in the frequency array, the returned dictionary entry
-    would be {`nfe_XX`: 4}.
+    would be {'nfe_XX': 4}.
 
     :param freq_meta: List of dictionaries containing frequency metadata.
     :param label_delimiter: Delimiter to use when joining frequency metadata labels.
@@ -124,7 +124,7 @@ def make_freq_index_dict_from_meta(
     :return: Dictionary of frequency metadata.
     """
     # Confirm all groups in freq_meta are in sort_order. Warn user if not.
-    diff = hl.eval(hl.set(freq_meta.flatmap(lambda i: i.keys()))) - set(SORT_ORDER)
+    diff = hl.eval(hl.set(freq_meta.flatmap(lambda i: i.keys()))) - set(sort_order)
     if diff:
         logger.warning(
             "Found unexpected frequency metadata groupings: %s. These groupings are"

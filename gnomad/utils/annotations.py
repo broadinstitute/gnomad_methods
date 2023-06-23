@@ -1108,7 +1108,8 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
+        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())
+         } if non_par else {}  # fmt: skip
     )
 
     if prob_regions is not None:
@@ -1210,8 +1211,8 @@ def merge_freq_arrays(
         the array indices for a freq array in `farrays` must be the same as its associated
         frequency metadata index in `fmeta` i.e., `farrays = [freq1, freq2]` then `fmeta`
         must equal `[fmeta1, fmeta2]` where fmeta1 contains the metadata information
-        for freq1. 
-        
+        for freq1.
+
         If `operation` is set to "sum", groups in the merged array
         will be the union of groupings found within the arrays' metadata and all arrays
         with be summed by grouping. If `operation` is set to "diff", the merged array
@@ -1222,7 +1223,7 @@ def merge_freq_arrays(
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
-    :return: Tuple of merged frequency array and its freq index dictionary.
+    :return: Tuple of merged frequency array and its frequency metadata list.
     """
     if len(farrays) < 2:
         raise ValueError("Must provide at least two frequency arrays to merge!")

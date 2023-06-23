@@ -124,15 +124,16 @@ def make_freq_index_dict_from_meta(
     :return: Dictionary of frequency metadata.
     """
     # Confirm all groups in freq_meta are in sort_order. Warn user if not.
-    diff = hl.eval(hl.set(freq_meta.flatmap(lambda i: i.keys()))) - set(sort_order)
-    if diff:
-        logger.warning(
-            "Found unexpected frequency metadata groupings: %s. These groupings are"
-            " not present in the provided sort_order: %s. These groupings will not"
-            " be included in the returned dictionary.",
-            diff,
-            sort_order,
-        )
+    if sort_order is not None:
+        diff = hl.eval(hl.set(freq_meta.flatmap(lambda i: i.keys()))) - set(sort_order)
+        if diff:
+            logger.warning(
+                "Found unexpected frequency metadata groupings: %s. These groupings"
+                " are not present in the provided sort_order: %s. These groupings"
+                " will not be included in the returned dictionary.",
+                diff,
+                sort_order,
+            )
 
     index_dict = {}
     for i, f in enumerate(hl.eval(freq_meta)):

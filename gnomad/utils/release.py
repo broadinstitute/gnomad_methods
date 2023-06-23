@@ -107,7 +107,7 @@ def make_freq_index_dict(
 def make_freq_index_dict_from_meta(
     freq_meta: List[Dict[str, str]],
     label_delimiter: str = "_",
-    sort_order: List[str] = SORT_ORDER,
+    sort_order: Optional[List[str]] = SORT_ORDER,
 ) -> Dict[str, int]:
     """
     Create a dictionary for accessing frequency array.
@@ -136,7 +136,7 @@ def make_freq_index_dict_from_meta(
 
     index_dict = {}
     for i, f in enumerate(hl.eval(freq_meta)):
-        if sort_order and len(set(f.keys()) - set(sort_order)) < 1:
+        if sort_order is None or len(set(f.keys()) - set(sort_order)) < 1:
             index_dict[
                 label_delimiter.join(
                     [

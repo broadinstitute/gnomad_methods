@@ -281,12 +281,15 @@ def qual_hist_expr(
                 for qual_hist_name, qual_hist_expr in qual_hists.items()
             },
         }
+        ab_hist_msg = "Using the %s to compute allele balance histogram..."
         if ab_expr is not None:
-            qual_hists["ab_hist_all"] = hl.agg.filter(
+            logger.info(ab_hist_msg, "ab_expr")
+            qual_hists["ab_hist_alt"] = hl.agg.filter(
                 gt_expr.is_het(), hl.agg.hist(ab_expr, 0, 1, 20)
             )
         elif ad_expr is not None:
-            qual_hists["ab_hist_all"] = hl.agg.filter(
+            logger.info(ab_hist_msg, "ad_expr")
+            qual_hists["ab_hist_alt"] = hl.agg.filter(
                 gt_expr.is_het(), hl.agg.hist(ad_expr[1] / hl.sum(ad_expr), 0, 1, 20)
             )
 

@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Optional, Union
 
 import hail as hl
+from hail.utils.misc import new_temp_file
 
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
@@ -982,3 +983,93 @@ def validate_release_t(
             t, info_metrics, non_info_metrics, n_sites, missingness_threshold
         )
     logger.info("VALIDITY CHECKS COMPLETE")
+
+
+def count_vep_annotated_variants_per_interval(
+    vep_ht: hl.Table, interval_ht: hl.Table
+) -> hl.Table:
+    """
+    Calculate the count of VEP annotated variants in `vep_ht` per interval defined by `interval_ht`.
+
+    .. note::
+
+        - `vep_ht` must contain the 'vep.transcript_consequences' array field, which
+          contains a 'biotype' field to determine whether a variant is in a
+          "protein-coding" gene.
+        - `interval_ht` should be indexed by 'locus' and contain a 'gene_stable_ID'
+          field. For example, an interval Table containing the intervals of
+          protein-coding genes of a specific Ensembl release.
+
+    The returned Table will have the following fields added:
+        - n_total_variants: The number of total variants in the interval.
+        - n_pcg_variants: The number of variants in the interval that are annotated as
+          "protein-coding".
+
+    :param vep_ht: VEP-annotated Table.
+    :param interval_ht: Interval Table.
+    :return: Interval Table with annotations for the counts of total variants and
+        variants annotated as "protein-coding" in biotype.
+    """
+    logger.info(
+        "Counting the number of total variants and protein-coding variants in each"
+        " interval..."
+    )
+
+    # Select the vep_ht and annotate genes that have a matched interval from
+    # the interval_ht and are protein-coding.
+    vep_ht = vep_ht.select(
+        gene_stable_ID=interval_ht.index(vep_ht.locus, all_matches=True).gene_stable_ID,
+        in_pcg=vep_ht.vep.transcript_consequences.biotype.contains("protein_coding"),
+    )
+
+    vep_ht = vep_ht.filter(hl.is_defined(vep_ht.gene_stable_ID))
+
+    # Explode the vep_ht by gene_stable_ID.
+    vep_ht = vep_ht.explode(vep_ht.gene_stable_ID)
+
+    # Count the number of total variants and "protein-coding" variants in each interval.
+    count_ht = vep_ht.group_by(vep_ht.gene_stable_ID).aggregate(
+        all_variants=hl.agg.count(),
+        variants_in_pcg=hl.agg.count_where(vep_ht.in_pcg),
+    )
+
+    interval_ht = interval_ht.annotate(**count_ht[interval_ht.gene_stable_ID])
+
+    logger.info("Checkpointing the counts per interval...")
+    interval_ht = interval_ht.checkpoint(
+        new_temp_file("validity_checks.vep_count_per_interval", extension="ht"),
+        overwrite=True,
+    )
+
+    logger.info("Genes without variants annotated: ")
+    gene_sets = interval_ht.aggregate(
+        hl.struct(
+            na_genes=hl.agg.filter(
+                hl.is_missing(interval_ht.variants_in_pcg)
+                | (interval_ht.variants_in_pcg == 0),
+                hl.agg.collect_as_set(interval_ht.gene_stable_ID),
+            ),
+            partial_pcg_genes=hl.agg.filter(
+                (interval_ht.all_variants != 0)
+                & (interval_ht.variants_in_pcg != 0)
+                & (interval_ht.all_variants != interval_ht.variants_in_pcg),
+                hl.agg.collect_as_set(interval_ht.gene_stable_ID),
+            ),
+        )
+    )
+
+    logger.info(
+        "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
+        " likely these genes are not covered by the variants in 'vep_ht'. These genes"
+        " are: %s",
+        len(gene_sets.na_genes),
+        gene_sets.na_genes,
+    )
+
+    logger.info(
+        "%s gene(s) have a subset of variants annotated as protein-coding biotype in"
+        " their defined intervals",
+        len(gene_sets.partial_pcg_genes),
+    )
+
+    return interval_ht

@@ -61,27 +61,16 @@ def _import_methylation_sites(path) -> hl.Table:
     """
     Import methylation data from bed file.
 
-    Methylation scores range from 0-15 and are described in Chen et al
-    (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-
-    :param path: Path to bed file.
+    :param path: Path to bed file containing methylation scores.
     :return: Table with methylation data.
     """
-    ht = hl.import_table(
-        path,
-        no_header=True,
-        delimiter=r"\s+",
-        impute=False,
-        skip_blank_lines=True,
-        min_partitions=100,
-        types={"f0": hl.tstr, "f1": hl.tint32, "f2": hl.tint32, "f3": hl.tint32},
-    )
+    ht = hl.import_bed(path, min_partitions=100, reference_genome="GRCh38")
     ht = ht.select(
-        locus=hl.locus(ht.f0, ht.f1, reference_genome="GRCh38"),
-        methylation_level=ht.f3,
+        locus=ht.interval.start,
+        methylation_level=hl.int32(ht.target),
     )
 
-    return ht.key_by("locus")
+    return ht.key_by("locus").drop("interval")
 
 
 # Resources with no versioning needed
@@ -272,6 +261,8 @@ mills = GnomadPublicTableResource(
     },
 )
 
+# Methylation scores range from 0-15 and are described in Chen et al
+# (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
 methylation_sites = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
     import_func=_import_methylation_sites,

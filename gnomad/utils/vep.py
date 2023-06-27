@@ -8,7 +8,6 @@ from typing import List, Optional, Union
 
 import hail as hl
 
-from gnomad.resources.grch38.gnomad import CURRENT_VEP_VERSION
 from gnomad.resources.resource_utils import VersionedTableResource
 from gnomad.utils.filtering import combine_functions
 

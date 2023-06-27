@@ -16,6 +16,12 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+VEP_VERSIONS = ["101", "105"]
+CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
+"""
+Versions of VEP used in gnomAD data, the latest version is 105.
+"""
+
 # Note that this is the current as of v81 with some included for backwards
 # compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [

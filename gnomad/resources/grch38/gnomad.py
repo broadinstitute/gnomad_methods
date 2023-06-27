@@ -20,6 +20,7 @@ DATA_TYPES = ["genomes"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
+
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 SUBSETS = {
     "v3": [

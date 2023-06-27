@@ -395,7 +395,8 @@ def filter_vep_to_synonymous_variants(
 
 
 def vep_struct_to_csq(
-    vep_expr: hl.expr.StructExpression, csq_fields: str = VEP_CSQ_FIELDS
+    vep_expr: hl.expr.StructExpression,
+    csq_fields: str = VEP_CSQ_FIELDS[CURRENT_VEP_VERSION],
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).

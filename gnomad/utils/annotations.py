@@ -1,5 +1,6 @@
 # noqa: D100
 
+import itertools
 import logging
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -125,7 +126,7 @@ def project_max_expr(
                     > 0
                 ),
                 # order the callstats computed by AF in decreasing order
-                lambda x: -x[1].AF[ai]
+                lambda x: -x[1].AF[ai],
                 # take the n_projects projects with largest AF
             )[:n_projects].map(
                 # add the project in the callstats struct
@@ -219,8 +220,10 @@ def faf_expr(
                 ~locus.in_autosome_or_par(),
                 hl.struct(
                     **{
-                        f"faf{str(threshold)[2:]}": hl.experimental.filtering_allele_frequency(
-                            freq[i].AC, freq[i].AN, threshold
+                        f"faf{str(threshold)[2:]}": (
+                            hl.experimental.filtering_allele_frequency(
+                                freq[i].AC, freq[i].AN, threshold
+                            )
                         )
                         for threshold in faf_thresholds
                     }
@@ -239,14 +242,16 @@ def qual_hist_expr(
     dp_expr: Optional[hl.expr.NumericExpression] = None,
     ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
     adj_expr: Optional[hl.expr.BooleanExpression] = None,
+    ab_expr: Optional[hl.expr.NumericExpression] = None,
 ) -> hl.expr.StructExpression:
     """
-    Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad).
+    Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad, ab).
 
     .. note::
 
         - If `gt_expr` is provided, will return histograms for non-reference samples only as well as all samples.
         - `gt_expr` is required for the allele-balance histogram, as it is only computed on het samples.
+        - If `ab_expr` is provided, the allele-balance histogram is computed using this expression instead of the ad_expr.
         - If `adj_expr` is provided, additional histograms are computed using only adj samples.
 
     :param gt_expr: Entry expression containing genotype
@@ -254,6 +259,7 @@ def qual_hist_expr(
     :param dp_expr: Entry expression containing depth
     :param ad_expr: Entry expression containing allelic depth (bi-allelic here)
     :param adj_expr: Entry expression containing adj (high quality) genotype status
+    :param ab_expr: Entry expression containing allele balance (bi-allelic here)
     :return: Genotype quality histograms expression
     """
     qual_hists = {}
@@ -275,7 +281,14 @@ def qual_hist_expr(
                 for qual_hist_name, qual_hist_expr in qual_hists.items()
             },
         }
-        if ad_expr is not None:
+        ab_hist_msg = "Using the %s to compute allele balance histogram..."
+        if ab_expr is not None:
+            logger.info(ab_hist_msg, "ab_expr")
+            qual_hists["ab_hist_alt"] = hl.agg.filter(
+                gt_expr.is_het(), hl.agg.hist(ab_expr, 0, 1, 20)
+            )
+        elif ad_expr is not None:
+            logger.info(ab_hist_msg, "ad_expr")
             qual_hists["ab_hist_alt"] = hl.agg.filter(
                 gt_expr.is_het(), hl.agg.hist(ad_expr[1] / hl.sum(ad_expr), 0, 1, 20)
             )
@@ -333,9 +346,11 @@ def annotate_freq(
     sex_expr: Optional[hl.expr.StringExpression] = None,
     pop_expr: Optional[hl.expr.StringExpression] = None,
     subpop_expr: Optional[hl.expr.StringExpression] = None,
-    additional_strata_expr: Optional[Dict[str, hl.expr.StringExpression]] = None,
-    additional_strata_grouping_expr: Optional[
-        Dict[str, hl.expr.StringExpression]
+    additional_strata_expr: Optional[
+        Union[
+            List[Dict[str, hl.expr.StringExpression]],
+            Dict[str, hl.expr.StringExpression],
+        ]
     ] = None,
     downsamplings: Optional[List[int]] = None,
 ) -> hl.MatrixTable:
@@ -388,12 +403,18 @@ def annotate_freq(
     In addition, if `pop_expr` is specified, a downsampling to each of the exact number of samples present in each population is added.
     Note that samples are randomly sampled only once, meaning that the lower downsamplings are subsets of the higher ones.
 
+    .. rubric:: The `additional_strata_expr` parameter
+
+    If the `additional_strata_expr` parameter is used, frequencies will be computed for each of the strata dictionaries across all
+    values. For example, if `additional_strata_expr` is set to `[{'platform': mt.platform}, {'platform':mt.platform, 'pop': mt.pop},
+    {'age_bin': mt.age_bin}]`, then frequencies will be computed for each of the values of `mt.platform`, each of the combined values
+    of `mt.platform` and `mt.pop`, and each of the values of `mt.age_bin`.
+
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr` is also specified, then a pop/sex stratifiction is added.
     :param pop_expr: When specified, frequencies are stratified by population. If `sex_expr` is also specified, then a pop/sex stratifiction is added.
     :param subpop_expr: When specified, frequencies are stratified by sub-continental population. Note that `pop_expr` is required as well when using this option.
-    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata found in the dict. This can e.g. be used to stratify by platform.
-    :param additional_strata_grouping_expr: When specified, frequencies are further stratified by groups within the additional_strata_expr. This can e.g. be used to stratify by platform-population.
+    :param additional_strata_expr: When specified, frequencies are stratified by the given additional strata. This can e.g. be used to stratify by platform, platform-pop, platform-pop-sex.
     :param downsamplings: When specified, frequencies are computed by downsampling the data to the number of samples given in the list. Note that if `pop_expr` is specified, downsamplings by population is also computed.
     :return: MatrixTable with `freq` annotation
     """
@@ -402,20 +423,15 @@ def annotate_freq(
             "annotate_freq requires pop_expr when using subpop_expr"
         )
 
-    if additional_strata_grouping_expr is not None and additional_strata_expr is None:
-        raise NotImplementedError(
-            "annotate_freq requires additional_strata_expr when using"
-            " additional_strata_grouping_expr"
-        )
-
     if additional_strata_expr is None:
-        additional_strata_expr = {}
+        additional_strata_expr = [{}]
 
-    _freq_meta_expr = hl.struct(**additional_strata_expr)
-    if additional_strata_grouping_expr is None:
-        additional_strata_grouping_expr = {}
-    else:
-        _freq_meta_expr = _freq_meta_expr.annotate(**additional_strata_grouping_expr)
+    if isinstance(additional_strata_expr, dict):
+        additional_strata_expr = [additional_strata_expr]
+
+    _freq_meta_expr = hl.struct(
+        **{k: v for d in additional_strata_expr for k, v in d.items()}
+    )
     if sex_expr is not None:
         _freq_meta_expr = _freq_meta_expr.annotate(sex=sex_expr)
     if pop_expr is not None:
@@ -495,6 +511,32 @@ def annotate_freq(
                 ]
             )
 
+    # Build a list of strata filters from the additional strata
+    additional_strata_filters = []
+    for additional_strata in additional_strata_expr:
+        additional_strata_values = [
+            cut_data.get(strata, {}) for strata in additional_strata
+        ]
+        additional_strata_combinations = itertools.product(*additional_strata_values)
+
+        additional_strata_filters.extend(
+            [
+                (
+                    {
+                        strata: str(value)
+                        for strata, value in zip(additional_strata, combination)
+                    },
+                    hl.all(
+                        list(
+                            mt._freq_meta[strata] == value
+                            for strata, value in zip(additional_strata, combination)
+                        )
+                    ),
+                )
+                for combination in additional_strata_combinations
+            ]
+        )
+
     # Add all desired strata, starting with the full set and ending with
     # downsamplings (if any)
     sample_group_filters = (
@@ -517,29 +559,9 @@ def annotate_freq(
             )
             for subpop in cut_data.get("subpop", {})
         ]
-        + [
-            ({strata: str(s_value)}, mt._freq_meta[strata] == s_value)
-            for strata in additional_strata_expr
-            for s_value in cut_data.get(strata, {})
-        ]
+        + additional_strata_filters
         + sample_group_filters
     )
-
-    # Add additional groupings to strata, e.g. strata-pop, strata-sex, strata-pop-sex
-    if additional_strata_grouping_expr is not None:
-        sample_group_filters.extend(
-            [
-                (
-                    {strata: str(s_value), add_strata: str(as_value)},
-                    (mt._freq_meta[strata] == s_value)
-                    & (mt._freq_meta[add_strata] == as_value),
-                )
-                for strata in additional_strata_expr
-                for s_value in cut_data.get(strata, {})
-                for add_strata in additional_strata_grouping_expr
-                for as_value in cut_data.get(add_strata, {})
-            ]
-        )
 
     freq_sample_count = mt.aggregate_cols(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
@@ -882,7 +904,8 @@ def annotation_type_in_vcf_info(t: Any) -> bool:
 
 
 def bi_allelic_site_inbreeding_expr(
-    call: hl.expr.CallExpression,
+    call: Optional[hl.expr.CallExpression] = None,
+    callstats_expr: Optional[hl.expr.StructExpression] = None,
 ) -> hl.expr.Float32Expression:
     """
     Return the site inbreeding coefficient as an expression to be computed on a MatrixTable.
@@ -895,8 +918,11 @@ def bi_allelic_site_inbreeding_expr(
         The computation is run based on the counts of alternate alleles and thus should only be run on bi-allelic sites.
 
     :param call: Expression giving the calls in the MT
+    :param callstats_expr: StructExpression containing only alternate allele AC, AN, and homozygote_count as integers. If passed, used to create expression in place of GT calls.
     :return: Site inbreeding coefficient expression
     """
+    if call is None and callstats_expr is None:
+        raise ValueError("One of `call` or `callstats_expr` must be passed.")
 
     def inbreeding_coeff(
         gt_counts: hl.expr.DictExpression,
@@ -906,7 +932,34 @@ def bi_allelic_site_inbreeding_expr(
         q = (2 * gt_counts.get(2, 0) + gt_counts.get(1, 0)) / (2 * n)
         return 1 - (gt_counts.get(1, 0) / (2 * p * q * n))
 
-    return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
+    if callstats_expr is not None:
+        # Check that AC, AN, and homozygote count are all ints
+        if not (
+            (
+                (callstats_expr.AC.dtype == hl.tint32)
+                | (callstats_expr.AC.dtype == hl.tint64)
+            )
+            & (
+                (callstats_expr.AN.dtype == hl.tint32)
+                | (callstats_expr.AN.dtype == hl.tint64)
+            )
+            & (
+                (callstats_expr.homozygote_count.dtype == hl.tint32)
+                | (callstats_expr.homozygote_count.dtype == hl.tint64)
+            )
+        ):
+            raise ValueError(
+                "callstats_expr must be a StructExpression containing fields 'AC',"
+                " 'AN', and 'homozygote_count' of types int32 or int64."
+            )
+        n = callstats_expr.AN / 2
+        q = callstats_expr.AC / callstats_expr.AN
+        p = 1 - q
+        return 1 - (callstats_expr.AC - (2 * callstats_expr.homozygote_count)) / (
+            2 * p * q * n
+        )
+    else:
+        return hl.bind(inbreeding_coeff, hl.agg.counter(call.n_alt_alleles()))
 
 
 def fs_from_sb(
@@ -1106,7 +1159,8 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())
+         } if non_par else {}  # fmt: skip
     )
 
     if prob_regions is not None:
@@ -1188,3 +1242,133 @@ def hemi_expr(
         # mt.GT[0] is alternate allele
         gt.is_haploid() & (sex_expr == male_str) & (gt[0] == 1),
     )
+
+
+def merge_freq_arrays(
+    farrays: List[hl.expr.ArrayExpression],
+    fmeta: List[List[Dict[str, str]]],
+    operation: str = "sum",
+    set_negatives_to_zero: bool = False,
+) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
+    """
+    Merge a list of frequency arrays based on the supplied `operation`.
+
+    .. warning::
+        Arrays must be on the same Table.
+
+    .. note::
+
+        Arrays do not have to contain the same groupings or order of groupings but
+        the array indices for a freq array in `farrays` must be the same as its associated
+        frequency metadata index in `fmeta` i.e., `farrays = [freq1, freq2]` then `fmeta`
+        must equal `[fmeta1, fmeta2]` where fmeta1 contains the metadata information
+        for freq1.
+
+        If `operation` is set to "sum", groups in the merged array
+        will be the union of groupings found within the arrays' metadata and all arrays
+        with be summed by grouping. If `operation` is set to "diff", the merged array
+        will contain groups only found in the first array of `fmeta`. Any array containing
+        any of these groups will have thier values subtracted from the values of the first array.
+
+    :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
+    :param fmeta: List of frequency metadata for arrays being merged.
+    :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
+    :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
+    :return: Tuple of merged frequency array and its frequency metadata list.
+    """
+    if len(farrays) < 2:
+        raise ValueError("Must provide at least two frequency arrays to merge!")
+    if len(farrays) != len(fmeta):
+        raise ValueError("Length of farrays and fmeta must be equal!")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'!")
+
+    # Create a list where each entry is a dictionary whose key is an aggregation
+    # group and the value is the corresponding index in the freq array.
+    fmeta = [hl.dict(hl.enumerate(f).map(lambda x: (x[1], [x[0]]))) for f in fmeta]
+
+    # Merge dictionaries in the list into a single dictionary where key is aggregation
+    # group and the value is a list of the group's index in each of the freq arrays, if
+    # it exists. For "sum" operation, use keys, aka groups, found in all freq dictionaries.
+    # For "diff" operations, only use key_set from the first entry.
+    fmeta = hl.fold(
+        lambda i, j: hl.dict(
+            (
+                hl.if_else(operation == "sum", (i.key_set() | j.key_set()), i.key_set())
+            ).map(
+                lambda k: (
+                    k,
+                    i.get(k, [hl.missing(hl.tint32)]).extend(
+                        j.get(k, [hl.missing(hl.tint32)])
+                    ),
+                )
+            )
+        ),
+        fmeta[0],
+        fmeta[1:],
+    )
+
+    # Create a list of tuples from the dictionary, sorted by the list of indices for
+    # each aggregation group.
+    fmeta = hl.sorted(fmeta.items(), key=lambda f: f[1])
+
+    # Create a list of the aggregation groups, maintaining the sorted order.
+    new_freq_meta = fmeta.map(lambda x: x[0])
+
+    # Create array for each aggregation group of arrays containing the group's freq
+    # values from each freq array.
+    freq_meta_idx = fmeta.map(lambda x: hl.zip(farrays, x[1]).map(lambda i: i[0][i[1]]))
+
+    def _sum_or_diff_fields(
+        field_1_expr: str, field_2_expr: str
+    ) -> hl.expr.Int32Expression:
+        """
+        Sum or subtract fields in call statistics struct.
+
+        :param field_1_expr: First field to sum or diff.
+        :param field_2_expr: Second field to sum or diff.
+        :return: Merged field value.
+        """
+        return hl.if_else(
+            operation == "sum",
+            hl.or_else(field_1_expr, 0) + hl.or_else(field_2_expr, 0),
+            hl.or_else(field_1_expr, 0) - hl.or_else(field_2_expr, 0),
+        )
+
+    # Iterate through the groups and their freq lists to merge callstats.
+    callstat_ann = ["AC", "AN", "homozygote_count"]
+    new_freq = freq_meta_idx.map(
+        lambda x: hl.bind(
+            lambda y: y.annotate(AF=hl.if_else(y.AN > 0, y.AC / y.AN, 0)),
+            hl.fold(
+                lambda i, j: hl.struct(
+                    **{ann: _sum_or_diff_fields(i[ann], j[ann]) for ann in callstat_ann}
+                ),
+                x[0].select("AC", "AN", "homozygote_count"),
+                x[1:],
+            ),
+        )
+    )
+    # Check and see if any annotation within the merged array is negative. If so,
+    # raise an error if set_negatives_to_zero is False or set the value to 0 if
+    # set_negatives_to_zero is True.
+    if operation == "diff":
+        negative_value_error_msg = (
+            "Negative values found in merged frequency array. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+        callstat_ann.append("AF")
+        new_freq = new_freq.map(
+            lambda x: x.annotate(
+                **{
+                    ann: (
+                        hl.case()
+                        .when(set_negatives_to_zero, hl.max(x[ann], 0))
+                        .or_error(negative_value_error_msg)
+                    )
+                    for ann in callstat_ann
+                }
+            )
+        )
+
+    return new_freq, new_freq_meta

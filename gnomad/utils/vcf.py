@@ -328,6 +328,42 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
 Dictionary with in silico score descriptions to include in the VCF INFO header.
 """
 
+
+VRS_FIELDS_DICT = {
+    "VRS_Allele_IDs": {
+        "Number": "R",
+        "Description": (
+            "The computed identifiers for the GA4GH VRS Alleles corresponding to the"
+            " values in the REF and ALT fields"
+        ),
+    },
+    "VRS_Starts": {
+        "Number": "R",
+        "Description": (
+            "Interresidue coordinates used as the location starts for the GA4GH VRS"
+            " Alleles corresponding to the values in the REF and ALT fields"
+        ),
+    },
+    "VRS_Ends": {
+        "Number": "R",
+        "Description": (
+            "Interresidue coordinates used as the location ends for the GA4GH VRS"
+            " Alleles corresponding to the values in the REF and ALT fields"
+        ),
+    },
+    "VRS_States": {
+        "Number": "R",
+        "Description": (
+            "The literal sequence states used for the GA4GH VRS Alleles corresponding"
+            " to the values in the REF and ALT fields"
+        ),
+    },
+}
+"""
+Dictionary with VRS annotations to include in the VCF INFO field and VCF header.
+"""
+
+
 ENTRIES = ["GT", "GQ", "DP", "AD", "MIN_DP", "PGT", "PID", "PL", "SB"]
 """
 Densified entries to be selected during VCF export.

@@ -416,7 +416,7 @@ def vep_struct_to_csq(
     hl.str(), so it may differ from their usual VEP CSQ representation.
 
     :param vep_expr: The input VEP Struct
-    :param csq_fields: The | delimited list of fields to include in the CSQ (in that order)
+    :param csq_fields: The | delimited list of fields to include in the CSQ (in that order), default is the CSQ fields of the CURRENT_VEP_VERSION.
     :return: The corresponding CSQ strings
     """
     _csq_fields = [f.lower() for f in csq_fields.split("|")]

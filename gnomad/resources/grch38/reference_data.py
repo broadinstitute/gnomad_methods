@@ -57,6 +57,48 @@ def _import_dbsnp(**kwargs) -> hl.Table:
     return dbsnp
 
 
+def _import_methylation_sites(path) -> hl.Table:
+    """
+    Import methylation data from bed file.
+
+    :param path: Path to bed file containing methylation scores.
+    :return: Table with methylation data.
+    """
+    ht = hl.import_bed(path, min_partitions=100, reference_genome="GRCh38")
+    ht = ht.select(
+        locus=ht.interval.start,
+        methylation_level=hl.int32(ht.target),
+    )
+
+    return ht.key_by("locus").drop("interval")
+
+
+def _import_ensembl_interval(path) -> hl.Table:
+    """
+    Import and parse Ensembl intervals of protein-coding genes to a Hail Table.
+
+    File is expected to include only the following fields: gene_stable_ID, chr, start, end, source_gene, gene_name, and type.
+
+    :param path: Path to the interval Table file.
+    """
+    ensembl = hl.import_table(
+        path,
+        delimiter="\t",
+        min_partitions=100,
+        impute=True,
+    )
+
+    ensembl = ensembl.key_by(
+        interval=hl.locus_interval(
+            "chr" + ensembl.chr,
+            ensembl.start,
+            ensembl.end,
+            reference_genome="GRCh38",
+        )
+    )
+    return ensembl
+
+
 # Resources with no versioning needed
 purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.ht",
@@ -132,6 +174,31 @@ syndip_hc_intervals = VersionedTableResource(
                 "min_partitions": 10,
             },
         )
+    },
+)
+
+# These Ensembl Interval Tables are focused on protein-coding genes on chr1-22,X,Y.
+# Downloaded from the biomart of Ensembl Archive (https://useast.ensembl.org/info/website/archives/index.html)
+# Ensembl 101 & 105 are included, since 101 was used to annotate gnomAD v3 and 105 to gnomAD v4.
+# Basic stats: 19924 protein-coding genes in Ensembl 101, and1 19951
+# protein-coding genes in Ensembl 105.
+ensembl_interval = VersionedTableResource(
+    default_version="105",
+    versions={
+        "105": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.ht",
+            import_func=_import_ensembl_interval,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.tsv",
+            },
+        ),
+        "101": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.ht",
+            import_func=_import_ensembl_interval,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.tsv",
+            },
+        ),
     },
 )
 
@@ -242,6 +309,16 @@ mills = GnomadPublicTableResource(
         "path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
         "force_bgz": True,
         "reference_genome": "GRCh38",
+    },
+)
+
+# Methylation scores range from 0-15 and are described in Chen et al
+# (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
+methylation_sites = GnomadPublicTableResource(
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
+    import_func=_import_methylation_sites,
+    import_args={
+        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.bed",
     },
 )
 

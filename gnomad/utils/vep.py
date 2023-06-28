@@ -15,6 +15,12 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+VEP_VERSIONS = ["101", "105"]
+CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
+"""
+Versions of VEP used in gnomAD data, the latest version is 105.
+"""
+
 # Note that this is the current as of v81 with some included for backwards
 # compatibility (VEP <= 75)
 CSQ_CODING_HIGH_IMPACT = [
@@ -85,12 +91,18 @@ VEP_CONFIG_PATH = "file:///vep_data/vep-gcloud.json"
 Constant that contains the local path to the VEP config file
 """
 
-VEP_CSQ_FIELDS = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info"
+VEP_CSQ_FIELDS = {
+    "101": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info",
+    "105": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|UNIPROT_ISOFORM|SOURCE|SIFT|PolyPhen|DOMAINS|miRNA|HGVS_OFFSET|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|TRANSCRIPTION_FACTORS|LoF|LoF_filter|LoF_flags|LoF_info",
+}
 """
-Constant that defines the order of VEP annotations used in VCF export.
+Constant that defines the order of VEP annotations used in VCF export, currently stored in a dictionary with the VEP version as the key.
 """
 
-VEP_CSQ_HEADER = f"Consequence annotations from Ensembl VEP. Format: {VEP_CSQ_FIELDS}"
+VEP_CSQ_HEADER = (
+    "Consequence annotations from Ensembl VEP. Format:"
+    f" {VEP_CSQ_FIELDS[CURRENT_VEP_VERSION]}"
+)
 """
 Constant that contains description for VEP used in VCF export.
 """
@@ -234,6 +246,10 @@ def vep_or_lookup_vep(
         revep_ht = revep_ht.drop("vep_proc_id")
     if "vep_proc_id" in list(vep_ht.row):
         vep_ht = vep_ht.drop("vep_proc_id")
+
+    vep_ht = vep_ht.annotate_globals(
+        vep_version=f"v{vep_version}", vep_help=vep_help, vep_config=vep_config
+    )
 
     return vep_ht.union(revep_ht)
 
@@ -384,7 +400,8 @@ def filter_vep_to_synonymous_variants(
 
 
 def vep_struct_to_csq(
-    vep_expr: hl.expr.StructExpression, csq_fields: str = VEP_CSQ_FIELDS
+    vep_expr: hl.expr.StructExpression,
+    csq_fields: str = VEP_CSQ_FIELDS[CURRENT_VEP_VERSION],
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
@@ -399,7 +416,7 @@ def vep_struct_to_csq(
     hl.str(), so it may differ from their usual VEP CSQ representation.
 
     :param vep_expr: The input VEP Struct
-    :param csq_fields: The | delimited list of fields to include in the CSQ (in that order)
+    :param csq_fields: The | delimited list of fields to include in the CSQ (in that order), default is the CSQ fields of the CURRENT_VEP_VERSION.
     :return: The corresponding CSQ strings
     """
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
@@ -433,29 +450,31 @@ def vep_struct_to_csq(
         if feature_type == "Transcript":
             fields.update(
                 {
-                    "canonical": hl.cond(element.canonical == 1, "YES", ""),
+                    "canonical": hl.if_else(element.canonical == 1, "YES", ""),
                     "ensp": element.protein_id,
                     "gene": element.gene_id,
                     "symbol": element.gene_symbol,
                     "symbol_source": element.gene_symbol_source,
                     "cdna_position": hl.str(element.cdna_start)
-                    + hl.cond(
+                    + hl.if_else(
                         element.cdna_start == element.cdna_end,
                         "",
                         "-" + hl.str(element.cdna_end),
                     ),
                     "cds_position": hl.str(element.cds_start)
-                    + hl.cond(
+                    + hl.if_else(
                         element.cds_start == element.cds_end,
                         "",
                         "-" + hl.str(element.cds_end),
                     ),
+                    "mirna": hl.delimit(element.mirna, "&"),
                     "protein_position": hl.str(element.protein_start)
-                    + hl.cond(
+                    + hl.if_else(
                         element.protein_start == element.protein_end,
                         "",
                         "-" + hl.str(element.protein_end),
                     ),
+                    "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&"),
                     "sift": element.sift_prediction
                     + "("
                     + hl.format("%.3f", element.sift_score)
@@ -471,6 +490,9 @@ def vep_struct_to_csq(
             )
         elif feature_type == "MotifFeature":
             fields["motif_score_change"] = hl.format("%.3f", element.motif_score_change)
+            fields["transcription_factors"] = hl.delimit(
+                element.transcription_factors, "&"
+            )
 
         return hl.delimit(
             [hl.or_else(hl.str(fields.get(f, "")), "") for f in _csq_fields], "|"

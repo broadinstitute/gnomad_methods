@@ -63,6 +63,7 @@ POPS = {
         "eas",
         "fin",
         "mid",
+        "nfe",
         "remaining",
         "sas",
     ],
@@ -199,7 +200,7 @@ TGP_POP_NAMES = {
 """
 
 POPS_STORED_AS_SUBPOPS = TGP_POPS + HGDP_POPS
-POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid"}
+POPS_TO_REMOVE_FOR_POPMAX = {"asj", "fin", "oth", "ami", "mid", "remaining"}
 """
 Populations that are removed before popmax calculations.
 """

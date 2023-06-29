@@ -165,10 +165,11 @@ def compute_stratified_metrics_filter(
     :param metric_threshold: Can be used to specify different (lower, upper) thresholds
         for one or more metrics.
     :param filter_name: Name of resulting filters annotation.
-    :param comparison_sample_expr: Optional CollectionExpression of sample IDs to use
-        for computation of the metric median, MAD, and upper and lower thresholds to
-        use for each sample. For instance, this works well with the output of
-        `determine_nearest_neighbors`.
+    :param comparison_sample_expr: Optional BooleanExpression or CollectionExpression
+        of sample IDs to use for computation of the metric median, MAD, and upper and
+        lower thresholds to use for each sample. For instance, this works well with the
+        output of `determine_nearest_neighbors` or a boolean expression defining
+        releasable samples.
     :return: Table grouped by strata, with upper and lower threshold values computed
         for each sample QC metric.
     """

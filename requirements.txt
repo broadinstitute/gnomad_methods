@@ -3,5 +3,8 @@ hail
 hdbscan
 ipywidgets
 networkx
+onnx
+onnxruntime
 scikit-learn
+skl2onnx
 slackclient==2.5.0

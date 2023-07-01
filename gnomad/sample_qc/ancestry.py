@@ -134,7 +134,7 @@ def apply_onnx_classification_model(
     :return: Tuple of classification and probabilities.
     """
     if not isinstance(fit, onnx.ModelProto):
-        raise TypeError(f"The model supplied is not an onnx model!")
+        raise TypeError("The model supplied is not an onnx model!")
 
     sess = rt.InferenceSession(
         fit.SerializeToString(), providers=["CPUExecutionProvider"]

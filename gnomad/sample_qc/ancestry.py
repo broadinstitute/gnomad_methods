@@ -145,6 +145,7 @@ def apply_onnx_classification_model(
     classification = sess.run([label_name], {input_name: data_pd.astype(np.float32)})[0]
     probs = sess.run([prob_name], {input_name: data_pd.astype(np.float32)})[0]
     probs = pd.DataFrame.from_dict(probs)
+    probs = probs.add_prefix("prob_")
 
     return classification, probs
 
@@ -183,10 +184,14 @@ def convert_sklearn_rf_to_onnx(
     :param target_opset: An optional target ONNX opset version to convert the model to.
     :return: ONNX model.
     """
-    if not isinstance(fit, onnx.ModelProto):
-        raise TypeError(f"The model supplied is not an onnx model!")
+    from sklearn.utils.validation import check_is_fitted
 
-    initial_type = [("float_input", FloatTensorType([None, fit.n_features_]))]
+    try:
+        check_is_fitted(fit)
+    except TypeError:
+        raise TypeError("The supplied model is not an sklearn model!")
+
+    initial_type = [("float_input", FloatTensorType([None, fit.n_features_in_]))]
     onx = convert_sklearn(fit, initial_types=initial_type, target_opset=target_opset)
 
     domains = onx.opset_import

@@ -148,7 +148,9 @@ def compute_stratified_metrics_filter(
     upper_threshold: float = 4.0,
     metric_threshold: Optional[Dict[str, Tuple[float, float]]] = None,
     filter_name: str = "qc_metrics_filters",
-    comparison_sample_expr: Optional[hl.expr.CollectionExpression] = None,
+    comparison_sample_expr: Optional[
+        Union[hl.expr.BooleanExpression, hl.expr.CollectionExpression]
+    ] = None,
 ) -> hl.Table:
     """
     Compute median, MAD, and upper and lower thresholds for each metric used in outlier filtering.
@@ -163,10 +165,11 @@ def compute_stratified_metrics_filter(
     :param metric_threshold: Can be used to specify different (lower, upper) thresholds
         for one or more metrics.
     :param filter_name: Name of resulting filters annotation.
-    :param comparison_sample_expr: Optional CollectionExpression of sample IDs to use
-        for computation of the metric median, MAD, and upper and lower thresholds to
-        use for each sample. For instance, this works well with the output of
-        `determine_nearest_neighbors`.
+    :param comparison_sample_expr: Optional BooleanExpression or CollectionExpression
+        of sample IDs to use for computation of the metric median, MAD, and upper and
+        lower thresholds to use for each sample. For instance, this works well with the
+        output of `determine_nearest_neighbors` or a boolean expression defining
+        releasable samples.
     :return: Table grouped by strata, with upper and lower threshold values computed
         for each sample QC metric.
     """
@@ -187,16 +190,26 @@ def compute_stratified_metrics_filter(
         "_strata": hl.tuple([x[1] for x in strata]),
     }
 
+    sample_explode = False
     if comparison_sample_expr is not None:
-        select_expr["_comparison_sample"] = comparison_sample_expr
-        pre_explode_ht = ht.select(**select_expr)
-        ht = pre_explode_ht.explode(pre_explode_ht._comparison_sample)
-        ht = ht.annotate(
-            _comparison_qc_metrics=ht[ht._comparison_sample]._qc_metrics,
-            _comparison_strata=ht[ht._comparison_sample]._strata,
-        )
-        metric_ann = "_comparison_qc_metrics"
-        strata_ann = "_comparison_strata"
+        if isinstance(comparison_sample_expr, hl.expr.BooleanExpression):
+            select_expr["_comparison_qc_metrics"] = hl.or_missing(
+                comparison_sample_expr, qc_metrics
+            )
+            ht = ht.select(**select_expr)
+            metric_ann = "_comparison_qc_metrics"
+            strata_ann = "_strata"
+        else:
+            sample_explode = True
+            select_expr["_comparison_sample"] = comparison_sample_expr
+            pre_explode_ht = ht.select(**select_expr)
+            ht = pre_explode_ht.explode(pre_explode_ht._comparison_sample)
+            ht = ht.annotate(
+                _comparison_qc_metrics=ht[ht._comparison_sample]._qc_metrics,
+                _comparison_strata=ht[ht._comparison_sample]._strata,
+            )
+            metric_ann = "_comparison_qc_metrics"
+            strata_ann = "_comparison_strata"
     else:
         ht = ht.select(**select_expr)
         metric_ann = "_qc_metrics"
@@ -223,7 +236,7 @@ def compute_stratified_metrics_filter(
     )
 
     select_expr = {}
-    if comparison_sample_expr is not None:
+    if sample_explode:
         ht = pre_explode_ht.annotate(
             **ht.group_by(ht.s).aggregate(qc_metrics_stats=agg_expr)[pre_explode_ht.key]
         )
@@ -255,10 +268,11 @@ def compute_stratified_metrics_filter(
 
     if no_strata:
         ann_expr = {"qc_metrics_stats": ht.qc_metrics_stats[(True,)]}
-        if comparison_sample_expr is None:
-            ht = ht.annotate_globals(**ann_expr)
-        else:
+        if sample_explode:
             ht = ht.annotate(**ann_expr)
+        else:
+            ht = ht.annotate_globals(**ann_expr)
+
     else:
         ht = ht.annotate_globals(strata=hl.tuple([x[0] for x in strata]))
     ht = ht.annotate_globals(qc_metrics=list(qc_metrics.keys()))

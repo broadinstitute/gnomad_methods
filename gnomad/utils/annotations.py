@@ -1415,9 +1415,8 @@ def get_gks(
         :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
         :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
         :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
-        :param vrs_id: String containing the VRS ID of the variant in ht_subpop.
+        :param group_sex: String indicating the sex of the group. Example: "XX", or "XY".
         :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
-
         """
         # Obtain frequency information for the specified variant
         group_freq = variant_ht.freq[group_index]

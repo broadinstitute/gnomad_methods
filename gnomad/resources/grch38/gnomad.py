@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Union
 
 import hail as hl
+import json
 
 from gnomad.resources.resource_utils import (
     DataException,
@@ -13,7 +14,12 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
 )
 from gnomad.sample_qc.ancestry import POP_NAMES
-from gnomad.utils.annotations import get_gks
+from gnomad.utils.annotations import (
+    get_gks,
+    add_gks_va,
+    add_gks_vrs,
+    gks_compute_seqloc_digest
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -493,3 +499,106 @@ def gnomad_gks(
     )
 
     return gks_info
+
+
+# VRS Annotation needs to be done separately. It needs to compute the sequence location
+# digest and this cannot be done in hail. It needs to export the record to JSON, compute
+# sequence location digests in python, and then that can be imported to a hail table.
+def gnomad_gks_batch(
+    ht: hl.Table,
+    locus_interval: hl.IntervalExpression,
+    version: str,
+    data_type: str = "genomes",
+    by_ancestry_group: bool = False,
+    by_sex: bool = False,
+    vrs_only: bool = False
+):
+    """
+    Performs gnomad GKS annotations on a range of variants at once.
+
+    :param ht: Path of Hail Table to parse if different from what the public_release() method would return for the version, or an existing hail.Table object.
+    :param locus_interval: Hail IntervalExpression of locus<reference_genome>. e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
+    :param version: String of version of gnomAD release to use.
+    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
+    :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
+    :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
+    :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
+    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
+    """
+    # If ht is not already a table,
+    # read in gnomAD release table to filter to chosen variant.
+    if not isinstance(ht, hl.Table):
+        if ht:
+            ht = hl.read_table(ht)
+        else:
+            ht = hl.read_table(public_release(data_type).versions[version].path)
+
+    high_level_version = f"v{version.split('.')[0]}"
+
+    # Read coverage statistics.
+
+    if high_level_version == "v3":
+        coverage_version = "3.0.1"
+    else:
+        raise NotImplementedError(
+            "gnomad_gks() is currently only implemented for gnomAD v3."
+        )
+
+    coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+
+    # Retrieve ancestry groups from the imported POPS dictionary.
+    pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
+
+    # Throw warnings if contradictory arguments passed.
+    if by_ancestry_group and vrs_only:
+        logger.warning(
+            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
+            " 'by_ancestry_groups' list and returning only VRS information."
+        )
+    elif by_sex and not by_ancestry_group:
+        logger.warning(
+            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
+            " please also specify 'by_ancestry_group' to stratify by."
+        )
+
+    # Call and return get_gks*() for chosen arguments.
+    # get_gks_va returns the table annotated with .gks_va_freq_dict
+    # get_gks_va does not fill in the the .focusAllele value of .gks_va_freq_dict
+    # this is the vrs variant and is mostly just based on the values in the variant and info column,
+    # but it also needs to compute the SequenceLocation digest, which cannot be done in hail
+
+    # Add .vrs and .vrs_json (the JSON string representation of .vrs)
+    # Omits .location._id
+    ht_with_vrs = add_gks_vrs(ht)
+    # Add .gks_va_freq_dict
+    ht_with_va = add_gks_va(
+        ht=ht_with_vrs,
+        label_name="gnomAD",
+        label_version=version,
+        coverage_ht=coverage_ht,
+        ancestry_groups=pops_list,
+        ancestry_groups_dict=POP_NAMES,
+        by_sex=by_sex,
+        vrs_only=vrs_only,
+    )
+    filtered = hl.filter_intervals(ht_with_va, [locus_interval])
+    annotations = filtered.select(
+        gks_va_freq_dict=hl.json(filtered.gks_va_freq_dict),
+        vrs_json=filtered.vrs_json).collect()  # might be big
+    outputs = []
+    for ann in annotations:
+        vrs_json = ann.vrs_json
+        vrs_variant = json.loads(vrs_json)
+        # begin filling in fields ommitted by add_gks_vrs and add_gks_va
+        vrs_variant = gks_compute_seqloc_digest(vrs_variant)
+        va_freq_dict = json.loads(ann.gks_va_freq_dict)  # Hail Struct as json
+        va_freq_dict["focusAllele"] = vrs_variant
+
+        outputs.append({
+            "locus": ann.locus,
+            "alleles": ann.alleles,
+            "gks_va_freq": va_freq_dict,
+            "gks_vrs_variant": vrs_variant
+        })
+
+    return outputs

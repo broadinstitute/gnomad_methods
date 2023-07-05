@@ -3,6 +3,8 @@
 import itertools
 import json
 import logging
+import csv
+from timeit import default_timer as timer
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import ga4gh.core as ga4gh_core
@@ -1375,7 +1377,9 @@ def get_gks(
             "sequence_id": vrs_chrom_id,
             "type": "SequenceLocation",
         },
-        "state": {"sequence": vrs_state_sequence, "type": "LiteralSequenceExpression"},
+        "state": {
+            "sequence": vrs_state_sequence,
+            "type": "LiteralSequenceExpression"},
         "type": "Allele",
     }
 
@@ -1528,3 +1532,553 @@ def get_gks(
 
     # Returns the constructed dictionary.
     return final_freq_dict
+
+
+
+def get_gks_bulk_collect(
+    ht: hl.Table,
+    variant: str,
+    label_name: str,
+    label_version: str,
+    coverage_ht: hl.Table = None,
+    ancestry_groups: list = None,
+    ancestry_groups_dict: dict = None,
+    by_sex: bool = False,
+    vrs_only: bool = False,
+) -> dict:
+    """
+    Filter to a specified variant and return a Python dictionary containing the GA4GH variant report schema.
+
+    :param ht: Hail Table to parse for desired variant.
+    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
+    :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
+    :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
+    :param coverage_ht: Hail Table containing coverage statistics, with mean depth stored in "mean" annotation. If None, omit coverage in return.
+    :param ancestry_groups: List of strings of shortened names of genetic ancestry groups to return results for. Example: ['afr','fin','nfe'] .
+    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names. Example: {'afr':'African/African American'} .
+    :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well.
+    :param vrs_only: Boolean to return only the VRS information and no general frequency information. Default is False.
+    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
+
+    """
+    # Throw warnings if contradictory arguments passed.
+    if ancestry_groups and vrs_only:
+        logger.warning(
+            "Both 'vrs_only' and 'ancestry_groups' have been specified. Ignoring"
+            " 'ancestry_groups' list and returning only VRS information."
+        )
+    elif by_sex and not ancestry_groups:
+        logger.warning(
+            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
+            " please also specify 'ancestry_groups' to stratify by."
+        )
+
+    # Define variables for variant information.
+    build_in = get_reference_genome(ht.locus).name
+    chrom_dict = VRS_CHROM_IDS[build_in]
+    chr_in, pos_in, ref_in, alt_in = variant.split("-")
+
+    # Filter HT to desired variant.
+    ht = ht.filter(
+        (
+            ht.locus
+            == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+        )
+        & (ht.alleles == [ref_in, alt_in])
+    )
+    ht = ht.checkpoint(new_temp_file("get_gks", extension="ht"))
+    # Check to ensure the ht is successfully filtered to 1 variant.
+    if ht.count() != 1:
+        raise ValueError(
+            "Error: can only work with one variant for this code, 0 or multiple"
+            " returned."
+        )
+
+    # TODO
+    ht = ht.annotate(
+        gks_fields=hl.struct(
+            vrs_id=ht.info.vrs.VRS_Allele_IDs[1],
+            vrs_start_value=ht.info.vrs.VRS_Starts[1],
+            vrs_end_value=ht.info.vrs.VRS_Ends[1]
+        )
+    )
+
+    # Define VRS Attributes that will later be read into the dictionary to be returned.
+    vrs_id = f"{ht.info.vrs.VRS_Allele_IDs[1].collect()[0]}"
+    vrs_chrom_id = f"{chrom_dict[chr_in]}"
+    vrs_start_value = ht.info.vrs.VRS_Starts[1].collect()[0]
+    vrs_end_value = ht.info.vrs.VRS_Ends[1].collect()[0]
+    vrs_state_sequence = f"{ht.info.vrs.VRS_States[1].collect()[0]}"
+
+    # Defining the dictionary for VRS information.
+    vrs_dict = {
+        "_id": vrs_id,
+        "location": {
+            "_id": "to-be-defined",
+            "interval": {
+                "end": {"type": "Number", "value": vrs_end_value},
+                "start": {
+                    "type": "Number",
+                    "value": vrs_start_value,
+                },
+                "type": "SequenceInterval",
+            },
+            "sequence_id": vrs_chrom_id,
+            "type": "SequenceLocation",
+        },
+        "state": {
+            "sequence": vrs_state_sequence,
+            "type": "LiteralSequenceExpression"},
+        "type": "Allele",
+    }
+
+    # Set location ID
+    location_dict = vrs_dict["location"]
+    location_dict.pop("_id")
+    location = ga4gh_vrs.models.SequenceLocation(**location_dict)
+    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(location)
+    vrs_dict["location"]["_id"] = location_id
+
+    logger.info(vrs_dict)
+
+    # If vrs_only was passed, only return the above dict and stop.
+    if vrs_only:
+        return vrs_dict
+
+    # Create a list to then add the dictionaries for frequency reports for
+    # different ancestry groups to.
+    list_of_group_info_dicts = []
+
+    # Define function to return a frequency report dictionary for a given group
+    def _create_group_dicts(
+        variant_ht: hl.Table,
+        group_index: int,
+        group_id: str,
+        group_label: str,
+        group_sex: str = None,
+    ) -> dict:
+        """
+        Return a dictionary for the frequency information of a given variant for a given subpopulation.
+
+        :param variant_ht: Hail Table with only one row, only containing the desired variant.
+        :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
+        :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
+        :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
+        :param vrs_id: String containing the VRS ID of the variant in ht_subpop.
+        :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
+
+        """
+        # Obtain frequency information for the specified variant
+        group_freq = variant_ht.freq[group_index]
+
+        # Cohort characteristics
+        characteristics = []
+        characteristics.append({"name": "genetic ancestry", "value": group_label})
+        if group_sex is not None:
+            characteristics.append({"name": "biological sex", "value": group_sex})
+
+        # Dictionary to be returned containing information for a specified group
+        freq_record = {
+            "id": f"{variant}.{group_id.upper()}",
+            "type": "CohortAlleleFrequency",
+            "label": f"{group_label} Cohort Allele Frequency for {variant}",
+            "focusAllele": "#/focusAllele",
+            "focusAlleleCount": group_freq["AC"].collect()[0],
+            "locusAlleleCount": group_freq["AN"].collect()[0],
+            "alleleFrequency": group_freq["AF"].collect()[0],
+            "cohort": {"id": group_id.upper(), "characteristics": characteristics},
+            "ancillaryResults": {
+                "homozygotes": group_freq["homozygote_count"].collect()[0]
+            },
+        }
+
+        return freq_record
+
+    # Iterate through provided groups and generate dictionaries
+    if ancestry_groups:
+        for group in ancestry_groups:
+            key = f"{group}-adj"
+            index_value = ht.freq_index_dict.get(key)
+            group_result = _create_group_dicts(
+                variant_ht=ht,
+                group_index=index_value,
+                group_id=group,
+                group_label=ancestry_groups_dict[group],
+            )
+
+            # If specified, stratify group information by sex.
+            if by_sex:
+                sex_list = []
+                for sex in ["XX", "XY"]:
+                    sex_key = f"{group}-{sex}-adj"
+                    sex_index_value = ht.freq_index_dict.get(sex_key)
+                    sex_label = f"{group}.{sex}"
+                    sex_result = _create_group_dicts(
+                        variant_ht=ht,
+                        group_index=sex_index_value,
+                        group_id=sex_label,
+                        group_label=ancestry_groups_dict[group],
+                        group_sex=sex,
+                    )
+                    sex_list.append(sex_result)
+
+                group_result["subcohortFrequency"] = sex_list
+
+            list_of_group_info_dicts.append(group_result)
+
+    # Overall frequency, via label 'adj' which is currently stored at
+    # position #1 (index 0)
+    overall_freq = ht.freq[0]
+
+    # Final dictionary to be returned
+    final_freq_dict = {
+        "id": f"{label_name}{label_version}:{variant}",
+        "type": "CohortAlleleFrequency",
+        "label": f"Overall Cohort Allele Frequency for {variant}",
+        "derivedFrom": {
+            "id": f"{label_name}{label_version}",
+            "type": "DataSet",
+            "label": f"{label_name} v{label_version}",
+            "version": f"{label_version}",
+        },
+        "focusAllele": vrs_dict,
+        "focusAlleleCount": overall_freq["AC"].collect()[0],
+        "locusAlleleCount": overall_freq["AN"].collect()[0],
+        "alleleFrequency": overall_freq["AF"].collect()[0],
+        "cohort": {"id": "ALL"},
+        "ancillaryResults": {
+            "homozygotes": overall_freq["homozygote_count"].collect()[0]
+        },
+    }
+
+    # popmax FAF95
+    popmax_95 = {
+        "frequency": ht.popmax.faf95.collect()[0],
+        "confidenceInterval": 0.95,
+        "popFreqId": f"{variant}.{ht.popmax.pop.collect()[0].upper()}",
+    }
+    final_freq_dict["ancillaryResults"]["popMaxFAF95"] = popmax_95
+
+    # Read coverage statistics if a table is provdied
+    if coverage_ht:
+        coverage_ht = coverage_ht.filter(
+            coverage_ht.locus
+            == hl.locus(contig=chr_in, pos=int(pos_in), reference_genome=build_in)
+        )
+        mean_coverage = coverage_ht.mean.collect()[0]
+        final_freq_dict["ancillaryResults"]["meanDepth"] = mean_coverage
+
+    # If ancestry_groups were passed, add the ancestry group dictionary to the
+    # final frequency dictionary to be returned.
+    if ancestry_groups:
+        final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
+
+    # Validate that the constructed dictionary will convert to a JSON string.
+    try:
+        validated_json = json.dumps(final_freq_dict)
+    except BaseException:
+        raise SyntaxError("The dictionary did not convert to a valid JSON")
+
+    # Returns the constructed dictionary.
+    return final_freq_dict
+
+
+def gks_compute_seqloc_digest(vrs_variant: dict) -> dict:
+    """
+    Takes a dict of a VRS variant that has a sequence location that does not yet
+    have the digest computed. Computes teh digest and assigns it to .location._id.
+    """
+    location = vrs_variant["location"]
+    location.pop("_id")
+    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
+        ga4gh_vrs.models.SequenceLocation(**location)
+    )
+    location["_id"] = location_id
+    return vrs_variant
+
+
+def gks_compute_seqloc_digest_batch(ht: hl.Table,
+                                    export_tmpfile: str = new_temp_file("gks-seqloc-pre.tsv"),
+                                    computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv")):
+    """
+    Exports table to tsv, computes SequenceLocation digests, reimports and replaces
+    the vrs_json field with the result. Input table must have a .vrs field, like the
+    one added by add_gks_vrs, that can be used to construct ga4gh.vrs models.
+    """
+    logger.info("Exporting ht to %s", export_tmpfile)
+    ht.select("vrs_json").export(export_tmpfile, header=True)
+
+    logger.info("Computing SequenceLocation digests and writing to %s", computed_tmpfile)
+    start = timer()
+    counter = 0
+    with open(computed_tmpfile, "w", encoding="utf-8") as f_out:
+        with open(export_tmpfile, "r", encoding="utf-8") as f:
+            reader = csv.reader(f, delimiter="\t")
+            header = None
+            for line in reader:
+                if header is None:
+                    header = line
+                    f_out.write("\t".join(header))
+                    f_out.write("\n")
+                    continue
+                else:
+                    locus, alleles, vrs_json = line
+                    vrs_variant = json.loads(vrs_json)
+                    vrs_variant = gks_compute_seqloc_digest(vrs_variant)
+                    # serialize outputs to JSON and write to TSV
+                    vrs_json = json.dumps(vrs_variant)
+                    alleles = json.dumps(json.loads(alleles))
+                    f_out.write("\t".join([locus, alleles, vrs_json]))
+                    f_out.write("\n")
+                    counter += 1
+    end = timer()
+    logger.info("Computed %s SequenceLocation digests in %s seconds", counter, (end - start))
+    logger.info("Importing VRS records with computed SequenceLocation digests")
+    ht_with_location = hl.import_table(
+        computed_tmpfile,
+        types={
+            "locus": "tstr",
+            "alleles": "tstr",
+            "vrs_json": "tstr"})
+    ht_with_location_parsed = (
+        ht_with_location
+        .annotate(
+            locus=hl.locus(
+                contig=ht_with_location.locus.split(":")[0],
+                pos=hl.int32(ht_with_location.locus.split(":")[1]),
+                reference_genome="GRCh38"
+            ),
+            alleles=hl.parse_json(ht_with_location.alleles, dtype=hl.tarray(hl.tstr)))
+        .key_by("locus", "alleles"))
+
+    return ht.drop("vrs_json").join(ht_with_location_parsed, how="left")
+
+
+# VRS-only function
+def add_gks_vrs(ht: hl.Table):
+    """
+    Annotates `ht` with GA4GH GKS VRS structure, except for the variant.location._id,
+    which must be computed outside Hail. Use gks_compute_seqloc_digest
+
+    ht_out.vrs: Struct of the VRS representation of the variant
+    ht_out.vrs_json: JSON string representation of the .vrs struct.
+    """
+    build_in = get_reference_genome(ht.locus).name
+    chr_in = ht.locus.contig
+
+    vrs_chrom_ids_expr = hl.literal(VRS_CHROM_IDS)
+    chrom_dict = vrs_chrom_ids_expr[build_in]
+    vrs_id = ht.info.vrs.VRS_Allele_IDs[1]
+    vrs_chrom_id = chrom_dict[chr_in]
+    vrs_start_value = ht.info.vrs.VRS_Starts[1]
+    vrs_end_value = ht.info.vrs.VRS_Ends[1]
+    vrs_state_sequence = ht.info.vrs.VRS_States[1]
+
+    ht_out = ht.annotate(
+        vrs=hl.struct(
+            _id=vrs_id,
+            location=hl.struct(
+                _id="",
+                type="SequenceLocation",
+                interval=hl.struct(
+                    start=vrs_start_value,
+                    end=vrs_end_value
+                ),
+                sequence_id=vrs_chrom_id
+            ),
+            state=hl.struct(
+                type="LiteralSequenceExpression",
+                sequence=vrs_state_sequence
+            )
+        )
+    )
+    ht_out = ht_out.annotate(
+        vrs_json=hl.json(ht_out.vrs)
+    )
+    return ht_out
+
+
+def add_gks_va(
+    ht: hl.Table,
+    label_name: str,
+    label_version: str,
+    coverage_ht: hl.Table = None,
+    ancestry_groups: list = None,
+    ancestry_groups_dict: dict = None,
+    by_sex: bool = False,
+    vrs_only: bool = False,
+) -> dict:
+    """
+    Annotates the hail table with frequency information conforming to the GKS VA frequency schema.
+    If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
+    This annotation is added under the gks_va_freq_dict field of the table.
+    The focusAllele field is not populated, and must be filled in by the caller.
+
+    :param ht: Hail Table to parse for desired variant.
+    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
+    :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
+    :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
+    :param coverage_ht: Hail Table containing coverage statistics, with mean depth stored in "mean" annotation. If None, omit coverage in return.
+    :param ancestry_groups: List of strings of shortened names of genetic ancestry groups to return results for. Example: ['afr','fin','nfe'] .
+    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names. Example: {'afr':'African/African American'} .
+    :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well.
+    :param vrs_only: Boolean to return only the VRS information and no general frequency information. Default is False.
+    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
+
+    """
+    # Throw warnings if contradictory arguments passed.
+    if ancestry_groups and vrs_only:
+        logger.warning(
+            "Both 'vrs_only' and 'ancestry_groups' have been specified. Ignoring"
+            " 'ancestry_groups' list and returning only VRS information."
+        )
+    elif by_sex and not ancestry_groups:
+        logger.warning(
+            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
+            " please also specify 'ancestry_groups' to stratify by."
+        )
+
+    ht = ht.annotate(gnomad_id=hl.format(
+        "%s-%s-%s-%s",
+        ht.locus.contig,
+        ht.locus.position,
+        ht.alleles[0],
+        ht.alleles[1]
+    ))
+
+    # Define function to return a frequency report dictionary for a given group
+    def _create_group_dicts(
+        group_index: int,
+        group_id: str,
+        group_label: str,
+        group_sex: str = None,
+    ) -> dict:
+        """
+        Return a dictionary for the frequency information of a given variant for a given subpopulation.
+
+        :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
+        :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
+        :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
+        :param group_sex: String indicating the sex of the group. Example: "XX", or "XY".
+        :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
+        """
+        # Obtain frequency information for the specified variant
+        group_freq = ht.freq[group_index]
+
+        # Cohort characteristics
+        characteristics = []
+        characteristics.append({"name": "genetic ancestry", "value": group_label})
+        if group_sex is not None:
+            characteristics.append({"name": "biological sex", "value": group_sex})
+
+        # Dictionary to be returned containing information for a specified group
+        freq_record = {
+            "id": hl.format("%s.%s", ht.gnomad_id, group_id.upper()),
+            "type": "CohortAlleleFrequency",
+            "label": hl.format("%s Cohort Allele Frequency for %s", group_label, ht.gnomad_id),
+            "focusAllele": "#/focusAllele",
+            "focusAlleleCount": group_freq["AC"],
+            "locusAlleleCount": group_freq["AN"],
+            "alleleFrequency": group_freq["AF"],
+            "cohort": {"id": group_id.upper(), "characteristics": characteristics},
+            "ancillaryResults": {
+                "homozygotes": group_freq["homozygote_count"]
+            },
+        }
+
+        return freq_record
+
+    # Create a list to then add the dictionaries for frequency reports for
+    # different ancestry groups to.
+    list_of_group_info_dicts = []
+
+    # Iterate through provided groups and generate dictionaries
+    if ancestry_groups:
+        for group in ancestry_groups:
+            key = f"{group}-adj"
+            index_value = ht.freq_index_dict.get(key)
+            group_result = _create_group_dicts(
+                group_index=index_value,
+                group_id=group,
+                group_label=ancestry_groups_dict[group],
+            )
+
+            # If specified, stratify group information by sex.
+            if by_sex:
+                sex_list = []
+                for sex in ["XX", "XY"]:
+                    sex_key = f"{group}-{sex}-adj"
+                    sex_index_value = ht.freq_index_dict.get(sex_key)
+                    sex_label = f"{group}.{sex}"
+                    sex_result = _create_group_dicts(
+                        group_index=sex_index_value,
+                        group_id=sex_label,
+                        group_label=ancestry_groups_dict[group],
+                        group_sex=sex,
+                    )
+                    sex_list.append(sex_result)
+
+                group_result["subcohortFrequency"] = sex_list
+
+            list_of_group_info_dicts.append(group_result)
+
+    # Overall frequency, via label 'adj' which is currently stored at
+    # position #1 (index 0)
+    overall_freq = ht.freq[0]
+
+    # Final dictionary to be returned
+    final_freq_dict = hl.struct(**{
+        "id": hl.format("%s-%s:%s", label_name, label_version, ht.gnomad_id),
+        "type": "CohortAlleleFrequency",
+        "label": hl.format("Overall Cohort Allele Frequency for %s", ht.gnomad_id),
+        "derivedFrom": {
+            "id": f"{label_name}{label_version}",
+            "type": "DataSet",
+            "label": f"{label_name} v{label_version}",
+            "version": f"{label_version}",
+        },
+        "focusAllele": "",  # TODO load from vrs_json table
+        "focusAlleleCount": overall_freq["AC"],
+        "locusAlleleCount": overall_freq["AN"],
+        "alleleFrequency": overall_freq["AF"],
+        "cohort": {"id": "ALL"},
+    })
+
+    ancillaryResults = hl.struct(
+        homozygotes=overall_freq["homozygote_count"],
+        popMaxFAF95=hl.struct(
+            frequency=ht.popmax.faf95,
+            confidenceInterval=0.95,
+            popFreqId=hl.format("%s.%s",
+                                ht.gnomad_id,
+                                ht.popmax.pop.upper())
+        )
+    )
+
+    # Read coverage statistics if a table is provided
+    # NOTE: this is slow, and doing the join outside this function and passing in the joined
+    # variant ht with the coverage table doesn't help much since the join is resolved dynamically.
+    # If the mean field was persisted into the variant table it would be faster but this increases
+    # the table size.
+    # It could be persisted with something like this, then doing a write out and read back from storage.
+    # ht_with_cov = ht.annotate(
+    #     meanDepth=coverage_ht[ht.locus].mean
+    # )
+    if coverage_ht is not None:
+        ancillaryResults = ancillaryResults.annotate(
+            meanDepth=coverage_ht[ht.locus].mean
+        )
+
+    final_freq_dict = final_freq_dict.annotate(ancillaryResults=ancillaryResults)
+
+    # If ancestry_groups were passed, add the ancestry group dictionary to the
+    # final frequency dictionary to be returned.
+    if ancestry_groups:
+        final_freq_dict = final_freq_dict.annotate(
+            subcohortFrequency=list_of_group_info_dicts)
+
+    # Returns the constructed dictionary.
+    ht_out = ht.annotate(
+        gks_va_freq_dict=final_freq_dict
+    )
+    return ht_out

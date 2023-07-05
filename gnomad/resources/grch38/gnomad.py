@@ -18,7 +18,7 @@ from gnomad.utils.annotations import (
     get_gks,
     add_gks_va,
     add_gks_vrs,
-    gks_compute_seqloc_digest
+    gks_compute_seqloc_digest,
 )
 
 logging.basicConfig(
@@ -511,7 +511,7 @@ def gnomad_gks_batch(
     data_type: str = "genomes",
     by_ancestry_group: bool = False,
     by_sex: bool = False,
-    vrs_only: bool = False
+    vrs_only: bool = False,
 ):
     """
     Performs gnomad GKS annotations on a range of variants at once.
@@ -599,7 +599,7 @@ def gnomad_gks_batch(
         out = {
             "locus": ann.locus,
             "alleles": ann.alleles,
-            "gks_vrs_variant": vrs_variant
+            "gks_vrs_variant": vrs_variant,
         }
 
         if not vrs_only:

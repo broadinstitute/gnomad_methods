@@ -1377,9 +1377,7 @@ def get_gks(
             "sequence_id": vrs_chrom_id,
             "type": "SequenceLocation",
         },
-        "state": {
-            "sequence": vrs_state_sequence,
-            "type": "LiteralSequenceExpression"},
+        "state": {"sequence": vrs_state_sequence, "type": "LiteralSequenceExpression"},
         "type": "Allele",
     }
 
@@ -1533,7 +1531,6 @@ def get_gks(
     return final_freq_dict
 
 
-
 def get_gks_bulk_collect(
     ht: hl.Table,
     variant: str,
@@ -1598,7 +1595,7 @@ def get_gks_bulk_collect(
         gks_fields=hl.struct(
             vrs_id=ht.info.vrs.VRS_Allele_IDs[1],
             vrs_start_value=ht.info.vrs.VRS_Starts[1],
-            vrs_end_value=ht.info.vrs.VRS_Ends[1]
+            vrs_end_value=ht.info.vrs.VRS_Ends[1],
         )
     )
 
@@ -1625,9 +1622,7 @@ def get_gks_bulk_collect(
             "sequence_id": vrs_chrom_id,
             "type": "SequenceLocation",
         },
-        "state": {
-            "sequence": vrs_state_sequence,
-            "type": "LiteralSequenceExpression"},
+        "state": {"sequence": vrs_state_sequence, "type": "LiteralSequenceExpression"},
         "type": "Allele",
     }
 
@@ -1796,9 +1791,11 @@ def gks_compute_seqloc_digest(vrs_variant: dict) -> dict:
     return vrs_variant
 
 
-def gks_compute_seqloc_digest_batch(ht: hl.Table,
-                                    export_tmpfile: str = new_temp_file("gks-seqloc-pre.tsv"),
-                                    computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv")):
+def gks_compute_seqloc_digest_batch(
+    ht: hl.Table,
+    export_tmpfile: str = new_temp_file("gks-seqloc-pre.tsv"),
+    computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv"),
+):
     """
     Exports table to tsv, computes SequenceLocation digests, reimports and replaces
     the vrs_json field with the result. Input table must have a .vrs field, like the
@@ -1807,7 +1804,9 @@ def gks_compute_seqloc_digest_batch(ht: hl.Table,
     logger.info("Exporting ht to %s", export_tmpfile)
     ht.select("vrs_json").export(export_tmpfile, header=True)
 
-    logger.info("Computing SequenceLocation digests and writing to %s", computed_tmpfile)
+    logger.info(
+        "Computing SequenceLocation digests and writing to %s", computed_tmpfile
+    )
     start = timer()
     counter = 0
     with open(computed_tmpfile, "w", encoding="utf-8") as f_out:
@@ -1831,24 +1830,21 @@ def gks_compute_seqloc_digest_batch(ht: hl.Table,
                     f_out.write("\n")
                     counter += 1
     end = timer()
-    logger.info("Computed %s SequenceLocation digests in %s seconds", counter, (end - start))
+    logger.info(
+        "Computed %s SequenceLocation digests in %s seconds", counter, (end - start)
+    )
     logger.info("Importing VRS records with computed SequenceLocation digests")
     ht_with_location = hl.import_table(
-        computed_tmpfile,
-        types={
-            "locus": "tstr",
-            "alleles": "tstr",
-            "vrs_json": "tstr"})
-    ht_with_location_parsed = (
-        ht_with_location
-        .annotate(
-            locus=hl.locus(
-                contig=ht_with_location.locus.split(":")[0],
-                pos=hl.int32(ht_with_location.locus.split(":")[1]),
-                reference_genome="GRCh38"
-            ),
-            alleles=hl.parse_json(ht_with_location.alleles, dtype=hl.tarray(hl.tstr)))
-        .key_by("locus", "alleles"))
+        computed_tmpfile, types={"locus": "tstr", "alleles": "tstr", "vrs_json": "tstr"}
+    )
+    ht_with_location_parsed = ht_with_location.annotate(
+        locus=hl.locus(
+            contig=ht_with_location.locus.split(":")[0],
+            pos=hl.int32(ht_with_location.locus.split(":")[1]),
+            reference_genome="GRCh38",
+        ),
+        alleles=hl.parse_json(ht_with_location.alleles, dtype=hl.tarray(hl.tstr)),
+    ).key_by("locus", "alleles")
 
     return ht.drop("vrs_json").join(ht_with_location_parsed, how="left")
 
@@ -1879,21 +1875,15 @@ def add_gks_vrs(ht: hl.Table):
             location=hl.struct(
                 _id="",
                 type="SequenceLocation",
-                interval=hl.struct(
-                    start=vrs_start_value,
-                    end=vrs_end_value
-                ),
-                sequence_id=vrs_chrom_id
+                interval=hl.struct(start=vrs_start_value, end=vrs_end_value),
+                sequence_id=vrs_chrom_id,
             ),
             state=hl.struct(
-                type="LiteralSequenceExpression",
-                sequence=vrs_state_sequence
-            )
+                type="LiteralSequenceExpression", sequence=vrs_state_sequence
+            ),
         )
     )
-    ht_out = ht_out.annotate(
-        vrs_json=hl.json(ht_out.vrs)
-    )
+    ht_out = ht_out.annotate(vrs_json=hl.json(ht_out.vrs))
     return ht_out
 
 
@@ -1904,7 +1894,7 @@ def add_gks_va(
     coverage_ht: hl.Table = None,
     ancestry_groups: list = None,
     ancestry_groups_dict: dict = None,
-    by_sex: bool = False
+    by_sex: bool = False,
 ) -> dict:
     """
     Annotates the hail table with frequency information conforming to the GKS VA frequency schema.
@@ -1931,13 +1921,15 @@ def add_gks_va(
             " please also specify 'ancestry_groups' to stratify by."
         )
 
-    ht = ht.annotate(gnomad_id=hl.format(
-        "%s-%s-%s-%s",
-        ht.locus.contig,
-        ht.locus.position,
-        ht.alleles[0],
-        ht.alleles[1]
-    ))
+    ht = ht.annotate(
+        gnomad_id=hl.format(
+            "%s-%s-%s-%s",
+            ht.locus.contig,
+            ht.locus.position,
+            ht.alleles[0],
+            ht.alleles[1],
+        )
+    )
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
@@ -1968,15 +1960,15 @@ def add_gks_va(
         freq_record = {
             "id": hl.format("%s.%s", ht.gnomad_id, group_id.upper()),
             "type": "CohortAlleleFrequency",
-            "label": hl.format("%s Cohort Allele Frequency for %s", group_label, ht.gnomad_id),
+            "label": hl.format(
+                "%s Cohort Allele Frequency for %s", group_label, ht.gnomad_id
+            ),
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
             "alleleFrequency": group_freq["AF"],
             "cohort": {"id": group_id.upper(), "characteristics": characteristics},
-            "ancillaryResults": {
-                "homozygotes": group_freq["homozygote_count"]
-            },
+            "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
 
         return freq_record
@@ -2020,32 +2012,32 @@ def add_gks_va(
     overall_freq = ht.freq[0]
 
     # Final dictionary to be returned
-    final_freq_dict = hl.struct(**{
-        "id": hl.format("%s-%s:%s", label_name, label_version, ht.gnomad_id),
-        "type": "CohortAlleleFrequency",
-        "label": hl.format("Overall Cohort Allele Frequency for %s", ht.gnomad_id),
-        "derivedFrom": {
-            "id": f"{label_name}{label_version}",
-            "type": "DataSet",
-            "label": f"{label_name} v{label_version}",
-            "version": f"{label_version}",
-        },
-        "focusAllele": "",  # TODO load from vrs_json table
-        "focusAlleleCount": overall_freq["AC"],
-        "locusAlleleCount": overall_freq["AN"],
-        "alleleFrequency": overall_freq["AF"],
-        "cohort": {"id": "ALL"},
-    })
+    final_freq_dict = hl.struct(
+        **{
+            "id": hl.format("%s-%s:%s", label_name, label_version, ht.gnomad_id),
+            "type": "CohortAlleleFrequency",
+            "label": hl.format("Overall Cohort Allele Frequency for %s", ht.gnomad_id),
+            "derivedFrom": {
+                "id": f"{label_name}{label_version}",
+                "type": "DataSet",
+                "label": f"{label_name} v{label_version}",
+                "version": f"{label_version}",
+            },
+            "focusAllele": "",  # TODO load from vrs_json table
+            "focusAlleleCount": overall_freq["AC"],
+            "locusAlleleCount": overall_freq["AN"],
+            "alleleFrequency": overall_freq["AF"],
+            "cohort": {"id": "ALL"},
+        }
+    )
 
     ancillaryResults = hl.struct(
         homozygotes=overall_freq["homozygote_count"],
         popMaxFAF95=hl.struct(
             frequency=ht.popmax.faf95,
             confidenceInterval=0.95,
-            popFreqId=hl.format("%s.%s",
-                                ht.gnomad_id,
-                                ht.popmax.pop.upper())
-        )
+            popFreqId=hl.format("%s.%s", ht.gnomad_id, ht.popmax.pop.upper()),
+        ),
     )
 
     # Read coverage statistics if a table is provided
@@ -2068,10 +2060,9 @@ def add_gks_va(
     # final frequency dictionary to be returned.
     if ancestry_groups:
         final_freq_dict = final_freq_dict.annotate(
-            subcohortFrequency=list_of_group_info_dicts)
+            subcohortFrequency=list_of_group_info_dicts
+        )
 
     # Returns the constructed dictionary.
-    ht_out = ht.annotate(
-        gks_va_freq_dict=final_freq_dict
-    )
+    ht_out = ht.annotate(gks_va_freq_dict=final_freq_dict)
     return ht_out

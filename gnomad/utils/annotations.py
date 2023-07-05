@@ -1904,8 +1904,7 @@ def add_gks_va(
     coverage_ht: hl.Table = None,
     ancestry_groups: list = None,
     ancestry_groups_dict: dict = None,
-    by_sex: bool = False,
-    vrs_only: bool = False,
+    by_sex: bool = False
 ) -> dict:
     """
     Annotates the hail table with frequency information conforming to the GKS VA frequency schema.
@@ -1926,12 +1925,7 @@ def add_gks_va(
 
     """
     # Throw warnings if contradictory arguments passed.
-    if ancestry_groups and vrs_only:
-        logger.warning(
-            "Both 'vrs_only' and 'ancestry_groups' have been specified. Ignoring"
-            " 'ancestry_groups' list and returning only VRS information."
-        )
-    elif by_sex and not ancestry_groups:
+    if by_sex and not ancestry_groups:
         logger.warning(
             "Splitting whole database by sex is not yet supported. If using 'by_sex',"
             " please also specify 'ancestry_groups' to stratify by."

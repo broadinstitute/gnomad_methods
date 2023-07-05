@@ -569,36 +569,44 @@ def gnomad_gks_batch(
 
     # Add .vrs and .vrs_json (the JSON string representation of .vrs)
     # Omits .location._id
-    ht_with_vrs = add_gks_vrs(ht)
-    # Add .gks_va_freq_dict
-    ht_with_va = add_gks_va(
-        ht=ht_with_vrs,
-        label_name="gnomAD",
-        label_version=version,
-        coverage_ht=coverage_ht,
-        ancestry_groups=pops_list,
-        ancestry_groups_dict=POP_NAMES,
-        by_sex=by_sex,
-        vrs_only=vrs_only,
-    )
-    filtered = hl.filter_intervals(ht_with_va, [locus_interval])
-    annotations = filtered.select(
-        gks_va_freq_dict=hl.json(filtered.gks_va_freq_dict),
-        vrs_json=filtered.vrs_json).collect()  # might be big
+    ht_with_gks = add_gks_vrs(ht)
+
+    # If not vrs_only, include the VA freq in various operations below
+    if not vrs_only:
+        # Add .gks_va_freq_dict
+        # Omits .focusAllele
+        ht_with_gks = add_gks_va(
+            ht=ht_with_gks,
+            label_name="gnomAD",
+            label_version=version,
+            coverage_ht=coverage_ht,
+            ancestry_groups=pops_list,
+            ancestry_groups_dict=POP_NAMES,
+            by_sex=by_sex,
+        )
+
+    filtered = hl.filter_intervals(ht_with_gks, [locus_interval])
+    select_cols = {"vrs_json": filtered.vrs_json}
+    if not vrs_only:
+        select_cols["gks_va_freq_json"] = hl.json(filtered.gks_va_freq_dict)
+    annotations = filtered.select(**select_cols).collect()  # might be big
     outputs = []
     for ann in annotations:
         vrs_json = ann.vrs_json
         vrs_variant = json.loads(vrs_json)
-        # begin filling in fields ommitted by add_gks_vrs and add_gks_va
+        # Fill in fields ommitted by add_gks_vrs and add_gks_va
         vrs_variant = gks_compute_seqloc_digest(vrs_variant)
-        va_freq_dict = json.loads(ann.gks_va_freq_dict)  # Hail Struct as json
-        va_freq_dict["focusAllele"] = vrs_variant
-
-        outputs.append({
+        out = {
             "locus": ann.locus,
             "alleles": ann.alleles,
-            "gks_va_freq": va_freq_dict,
             "gks_vrs_variant": vrs_variant
-        })
+        }
+
+        if not vrs_only:
+            va_freq_dict = json.loads(ann.gks_va_freq_json)  # Hail Struct as json
+            va_freq_dict["focusAllele"] = vrs_variant
+            out["gks_va_freq"] = va_freq_dict
+
+        outputs.append(out)
 
     return outputs

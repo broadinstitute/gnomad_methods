@@ -435,6 +435,7 @@ def gnomad_gks(
     by_sex: bool = False,
     vrs_only: bool = False,
     ht: Union[str, hl.Table] = None,
+    coverage_ht: Union[str, hl.Table] = 'auto',
 ) -> dict:
     """
     Call get_gks() and return VRS information and frequency information for the specified gnomAD release version and variant.
@@ -468,7 +469,14 @@ def gnomad_gks(
             "gnomad_gks() is currently only implemented for gnomAD v3."
         )
 
-    coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+
+
+    if coverage_ht == 'auto':
+        coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+    elif type(coverage_ht) == hl.Table:
+        coverage_ht = hl.read_table(coverage_ht)
+    else:
+        coverage_ht = None
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None

@@ -1209,7 +1209,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
     )
 
     if prob_regions is not None:
@@ -1411,7 +1411,7 @@ def get_gks(
         :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
         :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
         :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
-        :param vrs_id: String containing the VRS ID of the variant in ht_subpop.
+        :param group_sex: String indicating the sex of the group. Example: "XX", or "XY".
         :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
 
         """
@@ -1506,7 +1506,7 @@ def get_gks(
     }
     final_freq_dict["ancillaryResults"]["popMaxFAF95"] = popmax_95
 
-    # Read coverage statistics if a table is provdied
+    # Read coverage statistics if a table is provided
     if coverage_ht:
         coverage_ht = coverage_ht.filter(
             coverage_ht.locus

@@ -1,10 +1,10 @@
 # noqa: D100
 
+import json
 import logging
 from typing import Optional, Union
 
 import hail as hl
-import json
 
 from gnomad.resources.resource_utils import (
     DataException,
@@ -15,9 +15,9 @@ from gnomad.resources.resource_utils import (
 )
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.annotations import (
-    get_gks,
     add_gks_va,
     add_gks_vrs,
+    get_gks,
     gks_compute_seqloc_digest,
 )
 
@@ -514,7 +514,7 @@ def gnomad_gks_batch(
     vrs_only: bool = False,
 ):
     """
-    Performs gnomad GKS annotations on a range of variants at once.
+    Perform gnomad GKS annotations on a range of variants at once.
 
     :param ht: Path of Hail Table to parse if different from what the public_release() method would return for the version, or an existing hail.Table object.
     :param locus_interval: Hail IntervalExpression of locus<reference_genome>. e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
@@ -563,9 +563,10 @@ def gnomad_gks_batch(
 
     # Call and return get_gks*() for chosen arguments.
     # get_gks_va returns the table annotated with .gks_va_freq_dict
-    # get_gks_va does not fill in the the .focusAllele value of .gks_va_freq_dict
-    # this is the vrs variant and is mostly just based on the values in the variant and info column,
-    # but it also needs to compute the SequenceLocation digest, which cannot be done in hail
+    # get_gks_va does not fill in the the .focusAllele value of
+    # .gks_va_freq_dict this is the vrs variant and is mostly just based
+    # on the values in the variant and info column, but it also needs
+    # to compute the SequenceLocation digest, which cannot be done in hail
 
     # Add .vrs and .vrs_json (the JSON string representation of .vrs)
     # Omits .location._id

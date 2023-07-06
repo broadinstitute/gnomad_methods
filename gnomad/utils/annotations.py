@@ -1,9 +1,9 @@
 # noqa: D100
 
+import csv
 import itertools
 import json
 import logging
-import csv
 from timeit import default_timer as timer
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -1211,7 +1211,7 @@ def region_flag_expr(
     :return: `region_flag` struct row annotation
     """
     prob_flags_expr = (
-        {"non_par": (t.locus.in_x_nonpar() | t.locus.in_y_nonpar())} if non_par else {}
+        {"non_par": t.locus.in_x_nonpar() | t.locus.in_y_nonpar()} if non_par else {}
     )
 
     if prob_regions is not None:
@@ -1779,8 +1779,13 @@ def get_gks_bulk_collect(
 
 def gks_compute_seqloc_digest(vrs_variant: dict) -> dict:
     """
-    Takes a dict of a VRS variant that has a sequence location that does not yet
-    have the digest computed. Computes teh digest and assigns it to .location._id.
+    Compute and set the digest-based id for the sequence location.
+
+    Take a dict of a VRS variant that has a sequence location that does not yet
+    have the digest-based id computed. Computes it and assigns it to .location._id.
+
+    :param vrs_variant: VRS variant dict
+    :return: VRS variant dict with the location id set to the computed digest-based id
     """
     location = vrs_variant["location"]
     location.pop("_id")
@@ -1797,9 +1802,16 @@ def gks_compute_seqloc_digest_batch(
     computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv"),
 ):
     """
+    Compute sequence location digest-based id for a hail variant table.
+
     Exports table to tsv, computes SequenceLocation digests, reimports and replaces
     the vrs_json field with the result. Input table must have a .vrs field, like the
     one added by add_gks_vrs, that can be used to construct ga4gh.vrs models.
+
+    :param ht: hail table with VRS annotation
+    :param export_tmpfile: file path to export the table to.
+    :param computed_tmpfile: file path to write the updated rows to, which is then imported as a hail table
+    :return: a hail table with the VRS annotation updated with the new SequenceLocations
     """
     logger.info("Exporting ht to %s", export_tmpfile)
     ht.select("vrs_json").export(export_tmpfile, header=True)
@@ -1849,11 +1861,12 @@ def gks_compute_seqloc_digest_batch(
     return ht.drop("vrs_json").join(ht_with_location_parsed, how="left")
 
 
-# VRS-only function
 def add_gks_vrs(ht: hl.Table):
     """
-    Annotates `ht` with GA4GH GKS VRS structure, except for the variant.location._id,
-    which must be computed outside Hail. Use gks_compute_seqloc_digest
+    Add GKS VRS variant annotation to a hail table.
+
+    Annotates ht with GA4GH GKS VRS structure, except for the variant.location._id,
+    which must be computed outside Hail. Use gks_compute_seqloc_digest for this.
 
     ht_out.vrs: Struct of the VRS representation of the variant
     ht_out.vrs_json: JSON string representation of the .vrs struct.
@@ -1897,6 +1910,8 @@ def add_gks_va(
     by_sex: bool = False,
 ) -> dict:
     """
+    Add GKS VA annotations to a hail table.
+
     Annotates the hail table with frequency information conforming to the GKS VA frequency schema.
     If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
     This annotation is added under the gks_va_freq_dict field of the table.
@@ -1912,7 +1927,6 @@ def add_gks_va(
     :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well.
     :param vrs_only: Boolean to return only the VRS information and no general frequency information. Default is False.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
-
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not ancestry_groups:

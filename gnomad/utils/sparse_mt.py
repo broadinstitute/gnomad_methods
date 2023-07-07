@@ -30,7 +30,7 @@ INFO_ARRAY_SUM_AGG_FIELDS = ["SB", "RAW_MQandDP"]
 AS_INFO_SUM_AGG_FIELDS = ["AS_QUALapprox", "AS_RAW_MQ"]
 AS_INFO_INT32_SUM_AGG_FIELDS = ["AS_VarDP"]
 AS_INFO_MEDIAN_AGG_FIELDS = ["AS_RAW_ReadPosRankSum", "AS_RAW_MQRankSum"]
-AS_INFO_ARRAY_SUM_AGG_FIELDS = ["AS_SB_TABLE", "AS_RAW_MQ"]
+AS_INFO_ARRAY_SUM_AGG_FIELDS = ["AS_SB_TABLE"]
 
 
 def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
@@ -259,6 +259,7 @@ def _get_info_agg_expr(
                         lambda x: agg_func(hl.or_missing(hl.is_defined(x), x[0])), expr
                     )
                 else:
+                    print(prefix, k, agg_func, expr)
                     agg_expr[f"{prefix}{k}"] = hl.agg.array_agg(
                         lambda x: agg_func(x), expr
                     )

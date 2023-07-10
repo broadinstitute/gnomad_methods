@@ -610,8 +610,13 @@ def gnomad_gks_batch(
         vrs_variant = json.loads(vrs_json)
         # Fill in fields ommitted by add_gks_vrs and add_gks_va
         vrs_variant = gks_compute_seqloc_digest(vrs_variant)
+
         out = {
-            "locus": ann.locus,
+            "locus": {
+                "contig": ann.locus.contig,
+                "position": ann.locus.position,
+                "reference_genome": ann.locus.reference_genome.name,
+            },
             "alleles": ann.alleles,
             "gks_vrs_variant": vrs_variant,
         }

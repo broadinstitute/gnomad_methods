@@ -294,7 +294,7 @@ def get_coverage_ht(coverage_ht, data_type, coverage_version):
     if coverage_ht == "auto":
         return hl.read_table(coverage(data_type).versions[coverage_version].path)
     elif type(coverage_ht) == hl.Table:
-        return hl.read_table(coverage_ht)
+        return coverage_ht
     else:
         return None
 

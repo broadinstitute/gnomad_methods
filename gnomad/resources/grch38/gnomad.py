@@ -290,10 +290,24 @@ na12878 = VersionedMatrixTableResource(
 )
 
 
-def get_coverage_ht(coverage_ht, data_type, coverage_version):
+def get_coverage_ht(
+    coverage_ht: Union[str, hl.Table], data_type: str, coverage_version: str
+):
+    """
+    Loads a coverage hail table if needed.
+
+    If coverage_ht is 'auto', loads the default coverage table for the
+    data_type and coverage_version. If it's already a hail table, return it.
+    Otherwise return None.
+
+    :param coverage_ht: a hail table, or 'auto'.
+    :param data_type: a gnomad dataset type, as in 'genomes' or 'exomes'
+    :param coverage_version: gnomad release version the coverage table is built on
+    :return: hail table with coverage info, or None
+    """
     if coverage_ht == "auto":
         return hl.read_table(coverage(data_type).versions[coverage_version].path)
-    elif type(coverage_ht) == hl.Table:
+    elif isinstance(coverage_ht, hl.Table):
         return coverage_ht
     else:
         return None
@@ -574,7 +588,7 @@ def gnomad_gks_batch(
             " please also specify 'by_ancestry_group' to stratify by."
         )
 
-    # Call and return get_gks*() for chosen arguments.
+    # Call and return add_gks*() for chosen arguments.
     # get_gks_va returns the table annotated with .gks_va_freq_dict
     # get_gks_va does not fill in the the .focusAllele value of
     # .gks_va_freq_dict this is the vrs variant and is mostly just based

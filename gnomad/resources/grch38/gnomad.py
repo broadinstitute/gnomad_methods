@@ -294,7 +294,7 @@ def get_coverage_ht(
     coverage_ht: Union[str, hl.Table], data_type: str, coverage_version: str
 ):
     """
-    Loads a coverage hail table if needed.
+    Load a coverage hail table if needed.
 
     If coverage_ht is 'auto', loads the default coverage table for the
     data_type and coverage_version. If it's already a hail table, return it.

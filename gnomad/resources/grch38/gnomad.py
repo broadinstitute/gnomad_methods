@@ -290,6 +290,15 @@ na12878 = VersionedMatrixTableResource(
 )
 
 
+def get_coverage_ht(coverage_ht, data_type, coverage_version):
+    if coverage_ht == "auto":
+        return hl.read_table(coverage(data_type).versions[coverage_version].path)
+    elif type(coverage_ht) == hl.Table:
+        return coverage_ht
+    else:
+        return None
+
+
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """
     Get public release table path.
@@ -435,6 +444,7 @@ def gnomad_gks(
     by_sex: bool = False,
     vrs_only: bool = False,
     ht: Union[str, hl.Table] = None,
+    coverage_ht: Union[str, hl.Table] = "auto",
 ) -> dict:
     """
     Call get_gks() and return VRS information and frequency information for the specified gnomAD release version and variant.
@@ -446,6 +456,7 @@ def gnomad_gks(
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
     :param ht: Path of Hail Table to parse if different from what the public_release() method would return for the version, or an existing hail.Table object.
+    :param coverage_ht: Path of coverage_ht, an existing hail.Table object, or 'auto' to automatically lookup coverage ht.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
@@ -468,7 +479,7 @@ def gnomad_gks(
             "gnomad_gks() is currently only implemented for gnomAD v3."
         )
 
-    coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+    coverage_ht = get_coverage_ht(coverage_ht, data_type, coverage_version)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
@@ -512,6 +523,7 @@ def gnomad_gks_batch(
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
+    coverage_ht: Union[str, hl.Table] = "auto",
 ):
     """
     Perform gnomad GKS annotations on a range of variants at once.
@@ -523,6 +535,7 @@ def gnomad_gks_batch(
     :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
+    :param coverage_ht: Path of coverage_ht, an existing hail.Table object, or 'auto' to automatically lookup coverage ht.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
     """
     # If ht is not already a table,
@@ -544,7 +557,7 @@ def gnomad_gks_batch(
             "gnomad_gks() is currently only implemented for gnomAD v3."
         )
 
-    coverage_ht = hl.read_table(coverage(data_type).versions[coverage_version].path)
+    coverage_ht = get_coverage_ht(coverage_ht, data_type, coverage_version)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
@@ -597,8 +610,13 @@ def gnomad_gks_batch(
         vrs_variant = json.loads(vrs_json)
         # Fill in fields ommitted by add_gks_vrs and add_gks_va
         vrs_variant = gks_compute_seqloc_digest(vrs_variant)
+
         out = {
-            "locus": ann.locus,
+            "locus": {
+                "contig": ann.locus.contig,
+                "position": ann.locus.position,
+                "reference_genome": ann.locus.reference_genome.name,
+            },
             "alleles": ann.alleles,
             "gks_vrs_variant": vrs_variant,
         }

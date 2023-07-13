@@ -300,7 +300,7 @@ def get_coverage_ht(
     data_type and coverage_version. If it's already a hail table, return it.
     Otherwise return None.
 
-    :param coverage_ht: a hail table, or 'auto'.
+    :param coverage_ht: a hail table, or 'auto' (otherwise return None).
     :param data_type: a gnomad dataset type, as in 'genomes' or 'exomes'
     :param coverage_version: gnomad release version the coverage table is built on
     :return: hail table with coverage info, or None
@@ -457,7 +457,7 @@ def gnomad_gks(
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
-    ht: Union[str, hl.Table] = None,
+    custom_ht: hl.Table = None,
     coverage_ht: Union[str, hl.Table] = "auto",
 ) -> dict:
     """
@@ -469,18 +469,16 @@ def gnomad_gks(
     :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
-    :param ht: Path of Hail Table to parse if different from what the public_release() method would return for the version, or an existing hail.Table object.
-    :param coverage_ht: Path of coverage_ht, an existing hail.Table object, or 'auto' to automatically lookup coverage ht.
+    :param custom_ht: A Hail Table to use instead of what public_release() method would return for the version.
+    :param coverage_ht: An existing hail.Table object, or 'auto' to automatically lookup coverage ht, or None.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
 
     """
-    # If ht is not already a table,
-    # read in gnomAD release table to filter to chosen variant.
-    if not isinstance(ht, hl.Table):
-        if ht:
-            ht = hl.read_table(ht)
-        else:
-            ht = hl.read_table(public_release(data_type).versions[version].path)
+    # Read public_release table if no custom table provided
+    if custom_ht:
+        ht = custom_ht
+    else:
+        ht = hl.read_table(public_release(data_type).versions[version].path)
 
     high_level_version = f"v{version.split('.')[0]}"
 
@@ -530,35 +528,33 @@ def gnomad_gks(
 # digest and this cannot be done in hail. It needs to export the record to JSON, compute
 # sequence location digests in python, and then that can be imported to a hail table.
 def gnomad_gks_batch(
-    ht: hl.Table,
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",
     by_ancestry_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
+    custom_ht: hl.Table = None,
     coverage_ht: Union[str, hl.Table] = "auto",
 ):
     """
     Perform gnomad GKS annotations on a range of variants at once.
 
-    :param ht: Path of Hail Table to parse if different from what the public_release() method would return for the version, or an existing hail.Table object.
     :param locus_interval: Hail IntervalExpression of locus<reference_genome>. e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
     :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
     :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
+    :param custom_ht: A Hail Table to use instead of what public_release() method would return for the version.
     :param coverage_ht: Path of coverage_ht, an existing hail.Table object, or 'auto' to automatically lookup coverage ht.
     :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
     """
-    # If ht is not already a table,
-    # read in gnomAD release table to filter to chosen variant.
-    if not isinstance(ht, hl.Table):
-        if ht:
-            ht = hl.read_table(ht)
-        else:
-            ht = hl.read_table(public_release(data_type).versions[version].path)
+    # Read public_release table if no custom table provided
+    if custom_ht:
+        ht = custom_ht
+    else:
+        ht = hl.read_table(public_release(data_type).versions[version].path)
 
     high_level_version = f"v{version.split('.')[0]}"
 

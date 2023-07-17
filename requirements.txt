@@ -1,6 +1,7 @@
 annoy
 hail
-hdbscan==0.8.29
+hdbscan
+cython>=0.27<3
 ipywidgets
 networkx
 onnx

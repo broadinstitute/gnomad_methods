@@ -22,15 +22,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-INFO_SUM_AGG_FIELDS = ["QUALapprox"]
-INFO_INT32_SUM_AGG_FIELDS = ["VarDP"]
-INFO_MEDIAN_AGG_FIELDS = ["ReadPosRankSum", "MQRankSum"]
-INFO_ARRAY_SUM_AGG_FIELDS = ["SB", "RAW_MQandDP"]
+INFO_AGG_FIELDS = {
+    "sum_agg_fields": ["QUALapprox"],
+    "int32_sum_agg_fields": ["VarDP"],
+    "median_agg_fields": ["ReadPosRankSum", "MQRankSum"],
+    "array_sun_agg_fields": ["SB", "RAW_MQandDP"],
+}
 
-AS_INFO_SUM_AGG_FIELDS = ["AS_QUALapprox", "AS_RAW_MQ"]
-AS_INFO_INT32_SUM_AGG_FIELDS = ["AS_VarDP"]
-AS_INFO_MEDIAN_AGG_FIELDS = ["AS_RAW_ReadPosRankSum", "AS_RAW_MQRankSum"]
-AS_INFO_ARRAY_SUM_AGG_FIELDS = ["AS_SB_TABLE"]
+AS_INFO_AGG_FIELDS = {
+    "sum_agg_fields_agg_fields": ["AS_QUALapprox", "AS_RAW_MQ"],
+    "int32_sum_agg_fields": ["AS_VarDP"],
+    "median_agg_fields": ["AS_RAW_ReadPosRankSum", "AS_RAW_MQRankSum"],
+    "array_sun_agg_fields": ["AS_SB_TABLE"],
+}
 
 
 def compute_last_ref_block_end(mt: hl.MatrixTable) -> hl.Table:
@@ -149,16 +153,16 @@ def _get_info_agg_expr(
     mt: hl.MatrixTable,
     sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["sum_agg_fields"],
     int32_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_INT32_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["int32_sum_agg_fields"],
     median_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_MEDIAN_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["median_agg_fields"],
     array_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
-    ] = INFO_ARRAY_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["array_sum_agg_fields"],
     prefix: str = "",
     treat_fields_as_allele_specific: bool = False,
 ) -> Dict[str, hl.expr.Aggregation]:
@@ -340,16 +344,16 @@ def get_as_info_expr(
     mt: hl.MatrixTable,
     sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["sum_agg_fields"],
     int32_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_INT32_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["int32_sum_agg_fields"],
     median_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_MEDIAN_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["median_agg_fields"],
     array_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
-    ] = INFO_ARRAY_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["array_sum_agg_fields"],
     alt_alleles_range_array_field: str = "alt_alleles_range_array",
     treat_fields_as_allele_specific: bool = False,
 ) -> hl.expr.StructExpression:
@@ -451,16 +455,16 @@ def get_site_info_expr(
     mt: hl.MatrixTable,
     sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["sum_agg_fields"],
     int32_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_INT32_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["int32_sum_agg_fields"],
     median_agg_fields: Union[
         List[str], Dict[str, hl.expr.NumericExpression]
-    ] = INFO_MEDIAN_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["median_agg_fields"],
     array_sum_agg_fields: Union[
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
-    ] = INFO_ARRAY_SUM_AGG_FIELDS,
+    ] = INFO_AGG_FIELDS["array_sum_agg_fields"],
 ) -> hl.expr.StructExpression:
     """
     Create a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
@@ -498,7 +502,7 @@ def get_site_info_expr(
     )
 
     # Add FS and SOR if SB is present
-    # This is done outside of _get_info_agg_expr as the behavior is different
+    # This is done outside _get_info_agg_expr as the behavior is different
     # in site vs allele-specific versions
     if "SB" in agg_expr:
         agg_expr["FS"] = fs_from_sb(agg_expr["SB"])
@@ -585,10 +589,7 @@ def default_compute_info(
             quasi_info_expr = info_expr
         info_expr = get_as_info_expr(
             mt,
-            sum_agg_fields=AS_INFO_SUM_AGG_FIELDS,
-            int32_sum_agg_fields=AS_INFO_INT32_SUM_AGG_FIELDS,
-            median_agg_fields=AS_INFO_MEDIAN_AGG_FIELDS,
-            array_sum_agg_fields=AS_INFO_ARRAY_SUM_AGG_FIELDS,
+            **AS_INFO_AGG_FIELDS,
             treat_fields_as_allele_specific=True,
         )
 

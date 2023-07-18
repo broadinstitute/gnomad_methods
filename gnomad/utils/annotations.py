@@ -1249,6 +1249,7 @@ def merge_freq_arrays(
     fmeta: List[List[Dict[str, str]]],
     operation: str = "sum",
     set_negatives_to_zero: bool = False,
+    count_arrays: Optional[List[hl.expr.ArrayExpression]] = None,
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
     """
     Merge a list of frequency arrays based on the supplied `operation`.
@@ -1274,6 +1275,7 @@ def merge_freq_arrays(
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
+    :param count_arrays: List of arrays containing counts to merge using the passed operation. Default is None.
     :return: Tuple of merged frequency array and its frequency metadata list.
     """
     if len(farrays) < 2:
@@ -1349,12 +1351,27 @@ def merge_freq_arrays(
             ),
         )
     )
+    # Iterate through each group in the freq_meta_idx
+    # access the entry in the high_ab_hets_by_group_membership annotation
+    # and add the values for each group to make a
+    # new high_ab_het counts annotation. Probably add in diff?
+    if count_arrays:
+        high_ab_meta_idx = fmeta.map(
+            lambda x: hl.zip(count_arrays, x[1]).map(lambda i: i[0][i[1]])
+        )
+        new_counts_array = high_ab_meta_idx.map(
+            lambda x: hl.fold(
+                lambda i, j: _sum_or_diff_fields(x[i], x[j]),
+                x[0],
+                x[1:],
+            ),
+        )
     # Check and see if any annotation within the merged array is negative. If so,
     # raise an error if set_negatives_to_zero is False or set the value to 0 if
     # set_negatives_to_zero is True.
     if operation == "diff":
         negative_value_error_msg = (
-            "Negative values found in merged frequency array. Review data or set"
+            "Negative values found in merged %s array. Review data or set"
             " `set_negatives_to_zero` to True to set negative values to 0."
         )
         callstat_ann.append("AF")
@@ -1364,11 +1381,21 @@ def merge_freq_arrays(
                     ann: (
                         hl.case()
                         .when(set_negatives_to_zero, hl.max(x[ann], 0))
-                        .or_error(negative_value_error_msg)
+                        .or_error((negative_value_error_msg, "freq"))
                     )
                     for ann in callstat_ann
                 }
             )
         )
+        if count_arrays:
+            new_counts_array = new_counts_array.map(
+                lambda x: hl.case()
+                .when(set_negatives_to_zero, hl.max(x, 0))
+                .or_error((negative_value_error_msg, "high_ab_het_counts"))
+            )
 
-    return new_freq, new_freq_meta
+    combined_annotations = new_freq, new_freq_meta
+    if count_arrays:
+        combined_annotations += (new_counts_array,)
+
+    return combined_annotations

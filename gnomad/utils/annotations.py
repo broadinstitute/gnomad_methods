@@ -1275,7 +1275,7 @@ def merge_freq_arrays(
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
-    :param count_arrays: List of arrays containing counts to merge using the passed operation. Default is None.
+    :param count_arrays: List of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Default is None.
     :return: Tuple of merged frequency array and its frequency metadata list.
     """
     if len(farrays) < 2:
@@ -1284,6 +1284,9 @@ def merge_freq_arrays(
         raise ValueError("Length of farrays and fmeta must be equal!")
     if operation not in ["sum", "diff"]:
         raise ValueError("Operation must be either 'sum' or 'diff'!")
+    if count_arrays is not None:
+        if len(count_arrays) != len(fmeta):
+            raise ValueError("Length of count_arrays and fmeta must be equal!")
 
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the freq array.

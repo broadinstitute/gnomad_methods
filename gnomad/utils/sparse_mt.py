@@ -173,7 +173,7 @@ def _get_info_agg_expr(
           the `MQ` calculation and then dropped according to GATK recommendation.
         - If `RAW_MQ` and `MQ_DP` are given, they will be used for the `MQ` calculation
           and then dropped according to GATK recommendation.
-        - If the fields to be aggregate (`sum_agg_fields`, `int32_sum_agg_fields`,
+        - If the fields to be aggregated (`sum_agg_fields`, `int32_sum_agg_fields`,
           `median_agg_fields`) are passed as list of str, then they should correspond
           to entry fields in `mt` or in mt.gvcf_info`.
         - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in
@@ -183,9 +183,10 @@ def _get_info_agg_expr(
     :param sum_agg_fields: Fields to aggregate using sum.
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
     :param median_agg_fields: Fields to aggregate using (approximate) median.
-    :param median_agg_fields: Fields to aggregate using element-wise summing over an
+    :param array_sum_agg_fields: Fields to aggregate using element-wise summing over an
         array.
     :param prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
+    :param treat_fields_as_allele_specific: Treat info fields as allele-specific. Defaults to False.
     :return: Dictionary of expression names and their corresponding aggregation
         Expression.
     """
@@ -259,7 +260,6 @@ def _get_info_agg_expr(
                         lambda x: agg_func(hl.or_missing(hl.is_defined(x), x[0])), expr
                     )
                 else:
-                    print(prefix, k, agg_func, expr)
                     agg_expr[f"{prefix}{k}"] = hl.agg.array_agg(
                         lambda x: agg_func(x), expr
                     )
@@ -377,6 +377,7 @@ def get_as_info_expr(
     :param array_sum_agg_fields: Fields to aggregate using array sum.
     :param alt_alleles_range_array_field: Annotation containing an array of the range
         of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
+    :param treat_fields_as_allele_specific: Treat info fields as allele-specific. Defaults to False.
     :return: Expression containing the AS info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -541,7 +542,7 @@ def default_compute_info(
     :param as_annotations: Whether to generate allele-specific info fields using
         allele-specific annotations in gvcf_info. Default is False.
     :param quasi_as_annotations: Whether to generate allele-specific info fields using
-        non-allele-specific annotation in gvcf_info, but performing per allele
+        non-allele-specific annotations in gvcf_info, but performing per allele
         aggregations. This method can be used in cases where genotype data doesn't
         contain allele-specific annotations to approximate allele-specific annotations.
         Default is True.

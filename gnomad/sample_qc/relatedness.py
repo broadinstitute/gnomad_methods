@@ -690,27 +690,48 @@ def create_fake_pedigree(
     exclude_real_probands: bool = False,
     max_tries: int = 10,
     real_pedigree: Optional[hl.Pedigree] = None,
+    sample_list_stratification: Optional[Dict[str, str]] = None,
 ) -> hl.Pedigree:
     """
     Generate a pedigree made of trios created by sampling 3 random samples in the sample list.
 
-    - If `real_pedigree` is given, then children in the resulting fake trios will not include any trio with proband - parents
-      that are in the real ones.
+    - If `real_pedigree` is given, then children in the resulting fake trios will not
+      include any trio with proband - parents that are in the real ones.
     - Each sample can be used only once as a proband in the resulting trios.
     - Sex of probands in fake trios is random.
 
-    :param n: Number of fake trios desired in the pedigree
-    :param sample_list: List of samples
-    :param exclude_real_probands: If set, then fake trios probands cannot be in the real trios probands.
-    :param max_tries: Maximum number of sampling to try before bailing out (preventing infinite loop if `n` is too large w.r.t. the number of samples)
-    :param real_pedigree: Optional pedigree to exclude children from
-    :return: Fake pedigree
+    :param n: Number of fake trios desired in the pedigree.
+    :param sample_list: List of samples.
+    :param exclude_real_probands: If set, then fake trios probands cannot be in the
+        real trios probands.
+    :param max_tries: Maximum number of sampling to try before bailing out (preventing
+        infinite loop if `n` is too large w.r.t. the number of samples).
+    :param real_pedigree: Optional pedigree to exclude children from.
+    :param sample_list_stratification: Optional dictionary with samples as keys and
+        a value that should be used to stratify samples in `sample_list` into groups
+        that the trio should be picked from. This ensures that each fake trio will
+        contain samples from only the same stratification. For example, if all samples
+        within a fake trio should be chosen from the same platform, this can be a
+        dictionary of sample: platform.
+    :return: Fake pedigree.
     """
     real_trios = (
         {trio.s: trio for trio in real_pedigree.trios}
         if real_pedigree is not None
         else dict()
     )
+
+    if sample_list_stratification is not None:
+        sample_list_stratified = defaultdict(list)
+        for s in sample_list:
+            s_strata = sample_list_stratification.get(s)
+            if s_strata is None:
+                raise ValueError(
+                    f"Sample {s} not found in 'sample_list_stratification' dict!"
+                )
+            sample_list_stratified[s_strata].append(s)
+    else:
+        sample_list_stratified = None
 
     if exclude_real_probands and len(real_trios) == len(set(sample_list)):
         logger.warning(
@@ -722,7 +743,13 @@ def create_fake_pedigree(
     fake_trios = {}
     tries = 0
     while len(fake_trios) < n and tries < max_tries:
-        s, mat_id, pat_id = random.sample(sample_list, 3)
+        s = random.choice(sample_list)
+        if sample_list_stratified is None:
+            curr_sample_list = sample_list
+        else:
+            curr_sample_list = sample_list_stratified[sample_list_stratification[s]]
+
+        mat_id, pat_id = random.sample(curr_sample_list, 2)
         if (
             s in real_trios
             and (

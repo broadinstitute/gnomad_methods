@@ -26,14 +26,14 @@ INFO_AGG_FIELDS = {
     "sum_agg_fields": ["QUALapprox"],
     "int32_sum_agg_fields": ["VarDP"],
     "median_agg_fields": ["ReadPosRankSum", "MQRankSum"],
-    "array_sun_agg_fields": ["SB", "RAW_MQandDP"],
+    "array_sum_agg_fields": ["SB", "RAW_MQandDP"],
 }
 
 AS_INFO_AGG_FIELDS = {
-    "sum_agg_fields_agg_fields": ["AS_QUALapprox", "AS_RAW_MQ"],
+    "sum_agg_fields": ["AS_QUALapprox", "AS_RAW_MQ"],
     "int32_sum_agg_fields": ["AS_VarDP"],
     "median_agg_fields": ["AS_RAW_ReadPosRankSum", "AS_RAW_MQRankSum"],
-    "array_sun_agg_fields": ["AS_SB_TABLE"],
+    "array_sum_agg_fields": ["AS_SB_TABLE"],
 }
 
 
@@ -213,15 +213,15 @@ def _get_info_agg_expr(
             )
 
         if treat_fields_as_allele_specific:
+            # TODO: Change to use hl.vds.local_to_global when fill_value can accept
+            #  missing (error in v0.2.119).
             out_fields = {
                 f: hl.bind(
                     lambda x: hl.if_else(f == "AS_SB_TABLE", x, x[1:]),
-                    hl.vds.local_to_global(
-                        out_fields[f],
-                        mt.LA,
-                        hl.len(mt.alleles),
-                        fill_value=hl.missing(out_fields[f].dtype.element_type),
-                        number="R",
+                    hl.range(hl.len(mt.alleles)).map(
+                        lambda i: hl.or_missing(
+                            mt.LA.contains(i), out_fields[f][mt.LA.index(i)]
+                        )
                     ),
                 )
                 for f in fields
@@ -373,6 +373,13 @@ def get_as_info_expr(
           to entry fields in `mt` or in `mt.gvcf_info`.
         - Priority is given to entry fields in `mt` over those in `mt.gvcf_info` in
           case of a name clash.
+        - If `treat_fields_as_allele_specific` is False, it's expected that there is a
+          single value for each entry field to be aggregated. Then when performing the
+          aggregation per global alternate allele, that value is included in the
+          aggregation if the global allele is present in the entry's list of local
+          alleles. If `treat_fields_as_allele_specific` is True, it's expected that
+          each entry field to be aggregated has one value per local allele, and each
+          of those is mapped to a global allele for aggregation.
 
     :param mt: Input Matrix Table
     :param sum_agg_fields: Fields to aggregate using sum.
@@ -381,7 +388,8 @@ def get_as_info_expr(
     :param array_sum_agg_fields: Fields to aggregate using array sum.
     :param alt_alleles_range_array_field: Annotation containing an array of the range
         of alternate alleles e.g., `hl.range(1, hl.len(mt.alleles))`
-    :param treat_fields_as_allele_specific: Treat info fields as allele-specific. Defaults to False.
+    :param treat_fields_as_allele_specific: Treat info fields as allele-specific.
+        Defaults to False.
     :return: Expression containing the AS info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -428,6 +436,11 @@ def get_as_info_expr(
     if "AS_SB_TABLE" in info or "AS_SB" in info:
         # Rename AS_SB to AS_SB_TABLE if present and add SB Ax2 aggregation logic.
         if "AS_SB" in agg_expr:
+            if "AS_SB_TABLE" in agg_expr:
+                logger.warning(
+                    "Both `AS_SB` and `AS_SB_TABLE` were specified for aggregation."
+                    " `AS_SB` will be used for aggregation."
+                )
             as_sb_table = hl.array(
                 [
                     info.AS_SB.filter(lambda x: hl.is_defined(x)).fold(

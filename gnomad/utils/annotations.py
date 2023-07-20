@@ -798,9 +798,17 @@ def annotate_adj(
 
     Defaults correspond to gnomAD values.
     """
+    if "GT" not in mt.entry and "LGT" in mt.entry:
+        logger.warning("No GT field found, using LGT instead.")
+        gt_expr = mt.LGT
+
+    if "AD" not in mt.entry and "LAD" in mt.entry:
+        logger.warning("No AD field found, using LAD instead.")
+        ad_expr = mt.LAD
+
     return mt.annotate_entries(
         adj=get_adj_expr(
-            mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp
+            gt_expr, mt.GQ, mt.DP, ad_expr, adj_gq, adj_dp, adj_ab, haploid_adj_dp
         )
     )
 

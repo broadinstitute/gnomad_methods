@@ -1354,17 +1354,16 @@ def merge_freq_arrays(
             ),
         )
     )
-    # Iterate through each group in the freq_meta_idx
+    # Iterate through each group in the high_ab_meta_idx
     # access the entry in the high_ab_hets_by_group_membership annotation
-    # and add the values for each group to make a
-    # new high_ab_het counts annotation. Probably add in diff?
+    # and add the values for each group to make a new count array annotation.
     if count_arrays:
-        high_ab_meta_idx = fmeta.map(
+        count_array_meta_idx = fmeta.map(
             lambda x: hl.zip(count_arrays, x[1]).map(lambda i: i[0][i[1]])
         )
-        new_counts_array = high_ab_meta_idx.map(
+        new_counts_array = count_array_meta_idx.map(
             lambda x: hl.fold(
-                lambda i, j: _sum_or_diff_fields(x[i], x[j]),
+                lambda i, j: _sum_or_diff_fields(i, j),
                 x[0],
                 x[1:],
             ),

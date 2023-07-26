@@ -1556,7 +1556,7 @@ def gks_compute_seqloc_digest_batch(
     computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv"),
 ):
     """
-    Compute sequence location digest-based id for a hail variant table.
+    Compute sequence location digest-based id for a hail variant Table.
 
     Exports table to tsv, computes SequenceLocation digests, reimports and replaces
     the vrs_json field with the result. Input table must have a .vrs field, like the

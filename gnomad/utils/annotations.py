@@ -1536,7 +1536,7 @@ def gks_compute_seqloc_digest(vrs_variant: dict) -> dict:
     Compute and set the digest-based id for the sequence location.
 
     Take a dict of a VRS variant that has a sequence location that does not yet
-    have the digest-based id computed. Computes it and assigns it to .location._id.
+    have the digest-based id computed. Compute it and assign it to .location._id.
 
     :param vrs_variant: VRS variant dict
     :return: VRS variant dict with the location id set to the computed digest-based id

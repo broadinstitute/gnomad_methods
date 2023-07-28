@@ -1639,6 +1639,7 @@ def add_gks_vrs(ht: hl.Table):
     ht_out = ht.annotate(
         vrs=hl.struct(
             _id=vrs_id,
+            type="Allele",
             location=hl.struct(
                 _id="",
                 type="SequenceLocation",

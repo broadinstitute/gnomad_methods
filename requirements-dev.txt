@@ -4,88 +4,82 @@
 #
 #    pip-compile requirements-dev.in
 #
-astroid==2.15.1
+astroid==2.15.6
     # via pylint
-attrs==21.4.0
-    # via pytest
 autopep8==2.0.2
     # via -r requirements-dev.in
-backports-entry-points-selectable==1.1.1
-    # via virtualenv
 black==22.10.0
     # via -r requirements-dev.in
 cfgv==3.3.1
     # via pre-commit
-click==8.0.3
+click==8.1.6
     # via black
-dill==0.3.6
+dill==0.3.7
     # via pylint
-distlib==0.3.3
+distlib==0.3.7
     # via virtualenv
-filelock==3.4.0
+exceptiongroup==1.1.2
+    # via pytest
+filelock==3.12.2
     # via virtualenv
-identify==2.4.0
+identify==2.5.26
     # via pre-commit
-iniconfig==1.1.1
+iniconfig==2.0.0
     # via pytest
 isort==5.12.0
     # via
     #   -r requirements-dev.in
     #   pylint
-lazy-object-proxy==1.6.0
+lazy-object-proxy==1.9.0
     # via astroid
-mccabe==0.6.1
+mccabe==0.7.0
     # via pylint
-mypy-extensions==0.4.3
+mypy-extensions==1.0.0
     # via black
-nodeenv==1.6.0
+nodeenv==1.8.0
     # via pre-commit
-packaging==23.0
+packaging==23.1
     # via pytest
-pathspec==0.9.0
+pathspec==0.11.2
     # via black
-platformdirs==2.4.0
+platformdirs==3.10.0
     # via
     #   black
     #   pylint
     #   virtualenv
-pluggy==1.0.0
+pluggy==1.2.0
     # via pytest
-pre-commit==2.15.0
+pre-commit==3.3.3
     # via -r requirements-dev.in
-py==1.11.0
-    # via pytest
-pycodestyle==2.10.0
+pycodestyle==2.11.0
     # via autopep8
 pydocstyle==6.3.0
     # via -r requirements-dev.in
-pylint==2.17.1
+pylint==2.17.5
     # via -r requirements-dev.in
-pytest==6.2.5
+pytest==7.4.0
     # via -r requirements-dev.in
-pyyaml==6.0
+pyyaml==6.0.1
     # via pre-commit
-six==1.16.0
-    # via virtualenv
 snowballstemmer==2.2.0
     # via pydocstyle
-toml==0.10.2
-    # via
-    #   pre-commit
-    #   pytest
 tomli==2.0.1
     # via
     #   autopep8
     #   black
     #   pylint
-tomlkit==0.11.7
+    #   pytest
+tomlkit==0.12.1
     # via pylint
-typing-extensions==4.0.0
+typing-extensions==4.7.1
     # via
     #   astroid
     #   black
     #   pylint
-virtualenv==20.10.0
+virtualenv==20.24.2
     # via pre-commit
-wrapt==1.13.3
+wrapt==1.15.0
     # via astroid
+
+# The following packages are considered to be unsafe in a requirements file:
+# setuptools

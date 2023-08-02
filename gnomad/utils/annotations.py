@@ -1384,3 +1384,65 @@ def merge_freq_arrays(
         )
 
     return new_freq, new_freq_meta
+
+
+def annotate_downsamplings(
+    t: Union[hl.MatrixTable, hl.Table],
+    downsamplings: List[int],
+    pop_expr: Optional[hl.expr.StringExpression] = None,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Annotate MatrixTable or Table with downsampling groups.
+
+    :param t: Input MatrixTable or Table.
+    :param downsamplings: List of downsampling sizes.
+    :param pop_expr: Optional expression for population group. When provided, population
+        sample sizes are added as values to downsamplings.
+    :return: MatrixTable or Table with downsampling annotations.
+    """
+    if isinstance(t, hl.MatrixTable):
+        if pop_expr is not None:
+            ht = t.annotate_cols(pop=pop_expr).cols()
+        else:
+            ht = t.cols()
+    else:
+        if pop_expr is not None:
+            ht = t.annotate(pop=pop_expr)
+        else:
+            ht = t
+
+    ht = ht.annotate(r=hl.rand_unif(0, 1))
+    ht = ht.order_by(ht.r)
+
+    # Add a global index for use in computing frequencies, or other aggregate stats on
+    # the downsamplings.
+    scan_expr = {"global_idx": hl.scan.count()}
+
+    # If pop_expr is provided, add all pop counts to the downsamplings list.
+    if pop_expr is not None:
+        pop_counts = ht.aggregate(
+            hl.agg.filter(hl.is_defined(ht.pop), hl.agg.counter(ht.pop))
+        )
+        downsamplings = [x for x in downsamplings if x <= sum(pop_counts.values())]
+        downsamplings = sorted(set(downsamplings + list(pop_counts.values())))
+        # Add an index by pop for use in computing frequencies, or other aggregate stats
+        # on the downsamplings.
+        scan_expr["pop_idx"] = hl.scan.counter(ht.pop).get(ht.pop, 0)
+    else:
+        pop_counts = None
+    logger.info("Found %i downsamplings: %s", len(downsamplings), downsamplings)
+
+    ht = ht.annotate(**scan_expr)
+    ht = ht.key_by("s").select(*scan_expr)
+
+    if isinstance(t, hl.MatrixTable):
+        t = t.annotate_cols(downsampling=ht[t.s])
+    else:
+        t = t.annotate(downsampling=ht[t.s])
+
+    t = t.annotate_globals(
+        downsamplings=downsamplings,
+        ds_pop_counts=pop_counts,
+    )
+
+    return t

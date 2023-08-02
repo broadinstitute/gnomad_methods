@@ -379,7 +379,7 @@ def annotate_freq(
 
     .. rubric:: `freq` row annotation
 
-    The `freq` row annotation is an Array of Struct, with each Struct containing the
+    The `freq` row annotation is an Array of Structs, with each Struct containing the
     following fields:
 
         - AC: int32
@@ -1377,7 +1377,11 @@ def compute_freq_by_strata(
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
 ) -> hl.Table:
     """
-    Compute allele frequencies by strata.
+    Compute allele frequencies by strata and downsamplings, when provided.
+
+    .. note::
+        This function is primarily used through annotate_freq but can be used
+        independently if desired.
 
     :param mt: Input MatrixTable.
     :param strata_expr: List of dicts of strata expressions.
@@ -1456,6 +1460,7 @@ def compute_freq_by_strata(
     freq_meta_expr = [
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]
+    # Add the "raw" group, representing all samples, to the freq_meta_expr list.
     freq_meta_expr.insert(1, {"group": "raw"})
     freq_sample_count.insert(1, freq_sample_count[0])
     mt = mt.annotate_globals(
@@ -1484,6 +1489,7 @@ def compute_freq_by_strata(
             )
         )
         raw_agg_expr = agg_expr.aggregate(lambda x: agg_func(x, *args))
+        # Add the "raw" group, representing all samples, to the adj_agg_expr list.
         return adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
 
     freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)

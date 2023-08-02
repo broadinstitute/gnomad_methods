@@ -511,3 +511,21 @@ def filter_for_mu(
     )
 
     return ht
+
+
+def split_vds_by_strata(
+    vds: hl.vds.VariantDataset, strata_expr: hl.expr.Expression
+) -> List[hl.vds.VariantDataset]:
+    """
+    Split a VDS into a list of VDSs based on `strata_expr`.
+
+    :param vds: Input VDS.
+    :param strata_expr: Expression on VDS variant_data MT to split on.
+    :return: List of VDSs.
+    """
+    vmt = vds.variant_data
+    s_by_strata = vmt.aggregate_cols(
+        hl.agg.group_by(strata_expr, hl.agg.collect_as_set(vmt.s))
+    )
+
+    return [hl.vds.filter_samples(vds, list(s)) for strata, s in s_by_strata.items()]

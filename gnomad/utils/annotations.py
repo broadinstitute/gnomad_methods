@@ -2,7 +2,7 @@
 
 import itertools
 import logging
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
@@ -1446,3 +1446,150 @@ def annotate_downsamplings(
     )
 
     return t
+
+
+def compute_freq_by_strata(
+    mt: hl.MatrixTable,
+    strata_expr: List[Dict[str, hl.expr.StringExpression]],
+    downsamplings: Optional[List[int]] = None,
+    ds_pop_counts: Optional[Dict[str, int]] = None,
+    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
+) -> hl.Table:
+    """
+    Compute allele frequencies by strata.
+
+    :param mt: Input MatrixTable.
+    :param strata_expr: List of dicts of strata expressions.
+    :param downsamplings: Optional list of downsampling groups.
+    :param ds_pop_counts: Optional dict of population counts for downsampling groups.
+    :param entry_agg_funcs: Optional dict of entry aggregation functions.
+    :return: Table or MatrixTable with allele frequencies by strata.
+    """
+    n_samples = mt.count_cols()
+
+    # Get counters for all strata.
+    strata_counts = mt.aggregate_cols(
+        hl.struct(
+            **{
+                k: hl.agg.filter(hl.is_defined(v), hl.agg.counter({k: v}))
+                for strata in strata_expr
+                for k, v in strata.items()
+            }
+        )
+    )
+
+    # Add all desired strata to sample group filters.
+    sample_group_filters = [({}, True)]
+    for strata in strata_expr:
+        downsampling_expr = strata.get("downsampling")
+        strata_values = []
+        for s in strata:
+            if s == "downsampling":
+                v = [("downsampling", d) for d in downsamplings]
+            else:
+                v = [(s, k[s]) for k in strata_counts.get(s, {})]
+                if s == "pop" and downsampling_expr is not None:
+                    v.append(("pop", "global"))
+            strata_values.append(v)
+
+        # Get all combinations of strata values.
+        strata_combinations = itertools.product(*strata_values)
+        for combo in strata_combinations:
+            combo = dict(combo)
+            ds = combo.get("downsampling")
+            pop = combo.get("pop")
+            # If combo contains downsampling, determine the downsampling index
+            # annotation to use.
+            downsampling_idx = "global_idx"
+            if ds is not None:
+                if pop is not None and pop != "global":
+                    # Don't include population downsamplings where the downsampling is
+                    # larger than the number of samples in the population.
+                    if ds > ds_pop_counts[pop]:
+                        continue
+                    downsampling_idx = "pop_idx"
+
+            # If combo contains downsampling, add downsampling filter expression.
+            combo_filter_exprs = []
+            for s, v in combo.items():
+                if s == "downsampling":
+                    combo_filter_exprs.append(downsampling_expr[downsampling_idx] < v)
+                else:
+                    if s != "pop" or v != "global":
+                        combo_filter_exprs.append(strata[s] == v)
+            combo = {k: str(v) for k, v in combo.items()}
+            sample_group_filters.append((combo, hl.all(combo_filter_exprs)))
+
+    n_groups = len(sample_group_filters)
+    logger.info("number of filters: %i", n_groups)
+
+    # Annotate columns with group_membership.
+    mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
+
+    # Get sample count per strata group.
+    freq_sample_count = mt.aggregate_cols(
+        hl.agg.array_agg(lambda x: hl.agg.count_where(x), mt.group_membership)
+    )
+
+    # Create and annotate global expression with meta and sample count information
+    freq_meta_expr = [
+        dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
+    ]
+    freq_meta_expr.insert(1, {"group": "raw"})
+    freq_sample_count.insert(1, freq_sample_count[0])
+    mt = mt.annotate_globals(
+        freq_meta=freq_meta_expr,
+        freq_sample_count=freq_sample_count,
+    )
+
+    # Create frequency expression array from the sample groups.
+    ht = mt.localize_entries("entries", "cols")
+    ht = ht.annotate_globals(
+        indices_by_group=hl.range(n_groups).map(
+            lambda g_i: hl.range(n_samples).filter(
+                lambda s_i: ht.cols[s_i].group_membership[g_i]
+            )
+        )
+    )
+    ht = ht.annotate(
+        adj_array=ht.entries.map(lambda e: e.adj),
+        gt_array=ht.entries.map(lambda e: e.GT),
+    )
+
+    def _agg_by_group(ht, agg_func, agg_expr, *args):
+        adj_agg_expr = ht.indices_by_group.map(
+            lambda s_indices: s_indices.aggregate(
+                lambda i: hl.agg.filter(ht.adj_array[i], agg_func(agg_expr[i], *args))
+            )
+        )
+        raw_agg_expr = agg_expr.aggregate(lambda x: agg_func(x, *args))
+        return adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
+
+    freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)
+
+    # Select non-ref allele (assumes bi-allelic).
+    ann_expr = {
+        "freq": freq_expr.map(
+            lambda cs: cs.annotate(
+                AC=cs.AC[1],
+                # TODO: This is NA in case AC and AN are 0 -- should we set it to 0?
+                AF=cs.AF[1],
+                homozygote_count=cs.homozygote_count[1],
+            )
+        )
+    }
+
+    # Add annotations for any supplied entry transform and aggregation functions.
+    if entry_agg_funcs is not None:
+        for ann, f in entry_agg_funcs.items():
+            transform_func = f[0]
+            agg_func = f[1]
+            ann_expr[ann] = _agg_by_group(
+                ht,
+                agg_func,
+                hl.map(lambda e, s: transform_func(e, s), ht.entries, ht.cols),
+            )
+
+    ht = ht.select(**ann_expr)
+
+    return ht

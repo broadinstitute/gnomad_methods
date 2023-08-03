@@ -255,13 +255,14 @@ def qual_hist_expr(
         - If `ab_expr` is provided, the allele-balance histogram is computed using this expression instead of the ad_expr.
         - If `adj_expr` is provided, additional histograms are computed using only adj samples.
 
-    :param gt_expr: Entry expression containing genotype
-    :param gq_expr: Entry expression containing genotype quality
-    :param dp_expr: Entry expression containing depth
-    :param ad_expr: Entry expression containing allelic depth (bi-allelic here)
-    :param adj_expr: Entry expression containing adj (high quality) genotype status
-    :param ab_expr: Entry expression containing allele balance (bi-allelic here)
-    :return: Genotype quality histograms expression
+    :param gt_expr: Entry expression containing genotype.
+    :param gq_expr: Entry expression containing genotype quality.
+    :param dp_expr: Entry expression containing depth.
+    :param ad_expr: Entry expression containing allelic depth (bi-allelic here).
+    :param adj_expr: Entry expression containing adj (high quality) genotype status.
+    :param ab_expr: Entry expression containing allele balance (bi-allelic here).
+    :param split_adj_and_raw: Whether to split the adj and raw histograms into separate fields in the returned struct expr.
+    :return: Genotype quality histograms expression.
     """
     qual_hists = {}
     if gq_expr is not None:

@@ -1388,11 +1388,11 @@ def merge_freq_arrays(
 
 def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.Table:
     """
-    Merge histogram annotations.
+    Merge a list of histogram annotations.
 
-    This function merges all split histogram annotations by summing the arrays
-    in an element-wise fashion. It keeps one bin_edge annotation but merges the
-    bin_freq, n_smaller, and n_larger annotations by summing them.
+    This function merges a list of histogram annotations by summing the arrays
+    in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
+    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing them.
 
     .. note::
 

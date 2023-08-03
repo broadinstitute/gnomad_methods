@@ -1383,7 +1383,11 @@ def compute_freq_by_strata(
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
 ) -> hl.Table:
     """
-    Compute allele frequencies by strata and downsamplings, when provided.
+    Compute call statistics and, when passed, entry aggregation function(s) by strata.
+
+    The computed call statistics are AC, AF, AN, and homozygote_count. Downsamplings are
+    added to the strata when downsamplings when passed. The entry aggregation functions
+    are applied to the MatrixTable entries and aggregated by strata.
 
     .. note::
         This function is primarily used through annotate_freq but can be used
@@ -1393,7 +1397,12 @@ def compute_freq_by_strata(
     :param strata_expr: List of dicts of strata expressions.
     :param downsamplings: Optional list of downsampling groups.
     :param ds_pop_counts: Optional dict of population counts for downsampling groups.
-    :param entry_agg_funcs: Optional dict of entry aggregation functions.
+    :param entry_agg_funcs: Optional dict of entry aggregation functions. When
+        specified, additional annotations are added to the output Table/MatrixTable.
+        The keys of the dict are the names of the annotations and the values are tuples
+        of functions. The first function is used to transform the `mt` entries in some
+        way, and the second function is used to aggregate the output from the first
+        function.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
     n_samples = mt.count_cols()

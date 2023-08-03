@@ -1386,6 +1386,35 @@ def merge_freq_arrays(
     return new_freq, new_freq_meta
 
 
+def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.Table:
+    """
+    Merge a list of histogram annotations.
+
+    This function merges a list of histogram annotations by summing the arrays
+    in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
+    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing them.
+
+    .. note::
+
+        Bin edges are assumed to be the same for all histograms.
+
+    :param hists: List of histogram structs to merge.
+    :return: Merged histogram struct.
+    """
+    return hl.fold(
+        lambda i, j: hl.struct(
+            **{
+                "bin_edges": i.bin_edges,  # Bin edges are the same for all histograms
+                "bin_freq": hl.zip(i.bin_freq, j.bin_freq).map(lambda x: x[0] + x[1]),
+                "n_smaller": i.n_smaller + j.n_smaller,
+                "n_larger": i.n_larger + j.n_larger,
+            }
+        ),
+        hists[0].select("bin_edges", "bin_freq", "n_smaller", "n_larger"),
+        hists[1:],
+    )
+
+
 def annotate_downsamplings(
     t: Union[hl.MatrixTable, hl.Table],
     downsamplings: List[int],

@@ -243,6 +243,7 @@ def qual_hist_expr(
     ad_expr: Optional[hl.expr.ArrayNumericExpression] = None,
     adj_expr: Optional[hl.expr.BooleanExpression] = None,
     ab_expr: Optional[hl.expr.NumericExpression] = None,
+    split_adj_and_raw: bool = False,
 ) -> hl.expr.StructExpression:
     """
     Return a struct expression with genotype quality histograms based on the arguments given (dp, gq, ad, ab).
@@ -300,13 +301,17 @@ def qual_hist_expr(
         }
 
     if adj_expr is not None:
-        qual_hists.update(
-            {
-                f"{qual_hist_name}_adj": hl.agg.filter(adj_expr, qual_hist_expr)
-                for qual_hist_name, qual_hist_expr in qual_hists.items()
-            }
-        )
-
+        adj_qual_hists = {
+            qual_hist_name: hl.agg.filter(adj_expr, qual_hist_expr)
+            for qual_hist_name, qual_hist_expr in qual_hists.items()
+        }
+        if split_adj_and_raw:
+            return hl.struct(
+                raw_qual_hists=hl.struct(**qual_hists),
+                qual_hists=hl.struct(**adj_qual_hists),
+            )
+        else:
+            qual_hists.update({f"{k}_adj": v for k, v in adj_qual_hists.items()})
     return hl.struct(**qual_hists)
 
 

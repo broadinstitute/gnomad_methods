@@ -1504,7 +1504,8 @@ def compute_freq_by_strata(
             )
         )
         raw_agg_expr = agg_expr.aggregate(lambda x: agg_func(x, *args))
-        # Add the "raw" group, representing all samples, to the adj_agg_expr list.
+        # Create final agg list by inserting the "raw" group, representing all samples,
+        # into the adj_agg_list.
         return adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
 
     freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)

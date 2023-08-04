@@ -798,9 +798,21 @@ def annotate_adj(
 
     Defaults correspond to gnomAD values.
     """
+    if "GT" not in mt.entry and "LGT" in mt.entry:
+        logger.warning("No GT field found, using LGT instead.")
+        gt_expr = mt.LGT
+    else:
+        gt_expr = mt.GT
+
+    if "AD" not in mt.entry and "LAD" in mt.entry:
+        logger.warning("No AD field found, using LAD instead.")
+        ad_expr = mt.LAD
+    else:
+        ad_expr = mt.AD
+
     return mt.annotate_entries(
         adj=get_adj_expr(
-            mt.GT, mt.GQ, mt.DP, mt.AD, adj_gq, adj_dp, adj_ab, haploid_adj_dp
+            gt_expr, mt.GQ, mt.DP, ad_expr, adj_gq, adj_dp, adj_ab, haploid_adj_dp
         )
     )
 
@@ -1403,3 +1415,94 @@ def merge_freq_arrays(
         return new_freq, new_freq_meta, new_counts_array
     else:
         return new_freq, new_freq_meta
+
+
+def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.Table:
+    """
+    Merge a list of histogram annotations.
+
+    This function merges a list of histogram annotations by summing the arrays
+    in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
+    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing them.
+
+    .. note::
+
+        Bin edges are assumed to be the same for all histograms.
+
+    :param hists: List of histogram structs to merge.
+    :return: Merged histogram struct.
+    """
+    return hl.fold(
+        lambda i, j: hl.struct(
+            **{
+                "bin_edges": i.bin_edges,  # Bin edges are the same for all histograms
+                "bin_freq": hl.zip(i.bin_freq, j.bin_freq).map(lambda x: x[0] + x[1]),
+                "n_smaller": i.n_smaller + j.n_smaller,
+                "n_larger": i.n_larger + j.n_larger,
+            }
+        ),
+        hists[0].select("bin_edges", "bin_freq", "n_smaller", "n_larger"),
+        hists[1:],
+    )
+
+
+def annotate_downsamplings(
+    t: Union[hl.MatrixTable, hl.Table],
+    downsamplings: List[int],
+    pop_expr: Optional[hl.expr.StringExpression] = None,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Annotate MatrixTable or Table with downsampling groups.
+
+    :param t: Input MatrixTable or Table.
+    :param downsamplings: List of downsampling sizes.
+    :param pop_expr: Optional expression for population group. When provided, population
+        sample sizes are added as values to downsamplings.
+    :return: MatrixTable or Table with downsampling annotations.
+    """
+    if isinstance(t, hl.MatrixTable):
+        if pop_expr is not None:
+            ht = t.annotate_cols(pop=pop_expr).cols()
+        else:
+            ht = t.cols()
+    else:
+        if pop_expr is not None:
+            ht = t.annotate(pop=pop_expr)
+        else:
+            ht = t
+
+    ht = ht.annotate(r=hl.rand_unif(0, 1))
+    ht = ht.order_by(ht.r)
+
+    # Add a global index for use in computing frequencies, or other aggregate stats on
+    # the downsamplings.
+    scan_expr = {"global_idx": hl.scan.count()}
+
+    # If pop_expr is provided, add all pop counts to the downsamplings list.
+    if pop_expr is not None:
+        pop_counts = ht.aggregate(
+            hl.agg.filter(hl.is_defined(ht.pop), hl.agg.counter(ht.pop))
+        )
+        downsamplings = [x for x in downsamplings if x <= sum(pop_counts.values())]
+        downsamplings = sorted(set(downsamplings + list(pop_counts.values())))
+        # Add an index by pop for use in computing frequencies, or other aggregate stats
+        # on the downsamplings.
+        scan_expr["pop_idx"] = hl.scan.counter(ht.pop).get(ht.pop, 0)
+    else:
+        pop_counts = None
+    logger.info("Found %i downsamplings: %s", len(downsamplings), downsamplings)
+
+    ht = ht.annotate(**scan_expr)
+    ht = ht.key_by("s").select(*scan_expr)
+
+    if isinstance(t, hl.MatrixTable):
+        t = t.annotate_cols(downsampling=ht[t.s])
+    else:
+        t = t.annotate(downsampling=ht[t.s])
+
+    t = t.annotate_globals(
+        downsamplings=downsamplings,
+        ds_pop_counts=pop_counts,
+    )
+
+    return t

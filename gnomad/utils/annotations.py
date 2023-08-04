@@ -1451,11 +1451,6 @@ def compute_freq_by_strata(
             "Strata must contain a downsampling expression when downsamplings"
             "are provided."
         )
-    if downsamplings is not None and not ds_in_strata:
-        errors.append(
-            "Strata must contain a downsampling expression when downsamplings"
-            "are provided."
-        )
     if downsamplings is not None and not global_idx_in_ds_expr:
         errors.append(
             "Strata must contain a downsampling expression with 'global_idx' when "
@@ -1494,7 +1489,7 @@ def compute_freq_by_strata(
         downsampling_expr = strata.get("downsampling")
         strata_values = []
         # Add to all downsampling groups, both global and population-specific, to
-        # strata
+        # strata.
         for s in strata:
             if s == "downsampling":
                 v = [("downsampling", d) for d in downsamplings]
@@ -1573,7 +1568,18 @@ def compute_freq_by_strata(
         gt_array=ht.entries.map(lambda e: e.GT),
     )
 
-    def _agg_by_group(ht, agg_func, agg_expr, *args):
+    def _agg_by_group(
+        ht: hl.Table, agg_func: Callable, agg_expr: Callable, *args
+    ) -> hl.expr.ArrayExpression:
+        """
+        Run a passed function on entries and aggregate the results by group.
+
+        :param ht: Input Hail Table.
+        :param agg_func: Function to apply to the entries.
+        :param agg_expr: Aggregation to run on the result of `agg_func`.
+        :param args: Additional arguments to pass to the `agg_func`.
+        :return: Aggregated array expression.
+        """
         adj_agg_expr = ht.indices_by_group.map(
             lambda s_indices: s_indices.aggregate(
                 lambda i: hl.agg.filter(ht.adj_array[i], agg_func(agg_expr[i], *args))

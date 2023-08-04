@@ -1250,7 +1250,10 @@ def merge_freq_arrays(
     operation: str = "sum",
     set_negatives_to_zero: bool = False,
     count_arrays: Optional[List[hl.expr.ArrayExpression]] = None,
-) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
+) -> Union[
+    Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]],
+    Tuple[hl.expr.ArrayExpression, List[Dict[str, int]], List[hl.expr.ArrayExpression]],
+]:
     """
     Merge a list of frequency arrays based on the supplied `operation`.
 
@@ -1276,7 +1279,7 @@ def merge_freq_arrays(
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
     :param count_arrays: List of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Default is None.
-    :return: Tuple of merged frequency array and its frequency metadata list.
+    :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a merged count array.
     """
     if len(farrays) < 2:
         raise ValueError("Must provide at least two frequency arrays to merge!")
@@ -1354,9 +1357,9 @@ def merge_freq_arrays(
             ),
         )
     )
-    # Iterate through each group in the high_ab_meta_idx
-    # access the entry in the high_ab_hets_by_group_membership annotation
-    # and add the values for each group to make a new count array annotation.
+    # Create count_array_meta_idx using the fmeta then iterate through each group
+    # in the list of tuples to access each group's entry per array. Sum or diff the
+    # values for each group across arrays to make a new_counts_array annotation.
     if count_arrays:
         count_array_meta_idx = fmeta.map(
             lambda x: hl.zip(count_arrays, x[1]).map(lambda i: i[0][i[1]])
@@ -1383,7 +1386,7 @@ def merge_freq_arrays(
                     ann: (
                         hl.case()
                         .when(set_negatives_to_zero, hl.max(x[ann], 0))
-                        .or_error((negative_value_error_msg, "freq"))
+                        .or_error(negative_value_error_msg % "freq")
                     )
                     for ann in callstat_ann
                 }
@@ -1393,11 +1396,10 @@ def merge_freq_arrays(
             new_counts_array = new_counts_array.map(
                 lambda x: hl.case()
                 .when(set_negatives_to_zero, hl.max(x, 0))
-                .or_error((negative_value_error_msg, "high_ab_het_counts"))
+                .or_error(negative_value_error_msg % "counts")
             )
 
-    combined_annotations = new_freq, new_freq_meta
     if count_arrays:
-        combined_annotations += (new_counts_array,)
-
-    return combined_annotations
+        return new_freq, new_freq_meta, new_counts_array
+    else:
+        return new_freq, new_freq_meta

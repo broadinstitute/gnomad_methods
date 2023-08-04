@@ -1572,11 +1572,11 @@ def compute_freq_by_strata(
         ht: hl.Table, agg_func: Callable, agg_expr: Callable, *args
     ) -> hl.expr.ArrayExpression:
         """
-        Run a passed function on entries and aggregate the results by group.
+        Aggregate `agg_expr` by group using the `agg_func` function.
 
         :param ht: Input Hail Table.
-        :param agg_func: Function to apply to the entries.
-        :param agg_expr: Aggregation to run on the result of `agg_func`.
+        :param agg_func: Aggregation function to apply to `agg_expr`.
+        :param agg_expr: Expression to aggregate by group.
         :param args: Additional arguments to pass to the `agg_func`.
         :return: Aggregated array expression.
         """

@@ -1366,13 +1366,14 @@ def merge_freq_arrays(
                 .or_error(negative_value_error_msg % "counts")
             )
 
+    new_freq_meta = hl.eval(new_freq_meta)
     if count_arrays:
         return new_freq, new_freq_meta, new_counts_array
     else:
         return new_freq, new_freq_meta
 
 
-def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.Table:
+def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.expr.Expression:
     """
     Merge a list of histogram annotations.
 

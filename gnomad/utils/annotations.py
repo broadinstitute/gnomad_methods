@@ -359,8 +359,8 @@ def annotate_freq(
         ]
     ] = None,
     downsamplings: Optional[List[int]] = None,
-    ds_pop_counts: Optional[Dict[str, int]] = None,
     downsampling_expr: Optional[hl.expr.StructExpression] = None,
+    ds_pop_counts: Optional[Dict[str, int]] = None,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
     annotate_mt: bool = True,
 ) -> Union[hl.Table, hl.MatrixTable]:
@@ -410,14 +410,17 @@ def annotate_freq(
 
     .. rubric:: The `downsamplings` parameter
 
-    If the `downsamplings` parameter is used, frequencies will be computed for all
-    samples and by population (if `pop_expr` is specified) by downsampling the number
-    of samples without replacement to each of the numbers specified in the
-    `downsamplings` array, provided that there are enough samples in the dataset. In
-    addition, if `pop_expr` is specified, a downsampling to each of the exact number
-    of samples present in each population is added. Note that samples are randomly
-    sampled only once, meaning that the lower downsamplings are subsets of the higher
-    ones.
+    If the `downsamplings` parameter is used without the `downsampling_expr`,
+    frequencies will be computed for all samples and by population (if `pop_expr` is
+    specified) by downsampling the number of samples without replacement to each of the
+    numbers specified in the `downsamplings` array, provided that there are enough
+    samples in the dataset. In addition, if `pop_expr` is specified, a downsampling to
+    each of the exact number of samples present in each population is added. Note that
+    samples are randomly sampled only once, meaning that the lower downsamplings are
+    subsets of the higher ones. If the `downsampling_expr` parameter is used with the
+    `downsamplings` parameter, the `downsamplings` parameter informs the function which
+    downsampling groups were already created and are to be used in the frequency
+    calculation.
 
     .. rubric:: The `additional_strata_expr` parameter
 
@@ -428,6 +431,25 @@ def annotate_freq(
     frequencies will be computed for each of the values of `mt.platform`, each of the
     combined values of `mt.platform` and `mt.pop`, and each of the values of
     `mt.age_bin`.
+
+    .. rubric:: The `downsampling_expr` and `ds_pop_counts` parameters
+
+    If the `downsampling_expr` parameter is used, `downsamplings` must also be set
+    and frequencies will be computed for all samples and by population (if `pop_expr`
+    is specified) using the downsampling indices to each of the numbers specified in
+    the `downsamplings` array. The function `annotate_downsamplings` can be used to to
+    create the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
+
+    .. rubric:: The `entry_agg_funcs` parameter
+
+    If the `entry_agg_funcs` parameter is used, the output MatrixTable will also
+    contain the annotations specified in the `entry_agg_funcs` parameter. The keys of
+    the dict are the names of the annotations and the values are tuples of functions.
+    The first function is used to transform the `mt` entries in some way, and the
+    second function is used to aggregate the output from the first function. For
+    example, if `entry_agg_funcs` is set to {'adj_samples': (get_adj_expr, hl.agg.sum)}`,
+    then the output MatrixTable will contain an annotation `adj_samples` which is an
+    array the of the number of adj samples per strata in each row.
 
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr`
@@ -442,12 +464,12 @@ def annotate_freq(
     :param downsamplings: When specified, frequencies are computed by downsampling the
         data to the number of samples given in the list. Note that if `pop_expr` is
         specified, downsamplings by population is also computed.
-    :param ds_pop_counts: When specified, frequencies are computed by downsampling the
-        data to the number of samples per pop in the dict. The key is the population
-        and the value is the number of samples.
     :param downsampling_expr: When specified, frequencies are computed using the
         downsampling indices in the provided StructExpression. Note that if `pop_idx`
         is specified within the struct, downsamplings by population is also computed.
+    :param ds_pop_counts: When specified, frequencies are computed by downsampling the
+        data to the number of samples per pop in the dict. The key is the population
+        and the value is the number of samples.
     :param entry_agg_funcs: When specified, additional annotations are added to the
         output Table/MatrixTable. The keys of the dict are the names of the annotations
         and the values are tuples of functions. The first function is used to transform
@@ -537,7 +559,10 @@ def annotate_freq(
     )
 
     if annotate_mt:
-        return mt.annotate_rows(**ht[mt.row_key])
+        mt = mt.annotate_rows(**ht[mt.row_key])
+        mt = mt.annotate_globals(**ht.index_globals())
+        return mt
+
     else:
         return ht
 

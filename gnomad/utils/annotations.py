@@ -1456,6 +1456,11 @@ def compute_freq_by_strata(
             "Strata must contain a downsampling expression when downsamplings"
             "are provided."
         )
+    if downsamplings is not None and not global_idx_in_ds_expr:
+        errors.append(
+            "Strata must contain a downsampling expression with 'global_idx' when "
+            "downsamplings are provided."
+        )
     if ds_pop_counts is not None and not pop_in_strata:
         errors.append(
             "Strata must contain a population expression 'pop' when ds_pop_counts "

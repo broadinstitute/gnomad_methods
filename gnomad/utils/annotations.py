@@ -408,6 +408,16 @@ def annotate_freq(
     The global annotation `freq_sample_count` is added to the input `mt`. This is a
     sample count per sample grouping defined in the `freq_meta` global annotation.
 
+    .. rubric:: The `additional_strata_expr` parameter
+
+    If the `additional_strata_expr` parameter is used, frequencies will be computed for
+    each of the strata dictionaries across all values. For example, if
+    `additional_strata_expr` is set to `[{'platform': mt.platform},
+    {'platform':mt.platform, 'pop': mt.pop}, {'age_bin': mt.age_bin}]`, then
+    frequencies will be computed for each of the values of `mt.platform`, each of the
+    combined values of `mt.platform` and `mt.pop`, and each of the values of
+    `mt.age_bin`.
+
     .. rubric:: The `downsamplings` parameter
 
     If the `downsamplings` parameter is used without the `downsampling_expr`,
@@ -422,23 +432,16 @@ def annotate_freq(
     downsampling groups were already created and are to be used in the frequency
     calculation.
 
-    .. rubric:: The `additional_strata_expr` parameter
-
-    If the `additional_strata_expr` parameter is used, frequencies will be computed for
-    each of the strata dictionaries across all values. For example, if
-    `additional_strata_expr` is set to `[{'platform': mt.platform},
-    {'platform':mt.platform, 'pop': mt.pop}, {'age_bin': mt.age_bin}]`, then
-    frequencies will be computed for each of the values of `mt.platform`, each of the
-    combined values of `mt.platform` and `mt.pop`, and each of the values of
-    `mt.age_bin`.
-
     .. rubric:: The `downsampling_expr` and `ds_pop_counts` parameters
 
     If the `downsampling_expr` parameter is used, `downsamplings` must also be set
     and frequencies will be computed for all samples and by population (if `pop_expr`
     is specified) using the downsampling indices to each of the numbers specified in
-    the `downsamplings` array. The function `annotate_downsamplings` can be used to to
-    create the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
+    the `downsamplings` array. The function expects a 'global_idx', and if `pop_expr`
+    is used, a 'pop_idx' within the `downsampling_expr` to be used to determine if a
+    sample belongs within a certain downsampling group, i.e. the index is less than
+    the group size. `The function `annotate_downsamplings` can be used to to create
+    the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
 
     .. rubric:: The `entry_agg_funcs` parameter
 
@@ -1411,12 +1414,13 @@ def compute_freq_by_strata(
     Compute call statistics and, when passed, entry aggregation function(s) by strata.
 
     The computed call statistics are AC, AF, AN, and homozygote_count. Downsamplings are
-    added to the strata when downsamplings when passed. The entry aggregation functions
+    added to the strata when `downsamplings` is passed. The entry aggregation functions
     are applied to the MatrixTable entries and aggregated by strata.
 
     .. note::
-        This function is primarily used through annotate_freq but can be used
-        independently if desired.
+        This function is primarily used through `annotate_freq` but can be used
+        independently if desired. Please see the `annotate_freq` function for more
+        complete documentation.
 
     :param mt: Input MatrixTable.
     :param strata_expr: List of dicts of strata expressions.
@@ -1430,6 +1434,42 @@ def compute_freq_by_strata(
         function.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
+    errors = []
+    ds_in_strata = any("downsampling" in s for s in strata_expr)
+    global_idx_in_ds_expr = any(
+        "global_idx" in s["downsampling"] for s in strata_expr if "downsampling" in s
+    )
+    pop_in_strata = any("pop" in s for s in strata_expr)
+    pop_idx_in_ds_expr = any(
+        "pop_idx" in s["downsampling"]
+        for s in strata_expr
+        if "downsampling" in s and ds_pop_counts is not None
+    )
+
+    if downsamplings is not None and not ds_in_strata:
+        errors.append(
+            "Strata must contain a downsampling expression when downsamplings"
+            "are provided."
+        )
+    if downsamplings is not None and not ds_in_strata:
+        errors.append(
+            "Strata must contain a downsampling expression when downsamplings"
+            "are provided."
+        )
+    if ds_pop_counts is not None and not pop_in_strata:
+        errors.append(
+            "Strata must contain a population expression 'pop' when ds_pop_counts "
+            " are provided."
+        )
+    if ds_pop_counts is not None and not pop_idx_in_ds_expr:
+        errors.append(
+            "Strata must contain a downsampling expression with 'pop_idx' when "
+            "ds_pop_counts are provided."
+        )
+
+    if errors:
+        raise ValueError("The following errors were found: \n" + "\n".join(errors))
+
     n_samples = mt.count_cols()
 
     # Get counters for all strata.

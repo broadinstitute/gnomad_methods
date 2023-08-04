@@ -1493,6 +1493,8 @@ def compute_freq_by_strata(
     for strata in strata_expr:
         downsampling_expr = strata.get("downsampling")
         strata_values = []
+        # Add to all downsampling groups, both global and population-specific, to
+        # strata
         for s in strata:
             if s == "downsampling":
                 v = [("downsampling", d) for d in downsamplings]
@@ -1504,6 +1506,10 @@ def compute_freq_by_strata(
 
         # Get all combinations of strata values.
         strata_combinations = itertools.product(*strata_values)
+        # Create sample group filters that are evaluated on each sample for each strata
+        # combination. Strata combinations are evaluated as a logical AND, e.g.
+        # {"pop":nfe, "downsampling":1000} or "nfe-10000" creates the filter expression
+        # pop == nfe AND downsampling pop_idx < 10000.
         for combo in strata_combinations:
             combo = dict(combo)
             ds = combo.get("downsampling")
@@ -1541,7 +1547,7 @@ def compute_freq_by_strata(
         hl.agg.array_agg(lambda x: hl.agg.count_where(x), mt.group_membership)
     )
 
-    # Create and annotate global expression with meta and sample count information
+    # Create and annotate global expression with meta and sample count information.
     freq_meta_expr = [
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]

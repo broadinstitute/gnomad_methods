@@ -1312,14 +1312,17 @@ def merge_freq_arrays(
 
     # Iterate through the groups and their freq lists to merge callstats.
     callstat_ann = ["AC", "AN", "homozygote_count"]
+    callstat_ann_af = ["AC", "AF", "AN", "homozygote_count"]
     new_freq = freq_meta_idx.map(
         lambda x: hl.bind(
-            lambda y: y.annotate(AF=hl.if_else(y.AN > 0, y.AC / y.AN, 0)),
+            lambda y: y.annotate(AF=hl.if_else(y.AN > 0, y.AC / y.AN, 0)).select(
+                *callstat_ann_af
+            ),
             hl.fold(
                 lambda i, j: hl.struct(
                     **{ann: _sum_or_diff_fields(i[ann], j[ann]) for ann in callstat_ann}
                 ),
-                x[0].select("AC", "AN", "homozygote_count"),
+                x[0].select(*callstat_ann),
                 x[1:],
             ),
         )

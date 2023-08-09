@@ -1622,8 +1622,9 @@ def add_gks_vrs(ht: hl.Table):
     Annotates ht with GA4GH GKS VRS structure, except for the variant.location._id,
     which must be computed outside Hail. Use gks_compute_seqloc_digest for this.
 
-    ht_out.vrs: Struct of the VRS representation of the variant
-    ht_out.vrs_json: JSON string representation of the .vrs struct.
+    :param ht: Hail Table input to annotate each variant with VRS information
+    :return: Hail Table with fields vrs (Struct of the VRS representation of the variant)
+    and vrs_json (JSON string representation of the .vrs struct).
     """
     build_in = get_reference_genome(ht.locus).name
     chr_in = ht.locus.contig
@@ -1643,7 +1644,9 @@ def add_gks_vrs(ht: hl.Table):
             location=hl.struct(
                 _id="",
                 type="SequenceLocation",
-                interval=hl.struct(start=vrs_start_value, end=vrs_end_value),
+                interval=hl.struct(
+                    start=vrs_start_value, end=vrs_end_value, type="SequenceInterval"
+                ),
                 sequence_id=vrs_chrom_id,
             ),
             state=hl.struct(

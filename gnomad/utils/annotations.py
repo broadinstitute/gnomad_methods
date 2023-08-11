@@ -1419,7 +1419,7 @@ def add_gks_vrs_py(struct_input: hl.struct):
     return vrs_dict_out
 
 
-def my_add_gks_va_py(
+def add_gks_va_py(
     input_dict: dict,
     label_name: str = "gnomAD",
     label_version: str = "3.1.2",

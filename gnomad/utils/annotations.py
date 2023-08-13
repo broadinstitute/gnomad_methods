@@ -1389,6 +1389,7 @@ def add_gks_vrs_py(struct_input: hl.struct):
     :param struct_input: Struct input as the result of running .collect() on a HT
     :return: Python Dictionary with fields vrs (Struct of the VRS representation of the variant)
     """
+
     build_in = struct_input.locus.reference_genome.name
     chr_in = struct_input.locus.contig
 
@@ -1401,20 +1402,27 @@ def add_gks_vrs_py(struct_input: hl.struct):
 
     vrs_dict_out = {
         "original_struct": struct_input,  # to remove later on
-        "_id": vrs_id,
-        "type": "Allele",
-        "location": {
-            "_id": "",
-            "type": "SequenceLocation",
-            "interval": {
-                "start": {"type": "Number", "value": vrs_start_value},
-                "end": {"type": "Number", "value": vrs_end_value},
-                "type": "SequenceInterval",
+        "gks_vrs":{
+            "_id": vrs_id,
+            "type": "Allele",
+            "location": {
+                "type": "SequenceLocation",
                 "sequence_id": vrs_chrom_id,
+                "interval": {
+                    "start": {"type": "Number", "value": vrs_start_value},
+                    "end": {"type": "Number", "value": vrs_end_value},
+                    "type": "SequenceInterval", 
+                },
             },
-        },
-        "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
+            "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
+        }
     }
+
+    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
+        ga4gh_vrs.models.SequenceLocation(**vrs_dict_out['gks_vrs']['location'])
+    )
+
+    vrs_dict_out['gks_vrs']['location']['_id'] = location_id
 
     return vrs_dict_out
 

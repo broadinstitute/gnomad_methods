@@ -1288,7 +1288,7 @@ def annotate_freq(
     second function is used to aggregate the output from the first function. For
     example, if `entry_agg_funcs` is set to {'adj_samples': (get_adj_expr, hl.agg.sum)}`,
     then the output MatrixTable will contain an annotation `adj_samples` which is an
-    array the of the number of adj samples per strata in each row.
+    array of the number of adj samples per strata in each row.
 
     :param mt: Input MatrixTable
     :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr`
@@ -1333,7 +1333,7 @@ def annotate_freq(
     if errors:
         raise ValueError("The following errors were found: \n" + "\n".join(errors))
 
-    # Get downsampling_expr if it is None, but downsamplings is supplied.
+    # Generate downsamplings and assign downsampling_expr if it is None when downsamplings is supplied.
     if downsamplings is not None and downsampling_expr is None:
         ds_ht = annotate_downsamplings(mt, downsamplings, pop_expr=pop_expr).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)

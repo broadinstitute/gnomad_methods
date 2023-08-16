@@ -1206,7 +1206,7 @@ def annotate_freq(
     The output Matrix table will include:
         - row annotation `freq` containing the stratified allele frequencies
         - global annotation `freq_meta` with metadata
-        - global annotation `freq_sample_count` with sample count information
+        - global annotation `freq_meta_sample_count` with sample count information
 
     .. note::
 
@@ -1239,9 +1239,9 @@ def annotate_freq(
     index in the list corresponds to the index of that frequency stratification in the
     `freq` row annotation.
 
-    .. rubric:: Global `freq_sample_count` annotation
+    .. rubric:: Global `freq_meta_sample_count` annotation
 
-    The global annotation `freq_sample_count` is added to the input `mt`. This is a
+    The global annotation `freq_meta_sample_count` is added to the input `mt`. This is a
     sample count per sample grouping defined in the `freq_meta` global annotation.
 
     .. rubric:: The `additional_strata_expr` parameter
@@ -1333,7 +1333,8 @@ def annotate_freq(
     if errors:
         raise ValueError("The following errors were found: \n" + "\n".join(errors))
 
-    # Generate downsamplings and assign downsampling_expr if it is None when downsamplings is supplied.
+    # Generate downsamplings and assign downsampling_expr if it is None when
+    # downsamplings is supplied.
     if downsamplings is not None and downsampling_expr is None:
         ds_ht = annotate_downsamplings(mt, downsamplings, pop_expr=pop_expr).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)
@@ -1548,7 +1549,7 @@ def generate_freq_group_membership_array(
     The following global annotations are added to the returned Table:
         - freq_meta: Each element of the list contains metadata on a stratification
           group.
-        - freq_sample_count: sample count per grouping defined in `freq_meta`.
+        - freq_meta_sample_count: sample count per grouping defined in `freq_meta`.
         - If downsamplings or ds_pop_counts are specified, they are also added as
           global annotations on the returned Table.
 
@@ -1663,7 +1664,7 @@ def generate_freq_group_membership_array(
     logger.info("number of filters: %i", n_groups)
 
     # Get sample count per strata group.
-    freq_sample_count = ht.aggregate(
+    freq_meta_sample_count = ht.aggregate(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
     )
 
@@ -1677,11 +1678,11 @@ def generate_freq_group_membership_array(
 
     # Add the "raw" group, representing all samples, to the freq_meta_expr list.
     freq_meta.insert(1, {"group": "raw"})
-    freq_sample_count.insert(1, freq_sample_count[0])
+    freq_meta_sample_count.insert(1, freq_meta_sample_count[0])
 
     global_expr = {
         "freq_meta": freq_meta,
-        "freq_sample_count": freq_sample_count,
+        "freq_meta_sample_count": freq_meta_sample_count,
     }
 
     if downsamplings is not None:
@@ -1735,6 +1736,9 @@ def compute_freq_by_strata(
             )
         )
     )
+    # Pull out each annotation that will be used in the array aggregation below as its
+    # own ArrayExpression. This is important to prevent memory issues when performing
+    # the below array aggregations.
     ht = ht.select(
         adj_array=ht.entries.map(lambda e: e.adj),
         gt_array=ht.entries.map(lambda e: e.GT),
@@ -1783,4 +1787,4 @@ def compute_freq_by_strata(
         freq=freq_expr,
     )
 
-    return ht
+    return ht.drop("cols")

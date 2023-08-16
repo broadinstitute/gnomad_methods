@@ -1776,7 +1776,6 @@ def compute_freq_by_strata(
     freq_expr = freq_expr.map(
         lambda cs: cs.annotate(
             AC=cs.AC[1],
-            # TODO: This is NA in case AC and AN are 0 -- should we set it to 0?
             AF=cs.AF[1],
             homozygote_count=cs.homozygote_count[1],
         )

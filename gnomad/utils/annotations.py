@@ -347,229 +347,6 @@ def age_hists_expr(
     )
 
 
-def annotate_freq(
-    mt: hl.MatrixTable,
-    sex_expr: Optional[hl.expr.StringExpression] = None,
-    pop_expr: Optional[hl.expr.StringExpression] = None,
-    subpop_expr: Optional[hl.expr.StringExpression] = None,
-    additional_strata_expr: Optional[
-        Union[
-            List[Dict[str, hl.expr.StringExpression]],
-            Dict[str, hl.expr.StringExpression],
-        ]
-    ] = None,
-    downsamplings: Optional[List[int]] = None,
-    downsampling_expr: Optional[hl.expr.StructExpression] = None,
-    ds_pop_counts: Optional[Dict[str, int]] = None,
-    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
-    annotate_mt: bool = True,
-) -> Union[hl.Table, hl.MatrixTable]:
-    """
-    Annotate `mt` with stratified allele frequencies.
-
-    The output Matrix table will include:
-        - row annotation `freq` containing the stratified allele frequencies
-        - global annotation `freq_meta` with metadata
-        - global annotation `freq_sample_count` with sample count information
-
-    .. note::
-
-        Currently this only supports bi-allelic sites.
-
-        The input `mt` needs to have the following entry fields:
-          - GT: a CallExpression containing the genotype
-          - adj: a BooleanExpression containing whether the genotype is of high quality
-            or not.
-
-        All expressions arguments need to be expression on the input `mt`.
-
-    .. rubric:: `freq` row annotation
-
-    The `freq` row annotation is an Array of Structs, with each Struct containing the
-    following fields:
-
-        - AC: int32
-        - AF: float64
-        - AN: int32
-        - homozygote_count: int32
-
-    Each element of the array corresponds to a stratification of the data, and the
-    metadata about these annotations is stored in the globals.
-
-    .. rubric:: Global `freq_meta` metadata annotation
-
-    The global annotation `freq_meta` is added to the input `mt`. It is a list of dict.
-    Each element of the list contains metadata on a frequency stratification and the
-    index in the list corresponds to the index of that frequency stratification in the
-    `freq` row annotation.
-
-    .. rubric:: Global `freq_sample_count` annotation
-
-    The global annotation `freq_sample_count` is added to the input `mt`. This is a
-    sample count per sample grouping defined in the `freq_meta` global annotation.
-
-    .. rubric:: The `additional_strata_expr` parameter
-
-    If the `additional_strata_expr` parameter is used, frequencies will be computed for
-    each of the strata dictionaries across all values. For example, if
-    `additional_strata_expr` is set to `[{'platform': mt.platform},
-    {'platform':mt.platform, 'pop': mt.pop}, {'age_bin': mt.age_bin}]`, then
-    frequencies will be computed for each of the values of `mt.platform`, each of the
-    combined values of `mt.platform` and `mt.pop`, and each of the values of
-    `mt.age_bin`.
-
-    .. rubric:: The `downsamplings` parameter
-
-    If the `downsamplings` parameter is used without the `downsampling_expr`,
-    frequencies will be computed for all samples and by population (if `pop_expr` is
-    specified) by downsampling the number of samples without replacement to each of the
-    numbers specified in the `downsamplings` array, provided that there are enough
-    samples in the dataset. In addition, if `pop_expr` is specified, a downsampling to
-    each of the exact number of samples present in each population is added. Note that
-    samples are randomly sampled only once, meaning that the lower downsamplings are
-    subsets of the higher ones. If the `downsampling_expr` parameter is used with the
-    `downsamplings` parameter, the `downsamplings` parameter informs the function which
-    downsampling groups were already created and are to be used in the frequency
-    calculation.
-
-    .. rubric:: The `downsampling_expr` and `ds_pop_counts` parameters
-
-    If the `downsampling_expr` parameter is used, `downsamplings` must also be set
-    and frequencies will be computed for all samples and by population (if `pop_expr`
-    is specified) using the downsampling indices to each of the numbers specified in
-    the `downsamplings` array. The function expects a 'global_idx', and if `pop_expr`
-    is used, a 'pop_idx' within the `downsampling_expr` to be used to determine if a
-    sample belongs within a certain downsampling group, i.e. the index is less than
-    the group size. `The function `annotate_downsamplings` can be used to to create
-    the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
-
-    .. rubric:: The `entry_agg_funcs` parameter
-
-    If the `entry_agg_funcs` parameter is used, the output MatrixTable will also
-    contain the annotations specified in the `entry_agg_funcs` parameter. The keys of
-    the dict are the names of the annotations and the values are tuples of functions.
-    The first function is used to transform the `mt` entries in some way, and the
-    second function is used to aggregate the output from the first function. For
-    example, if `entry_agg_funcs` is set to {'adj_samples': (get_adj_expr, hl.agg.sum)}`,
-    then the output MatrixTable will contain an annotation `adj_samples` which is an
-    array the of the number of adj samples per strata in each row.
-
-    :param mt: Input MatrixTable
-    :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr`
-        is also specified, then a pop/sex stratifiction is added.
-    :param pop_expr: When specified, frequencies are stratified by population. If
-        `sex_expr` is also specified, then a pop/sex stratifiction is added.
-    :param subpop_expr: When specified, frequencies are stratified by sub-continental
-        population. Note that `pop_expr` is required as well when using this option.
-    :param additional_strata_expr: When specified, frequencies are stratified by the
-        given additional strata. This can e.g. be used to stratify by platform,
-        platform-pop, platform-pop-sex.
-    :param downsamplings: When specified, frequencies are computed by downsampling the
-        data to the number of samples given in the list. Note that if `pop_expr` is
-        specified, downsamplings by population is also computed.
-    :param downsampling_expr: When specified, frequencies are computed using the
-        downsampling indices in the provided StructExpression. Note that if `pop_idx`
-        is specified within the struct, downsamplings by population is also computed.
-    :param ds_pop_counts: When specified, frequencies are computed by downsampling the
-        data to the number of samples per pop in the dict. The key is the population
-        and the value is the number of samples.
-    :param entry_agg_funcs: When specified, additional annotations are added to the
-        output Table/MatrixTable. The keys of the dict are the names of the annotations
-        and the values are tuples of functions. The first function is used to transform
-        the `mt` entries in some way, and the second function is used to aggregate the
-        output from the first function.
-    :param annotate_mt: Whether to return the full MatrixTable with annotations added
-        instead of only a Table with `freq` and other annotations. Default is True.
-    :return: MatrixTable or Table with `freq` annotation.
-    """
-    errors = []
-    if subpop_expr is not None and pop_expr is None:
-        errors.append("annotate_freq requires pop_expr when using subpop_expr")
-
-    if downsampling_expr is not None:
-        if downsamplings is None:
-            errors.append(
-                "annotate_freq requires `downsamplings` when using `downsampling_expr`"
-            )
-        if downsampling_expr.get("global_idx") is None:
-            errors.append(
-                "annotate_freq requires `downsampling_expr` with key 'global_idx'"
-            )
-        if downsampling_expr.get("pop_idx") is None:
-            if pop_expr is not None:
-                errors.append(
-                    "annotate_freq requires `downsampling_expr` with key 'pop_idx' when"
-                    " using `pop_expr`"
-                )
-        else:
-            if pop_expr is None or ds_pop_counts is None:
-                errors.append(
-                    "annotate_freq requires `pop_expr` and `ds_pop_counts` when using"
-                    " `downsampling_expr` with pop_idx"
-                )
-
-    if errors:
-        raise ValueError("The following errors were found: \n" + "\n".join(errors))
-
-    # Build list of strata expressions based on supplied parameters.
-    strata_expr = []
-    if pop_expr is not None:
-        strata_expr.append({"pop": pop_expr})
-    if sex_expr is not None:
-        strata_expr.append({"sex": sex_expr})
-        if pop_expr is not None:
-            strata_expr.append({"pop": pop_expr, "sex": sex_expr})
-    if subpop_expr is not None:
-        strata_expr.append({"pop": pop_expr, "subpop": subpop_expr})
-
-    # Add downsampling to strata expressions, include pop in the strata if supplied.
-    if downsampling_expr is not None:
-        downsampling_strata = {"downsampling": downsampling_expr}
-        if pop_expr is not None:
-            downsampling_strata["pop"] = pop_expr
-        strata_expr.append(downsampling_strata)
-
-    # Add additional strata expressions.
-    if additional_strata_expr is not None:
-        if isinstance(additional_strata_expr, dict):
-            additional_strata_expr = [additional_strata_expr]
-        strata_expr.extend(additional_strata_expr)
-
-    # Annotate mt with all annotations used in the strata expression list before any
-    # modifications are made to mt.
-    mt = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()})
-
-    # Get downsampling_expr if it is None, but downsamplings is supplied.
-    if downsamplings is not None and downsampling_expr is None:
-        mt = annotate_downsamplings(
-            mt, downsamplings, pop_expr=None if pop_expr is None else mt.pop
-        )
-        downsamplings = hl.eval(mt.downsamplings)
-        ds_pop_counts = hl.eval(mt.ds_pop_counts)
-        downsampling_strata = {"downsampling": mt.downsampling}
-        if pop_expr is not None:
-            downsampling_strata["pop"] = pop_expr
-        strata_expr.append(downsampling_strata)
-
-    strata_expr = [{k: mt[k] for k in d} for d in strata_expr]
-
-    ht = compute_freq_by_strata(
-        mt,
-        strata_expr,
-        downsamplings=downsamplings,
-        ds_pop_counts=ds_pop_counts,
-        entry_agg_funcs=entry_agg_funcs,
-    )
-
-    if annotate_mt:
-        mt = mt.annotate_rows(**ht[mt.row_key])
-        mt = mt.annotate_globals(**ht.index_globals())
-        return mt
-
-    else:
-        return ht
-
-
 def get_lowqual_expr(
     alleles: hl.expr.ArrayExpression,
     qual_approx_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
@@ -1405,6 +1182,203 @@ def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.expr.Expressio
     )
 
 
+# Functions used for computing allele frequency.
+def annotate_freq(
+    mt: hl.MatrixTable,
+    sex_expr: Optional[hl.expr.StringExpression] = None,
+    pop_expr: Optional[hl.expr.StringExpression] = None,
+    subpop_expr: Optional[hl.expr.StringExpression] = None,
+    additional_strata_expr: Optional[
+        Union[
+            List[Dict[str, hl.expr.StringExpression]],
+            Dict[str, hl.expr.StringExpression],
+        ]
+    ] = None,
+    downsamplings: Optional[List[int]] = None,
+    downsampling_expr: Optional[hl.expr.StructExpression] = None,
+    ds_pop_counts: Optional[Dict[str, int]] = None,
+    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
+    annotate_mt: bool = True,
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Annotate `mt` with stratified allele frequencies.
+
+    The output Matrix table will include:
+        - row annotation `freq` containing the stratified allele frequencies
+        - global annotation `freq_meta` with metadata
+        - global annotation `freq_meta_sample_count` with sample count information
+
+    .. note::
+
+        Currently this only supports bi-allelic sites.
+
+        The input `mt` needs to have the following entry fields:
+          - GT: a CallExpression containing the genotype
+          - adj: a BooleanExpression containing whether the genotype is of high quality
+            or not.
+
+        All expressions arguments need to be expression on the input `mt`.
+
+    .. rubric:: `freq` row annotation
+
+    The `freq` row annotation is an Array of Structs, with each Struct containing the
+    following fields:
+
+        - AC: int32
+        - AF: float64
+        - AN: int32
+        - homozygote_count: int32
+
+    Each element of the array corresponds to a stratification of the data, and the
+    metadata about these annotations is stored in the globals.
+
+    .. rubric:: Global `freq_meta` metadata annotation
+
+    The global annotation `freq_meta` is added to the input `mt`. It is a list of dict.
+    Each element of the list contains metadata on a frequency stratification and the
+    index in the list corresponds to the index of that frequency stratification in the
+    `freq` row annotation.
+
+    .. rubric:: Global `freq_meta_sample_count` annotation
+
+    The global annotation `freq_meta_sample_count` is added to the input `mt`. This is a
+    sample count per sample grouping defined in the `freq_meta` global annotation.
+
+    .. rubric:: The `additional_strata_expr` parameter
+
+    If the `additional_strata_expr` parameter is used, frequencies will be computed for
+    each of the strata dictionaries across all values. For example, if
+    `additional_strata_expr` is set to `[{'platform': mt.platform},
+    {'platform':mt.platform, 'pop': mt.pop}, {'age_bin': mt.age_bin}]`, then
+    frequencies will be computed for each of the values of `mt.platform`, each of the
+    combined values of `mt.platform` and `mt.pop`, and each of the values of
+    `mt.age_bin`.
+
+    .. rubric:: The `downsamplings` parameter
+
+    If the `downsamplings` parameter is used without the `downsampling_expr`,
+    frequencies will be computed for all samples and by population (if `pop_expr` is
+    specified) by downsampling the number of samples without replacement to each of the
+    numbers specified in the `downsamplings` array, provided that there are enough
+    samples in the dataset. In addition, if `pop_expr` is specified, a downsampling to
+    each of the exact number of samples present in each population is added. Note that
+    samples are randomly sampled only once, meaning that the lower downsamplings are
+    subsets of the higher ones. If the `downsampling_expr` parameter is used with the
+    `downsamplings` parameter, the `downsamplings` parameter informs the function which
+    downsampling groups were already created and are to be used in the frequency
+    calculation.
+
+    .. rubric:: The `downsampling_expr` and `ds_pop_counts` parameters
+
+    If the `downsampling_expr` parameter is used, `downsamplings` must also be set
+    and frequencies will be computed for all samples and by population (if `pop_expr`
+    is specified) using the downsampling indices to each of the numbers specified in
+    the `downsamplings` array. The function expects a 'global_idx', and if `pop_expr`
+    is used, a 'pop_idx' within the `downsampling_expr` to be used to determine if a
+    sample belongs within a certain downsampling group, i.e. the index is less than
+    the group size. `The function `annotate_downsamplings` can be used to to create
+    the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
+
+    .. rubric:: The `entry_agg_funcs` parameter
+
+    If the `entry_agg_funcs` parameter is used, the output MatrixTable will also
+    contain the annotations specified in the `entry_agg_funcs` parameter. The keys of
+    the dict are the names of the annotations and the values are tuples of functions.
+    The first function is used to transform the `mt` entries in some way, and the
+    second function is used to aggregate the output from the first function. For
+    example, if `entry_agg_funcs` is set to {'adj_samples': (get_adj_expr, hl.agg.sum)}`,
+    then the output MatrixTable will contain an annotation `adj_samples` which is an
+    array of the number of adj samples per strata in each row.
+
+    :param mt: Input MatrixTable
+    :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr`
+        is also specified, then a pop/sex stratifiction is added.
+    :param pop_expr: When specified, frequencies are stratified by population. If
+        `sex_expr` is also specified, then a pop/sex stratifiction is added.
+    :param subpop_expr: When specified, frequencies are stratified by sub-continental
+        population. Note that `pop_expr` is required as well when using this option.
+    :param additional_strata_expr: When specified, frequencies are stratified by the
+        given additional strata. This can e.g. be used to stratify by platform,
+        platform-pop, platform-pop-sex.
+    :param downsamplings: When specified, frequencies are computed by downsampling the
+        data to the number of samples given in the list. Note that if `pop_expr` is
+        specified, downsamplings by population is also computed.
+    :param downsampling_expr: When specified, frequencies are computed using the
+        downsampling indices in the provided StructExpression. Note that if `pop_idx`
+        is specified within the struct, downsamplings by population is also computed.
+    :param ds_pop_counts: When specified, frequencies are computed by downsampling the
+        data to the number of samples per pop in the dict. The key is the population
+        and the value is the number of samples.
+    :param entry_agg_funcs: When specified, additional annotations are added to the
+        output Table/MatrixTable. The keys of the dict are the names of the annotations
+        and the values are tuples of functions. The first function is used to transform
+        the `mt` entries in some way, and the second function is used to aggregate the
+        output from the first function.
+    :param annotate_mt: Whether to return the full MatrixTable with annotations added
+        instead of only a Table with `freq` and other annotations. Default is True.
+    :return: MatrixTable or Table with `freq` annotation.
+    """
+    errors = []
+    if downsampling_expr is not None:
+        if downsamplings is None:
+            errors.append(
+                "annotate_freq requires `downsamplings` when using `downsampling_expr`"
+            )
+        if downsampling_expr.get("pop_idx") is not None:
+            if ds_pop_counts is None:
+                errors.append(
+                    "annotate_freq requires `ds_pop_counts` when using "
+                    "`downsampling_expr` with pop_idx"
+                )
+    if errors:
+        raise ValueError("The following errors were found: \n" + "\n".join(errors))
+
+    # Generate downsamplings and assign downsampling_expr if it is None when
+    # downsamplings is supplied.
+    if downsamplings is not None and downsampling_expr is None:
+        ds_ht = annotate_downsamplings(mt, downsamplings, pop_expr=pop_expr).cols()
+        downsamplings = hl.eval(ds_ht.downsamplings)
+        ds_pop_counts = hl.eval(ds_ht.ds_pop_counts)
+        downsampling_expr = ds_ht[mt.col_key]
+
+    # Build list of all stratification groups to be used in the frequency calculation.
+    strata_expr = build_freq_stratification_list(
+        sex_expr=sex_expr,
+        pop_expr=pop_expr,
+        subpop_expr=subpop_expr,
+        additional_strata_expr=additional_strata_expr,
+        downsampling_expr=downsampling_expr,
+    )
+
+    # Annotate the MT cols with each of the expressions in strata_expr and redefine
+    # strata_expr based on the column HT with added annotations.
+    ht = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()}).cols()
+    strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
+
+    # Annotate HT with a freq_meta global and group membership array for each sample
+    # indicating whether the sample belongs to the group defined by freq_meta elements.
+    ht = generate_freq_group_membership_array(
+        ht,
+        strata_expr,
+        downsamplings=downsamplings,
+        ds_pop_counts=ds_pop_counts,
+    )
+
+    freq_ht = compute_freq_by_strata(
+        mt.annotate_cols(group_membership=ht[mt.col_key].group_membership),
+        entry_agg_funcs=entry_agg_funcs,
+    )
+    freq_ht = freq_ht.annotate_globals(**ht.index_globals())
+
+    if annotate_mt:
+        mt = mt.annotate_rows(**freq_ht[mt.row_key])
+        mt = mt.annotate_globals(**freq_ht.index_globals())
+        return mt
+
+    else:
+        return freq_ht
+
+
 def annotate_downsamplings(
     t: Union[hl.MatrixTable, hl.Table],
     downsamplings: List[int],
@@ -1467,36 +1441,129 @@ def annotate_downsamplings(
     return t
 
 
-def compute_freq_by_strata(
-    mt: hl.MatrixTable,
+def build_freq_stratification_list(
+    sex_expr: Optional[hl.expr.StringExpression] = None,
+    pop_expr: Optional[hl.expr.StringExpression] = None,
+    subpop_expr: Optional[hl.expr.StringExpression] = None,
+    additional_strata_expr: Optional[
+        Union[
+            List[Dict[str, hl.expr.StringExpression]],
+            Dict[str, hl.expr.StringExpression],
+        ]
+    ] = None,
+    downsampling_expr: Optional[hl.expr.StructExpression] = None,
+) -> List[Dict[str, hl.expr.StringExpression]]:
+    """
+    Build a list of stratification groupings to be used in frequency calculations based on supplied parameters.
+
+    .. note::
+        This function is primarily used through `annotate_freq` but can be used
+        independently if desired. The returned list of stratifications can be passed to
+        `generate_freq_group_membership_array`.
+
+    :param sex_expr: When specified, the returned list contains a stratification for
+        sex. If `pop_expr` is also specified, then the returned list also contains a
+        pop/sex stratification.
+    :param pop_expr: When specified, the returned list contains a stratification for
+        population. If `sex_expr` is also specified, then the returned list also
+        contains a pop/sex stratification.
+    :param subpop_expr: When specified, the returned list contains a stratification for
+        sub-continental population. Note that `pop_expr` is required as well when using
+        this option.
+    :param additional_strata_expr: When specified, the returned list contains a
+        stratification for each of the additional strata. This can e.g. be used to
+        stratify by platform, platform-pop, platform-pop-sex.
+    :param downsampling_expr: When specified, the returned list contains a
+        stratification for downsampling. If `pop_expr` is also specified, then the
+        returned list also contains a downsampling/pop stratification.
+    :return: List of dictionaries specifying stratification groups where the keys of
+        each dictionary are strings and the values are corresponding expressions that
+        define the values to stratify frequency calculations by.
+    """
+    errors = []
+    if subpop_expr is not None and pop_expr is None:
+        errors.append("annotate_freq requires pop_expr when using subpop_expr")
+
+    if downsampling_expr is not None:
+        if downsampling_expr.get("global_idx") is None:
+            errors.append(
+                "annotate_freq requires `downsampling_expr` with key 'global_idx'"
+            )
+        if downsampling_expr.get("pop_idx") is None:
+            if pop_expr is not None:
+                errors.append(
+                    "annotate_freq requires `downsampling_expr` with key 'pop_idx' when"
+                    " using `pop_expr`"
+                )
+        else:
+            if pop_expr is None:
+                errors.append(
+                    "annotate_freq requires `pop_expr` when using `downsampling_expr` "
+                    "with pop_idx"
+                )
+
+    if errors:
+        raise ValueError("The following errors were found: \n" + "\n".join(errors))
+
+    # Build list of strata expressions based on supplied parameters.
+    strata_expr = []
+    if pop_expr is not None:
+        strata_expr.append({"pop": pop_expr})
+    if sex_expr is not None:
+        strata_expr.append({"sex": sex_expr})
+        if pop_expr is not None:
+            strata_expr.append({"pop": pop_expr, "sex": sex_expr})
+    if subpop_expr is not None:
+        strata_expr.append({"pop": pop_expr, "subpop": subpop_expr})
+
+    # Add downsampling to strata expressions, include pop in the strata if supplied.
+    if downsampling_expr is not None:
+        downsampling_strata = {"downsampling": downsampling_expr}
+        if pop_expr is not None:
+            downsampling_strata["pop"] = pop_expr
+        strata_expr.append(downsampling_strata)
+
+    # Add additional strata expressions.
+    if additional_strata_expr is not None:
+        if isinstance(additional_strata_expr, dict):
+            additional_strata_expr = [additional_strata_expr]
+        strata_expr.extend(additional_strata_expr)
+
+    return strata_expr
+
+
+def generate_freq_group_membership_array(
+    ht: hl.Table,
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
     downsamplings: Optional[List[int]] = None,
     ds_pop_counts: Optional[Dict[str, int]] = None,
-    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
 ) -> hl.Table:
     """
-    Compute call statistics and, when passed, entry aggregation function(s) by strata.
-
-    The computed call statistics are AC, AF, AN, and homozygote_count. Downsamplings are
-    added to the strata when `downsamplings` is passed. The entry aggregation functions
-    are applied to the MatrixTable entries and aggregated by strata.
+    Generate a Table with a 'group_membership' array for each sample indicating whether the sample belongs to specific stratification groups.
 
     .. note::
         This function is primarily used through `annotate_freq` but can be used
         independently if desired. Please see the `annotate_freq` function for more
         complete documentation.
 
-    :param mt: Input MatrixTable.
-    :param strata_expr: List of dicts of strata expressions.
-    :param downsamplings: Optional list of downsampling groups.
-    :param ds_pop_counts: Optional dict of population counts for downsampling groups.
-    :param entry_agg_funcs: Optional dict of entry aggregation functions. When
-        specified, additional annotations are added to the output Table/MatrixTable.
-        The keys of the dict are the names of the annotations and the values are tuples
-        of functions. The first function is used to transform the `mt` entries in some
-        way, and the second function is used to aggregate the output from the first
-        function.
-    :return: Table or MatrixTable with allele frequencies by strata.
+    The following global annotations are added to the returned Table:
+        - freq_meta: Each element of the list contains metadata on a stratification
+          group.
+        - freq_meta_sample_count: sample count per grouping defined in `freq_meta`.
+        - If downsamplings or ds_pop_counts are specified, they are also added as
+          global annotations on the returned Table.
+
+    Each sample is annotated with a 'group_membership' array indicating whether the
+    sample belongs to specific stratification groups. All possible value combinations
+    are determined for each stratification grouping in the `strata_expr` list.
+
+    :param ht: Input Table that contains Expressions specified by `strata_expr`.
+    :param strata_expr: List of dictionaries specifying stratification groups where
+        the keys of each dictionary are strings and the values are corresponding
+        expressions that define the values to stratify frequency calculations by.
+    :param downsamplings: List of downsampling values to include in the stratifications.
+    :param ds_pop_counts: Dictionary of population counts for each downsampling value.
+    :return: Table with the 'group_membership' array annotation.
     """
     errors = []
     ds_in_strata = any("downsampling" in s for s in strata_expr)
@@ -1534,10 +1601,8 @@ def compute_freq_by_strata(
     if errors:
         raise ValueError("The following errors were found: \n" + "\n".join(errors))
 
-    n_samples = mt.count_cols()
-
     # Get counters for all strata.
-    strata_counts = mt.aggregate_cols(
+    strata_counts = ht.aggregate(
         hl.struct(
             **{
                 k: hl.agg.filter(hl.is_defined(v), hl.agg.counter({k: v}))
@@ -1598,27 +1663,71 @@ def compute_freq_by_strata(
     n_groups = len(sample_group_filters)
     logger.info("number of filters: %i", n_groups)
 
-    # Annotate columns with group_membership.
-    mt = mt.annotate_cols(group_membership=[x[1] for x in sample_group_filters])
-
     # Get sample count per strata group.
-    freq_sample_count = mt.aggregate_cols(
-        hl.agg.array_agg(lambda x: hl.agg.count_where(x), mt.group_membership)
+    freq_meta_sample_count = ht.aggregate(
+        [hl.agg.count_where(x[1]) for x in sample_group_filters]
     )
+
+    # Annotate columns with group_membership.
+    ht = ht.select(group_membership=[x[1] for x in sample_group_filters])
 
     # Create and annotate global expression with meta and sample count information.
-    freq_meta_expr = [
+    freq_meta = [
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]
-    # Add the "raw" group, representing all samples, to the freq_meta_expr list.
-    freq_meta_expr.insert(1, {"group": "raw"})
-    freq_sample_count.insert(1, freq_sample_count[0])
-    mt = mt.annotate_globals(
-        freq_meta=freq_meta_expr,
-        freq_sample_count=freq_sample_count,
-    )
 
-    # Create frequency expression array from the sample groups.
+    # Add the "raw" group, representing all samples, to the freq_meta_expr list.
+    freq_meta.insert(1, {"group": "raw"})
+    freq_meta_sample_count.insert(1, freq_meta_sample_count[0])
+
+    global_expr = {
+        "freq_meta": freq_meta,
+        "freq_meta_sample_count": freq_meta_sample_count,
+    }
+
+    if downsamplings is not None:
+        global_expr["downsamplings"] = downsamplings
+    if ds_pop_counts is not None:
+        global_expr["ds_pop_counts"] = ds_pop_counts
+
+    ht = ht.select_globals(**global_expr)
+    ht = ht.checkpoint(hl.utils.new_temp_file("group_membership", "ht"))
+
+    return ht
+
+
+def compute_freq_by_strata(
+    mt: hl.MatrixTable,
+    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
+) -> hl.Table:
+    """
+    Compute call statistics and, when passed, entry aggregation function(s) by strata.
+
+    The computed call statistics are AC, AF, AN, and homozygote_count. The entry
+    aggregation functions are applied to the MatrixTable entries and aggregated. The
+    MatrixTable must contain a 'group_membership' annotation (like the one added by
+    `generate_freq_group_membership_array`) that is a list of bools to aggregate the
+    columns by.
+
+    .. note::
+        This function is primarily used through `annotate_freq` but can be used
+        independently if desired. Please see the `annotate_freq` function for more
+        complete documentation.
+
+    :param mt: Input MatrixTable.
+    :param entry_agg_funcs: Optional dict of entry aggregation functions. When
+        specified, additional annotations are added to the output Table/MatrixTable.
+        The keys of the dict are the names of the annotations and the values are tuples
+        of functions. The first function is used to transform the `mt` entries in some
+        way, and the second function is used to aggregate the output from the first
+        function.
+    :return: Table or MatrixTable with allele frequencies by strata.
+    """
+    if entry_agg_funcs is None:
+        entry_agg_funcs = {}
+
+    n_samples = mt.count_cols()
+    n_groups = len(mt.group_membership.take(1)[0])
     ht = mt.localize_entries("entries", "cols")
     ht = ht.annotate_globals(
         indices_by_group=hl.range(n_groups).map(
@@ -1627,13 +1736,20 @@ def compute_freq_by_strata(
             )
         )
     )
-    ht = ht.annotate(
+    # Pull out each annotation that will be used in the array aggregation below as its
+    # own ArrayExpression. This is important to prevent memory issues when performing
+    # the below array aggregations.
+    ht = ht.select(
         adj_array=ht.entries.map(lambda e: e.adj),
         gt_array=ht.entries.map(lambda e: e.GT),
+        **{
+            ann: hl.map(lambda e, s: f[0](e, s), ht.entries, ht.cols)
+            for ann, f in entry_agg_funcs.items()
+        },
     )
 
     def _agg_by_group(
-        ht: hl.Table, agg_func: Callable, agg_expr: Callable, *args
+        ht: hl.Table, agg_func: Callable, ann_expr: hl.expr.ArrayExpression, *args
     ) -> hl.expr.ArrayExpression:
         """
         Aggregate `agg_expr` by group using the `agg_func` function.
@@ -1646,10 +1762,10 @@ def compute_freq_by_strata(
         """
         adj_agg_expr = ht.indices_by_group.map(
             lambda s_indices: s_indices.aggregate(
-                lambda i: hl.agg.filter(ht.adj_array[i], agg_func(agg_expr[i], *args))
+                lambda i: hl.agg.filter(ht.adj_array[i], agg_func(ann_expr[i], *args))
             )
         )
-        raw_agg_expr = agg_expr.aggregate(lambda x: agg_func(x, *args))
+        raw_agg_expr = ann_expr.aggregate(lambda x: agg_func(x, *args))
         # Create final agg list by inserting the "raw" group, representing all samples,
         # into the adj_agg_list.
         return adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
@@ -1657,28 +1773,17 @@ def compute_freq_by_strata(
     freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)
 
     # Select non-ref allele (assumes bi-allelic).
-    ann_expr = {
-        "freq": freq_expr.map(
-            lambda cs: cs.annotate(
-                AC=cs.AC[1],
-                # TODO: This is NA in case AC and AN are 0 -- should we set it to 0?
-                AF=cs.AF[1],
-                homozygote_count=cs.homozygote_count[1],
-            )
+    freq_expr = freq_expr.map(
+        lambda cs: cs.annotate(
+            AC=cs.AC[1],
+            AF=cs.AF[1],
+            homozygote_count=cs.homozygote_count[1],
         )
-    }
-
+    )
     # Add annotations for any supplied entry transform and aggregation functions.
-    if entry_agg_funcs is not None:
-        for ann, f in entry_agg_funcs.items():
-            transform_func = f[0]
-            agg_func = f[1]
-            ann_expr[ann] = _agg_by_group(
-                ht,
-                agg_func,
-                hl.map(lambda e, s: transform_func(e, s), ht.entries, ht.cols),
-            )
+    ht = ht.select(
+        **{ann: _agg_by_group(ht, f[1], ht[ann]) for ann, f in entry_agg_funcs.items()},
+        freq=freq_expr,
+    )
 
-    ht = ht.select(**ann_expr)
-
-    return ht
+    return ht.drop("cols")

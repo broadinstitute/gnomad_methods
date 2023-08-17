@@ -993,10 +993,14 @@ def merge_freq_arrays(
     fmeta: List[List[Dict[str, str]]],
     operation: str = "sum",
     set_negatives_to_zero: bool = False,
-    count_arrays: Optional[List[hl.expr.ArrayExpression]] = None,
+    count_arrays: Optional[Dict[str, List[hl.expr.ArrayExpression]]] = None,
 ) -> Union[
     Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]],
-    Tuple[hl.expr.ArrayExpression, List[Dict[str, int]], List[hl.expr.ArrayExpression]],
+    Tuple[
+        hl.expr.ArrayExpression,
+        List[Dict[str, int]],
+        Dict[str, List[hl.expr.ArrayExpression]],
+    ],
 ]:
     """
     Merge a list of frequency arrays based on the supplied `operation`.
@@ -1022,8 +1026,8 @@ def merge_freq_arrays(
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
-    :param count_arrays: List of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Default is None.
-    :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a merged count array.
+    :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
+    :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
     """
     if len(farrays) < 2:
         raise ValueError("Must provide at least two frequency arrays to merge!")
@@ -1108,16 +1112,19 @@ def merge_freq_arrays(
     # in the list of tuples to access each group's entry per array. Sum or diff the
     # values for each group across arrays to make a new_counts_array annotation.
     if count_arrays:
-        count_array_meta_idx = fmeta.map(
-            lambda x: hl.zip(count_arrays, x[1]).map(lambda i: i[0][i[1]])
-        )
-        new_counts_array = count_array_meta_idx.map(
-            lambda x: hl.fold(
-                lambda i, j: _sum_or_diff_fields(i, j),
-                x[0],
-                x[1:],
-            ),
-        )
+        new_counts_array_dict = {}
+        for k, count_array in count_arrays.items():
+            count_array_meta_idx = fmeta.map(
+                lambda x: hl.zip(count_array, x[1]).map(lambda i: i[0][i[1]])
+            )
+
+            new_counts_array_dict[k] = count_array_meta_idx.map(
+                lambda x: hl.fold(
+                    lambda i, j: _sum_or_diff_fields(i, j),
+                    x[0],
+                    x[1:],
+                ),
+            )
     # Check and see if any annotation within the merged array is negative. If so,
     # raise an error if set_negatives_to_zero is False or set the value to 0 if
     # set_negatives_to_zero is True.
@@ -1140,15 +1147,16 @@ def merge_freq_arrays(
             )
         )
         if count_arrays:
-            new_counts_array = new_counts_array.map(
-                lambda x: hl.case()
-                .when(set_negatives_to_zero, hl.max(x, 0))
-                .or_error(negative_value_error_msg % "counts")
-            )
+            for k, new_counts_array in new_counts_array_dict.items():
+                new_counts_array_dict[k] = new_counts_array.map(
+                    lambda x: hl.case()
+                    .when(set_negatives_to_zero, hl.max(x, 0))
+                    .or_error(negative_value_error_msg % "counts")
+                )
 
     new_freq_meta = hl.eval(new_freq_meta)
     if count_arrays:
-        return new_freq, new_freq_meta, new_counts_array
+        return new_freq, new_freq_meta, new_counts_array_dict
     else:
         return new_freq, new_freq_meta
 

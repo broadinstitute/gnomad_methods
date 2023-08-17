@@ -1379,7 +1379,10 @@ def gks_compute_seqloc_digest_batch(
     return ht.drop("vrs_json").join(ht_with_location_parsed, how="left")
 
 
-def add_gks_vrs_py(struct_input: hl.struct):
+def add_gks_vrs_py(
+    input_locus: hl.struct,
+    input_vrs: hl.struct,
+) -> dict:
     """
     Returns a dictionary containing VRS information from a given Hail Struct
 
@@ -1390,39 +1393,36 @@ def add_gks_vrs_py(struct_input: hl.struct):
     :return: Python Dictionary with fields vrs (Struct of the VRS representation of the variant)
     """
 
-    build_in = struct_input.locus.reference_genome.name
-    chr_in = struct_input.locus.contig
+    build_in = input_locus.reference_genome.name
+    chr_in = input_locus.contig
 
     chrom_dict = VRS_CHROM_IDS[build_in]
-    vrs_id = struct_input.info.vrs.VRS_Allele_IDs[1]
+    vrs_id = input_vrs.VRS_Allele_IDs[1]
     vrs_chrom_id = chrom_dict[chr_in]
-    vrs_start_value = struct_input.info.vrs.VRS_Starts[1]
-    vrs_end_value = struct_input.info.vrs.VRS_Ends[1]
-    vrs_state_sequence = struct_input.info.vrs.VRS_States[1]
+    vrs_start_value = input_vrs.VRS_Starts[1]
+    vrs_end_value = input_vrs.VRS_Ends[1]
+    vrs_state_sequence = input_vrs.VRS_States[1]
 
     vrs_dict_out = {
-        "original_struct": struct_input,  # to remove later on
-        "gks_vrs":{
-            "_id": vrs_id,
-            "type": "Allele",
-            "location": {
-                "type": "SequenceLocation",
-                "sequence_id": vrs_chrom_id,
-                "interval": {
-                    "start": {"type": "Number", "value": vrs_start_value},
-                    "end": {"type": "Number", "value": vrs_end_value},
-                    "type": "SequenceInterval", 
-                },
+        "_id": vrs_id,
+        "type": "Allele",
+        "location": {
+            "type": "SequenceLocation",
+            "sequence_id": vrs_chrom_id,
+            "interval": {
+                "start": {"type": "Number", "value": vrs_start_value},
+                "end": {"type": "Number", "value": vrs_end_value},
+                "type": "SequenceInterval",
             },
-            "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
-        }
+        },
+        "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
     }
 
     location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
-        ga4gh_vrs.models.SequenceLocation(**vrs_dict_out['gks_vrs']['location'])
+        ga4gh_vrs.models.SequenceLocation(**vrs_dict_out["location"])
     )
 
-    vrs_dict_out['gks_vrs']['location']['_id'] = location_id
+    vrs_dict_out["location"]["_id"] = location_id
 
     return vrs_dict_out
 
@@ -1465,12 +1465,11 @@ def add_gks_va_py(
         )
 
     # individual = input_dict[xi]
-    contig_str = input_dict["original_struct"].locus.contig
-    pos_str = input_dict["original_struct"].locus.position
-    ref_str = input_dict["original_struct"].alleles[0]
-    var_str = input_dict["original_struct"].alleles[1]
-    gnomad_id_str = f"{contig_str}-{pos_str}-{ref_str}-{var_str}"
-    input_dict["gnomad_id"] = gnomad_id_str
+    contig = input_dict.locus.contig
+    pos = input_dict.locus.position
+    ref = input_dict.alleles[0]
+    var = input_dict.alleles[1]
+    gnomad_id = f"{contig}-{pos}-{ref}-{var}"
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
@@ -1486,10 +1485,10 @@ def add_gks_va_py(
         :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
         :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
         :param group_sex: String indicating the sex of the group. Example: "XX", or "XY".
-        :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant.
+        :return: Dictionary containing VRS information (and genetic ancestry group if desired) for specified variant and String containing gnomad ID
         """
         # Obtain frequency information for the specified variant
-        group_freq = input_dict["original_struct"].freq[group_index]
+        group_freq = input_dict.freq[group_index]
 
         # Cohort characteristics
         characteristics = []
@@ -1499,9 +1498,9 @@ def add_gks_va_py(
 
         # Dictionary to be returned containing information for a specified group
         freq_record = {
-            "id": f"{gnomad_id_str},{group_id.upper()}",
+            "id": f"{gnomad_id},{group_id.upper()}",
             "type": "CohortAlleleFrequency",
-            "label": f"{group_label} Cohort Allele Frequency for {gnomad_id_str}",
+            "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
@@ -1548,14 +1547,14 @@ def add_gks_va_py(
 
     # Overall frequency, via label 'adj' which is currently stored at
     # position #1 (index 0)
-    overall_freq = input_dict["original_struct"].freq[0]
+    overall_freq = input_dict.freq[0]
     # print(input_dict['original_struct'].popmax)
 
     # Final dictionary to be returned
     final_freq_dict = {
-        "id": f"{label_name}-{label_version}-{gnomad_id_str}",
+        "id": f"{label_name}-{label_version}-{gnomad_id}",
         "type": "CohortAlleleFrequency",
-        "label": f"Overall Cohort Allele Frequency for {gnomad_id_str}",
+        "label": f"Overall Cohort Allele Frequency for {gnomad_id}",
         "derivedFrom": {
             "id": f"{label_name}{label_version}",
             "type": "DataSet",
@@ -1569,17 +1568,18 @@ def add_gks_va_py(
         "cohort": {"id": "ALL"},
     }
 
-    if input_dict["original_struct"].popmax:
-        ancillaryResults = {
-            "homozygotes": overall_freq["homozygote_count"],
-            "popMaxFAF95": {
-                "frequency": input_dict["original_struct"].popmax.faf95,
+    ancillaryResults = {"homozygotes": overall_freq["homozygote_count"]}
+
+    if input_dict.popmax:
+        ancillaryResults["popMaxFAF95"] = (
+            {
+                "frequency": input_dict.popmax.faf95,
                 "confidenceInterval": 0.95,
-                "popFreqId": f"{gnomad_id_str}.{input_dict['original_struct'].popmax.pop.upper()}",
+                "popFreqId": f"{gnomad_id}.{input_dict.popmax.pop.upper()}",
             },
-        }
+        )
     else:
-        ancillaryResults = "work in progress!"
+        ancillaryResults["popMaxFAF95"] = None
 
     # Read coverage statistics if a table is provided
     # NOTE: this is slow, and doing the join outside this function and passing in the joined
@@ -1587,13 +1587,15 @@ def add_gks_va_py(
     # If the mean field was persisted into the variant table it would be faster but this increases
     # the table size.
     # It could be persisted with something like this, then doing a write out and read back from storage.
-    # ht_with_cov = ht.annotate(
+    # ht_with_cov = ht.ann
+    #
+    # otate(
     #     meanDepth=coverage_ht[ht.locus].mean
     # )
     if coverage_ht is not None:
-        ancillaryResults["meanDepth"] = coverage_ht[
-            input_dict["original_struct"].locus
-        ].mean
+        ancillaryResults["meanDepth"] = coverage_ht.filter(
+            coverage_ht.locus == input_dict.locus
+        ).mean.collect()[0]
 
     final_freq_dict["ancillaryResults"] = ancillaryResults
 
@@ -1602,8 +1604,4 @@ def add_gks_va_py(
     if ancestry_groups:
         final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
 
-    # Return the hail table with the GKS VA struct added
-    input_dict["gks_va_freq_dict"] = final_freq_dict
-    retout = input_dict
-
-    return retout
+    return final_freq_dict, gnomad_id

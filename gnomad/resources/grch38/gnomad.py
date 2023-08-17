@@ -521,9 +521,8 @@ def gnomad_gks_batch_py(
 
     # Filter and Select before adding annotations, so that everything can be kept in native python (is that what it's called)
     filtered = hl.filter_intervals(ht, [locus_interval])
-    # select_cols = {"vrs_json": filtered.vrs_json}
     
-    struct_list = filtered.collect() # this return a list of structs that can be indexed
+    struct_list = filtered.collect() # This return a list of structs that can be indexed
 
     # Add .vrs and .vrs_json (the JSON string representation of .vrs)
     # Omits .location._id

@@ -452,7 +452,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
 # VRS Annotation needs to be done separately. It needs to compute the sequence location
 # digest and this cannot be done in hail. It needs to export the record to JSON, compute
 # sequence location digests in python, and then that can be imported to a hail table.
-def gnomad_gks_batch_py(
+def my_gnomad_gks_batch_py(
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",
@@ -520,47 +520,43 @@ def gnomad_gks_batch_py(
     # Omits .location._id
 
     # Filter and Select before adding annotations, so that everything can be kept in native python (is that what it's called)
-    filtered = hl.filter_intervals(ht, [locus_interval])
-    
-    struct_list = filtered.collect() # This return a list of structs that can be indexed
+    ht = hl.filter_intervals(ht, [locus_interval])
+
+    variant_list = ht.collect()  # This return a list of structs that can be indexed
 
     # Add .vrs and .vrs_json (the JSON string representation of .vrs)
     # Omits .location._id
-    
-    for xi in range(len(struct_list)):
-        struct_list[xi] = add_gks_vrs_py(struct_list[xi])
-        if not vrs_only:
-            struct_list[xi] = add_gks_va_py(
-                            input_dict=struct_list[xi],
-                            label_name="gnomAD",
-                            label_version=version,
-                            coverage_ht=coverage_ht,
-                            ancestry_groups=pops_list,
-                            ancestry_groups_dict=POP_NAMES,
-                            by_sex=by_sex,
-                            frequency_index=ht.freq_index_dict.collect()[0])
 
     outputs = []
 
-    for variant in struct_list:
-        vrs_variant = variant['vrs_json']
-        
-        # Fill in fields ommitted by add_gks_vrs and add_gks_va
+    for variant in variant_list:
+        vrs_variant = add_gks_vrs_py(variant.locus, variant.info.vrs)
 
         out = {
             "locus": {
-                "contig": variant['original_struct'].locus.contig,
-                "position": variant['original_struct'].locus.position,
-                "reference_genome": variant['original_struct'].locus.reference_genome.name,
+                "contig": variant.locus.contig,
+                "position": variant.locus.position,
+                "reference_genome": variant.locus.reference_genome.name,
             },
-            "alleles": variant['original_struct'].alleles,
+            "alleles": variant.alleles,
             "gks_vrs_variant": vrs_variant,
         }
 
         if not vrs_only:
-            va_freq_dict = variant['gks_va_freq_dict']  # Hail Struct as json
+            va_freq_dict, gnomad_id_str = add_gks_va_py(
+                input_dict=variant,
+                label_name="gnomAD",
+                label_version=version,
+                coverage_ht=coverage_ht,
+                ancestry_groups=pops_list,
+                ancestry_groups_dict=POP_NAMES,
+                by_sex=by_sex,
+                frequency_index=ht.freq_index_dict.collect()[0],
+            )
+
             va_freq_dict["focusAllele"] = vrs_variant
             out["gks_va_freq"] = va_freq_dict
+            out["gnomad_id"] = gnomad_id_str
 
         outputs.append(out)
 

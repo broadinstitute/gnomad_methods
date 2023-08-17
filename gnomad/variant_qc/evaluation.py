@@ -66,7 +66,7 @@ def compute_ranked_bin(
     if compute_snv_indel_separately:
         # For each bin, add a SNV / indel stratification
         bin_expr = {
-            f"{bin_id}_{snv}": (bin_expr & snv_expr)
+            f"{bin_id}_{snv}": bin_expr & snv_expr
             for bin_id, bin_expr in bin_expr.items()
             for snv, snv_expr in [
                 ("snv", hl.is_snp(ht.alleles[0], ht.alleles[1])),

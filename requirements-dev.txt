@@ -8,7 +8,7 @@ astroid==2.15.6
     # via pylint
 autopep8==2.0.2
     # via -r requirements-dev.in
-black==22.10.0
+black==23.7.0
     # via -r requirements-dev.in
 cfgv==3.4.0
     # via pre-commit
@@ -37,7 +37,9 @@ mypy-extensions==1.0.0
 nodeenv==1.8.0
     # via pre-commit
 packaging==23.1
-    # via pytest
+    # via
+    #   black
+    #   pytest
 pathspec==0.11.2
     # via black
 platformdirs==3.10.0

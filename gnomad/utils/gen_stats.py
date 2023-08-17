@@ -136,9 +136,9 @@ def merge_stats_counters_expr(
     # If `stdev` is present, then compute it from the variance
     return agg_stats.select(
         **{
-            metric: agg_stats[metric]
-            if metric != "stdev"
-            else hl.sqrt(agg_stats.variance)
+            metric: (
+                agg_stats[metric] if metric != "stdev" else hl.sqrt(agg_stats.variance)
+            )
             for metric in metrics
         }
     )

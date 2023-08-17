@@ -436,11 +436,15 @@ def vep_struct_to_csq(
                 "feature": (
                     element.transcript_id
                     if "transcript_id" in element
-                    else element.regulatory_feature_id
-                    if "regulatory_feature_id" in element
-                    else element.motif_feature_id
-                    if "motif_feature_id" in element
-                    else ""
+                    else (
+                        element.regulatory_feature_id
+                        if "regulatory_feature_id" in element
+                        else (
+                            element.motif_feature_id
+                            if "motif_feature_id" in element
+                            else ""
+                        )
+                    )
                 ),
                 "variant_class": vep_expr.variant_class,
             }
@@ -455,34 +459,35 @@ def vep_struct_to_csq(
                     "gene": element.gene_id,
                     "symbol": element.gene_symbol,
                     "symbol_source": element.gene_symbol_source,
-                    "cdna_position": hl.str(element.cdna_start)
-                    + hl.if_else(
+                    "cdna_position": hl.str(element.cdna_start) + hl.if_else(
                         element.cdna_start == element.cdna_end,
                         "",
                         "-" + hl.str(element.cdna_end),
                     ),
-                    "cds_position": hl.str(element.cds_start)
-                    + hl.if_else(
+                    "cds_position": hl.str(element.cds_start) + hl.if_else(
                         element.cds_start == element.cds_end,
                         "",
                         "-" + hl.str(element.cds_end),
                     ),
                     "mirna": hl.delimit(element.mirna, "&"),
-                    "protein_position": hl.str(element.protein_start)
-                    + hl.if_else(
+                    "protein_position": hl.str(element.protein_start) + hl.if_else(
                         element.protein_start == element.protein_end,
                         "",
                         "-" + hl.str(element.protein_end),
                     ),
                     "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&"),
-                    "sift": element.sift_prediction
-                    + "("
-                    + hl.format("%.3f", element.sift_score)
-                    + ")",
-                    "polyphen": element.polyphen_prediction
-                    + "("
-                    + hl.format("%.3f", element.polyphen_score)
-                    + ")",
+                    "sift": (
+                        element.sift_prediction
+                        + "("
+                        + hl.format("%.3f", element.sift_score)
+                        + ")"
+                    ),
+                    "polyphen": (
+                        element.polyphen_prediction
+                        + "("
+                        + hl.format("%.3f", element.polyphen_score)
+                        + ")"
+                    ),
                     "domains": hl.delimit(
                         element.domains.map(lambda d: d.db + ":" + d.name), "&"
                     ),

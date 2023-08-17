@@ -11,10 +11,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Setup Python 3.8
+      - name: Setup Python 3.11
         uses: actions/setup-python@v2
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Use pip cache
         uses: actions/cache@v2
         with:
@@ -45,10 +45,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Setup Python 3.8
+      - name: Setup Python 3.11
         uses: actions/setup-python@v1
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Use pip cache
         uses: actions/cache@v1
         with:
@@ -107,10 +107,10 @@ jobs:
           submodules: recursive
           repository: broadinstitute/gnomad_qc
           path: gnomad_qc
-      - name: Setup Python 3.8
+      - name: Setup Python 3.11
         uses: actions/setup-python@v2
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Use pip cache
         uses: actions/cache@v2
         with:

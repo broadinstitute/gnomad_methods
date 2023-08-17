@@ -976,7 +976,7 @@ def compute_coverage_stats(
 
     # Annotate rows now
     return mt.select_rows(
-        mean=hl.cond(hl.is_nan(mean_expr), 0, mean_expr),
+        mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
         median_approx=hl.or_else(hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0),
         total_DP=hl.agg.sum(mt.DP),
         **{

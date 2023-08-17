@@ -45,7 +45,7 @@ def run_rf_test(
     )
 
     mt = mt.annotate_rows(
-        label=hl.cond(mt["feature1"] & (mt["feature2"] > 0), "TP", "FP")
+        label=hl.if_else(mt["feature1"] & (mt["feature2"] > 0), "TP", "FP")
     )
     ht = mt.rows()
 

@@ -1097,7 +1097,7 @@ def generate_trio_stats_expr(
                 locus.in_autosome(),
                 proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
             )
-        return hl.cond(
+        return hl.if_else(
             locus.in_autosome_or_par() | (proband_is_female & locus.in_x_nonpar()),
             proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
             hl.or_missing(

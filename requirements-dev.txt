@@ -10,7 +10,7 @@ autopep8==2.0.2
     # via -r requirements-dev.in
 black==22.10.0
     # via -r requirements-dev.in
-cfgv==3.3.1
+cfgv==3.4.0
     # via pre-commit
 click==8.1.6
     # via black
@@ -63,7 +63,7 @@ snowballstemmer==2.2.0
     # via pydocstyle
 tomlkit==0.12.1
     # via pylint
-virtualenv==20.24.2
+virtualenv==20.24.3
     # via pre-commit
 wrapt==1.15.0
     # via astroid

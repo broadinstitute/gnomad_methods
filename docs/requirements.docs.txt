@@ -6,15 +6,13 @@
 #
 alabaster==0.7.13
     # via sphinx
-attrs==21.4.0
-    # via markdown-it-py
 babel==2.12.1
     # via sphinx
 certifi==2023.7.22
     # via requests
 charset-normalizer==3.2.0
     # via requests
-docutils==0.17.1
+docutils==0.18.1
     # via
     #   myst-parser
     #   sphinx
@@ -23,24 +21,26 @@ idna==3.4
     # via requests
 imagesize==1.4.1
     # via sphinx
-jinja2==3.0.3
+jinja2==3.1.2
     # via
     #   -r docs/requirements.docs.in
     #   myst-parser
     #   sphinx
-markdown-it-py==1.1.0
+markdown-it-py==3.0.0
     # via
     #   mdit-py-plugins
     #   myst-parser
 markupsafe==2.1.3
     # via jinja2
-mdit-py-plugins==0.2.8
+mdit-py-plugins==0.4.0
     # via myst-parser
-myst-parser==0.14.0
+mdurl==0.1.2
+    # via markdown-it-py
+myst-parser==2.0.0
     # via -r docs/requirements.docs.in
 packaging==23.1
     # via sphinx
-pygments==2.15.1
+pygments==2.16.1
     # via sphinx
 pyyaml==6.0.1
     # via myst-parser
@@ -50,33 +50,35 @@ requests==2.31.0
     #   sphinx
 snowballstemmer==2.2.0
     # via sphinx
-sphinx==2.4.5
+sphinx==6.2.1
     # via
     #   -r docs/requirements.docs.in
     #   myst-parser
     #   sphinx-autodoc-typehints
     #   sphinx-rtd-theme
+    #   sphinxcontrib-applehelp
+    #   sphinxcontrib-devhelp
+    #   sphinxcontrib-htmlhelp
     #   sphinxcontrib-jquery
-sphinx-autodoc-typehints==1.10.3
+    #   sphinxcontrib-qthelp
+    #   sphinxcontrib-serializinghtml
+sphinx-autodoc-typehints==1.23.0
     # via -r docs/requirements.docs.in
 sphinx-rtd-theme==1.2.2
     # via -r docs/requirements.docs.in
-sphinxcontrib-applehelp==1.0.4
+sphinxcontrib-applehelp==1.0.7
     # via sphinx
-sphinxcontrib-devhelp==1.0.2
+sphinxcontrib-devhelp==1.0.5
     # via sphinx
-sphinxcontrib-htmlhelp==2.0.1
+sphinxcontrib-htmlhelp==2.0.4
     # via sphinx
 sphinxcontrib-jquery==4.1
     # via sphinx-rtd-theme
 sphinxcontrib-jsmath==1.0.1
     # via sphinx
-sphinxcontrib-qthelp==1.0.3
+sphinxcontrib-qthelp==1.0.6
     # via sphinx
-sphinxcontrib-serializinghtml==1.1.5
+sphinxcontrib-serializinghtml==1.1.8
     # via sphinx
 urllib3==2.0.4
     # via requests
-
-# The following packages are considered to be unsafe in a requirements file:
-# setuptools

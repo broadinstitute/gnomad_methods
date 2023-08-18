@@ -6,8 +6,8 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.gen_stats import to_phred
 from gnomad.utils.filtering import add_filters_expr
+from gnomad.utils.gen_stats import to_phred
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

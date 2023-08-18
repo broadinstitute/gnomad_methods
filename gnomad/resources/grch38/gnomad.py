@@ -14,11 +14,7 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
 )
 from gnomad.sample_qc.ancestry import POP_NAMES
-from gnomad.utils.annotations import (
-    add_gks_va_py,
-    add_gks_vrs_py,
-    gks_compute_seqloc_digest,
-)
+from gnomad.utils.annotations import add_gks_va, add_gks_vrs
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -449,10 +445,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
 
-# VRS Annotation needs to be done separately. It needs to compute the sequence location
-# digest and this cannot be done in hail. It needs to export the record to JSON, compute
-# sequence location digests in python, and then that can be imported to a hail table.
-def my_gnomad_gks_batch_py(
+def my_gnomad_gks_batch(
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",
@@ -461,7 +454,7 @@ def my_gnomad_gks_batch_py(
     vrs_only: bool = False,
     custom_ht: hl.Table = None,
     coverage_ht: Union[str, hl.Table] = "auto",
-):
+) -> list(dict):
     """
     Perform gnomad GKS annotations on a range of variants at once.
 
@@ -473,7 +466,7 @@ def my_gnomad_gks_batch_py(
     :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
     :param custom_ht: A Hail Table to use instead of what public_release() method would return for the version.
     :param coverage_ht: Path of coverage_ht, an existing hail.Table object, or 'auto' to automatically lookup coverage ht.
-    :return: Dictionary containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
+    :return: List of Dictionaries containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
     """
     # Read public_release table if no custom table provided
     if custom_ht:
@@ -484,7 +477,6 @@ def my_gnomad_gks_batch_py(
     high_level_version = f"v{version.split('.')[0]}"
 
     # Read coverage statistics.
-
     if high_level_version == "v3":
         coverage_version = "3.0.1"
     else:
@@ -510,27 +502,17 @@ def my_gnomad_gks_batch_py(
         )
 
     # Call and return add_gks*() for chosen arguments.
-    # get_gks_va returns the table annotated with .gks_va_freq_dict
-    # get_gks_va does not fill in the the .focusAllele value of
-    # .gks_va_freq_dict this is the vrs variant and is mostly just based
-    # on the values in the variant and info column, but it also needs
-    # to compute the SequenceLocation digest, which cannot be done in hail
 
-    # Add .vrs and .vrs_json (the JSON string representation of .vrs)
-    # Omits .location._id
-
-    # Filter and Select before adding annotations, so that everything can be kept in native python (is that what it's called)
+    # Filter to interval before adding annotations
     ht = hl.filter_intervals(ht, [locus_interval])
 
-    variant_list = ht.collect()  # This return a list of structs that can be indexed
+    # Collect all variants as structs, so all dictionary construction can be done in native Python
+    variant_list = ht.collect()
 
-    # Add .vrs and .vrs_json (the JSON string representation of .vrs)
-    # Omits .location._id
-
+    # Assemble output dictionaries with VRS and optionally Frequency information, append to list, then return list
     outputs = []
-
     for variant in variant_list:
-        vrs_variant = add_gks_vrs_py(variant.locus, variant.info.vrs)
+        vrs_variant = add_gks_vrs(variant.locus, variant.info.vrs)
 
         out = {
             "locus": {
@@ -543,7 +525,7 @@ def my_gnomad_gks_batch_py(
         }
 
         if not vrs_only:
-            va_freq_dict, gnomad_id_str = add_gks_va_py(
+            va_freq_dict, gnomad_id_str = add_gks_va(
                 input_dict=variant,
                 label_name="gnomAD",
                 label_version=version,
@@ -554,6 +536,7 @@ def my_gnomad_gks_batch_py(
                 frequency_index=ht.freq_index_dict.collect()[0],
             )
 
+            # Assign existing VRS information to "focusAllele" key
             va_freq_dict["focusAllele"] = vrs_variant
             out["gks_va_freq"] = va_freq_dict
             out["gnomad_id"] = gnomad_id_str

@@ -156,12 +156,12 @@ def make_freq_index_dict_from_meta(
 
 def update_sample_annotations(expr: hl.expr, sample_annotations: Dict[str, hl.expr]):
     """
-        Update highly structured annotations such as gnomAD sample meta.
+    Update highly structured annotations such as gnomAD sample meta.
 
-    .. note::
     This function allows first to check if the sample annotations are different from the input, then it updates the annotations recursively. It will also add a `sample_annotations_updated` flag to the input, indicating which annotations have been updated for each sample.
-        :param expr: highly structured Hail expr, could be a Table or MatrixTable.
-        :param sample_annotations: Dictionary of sample annotations to update.
+
+    :param expr: highly structured Hail expr, could be a Table or MatrixTable.
+    :param sample_annotations: Dictionary of sample annotations to update.
     """
     if isinstance(sample_annotations, dict):
         updated = {}

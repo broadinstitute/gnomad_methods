@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import hail as hl
 
 from gnomad.utils.gen_stats import to_phred
+from gnomad.utils.filtering import add_filters_expr
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -1795,3 +1796,31 @@ def compute_freq_by_strata(
     )
 
     return ht.drop("cols")
+
+
+def update_sample_annotations(expr: hl.expr, sample_annotations: Dict[str, hl.expr]):
+    """
+        Update highly structured annotations such as gnomAD sample meta.
+
+    .. note::
+    This function allows first to check if the sample annotations are different from the input, then it updates the annotations recursively. It will also add a `sample_annotations_updated` flag to the input, indicating which annotations have been updated for each sample.
+        :param expr: highly structured Hail expr, could be a Table or MatrixTable.
+        :param sample_annotations: Dictionary of sample annotations to update.
+    """
+    if isinstance(sample_annotations, dict):
+        updated = {}
+        updated_flag = {}
+        for ann, updated_expr in sample_annotations.items():
+            updated_flag_dict, updated_ann = update_sample_annotations(
+                expr[ann], updated_expr
+            )
+            updated_flag.update(
+                {ann + ("." + k if k else ""): v for k, v in updated_flag_dict.items()}
+            )
+            updated[ann] = updated_ann
+        if isinstance(expr, hl.Table):
+            updated_flag = add_filters_expr(filters=updated_flag)
+            return expr.annotate(**updated, sample_annotations_updated=updated_flag)
+        return updated_flag, expr.annotate(**updated)
+    else:
+        return {"": sample_annotations != expr}, sample_annotations

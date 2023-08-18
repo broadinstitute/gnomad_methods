@@ -10,13 +10,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-      - name: Setup Python 3.8
-        uses: actions/setup-python@v2
+        uses: actions/checkout@v3
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Use pip cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('**/requirements*.txt') }}
@@ -44,13 +44,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
-      - name: Setup Python 3.8
-        uses: actions/setup-python@v1
+        uses: actions/checkout@v3
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Use pip cache
-        uses: actions/cache@v1
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('**/requirements*.txt') }}
@@ -98,21 +98,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout gnomad_methods
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: gnomad_methods
       - name: Checkout gnomad_qc
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           submodules: recursive
           repository: broadinstitute/gnomad_qc
           path: gnomad_qc
-      - name: Setup Python 3.8
-        uses: actions/setup-python@v2
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.8
+          python-version: 3.11
       - name: Use pip cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: pip-${{ hashFiles('gnomad_methods/**/requirements*.txt') }}

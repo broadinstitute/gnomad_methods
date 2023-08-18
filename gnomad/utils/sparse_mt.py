@@ -855,21 +855,22 @@ def impute_sex_ploidy(
                     f"{chrom}_mean_dp": hl.agg.filter(
                         chr_mt.LGT.is_non_ref(),
                         hl.agg.sum(chr_mt.DP),
-                    )
-                    / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
+                    ) / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
                 }
             ).cols()
         else:
             return chr_mt.select_cols(
                 **{
-                    f"{chrom}_mean_dp": hl.agg.sum(
-                        hl.if_else(
-                            chr_mt.LGT.is_hom_ref(),
-                            chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
-                            chr_mt.DP,
+                    f"{chrom}_mean_dp": (
+                        hl.agg.sum(
+                            hl.if_else(
+                                chr_mt.LGT.is_hom_ref(),
+                                chr_mt.DP * (1 + chr_mt.END - chr_mt.locus.position),
+                                chr_mt.DP,
+                            )
                         )
+                        / contig_size
                     )
-                    / contig_size
                 }
             ).cols()
 
@@ -884,10 +885,12 @@ def impute_sex_ploidy(
 
     return ht.annotate(
         **{
-            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"]
-            / (ht[f"{normalization_contig}_mean_dp"] / 2),
-            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"]
-            / (ht[f"{normalization_contig}_mean_dp"] / 2),
+            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"] / (
+                ht[f"{normalization_contig}_mean_dp"] / 2
+            ),
+            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"] / (
+                ht[f"{normalization_contig}_mean_dp"] / 2
+            ),
         }
     )
 
@@ -976,7 +979,7 @@ def compute_coverage_stats(
 
     # Annotate rows now
     return mt.select_rows(
-        mean=hl.cond(hl.is_nan(mean_expr), 0, mean_expr),
+        mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
         median_approx=hl.or_else(hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0),
         total_DP=hl.agg.sum(mt.DP),
         **{

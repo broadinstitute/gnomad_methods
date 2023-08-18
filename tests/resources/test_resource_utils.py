@@ -188,17 +188,20 @@ class TestDefaultPublicResourceSource:
         Make sure the environment variables is used over the one for the current cloud
         Spark provider.
         """
-        with patch(
-            "hail.utils.guess_cloud_spark_provider",
-            return_value="hdinsight",
-            create=True,
-        ), patch.dict(
-            os.environ,
-            {
-                "GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE": (
-                    "gs://my-bucket/gnomad-resources"
-                )
-            },
+        with (
+            patch(
+                "hail.utils.guess_cloud_spark_provider",
+                return_value="hdinsight",
+                create=True,
+            ),
+            patch.dict(
+                os.environ,
+                {
+                    "GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE": (
+                        "gs://my-bucket/gnomad-resources"
+                    )
+                },
+            ),
         ):
             assert (
                 get_default_public_resource_source()

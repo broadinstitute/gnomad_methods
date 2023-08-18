@@ -227,21 +227,27 @@ def get_qc_mt(
             snv_only=snv_only,
             adj_only=adj_only,
             min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
-            min_callrate=min_callrate
-            if min_callrate is not None
-            else hl.null(hl.tfloat32),
-            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold
-            if min_inbreeding_coeff_threshold is not None
-            else hl.null(hl.tfloat32),
-            min_hardy_weinberg_threshold=min_hardy_weinberg_threshold
-            if min_hardy_weinberg_threshold is not None
-            else hl.null(hl.tfloat32),
+            min_callrate=(
+                min_callrate if min_callrate is not None else hl.null(hl.tfloat32)
+            ),
+            inbreeding_coeff_threshold=(
+                min_inbreeding_coeff_threshold
+                if min_inbreeding_coeff_threshold is not None
+                else hl.null(hl.tfloat32)
+            ),
+            min_hardy_weinberg_threshold=(
+                min_hardy_weinberg_threshold
+                if min_hardy_weinberg_threshold is not None
+                else hl.null(hl.tfloat32)
+            ),
             apply_hard_filters=apply_hard_filters,
             ld_r2=ld_r2 if ld_r2 is not None else hl.null(hl.tfloat32),
             filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,
-            high_conf_regions=high_conf_regions
-            if high_conf_regions is not None
-            else hl.null(hl.tarray(hl.tstr)),
+            high_conf_regions=(
+                high_conf_regions
+                if high_conf_regions is not None
+                else hl.null(hl.tarray(hl.tstr))
+            ),
         )
     )
     return qc_mt.annotate_cols(sample_callrate=hl.agg.fraction(hl.is_defined(qc_mt.GT)))

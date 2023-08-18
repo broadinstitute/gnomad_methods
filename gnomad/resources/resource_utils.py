@@ -550,9 +550,9 @@ class GnomadPublicResource(BaseResource, ABC):
             return self._path
 
         relative_path = reduce(
-            lambda path, bucket: path[5 + len(bucket) :]
-            if path.startswith(f"gs://{bucket}/")
-            else path,
+            lambda path, bucket: (
+                path[5 + len(bucket) :] if path.startswith(f"gs://{bucket}/") else path
+            ),
             GNOMAD_PUBLIC_BUCKETS,
             self._path,
         )

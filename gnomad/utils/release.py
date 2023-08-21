@@ -12,7 +12,6 @@ from gnomad.resources.grch38.gnomad import (
     SEXES,
     SUBSETS,
 )
-from gnomad.utils.filtering import add_filters_expr
 from gnomad.utils.vcf import SORT_ORDER, index_globals
 
 logging.basicConfig(

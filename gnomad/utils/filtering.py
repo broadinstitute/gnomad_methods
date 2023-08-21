@@ -217,7 +217,7 @@ def filter_to_autosomes(
 def add_filters_expr(
     filters: Dict[str, hl.expr.BooleanExpression],
     current_filters: hl.expr.SetExpression = None,
-) -> hl.expr:
+) -> hl.expr.SetExpression:
     """
     Create an expression to create or add filters.
 

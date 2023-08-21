@@ -1824,7 +1824,7 @@ def update_structured_annotations(
     def _update_struct(
         struct_expr: hl.expr.StructExpression,
         update_exprs: Union[Dict[str, hl.Expression], hl.expr.Expression],
-    ) -> Tuple[Dict[str, Any], hl.expr]:
+    ) -> Tuple[Dict[str, hl.expr.BooleanExpression], Any]:
         """
         Update a StructExpression.
 

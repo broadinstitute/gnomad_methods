@@ -528,4 +528,6 @@ def split_vds_by_strata(
         hl.agg.group_by(strata_expr, hl.agg.collect_as_set(vmt.s))
     )
 
-    return [hl.vds.filter_samples(vds, list(s)) for strata, s in s_by_strata.items()]
+    return {
+        strata: hl.vds.filter_samples(vds, list(s)) for strata, s in s_by_strata.items()
+    }

@@ -7,8 +7,8 @@ from typing import Callable, Dict, List, Optional, Union
 
 import hail as hl
 
+import gnomad.utils.annotations as annotate_utils
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     """Filter genotypes to adj criteria."""
     if "adj" not in list(mt.entry):
-        mt = annotate_adj(mt)
+        mt = annotate_utils.annotate_adj(mt)
     mt = mt.filter_entries(mt.adj)
     return mt.drop(mt.adj)
 

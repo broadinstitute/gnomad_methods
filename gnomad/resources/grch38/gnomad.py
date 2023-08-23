@@ -458,7 +458,7 @@ def my_gnomad_gks_batch(
     """
     Perform gnomad GKS annotations on a range of variants at once.
 
-    :param locus_interval: Hail IntervalExpression of locus<reference_genome>. 
+    :param locus_interval: Hail IntervalExpression of locus<reference_genome>.
     - e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
@@ -467,9 +467,9 @@ def my_gnomad_gks_batch(
     :param vrs_only: Boolean to pass for only VRS info to be returned
     - (will not include allele frequency information).
     :param custom_ht: Table to use instead of return from public_release() method.
-    :param coverage_ht: Path of coverage_ht, an existing hail.Table object, 
+    :param coverage_ht: Path of coverage_ht, an existing hail.Table object,
     - or 'auto' to automatically lookup coverage ht.
-    :return: List of Dictionaries containing VRS information 
+    :return: List of Dictionaries containing VRS information
     - (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
     # Read public_release table if no custom table provided

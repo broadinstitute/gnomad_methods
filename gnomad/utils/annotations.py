@@ -1339,7 +1339,7 @@ def annotate_freq(
         ds_ht = annotate_downsamplings(mt, downsamplings, pop_expr=pop_expr).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)
         ds_pop_counts = hl.eval(ds_ht.ds_pop_counts)
-        downsampling_expr = ds_ht[mt.col_key]
+        downsampling_expr = ds_ht[mt.col_key].downsampling
 
     # Build list of all stratification groups to be used in the frequency calculation.
     strata_expr = build_freq_stratification_list(

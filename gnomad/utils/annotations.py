@@ -1385,15 +1385,14 @@ def add_gks_vrs(
     input_vrs: hl.struct,
 ) -> dict:
     """
-    Returns a dictionary containing VRS information from the two given Hail structs
+    Return a dictionary containing VRS information from the two given Hail structs.
 
-    Dict will have GA4GH GKS VRS structure
+    Dict will have GA4GH GKS VRS structure.
 
-    :param input_locus: Locus field from a Struct (result of running .collect() on a Hail Table)
-    :param input_vrs: VRS field from a Struct - my_struct.info.vrs
-    :return: Python Dictionary with fields vrs (Struct of the VRS representation of the variant)
+    :param input_locus: Locus field from a Struct (result of running .collect() on a Hail Table).
+    :param input_vrs: VRS field from a Struct - my_struct.info.vrs.
+    :return: Python Dictionary with fields vrs (Struct of the VRS representation of the variant).
     """
-
     build_in = input_locus.reference_genome.name
     chr_in = input_locus.contig
 
@@ -1439,14 +1438,14 @@ def add_gks_va(
     frequency_index: dict = None,
 ) -> Tuple[dict, str]:
     """
-    Returns Python dictionary containing GKS VA annotations
+    Return Python dictionary containing GKS VA annotations.
 
     Populates the dictionary with frequency information conforming to the GKS VA frequency schema.
     If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
     This annotation is added under the gks_va_freq_dict field of the table.
     The focusAllele field is not populated, and must be filled in by the caller.
 
-    :param input_struct: Hail Struct for a desired variant
+    :param input_struct: Hail Struct for a desired variant.
     :param variant: String of variant to search for (chr, pos, ref, and alt, separated by '-').
     - Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
@@ -1463,9 +1462,9 @@ def add_gks_va(
     - Default is False.
     :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
     - Default is None.
-    :return: Tuple containing first a Dictionary containing GKS VA Frequency information
+    :return: Tuple containing first a Dictionary containing GKS VA Frequency information,
     - (split by ancestry groups and sex if desired) for the specified variant,
-    - and second a String containing the gnomAD-formatted Variant ID
+    - and second a String containing the gnomAD-formatted Variant ID.
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not ancestry_groups:
@@ -1497,8 +1496,8 @@ def add_gks_va(
         - Example: "African/African American".
         :param group_sex: String indicating the sex of the group.
         - Example: "XX", or "XY".
-        :return: Dictionary containing Variant Frequency information
-        - (by genetic ancestry group and sex if desired) for specified variant
+        :return: Dictionary containing Variant Frequency information,
+        - (by genetic ancestry group and sex if desired) for specified variant.
         """
         # Obtain frequency information for the specified variant
         group_freq = input_dict.freq[group_index]

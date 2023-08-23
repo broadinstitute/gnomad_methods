@@ -454,19 +454,23 @@ def my_gnomad_gks_batch(
     vrs_only: bool = False,
     custom_ht: hl.Table = None,
     coverage_ht: Union[str, hl.Table] = "auto",
-) -> list(dict):
+) -> list:
     """
     Perform gnomad GKS annotations on a range of variants at once.
 
-    :param locus_interval: Hail IntervalExpression of locus<reference_genome>. e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
+    :param locus_interval: Hail IntervalExpression of locus<reference_genome>. 
+    - e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
-    :param by_ancestry_group: Boolean to pass to obtain frequency information for each ancestry group in the desired gnomAD version.
-    :param by_sex: Boolean to pass if want to return frequency information for each ancestry group split by chromosomal sex.
-    :param vrs_only: Boolean to pass if only want VRS information returned (will not include allele frequency information).
-    :param custom_ht: A Hail Table to use instead of what public_release() method would return for the version.
-    :param coverage_ht: Path of coverage_ht, an existing hail.Table object, or 'auto' to automatically lookup coverage ht.
-    :return: List of Dictionaries containing VRS information (and frequency information split by ancestry groups and sex if desired) for the specified variant.
+    :param by_ancestry_group: Boolean to pass for frequency information for each cohort.
+    :param by_sex: Boolean to pass to return freq info for each cohort split by chromosomal sex.
+    :param vrs_only: Boolean to pass for only VRS info to be returned
+    - (will not include allele frequency information).
+    :param custom_ht: Table to use instead of return from public_release() method.
+    :param coverage_ht: Path of coverage_ht, an existing hail.Table object, 
+    - or 'auto' to automatically lookup coverage ht.
+    :return: List of Dictionaries containing VRS information 
+    - (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
     # Read public_release table if no custom table provided
     if custom_ht:
@@ -509,7 +513,7 @@ def my_gnomad_gks_batch(
     # Collect all variants as structs, so all dictionary construction can be done in native Python
     variant_list = ht.collect()
 
-    # Assemble output dictionaries with VRS and optionally Frequency information, append to list, then return list
+    # Assemble output dicts with VRS and optionally frequency, append to list, then return list
     outputs = []
     for variant in variant_list:
         vrs_variant = add_gks_vrs(variant.locus, variant.info.vrs)
@@ -538,8 +542,7 @@ def my_gnomad_gks_batch(
 
             # Assign existing VRS information to "focusAllele" key
             va_freq_dict["focusAllele"] = vrs_variant
-            out["gks_va_freq"] = va_freq_dict
-            out["gnomad_id"] = gnomad_id_str
+            out = va_freq_dict
 
         outputs.append(out)
 

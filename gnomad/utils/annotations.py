@@ -1328,7 +1328,8 @@ def gks_compute_seqloc_digest_batch(
 
     :param ht: hail table with VRS annotation
     :param export_tmpfile: file path to export the table to.
-    :param computed_tmpfile: file path to write the updated rows to, which is then imported as a hail table
+    :param computed_tmpfile: file path to write the updated rows to,
+    - which is then imported as a hail table
     :return: a hail table with the VRS annotation updated with the new SequenceLocations
     """
     logger.info("Exporting ht to %s", export_tmpfile)
@@ -1388,7 +1389,7 @@ def add_gks_vrs(
 
     Dict will have GA4GH GKS VRS structure
 
-    :param input_locus: Locus field from a Struct (result of running .collect() on a Hail Table) - my_struct.locus
+    :param input_locus: Locus field from a Struct (result of running .collect() on a Hail Table)
     :param input_vrs: VRS field from a Struct - my_struct.info.vrs
     :return: Python Dictionary with fields vrs (Struct of the VRS representation of the variant)
     """
@@ -1436,7 +1437,7 @@ def add_gks_va(
     ancestry_groups_dict: dict = None,
     by_sex: bool = False,
     frequency_index: dict = None,
-) -> Tuple(dict, str):
+) -> Tuple[dict, str]:
     """
     Returns Python dictionary containing GKS VA annotations
 
@@ -1446,17 +1447,25 @@ def add_gks_va(
     The focusAllele field is not populated, and must be filled in by the caller.
 
     :param input_struct: Hail Struct for a desired variant
-    :param variant: String of variant to search for (chromosome, position, ref, and alt, separated by '-'). Example for a variant in build GRCh38: "chr5-38258681-C-T".
+    :param variant: String of variant to search for (chr, pos, ref, and alt, separated by '-').
+    - Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
-    :param coverage_ht: Hail Table containing coverage statistics, with mean depth stored in "mean" annotation. If None, omit coverage in return.
-    :param ancestry_groups: List of strings of shortened names of genetic ancestry groups to return results for. Example: ['afr','fin','nfe'] . Default is None.
-    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names. Example: {'afr':'African/African American'} . Default is None.
-    :param by_sex: Boolean to include breakdown of ancestry groups by inferred sex (XX and XY) as well. Default is None.
-    :param vrs_only: Boolean to return only the VRS information and no general frequency information. Default is False.
-    :frequency_index: Dict mapping groups to their appropriate index for frequency information in ht.freq_index_dict[0]. Default is None.
-    :return: Tuple containing first a Dictionary containing GKS VA Frequency information (split by ancestry groups and sex if desired) for the specified variant,
-    and second a String containing the gnomAD-formatted Variant ID
+    :param coverage_ht: Table containing coverage stats, with mean depth in "mean" annotation.
+    - If None, omit coverage in return.
+    :param ancestry_groups: List of strings of shortened names of cohorts to return results for.
+    - Example: ['afr','fin','nfe'] . Default is None.
+    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
+    - Example: {'afr':'African/African American'} . Default is None.
+    :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
+    - Default is None.
+    :param vrs_only: Boolean to return only VRS information and no general frequency information.
+    - Default is False.
+    :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
+    - Default is None.
+    :return: Tuple containing first a Dictionary containing GKS VA Frequency information
+    - (split by ancestry groups and sex if desired) for the specified variant,
+    - and second a String containing the gnomAD-formatted Variant ID
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not ancestry_groups:
@@ -1479,13 +1488,17 @@ def add_gks_va(
         group_sex: str = None,
     ) -> dict:
         """
-        Return a dictionary for the frequency information of a given variant for a given subpopulation.
+        Return a dictionary for the frequency info of a given variant for given subpopulation.
 
-        :param group_index: Index of frequency within the 'freq' annotation containing the desired group.
-        :param group_id: String containing variant, genetic ancestry group, and sex (if requested). Example: "chr19-41094895-C-T.afr.XX".
-        :param group_label: String containing the full name of genetic ancestry group requested. Example: "African/African American".
-        :param group_sex: String indicating the sex of the group. Example: "XX", or "XY".
-        :return: Dictionary containing Variant Frequency information (by genetic ancestry group and sex if desired) for specified variant
+        :param group_index: Index of frequency within the 'freq' annotation for the desired group.
+        :param group_id: String containing variant, genetic ancestry group, and sex (if requested).
+        - Example: "chr19-41094895-C-T.afr.XX".
+        :param group_label: String containing the full name of genetic ancestry group requested.
+        - Example: "African/African American".
+        :param group_sex: String indicating the sex of the group.
+        - Example: "XX", or "XY".
+        :return: Dictionary containing Variant Frequency information
+        - (by genetic ancestry group and sex if desired) for specified variant
         """
         # Obtain frequency information for the specified variant
         group_freq = input_dict.freq[group_index]
@@ -1570,13 +1583,12 @@ def add_gks_va(
     ancillaryResults = {"homozygotes": overall_freq["homozygote_count"]}
 
     if input_dict.popmax:
-        ancillaryResults["popMaxFAF95"] = (
-            {
-                "frequency": input_dict.popmax.faf95,
-                "confidenceInterval": 0.95,
-                "popFreqId": f"{gnomad_id}.{input_dict.popmax.pop.upper()}",
-            },
-        )
+        ancillaryResults["popMaxFAF95"] = {
+            "frequency": input_dict.popmax.faf95,
+            "confidenceInterval": 0.95,
+            "popFreqId": f"{gnomad_id}.{input_dict.popmax.pop.upper()}",
+        }
+
     else:
         ancillaryResults["popMaxFAF95"] = None
 
@@ -1585,7 +1597,8 @@ def add_gks_va(
     # variant ht with the coverage table doesn't help much since the join is resolved dynamically.
     # If the mean field was persisted into the variant table it would be faster but this increases
     # the table size.
-    # It could be persisted with something like this, then doing a write out and read back from storage.
+    # It could be persisted with something like this,
+    # then doing a write out and read back from storage.
     # ht_with_cov = ht.annotate(
     #     meanDepth=coverage_ht[ht.locus].mean
     # )

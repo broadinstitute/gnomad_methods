@@ -1588,9 +1588,6 @@ def add_gks_va(
             "popFreqId": f"{gnomad_id}.{input_dict.popmax.pop.upper()}",
         }
 
-    else:
-        ancillaryResults["popMaxFAF95"] = None
-
     # Read coverage statistics if a table is provided
     # NOTE: this is slow, and doing the join outside this function and passing in the joined
     # variant ht with the coverage table doesn't help much since the join is resolved dynamically.

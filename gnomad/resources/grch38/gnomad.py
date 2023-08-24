@@ -529,7 +529,7 @@ def my_gnomad_gks_batch(
         }
 
         if not vrs_only:
-            va_freq_dict = add_gks_va(
+            va_freq_dict, gnomad_id = add_gks_va(
                 input_dict=variant,
                 label_name="gnomAD",
                 label_version=version,
@@ -542,7 +542,8 @@ def my_gnomad_gks_batch(
 
             # Assign existing VRS information to "focusAllele" key
             va_freq_dict["focusAllele"] = vrs_variant
-            out = va_freq_dict
+            out["gks_va_freq"] = va_freq_dict
+            out["gnomad_id"] = gnomad_id
 
         outputs.append(out)
 

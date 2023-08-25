@@ -531,42 +531,55 @@ def split_vds_by_strata(
     return [hl.vds.filter_samples(vds, list(s)) for strata, s in s_by_strata.items()]
 
 
-def remove_items_from_freq(
+def filter_freq_by_meta(
     freq_expr: hl.expr.ArrayExpression,
     freq_meta_expr: hl.expr.ArrayExpression,
-    items_to_remove: Union[Dict[str, List[Any]], List[Any]],
+    items_to_filter: Union[Dict[str, List[Any]], List[Any]],
+    keep: bool = True,
+    operator: str = "and",
 ) -> [hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
     """
-    Script to remove items from the freq array and freq_meta array in the Table.
+    Filter frequency and frequency meta expressions by freq_meta items.
 
-    :param freq_expr: ArrayExpression containing the freq array.
-    :param freq_meta_expr: ArrayExpression containing the freq_meta array.
-    :param items_to_remove: Dictionary or list of items to remove from the freq
-           and freq_meta arrays, the format has to be
-           {key: [value]}, {key: [value1, value2, ...]} or [key1, key2, ...].
-    :return: Table with specified items removed from the freq array and freq_meta array.
+    This function is designed to filter in different cases, for example:
+    simply filter by a list of keys, e.g. ["sex", "downsampling"],
+    or by specific populations by using {"pop": ["han", "papuan"]},
+    or a more complicated use case: {"pop": ["afr"], "sex": ["XX"]},
+    one can decide to keep or remove the items, either they appear
+    at the same time in one freq_meta dictionary by using "and",
+    or they appear in different freq_meta dictionaries by using "or".
+
+    :param freq_expr: frequency expression
+    :param freq_meta_expr: frequency meta expression
+    :param items_to_filter: items to filter by, either a list or a dictionary
+    :param keep: whether to keep or remove the items
+    :param operator: whether to use "and" or "or" to combine the items
+    :return: filtered frequency and frequency meta expressions
     """
     freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
-    freq_expr = hl.map(
-        lambda x: x[0].annotate(_meta=x[1]), hl.zip(freq_expr, freq_meta_expr)
+
+    if operator == "and":
+        operator_func = hl.all
+    elif operator == "or":
+        operator_func = hl.any
+
+    if isinstance(items_to_filter, list):
+        filter_func = lambda m, k: m.contains(k)
+    elif isinstance(items_to_filter, dict):
+        filter_func = lambda m, k: (m.get(k[0], "") == k[1])
+        items_to_filter = [
+            (k, v) for k, values in items_to_filter.items() for v in values
+        ]
+    else:
+        raise TypeError("")
+
+    freq_meta_expr = hl.enumerate(freq_meta_expr).filter(
+        lambda m: hl.bind(
+            lambda x: hl.if_else(keep, x, ~x),
+            operator_func([filter_func(m[1], k) for k in items_to_filter]),
+        ),
     )
-
-    if isinstance(items_to_remove, list):
-        for key in items_to_remove:
-            freq_expr = hl.filter(lambda f: ~f._meta.contains(key), freq_expr)
-        freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
-        freq_meta_expr = freq_meta_expr.filter(lambda m: ~m.contains(key))
-
-    elif isinstance(items_to_remove, dict):
-        for k, v in items_to_remove.items():
-            for value in v:
-                freq_expr = hl.filter(
-                    lambda f: (~f._meta.contains(k) | (f._meta.get(k) != value)),
-                    freq_expr,
-                )
-                freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
-                freq_meta_expr = freq_meta_expr.filter(
-                    lambda m: ~m.contains(k) | (m.get(k) != value)
-                )
+    freq_expr = freq_meta_expr.map(lambda x: freq_expr[x[0]])
+    freq_meta_expr = freq_meta_expr.map(lambda x: x[1])
 
     return freq_expr, freq_meta_expr

@@ -3,7 +3,7 @@
 import functools
 import logging
 import operator
-from typing import Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import hail as hl
 
@@ -531,28 +531,55 @@ def split_vds_by_strata(
     return [hl.vds.filter_samples(vds, list(s)) for strata, s in s_by_strata.items()]
 
 
-def remove_items_from_freq(ht: hl.Table, items_to_remove: Dict[str, str]) -> hl.Table:
+def remove_items_from_freq(
+    ht: hl.Table, items_to_remove: Union[Dict[str, List[Any]], List[Any]]
+) -> hl.Table:
     """
     Script to remove items from the freq array and freq_meta array in the Table.
 
     :param ht: Input Table with freq and freq_meta arrays.
-    :param items_to_remove: Dictionary of items to remove from the freq array and freq_meta array.
+    :param items_to_remove: Dictionary or list of items to remove from the freq and freq_meta arrays.
     :return: Table with specified items removed from the freq array and freq_meta array.
     """
-    # TODO: we may have to change if we only have a list of keys to drop
-    freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(ht.freq, ht.freq_meta))
 
-    for k, v in items_to_remove.items():
+    def _remove_key_value_pair_from_freq(
+        ht: hl.Table,
+        key: str,
+        value: str,
+    ) -> hl.Table:
+        """
+        Remove key-value pair from freq and freq_meta arrays.
+
+        :param key: Key to remove from freq_meta array.
+        :param value: Value to remove from freq_meta array.
+        :param ht: Input Table with freq and freq_meta arrays.
+        :return: Table with specified key-value pair removed from freq and freq_meta arrays.
+        """
+        freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(ht.freq, ht.freq_meta))
+
         freq = hl.filter(
-            lambda f: (~f.meta.contains(k) | (f.meta.get(k) != v)),
+            lambda f: (~f.meta.contains(key) | (f.meta.get(key) != value)),
             freq,
         )
-
-    ht = ht.annotate(freq=freq.map(lambda x: x[0:4]))
-
-    for k, v in items_to_remove.items():
+        ht = ht.annotate(freq=freq.map(lambda x: x[0:4]))
         ht = ht.annotate_globals(
-            freq_meta=ht.freq_meta.filter(lambda m: (~m.contains(k) | (m.get(k) != v)))
+            freq_meta=ht.freq_meta.filter(
+                lambda m: ~m.contains(key) | (m.get(key) != value)
+            )
+        )
+        return ht
+
+    if isinstance(items_to_remove, list):
+        freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(ht.freq, ht.freq_meta))
+        for key in items_to_remove:
+            freq = hl.filter(lambda f: ~f.meta.contains(key), freq)
+        ht = ht.annotate(freq=freq.map(lambda x: x[0:4]))
+        ht = ht.annotate_globals(
+            freq_meta=ht.freq_meta.filter(lambda m: ~m.contains(key))
         )
 
+    elif isinstance(items_to_remove, dict):
+        for k, v in items_to_remove.items():
+            for value in v:
+                ht = _remove_key_value_pair_from_freq(ht, k, value)
     return ht

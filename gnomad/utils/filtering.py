@@ -547,51 +547,26 @@ def remove_items_from_freq(
     :return: Table with specified items removed from the freq array and freq_meta array.
     """
     freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
-
-    def _remove_key_value_pair_from_freq(
-        freq_expr: hl.expr.ArrayExpression,
-        freq_meta_expr: hl.expr.ArrayExpression,
-        key: str,
-        value: str,
-    ) -> [hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
-        """
-        Remove key-value pair from freq and freq_meta arrays.
-
-        :param freq_expr: ArrayExpression containing the freq array.
-        :param freq_meta_expr: ArrayExpression containing the freq_meta array.
-        :param key: Key to remove from freq_meta array.
-        :param value: Value to remove from freq_meta array.
-        :return: Table with specified key-value pair removed from freq and freq_meta arrays.
-        """
-        freq_expr = hl.map(
-            lambda x: x[0].annotate(_meta=x[1]), hl.zip(freq_expr, freq_meta_expr)
-        )
-
-        freq_expr = hl.filter(
-            lambda f: (~f.meta.contains(key) | (f.meta.get(key) != value)),
-            freq_expr,
-        )
-        freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
-        freq_meta_expr = freq_meta_expr.filter(
-            lambda m: ~m.contains(key) | (m.get(key) != value)
-        )
-
-        return freq_expr, freq_meta_expr
+    freq_expr = hl.map(
+        lambda x: x[0].annotate(_meta=x[1]), hl.zip(freq_expr, freq_meta_expr)
+    )
 
     if isinstance(items_to_remove, list):
-        freq_expr = hl.map(
-            lambda x: x[0].annotate(_meta=x[1]), hl.zip(freq_expr, freq_meta_expr)
-        )
         for key in items_to_remove:
-            freq_expr = hl.filter(lambda f: ~f.meta.contains(key), freq_expr)
+            freq_expr = hl.filter(lambda f: ~f._meta.contains(key), freq_expr)
         freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
         freq_meta_expr = freq_meta_expr.filter(lambda m: ~m.contains(key))
 
     elif isinstance(items_to_remove, dict):
         for k, v in items_to_remove.items():
             for value in v:
-                freq_expr, freq_meta_expr = _remove_key_value_pair_from_freq(
-                    freq_expr, freq_meta_expr, k, value
+                freq_expr = hl.filter(
+                    lambda f: (~f._meta.contains(k) | (f._meta.get(k) != value)),
+                    freq_expr,
+                )
+                freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
+                freq_meta_expr = freq_meta_expr.filter(
+                    lambda m: ~m.contains(k) | (m.get(k) != value)
                 )
 
     return freq_expr, freq_meta_expr

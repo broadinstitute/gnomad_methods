@@ -1463,8 +1463,7 @@ def add_gks_va(
     :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
     - Default is None.
     :return: Tuple containing first a Dictionary containing GKS VA Frequency information,
-    - (split by ancestry groups and sex if desired) for the specified variant,
-    - and second a String containing the gnomAD-formatted Variant ID.
+    - (split by ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not ancestry_groups:
@@ -1589,15 +1588,6 @@ def add_gks_va(
         }
 
     # Read coverage statistics if a table is provided
-    # NOTE: this is slow, and doing the join outside this function and passing in the joined
-    # variant ht with the coverage table doesn't help much since the join is resolved dynamically.
-    # If the mean field was persisted into the variant table it would be faster but this increases
-    # the table size.
-    # It could be persisted with something like this,
-    # then doing a write out and read back from storage.
-    # ht_with_cov = ht.annotate(
-    #     meanDepth=coverage_ht[ht.locus].mean
-    # )
     if coverage_ht is not None:
         ancillaryResults["meanDepth"] = coverage_ht.filter(
             coverage_ht.locus == input_dict.locus
@@ -1610,4 +1600,4 @@ def add_gks_va(
     if ancestry_groups:
         final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
 
-    return (final_freq_dict, gnomad_id)
+    return final_freq_dict

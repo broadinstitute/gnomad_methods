@@ -445,7 +445,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
 
-def my_gnomad_gks_batch(
+def gnomad_gks_batch(
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",
@@ -453,7 +453,8 @@ def my_gnomad_gks_batch(
     by_sex: bool = False,
     vrs_only: bool = False,
     custom_ht: hl.Table = None,
-    coverage_ht: Union[str, hl.Table] = "auto",
+    skip_coverage: bool = False,
+    custom_coverage_ht: hl.Table = None,
 ) -> list:
     """
     Perform gnomad GKS annotations on a range of variants at once.
@@ -467,8 +468,8 @@ def my_gnomad_gks_batch(
     :param vrs_only: Boolean to pass for only VRS info to be returned
     - (will not include allele frequency information).
     :param custom_ht: Table to use instead of return from public_release() method.
-    :param coverage_ht: Path of coverage_ht, an existing hail.Table object,
-    - or 'auto' to automatically lookup coverage ht.
+    :param skip_coverage: Bool to pass to skip adding coverage stats.
+    :param custom_coverage_ht: Custom Table to use for coverage stats if not release coverage table.
     :return: List of Dictionaries containing VRS information
     - (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
@@ -480,7 +481,7 @@ def my_gnomad_gks_batch(
 
     high_level_version = f"v{version.split('.')[0]}"
 
-    # Read coverage statistics.
+    # Read coverage statistics if requested
     if high_level_version == "v3":
         coverage_version = "3.0.1"
     else:
@@ -488,7 +489,15 @@ def my_gnomad_gks_batch(
             "gnomad_gks() is currently only implemented for gnomAD v3."
         )
 
-    coverage_ht = get_coverage_ht(coverage_ht, data_type, coverage_version)
+    coverage_ht = None
+
+    if not skip_coverage:
+        if custom_coverage_ht:
+            coverage_ht = custom_coverage_ht
+        else:
+            coverage_ht = hl.read_table(
+                coverage("genomes").versions[coverage_version].path
+            )
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
@@ -529,7 +538,7 @@ def my_gnomad_gks_batch(
         }
 
         if not vrs_only:
-            va_freq_dict, gnomad_id = add_gks_va(
+            va_freq_dict = add_gks_va(
                 input_dict=variant,
                 label_name="gnomAD",
                 label_version=version,
@@ -543,8 +552,8 @@ def my_gnomad_gks_batch(
             # Assign existing VRS information to "focusAllele" key
             va_freq_dict["focusAllele"] = vrs_variant
             out["gks_va_freq"] = va_freq_dict
-            out["gnomad_id"] = gnomad_id
 
+        # Append variant dictionary to list of outputs
         outputs.append(out)
 
     return outputs

@@ -532,54 +532,66 @@ def split_vds_by_strata(
 
 
 def remove_items_from_freq(
-    ht: hl.Table, items_to_remove: Union[Dict[str, List[Any]], List[Any]]
-) -> hl.Table:
+    freq_expr: hl.expr.ArrayExpression,
+    freq_meta_expr: hl.expr.ArrayExpression,
+    items_to_remove: Union[Dict[str, List[Any]], List[Any]],
+) -> [hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
     """
     Script to remove items from the freq array and freq_meta array in the Table.
 
-    :param ht: Input Table with freq and freq_meta arrays.
-    :param items_to_remove: Dictionary or list of items to remove from the freq and freq_meta arrays.
+    :param freq_expr: ArrayExpression containing the freq array.
+    :param freq_meta_expr: ArrayExpression containing the freq_meta array.
+    :param items_to_remove: Dictionary or list of items to remove from the freq
+           and freq_meta arrays, the format has to be
+           {key: [value]}, {key: [value1, value2, ...]} or [key1, key2, ...].
     :return: Table with specified items removed from the freq array and freq_meta array.
     """
+    freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
 
     def _remove_key_value_pair_from_freq(
-        ht: hl.Table,
+        freq_expr: hl.expr.ArrayExpression,
+        freq_meta_expr: hl.expr.ArrayExpression,
         key: str,
         value: str,
-    ) -> hl.Table:
+    ) -> [hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
         """
         Remove key-value pair from freq and freq_meta arrays.
 
+        :param freq_expr: ArrayExpression containing the freq array.
+        :param freq_meta_expr: ArrayExpression containing the freq_meta array.
         :param key: Key to remove from freq_meta array.
         :param value: Value to remove from freq_meta array.
-        :param ht: Input Table with freq and freq_meta arrays.
         :return: Table with specified key-value pair removed from freq and freq_meta arrays.
         """
-        freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(ht.freq, ht.freq_meta))
+        freq_expr = hl.map(
+            lambda x: x[0].annotate(_meta=x[1]), hl.zip(freq_expr, freq_meta_expr)
+        )
 
-        freq = hl.filter(
+        freq_expr = hl.filter(
             lambda f: (~f.meta.contains(key) | (f.meta.get(key) != value)),
-            freq,
+            freq_expr,
         )
-        ht = ht.annotate(freq=freq.map(lambda x: x[0:4]))
-        ht = ht.annotate_globals(
-            freq_meta=ht.freq_meta.filter(
-                lambda m: ~m.contains(key) | (m.get(key) != value)
-            )
+        freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
+        freq_meta_expr = freq_meta_expr.filter(
+            lambda m: ~m.contains(key) | (m.get(key) != value)
         )
-        return ht
+
+        return freq_expr, freq_meta_expr
 
     if isinstance(items_to_remove, list):
-        freq = hl.map(lambda x: x[0].annotate(meta=x[1]), hl.zip(ht.freq, ht.freq_meta))
-        for key in items_to_remove:
-            freq = hl.filter(lambda f: ~f.meta.contains(key), freq)
-        ht = ht.annotate(freq=freq.map(lambda x: x[0:4]))
-        ht = ht.annotate_globals(
-            freq_meta=ht.freq_meta.filter(lambda m: ~m.contains(key))
+        freq_expr = hl.map(
+            lambda x: x[0].annotate(_meta=x[1]), hl.zip(freq_expr, freq_meta_expr)
         )
+        for key in items_to_remove:
+            freq_expr = hl.filter(lambda f: ~f.meta.contains(key), freq_expr)
+        freq_expr = freq_expr.map(lambda x: x.drop("_meta"))
+        freq_meta_expr = freq_meta_expr.filter(lambda m: ~m.contains(key))
 
     elif isinstance(items_to_remove, dict):
         for k, v in items_to_remove.items():
             for value in v:
-                ht = _remove_key_value_pair_from_freq(ht, k, value)
-    return ht
+                freq_expr, freq_meta_expr = _remove_key_value_pair_from_freq(
+                    freq_expr, freq_meta_expr, k, value
+                )
+
+    return freq_expr, freq_meta_expr

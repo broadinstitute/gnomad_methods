@@ -1447,23 +1447,23 @@ def add_gks_va(
 
     :param input_struct: Hail Struct for a desired variant.
     :param variant: String of variant to search for (chr, pos, ref, and alt, separated by '-').
-    - Example for a variant in build GRCh38: "chr5-38258681-C-T".
+        - Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
     :param coverage_ht: Table containing coverage stats, with mean depth in "mean" annotation.
-    - If None, omit coverage in return.
+        - If None, omit coverage in return.
     :param ancestry_groups: List of strings of shortened names of cohorts to return results for.
-    - Example: ['afr','fin','nfe'] . Default is None.
+        - Example: ['afr','fin','nfe'] . Default is None.
     :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
-    - Example: {'afr':'African/African American'} . Default is None.
+        - Example: {'afr':'African/African American'} . Default is None.
     :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
-    - Default is None.
+        - Default is None.
     :param vrs_only: Boolean to return only VRS information and no general frequency information.
-    - Default is False.
+        - Default is False.
     :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
-    - Default is None.
+        - Default is None.
     :return: Tuple containing first a Dictionary containing GKS VA Frequency information,
-    - (split by ancestry groups and sex if desired) for the specified variant.
+        - (split by ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not ancestry_groups:
@@ -1490,13 +1490,13 @@ def add_gks_va(
 
         :param group_index: Index of frequency within the 'freq' annotation for the desired group.
         :param group_id: String containing variant, genetic ancestry group, and sex (if requested).
-        - Example: "chr19-41094895-C-T.afr.XX".
+            - Example: "chr19-41094895-C-T.afr.XX".
         :param group_label: String containing the full name of genetic ancestry group requested.
-        - Example: "African/African American".
+            - Example: "African/African American".
         :param group_sex: String indicating the sex of the group.
-        - Example: "XX", or "XY".
+            - Example: "XX", or "XY".
         :return: Dictionary containing Variant Frequency information,
-        - (by genetic ancestry group and sex if desired) for specified variant.
+            - (by genetic ancestry group and sex if desired) for specified variant.
         """
         # Obtain frequency information for the specified variant
         group_freq = input_dict.freq[group_index]

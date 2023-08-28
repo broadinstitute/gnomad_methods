@@ -3,7 +3,7 @@
 import functools
 import logging
 import operator
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
@@ -539,7 +539,7 @@ def filter_freq_by_meta(
     items_to_filter: Union[Dict[str, List[Any]], List[Any]],
     keep: bool = True,
     combine_operator: str = "and",
-) -> [hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
+) -> Tuple[hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
     """
     Filter frequency and frequency meta expressions specified by `items_to_filter`.
 

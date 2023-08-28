@@ -538,47 +538,63 @@ def filter_freq_by_meta(
     freq_meta_expr: hl.expr.ArrayExpression,
     items_to_filter: Union[Dict[str, List[Any]], List[Any]],
     keep: bool = True,
-    operator: str = "and",
+    combine_operator: str = "and",
 ) -> [hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
     """
-    Filter frequency and frequency meta expressions by freq_meta items.
+    Filter frequency and frequency meta expressions specified by `items_to_filter`.
 
-    This function is designed to filter in different cases, for example:
-    simply filter by a list of keys, e.g. ["sex", "downsampling"],
-    or by specific populations by using {"pop": ["han", "papuan"]},
-    or a more complicated use case: {"pop": ["afr"], "sex": ["XX"]},
-    one can decide to keep or remove the items, either they appear
-    at the same time in one freq_meta dictionary by using "and",
-    or they appear in different freq_meta dictionaries by using "or".
+    The `items_to_filter` can be used to filter in the following ways based on
+    `freq_meta_expr` items:
+        - By a list of keys, e.g. ["sex", "downsampling"].
+        - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
+         {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
+         {"pop": ["afr"], "sex": ["XX"]}.
 
-    :param freq_expr: frequency expression
+    The items can be kept or removed from `freq_expr` and `freq_meta_expr` based on the
+    value of `keep`.
+
+    The filtering can also be applied such that all criteria must be met
+    (`combine_operator` = "and") by the `freq_meta_expr` item in order to be filtered,
+    or at least one of the specified criteria must be met (`combine_operator` = "or")
+    by the `freq_meta_expr` item in order to be filtered.
+
+    :param freq_expr: Frequency expression.
     :param freq_meta_expr: frequency meta expression
-    :param items_to_filter: items to filter by, either a list or a dictionary
+    :param items_to_filter: Items to filter by, either a list or a dictionary.
     :param keep: whether to keep or remove the items
-    :param operator: whether to use "and" or "or" to combine the items
+    :param combine_operator: Whether to use "and" or "or" to combine the items
+        specified by `items_to_filter`.
     :return: filtered frequency and frequency meta expressions
     """
     freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
 
-    if operator == "and":
+    if combine_operator == "and":
         operator_func = hl.all
-    elif operator == "or":
+    elif combine_operator == "or":
         operator_func = hl.any
+    else:
+        raise ValueError(
+            "combine_operator must be one of 'and' or 'or', but found"
+            f" {combine_operator}"
+        )
 
     if isinstance(items_to_filter, list):
         filter_func = lambda m, k: m.contains(k)
+        items_to_filter = [[k] for k in items_to_filter]
     elif isinstance(items_to_filter, dict):
         filter_func = lambda m, k: (m.get(k[0], "") == k[1])
         items_to_filter = [
-            (k, v) for k, values in items_to_filter.items() for v in values
+            [(k, v) for v in values] for k, values in items_to_filter.items()
         ]
     else:
-        raise TypeError("")
+        raise TypeError(f"items_to_filter must be a list or a dictionary")
 
     freq_meta_expr = hl.enumerate(freq_meta_expr).filter(
         lambda m: hl.bind(
             lambda x: hl.if_else(keep, x, ~x),
-            operator_func([filter_func(m[1], k) for k in items_to_filter]),
+            operator_func(
+                [hl.any([filter_func(m[1], v) for v in k]) for k in items_to_filter]
+            ),
         ),
     )
     freq_expr = freq_meta_expr.map(lambda x: freq_expr[x[0]])

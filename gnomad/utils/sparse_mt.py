@@ -541,7 +541,7 @@ def default_compute_info(
     as_annotations: bool = False,
     # Set to True by default to prevent a breaking change.
     quasi_as_annotations: bool = True,
-    n_partitions: int = 5000,
+    n_partitions: Optional[int] = 5000,
     lowqual_indel_phred_het_prior: int = 40,
     ac_filter_groups: Optional[Dict[str, hl.Expression]] = None,
 ) -> hl.Table:
@@ -563,7 +563,8 @@ def default_compute_info(
         aggregations. This method can be used in cases where genotype data doesn't
         contain allele-specific annotations to approximate allele-specific annotations.
         Default is True.
-    :param n_partitions: Number of desired partitions for output Table. Default is 5000.
+    :param n_partitions: Optional number of desired partitions for output Table. If
+        specified, naive_coalesce is performed. Default is 5000.
     :param lowqual_indel_phred_het_prior: Phred-scaled prior for a het genotype at a
         site with a low quality indel. Default is 40. We use 1/10k bases (phred=40) to
         be more consistent with the filtering used by Broad's Data Sciences Platform
@@ -681,7 +682,10 @@ def default_compute_info(
             )
         )
 
-    return info_ht.naive_coalesce(n_partitions)
+    if n_partitions is not None:
+        info_ht = info_ht.naive_coalesce(n_partitions)
+
+    return info_ht
 
 
 def split_info_annotation(

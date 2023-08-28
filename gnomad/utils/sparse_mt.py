@@ -564,7 +564,7 @@ def default_compute_info(
         contain allele-specific annotations to approximate allele-specific annotations.
         Default is True.
     :param n_partitions: Optional number of desired partitions for output Table. If
-        None, naive_coalesce is performed. Default is 5000.
+        specified, naive_coalesce is performed. Default is 5000.
     :param lowqual_indel_phred_het_prior: Phred-scaled prior for a het genotype at a
         site with a low quality indel. Default is 40. We use 1/10k bases (phred=40) to
         be more consistent with the filtering used by Broad's Data Sciences Platform

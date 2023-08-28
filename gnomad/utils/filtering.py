@@ -3,7 +3,7 @@
 import functools
 import logging
 import operator
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
@@ -536,7 +536,7 @@ def split_vds_by_strata(
 def filter_freq_by_meta(
     freq_expr: hl.expr.ArrayExpression,
     freq_meta_expr: hl.expr.ArrayExpression,
-    items_to_filter: Union[Dict[str, List[Any]], List[Any]],
+    items_to_filter: Union[Dict[str, List[str]], List[str]],
     keep: bool = True,
     combine_operator: str = "and",
 ) -> Tuple[hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
@@ -559,12 +559,12 @@ def filter_freq_by_meta(
     by the `freq_meta_expr` item in order to be filtered.
 
     :param freq_expr: Frequency expression.
-    :param freq_meta_expr: frequency meta expression
+    :param freq_meta_expr: Frequency meta expression.
     :param items_to_filter: Items to filter by, either a list or a dictionary.
-    :param keep: whether to keep or remove the items
+    :param keep: Whether to keep or remove the items specified by `items_to_filter`.
     :param combine_operator: Whether to use "and" or "or" to combine the items
         specified by `items_to_filter`.
-    :return: filtered frequency and frequency meta expressions
+    :return: Tuple of the filtered frequency and frequency meta expressions.
     """
     freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
 
@@ -575,7 +575,7 @@ def filter_freq_by_meta(
     else:
         raise ValueError(
             "combine_operator must be one of 'and' or 'or', but found"
-            f" {combine_operator}"
+            f" {combine_operator}!"
         )
 
     if isinstance(items_to_filter, list):
@@ -587,7 +587,7 @@ def filter_freq_by_meta(
             [(k, v) for v in values] for k, values in items_to_filter.items()
         ]
     else:
-        raise TypeError("items_to_filter must be a list or a dictionary")
+        raise TypeError("items_to_filter must be a list or a dictionary!")
 
     freq_meta_expr = hl.enumerate(freq_meta_expr).filter(
         lambda m: hl.bind(

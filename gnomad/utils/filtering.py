@@ -545,10 +545,10 @@ def filter_freq_by_meta(
 
     The `items_to_filter` can be used to filter in the following ways based on
     `freq_meta_expr` items:
-        - By a list of keys, e.g. ["sex", "downsampling"].
-        - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
-         {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
-         {"pop": ["afr"], "sex": ["XX"]}.
+       - By a list of keys, e.g. ["sex", "downsampling"].
+       - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
+       {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
+       {"pop": ["afr"], "sex": ["XX"]}.
 
     The items can be kept or removed from `freq_expr` and `freq_meta_expr` based on the
     value of `keep`.

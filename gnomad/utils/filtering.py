@@ -587,7 +587,7 @@ def filter_freq_by_meta(
             [(k, v) for v in values] for k, values in items_to_filter.items()
         ]
     else:
-        raise TypeError(f"items_to_filter must be a list or a dictionary")
+        raise TypeError("items_to_filter must be a list or a dictionary")
 
     freq_meta_expr = hl.enumerate(freq_meta_expr).filter(
         lambda m: hl.bind(

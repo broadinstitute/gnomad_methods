@@ -1329,7 +1329,7 @@ def gks_compute_seqloc_digest_batch(
     :param ht: hail table with VRS annotation
     :param export_tmpfile: file path to export the table to.
     :param computed_tmpfile: file path to write the updated rows to,
-    - which is then imported as a hail table
+        which is then imported as a hail table
     :return: a hail table with the VRS annotation updated with the new SequenceLocations
     """
     logger.info("Exporting ht to %s", export_tmpfile)
@@ -1447,23 +1447,23 @@ def add_gks_va(
 
     :param input_struct: Hail Struct for a desired variant.
     :param variant: String of variant to search for (chr, pos, ref, and alt, separated by '-').
-        - Example for a variant in build GRCh38: "chr5-38258681-C-T".
+        Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
     :param coverage_ht: Table containing coverage stats, with mean depth in "mean" annotation.
-        - If None, omit coverage in return.
+        If None, omit coverage in return.
     :param ancestry_groups: List of strings of shortened names of cohorts to return results for.
-        - Example: ['afr','fin','nfe'] . Default is None.
+        Example: ['afr','fin','nfe'] . Default is None.
     :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
-        - Example: {'afr':'African/African American'} . Default is None.
+        Example: {'afr':'African/African American'} . Default is None.
     :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
-        - Default is None.
+        Default is None.
     :param vrs_only: Boolean to return only VRS information and no general frequency information.
-        - Default is False.
+        Default is False.
     :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
-        - Default is None.
+        Default is None.
     :return: Tuple containing first a Dictionary containing GKS VA Frequency information,
-        - (split by ancestry groups and sex if desired) for the specified variant.
+        (split by ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not ancestry_groups:

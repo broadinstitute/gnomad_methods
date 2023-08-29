@@ -600,12 +600,15 @@ def filter_freq_by_meta(
         ),
     )
     freq_expr = freq_meta_expr.map(lambda x: freq_expr[x[0]])
-    freq_meta_expr = freq_meta_expr.map(lambda x: x[1])
 
     if freq_meta_sample_count_expr is not None:
         freq_meta_sample_count_expr = freq_meta_expr.map(
             lambda x: freq_meta_sample_count_expr[x[0]]
         )
+
+    freq_meta_expr = freq_meta_expr.map(lambda x: x[1])
+
+    if freq_meta_sample_count_expr is not None:
         return freq_expr, freq_meta_expr, freq_meta_sample_count_expr
     else:
         return freq_expr, freq_meta_expr

@@ -539,6 +539,7 @@ def filter_freq_by_meta(
     items_to_filter: Union[Dict[str, List[str]], List[str]],
     keep: bool = True,
     combine_operator: str = "and",
+    freq_meta_sample_count_expr: Optional[hl.ArrayExpression] = None,
 ) -> Tuple[hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
     """
     Filter frequency and frequency meta expressions specified by `items_to_filter`.
@@ -564,6 +565,7 @@ def filter_freq_by_meta(
     :param keep: Whether to keep or remove the items specified by `items_to_filter`.
     :param combine_operator: Whether to use "and" or "or" to combine the items
         specified by `items_to_filter`.
+    :param freq_meta_sample_count: Optional frequency meta sample count expression to be filtered.
     :return: Tuple of the filtered frequency and frequency meta expressions.
     """
     freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
@@ -600,4 +602,10 @@ def filter_freq_by_meta(
     freq_expr = freq_meta_expr.map(lambda x: freq_expr[x[0]])
     freq_meta_expr = freq_meta_expr.map(lambda x: x[1])
 
-    return freq_expr, freq_meta_expr
+    if freq_meta_sample_count_expr is not None:
+        freq_meta_sample_count_expr = freq_meta_expr.map(
+            lambda x: freq_meta_sample_count_expr[x[0]]
+        )
+        return freq_expr, freq_meta_expr, freq_meta_sample_count_expr
+    else:
+        return freq_expr, freq_meta_expr

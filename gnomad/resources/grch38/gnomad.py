@@ -501,7 +501,7 @@ def gnomad_gks_batch(
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
 
-    # Throw warnings if contradictory arguments passed.
+    # Throw warnings if contradictory arguments are passed.
     if by_ancestry_group and vrs_only:
         logger.warning(
             "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"

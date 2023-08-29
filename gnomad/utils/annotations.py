@@ -13,7 +13,6 @@ import hail as hl
 from hail.utils.misc import new_temp_file
 
 from gnomad.utils.gen_stats import to_phred
-from gnomad.utils.reference_genome import get_reference_genome
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

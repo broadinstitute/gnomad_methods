@@ -1,6 +1,5 @@
 # noqa: D100
 
-import json
 import logging
 from typing import Optional, Union
 

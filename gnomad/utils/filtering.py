@@ -3,12 +3,12 @@
 import functools
 import logging
 import operator
-from typing import Callable, Dict, List, Optional, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
+import gnomad.utils.annotations as annotate_utils
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.annotations import annotate_adj
 from gnomad.utils.reference_genome import get_reference_genome
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -19,7 +19,7 @@ logger.setLevel(logging.INFO)
 def filter_to_adj(mt: hl.MatrixTable) -> hl.MatrixTable:
     """Filter genotypes to adj criteria."""
     if "adj" not in list(mt.entry):
-        mt = annotate_adj(mt)
+        mt = annotate_utils.annotate_adj(mt)
     mt = mt.filter_entries(mt.adj)
     return mt.drop(mt.adj)
 
@@ -237,7 +237,7 @@ def add_filters_expr(
         lambda x, y: x.union(y),
         current_filters,
         [
-            hl.cond(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
+            hl.if_else(filter_condition, hl.set([filter_name]), hl.empty_set(hl.tstr))
             for filter_name, filter_condition in filters.items()
         ],
     )
@@ -511,3 +511,93 @@ def filter_for_mu(
     )
 
     return ht
+
+
+def split_vds_by_strata(
+    vds: hl.vds.VariantDataset, strata_expr: hl.expr.Expression
+) -> Dict[str, hl.vds.VariantDataset]:
+    """
+    Split a VDS into multiple VDSs based on `strata_expr`.
+
+    :param vds: Input VDS.
+    :param strata_expr: Expression on VDS variant_data MT to split on.
+    :return: Dictionary where strata value is key and VDS is value.
+    """
+    vmt = vds.variant_data
+    s_by_strata = vmt.aggregate_cols(
+        hl.agg.group_by(strata_expr, hl.agg.collect_as_set(vmt.s))
+    )
+
+    return {
+        strata: hl.vds.filter_samples(vds, list(s)) for strata, s in s_by_strata.items()
+    }
+
+
+def filter_freq_by_meta(
+    freq_expr: hl.expr.ArrayExpression,
+    freq_meta_expr: hl.expr.ArrayExpression,
+    items_to_filter: Union[Dict[str, List[str]], List[str]],
+    keep: bool = True,
+    combine_operator: str = "and",
+) -> Tuple[hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
+    """
+    Filter frequency and frequency meta expressions specified by `items_to_filter`.
+
+    The `items_to_filter` can be used to filter in the following ways based on
+    `freq_meta_expr` items:
+    - By a list of keys, e.g. ["sex", "downsampling"].
+    - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
+    {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
+    {"pop": ["afr"], "sex": ["XX"]}.
+
+    The items can be kept or removed from `freq_expr` and `freq_meta_expr` based on the
+    value of `keep`.
+
+    The filtering can also be applied such that all criteria must be met
+    (`combine_operator` = "and") by the `freq_meta_expr` item in order to be filtered,
+    or at least one of the specified criteria must be met (`combine_operator` = "or")
+    by the `freq_meta_expr` item in order to be filtered.
+
+    :param freq_expr: Frequency expression.
+    :param freq_meta_expr: Frequency meta expression.
+    :param items_to_filter: Items to filter by, either a list or a dictionary.
+    :param keep: Whether to keep or remove the items specified by `items_to_filter`.
+    :param combine_operator: Whether to use "and" or "or" to combine the items
+        specified by `items_to_filter`.
+    :return: Tuple of the filtered frequency and frequency meta expressions.
+    """
+    freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
+
+    if combine_operator == "and":
+        operator_func = hl.all
+    elif combine_operator == "or":
+        operator_func = hl.any
+    else:
+        raise ValueError(
+            "combine_operator must be one of 'and' or 'or', but found"
+            f" {combine_operator}!"
+        )
+
+    if isinstance(items_to_filter, list):
+        filter_func = lambda m, k: m.contains(k)
+        items_to_filter = [[k] for k in items_to_filter]
+    elif isinstance(items_to_filter, dict):
+        filter_func = lambda m, k: (m.get(k[0], "") == k[1])
+        items_to_filter = [
+            [(k, v) for v in values] for k, values in items_to_filter.items()
+        ]
+    else:
+        raise TypeError("items_to_filter must be a list or a dictionary!")
+
+    freq_meta_expr = hl.enumerate(freq_meta_expr).filter(
+        lambda m: hl.bind(
+            lambda x: hl.if_else(keep, x, ~x),
+            operator_func(
+                [hl.any([filter_func(m[1], v) for v in k]) for k in items_to_filter]
+            ),
+        ),
+    )
+    freq_expr = freq_meta_expr.map(lambda x: freq_expr[x[0]])
+    freq_meta_expr = freq_meta_expr.map(lambda x: x[1])
+
+    return freq_expr, freq_meta_expr

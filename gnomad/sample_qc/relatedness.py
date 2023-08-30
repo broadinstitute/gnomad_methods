@@ -587,8 +587,10 @@ def infer_families(
                 )
             else:
                 logger.warning(
-                    "Discarded family with same parents, and multiple offspring that"
-                    " weren't siblings:\nMother: %s\nFather:%s\nChildren:%s",
+                    (
+                        "Discarded family with same parents, and multiple offspring"
+                        " that weren't siblings:\nMother: %s\nFather:%s\nChildren:%s"
+                    ),
                     possible_parents[0],
                     possible_parents[1],
                     ", ".join(children),
@@ -619,15 +621,19 @@ def infer_families(
     # If i_col and j_col aren't str, then convert them
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
         logger.warning(
-            "Pedigrees can only be constructed from string IDs, but your relatedness_ht"
-            " ID column is of type: %s. Expression will be converted to string in"
-            " Pedigrees.",
+            (
+                "Pedigrees can only be constructed from string IDs, but your"
+                " relatedness_ht ID column is of type: %s. Expression will be converted"
+                " to string in Pedigrees."
+            ),
             relationship_ht[i_col].dtype,
         )
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
             logger.warning(
-                "Struct fields %s will be joined by underscores to use as sample names"
-                " in Pedigree.",
+                (
+                    "Struct fields %s will be joined by underscores to use as sample"
+                    " names in Pedigree."
+                ),
                 list(relationship_ht[i_col]),
             )
             relationship_ht = relationship_ht.key_by(
@@ -690,27 +696,48 @@ def create_fake_pedigree(
     exclude_real_probands: bool = False,
     max_tries: int = 10,
     real_pedigree: Optional[hl.Pedigree] = None,
+    sample_list_stratification: Optional[Dict[str, str]] = None,
 ) -> hl.Pedigree:
     """
     Generate a pedigree made of trios created by sampling 3 random samples in the sample list.
 
-    - If `real_pedigree` is given, then children in the resulting fake trios will not include any trio with proband - parents
-      that are in the real ones.
+    - If `real_pedigree` is given, then children in the resulting fake trios will not
+      include any trio with proband - parents that are in the real ones.
     - Each sample can be used only once as a proband in the resulting trios.
     - Sex of probands in fake trios is random.
 
-    :param n: Number of fake trios desired in the pedigree
-    :param sample_list: List of samples
-    :param exclude_real_probands: If set, then fake trios probands cannot be in the real trios probands.
-    :param max_tries: Maximum number of sampling to try before bailing out (preventing infinite loop if `n` is too large w.r.t. the number of samples)
-    :param real_pedigree: Optional pedigree to exclude children from
-    :return: Fake pedigree
+    :param n: Number of fake trios desired in the pedigree.
+    :param sample_list: List of samples.
+    :param exclude_real_probands: If set, then fake trios probands cannot be in the
+        real trios probands.
+    :param max_tries: Maximum number of sampling to try before bailing out (preventing
+        infinite loop if `n` is too large w.r.t. the number of samples).
+    :param real_pedigree: Optional pedigree to exclude children from.
+    :param sample_list_stratification: Optional dictionary with samples as keys and
+        a value that should be used to stratify samples in `sample_list` into groups
+        that the trio should be picked from. This ensures that each fake trio will
+        contain samples from only the same stratification. For example, if all samples
+        within a fake trio should be chosen from the same platform, this can be a
+        dictionary of sample: platform.
+    :return: Fake pedigree.
     """
     real_trios = (
         {trio.s: trio for trio in real_pedigree.trios}
         if real_pedigree is not None
         else dict()
     )
+
+    if sample_list_stratification is not None:
+        sample_list_stratified = defaultdict(list)
+        for s in sample_list:
+            s_strata = sample_list_stratification.get(s)
+            if s_strata is None:
+                raise ValueError(
+                    f"Sample {s} not found in 'sample_list_stratification' dict!"
+                )
+            sample_list_stratified[s_strata].append(s)
+    else:
+        sample_list_stratified = None
 
     if exclude_real_probands and len(real_trios) == len(set(sample_list)):
         logger.warning(
@@ -722,7 +749,13 @@ def create_fake_pedigree(
     fake_trios = {}
     tries = 0
     while len(fake_trios) < n and tries < max_tries:
-        s, mat_id, pat_id = random.sample(sample_list, 3)
+        s = random.choice(sample_list)
+        if sample_list_stratified is None:
+            curr_sample_list = sample_list
+        else:
+            curr_sample_list = sample_list_stratified[sample_list_stratification[s]]
+
+        mat_id, pat_id = random.sample(curr_sample_list, 2)
         if (
             s in real_trios
             and (
@@ -743,8 +776,10 @@ def create_fake_pedigree(
 
     if tries == max_tries:
         logger.warning(
-            "Only returning %d fake trios; random trio sampling stopped after reaching"
-            " the maximum %d iterations",
+            (
+                "Only returning %d fake trios; random trio sampling stopped after"
+                " reaching the maximum %d iterations"
+            ),
             len(fake_trios),
             max_tries,
         )
@@ -800,8 +835,10 @@ def compute_related_samples_to_drop(
             hl.agg.filter(gbi.n > min_related_hard_filter, hl.agg.collect_as_set(gbi.s))
         )
         logger.info(
-            "Found %d samples with too many 1st/2nd degree relatives. These samples"
-            " will be excluded.",
+            (
+                "Found %d samples with too many 1st/2nd degree relatives. These samples"
+                " will be excluded."
+            ),
             len(filtered_samples_rel),
         )
 
@@ -841,8 +878,10 @@ def compute_related_samples_to_drop(
         num_keep_samples_rel = len(keep_samples_rel)
         if num_keep_samples_rel > 0:
             logger.warning(
-                "The following pairs are in the list of samples to keep, but are "
-                "related:\n%s",
+                (
+                    "The following pairs are in the list of samples to keep, but are "
+                    "related:\n%s"
+                ),
                 "\n".join(map(str, keep_samples_rel)),
             )
             if not keep_samples_when_related:
@@ -1070,7 +1109,7 @@ def generate_trio_stats_expr(
                 locus.in_autosome(),
                 proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
             )
-        return hl.cond(
+        return hl.if_else(
             locus.in_autosome_or_par() | (proband_is_female & locus.in_x_nonpar()),
             proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
             hl.or_missing(

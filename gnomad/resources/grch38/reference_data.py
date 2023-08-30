@@ -57,6 +57,22 @@ def _import_dbsnp(**kwargs) -> hl.Table:
     return dbsnp
 
 
+def _import_methylation_sites(path) -> hl.Table:
+    """
+    Import methylation data from bed file.
+
+    :param path: Path to bed file containing methylation scores.
+    :return: Table with methylation data.
+    """
+    ht = hl.import_bed(path, min_partitions=100, reference_genome="GRCh38")
+    ht = ht.select(
+        locus=ht.interval.start,
+        methylation_level=hl.int32(ht.target),
+    )
+
+    return ht.key_by("locus").drop("interval")
+
+
 def _import_ensembl_interval(path) -> hl.Table:
     """
     Import and parse Ensembl intervals of protein-coding genes to a Hail Table.
@@ -293,6 +309,16 @@ mills = GnomadPublicTableResource(
         "path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
         "force_bgz": True,
         "reference_genome": "GRCh38",
+    },
+)
+
+# Methylation scores range from 0-15 and are described in Chen et al
+# (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
+methylation_sites = GnomadPublicTableResource(
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
+    import_func=_import_methylation_sites,
+    import_args={
+        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.bed",
     },
 )
 

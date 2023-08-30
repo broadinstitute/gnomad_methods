@@ -406,6 +406,7 @@ def _load_cadd_raw(cadd_tsv) -> hl.Table:
 
 
 cadd = VersionedTableResource(
+    default_version="indels4.0",
     versions={
         "snvs": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/CADD_v1.6_SNVs.ht"
@@ -432,10 +433,11 @@ cadd = VersionedTableResource(
                 )
             },
         ),
-    }
+    },
 )
 
 revel = VersionedTableResource(
+    default_version="v1.3",
     versions={
         "v1.3": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel.v1.3.ht",
@@ -448,10 +450,11 @@ revel = VersionedTableResource(
                 "min_partitions": 1000,
             },
         ),
-    }
+    },
 )
 
 pangolin = VersionedTableResource(
+    default_version="v1.0",
     versions={
         "v1.0": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/pangolin.v1.0.ht",
@@ -464,5 +467,5 @@ pangolin = VersionedTableResource(
                 "skip_invalid_loci": True,
             },
         ),
-    }
+    },
 )

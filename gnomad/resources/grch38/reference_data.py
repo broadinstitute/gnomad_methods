@@ -458,7 +458,7 @@ pangolin = VersionedTableResource(
     versions={
         "v1.0": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/pangolin.v1.0.ht",
-            import_func=hl.import_sites_vcf,
+            import_func=import_sites_vcf,
             import_args={
                 "path": "gs://gnomad-insilico/pangolin/gnomad.v4.0.genomes.pangolin.vcf.bgz/*",
                 "force_bgz": True,

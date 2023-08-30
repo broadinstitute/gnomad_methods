@@ -45,10 +45,8 @@ def compute_callrate_mt(
         intervals_ht.key[0], hl.expr.IntervalExpression
     ):
         logger.warning(
-            (
-                "Call rate matrix computation expects `intervals_ht` with a key of type"
-                " Interval. Found: %s"
-            ),
+            "Call rate matrix computation expects `intervals_ht` with a key of type"
+            " Interval. Found: %s",
             intervals_ht.key,
         )
 

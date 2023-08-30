@@ -316,11 +316,9 @@ def infer_sex_karyotype(
 
     if chr_x_frac_hom_alt_expr is not None:
         logger.info(
-            (
-                "Including cutoffs for the fraction of homozygous alternate genotypes"
-                " (hom-alt/(hom-alt + het)) on chromosome X. Using %d standard"
-                " deviations to determine cutoffs."
-            ),
+            "Including cutoffs for the fraction of homozygous alternate genotypes"
+            " (hom-alt/(hom-alt + het)) on chromosome X. Using %d standard"
+            " deviations to determine cutoffs.",
             normal_chr_x_hom_alt_cutoff,
         )
         chr_x_frac_hom_alt_expr = ploidy_ht._chr_x_frac_hom_alt
@@ -528,10 +526,8 @@ def annotate_sex(
 
     if ref_keep_contigs:
         logger.info(
-            (
-                "Imputing sex chromosome ploidy using only reference block depth"
-                " information on the following contigs: %s"
-            ),
+            "Imputing sex chromosome ploidy using only reference block depth"
+            " information on the following contigs: %s",
             ref_keep_contigs,
         )
         if is_vds:
@@ -576,11 +572,9 @@ def annotate_sex(
     add_globals = hl.struct()
     if compute_x_frac_variants_hom_alt or var_keep_contigs:
         logger.info(
-            (
-                "Filtering variants for variant only sex chromosome ploidy imputation"
-                " and/or computation of the fraction of homozygous alternate variants"
-                " on chromosome X"
-            ),
+            "Filtering variants for variant only sex chromosome ploidy imputation"
+            " and/or computation of the fraction of homozygous alternate variants"
+            " on chromosome X",
         )
         filtered_mt = hl.filter_intervals(
             mt, var_keep_locus_intervals + x_locus_intervals
@@ -613,10 +607,8 @@ def annotate_sex(
 
     if var_keep_contigs:
         logger.info(
-            (
-                "Imputing sex chromosome ploidy using only variant depth information on"
-                " the following contigs: %s"
-            ),
+            "Imputing sex chromosome ploidy using only variant depth information on"
+            " the following contigs: %s",
             var_keep_contigs,
         )
         var_filtered_mt = hl.filter_intervals(filtered_mt, var_keep_locus_intervals)

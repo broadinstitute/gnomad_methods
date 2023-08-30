@@ -278,10 +278,8 @@ def _get_info_agg_expr(
     mq_tuple = None
     if f"{prefix}RAW_MQandDP" in agg_expr:
         logger.info(
-            (
-                "Computing %sMQ as sqrt(%sRAW_MQandDP[0]/%sRAW_MQandDP[1]). "
-                "Note that %sMQ will be set to 0 if %sRAW_MQandDP[1] == 0."
-            ),
+            "Computing %sMQ as sqrt(%sRAW_MQandDP[0]/%sRAW_MQandDP[1]). "
+            "Note that %sMQ will be set to 0 if %sRAW_MQandDP[1] == 0.",
             *[prefix] * 5,
         )
         mq_tuple = agg_expr.pop(f"{prefix}RAW_MQandDP")
@@ -296,10 +294,8 @@ def _get_info_agg_expr(
         mq_tuple = hl.zip(agg_expr.pop("AS_RAW_MQ"), hl.agg.array_sum(ad_expr[1:]))
     elif f"{prefix}RAW_MQ" in agg_expr and f"{prefix}MQ_DP" in agg_expr:
         logger.info(
-            (
-                "Computing %sMQ as sqrt(%sRAW_MQ/%sMQ_DP). "
-                "Note that MQ will be set to 0 if %sRAW_MQ == 0."
-            ),
+            "Computing %sMQ as sqrt(%sRAW_MQ/%sMQ_DP). "
+            "Note that MQ will be set to 0 if %sRAW_MQ == 0.",
             *[prefix] * 4,
         )
         mq_tuple = (agg_expr.pop(f"{prefix}RAW_MQ"), agg_expr.pop(f"{prefix}MQ_DP"))
@@ -317,10 +313,8 @@ def _get_info_agg_expr(
     # If both VarDP and QUALapprox are present, also compute QD.
     if f"{prefix}VarDP" in agg_expr and f"{prefix}QUALapprox" in agg_expr:
         logger.info(
-            (
-                "Computing %sQD as %sQUALapprox/%sVarDP. "
-                "Note that %sQD will be set to 0 if %sVarDP == 0."
-            ),
+            "Computing %sQD as %sQUALapprox/%sVarDP. "
+            "Note that %sQD will be set to 0 if %sVarDP == 0.",
             *[prefix] * 5,
         )
         var_dp = agg_expr[f"{prefix}VarDP"]

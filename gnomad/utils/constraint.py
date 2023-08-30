@@ -175,19 +175,15 @@ def count_variants_by_group(
     for group in additional_grouping:
         grouping = grouping.annotate(**{group: ht[group]})
     logger.info(
-        (
-            "The following annotations will be used to group the input Table rows when"
-            " counting variants: %s."
-        ),
+        "The following annotations will be used to group the input Table rows when"
+        " counting variants: %s.",
         ", ".join(grouping.keys()),
     )
 
     if max_af:
         logger.info(
-            (
-                "The maximum variant allele frequency to be included in `variant_count`"
-                " is %.3f."
-            ),
+            "The maximum variant allele frequency to be included in `variant_count`"
+            " is %.3f.",
             max_af,
         )
         agg = {"variant_count": hl.agg.count_where(freq_expr[0].AF <= max_af)}
@@ -202,10 +198,8 @@ def count_variants_by_group(
 
     for pop in count_downsamplings:
         logger.info(
-            (
-                "Counting variants in downsamplings for population '%s', and adding as"
-                " 'downsampling_counts_%s' annotation."
-            ),
+            "Counting variants in downsamplings for population '%s', and adding as"
+            " 'downsampling_counts_%s' annotation.",
             pop,
             pop,
         )
@@ -214,10 +208,8 @@ def count_variants_by_group(
         )
         if count_singletons:
             logger.info(
-                (
-                    "Counting singleton variants in downsamplings for population '%s',"
-                    " and adding as 'singleton_downsampling_counts_%s' annotation."
-                ),
+                "Counting singleton variants in downsamplings for population '%s',"
+                " and adding as 'singleton_downsampling_counts_%s' annotation.",
                 pop,
                 pop,
             )
@@ -358,10 +350,8 @@ def annotate_mutation_type(
         context_lengths = list(filter(None, set(context_lengths)))
         if len(context_lengths) > 1:
             raise ValueError(
-                (
-                    f"More than one length was found among {msg} 'context' values."
-                    " Length of 'context' should be consistent."
-                ),
+                f"More than one length was found among {msg} 'context' values."
+                " Length of 'context' should be consistent.",
             )
         else:
             context_length = context_lengths[0]

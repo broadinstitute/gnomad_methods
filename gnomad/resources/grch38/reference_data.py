@@ -408,7 +408,7 @@ def _load_cadd_raw(cadd_tsv) -> hl.Table:
 cadd = VersionedTableResource(
     versions={
         "snvs": GnomadPublicTableResource(
-            path="gs://gcp-public-data--gnomad/resources/grch38/in_silico_predictors/CADD_v1.6_SNVs.ht"
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/CADD_v1.6_SNVs.ht"
         ),
         "indels3.0": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/cadd.v1.6.gnomad.genomes.v3.0.indel.ht",
@@ -441,7 +441,7 @@ revel = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel.v1.3.ht",
             import_func=hl.import_table,
             import_args={
-                "path": "gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel-v1.3_all_chromosomes_with_transcript_ids.csv.bgz",
+                "path": "gs://gnomad-insilico/revel/revel-v1.3_all_chromosomes_with_transcript_ids.csv.bgz",
                 "delimiter": ",",
                 "types": {"grch38_pos": hl.tstr, "REVEL": hl.tfloat64},
                 "force_bgz": True,

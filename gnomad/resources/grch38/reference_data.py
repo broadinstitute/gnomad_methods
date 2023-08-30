@@ -373,3 +373,96 @@ def get_truth_ht() -> Table:
         .repartition(200, shuffle=False)
         .persist()
     )
+
+
+def _load_cadd_raw(cadd_tsv) -> hl.Table:
+    """Functions to load CADD raw data in TSV format to Hail Table."""
+    column_names = {
+        "f0": "chr",
+        "f1": "pos",
+        "f2": "ref",
+        "f3": "alt",
+        "f4": "RawScore",
+        "f5": "PHRED",
+    }
+    types = {"f0": hl.tstr, "f1": hl.tint32, "f4": hl.tfloat32, "f5": hl.tfloat32}
+    ht = hl.import_table(
+        cadd_tsv,
+        types=types,
+        no_header=True,
+        force_bgz=True,
+        comment="#",
+        min_partitions=1000,
+    )
+    ht = ht.rename(column_names)
+    chr = hl.if_else(ht.chr.startswith("chr"), ht.chr, hl.format("chr%s", ht.chr))
+    ht = ht.annotate(
+        locus=hl.locus(chr, ht.pos, reference_genome="GRCh38"),
+        alleles=hl.array([ht.ref, ht.alt]),
+    )
+    ht = ht.select("locus", "alleles", "RawScore", "PHRED")
+    ht = ht.key_by("locus", "alleles")
+    return ht
+
+
+cadd = VersionedTableResource(
+    versions={
+        "snvs": GnomadPublicTableResource(
+            path="gs://gcp-public-data--gnomad/resources/grch38/in_silico_predictors/CADD_v1.6_SNVs.ht"
+        ),
+        "indels3.0": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/cadd.v1.6.gnomad.genomes.v3.0.indel.ht",
+            import_func=_load_cadd_raw,
+            import_args={
+                "path": "gs://gnomad-insilico/cadd/cadd.v1.6.gnomad.genomes.v3.0.indel.tsv.bgz"
+            },
+        ),
+        "indels3.1": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/cadd.v1.6.gnomad.genomes.v3.1.indels.new.ht",
+        ),
+        "indels3.1-complex": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/cadd.v1.6.gnomad.genomes.v3.1.indels.complex.ht",
+        ),
+        "indels4.0": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/cadd.v1.6.gnomad.v4.0.indels.new.ht",
+            import_func=_load_cadd_raw,
+            import_args={
+                "path": (
+                    "gs://gnomad-insilico/cadd/cadd.v1.6.gnomad.v4.0.indels.new.tsv.bgz"
+                )
+            },
+        ),
+    }
+)
+
+revel = VersionedTableResource(
+    versions={
+        "v1.3": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel.v1.3.ht",
+            import_func=hl.import_table,
+            import_args={
+                "path": "gs://gnomad-insilico/revel/revel-v1.3_all_chromosomes_with_transcript_ids.csv.bgz",
+                "delimiter": ",",
+                "types": {"grch38_pos": hl.tstr, "REVEL": hl.tfloat64},
+                "force_bgz": True,
+                "min_partitions": 1000,
+            },
+        ),
+    }
+)
+
+pangolin = VersionedTableResource(
+    versions={
+        "v1.0": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/pangolin.v1.0.ht",
+            import_func=hl.import_sites_vcf,
+            import_args={
+                "path": "gs://gnomad-insilico/pangolin/gnomad.v4.0.genomes.pangolin.vcf.bgz/*",
+                "force_bgz": True,
+                "min_partitions": 1000,
+                "reference_genome": "GRCh38",
+                "skip_invalid_loci": True,
+            },
+        ),
+    }
+)

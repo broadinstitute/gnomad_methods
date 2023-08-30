@@ -605,9 +605,9 @@ def filter_arrays_by_meta(
         ),
     )
 
-    meta_indexed_exprs = meta_indexed_exprs.map_values(
-        lambda x: meta_expr.map(lambda y: x[y[0]])
-    )
+    meta_indexed_exprs = {
+        k: meta_expr.map(lambda x: v[x[0]]) for k, v in meta_indexed_exprs.items()
+    }
     meta_expr = meta_expr.map(lambda x: x[1])
 
     return meta_expr, meta_indexed_exprs

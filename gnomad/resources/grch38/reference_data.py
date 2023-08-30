@@ -375,7 +375,7 @@ def get_truth_ht() -> Table:
     )
 
 
-def _load_cadd_raw(cadd_tsv) -> hl.Table:
+def _load_cadd_raw(path) -> hl.Table:
     """Functions to load CADD raw data in TSV format to Hail Table."""
     column_names = {
         "f0": "chr",
@@ -387,7 +387,7 @@ def _load_cadd_raw(cadd_tsv) -> hl.Table:
     }
     types = {"f0": hl.tstr, "f1": hl.tint32, "f4": hl.tfloat32, "f5": hl.tfloat32}
     ht = hl.import_table(
-        cadd_tsv,
+        path,
         types=types,
         no_header=True,
         force_bgz=True,
@@ -436,18 +436,32 @@ cadd = VersionedTableResource(
     },
 )
 
+
+def _import_revel_csv(path: str) -> hl.Table:
+    """
+    Import REVEL scores from CSV file.
+
+    :param path: Path to CSV file containing REVEL scores.
+    :return: Table with REVEL scores.
+    """
+    ht = hl.import_table(
+        path,
+        delimiter=",",
+        min_partitions=1000,
+        types={"grch38_pos": hl.tstr, "REVEL": hl.tfloat64},
+        force_bgz=True,
+    )
+    return ht
+
+
 revel = VersionedTableResource(
     default_version="v1.3",
     versions={
         "v1.3": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel.v1.3.ht",
-            import_func=hl.import_table,
+            import_func=_import_revel_csv,
             import_args={
                 "path": "gs://gnomad-insilico/revel/revel-v1.3_all_chromosomes_with_transcript_ids.csv.bgz",
-                "delimiter": ",",
-                "types": {"grch38_pos": hl.tstr, "REVEL": hl.tfloat64},
-                "force_bgz": True,
-                "min_partitions": 1000,
             },
         ),
     },

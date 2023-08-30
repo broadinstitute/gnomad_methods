@@ -441,7 +441,7 @@ revel = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel.v1.3.ht",
             import_func=hl.import_table,
             import_args={
-                "path": "gs://gnomad-insilico/revel/revel-v1.3_all_chromosomes_with_transcript_ids.csv.bgz",
+                "path": "gs://gnomad-public-requester-pays/resources/grch38/in_silico_predictors/revel-v1.3_all_chromosomes_with_transcript_ids.csv.bgz",
                 "delimiter": ",",
                 "types": {"grch38_pos": hl.tstr, "REVEL": hl.tfloat64},
                 "force_bgz": True,

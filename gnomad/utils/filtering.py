@@ -535,7 +535,9 @@ def split_vds_by_strata(
 
 def filter_arrays_by_meta(
     meta_expr: hl.expr.ArrayExpression,
-    meta_indexed_exprs: Dict[str, hl.expr.ArrayExpression],
+    meta_indexed_exprs: Union[
+        Dict[str, hl.expr.ArrayExpression], hl.expr.ArrayExpression
+    ],
     items_to_filter: Union[Dict[str, List[str]], List[str]],
     keep: bool = True,
     combine_operator: str = "and",
@@ -555,7 +557,8 @@ def filter_arrays_by_meta(
     'freq_meta_sample_count': ht.index_globals().freq_meta_sample_count} and `meta_expr`
     is ht.freq_meta then if `keep` is True, the items specified by `items_to_filter`
     such as  'pop' = 'han' will be kept and all other items will be removed from the
-    ht.freq, ht.freq_meta_sample_count, and ht.freq_meta.
+    ht.freq, ht.freq_meta_sample_count, and ht.freq_meta. `meta_indexed_exprs` can also
+    be a single array expression such as ht.freq.
 
     The filtering can also be applied such that all criteria must be met
     (`combine_operator` = "and") by the `meta_expr` item in order to be filtered,
@@ -563,16 +566,24 @@ def filter_arrays_by_meta(
     by the `meta_expr` item in order to be filtered.
 
     :param meta_expr: Metadata expression that contains the values of the elements in
-        `meta_indexed_expr`. The most often used expression is `freq_meta` to index into a 'freq' array.
-    :param meta_indexed_expr: Dictionary where the keys are the expression name and the
-        values are the expressions indexed by the `meta_expr` such as a 'freq' array.
+        `meta_indexed_expr`. The most often used expression is `freq_meta` to index into
+        a 'freq' array.
+    :param meta_indexed_expr: Either a Dictionary where the keys are the expression name
+        and the values are the expressions indexed by the `meta_expr` such as a 'freq'
+        array or just a single expression indexed by the `meta_expr`.
     :param items_to_filter: Items to filter by, either a list or a dictionary.
     :param keep: Whether to keep or remove the items specified by `items_to_filter`.
     :param combine_operator: Whether to use "and" or "or" to combine the items
         specified by `items_to_filter`.
-    :return: Tuple of the filtered metadata expression and a dictionary of metadata indexed expressions.
+    :param meta_based_array_expr: Optional array based on freq meta expression to be filtered.
+    :return: A Tuple of the filtered metadata expression and a dictionary of metadata
+        indexed expressions when meta_indexed_expr is a Dictionary or a single filtered
+        array expression when meta_indexed_expr is a single array expression.
     """
     meta_expr = meta_expr.collect(_localize=False)[0]
+
+    if isinstance(meta_indexed_exprs, hl.expr.ArrayExpression):
+        meta_indexed_exprs = {"_tmp": meta_indexed_exprs}
 
     if combine_operator == "and":
         operator_func = hl.all
@@ -608,5 +619,8 @@ def filter_arrays_by_meta(
         k: meta_expr.map(lambda x: v[x[0]]) for k, v in meta_indexed_exprs.items()
     }
     meta_expr = meta_expr.map(lambda x: x[1])
+
+    if "_tmp" in meta_indexed_exprs:
+        meta_indexed_exprs = meta_indexed_exprs["_tmp"]
 
     return meta_expr, meta_indexed_exprs

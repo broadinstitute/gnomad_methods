@@ -552,7 +552,7 @@ def filter_arrays_by_meta(
 
     The items can be kept or removed from `meta_indexed_expr` and `meta_expr` based on
     the value of `keep`. For example if `meta_indexed_exprs` is {'freq': ht.freq,
-'freq_meta_sample_count': ht.index_globals().freq_meta_sample_count} and `meta_expr`
+    'freq_meta_sample_count': ht.index_globals().freq_meta_sample_count} and `meta_expr`
     is ht.freq_meta then if `keep` is True, the items specified by `items_to_filter`
     such as  'pop' = 'han' will be kept and all other items will be removed from the
     ht.freq, ht.freq_meta_sample_count, and ht.freq_meta.

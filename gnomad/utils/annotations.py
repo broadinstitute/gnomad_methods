@@ -1043,6 +1043,7 @@ def merge_freq_arrays(
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the freq array.
     fmeta = [hl.dict(hl.enumerate(f).map(lambda x: (x[1], [x[0]]))) for f in fmeta]
+    all_keys = hl.fold(lambda i, j: (i | j.key_set()), fmeta[0].key_set(), fmeta[1:])
 
     # Merge dictionaries in the list into a single dictionary where key is aggregation
     # group and the value is a list of the group's index in each of the freq arrays, if
@@ -1050,9 +1051,7 @@ def merge_freq_arrays(
     # For "diff" operations, only use key_set from the first entry.
     fmeta = hl.fold(
         lambda i, j: hl.dict(
-            (
-                hl.if_else(operation == "sum", (i.key_set() | j.key_set()), i.key_set())
-            ).map(
+            (hl.if_else(operation == "sum", all_keys, i.key_set())).map(
                 lambda k: (
                     k,
                     i.get(k, [hl.missing(hl.tint32)]).extend(

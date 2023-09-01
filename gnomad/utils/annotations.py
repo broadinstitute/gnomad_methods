@@ -1050,25 +1050,6 @@ def hemi_expr(
     )
 
 
-def gks_compute_seqloc_digest(vrs_variant: dict) -> dict:
-    """
-    Compute and set the digest-based id for the sequence location.
-
-    Take a dict of a VRS variant that has a sequence location that does not yet
-    have the digest-based id computed. Compute it and assign it to .location._id.
-
-    :param vrs_variant: VRS variant dict
-    :return: VRS variant dict with the location id set to the computed digest-based id
-    """
-    location = vrs_variant["location"]
-    location.pop("_id")
-    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
-        ga4gh_vrs.models.SequenceLocation(**location)
-    )
-    location["_id"] = location_id
-    return vrs_variant
-
-
 def gks_compute_seqloc_digest_batch(
     ht: hl.Table,
     export_tmpfile: str = new_temp_file("gks-seqloc-pre.tsv"),
@@ -1108,7 +1089,12 @@ def gks_compute_seqloc_digest_batch(
                 else:
                     locus, alleles, vrs_json = line
                     vrs_variant = json.loads(vrs_json)
-                    vrs_variant = gks_compute_seqloc_digest(vrs_variant)
+                    location = vrs_variant["location"]
+                    location.pop("_id")
+                    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
+                        ga4gh_vrs.models.SequenceLocation(**location)
+                    )
+                    vrs_variant["location"]["_id"] = location_id
                     # serialize outputs to JSON and write to TSV
                     vrs_json = json.dumps(vrs_variant)
                     alleles = json.dumps(json.loads(alleles))
@@ -1144,9 +1130,9 @@ def add_gks_vrs(
 
     Dict will have GA4GH GKS VRS structure.
 
-    :param input_locus: Locus field from a Struct (result of running .collect() on a Hail Table).
+    :param input_locus: Locus field from a Struct (locus of result of running .collect() on a Hail Table).
     :param input_vrs: VRS field from a Struct - my_struct.info.vrs.
-    :return: Python Dictionary with fields vrs (Struct of the VRS representation of the variant).
+    :return: Python dictionary conforming to GA4GH GKS VRS structure.
     """
     build_in = input_locus.reference_genome.name
     chr_in = input_locus.contig
@@ -1191,7 +1177,7 @@ def add_gks_va(
     ancestry_groups_dict: dict = None,
     by_sex: bool = False,
     frequency_index: dict = None,
-) -> Tuple[dict, str]:
+) -> dict:
     """
     Return Python dictionary containing GKS VA annotations.
 
@@ -1201,8 +1187,6 @@ def add_gks_va(
     The focusAllele field is not populated, and must be filled in by the caller.
 
     :param input_struct: Hail Struct for a desired variant.
-    :param variant: String of variant to search for (chr, pos, ref, and alt, separated by '-').
-        Example for a variant in build GRCh38: "chr5-38258681-C-T".
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the HT being used. Example: "3.1.2" .
     :param coverage_ht: Table containing coverage stats, with mean depth in "mean" annotation.
@@ -1217,7 +1201,7 @@ def add_gks_va(
         Default is False.
     :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
         Default is None.
-    :return: Tuple containing first a Dictionary containing GKS VA Frequency information,
+    :return: Tuple containing a dictionary containing GKS VA frequency information,
         (split by ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
@@ -1250,19 +1234,19 @@ def add_gks_va(
             - Example: "African/African American".
         :param group_sex: String indicating the sex of the group.
             - Example: "XX", or "XY".
-        :return: Dictionary containing Variant Frequency information,
+        :return: Dictionary containing variant frequency information,
             - (by genetic ancestry group and sex if desired) for specified variant.
         """
-        # Obtain frequency information for the specified variant
+        # Obtain frequency information for the specified variant.
         group_freq = input_dict.freq[group_index]
 
-        # Cohort characteristics
+        # Cohort characteristics.
         characteristics = []
         characteristics.append({"name": "genetic ancestry", "value": group_label})
         if group_sex is not None:
             characteristics.append({"name": "biological sex", "value": group_sex})
 
-        # Dictionary to be returned containing information for a specified group
+        # Dictionary to be returned containing information for a specified group.
         freq_record = {
             "id": f"{gnomad_id},{group_id.upper()}",
             "type": "CohortAlleleFrequency",
@@ -1281,7 +1265,7 @@ def add_gks_va(
     # different ancestry groups to.
     list_of_group_info_dicts = []
 
-    # Iterate through provided groups and generate dictionaries
+    # Iterate through provided groups and generate dictionaries.
     if ancestry_groups:
         for group in ancestry_groups:
             key = f"{group}-adj"
@@ -1312,10 +1296,10 @@ def add_gks_va(
             list_of_group_info_dicts.append(group_result)
 
     # Overall frequency, via label 'adj' which is currently stored at
-    # position #1 (index 0)
+    # position #1 (index 0).
     overall_freq = input_dict.freq[0]
 
-    # Final dictionary to be returned
+    # Final dictionary to be returned.
     final_freq_dict = {
         "id": f"{label_name}-{label_version}-{gnomad_id}",
         "type": "CohortAlleleFrequency",

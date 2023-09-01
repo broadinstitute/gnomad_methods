@@ -10,13 +10,19 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
 )
 
-CURRENT_EXOME_RELEASE = ""
+CURRENT_EXOME_RELEASE = "4.0"
 CURRENT_GENOME_RELEASE = "3.1.2"
+
+CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
-EXOME_RELEASES = []
+
+EXOME_RELEASES = ["4.0"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2"]
+
+EXOME_COVERAGE_RELEASES = ["4.0"]
 GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
-DATA_TYPES = ["genomes"]
+
+DATA_TYPES = ["genomes", "exomes"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
@@ -341,8 +347,8 @@ def coverage(data_type: str) -> VersionedTableResource:
         )
 
     if data_type == "exomes":
-        current_release = CURRENT_EXOME_RELEASE
-        releases = EXOME_RELEASES
+        current_release = CURRENT_EXOME_COVERAGE_RELEASE
+        releases = EXOME_COVERAGE_RELEASES
     else:
         current_release = CURRENT_GENOME_COVERAGE_RELEASE
         releases = GENOME_COVERAGE_RELEASES

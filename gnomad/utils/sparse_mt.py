@@ -931,12 +931,13 @@ def compute_coverage_stats(
     logging.info(f"Computing coverage stats on {n_samples} samples.")
 
     # Filter to interval list
-    if is_vds:
-        mtds = hl.vds.filter_intervals(
-            vds=mtds, intervals=interval_ht, split_reference_blocks=True
-        )
-    else:
-        mtds = hl.filter_intervals(mtds, interval_ht["interval"].collect())
+    if interval_ht is not None:
+        if is_vds:
+            mtds = hl.vds.filter_intervals(
+                vds=mtds, intervals=interval_ht, split_reference_blocks=True
+            )
+        else:
+            mtds = hl.filter_intervals(mtds, interval_ht["interval"].collect())
 
     # Create an outer join with the reference Table
     def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:

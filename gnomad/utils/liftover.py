@@ -55,8 +55,8 @@ def get_liftover_genome(
     logger.info("Adding liftover chain to input build...")
     if source.has_liftover(target):
         logger.warning(
-            "Source reference build %s already has a chain file: %s! Using whichever"
-            " chain has already been added.",
+            "Source reference build %s already has a chain file: %s! Using"
+            " whichever chain has already been added.",
             source.name,
             source._liftovers,
         )

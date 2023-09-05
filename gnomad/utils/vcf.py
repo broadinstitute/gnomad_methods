@@ -482,8 +482,8 @@ def adjust_vcf_incompatible_types(
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                "Coercing field info.%s from int64 to int32 for VCF output. Value will"
-                " be capped at int32 max value.",
+                "Coercing field info.%s from int64 to int32 for VCF output. Value"
+                " will be capped at int32 max value.",
                 f,
             )
             info_type_convert_expr.update(

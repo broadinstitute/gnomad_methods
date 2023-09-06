@@ -45,7 +45,7 @@ def run_rf_test(
     )
 
     mt = mt.annotate_rows(
-        label=hl.if_else(mt["feature1"] & (mt["feature2"] > 0), "TP", "FP")
+        label=hl.cond(mt["feature1"] & (mt["feature2"] > 0), "TP", "FP")
     )
     ht = mt.rows()
 
@@ -440,10 +440,8 @@ def train_rf(
     :return: Random Forest pipeline model
     """
     logger.info(
-        (
-            "Training RF model using:\nfeatures: %s\nlabels: %s\nnum_trees:"
-            " %d\nmax_depth: %d"
-        ),
+        "Training RF model using:\nfeatures: %s\nlabels: %s\nnum_trees:"
+        " %d\nmax_depth: %d",
         ",".join(features),
         label,
         num_trees,

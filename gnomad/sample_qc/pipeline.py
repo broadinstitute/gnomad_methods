@@ -227,27 +227,21 @@ def get_qc_mt(
             snv_only=snv_only,
             adj_only=adj_only,
             min_af=min_af if min_af is not None else hl.null(hl.tfloat32),
-            min_callrate=(
-                min_callrate if min_callrate is not None else hl.null(hl.tfloat32)
-            ),
-            inbreeding_coeff_threshold=(
-                min_inbreeding_coeff_threshold
-                if min_inbreeding_coeff_threshold is not None
-                else hl.null(hl.tfloat32)
-            ),
-            min_hardy_weinberg_threshold=(
-                min_hardy_weinberg_threshold
-                if min_hardy_weinberg_threshold is not None
-                else hl.null(hl.tfloat32)
-            ),
+            min_callrate=min_callrate
+            if min_callrate is not None
+            else hl.null(hl.tfloat32),
+            inbreeding_coeff_threshold=min_inbreeding_coeff_threshold
+            if min_inbreeding_coeff_threshold is not None
+            else hl.null(hl.tfloat32),
+            min_hardy_weinberg_threshold=min_hardy_weinberg_threshold
+            if min_hardy_weinberg_threshold is not None
+            else hl.null(hl.tfloat32),
             apply_hard_filters=apply_hard_filters,
             ld_r2=ld_r2 if ld_r2 is not None else hl.null(hl.tfloat32),
             filter_exome_low_coverage_regions=filter_exome_low_coverage_regions,
-            high_conf_regions=(
-                high_conf_regions
-                if high_conf_regions is not None
-                else hl.null(hl.tarray(hl.tstr))
-            ),
+            high_conf_regions=high_conf_regions
+            if high_conf_regions is not None
+            else hl.null(hl.tarray(hl.tstr)),
         )
     )
     return qc_mt.annotate_cols(sample_callrate=hl.agg.fraction(hl.is_defined(qc_mt.GT)))
@@ -316,11 +310,9 @@ def infer_sex_karyotype(
 
     if chr_x_frac_hom_alt_expr is not None:
         logger.info(
-            (
-                "Including cutoffs for the fraction of homozygous alternate genotypes"
-                " (hom-alt/(hom-alt + het)) on chromosome X. Using %d standard"
-                " deviations to determine cutoffs."
-            ),
+            "Including cutoffs for the fraction of homozygous alternate genotypes"
+            " (hom-alt/(hom-alt + het)) on chromosome X. Using %d standard deviations"
+            " to determine cutoffs.",
             normal_chr_x_hom_alt_cutoff,
         )
         chr_x_frac_hom_alt_expr = ploidy_ht._chr_x_frac_hom_alt
@@ -528,10 +520,8 @@ def annotate_sex(
 
     if ref_keep_contigs:
         logger.info(
-            (
-                "Imputing sex chromosome ploidy using only reference block depth"
-                " information on the following contigs: %s"
-            ),
+            "Imputing sex chromosome ploidy using only reference block depth"
+            " information on the following contigs: %s",
             ref_keep_contigs,
         )
         if is_vds:
@@ -576,11 +566,9 @@ def annotate_sex(
     add_globals = hl.struct()
     if compute_x_frac_variants_hom_alt or var_keep_contigs:
         logger.info(
-            (
-                "Filtering variants for variant only sex chromosome ploidy imputation"
-                " and/or computation of the fraction of homozygous alternate variants"
-                " on chromosome X"
-            ),
+            "Filtering variants for variant only sex chromosome ploidy imputation"
+            " and/or computation of the fraction of homozygous alternate variants on"
+            " chromosome X",
         )
         filtered_mt = hl.filter_intervals(
             mt, var_keep_locus_intervals + x_locus_intervals
@@ -613,10 +601,8 @@ def annotate_sex(
 
     if var_keep_contigs:
         logger.info(
-            (
-                "Imputing sex chromosome ploidy using only variant depth information on"
-                " the following contigs: %s"
-            ),
+            "Imputing sex chromosome ploidy using only variant depth information on the"
+            " following contigs: %s",
             var_keep_contigs,
         )
         var_filtered_mt = hl.filter_intervals(filtered_mt, var_keep_locus_intervals)

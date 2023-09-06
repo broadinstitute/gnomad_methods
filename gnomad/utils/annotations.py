@@ -1037,8 +1037,9 @@ def merge_freq_arrays(
     if operation not in ["sum", "diff"]:
         raise ValueError("Operation must be either 'sum' or 'diff'!")
     if count_arrays is not None:
-        if len(count_arrays) != len(fmeta):
-            raise ValueError("Length of count_arrays and fmeta must be equal!")
+        for k, count_array in count_arrays.items():
+            if len(count_array) != len(fmeta):
+                raise ValueError("Length of each count_array and fmeta must be equal!")
 
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the freq array.

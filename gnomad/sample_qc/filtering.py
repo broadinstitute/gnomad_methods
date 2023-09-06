@@ -559,11 +559,9 @@ def determine_nearest_neighbors(
         group_n_neighbors = min(n_neighbors, group_n)
         if n_neighbors > group_n:
             logger.warning(
-                (
-                    "The requested number of nearest neighbors (%d) is larger than the "
-                    "number of samples in the %s stratification group (%d). Only %d "
-                    "neighbors will be returned for all samples in this group."
-                ),
+                "The requested number of nearest neighbors (%d) is larger than the "
+                "number of samples in the %s stratification group (%d). Only %d "
+                "neighbors will be returned for all samples in this group.",
                 n_neighbors,
                 group,
                 group_n,

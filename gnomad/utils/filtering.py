@@ -533,40 +533,60 @@ def split_vds_by_strata(
     }
 
 
-def filter_freq_by_meta(
-    freq_expr: hl.expr.ArrayExpression,
-    freq_meta_expr: hl.expr.ArrayExpression,
+def filter_arrays_by_meta(
+    meta_expr: hl.expr.ArrayExpression,
+    meta_indexed_exprs: Union[
+        Dict[str, hl.expr.ArrayExpression], hl.expr.ArrayExpression
+    ],
     items_to_filter: Union[Dict[str, List[str]], List[str]],
     keep: bool = True,
     combine_operator: str = "and",
-) -> Tuple[hl.expr.ArrayExpression, hl.expr.ArrayExpression]:
+) -> Tuple[
+    hl.expr.ArrayExpression,
+    Union[Dict[str, hl.expr.ArrayExpression], hl.expr.ArrayExpression],
+]:
     """
-    Filter frequency and frequency meta expressions specified by `items_to_filter`.
+    Filter both metadata array expression and meta data indexed expression by `items_to_filter`.
 
     The `items_to_filter` can be used to filter in the following ways based on
-    `freq_meta_expr` items:
+    `meta_expr` items:
     - By a list of keys, e.g. ["sex", "downsampling"].
     - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
     {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
     {"pop": ["afr"], "sex": ["XX"]}.
 
-    The items can be kept or removed from `freq_expr` and `freq_meta_expr` based on the
-    value of `keep`.
+    The items can be kept or removed from `meta_indexed_expr` and `meta_expr` based on
+    the value of `keep`. For example if `meta_indexed_exprs` is {'freq': ht.freq,
+    'freq_meta_sample_count': ht.index_globals().freq_meta_sample_count} and `meta_expr`
+    is ht.freq_meta then if `keep` is True, the items specified by `items_to_filter`
+    such as  'pop' = 'han' will be kept and all other items will be removed from the
+    ht.freq, ht.freq_meta_sample_count, and ht.freq_meta. `meta_indexed_exprs` can also
+    be a single array expression such as ht.freq.
 
     The filtering can also be applied such that all criteria must be met
-    (`combine_operator` = "and") by the `freq_meta_expr` item in order to be filtered,
+    (`combine_operator` = "and") by the `meta_expr` item in order to be filtered,
     or at least one of the specified criteria must be met (`combine_operator` = "or")
-    by the `freq_meta_expr` item in order to be filtered.
+    by the `meta_expr` item in order to be filtered.
 
-    :param freq_expr: Frequency expression.
-    :param freq_meta_expr: Frequency meta expression.
+    :param meta_expr: Metadata expression that contains the values of the elements in
+        `meta_indexed_expr`. The most often used expression is `freq_meta` to index into
+        a 'freq' array.
+    :param meta_indexed_expr: Either a Dictionary where the keys are the expression name
+        and the values are the expressions indexed by the `meta_expr` such as a 'freq'
+        array or just a single expression indexed by the `meta_expr`.
     :param items_to_filter: Items to filter by, either a list or a dictionary.
     :param keep: Whether to keep or remove the items specified by `items_to_filter`.
     :param combine_operator: Whether to use "and" or "or" to combine the items
         specified by `items_to_filter`.
-    :return: Tuple of the filtered frequency and frequency meta expressions.
+    :param meta_based_array_expr: Optional array based on freq meta expression to be filtered.
+    :return: A Tuple of the filtered metadata expression and a dictionary of metadata
+        indexed expressions when meta_indexed_expr is a Dictionary or a single filtered
+        array expression when meta_indexed_expr is a single array expression.
     """
-    freq_meta_expr = freq_meta_expr.collect(_localize=False)[0]
+    meta_expr = meta_expr.collect(_localize=False)[0]
+
+    if isinstance(meta_indexed_exprs, hl.expr.ArrayExpression):
+        meta_indexed_exprs = {"_tmp": meta_indexed_exprs}
 
     if combine_operator == "and":
         operator_func = hl.all
@@ -589,7 +609,7 @@ def filter_freq_by_meta(
     else:
         raise TypeError("items_to_filter must be a list or a dictionary!")
 
-    freq_meta_expr = hl.enumerate(freq_meta_expr).filter(
+    meta_expr = hl.enumerate(meta_expr).filter(
         lambda m: hl.bind(
             lambda x: hl.if_else(keep, x, ~x),
             operator_func(
@@ -597,7 +617,13 @@ def filter_freq_by_meta(
             ),
         ),
     )
-    freq_expr = freq_meta_expr.map(lambda x: freq_expr[x[0]])
-    freq_meta_expr = freq_meta_expr.map(lambda x: x[1])
 
-    return freq_expr, freq_meta_expr
+    meta_indexed_exprs = {
+        k: meta_expr.map(lambda x: v[x[0]]) for k, v in meta_indexed_exprs.items()
+    }
+    meta_expr = meta_expr.map(lambda x: x[1])
+
+    if "_tmp" in meta_indexed_exprs:
+        meta_indexed_exprs = meta_indexed_exprs["_tmp"]
+
+    return meta_expr, meta_indexed_exprs

@@ -587,8 +587,8 @@ def infer_families(
                 )
             else:
                 logger.warning(
-                    "Discarded family with same parents, and multiple offspring that"
-                    " weren't siblings:\nMother: %s\nFather:%s\nChildren:%s",
+                    "Discarded family with same parents, and multiple offspring"
+                    " that weren't siblings:\nMother: %s\nFather:%s\nChildren:%s",
                     possible_parents[0],
                     possible_parents[1],
                     ", ".join(children),
@@ -619,15 +619,15 @@ def infer_families(
     # If i_col and j_col aren't str, then convert them
     if not isinstance(relationship_ht[i_col], hl.expr.StringExpression):
         logger.warning(
-            "Pedigrees can only be constructed from string IDs, but your relatedness_ht"
-            " ID column is of type: %s. Expression will be converted to string in"
-            " Pedigrees.",
+            "Pedigrees can only be constructed from string IDs, but your"
+            " relatedness_ht ID column is of type: %s. Expression will be converted"
+            " to string in Pedigrees.",
             relationship_ht[i_col].dtype,
         )
         if isinstance(relationship_ht[i_col], hl.expr.StructExpression):
             logger.warning(
-                "Struct fields %s will be joined by underscores to use as sample names"
-                " in Pedigree.",
+                "Struct fields %s will be joined by underscores to use as sample"
+                " names in Pedigree.",
                 list(relationship_ht[i_col]),
             )
             relationship_ht = relationship_ht.key_by(
@@ -770,8 +770,8 @@ def create_fake_pedigree(
 
     if tries == max_tries:
         logger.warning(
-            "Only returning %d fake trios; random trio sampling stopped after reaching"
-            " the maximum %d iterations",
+            "Only returning %d fake trios; random trio sampling stopped after"
+            " reaching the maximum %d iterations",
             len(fake_trios),
             max_tries,
         )

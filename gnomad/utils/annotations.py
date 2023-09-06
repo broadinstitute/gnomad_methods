@@ -1026,7 +1026,7 @@ def merge_freq_arrays(
     :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
     :param fmeta: List of frequency metadata for arrays being merged.
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first freq array in the list will have the other arrays subtracted from it.
-    :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is True.
+    :param set_negatives_to_zero: If True, set negative array values to 0 for AC, AN, AF, and homozygote_count. If False, raise a ValueError. Default is False.
     :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
     :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
     """
@@ -1141,6 +1141,7 @@ def merge_freq_arrays(
                     ann: (
                         hl.case()
                         .when(set_negatives_to_zero, hl.max(x[ann], 0))
+                        .when(x[ann] >= 0, x[ann])
                         .or_error(negative_value_error_msg % "freq")
                     )
                     for ann in callstat_ann
@@ -1152,6 +1153,7 @@ def merge_freq_arrays(
                 new_counts_array_dict[k] = new_counts_array.map(
                     lambda x: hl.case()
                     .when(set_negatives_to_zero, hl.max(x, 0))
+                    .when(x >= 0, x)
                     .or_error(negative_value_error_msg % "counts")
                 )
 

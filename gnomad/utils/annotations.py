@@ -1039,7 +1039,9 @@ def merge_freq_arrays(
     if count_arrays is not None:
         for k, count_array in count_arrays.items():
             if len(count_array) != len(fmeta):
-                raise ValueError("Length of each count_array and fmeta must be equal!")
+                raise ValueError(
+                    f"Length of  count_array '{k}' and fmeta must be equal!"
+                )
 
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the freq array.

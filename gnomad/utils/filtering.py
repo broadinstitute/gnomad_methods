@@ -541,7 +541,7 @@ def filter_arrays_by_meta(
     items_to_filter: Union[Dict[str, List[str]], List[str]],
     keep: bool = True,
     combine_operator: str = "and",
-) -> Tuple[hl.expr.ArrayExpression, Dict[str, hl.expr.ArrayExpression]]:
+) -> Tuple[hl.expr.ArrayExpression, Union[Dict[str, hl.expr.ArrayExpression], hl.expr.ArrayExpression]]:
     """
     Filter both metadata array expression and meta data indexed expression by `items_to_filter`.
 

@@ -1417,8 +1417,7 @@ def annotate_downsamplings(
         else:
             ht = t
 
-    ht = ht.annotate(r=hl.rand_unif(0, 1))
-    ht = ht.order_by(ht.r)
+    ht = ht.key_by(r=hl.rand_unif(0, 1))
 
     # Add a global index for use in computing frequencies, or other aggregate stats on
     # the downsamplings.

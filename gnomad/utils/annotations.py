@@ -1100,7 +1100,7 @@ def merge_freq_arrays(
     new_freq = freq_meta_idx.map(
         lambda x: hl.bind(
             lambda y: y.annotate(
-                AF=hl.if_else(y.AN > 0, y.AC / y.AN, hl.missing(hl.tfloat64))
+                AF=hl.or_missing(y.AN > 0, y.AC / y.AN)
             ).select(*callstat_ann_af),
             hl.fold(
                 lambda i, j: hl.struct(

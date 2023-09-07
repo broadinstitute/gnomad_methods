@@ -12,9 +12,8 @@ import pyspark.sql
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import IndexToString, StringIndexer, VectorAssembler
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, udf  # pylint: disable=no-name-in-module
-from pyspark.sql.types import ArrayType, DoubleType
+from pyspark.ml.functions import vector_to_array
+from pyspark.sql.functions import col  # pylint: disable=no-name-in-module
 
 from gnomad.utils.file_utils import file_exists
 
@@ -323,9 +322,6 @@ def test_model(
     )
 
     return test_results
-
-
-from pyspark.ml.functions import vector_to_array
 
 
 def apply_rf_model(

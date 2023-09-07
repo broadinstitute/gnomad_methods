@@ -12,9 +12,8 @@ import pyspark.sql
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import RandomForestClassifier
 from pyspark.ml.feature import IndexToString, StringIndexer, VectorAssembler
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, udf  # pylint: disable=no-name-in-module
-from pyspark.sql.types import ArrayType, DoubleType
+from pyspark.ml.functions import vector_to_array
+from pyspark.sql.functions import col  # pylint: disable=no-name-in-module
 
 from gnomad.utils.file_utils import file_exists
 
@@ -359,29 +358,21 @@ def apply_rf_model(
     df = ht_to_rf_df(ht, features, label, index_name)
 
     rf_df = rf_model.transform(df)
+    prob_cols = get_labels(rf_model)
 
-    def to_array(col):
-        def to_array_(v):
-            return v.toArray().tolist()
-
-        return udf(to_array_, ArrayType(DoubleType()))(col)
-
-    # Note: SparkSession is needed to write DF to disk before converting to HT;
-    # hail currently fails without intermediate write
-    spark = SparkSession.builder.getOrCreate()
-    rf_df.withColumn("probability", to_array(col("probability"))).select(
-        [index_name, "probability", "predictedLabel"]
-    ).write.mode("overwrite").save("rf_probs.parquet")
-    rf_df = spark.read.format("parquet").load("rf_probs.parquet")
+    rf_df = rf_df.withColumn("probability", vector_to_array("probability")).select(
+        [index_name, "predictedLabel"]
+        + [col("probability")[i] for i in range(len(prob_cols))]
+    )
+    new_colnames = [index_name, "predictedLabel"] + prob_cols
+    rf_df = rf_df.toDF(*new_colnames)
     rf_ht = hl.Table.from_spark(rf_df)
-    rf_ht = rf_ht.checkpoint("/tmp/rf_raw_pred.ht", overwrite=True)
-    rf_ht = rf_ht.key_by(index_name)
 
+    rf_ht = rf_ht.key_by(index_name)
     ht = ht.annotate(
         **{
             probability_col_name: {
-                label: rf_ht[ht[index_name]]["probability"][i]
-                for i, label in enumerate(get_labels(rf_model))
+                label: rf_ht[ht[index_name]][label] for label in prob_cols
             },
             prediction_col_name: rf_ht[ht[index_name]]["predictedLabel"],
         }

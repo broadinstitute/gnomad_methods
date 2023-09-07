@@ -1099,9 +1099,9 @@ def merge_freq_arrays(
     callstat_ann_af = ["AC", "AF", "AN", "homozygote_count"]
     new_freq = freq_meta_idx.map(
         lambda x: hl.bind(
-            lambda y: y.annotate(
-                AF=hl.or_missing(y.AN > 0, y.AC / y.AN)
-            ).select(*callstat_ann_af),
+            lambda y: y.annotate(AF=hl.or_missing(y.AN > 0, y.AC / y.AN)).select(
+                *callstat_ann_af
+            ),
             hl.fold(
                 lambda i, j: hl.struct(
                     **{ann: _sum_or_diff_fields(i[ann], j[ann]) for ann in callstat_ann}

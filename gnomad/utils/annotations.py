@@ -1711,6 +1711,7 @@ def generate_freq_group_membership_array(
 def compute_freq_by_strata(
     mt: hl.MatrixTable,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
+    select_fields: Optional[List[str]] = None,
 ) -> hl.Table:
     """
     Compute call statistics and, when passed, entry aggregation function(s) by strata.
@@ -1733,10 +1734,14 @@ def compute_freq_by_strata(
         of functions. The first function is used to transform the `mt` entries in some
         way, and the second function is used to aggregate the output from the first
         function.
+    :param select_fields: Optional list of row fields from `mt` to keep on the output
+        Table.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
     if entry_agg_funcs is None:
         entry_agg_funcs = {}
+    if select_fields is None:
+        select_fields = []
 
     n_samples = mt.count_cols()
     n_groups = len(mt.group_membership.take(1)[0])
@@ -1752,6 +1757,7 @@ def compute_freq_by_strata(
     # own ArrayExpression. This is important to prevent memory issues when performing
     # the below array aggregations.
     ht = ht.select(
+        *select_fields,
         adj_array=ht.entries.map(lambda e: e.adj),
         gt_array=ht.entries.map(lambda e: e.GT),
         **{
@@ -1794,6 +1800,7 @@ def compute_freq_by_strata(
     )
     # Add annotations for any supplied entry transform and aggregation functions.
     ht = ht.select(
+        *select_fields,
         **{ann: _agg_by_group(ht, f[1], ht[ann]) for ann, f in entry_agg_funcs.items()},
         freq=freq_expr,
     )

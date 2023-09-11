@@ -4,8 +4,8 @@ import csv
 import itertools
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 from timeit import default_timer as timer
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import ga4gh.core as ga4gh_core
 import ga4gh.vrs as ga4gh_vrs

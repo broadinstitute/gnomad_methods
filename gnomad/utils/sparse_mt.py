@@ -929,7 +929,7 @@ def compute_coverage_stats(
         n_samples = mtds.variant_data.count_cols()
     else:
         n_samples = mtds.count_cols()
-    logging.info(f"Computing coverage stats on {n_samples} samples.")
+    logging.info(f"Computing coverage stats on %d n_samplessamples.", n_samples)
 
     # Filter to interval list
     if interval_ht is not None:

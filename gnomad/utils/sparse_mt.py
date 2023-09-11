@@ -859,8 +859,7 @@ def impute_sex_ploidy(
                     f"{chrom}_mean_dp": hl.agg.filter(
                         chr_mt.LGT.is_non_ref(),
                         hl.agg.sum(chr_mt.DP),
-                    )
-                    / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
+                    ) / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
                 }
             ).cols()
         else:
@@ -890,10 +889,12 @@ def impute_sex_ploidy(
 
     return ht.annotate(
         **{
-            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"]
-            / (ht[f"{normalization_contig}_mean_dp"] / 2),
-            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"]
-            / (ht[f"{normalization_contig}_mean_dp"] / 2),
+            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"] / (
+                ht[f"{normalization_contig}_mean_dp"] / 2
+            ),
+            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"] / (
+                ht[f"{normalization_contig}_mean_dp"] / 2
+            ),
         }
     )
 
@@ -937,17 +938,26 @@ def compute_coverage_stats(
                 vds=mtds, intervals=interval_ht, split_reference_blocks=True
             )
         else:
-            mtds = hl.filter_intervals(mtds, interval_ht["interval"].collect())
+            raise NotImplementedError(
+                "Filtering to an interval list for a sparse Matrix Table is currently"
+                " not supported."
+            )
 
     # Create an outer join with the reference Table
     def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
+        """
+        Outer join Matrix Table with reference Table to add 'in_ref' annotation indicating whether or not a given position is found in the reference Table.
+
+        :param mt: Input Matrix Table.
+        :return: Matrix Table with 'in_ref' annotation added.
+        """
         keep_entries = ["DP"]
         if "END" in mt.entry:
             keep_entries.append("END")
         mt.select_entries(*keep_entries).select_cols().select_rows()
         col_key_fields = list(mt.col_key)
         t = mt._localize_entries("__entries", "__cols")
-        t = t.join(reference_ht.key_by(*mt.row_key).select(_in_ref=True), how="outer")
+        t = t.join(reference_ht.key_by(*t.row_key).select(_in_ref=True), how="outer")
         t = t.annotate(
             __entries=hl.or_else(
                 t.__entries,

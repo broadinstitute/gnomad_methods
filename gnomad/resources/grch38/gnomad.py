@@ -540,7 +540,7 @@ def gnomad_gks_batch(
 
         if not vrs_only:
             va_freq_dict = add_gks_va(
-                input_dict=variant,
+                input_struct=variant,
                 label_name="gnomAD",
                 label_version=version,
                 coverage_ht=coverage_ht,

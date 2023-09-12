@@ -474,8 +474,8 @@ def gnomad_gks_batch(
         (will not include allele frequency information).
     :param custom_ht: Table to use instead of return from public_release() method.
     :param skip_coverage: Bool to pass to skip adding coverage stats.
-    :param custom_coverage_ht: Custom Table to use for coverage stats if not release coverage table.
-    :return: List of Dictionaries containing VRS information
+    :param custom_coverage_ht: Custom table to use for coverage stats if not release coverage table.
+    :return: List of dictionaries containing VRS information
         (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
     # Read public_release table if no custom table provided

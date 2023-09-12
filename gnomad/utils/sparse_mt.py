@@ -931,8 +931,12 @@ def compute_coverage_stats(
         n_samples = mtds.count_cols()
     logging.info("Computing coverage stats on %d n_samplessamples.", n_samples)
 
-    # Filter to interval list
+    # Filter datasetes to interval list
     if interval_ht is not None:
+        reference_ht = hl.filter_intervals(
+            reference_ht, interval_ht["interval"].collect()
+        )
+
         if is_vds:
             mtds = hl.vds.filter_intervals(
                 vds=mtds, intervals=interval_ht, split_reference_blocks=True
@@ -946,7 +950,7 @@ def compute_coverage_stats(
     # Create an outer join with the reference Table
     def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
         """
-        Outer join Matrix Table with reference Table to add 'in_ref' annotation indicating whether or not a given position is found in the reference Table.
+        Outer join Matrix Table with reference Table to add 'in_ref' annotation indicating whether or not a given position is found in the reference Table and filter to sites contained in the reference.
 
         :param mt: Input Matrix Table.
         :return: Matrix Table with 'in_ref' annotation added.
@@ -956,8 +960,16 @@ def compute_coverage_stats(
             keep_entries.append("END")
         mt.select_entries(*keep_entries).select_cols().select_rows()
         col_key_fields = list(mt.col_key)
+        row_key_fields = list(mt.row_key)
         t = mt._localize_entries("__entries", "__cols")
-        t = t.join(reference_ht.key_by(*t.row_key).select(_in_ref=True), how="outer")
+        if is_vds:
+            t = t.key_by("locus")
+            t = t.join(reference_ht.key_by(*t.key).select(_in_ref=True), how="outer")
+        else:
+            t = t.join(
+                reference_ht.key_by(*mt.row_key).select(_in_ref=True), how="outer"
+            )
+
         t = t.annotate(
             __entries=hl.or_else(
                 t.__entries,
@@ -966,7 +978,14 @@ def compute_coverage_stats(
                 ),
             )
         )
-        return t._unlocalize_entries("__entries", "__cols", col_key_fields)
+
+        # Filter out rows where the reference is missing
+        if is_vds:
+            t = t.filter(t._in_ref)
+
+        return t._unlocalize_entries("__entries", "__cols", col_key_fields).key_rows_by(
+            *row_key_fields
+        )
 
     if is_vds:
         rmt = mtds.reference_data
@@ -977,9 +996,7 @@ def compute_coverage_stats(
         mtds = join_with_ref(mtds)
         # Densify
         mt = hl.experimental.densify(mtds)
-
-    # Filter rows where the reference is missing
-    mt = mt.filter_rows(mt._in_ref)
+        mt = mt.filter_rows(mt._in_ref)
 
     # Unfilter entries so that entries with no ref block overlap aren't null
     mt = mt.unfilter_entries()

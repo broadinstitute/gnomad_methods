@@ -931,7 +931,7 @@ def compute_coverage_stats(
         n_samples = mtds.count_cols()
     logging.info("Computing coverage stats on %d n_samplessamples.", n_samples)
 
-    # Filter datasetes to interval list
+    # Filter datasets to interval list
     if interval_ht is not None:
         reference_ht = hl.filter_intervals(
             reference_ht, interval_ht["interval"].collect()

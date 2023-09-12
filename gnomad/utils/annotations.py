@@ -1549,6 +1549,7 @@ def generate_freq_group_membership_array(
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
     downsamplings: Optional[List[int]] = None,
     ds_pop_counts: Optional[Dict[str, int]] = None,
+    checkpoint_path: Optional[str] = None,
 ) -> hl.Table:
     """
     Generate a Table with a 'group_membership' array for each sample indicating whether the sample belongs to specific stratification groups.
@@ -1575,6 +1576,7 @@ def generate_freq_group_membership_array(
         expressions that define the values to stratify frequency calculations by.
     :param downsamplings: List of downsampling values to include in the stratifications.
     :param ds_pop_counts: Dictionary of population counts for each downsampling value.
+    :param checkpoint_path: Optional checkpoint path to write the Table to.
     :return: Table with the 'group_membership' array annotation.
     """
     errors = []
@@ -1703,7 +1705,13 @@ def generate_freq_group_membership_array(
         global_expr["ds_pop_counts"] = ds_pop_counts
 
     ht = ht.select_globals(**global_expr)
-    ht = ht.checkpoint(hl.utils.new_temp_file("group_membership", "ht"))
+
+    checkpoint_path = (
+        hl.utils.new_temp_file("group_membership", "ht")
+        if not checkpoint_path
+        else checkpoint_path
+    )
+    ht = ht.checkpoint(checkpoint_path)
 
     return ht
 

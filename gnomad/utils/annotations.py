@@ -2077,7 +2077,7 @@ def add_gks_va(
         Example: {'afr':'African/African American'}. Default is None.
     :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
         Default is None.
-    :frequency_index: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
+    :freq_index_dict: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
         Default is None.
     :return: Tuple containing a dictionary containing GKS VA frequency information,
         (split by ancestry groups and sex if desired) for the specified variant.
@@ -2163,7 +2163,7 @@ def add_gks_va(
                     sex_id = f"{group}.{sex}"
                     sex_result = _create_group_dicts(
                         group_index=sex_index_value,
-                        group_id=sex_label,
+                        group_id=sex_id,
                         group_label=ancestry_groups_dict[group],
                         group_sex=sex,
                     )

@@ -462,13 +462,13 @@ def gnomad_gks_batch(
         e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
-    :param by_ancestry_group: Boolean to pass for frequency information for each cohort.
-    :param by_sex: Boolean to pass to return freq info for each cohort split by chromosomal sex.
+    :param by_ancestry_group: Boolean to pass to obtain frequency information for each cohort.
+    :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex.
     :param vrs_only: Boolean to pass for only VRS info to be returned
         (will not include allele frequency information).
-    :param custom_ht: Table to use instead of return from public_release() method.
-    :param skip_coverage: Bool to pass to skip adding coverage stats.
-    :param custom_coverage_ht: Custom table to use for coverage stats if not release coverage table.
+    :param custom_ht: Table to use instead of what public_release() method would return for the version.
+    :param skip_coverage: Bool to pass to skip adding coverage statistics.
+    :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table.
     :return: List of dictionaries containing VRS information
         (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
@@ -513,7 +513,7 @@ def gnomad_gks_batch(
             " please also specify 'by_ancestry_group' to stratify by."
         )
 
-    # Call and return add_gks*() for chosen arguments.
+    # Call and return add_gks_vrs and add_gks_va for chosen arguments.
 
     # Filter to interval before adding annotations
     ht = hl.filter_intervals(ht, [locus_interval])
@@ -547,7 +547,7 @@ def gnomad_gks_batch(
                 ancestry_groups=pops_list,
                 ancestry_groups_dict=POP_NAMES,
                 by_sex=by_sex,
-                frequency_index=ht.freq_index_dict.collect()[0],
+                freq_index_dict=ht.freq_index_dict.collect()[0],
             )
 
             # Assign existing VRS information to "focusAllele" key

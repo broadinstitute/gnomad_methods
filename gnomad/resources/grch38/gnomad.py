@@ -460,6 +460,8 @@ def gnomad_gks_batch(
     custom_ht: hl.Table = None,
     skip_coverage: bool = False,
     custom_coverage_ht: hl.Table = None,
+    checkpoint_path: str = None,
+    overwrite: bool = False,
 ) -> list:
     """
     Perform gnomad GKS annotations on a range of variants at once.
@@ -522,6 +524,9 @@ def gnomad_gks_batch(
     # Call and return add_gks_vrs and add_gks_va for chosen arguments.
 
     # Filter to interval before adding annotations
+    ht = ht.select(ht.freq,ht.info.vrs,ht.popmax)
+    if checkpoint_path:
+        ht = ht.checkpoint(checkpoint_path,overwrite=overwrite)
     ht = hl.filter_intervals(ht, [locus_interval])
 
     # Collect all variants as structs, so all dictionary construction can be
@@ -532,7 +537,7 @@ def gnomad_gks_batch(
     # then return list
     outputs = []
     for variant in variant_list:
-        vrs_variant = add_gks_vrs(variant.locus, variant.info.vrs)
+        vrs_variant = add_gks_vrs(variant.locus, variant.vrs)
 
         out = {
             "locus": {

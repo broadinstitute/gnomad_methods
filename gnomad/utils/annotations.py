@@ -2004,7 +2004,7 @@ def add_gks_vrs(
     Dict will have GA4GH GKS VRS structure.
 
     :param input_locus: Locus field from a struct (locus of result of running .collect() on a Hail table).
-    :param input_vrs: VRS struct (such as from my_struct.info.vrs).
+    :param input_vrs: VRS struct (such as from a ht.info.vrs field).
     :return: Python dictionary conforming to GA4GH GKS VRS structure.
     """
     build_in = input_locus.reference_genome.name

@@ -444,7 +444,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
 
-def gnomad_gks_batch(
+def gnomad_gks(
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",

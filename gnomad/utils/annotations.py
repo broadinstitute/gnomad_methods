@@ -1930,7 +1930,7 @@ def update_structured_annotations(
     return ht.annotate(**updated_rows)
 
 
-def gks_compute_seqloc_digest_batch(
+def gks_compute_seqloc_digest(
     ht: hl.Table,
     export_tmpfile: str = new_temp_file("gks-seqloc-pre.tsv"),
     computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv"),
@@ -2188,7 +2188,9 @@ def add_gks_va(
             "label": f"{label_name} v{label_version}",
             "version": f"{label_version}",
         },
-        "focusAllele": "",  # TODO load from VRS dictionary
+        "focusAllele": (
+            ""
+        ),  # Information can be populated with the result of add_gks_vrs()
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
         "alleleFrequency": overall_freq["AF"],

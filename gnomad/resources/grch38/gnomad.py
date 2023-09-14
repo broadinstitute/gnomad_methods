@@ -467,7 +467,7 @@ def gnomad_gks_batch(
     Perform gnomad GKS annotations on a range of variants at once.
 
     :param locus_interval: Hail IntervalExpression of locus<reference_genome>.
-        e.g. hl.locus_interval('chr1', 1, 50000000, reference_genome="GRCh38")
+        e.g. hl.locus_interval('chr1', 6424776, 6461367, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
     :param by_ancestry_group: Boolean to pass to obtain frequency information for each cohort.
@@ -524,9 +524,9 @@ def gnomad_gks_batch(
     # Call and return add_gks_vrs and add_gks_va for chosen arguments.
 
     # Filter to interval before adding annotations
-    ht = ht.select(ht.freq,ht.info.vrs,ht.popmax)
+    ht = ht.select(ht.freq, ht.info.vrs, ht.popmax)
     if checkpoint_path:
-        ht = ht.checkpoint(checkpoint_path,overwrite=overwrite)
+        ht = ht.checkpoint(checkpoint_path, overwrite=overwrite)
     ht = hl.filter_intervals(ht, [locus_interval])
 
     # Collect all variants as structs, so all dictionary construction can be

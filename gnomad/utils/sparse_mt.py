@@ -902,7 +902,7 @@ def impute_sex_ploidy(
 def compute_coverage_stats(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
-    interval_ht: hl.Table = None,
+    interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
 ) -> hl.Table:
     """
@@ -920,7 +920,7 @@ def compute_coverage_stats(
 
     :param mtds: Input sparse MT or VDS
     :param reference_ht: Input reference HT
-    :param interval_ht: Table containing intervals to filter to
+    :param interval_ht: Optional table containing intervals to filter to
     :param coverage_over_x_bins: List of boundaries for computing samples over X
     :return: Table with per-base coverage stats
     """
@@ -929,12 +929,12 @@ def compute_coverage_stats(
         n_samples = mtds.variant_data.count_cols()
     else:
         n_samples = mtds.count_cols()
-    logging.info("Computing coverage stats on %d n_samplessamples.", n_samples)
+    logging.info("Computing coverage stats on %d samples.", n_samples)
 
     # Filter datasets to interval list
     if interval_ht is not None:
-        reference_ht = hl.filter_intervals(
-            reference_ht, interval_ht["interval"].collect()
+        reference_ht = reference_ht.filter(
+            hl.is_defined(interval_ht[reference_ht.locus])
         )
 
         if is_vds:
@@ -958,7 +958,7 @@ def compute_coverage_stats(
         keep_entries = ["DP"]
         if "END" in mt.entry:
             keep_entries.append("END")
-        mt.select_entries(*keep_entries).select_cols().select_rows()
+        mt = mt.select_entries(*keep_entries).select_cols().select_rows()
         col_key_fields = list(mt.col_key)
         row_key_fields = list(mt.row_key)
         t = mt._localize_entries("__entries", "__cols")

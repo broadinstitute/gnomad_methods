@@ -85,7 +85,7 @@ def compute_ranked_bin(
         "Sorting the HT by score_expr followed by a random float between 0 and 1. "
         "Then adding a row index per grouping defined by bin_expr..."
     )
-    bin_ht = bin_ht.order_by("_score", "_rand")
+    bin_ht = bin_ht.key_by("_score", "_rand")
     bin_ht = bin_ht.annotate(
         **{
             f"{bin_id}_rank": hl.or_missing(

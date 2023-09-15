@@ -952,9 +952,7 @@ def compute_coverage_stats(
         mt: hl.MatrixTable, row_key_fields: List[str] = ["locus"]
     ) -> hl.MatrixTable:
         """
-        Outer join MatrixTable with reference Table to add 'in_ref' annotation
-        indicating whether a given position is found in the reference Table and filter
-        to sites contained in the reference.
+        Outer join MatrixTable with reference Table to add 'in_ref' annotation indicating whether a given position is found in the reference Table.
 
         :param mt: Input MatrixTable.
         :param row_key_fields: List of keys to use when joining the MatrixTable and reference Table.

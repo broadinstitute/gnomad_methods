@@ -915,7 +915,7 @@ def compute_coverage_stats(
         - total DP
         - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
 
-    The `reference_ht` is a Table that contains acrow for each locus coverage that should be
+    The `reference_ht` is a Table that contains a row for each locus coverage that should be
     computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
     created using `get_reference_ht`.
 

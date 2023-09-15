@@ -914,13 +914,13 @@ def compute_coverage_stats(
         - total DP
         - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
 
-    The `reference_ht` is a table that contains row for each locus coverage should be computed on.
+    The `reference_ht` is a Table that contains row for each locus coverage should be computed on.
     It needs to be keyed with the same keys as `mt`, typically either `locus` or `locus, alleles`.
     The `reference_ht` can e.g. be created using `get_reference_ht`
 
     :param mtds: Input sparse MT or VDS
     :param reference_ht: Input reference HT
-    :param interval_ht: Optional table containing intervals to filter to
+    :param interval_ht: Optional Table containing intervals to filter to
     :param coverage_over_x_bins: List of boundaries for computing samples over X
     :return: Table with per-base coverage stats
     """
@@ -948,28 +948,37 @@ def compute_coverage_stats(
             )
 
     # Create an outer join with the reference Table
-    def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
+    def join_with_ref(
+        mt: hl.MatrixTable, row_key_fields: List[str] = ["locus"]
+    ) -> hl.MatrixTable:
         """
-        Outer join Matrix Table with reference Table to add 'in_ref' annotation indicating whether or not a given position is found in the reference Table and filter to sites contained in the reference.
+        Outer join MatrixTable with reference Table to add 'in_ref' annotation
+        indicating whether a given position is found in the reference Table and filter
+        to sites contained in the reference.
 
-        :param mt: Input Matrix Table.
-        :return: Matrix Table with 'in_ref' annotation added.
+        :param mt: Input MatrixTable.
+        :param row_key_fields: List of keys to use when joining the MatrixTable and reference Table.
+        :return: MatrixTable with 'in_ref' annotation added.
         """
         keep_entries = ["DP"]
         if "END" in mt.entry:
             keep_entries.append("END")
-        mt = mt.select_entries(*keep_entries).select_cols().select_rows()
-        col_key_fields = list(mt.col_key)
-        row_key_fields = list(mt.row_key)
-        t = mt._localize_entries("__entries", "__cols")
-        if is_vds:
-            t = t.key_by("locus")
-            t = t.join(reference_ht.key_by(*t.key).select(_in_ref=True), how="outer")
-        else:
-            t = t.join(
-                reference_ht.key_by(*mt.row_key).select(_in_ref=True), how="outer"
+        if "LGT" in mt.entry:
+            keep_entries.append("LGT")
+        if "GT" in mt.entry:
+            keep_entries.append("GT")
+        mt_col_key_fields = list(mt.col_key)
+        mt_row_key_fields = list(mt.row_key)
+        t = mt.select_entries(*keep_entries).select_cols().select_rows()
+        t = t._localize_entries("__entries", "__cols")
+        t = (
+            t.key_by(*row_key_fields)
+            .join(
+                reference_ht.key_by(*row_key_fields).select(_in_ref=True),
+                how="outer",
             )
-
+            .key_by(*mt_row_key_fields)
+        )
         t = t.annotate(
             __entries=hl.or_else(
                 t.__entries,
@@ -979,13 +988,22 @@ def compute_coverage_stats(
             )
         )
 
-        # Filter out rows where the reference is missing
-        if is_vds:
-            t = t.filter(t._in_ref)
+        return t._unlocalize_entries("__entries", "__cols", mt_col_key_fields)
 
-        return t._unlocalize_entries("__entries", "__cols", col_key_fields).key_rows_by(
-            *row_key_fields
+    if is_vds:
+        mtds = hl.vds.VariantDataset(
+            mtds.reference_data.select_entries("END", "DP").select_cols().select_rows(),
+            join_with_ref(mtds.variant_data),
         )
+
+        # Densify
+        mt = hl.vds.to_dense_mt(mtds)
+    else:
+        mtds = join_with_ref(mtds, row_key_fields=["locus", "alleles"])
+        # Densify
+        mt = hl.experimental.densify(mtds)
+
+    mt = mt.filter_rows(mt._in_ref)
 
     if is_vds:
         rmt = mtds.reference_data

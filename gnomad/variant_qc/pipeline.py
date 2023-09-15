@@ -14,7 +14,7 @@ from gnomad.sample_qc.relatedness import (
     generate_trio_stats_expr,
 )
 from gnomad.utils.annotations import annotate_adj, bi_allelic_expr
-from gnomad.utils.filtering import filter_to_autosomes
+from gnomad.utils.filtering import filter_to_autosomes, filter_to_clinvar_pathogenic
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_ranked_bin
 from gnomad.variant_qc.random_forest import (
@@ -197,11 +197,14 @@ def score_bin_agg(
     indel_length = hl.abs(ht.alleles[0].length() - ht.alleles[1].length())
     # Load external evaluation data
     build = get_reference_genome(ht.locus).name
-    clinvar = (
+    clinvar_ht = (
         grch37_resources.reference_data.clinvar
         if build == "GRCh37"
         else grch38_resources.reference_data.clinvar
-    ).ht()[ht.key]
+    ).ht()
+    # Filter to ClinVar pathogenic data.
+    clinvar_path = filter_to_clinvar_pathogenic(clinvar_ht)[ht.key]
+    clinvar = clinvar_ht[ht.key]
     truth_data = (
         grch37_resources.reference_data.get_truth_ht()
         if build == "GRCh37"

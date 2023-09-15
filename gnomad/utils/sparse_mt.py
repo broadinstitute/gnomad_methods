@@ -904,6 +904,7 @@ def compute_coverage_stats(
     reference_ht: hl.Table,
     interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
+    row_key_fields: List[str] = ["locus"],
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -914,14 +915,16 @@ def compute_coverage_stats(
         - total DP
         - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
 
-    The `reference_ht` is a Table that contains row for each locus coverage should be computed on.
-    It needs to be keyed with the same keys as `mt`, typically either `locus` or `locus, alleles`.
-    The `reference_ht` can e.g. be created using `get_reference_ht`
+    The `reference_ht` is a Table that contains row for each locus coverage should be
+    computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
+    created using `get_reference_ht`.
 
     :param mtds: Input sparse MT or VDS
     :param reference_ht: Input reference HT
     :param interval_ht: Optional Table containing intervals to filter to
     :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :param row_key_fields: List of row key fields to use for joining `mtds` with
+        `reference_ht`
     :return: Table with per-base coverage stats
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -948,14 +951,12 @@ def compute_coverage_stats(
             )
 
     # Create an outer join with the reference Table
-    def join_with_ref(
-        mt: hl.MatrixTable, row_key_fields: List[str] = ["locus"]
-    ) -> hl.MatrixTable:
+    def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
         """
-        Outer join MatrixTable with reference Table to add 'in_ref' annotation indicating whether a given position is found in the reference Table.
+        Outer join MatrixTable with reference Table to add 'in_ref' annotation
+        indicating whether a given position is found in the reference Table.
 
         :param mt: Input MatrixTable.
-        :param row_key_fields: List of keys to use when joining the MatrixTable and reference Table.
         :return: MatrixTable with 'in_ref' annotation added.
         """
         keep_entries = ["DP"]
@@ -997,22 +998,12 @@ def compute_coverage_stats(
         # Densify
         mt = hl.vds.to_dense_mt(mtds)
     else:
-        mtds = join_with_ref(mtds, row_key_fields=["locus", "alleles"])
-        # Densify
-        mt = hl.experimental.densify(mtds)
-
-    mt = mt.filter_rows(mt._in_ref)
-
-    if is_vds:
-        rmt = mtds.reference_data
-        vmt = mtds.variant_data
-        mtds = hl.vds.VariantDataset(join_with_ref(rmt), join_with_ref(vmt))
-        mt = hl.vds.to_dense_mt(mtds)
-    else:
         mtds = join_with_ref(mtds)
         # Densify
         mt = hl.experimental.densify(mtds)
-        mt = mt.filter_rows(mt._in_ref)
+
+    # Filter rows where the reference is missing
+    mt = mt.filter_rows(mt._in_ref)
 
     # Unfilter entries so that entries with no ref block overlap aren't null
     mt = mt.unfilter_entries()

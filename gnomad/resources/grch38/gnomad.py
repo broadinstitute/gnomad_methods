@@ -517,7 +517,7 @@ def gnomad_gks(
 
     # Filter to select, checkpoint, and filter before adding annotations
     ht = ht.select(ht.freq, ht.info.vrs, ht.popmax)
-    ht = ht.checkpoint(hl.utils.new_temp_path("vrs_checkpoint", extension="ht"))
+    ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
     ht = hl.filter_intervals(ht, [locus_interval])
 
     # Collect all variants as structs, so all dictionary construction can be

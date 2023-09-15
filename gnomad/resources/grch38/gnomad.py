@@ -521,7 +521,8 @@ def gnomad_gks(
 
     # Call and return add_gks_vrs and add_gks_va for chosen arguments.
 
-    # Select relevant fields, checkpoint, and filter to interval before adding annotations
+    # Select relevant fields, checkpoint, and filter to interval before adding
+    # annotations
     ht = ht.select(ht.freq, ht.info.vrs, ht.popmax)
     ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
     ht = hl.filter_intervals(ht, [locus_interval])

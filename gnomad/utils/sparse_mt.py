@@ -904,9 +904,11 @@ def impute_sex_ploidy(
 
 
 def compute_coverage_stats(
-    mt: hl.MatrixTable,
+    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
+    interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
+    row_key_fields: List[str] = ["locus"],
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -917,33 +919,93 @@ def compute_coverage_stats(
         - total DP
         - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
 
-    The `reference_ht` is a table that contains row for each locus coverage should be computed on.
-    It needs to be keyed with the same keys as `mt`, typically either `locus` or `locus, alleles`.
-    The `reference_ht` can e.g. be created using `get_reference_ht`
+    The `reference_ht` is a Table that contains a row for each locus coverage that should be
+    computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
+    created using `get_reference_ht`.
 
-    :param mt: Input sparse MT
+    :param mtds: Input sparse MT or VDS
     :param reference_ht: Input reference HT
+    :param interval_ht: Optional Table containing intervals to filter to
     :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :param row_key_fields: List of row key fields to use for joining `mtds` with
+        `reference_ht`
     :return: Table with per-base coverage stats
     """
-    n_samples = mt.count_cols()
-    print(f"Computing coverage stats on {n_samples} samples.")
+    is_vds = isinstance(mtds, hl.vds.VariantDataset)
+    if is_vds:
+        n_samples = mtds.variant_data.count_cols()
+    else:
+        n_samples = mtds.count_cols()
+    logging.info("Computing coverage stats on %d samples.", n_samples)
+
+    # Filter datasets to interval list
+    if interval_ht is not None:
+        reference_ht = reference_ht.filter(
+            hl.is_defined(interval_ht[reference_ht.locus])
+        )
+
+        if is_vds:
+            mtds = hl.vds.filter_intervals(
+                vds=mtds, intervals=interval_ht, split_reference_blocks=True
+            )
+        else:
+            raise NotImplementedError(
+                "Filtering to an interval list for a sparse Matrix Table is currently"
+                " not supported."
+            )
 
     # Create an outer join with the reference Table
-    mt = mt.select_entries("END", "DP").select_cols().select_rows()
-    col_key_fields = list(mt.col_key)
-    t = mt._localize_entries("__entries", "__cols")
-    t = t.join(reference_ht.key_by(*mt.row_key).select(_in_ref=True), how="outer")
-    t = t.annotate(
-        __entries=hl.or_else(
-            t.__entries,
-            hl.range(n_samples).map(lambda x: hl.null(t.__entries.dtype.element_type)),
-        )
-    )
-    mt = t._unlocalize_entries("__entries", "__cols", col_key_fields)
+    def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
+        """
+        Outer join MatrixTable with reference Table.
 
-    # Densify
-    mt = hl.experimental.densify(mt)
+        Add 'in_ref' annotation indicating whether a given position is found in the reference Table.
+
+        :param mt: Input MatrixTable.
+        :return: MatrixTable with 'in_ref' annotation added.
+        """
+        keep_entries = ["DP"]
+        if "END" in mt.entry:
+            keep_entries.append("END")
+        if "LGT" in mt.entry:
+            keep_entries.append("LGT")
+        if "GT" in mt.entry:
+            keep_entries.append("GT")
+        mt_col_key_fields = list(mt.col_key)
+        mt_row_key_fields = list(mt.row_key)
+        t = mt.select_entries(*keep_entries).select_cols().select_rows()
+        t = t._localize_entries("__entries", "__cols")
+        t = (
+            t.key_by(*row_key_fields)
+            .join(
+                reference_ht.key_by(*row_key_fields).select(_in_ref=True),
+                how="outer",
+            )
+            .key_by(*mt_row_key_fields)
+        )
+        t = t.annotate(
+            __entries=hl.or_else(
+                t.__entries,
+                hl.range(n_samples).map(
+                    lambda x: hl.missing(t.__entries.dtype.element_type)
+                ),
+            )
+        )
+
+        return t._unlocalize_entries("__entries", "__cols", mt_col_key_fields)
+
+    if is_vds:
+        mtds = hl.vds.VariantDataset(
+            mtds.reference_data.select_entries("END", "DP").select_cols().select_rows(),
+            join_with_ref(mtds.variant_data),
+        )
+
+        # Densify
+        mt = hl.vds.to_dense_mt(mtds)
+    else:
+        mtds = join_with_ref(mtds)
+        # Densify
+        mt = hl.experimental.densify(mtds)
 
     # Filter rows where the reference is missing
     mt = mt.filter_rows(mt._in_ref)

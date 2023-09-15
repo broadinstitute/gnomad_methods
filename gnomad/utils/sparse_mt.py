@@ -953,8 +953,9 @@ def compute_coverage_stats(
     # Create an outer join with the reference Table
     def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
         """
-        Outer join MatrixTable with reference Table to add 'in_ref' annotation
-        indicating whether a given position is found in the reference Table.
+        Outer join MatrixTable with reference Table.
+
+        Add 'in_ref' annotation indicating whether a given position is found in the reference Table.
 
         :param mt: Input MatrixTable.
         :return: MatrixTable with 'in_ref' annotation added.

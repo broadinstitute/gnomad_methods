@@ -14,7 +14,7 @@ from gnomad.sample_qc.relatedness import (
     generate_trio_stats_expr,
 )
 from gnomad.utils.annotations import annotate_adj, bi_allelic_expr
-from gnomad.utils.filtering import filter_to_autosomes
+from gnomad.utils.filtering import filter_to_autosomes, filter_to_clinvar_pathogenic
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.variant_qc.evaluation import compute_ranked_bin
 from gnomad.variant_qc.random_forest import (
@@ -197,17 +197,31 @@ def score_bin_agg(
     indel_length = hl.abs(ht.alleles[0].length() - ht.alleles[1].length())
     # Load external evaluation data
     build = get_reference_genome(ht.locus).name
-    clinvar = (
+    clinvar_ht = (
         grch37_resources.reference_data.clinvar
         if build == "GRCh37"
         else grch38_resources.reference_data.clinvar
-    ).ht()[ht.key]
+    ).ht()
+    # Filter to ClinVar pathogenic data.
+    clinvar_path = filter_to_clinvar_pathogenic(clinvar_ht)[ht.key]
+    clinvar = clinvar_ht[ht.key]
     truth_data = (
         grch37_resources.reference_data.get_truth_ht()
         if build == "GRCh37"
         else grch38_resources.reference_data.get_truth_ht()
     )[ht.key]
     fam = fam_stats_ht[ht.key]
+
+    if "fail_hard_filters" in ht.row:
+        fail_hard_filters_expr = ht.fail_hard_filters
+    elif "info" in ht.row:
+        fail_hard_filters_expr = (
+            (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
+        )
+    else:
+        raise ValueError(
+            "Either 'fail_hard_filters' or 'info' must be present in the input Table!"
+        )
 
     return dict(
         min_score=hl.agg.min(ht.score),
@@ -220,12 +234,11 @@ def score_bin_agg(
         n_1bp_indel=hl.agg.count_where(indel_length == 1),
         n_mod3bp_indel=hl.agg.count_where((indel_length % 3) == 0),
         n_singleton=hl.agg.count_where(ht.singleton),
-        fail_hard_filters=hl.agg.count_where(
-            (ht.info.QD < 2) | (ht.info.FS > 60) | (ht.info.MQ < 30)
-        ),
+        fail_hard_filters=hl.agg.count_where(fail_hard_filters_expr),
         n_pos_train=hl.agg.count_where(ht.positive_train_site),
         n_neg_train=hl.agg.count_where(ht.negative_train_site),
         n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
+        n_clinvar_path=hl.agg.count_where(hl.is_defined(clinvar_path)),
         n_de_novos_singleton_adj=hl.agg.filter(
             ht.ac == 1, hl.agg.sum(fam.n_de_novos_adj)
         ),

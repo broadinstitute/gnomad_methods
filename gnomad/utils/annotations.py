@@ -2052,7 +2052,6 @@ def add_gks_va(
     input_struct: hl.struct,
     label_name: str = "gnomAD",
     label_version: str = "3.1.2",
-    coverage_ht: hl.Table = None,
     ancestry_groups: list = None,
     ancestry_groups_dict: dict = None,
     by_sex: bool = False,
@@ -2063,14 +2062,13 @@ def add_gks_va(
 
     Populate the dictionary with frequency information conforming to the GKS VA frequency schema.
     If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
+    If input_struct has mean_cov, it is added to ancillaryResults.
     This annotation is added under the gks_va_freq_dict field of the table.
     The focusAllele field is not populated, and must be filled in by the caller.
 
     :param input_struct: Hail struct for a desired variant (such as result of running .collect()[0] on a Table).
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the table being used. Example: "3.1.2".
-    :param coverage_ht: Table containing coverage stats, with mean depth in "mean" annotation.
-        If None, omit coverage in return.
     :param ancestry_groups: List of strings of shortened names of cohorts to return results for.
         Example: ['afr','fin','nfe']. Default is None.
     :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
@@ -2206,11 +2204,9 @@ def add_gks_va(
             "popFreqId": f"{gnomad_id}.{input_struct.popmax.pop.upper()}",
         }
 
-    # Add mean coverage statistics if a coverage Table is provided
-    if coverage_ht is not None:
-        ancillaryResults["meanDepth"] = coverage_ht.filter(
-            coverage_ht.locus == input_struct.locus
-        ).mean.collect()[0]
+    # Add mean coverage statistics if the input was annotated with coverage information
+    if "mean_cov" in input_struct:
+        ancillaryResults["meanDepth"] = input_struct.mean_cov
 
     final_freq_dict["ancillaryResults"] = ancillaryResults
 

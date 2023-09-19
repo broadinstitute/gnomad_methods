@@ -503,6 +503,7 @@ def gnomad_gks(
             coverage_ht = hl.read_table(
                 coverage("genomes").versions[coverage_version].path
             )
+        ht = ht.annotate(mean_cov=coverage_ht[ht.locus].mean)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
@@ -523,8 +524,11 @@ def gnomad_gks(
 
     # Select relevant fields, checkpoint, and filter to interval before adding
     # annotations
-    ht = ht.select(ht.freq, ht.info.vrs, ht.popmax)
-    ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
+    if not skip_coverage:
+        ht = ht.select(ht.freq, ht.info.vrs, ht.popmax, ht.mean_cov)
+    else:
+        ht = ht.select(ht.freq, ht.info.vrs, ht.popmax)
+    # ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
     ht = hl.filter_intervals(ht, [locus_interval])
 
     # Collect all variants as structs, so all dictionary construction can be
@@ -553,7 +557,6 @@ def gnomad_gks(
                 input_struct=variant,
                 label_name="gnomAD",
                 label_version=version,
-                coverage_ht=coverage_ht,
                 ancestry_groups=pops_list,
                 ancestry_groups_dict=POP_NAMES,
                 by_sex=by_sex,

@@ -524,6 +524,7 @@ def gnomad_gks(
     # Collect all variants as structs, so all dictionary construction can be
     # done in native Python
     variant_list = ht.collect()
+    ht_freq_index_dict = ht.freq_index_dict.collect()[0]
 
     # Assemble output dicts with VRS and optionally frequency, append to list,
     # then return list
@@ -550,7 +551,7 @@ def gnomad_gks(
                 ancestry_groups=pops_list,
                 ancestry_groups_dict=POP_NAMES,
                 by_sex=by_sex,
-                freq_index_dict=ht.freq_index_dict.collect()[0],
+                freq_index_dict=ht_freq_index_dict,
             )
 
             # Assign existing VRS information to "focusAllele" key

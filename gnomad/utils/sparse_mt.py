@@ -434,6 +434,7 @@ def get_as_info_expr(
 
     # Add FS and SOR if SB is present.
     if "AS_SB_TABLE" in info or "AS_SB" in info:
+        drop = []
         # Rename AS_SB to AS_SB_TABLE if present and add SB Ax2 aggregation logic.
         if "AS_SB" in agg_expr:
             if "AS_SB_TABLE" in agg_expr:
@@ -450,6 +451,7 @@ def get_as_info_expr(
             ).extend(
                 info.AS_SB.map(lambda x: x[2:])  # each alt
             )
+            drop = ["AS_SB"]
         else:
             as_sb_table = info.AS_SB_TABLE
         info = info.annotate(
@@ -460,7 +462,7 @@ def get_as_info_expr(
             AS_SOR=hl.range(1, hl.len(mt.alleles)).map(
                 lambda i: sor_from_sb(as_sb_table[0].extend(as_sb_table[i]))
             ),
-        )
+        ).drop(*drop)
 
     return info
 

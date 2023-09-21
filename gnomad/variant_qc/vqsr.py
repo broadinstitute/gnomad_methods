@@ -904,7 +904,8 @@ def vqsr_workflow(
         out_bucket: str,
         billing_project: str,
         n_samples: int,
-        use_as_annotations: bool = True
+        batch_suffix: str,
+        use_as_annotations: bool = True,
 ):
     """
     Wraps all the functions into a workflow
@@ -940,7 +941,7 @@ def vqsr_workflow(
     )
 
     b = hb.Batch(
-        'VQSR pipeline',
+        f'VQSR pipeline{batch_suffix}',
         backend=backend,
     )
 
@@ -990,6 +991,7 @@ def main():
     parser.add_argument('--transmitted-singletons', type=str, required=False) # we'll set this true
     parser.add_argument('--sibling-singletons', type=str, required=False) # we'll set this true 
     parser.add_argument('--no-as-annotations', action='store_true')
+    parser.add_argument('--batch-suffix', type=str, default="")
 
     args = parser.parse_args()
 
@@ -1005,7 +1007,8 @@ def main():
                   out_bucket=args.out_bucket,
                   billing_project=args.billing_project,
                   n_samples=args.n_samples,
-                  use_as_annotations=use_as_annotations)
+                  use_as_annotations=use_as_annotations,
+                  batch_suffix=args.batch_suffix)
 
 
 if __name__ == '__main__':

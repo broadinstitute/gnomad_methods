@@ -49,6 +49,7 @@ def split_intervals(
       -O {j.intervals} \\
       -scatter {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} \\
       -R {utils['ref_fasta']} \\
+      --gcs-project-for-requester-pays broad-mpg-gnomad \\
       -mode INTERVAL_SUBDIVISION
       """
     )
@@ -955,6 +956,8 @@ def vqsr_workflow(
     # collected from them.
     is_huge_callset = n_samples >= 100000
     # For huge callsets, we allocate more memory for the SNPs Create Model step
+    # For v4, this is 700,000 
+    # To improve: just let people pass a --huge-callset flag 
 
     make_vqsr_jobs(
         b=b,

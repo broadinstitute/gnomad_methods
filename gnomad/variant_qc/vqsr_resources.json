@@ -35,5 +35,5 @@
 
   "NUMBER_OF_HAPLOTYPE_CALLER_INTERVALS": 50,
   "NUMBER_OF_GENOMICS_DB_INTERVALS": 500,
-  "UNPADDED_INTERVALS": "gs://gcp-public-data--broad-references/hg38/v0/hg38.even.handcurated.20k.intervals"
+  "UNPADDED_INTERVALS": "gs://gnomad/resources/intervals/xgen.pad50.dsp.pad50.intersection.intervals"
 }

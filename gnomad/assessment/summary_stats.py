@@ -58,7 +58,7 @@ def get_summary_counts_dict(
     prefix_str: str = "",
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
-    Return dictionary containing containing counts of multiple variant categories.
+    Return dictionary containing counts of multiple variant categories.
 
     Categories are:
         - Number of variants

@@ -815,7 +815,7 @@ def get_constraint_grouping_expr(
     if include_canonical_group:
         groupings["canonical"] = hl.or_else(vep_annotation_expr.canonical == 1, False)
     elif include_mane_select_group:
-        groupings["mane"] = hl.or_else(
+        groupings["mane_select"] = hl.or_else(
             hl.is_defined(vep_annotation_expr.mane_select), False
         )
 

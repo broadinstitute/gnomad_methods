@@ -757,6 +757,7 @@ def get_constraint_grouping_expr(
     coverage_expr: Optional[hl.Int32Expression] = None,
     include_transcript_group: bool = True,
     include_canonical_group: bool = True,
+    include_mane_select_group: bool = False,
 ) -> Dict[str, Union[hl.StringExpression, hl.Int32Expression, hl.BooleanExpression]]:
     """
     Collect annotations used for constraint groupings.
@@ -790,6 +791,9 @@ def get_constraint_grouping_expr(
         groupings. Default is True.
     :param include_canonical_group: Whether to include canonical annotation in the
         groupings. Default is True.
+    :param include_mane_select_group: Whether to include mane_select annotation in the
+        groupings. Default is False.
+
     :return: A dictionary with keys as annotation names and values as actual
         annotations.
     """
@@ -810,12 +814,19 @@ def get_constraint_grouping_expr(
         groupings["transcript"] = vep_annotation_expr.transcript_id
     if include_canonical_group:
         groupings["canonical"] = hl.or_else(vep_annotation_expr.canonical == 1, False)
+    if include_mane_select_group:
+        groupings["mane_select"] = hl.or_else(
+            hl.is_defined(vep_annotation_expr.mane_select), False
+        )
 
     return groupings
 
 
 def annotate_exploded_vep_for_constraint_groupings(
-    ht: hl.Table, vep_annotation: str = "transcript_consequences"
+    ht: hl.Table,
+    vep_annotation: str = "transcript_consequences",
+    include_canonical_group: bool = True,
+    include_mane_select_group: bool = False,
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
     Annotate Table with annotations used for constraint groupings.
@@ -842,13 +853,29 @@ def annotate_exploded_vep_for_constraint_groupings(
     :param vep_annotation: Name of annotation in 'vep' annotation (one of
         "transcript_consequences" and "worst_csq_by_gene") that will be used for
         obtaining constraint annotations. Default is "transcript_consequences".
+    :param include_canonical_group: Whether to include 'canonical' annotation in the
+        groupings. Default is True. Ignored unless `vep_annotation` is  "transcript_consequences".
+    :param include_mane_select_group: Whether to include 'mane_select' annotation in the
+        groupings. Default is False. Ignored unless `vep_annotation` is  "transcript_consequences".
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
     if vep_annotation == "transcript_consequences":
-        include_transcript_group = include_canonical_group = True
+        if not include_canonical_group and not include_mane_select_group:
+            raise ValueError(
+                "If 'vep_annotation' is 'transcript_consequences', one of either"
+                " 'include_canonical_group' or 'include_mane_select_group' must be set!"
+            )
+        include_transcript_group = True
     else:
-        include_transcript_group = include_canonical_group = False
+        logger.warning(
+            "Setting both 'include_canonical_group' and 'include_mane_select_group' to"
+            " False (options cannot be used unless 'vep_annotation' is"
+            " 'transcript_consequences')."
+        )
+        include_transcript_group = False
+        include_canonical_group = False
+        include_mane_select_group = False
 
     # Annotate 'worst_csq_by_gene' to `ht` if it's specified for `vep_annotation`.
     if vep_annotation == "worst_csq_by_gene":
@@ -863,6 +890,7 @@ def annotate_exploded_vep_for_constraint_groupings(
         coverage_expr=ht.exome_coverage,
         include_transcript_group=include_transcript_group,
         include_canonical_group=include_canonical_group,
+        include_mane_select_group=include_mane_select_group,
     )
 
     return ht.annotate(**groupings), tuple(groupings.keys())

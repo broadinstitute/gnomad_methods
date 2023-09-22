@@ -604,7 +604,7 @@ def filter_vep_transcript_csqs(
     vep_root: str = "vep",
     synonymous: bool = True,
     canonical: bool = True,
-    mane: bool = False,
+    mane_select: bool = False,
     filter_empty_csq: bool = True,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
@@ -620,15 +620,15 @@ def filter_vep_transcript_csqs(
     :param vep_root: Name used for VEP annotation. Default is 'vep'.
     :param synonymous: Whether to filter to variants where the most severe consequence is 'synonymous_variant'. Default is True.
     :param canonical: Whether to filter to only canonical transcripts. Default is True.
-    :param mane: Whether to filter to only MANE select transcripts. Default is False.
+    :param mane_select: Whether to filter to only MANE Select transcripts. Default is False.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Default is True.
     :return: Table or MatrixTable filtered to specified criteria.
     """
-    if not synonymous and not (canonical or mane) and not filter_empty_csq:
+    if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
         logger.warning("No changes have been made to input Table/MatrixTable!")
         return t
 
-    if canonical and mane:
+    if canonical and mane_select:
         raise ValueError("Cannot set both 'canonical' and 'mane'!")
 
     transcript_csqs = t[vep_root].transcript_consequences
@@ -637,7 +637,7 @@ def filter_vep_transcript_csqs(
         criteria.append(lambda csq: csq.most_severe_consequence == "synonymous_variant")
     if canonical:
         criteria.append(lambda csq: csq.canonical == 1)
-    if mane:
+    if mane_select:
         criteria.append(lambda csq: hl.is_defined(csq.mane_select))
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))

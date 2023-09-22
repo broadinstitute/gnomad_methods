@@ -474,7 +474,7 @@ def gnomad_gks(
     :param vrs_only: Boolean to pass for only VRS info to be returned
         (will not include allele frequency information).
     :param custom_ht: Table to use instead of what public_release() method would return for the version.
-    :param skip_checkpoint: Bool to pass to skip checkpointing selected columns
+    :param skip_checkpoint: Bool to pass to skip checkpointing selected fields
         (checkpointing may be desirable for large datasets by reducing data copies across the cluster).
     :param skip_coverage: Bool to pass to skip adding coverage statistics.
     :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table.
@@ -506,7 +506,7 @@ def gnomad_gks(
             coverage_ht = hl.read_table(
                 coverage("genomes").versions[coverage_version].path
             )
-        ht = ht.annotate(mean_cov=coverage_ht[ht.locus].mean)
+        ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
@@ -527,10 +527,11 @@ def gnomad_gks(
 
     # Select relevant fields, checkpoint, and filter to interval before adding
     # annotations
+    keep_fields = [ht.freq, ht.info.vrs, ht.popmax]
     if not skip_coverage:
-        ht = ht.select(ht.freq, ht.info.vrs, ht.popmax, ht.mean_cov)
-    else:
-        ht = ht.select(ht.freq, ht.info.vrs, ht.popmax)
+        keep_fields.append(ht.mean_cov)
+
+    ht = ht.select(*keep_fields)
 
     # Checkpoint narrower set of columns if not skipped.
     if not skip_checkpoint:

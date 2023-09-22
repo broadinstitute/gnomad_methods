@@ -2062,7 +2062,7 @@ def add_gks_va(
 
     Populate the dictionary with frequency information conforming to the GKS VA frequency schema.
     If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
-    If input_struct has mean_cov, it is added to ancillaryResults.
+    If input_struct has mean_depth, it is added to ancillaryResults.
     This annotation is added under the gks_va_freq_dict field of the table.
     The focusAllele field is not populated, and must be filled in by the caller.
 
@@ -2204,9 +2204,10 @@ def add_gks_va(
             "popFreqId": f"{gnomad_id}.{input_struct.popmax.pop.upper()}",
         }
 
-    # Add mean coverage statistics if the input was annotated with coverage information
-    if "mean_cov" in input_struct:
-        ancillaryResults["meanDepth"] = input_struct.mean_cov
+    # Add mean coverage depth statistics if the input was annotated
+    # with coverage information.
+    if "mean_depth" in input_struct:
+        ancillaryResults["meanDepth"] = input_struct.mean_depth
 
     final_freq_dict["ancillaryResults"] = ancillaryResults
 

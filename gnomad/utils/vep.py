@@ -628,9 +628,6 @@ def filter_vep_transcript_csqs(
         logger.warning("No changes have been made to input Table/MatrixTable!")
         return t
 
-    if canonical and mane_select:
-        raise ValueError("Cannot set both 'canonical' and 'mane_select'!")
-
     transcript_csqs = t[vep_root].transcript_consequences
     criteria = [lambda csq: True]
     if synonymous:

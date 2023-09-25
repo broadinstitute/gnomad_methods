@@ -223,22 +223,39 @@ def score_bin_agg(
             "Either 'fail_hard_filters' or 'info' must be present in the input Table!"
         )
 
+    ins_expr = hl.is_insertion(ht.alleles[0], ht.alleles[1])
+    del_expr = hl.is_deletion(ht.alleles[0], ht.alleles[1])
+    indel_1bp_expr = indel_length == 1
+    count_where_expr = {
+        "n_ins": ins_expr,
+        "n_del": del_expr,
+        "n_ti": hl.is_transition(ht.alleles[0], ht.alleles[1]),
+        "n_tv": hl.is_transversion(ht.alleles[0], ht.alleles[1]),
+        "n_1bp_indel": indel_1bp_expr,
+        "n_1bp_ins": ins_expr & indel_1bp_expr,
+        "n_2bp_ins": ins_expr & (indel_length == 2),
+        "n_3bp_ins": ins_expr & (indel_length == 3),
+        "n_1bp_del": del_expr & indel_1bp_expr,
+        "n_2bp_del": del_expr & (indel_length == 2),
+        "n_3bp_del": del_expr & (indel_length == 3),
+        "n_mod3bp_indel": (indel_length % 3) == 0,
+        "n_singleton": ht.singleton,
+        "fail_hard_filters": fail_hard_filters_expr,
+        "n_pos_train": ht.positive_train_site,
+        "n_neg_train": ht.negative_train_site,
+        "n_clinvar": hl.is_defined(clinvar),
+        "n_clinvar_path": hl.is_defined(clinvar_path),
+        "n_omni": truth_data.omni,
+        "n_mills": truth_data.mills,
+        "n_hapmap": truth_data.hapmap,
+        "n_kgp_phase1_hc": truth_data.kgp_phase1_hc,
+    }
+
     return dict(
         min_score=hl.agg.min(ht.score),
         max_score=hl.agg.max(ht.score),
         n=hl.agg.count(),
-        n_ins=hl.agg.count_where(hl.is_insertion(ht.alleles[0], ht.alleles[1])),
-        n_del=hl.agg.count_where(hl.is_deletion(ht.alleles[0], ht.alleles[1])),
-        n_ti=hl.agg.count_where(hl.is_transition(ht.alleles[0], ht.alleles[1])),
-        n_tv=hl.agg.count_where(hl.is_transversion(ht.alleles[0], ht.alleles[1])),
-        n_1bp_indel=hl.agg.count_where(indel_length == 1),
-        n_mod3bp_indel=hl.agg.count_where((indel_length % 3) == 0),
-        n_singleton=hl.agg.count_where(ht.singleton),
-        fail_hard_filters=hl.agg.count_where(fail_hard_filters_expr),
-        n_pos_train=hl.agg.count_where(ht.positive_train_site),
-        n_neg_train=hl.agg.count_where(ht.negative_train_site),
-        n_clinvar=hl.agg.count_where(hl.is_defined(clinvar)),
-        n_clinvar_path=hl.agg.count_where(hl.is_defined(clinvar_path)),
+        **{k: hl.agg.count_where(v) for k, v in count_where_expr.items()},
         n_de_novos_singleton_adj=hl.agg.filter(
             ht.ac == 1, hl.agg.sum(fam.n_de_novos_adj)
         ),
@@ -247,6 +264,20 @@ def score_bin_agg(
         ),
         n_de_novos_adj=hl.agg.sum(fam.n_de_novos_adj),
         n_de_novo=hl.agg.sum(fam.n_de_novos_raw),
+        n_de_novos_AF_001_adj=hl.agg.filter(
+            hl.if_else(
+                fam.ac_parents_adj == 0, 0.0, fam.ac_parents_adj / fam.an_parents_adj
+            )
+            < 0.001,
+            hl.agg.sum(fam.n_de_novos_adj),
+        ),
+        n_de_novos_AF_001=hl.agg.filter(
+            hl.if_else(
+                fam.ac_parents_raw == 0, 0.0, fam.ac_parents_raw / fam.an_parents_raw
+            )
+            < 0.001,
+            hl.agg.sum(fam.n_de_novos_raw),
+        ),
         n_trans_singletons=hl.agg.filter(
             ht.ac_raw == 2, hl.agg.sum(fam.n_transmitted_raw)
         ),
@@ -257,10 +288,6 @@ def score_bin_agg(
         n_train_trans_singletons=hl.agg.filter(
             (ht.ac_raw == 2) & ht.positive_train_site, hl.agg.sum(fam.n_transmitted_raw)
         ),
-        n_omni=hl.agg.count_where(truth_data.omni),
-        n_mills=hl.agg.count_where(truth_data.mills),
-        n_hapmap=hl.agg.count_where(truth_data.hapmap),
-        n_kgp_phase1_hc=hl.agg.count_where(truth_data.kgp_phase1_hc),
     )
 
 

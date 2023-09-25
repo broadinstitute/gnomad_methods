@@ -886,7 +886,6 @@ def make_vqsr_jobs(
                 utils=utils,
                 disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
-                gcp_billing_project=gcp_billing_project,
                 scatter=idx,
                 interval=intervals[f"interval_{idx}"],
                 out_bucket=out_bucket,
@@ -944,7 +943,6 @@ def make_vqsr_jobs(
             utils=utils,
             disk_size=huge_disk,
             use_as_annotations=use_as_annotations,
-            gcp_billing_project=gcp_billing_project,
             out_bucket=out_bucket,
         )
 
@@ -1004,7 +1002,9 @@ def vqsr_workflow(
         backend=backend,
     )
 
-    intervals_j = split_intervals(b=b, utils=utils)
+    intervals_j = split_intervals(
+        b=b, utils=utils, gcp_billing_project=gcp_billing_project
+    )
 
     if run_mode == "small":
         is_small_callset = True

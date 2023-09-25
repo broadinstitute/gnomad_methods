@@ -9,18 +9,13 @@ python3 ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr.py \\
     --batch-suffix chr22testlarge --n-samples 700000
 """
 import argparse
+import json
 import logging
+from typing import Dict, List, Optional
+
 import hail as hl
-from typing import List, Optional, Dict
 import hailtop.batch as hb
 from hailtop.batch.job import Job
-import json
-
-hl.init(
-    backend="batch",
-    gcs_requester_pays_configuration="broad-mpg-gnomad",
-)
-
 
 logger = logging.getLogger(__file__)
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -30,11 +25,13 @@ logger.setLevel(logging.INFO)
 def split_intervals(
     b: hb.Batch,
     utils: Dict,
+    gcp_billing_project: str,
 ) -> Job:
     """
     Split genome into intervals to parallelize VQSR for large sample sizes
     :param b: Batch object to add jobs to
     :param utils: a dictionary containing resources (file paths and arguments) to be used to split genome
+    :param gcp_billing_project: GCP billing project for requester-pays buckets
     :return: a Job object with a single output j.intervals of type ResourceGroup
     """
     j = b.new_job(f"""Make {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} intervals""")
@@ -58,7 +55,7 @@ def split_intervals(
       -O {j.intervals} \\
       -scatter {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} \\
       -R {utils['ref_fasta']} \\
-      --gcs-project-for-requester-pays broad-mpg-gnomad \\
+      --gcs-project-for-requester-pays {gcp_billing_project} \\
       -mode INTERVAL_SUBDIVISION
       """)
     # Could save intervals to a bucket here to avoid rerunning the job
@@ -71,11 +68,12 @@ def snps_variant_recalibrator_create_model(
     sites_only_vcf: str,
     utils: Dict,
     use_as_annotations: bool,
+    gcp_billing_project: str,
     transmitted_singletons_resource_vcf: Optional[str] = None,
     sibling_singletons_resource_vcf: Optional[str] = None,
     out_bucket: str = None,
     is_small_callset: bool = False,
-    is_huge_callset: bool = False,
+    is_large_callset: bool = False,
     max_gaussians: int = 6,
 ) -> Job:
     """
@@ -98,11 +96,12 @@ def snps_variant_recalibrator_create_model(
     :param sites_only_vcf: sites only VCF file to be used to build the model
     :param utils: a dictionary containing resources (file paths and arguments) to be used to create the model
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
+    :param gcp_billing_project: GCP billing project for requester-pays buckets
     :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to be used in building the model
     :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to be used in building the model
     :param out_bucket: full path to output bucket to write model and plots to
     :param is_small_callset: whether the dataset is small. Used to set number of CPUs for the job
-    :param is_huge_callset: whether the dataset is huge. Used to set number of CPUs for the job
+    :param is_large_callset: whether the dataset is huge. Used to set number of CPUs for the job
     :param max_gaussians: maximum number of Gaussians for the positive model
     :return: a Job object with 2 outputs: j.model_file and j.snp_rscript_file.
     """
@@ -117,7 +116,7 @@ def snps_variant_recalibrator_create_model(
     java_mem = ncpu * 8 - 10
     j.storage("50G")
 
-    downsample_factor = 75 if is_huge_callset else 10
+    downsample_factor = 75 if is_large_callset else 10
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["SNP_RECALIBRATION_TRANCHE_VALUES"]]
@@ -132,10 +131,7 @@ def snps_variant_recalibrator_create_model(
             )
         ]
     )
-    print("so we are failing here???????")
-    logger.info(
-        "So we are failing here?????????? Is this where it reads in the sites_only_vcf?"
-    )
+
     j.command(f"""set -euo pipefail
         gatk --java-options "-Xms{java_mem}g -XX:+UseParallelGC -XX:ParallelGCThreads={ncpu-2}" \\
           VariantRecalibrator \\
@@ -150,7 +146,7 @@ def snps_variant_recalibrator_create_model(
           --sample-every-Nth-variant {downsample_factor} \\
           --output-model {j.model_file} \\
           --max-gaussians {max_gaussians} \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           -resource:hapmap,known=false,training=true,truth=true,prior=15 {utils['hapmap_resource_vcf']} \\
           -resource:omni,known=false,training=true,truth=true,prior=12 {utils['omni_resource_vcf']} \\
           -resource:1000G,known=false,training=true,truth=false,prior=10 {utils['one_thousand_genomes_resource_vcf']} \\
@@ -184,6 +180,7 @@ def snps_variant_recalibrator(
     utils: Dict,
     out_bucket: str,
     use_as_annotations: bool,
+    gcp_billing_project,
     interval: Optional[hb.ResourceGroup] = None,
     tranche_idx: Optional[int] = None,
     model_file: Optional[hb.ResourceFile] = None,
@@ -247,7 +244,7 @@ def snps_variant_recalibrator(
     cmd = f"""set -euo pipefail
         gatk --java-options "-Xms{mem_gb-1}g -XX:+UseParallelGC -XX:ParallelGCThreads=3" \\
           VariantRecalibrator \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
@@ -299,6 +296,7 @@ def indels_variant_recalibrator_create_model(
     sites_only_vcf: str,
     utils: Dict,
     use_as_annotations: bool,
+    gcp_billing_project: str,
     transmitted_singletons_resource_vcf: str = None,
     sibling_singletons_resource_vcf: str = None,
     out_bucket: str = None,
@@ -325,6 +323,7 @@ def indels_variant_recalibrator_create_model(
     :param sites_only_vcf: sites only VCF file to be used to build the model
     :param utils: a dictionary containing resources (file paths and arguments)
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
+    :param gcp_billing_project: GCP billing project for requester-pays buckets
     :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to be used in building the model
     :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to be used in building the model
     :param out_bucket: full path to output bucket to write model and plots to
@@ -344,7 +343,7 @@ def indels_variant_recalibrator_create_model(
     java_mem = ncpu * 8 - 10
     j.storage("50G")
 
-    # downsample_factor = 75 if is_huge_callset else 10
+    # downsample_factor = 75 if is_large_callset else 10
     downsample_factor = 10
 
     tranche_cmdl = " ".join(
@@ -364,7 +363,7 @@ def indels_variant_recalibrator_create_model(
     j.command(f"""set -euo pipefail
         gatk --java-options "-Xms{java_mem}g -XX:+UseParallelGC -XX:ParallelGCThreads={ncpu-2}" \\
           VariantRecalibrator \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
@@ -404,6 +403,7 @@ def indels_variant_recalibrator(
     utils: Dict,
     out_bucket: str,
     use_as_annotations: bool,
+    gcp_billing_project: str,
     interval: Optional[hb.ResourceGroup] = None,
     tranche_idx: Optional[int] = None,
     model_file: Optional[hb.ResourceFile] = None,
@@ -434,6 +434,7 @@ def indels_variant_recalibrator(
     :param out_bucket: full path to output bucket to write model and plots to
     :param tranche_idx: index for the tranches file
     :param use_as_annotations: If set, Allele-Specific variant recalibrator will be used
+    :param gcp_billing_project: GCP billing project for requester-pays buckets
     :param transmitted_singletons_resource_vcf: Optional transmitted singletons VCF to include in VariantRecalibrator
     :param sibling_singletons_resource_vcf: Optional sibling singletons VCF to include in VariantRecalibrator
     :param interval: genomic interval to apply the model to
@@ -467,7 +468,7 @@ def indels_variant_recalibrator(
     cmd = f"""set -euo pipefail
         gatk --java-options "-Xms{mem_gb-1}g -XX:+UseParallelGC -XX:ParallelGCThreads=3" \\
           VariantRecalibrator \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
           --tranches-file {j.tranches} \\
@@ -723,12 +724,13 @@ def make_vqsr_jobs(
     b: hb.Batch,
     sites_only_vcf: str,
     is_small_callset: bool,
-    is_huge_callset: bool,
+    is_large_callset: bool,
     output_vcf_name: str,
     utils: Dict,
     out_bucket: str,
     intervals: Dict,
     use_as_annotations: bool,
+    gcp_billing_project: str,
     transmitted_singletons: Optional[str] = None,
     sibling_singletons: Optional[str] = None,
 ):
@@ -739,13 +741,14 @@ def make_vqsr_jobs(
     :param is_small_callset: for small callsets, we gather the VCF shards and collect
         QC metrics directly. For anything larger, we need to keep the VCF sharded and
         gather metrics collected from them
-    :param is_huge_callset: For huge callsets, we allocate more memory for the SNPs
+    :param is_large_callset: For huge callsets, we allocate more memory for the SNPs
         Create Model step
     :param output_vcf_name: name, without extension, to use for the output VCF file(s)
     :param utils: a dictionary containing resource files and parameters to be used in VQSR
     :param out_bucket: path to write, plots, evaluation results, and recalibrated VCF to
     :param intervals: ResourceGroup object with intervals to scatter
     :param use_as_annotations: use allele-specific annotation for VQSR
+    :param gcp_billing_project: GCP billing project for requester-pays buckets
     :param transmitted_singletons: full path to transmitted singletons VCF file and its index
     :param sibling_singletons: full path to sibling singletons VCF file and its index
     :return: a final Job, and a path to the VCF with VQSR annotations
@@ -753,14 +756,14 @@ def make_vqsr_jobs(
     # To fit only a sites-only VCF
     if is_small_callset:
         small_disk = 50
-    elif not is_huge_callset:
+    elif not is_large_callset:
         small_disk = 100
     else:
         small_disk = 200
 
     if is_small_callset:
         huge_disk = 200
-    elif not is_huge_callset:
+    elif not is_large_callset:
         huge_disk = 500
     else:
         huge_disk = 2000
@@ -768,7 +771,7 @@ def make_vqsr_jobs(
     snp_max_gaussians = 6
     indel_max_gaussians = 4
 
-    if is_huge_callset:
+    if is_large_callset:
         # 1. Run SNP recalibrator in a scattered mode
         # file exists:
         if hl.hadoop_exists(f"{out_bucket}model/SNPS/snps.model.report"):
@@ -785,9 +788,10 @@ def make_vqsr_jobs(
                 sibling_singletons_resource_vcf=sibling_singletons,
                 utils=utils,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 out_bucket=out_bucket,
                 is_small_callset=is_small_callset,
-                is_huge_callset=is_huge_callset,
+                is_large_callset=is_large_callset,
                 max_gaussians=snp_max_gaussians,
             ).model_file
 
@@ -798,6 +802,7 @@ def make_vqsr_jobs(
                 utils=utils,
                 out_bucket=out_bucket,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 interval=intervals[f"interval_{idx}"],
                 tranche_idx=idx,
                 model_file=snps_model_file,
@@ -834,6 +839,7 @@ def make_vqsr_jobs(
                 sibling_singletons_resource_vcf=sibling_singletons,
                 utils=utils,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 out_bucket=out_bucket,
                 is_small_callset=is_small_callset,
                 max_gaussians=indel_max_gaussians,
@@ -846,6 +852,7 @@ def make_vqsr_jobs(
                 utils=utils,
                 out_bucket=out_bucket,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 interval=intervals[f"interval_{idx}"],
                 tranche_idx=idx,
                 model_file=indels_model_file,
@@ -879,6 +886,7 @@ def make_vqsr_jobs(
                 utils=utils,
                 disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 scatter=idx,
                 interval=intervals[f"interval_{idx}"],
                 out_bucket=out_bucket,
@@ -887,7 +895,7 @@ def make_vqsr_jobs(
         ]
 
         # 4. Gather VCFs
-        recalibrated_gathered_vcf_job = gather_vcfs(
+        gather_vcfs(
             b=b,
             input_vcfs=scattered_vcfs,
             out_vcf_name=output_vcf_name,
@@ -903,6 +911,7 @@ def make_vqsr_jobs(
             utils=utils,
             out_bucket=out_bucket,
             use_as_annotations=use_as_annotations,
+            gcp_billing_project=gcp_billing_project,
             transmitted_singletons_resource_vcf=transmitted_singletons,
             sibling_singletons_resource_vcf=sibling_singletons,
             max_gaussians=snp_max_gaussians,
@@ -918,12 +927,13 @@ def make_vqsr_jobs(
             utils=utils,
             out_bucket=out_bucket,
             use_as_annotations=use_as_annotations,
+            gcp_billing_project=gcp_billing_project,
             max_gaussians=indel_max_gaussians,
         )
         indels_recalibration = indels_variant_recalibrator_job.recalibration
         indels_tranches = indels_variant_recalibrator_job.tranches
 
-        recalibrated_gathered_vcf_job = apply_recalibration(
+        apply_recalibration(
             b=b,
             input_vcf=sites_only_vcf,
             out_vcf_name=output_vcf_name,
@@ -934,6 +944,7 @@ def make_vqsr_jobs(
             utils=utils,
             disk_size=huge_disk,
             use_as_annotations=use_as_annotations,
+            gcp_billing_project=gcp_billing_project,
             out_bucket=out_bucket,
         )
 
@@ -948,8 +959,9 @@ def vqsr_workflow(
     sibling_singletons: str,
     resources: str,
     out_bucket: str,
-    billing_project: str,
-    n_samples: int,
+    batch_billing_project: str,
+    gcp_billing_project: str,
+    run_mode: str,
     batch_suffix: str,
     use_as_annotations: bool = True,
 ):
@@ -961,27 +973,29 @@ def vqsr_workflow(
     :param sibling_singletons: full path to sibling singletons VCF file and its index
     :param resources: json file (vqsr_resources.json) with paths to the resource files and parameters to be used in VQSR
     :param out_bucket: path to write, plots, evaluation results, and recalibrated VCF to
-    :param billing_project: billing project to be used for the workflow
-    :param n_samples:
+    :param batch_billing_project: Batch billing project to be used for the workflow
+    :param gcp_billing_project: GCP billing project for requester-pays buckets
     :param use_as_annotations: use allele-specific annotation for VQSR
 
     :return:
     """
-    print("billerino as: ", billing_project)
+    hl.init(
+        backend="batch",
+        gcs_requester_pays_configuration=gcp_billing_project,
+    )
 
     tmp_vqsr_bucket = f"{out_bucket}/vqsr/"
 
     backend = hb.ServiceBackend(
-        billing_project=billing_project,
+        billing_project=batch_billing_project,
         remote_tmpdir=tmp_vqsr_bucket,
     )
 
     with open(resources, "r") as f:
-        print("lol lmao: ", f)
         utils = json.load(f)
 
     logger.info(
-        f"Starting hail Batch with the project {billing_project}, "
+        f"Starting hail Batch with the project {batch_billing_project}, "
         f"bucket {tmp_vqsr_bucket}"
     )
 
@@ -992,26 +1006,22 @@ def vqsr_workflow(
 
     intervals_j = split_intervals(b=b, utils=utils)
 
-    is_small_callset = n_samples < 1000
-    # 1. For small callsets, we don't apply the ExcessHet filtering.
-    # 2. For small callsets, we gather the VCF shards and collect QC metrics directly.
-    # For anything larger, we need to keep the VCF sharded and gather metrics
-    # collected from them.
-    is_huge_callset = n_samples >= 100000
-    # For huge callsets, we allocate more memory for the SNPs Create Model step
-    # For v4, this is 700,000
-    # To improve: just let people pass a --huge-callset flag
+    if run_mode == "small":
+        is_small_callset = True
+    elif run_mode == "large":
+        is_large_callset = True
 
     make_vqsr_jobs(
         b=b,
         sites_only_vcf=sites_only_vcf,
         is_small_callset=is_small_callset,
-        is_huge_callset=is_huge_callset,
+        is_large_callset=is_large_callset,
         output_vcf_name=output_vcf_filename,
         utils=utils,
         out_bucket=tmp_vqsr_bucket,
         intervals=intervals_j.intervals,
         use_as_annotations=use_as_annotations,
+        gcp_billing_project=gcp_billing_project,
         transmitted_singletons=transmitted_singletons,
         sibling_singletons=sibling_singletons,
     )
@@ -1022,31 +1032,75 @@ def vqsr_workflow(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--input-vcf", type=str, required=True
-    )  # this includes the annotations, this is our Variant QC Table (thx Julia)
-    parser.add_argument("--out-bucket", type=str, required=True)  # just a bucket, ez
-    parser.add_argument("--out-vcf-name", type=str, required=True)  # like a prefix , ez
+        "--input-vcf",
+        type=str,
+        required=True,
+        help="Input sites VCF containing AS annotations.",
+    )
     parser.add_argument(
-        "--resources", type=str, required=True
-    )  # this should be vqsr_resources.json
+        "--out-bucket", type=str, required=True, help="Bucket to store VQSR outputs in."
+    )
     parser.add_argument(
-        "--n-samples", type=int, required=True
-    )  # number of samples in the VCF to determine if we should run in scatter or full VCF mode
-    # ^^ there's not a suggested or default given for this ???
-    # no it's just literal like number of individuals in here
-    # and if it's gnomAD then it's a lot
-    # default: 100001
+        "--out-vcf-name",
+        type=str,
+        required=True,
+        help="Required prefix for VQSR outputs.",
+    )
     parser.add_argument(
-        "--billing-project", type=str, required=True
-    )  # broad-mpg-gnomad
+        "--resources",
+        type=str,
+        required=True,
+        help=(
+            "Path to .json file containing paths and information for the VQSR pipeline."
+        ),
+    )
     parser.add_argument(
-        "--transmitted-singletons", type=str, required=False
-    )  # we'll set this true
+        "--run-mode",
+        type=str,
+        default=None,
+        choices=["small", "large"],
+        help=(
+            "Option to pass if running a small or large database. This affects the size"
+            " of the clusters and, if --large is set, will run in a scattered mode (one"
+            " job for each partition)."
+        ),
+    )
     parser.add_argument(
-        "--sibling-singletons", type=str, required=False
-    )  # we'll set this true
-    parser.add_argument("--no-as-annotations", action="store_true")
-    parser.add_argument("--batch-suffix", type=str, default="")
+        "--batch-billing-project",
+        type=str,
+        required=True,
+        help="Hail Batch billing project.",
+    )
+    parser.add_argument(
+        "--gcp-billing-project",
+        type=str,
+        required=True,
+        help="Google Cloud billing project for reading requester pays buckets.",
+    )
+    parser.add_argument(
+        "--transmitted-singletons",
+        type=str,
+        required=False,
+        help="Path to transmitted singletons or first singleton truth set VCF.",
+    )
+    parser.add_argument(
+        "--sibling-singletons",
+        type=str,
+        required=False,
+        help="Path to sibling singletons or second singleton truth set VCF.",
+    )
+
+    parser.add_argument(
+        "--no-as-annotations",
+        action="store_true",
+        help="Option to pass if you do not want to use AS annotation.",
+    )
+    parser.add_argument(
+        "--batch-suffix",
+        type=str,
+        default="",
+        help="String to add to end of batch name.",
+    )
 
     args = parser.parse_args()
 
@@ -1061,8 +1115,9 @@ def main():
         sibling_singletons=args.sibling_singletons,
         resources=args.resources,
         out_bucket=args.out_bucket,
-        billing_project=args.billing_project,
-        n_samples=args.n_samples,
+        batch_billing_project=args.batch_billing_project,
+        gcp_billing_project=args.gcp_billing_project,
+        run_mode=args.run_mode,
         use_as_annotations=use_as_annotations,
         batch_suffix=args.batch_suffix,
     )

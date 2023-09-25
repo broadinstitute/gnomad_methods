@@ -1050,7 +1050,7 @@ def compute_coverage_stats(
     mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
 
     # Annotate rows now
-    mt = (
+    ht = (
         mt.select_rows(
             mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
             median_approx=hl.or_else(hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0),
@@ -1071,7 +1071,7 @@ def compute_coverage_stats(
         .drop("alleles")
     )
 
-    return mt.key_by("locus").select_globals().drop("alleles")
+    return ht.key_by("locus").select_globals().drop("alleles")
 
 
 def filter_ref_blocks(

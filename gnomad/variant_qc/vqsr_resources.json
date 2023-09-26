@@ -34,6 +34,6 @@
   "GATK_IMAGE": "us.gcr.io/broad-gatk/gatk:4.2.6.1",
 
   "NUMBER_OF_HAPLOTYPE_CALLER_INTERVALS": 50,
-  "NUMBER_OF_GENOMICS_DB_INTERVALS": 500,
+  "NUMBER_OF_GENOMICS_DB_INTERVALS": 50,
   "UNPADDED_INTERVALS": "gs://gnomad/resources/intervals/xgen.pad50.dsp.pad50.intersection.intervals"
 }

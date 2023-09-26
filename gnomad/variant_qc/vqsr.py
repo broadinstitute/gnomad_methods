@@ -552,6 +552,7 @@ def gather_tranches(
     j.command(f"""set -euo pipefail
         gatk --java-options "-Xms6g" \\
           GatherTranches \\
+          --gcs-project-for-requester-pays broad-mpg-gnomad \\
           --mode {mode} \\
           {inputs_cmdl} \\
           --output {j.out_tranches}""")
@@ -627,6 +628,7 @@ def apply_recalibration(
           ApplyVQSR \\
           -O tmp.indel.recalibrated.vcf \\
           -V {input_vcf} \\
+          --gcs-project-for-requester-pays broad-mpg-gnomad \\
           --recal-file {indels_recalibration} \\
           --tranches-file {indels_tranches} \\
           --truth-sensitivity-filter-level {utils['INDEL_HARD_FILTER_LEVEL']} \\
@@ -642,6 +644,7 @@ def apply_recalibration(
           ApplyVQSR \\
           -O {j.output_vcf['vcf.gz']} \\
           -V tmp.indel.recalibrated.vcf \\
+          --gcs-project-for-requester-pays broad-mpg-gnomad \\
           --recal-file {snps_recalibration} \\
           --tranches-file {snps_tranches} \\
           --truth-sensitivity-filter-level {utils['SNP_HARD_FILTER_LEVEL']} \\
@@ -659,7 +662,7 @@ def apply_recalibration(
         j.command(f"""
                 interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
                 bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
-                tabix {j.output_vcf['vcf.gz']}
+                tabix -f {j.output_vcf['vcf.gz']}
                 df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
             """)
 
@@ -708,6 +711,7 @@ def gather_vcfs(
         mkdir tmp/
         gatk --java-options "-Xms6g -Djava.io.tmpdir=`pwd`/tmp" \\
           GatherVcfsCloud \\
+          --gcs-project-for-requester-pays broad-mpg-gnomad \\
           --ignore-safety-checks \\
           --gather-type BLOCK \\
           {input_cmdl} \\
@@ -982,11 +986,11 @@ def vqsr_workflow(
         gcs_requester_pays_configuration=gcp_billing_project,
     )
 
-    tmp_vqsr_bucket = f"{out_bucket}/vqsr/"
+    tmp_vqsr_bucket = f"{out_bucket}/"
 
     backend = hb.ServiceBackend(
         billing_project=batch_billing_project,
-        remote_tmpdir=tmp_vqsr_bucket,
+        remote_tmpdir="gs://gnomad-tmp-4day/",
     )
 
     with open(resources, "r") as f:
@@ -1006,10 +1010,14 @@ def vqsr_workflow(
         b=b, utils=utils, gcp_billing_project=gcp_billing_project
     )
 
+    is_small_callset = False
+    is_large_callset = False
     if run_mode == "small":
         is_small_callset = True
     elif run_mode == "large":
         is_large_callset = True
+    else:
+        raise ValueError("Please specify a run mode: small or large.")
 
     make_vqsr_jobs(
         b=b,
@@ -1106,7 +1114,7 @@ def main():
 
     use_as_annotations = False if args.no_as_annotations else True
 
-    print("billing project as: ", args.billing_project)
+    print("billing project as: ", args.batch_billing_project)
 
     vqsr_workflow(
         sites_only_vcf=args.input_vcf,

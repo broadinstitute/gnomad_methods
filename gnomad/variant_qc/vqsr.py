@@ -520,6 +520,7 @@ def gather_tranches(
     tranches: List[hb.ResourceFile],
     mode: str,
     disk_size: int,
+    gcp_billing_project: str,
 ) -> Job:
     """
     Third step of VQSR for SNPs: run GatherTranches to gather scattered per-interval
@@ -552,7 +553,7 @@ def gather_tranches(
     j.command(f"""set -euo pipefail
         gatk --java-options "-Xms6g" \\
           GatherTranches \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --mode {mode} \\
           {inputs_cmdl} \\
           --output {j.out_tranches}""")
@@ -571,6 +572,7 @@ def apply_recalibration(
     utils: Dict,
     disk_size: int,
     use_as_annotations: bool,
+    gcp_billing_project: str,
     scatter: Optional[int] = None,
     interval: Optional[hb.ResourceGroup] = None,
     out_bucket: Optional[str] = None,
@@ -628,7 +630,7 @@ def apply_recalibration(
           ApplyVQSR \\
           -O tmp.indel.recalibrated.vcf \\
           -V {input_vcf} \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --recal-file {indels_recalibration} \\
           --tranches-file {indels_tranches} \\
           --truth-sensitivity-filter-level {utils['INDEL_HARD_FILTER_LEVEL']} \\
@@ -644,7 +646,7 @@ def apply_recalibration(
           ApplyVQSR \\
           -O {j.output_vcf['vcf.gz']} \\
           -V tmp.indel.recalibrated.vcf \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --recal-file {snps_recalibration} \\
           --tranches-file {snps_tranches} \\
           --truth-sensitivity-filter-level {utils['SNP_HARD_FILTER_LEVEL']} \\
@@ -678,6 +680,7 @@ def gather_vcfs(
     out_vcf_name: str,
     utils: Dict,
     disk_size: int,
+    gcp_billing_project: str,
     out_bucket: str = None,
 ) -> Job:
     """
@@ -711,7 +714,7 @@ def gather_vcfs(
         mkdir tmp/
         gatk --java-options "-Xms6g -Djava.io.tmpdir=`pwd`/tmp" \\
           GatherVcfsCloud \\
-          --gcs-project-for-requester-pays broad-mpg-gnomad \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --ignore-safety-checks \\
           --gather-type BLOCK \\
           {input_cmdl} \\
@@ -824,6 +827,7 @@ def make_vqsr_jobs(
             tranches=snps_tranches,
             mode="SNP",
             disk_size=small_disk,
+            gcp_billing_project=gcp_billing_project,
         ).out_tranches
 
         # 2. Run INDEL recalibrator in a scattered mode
@@ -874,6 +878,7 @@ def make_vqsr_jobs(
             tranches=indels_tranches,
             mode="INDEL",
             disk_size=small_disk,
+            gcp_billing_project=gcp_billing_project,
         ).out_tranches
 
         # 3. Apply recalibration
@@ -890,6 +895,7 @@ def make_vqsr_jobs(
                 utils=utils,
                 disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 scatter=idx,
                 interval=intervals[f"interval_{idx}"],
                 out_bucket=out_bucket,
@@ -905,6 +911,7 @@ def make_vqsr_jobs(
             utils=utils,
             disk_size=huge_disk,
             out_bucket=out_bucket,
+            gcp_billing_project=gcp_billing_project,
         )
 
     else:
@@ -947,6 +954,7 @@ def make_vqsr_jobs(
             utils=utils,
             disk_size=huge_disk,
             use_as_annotations=use_as_annotations,
+            gcp_billing_project=gcp_billing_project,
             out_bucket=out_bucket,
         )
 
@@ -1016,8 +1024,6 @@ def vqsr_workflow(
         is_small_callset = True
     elif run_mode == "large":
         is_large_callset = True
-    else:
-        raise ValueError("Please specify a run mode: small or large.")
 
     make_vqsr_jobs(
         b=b,
@@ -1065,12 +1071,12 @@ def main():
     parser.add_argument(
         "--run-mode",
         type=str,
-        default=None,
-        choices=["small", "large"],
+        default="standard",
+        choices=["small", "standard", "large"],
         help=(
-            "Option to pass if running a small or large database. This affects the size"
-            " of the clusters and, if --large is set, will run in a scattered mode (one"
-            " job for each partition)."
+            "Option to pass so that the mode/resources fit the size of the database."
+            " This affects the size of the clusters and, if --large is set, will run in"
+            " a scattered mode (one job for each partition)."
         ),
     )
     parser.add_argument(

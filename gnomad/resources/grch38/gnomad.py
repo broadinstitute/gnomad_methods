@@ -527,16 +527,19 @@ def gnomad_gks(
 
     # Select relevant fields, checkpoint, and filter to interval before adding
     # annotations
-    keep_fields = [ht.freq, ht.info.vrs, ht.popmax]
+    keep_fields = [ht.freq, ht.info.vrs, ht.popmax, ht.faf]
+
+    ht_globals = ht.globals().collect()[0]
+
     if not skip_coverage:
         keep_fields.append(ht.mean_depth)
 
     ht = ht.select(*keep_fields)
 
     # Checkpoint narrower set of columns if not skipped.
+    ht = hl.filter_intervals(ht, [locus_interval])
     if not skip_checkpoint:
         ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
-    ht = hl.filter_intervals(ht, [locus_interval])
 
     # Collect all variants as structs, so all dictionary construction can be
     # done in native Python
@@ -566,6 +569,7 @@ def gnomad_gks(
                 label_version=version,
                 ancestry_groups=pops_list,
                 ancestry_groups_dict=POP_NAMES,
+                faf_index_dict=ht_globals.faf_index_dict,
                 by_sex=by_sex,
                 freq_index_dict=ht_freq_index_dict,
             )

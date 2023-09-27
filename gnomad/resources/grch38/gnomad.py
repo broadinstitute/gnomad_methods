@@ -1,10 +1,9 @@
 # noqa: D100
 
 import logging
-from typing import Optional, Union
+from typing import Optional
 
 import hail as hl
-from gnomad_qc.v3.create_release.prepare_vcf_data_release import FAF_POPS
 
 from gnomad.resources.resource_utils import (
     DataException,
@@ -15,6 +14,7 @@ from gnomad.resources.resource_utils import (
 )
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.annotations import add_gks_va, add_gks_vrs
+from gnomad.utils.vcf import FAF_POPS
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -87,7 +87,6 @@ POPS = {
         "sas",
     ],
 }
-FAF_POPULATIONS = FAF_POPS.keys()
 """
 Global ancestry groups in gnomAD by version.
 """
@@ -515,7 +514,7 @@ def gnomad_gks(
                             faf=ht.faf[ht.faf_index_dict[f"{pop}-adj"]].faf95,
                             population=pop,
                         )
-                        for pop in FAF_POPULATIONS
+                        for pop in FAF_POPS
                     ]
                 ),
                 key=lambda f: (-f.faf, f.population),

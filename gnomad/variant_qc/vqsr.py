@@ -1,9 +1,9 @@
 """
 Script to run VQSR on an AS-annotated Sites VCF
-Example input: 
-python3 ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr.py \\ 
-    --input-vcf gs://gnomad-tmp/gnomad_v4.0_testing/annotations/exomes/gnomad.exomes.v4.0.info.AS.chr22.vcf.bgz \\ 
-    --out-bucket gs://gnomad-marten/vqsr_20230921/results --out-vcf-name chr22tester \\ 
+Example input:
+python3 ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr.py \\
+    --input-vcf gs://gnomad-tmp/gnomad_v4.0_testing/annotations/exomes/gnomad.exomes.v4.0.info.AS.chr22.vcf.bgz \\
+    --out-bucket gs://gnomad-marten/vqsr_20230921/results --out-vcf-name chr22tester \\
     --resources ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr_resources.json --billing-project marten-trial \\
     --transmitted-singletons gs://gnomad-tmp/gnomad_v4.0_testing/annotations/exomes/gnomad.exomes.v4.0.transmitted_singleton.raw.chr22.vcf.bgz \\
     --batch-suffix chr22testlarge --n-samples 700000
@@ -47,11 +47,12 @@ def split_intervals(
     )
 
     j.command(f"""set -e
-    # Modes other than INTERVAL_SUBDIVISION will produce an unpredicted number 
-    # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS number of 
+    # Modes other than INTERVAL_SUBDIVISION will produce an unpredicted number
+    # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS number of
     # output files because our workflow is not dynamic.
     gatk --java-options "-Xms{java_mem}g" SplitIntervals \\
-      -L {utils['UNPADDED_INTERVALS']} \\
+      -L {utils['EVEN_INTERVALS']} \\
+      --interval-padding 150 \\
       -O {j.intervals} \\
       -scatter {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} \\
       -R {utils['ref_fasta']} \\
@@ -137,6 +138,7 @@ def snps_variant_recalibrator_create_model(
           VariantRecalibrator \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
+          -L {utils['UNPADDED_INTERVALS']} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
@@ -225,7 +227,10 @@ def snps_variant_recalibrator(
     j.cpu(4)
     j.storage("20G")
 
-    j.declare_resource_group(recalibration={"index": "{root}.idx", "base": "{root}"})
+    j.declare_resource_group(
+        recalibration={"index": "{root}.idx", "base": "{root}"},
+        tranches={"base": "{root}"},
+    )
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["SNP_RECALIBRATION_TRANCHE_VALUES"]]
@@ -279,13 +284,15 @@ def snps_variant_recalibrator(
     j.command(cmd)
 
     if out_bucket:
-        if tranche_idx:
+        if tranche_idx is not None:
             b.write_output(
-                j.tranches,
+                j.tranches["base"],
                 f"{out_bucket}recalibration/SNPS/snps.{tranche_idx}.tranches",
             )
         else:
-            b.write_output(j.tranches, f"{out_bucket}recalibration/SNPS/snps.tranches")
+            b.write_output(
+                j.tranches["base"], f"{out_bucket}recalibration/SNPS/snps.tranches"
+            )
 
     return j
 
@@ -366,6 +373,7 @@ def indels_variant_recalibrator_create_model(
           --gcs-project-for-requester-pays {gcp_billing_project} \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
+          -L {utils['UNPADDED_INTERVALS']} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
@@ -449,7 +457,10 @@ def indels_variant_recalibrator(
     j.cpu(4)
     j.storage("20G")
 
-    j.declare_resource_group(recalibration={"index": "{root}.idx", "base": "{root}"})
+    j.declare_resource_group(
+        recalibration={"index": "{root}.idx", "base": "{root}"},
+        tranches={"base": "{root}"},
+    )
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["INDEL_RECALIBRATION_TRANCHE_VALUES"]]
@@ -502,14 +513,14 @@ def indels_variant_recalibrator(
     j.command(cmd)
 
     if out_bucket:
-        if tranche_idx:
+        if tranche_idx is not None:
             b.write_output(
-                j.tranches,
+                j.tranches["base"],
                 f"{out_bucket}recalibration/INDELS/indels.{tranche_idx}.tranches",
             )
         else:
             b.write_output(
-                j.tranches, f"{out_bucket}recalibration/INDELS/indels.tranches"
+                j.tranches["base"], f"{out_bucket}recalibration/INDELS/indels.tranches"
             )
     return j
 
@@ -619,11 +630,11 @@ def apply_recalibration(
     j.storage(f"{disk_size}G")
     j.declare_resource_group(
         output_vcf={"vcf.gz": "{root}.vcf.gz", "vcf.gz.tbi": "{root}.vcf.gz.tbi"},
+        # output_vcf2={"vcf.gz": "{root}_2.vcf.gz", "vcf.gz.tbi": "{root}_2.vcf.gz.tbi"},
         intermediate_vcf={"vcf.gz": "{root}.vcf.gz", "vcf.gz.tbi": "{root}.vcf.gz.tbi"},
     )
 
     j.command(f"""set -euo pipefail
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
         gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
           -O tmp.indel.recalibrated.vcf \\
@@ -637,9 +648,6 @@ def apply_recalibration(
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
           -mode INDEL
 
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        rm {indels_recalibration} {indels_tranches}
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
         gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
           -O {j.output_vcf['vcf.gz']} \\
@@ -651,23 +659,36 @@ def apply_recalibration(
           --create-output-variant-index true \\
           {f'-L {interval} ' if interval else ''} \\
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
-          -mode SNP
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-                """)
+          -mode SNP""")
 
     # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
-    # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
+    # merge. This makes sure the INDEL is ONLY in ONE of two consecutive
+    # chunks (not both)
     if interval:
-        # overwrite VCF with overlap issue addressed
+        j.command(
+            f"""bcftools query -f '%CHROM\n' {j.output_vcf['vcf.gz']} | cut -f1 | uniq -c """
+        )
         j.command(f"""
-                interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
-                bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
-                tabix -f {j.output_vcf['vcf.gz']}
-                df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-            """)
+            interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+            echo $interval
+        """)
+        # overwrite VCF with overlap issue addressed
+        # j.command(f"""
+        #    interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+        #    bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf2['vcf.gz']} --output-type z
+        #    tabix  {j.output_vcf2['vcf.gz']}
+        # """)
+        # overwrite VCF with overlap issue addressed
+    #    j.command(f"""
+    #            interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+    #            bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
+    #            tabix -f {j.output_vcf['vcf.gz']}
+    #            df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
+    #        """)
 
     if out_bucket:
         b.write_output(j.output_vcf, f"{outpath}{filename}")
+        # b.write_output(j.output_vcf2, f"{outpath}{filename}_2")
 
     return j
 
@@ -717,7 +738,7 @@ def gather_vcfs(
           {input_cmdl} \\
           --output {j.output_vcf['vcf.gz']} \\
           --tmp-dir `pwd`/tmp
-          
+
         tabix {j.output_vcf['vcf.gz']}""")
     if out_bucket:
         b.write_output(j.output_vcf, f"{out_bucket}{filename}")
@@ -877,7 +898,8 @@ def make_vqsr_jobs(
         ).out_tranches
 
         # 3. Apply recalibration
-        # Doesn't require too much storage in scatter mode (<500MB on gnomad VCF for each scatter), use small_disk
+        # Doesn't require too much storage in scatter mode (<500MB on gnomad VCF
+        # for each scatter), use small_disk
         scattered_vcfs = [
             apply_recalibration(
                 b=b,
@@ -983,7 +1005,9 @@ def vqsr_workflow(
     """
     hl.init(
         backend="batch",
+        tmp_dir="gs://gnomad-tmp-4day/",
         gcs_requester_pays_configuration=gcp_billing_project,
+        regions=["us-central1"],
     )
 
     tmp_vqsr_bucket = f"{out_bucket}/"

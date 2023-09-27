@@ -116,7 +116,7 @@ def snps_variant_recalibrator_create_model(
     java_mem = ncpu * 8 - 10
     j.storage("50G")
 
-    downsample_factor = 75 if is_large_callset else 10
+    downsample_factor = 75 # if is_large_callset else 10
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["SNP_RECALIBRATION_TRANCHE_VALUES"]]
@@ -343,8 +343,7 @@ def indels_variant_recalibrator_create_model(
     java_mem = ncpu * 8 - 10
     j.storage("50G")
 
-    # downsample_factor = 75 if is_large_callset else 10
-    downsample_factor = 10
+    downsample_factor = 75 if not is_small_callset else 10
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["INDEL_RECALIBRATION_TRANCHE_VALUES"]]
@@ -659,6 +658,10 @@ def apply_recalibration(
 
     # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
     # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
+
+    # Check for overlaps - via Lindo's code 
+    j.command(f"""bcftools query -f '%CHROM\n {j.output_vcf['vcf.gz']} | cut -f1 | uniq -c' """)
+
     if interval:
         # overwrite VCF with overlap issue addressed
         j.command(f"""
@@ -778,6 +781,7 @@ def make_vqsr_jobs(
     snp_max_gaussians = 6
     indel_max_gaussians = 4
 
+    # Iif it is a large callset, run in scatter mode 
     if is_large_callset:
         # 1. Run SNP recalibrator in a scattered mode
         # file exists:
@@ -904,7 +908,7 @@ def make_vqsr_jobs(
         ]
 
         # 4. Gather VCFs
-        gather_vcfs(
+        gathered_vcf_job = gather_vcfs(
             b=b,
             input_vcfs=scattered_vcfs,
             out_vcf_name=output_vcf_name,
@@ -943,7 +947,7 @@ def make_vqsr_jobs(
         indels_recalibration = indels_variant_recalibrator_job.recalibration
         indels_tranches = indels_variant_recalibrator_job.tranches
 
-        apply_recalibration(
+        recalibrated_gathered_vcf_job = apply_recalibration(
             b=b,
             input_vcf=sites_only_vcf,
             out_vcf_name=output_vcf_name,
@@ -994,11 +998,11 @@ def vqsr_workflow(
         gcs_requester_pays_configuration=gcp_billing_project,
     )
 
-    tmp_vqsr_bucket = f"{out_bucket}/"
+    tmp_vqsr_bucket = f"{out_bucket}/vqsr/"
 
     backend = hb.ServiceBackend(
         billing_project=batch_billing_project,
-        remote_tmpdir="gs://gnomad-tmp-4day/",
+        remote_tmpdir=tmp_vqsr_bucket,
     )
 
     with open(resources, "r") as f:

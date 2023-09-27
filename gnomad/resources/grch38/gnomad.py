@@ -4,7 +4,6 @@ import logging
 from typing import Optional, Union
 
 import hail as hl
-from gnomad_qc.v3.create_release.prepare_vcf_data_release import FAF_POPS
 
 from gnomad.resources.resource_utils import (
     DataException,
@@ -15,6 +14,7 @@ from gnomad.resources.resource_utils import (
 )
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.annotations import add_gks_va, add_gks_vrs
+from gnomad_qc.v3.create_release.prepare_vcf_data_release import FAF_POPS
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -291,28 +291,6 @@ na12878 = VersionedMatrixTableResource(
     },
 )
 
-
-def get_coverage_ht(
-    coverage_ht: Union[str, hl.Table], data_type: str, coverage_version: str
-):
-    """
-    Load a coverage hail table if needed.
-
-    If coverage_ht is 'auto', loads the default coverage table for the
-    data_type and coverage_version. If it's already a hail table, return it.
-    Otherwise return None.
-
-    :param coverage_ht: a hail table, or 'auto' (otherwise return None).
-    :param data_type: a gnomad dataset type, as in 'genomes' or 'exomes'
-    :param coverage_version: gnomad release version the coverage table is built on
-    :return: hail table with coverage info, or None
-    """
-    if coverage_ht == "auto":
-        return hl.read_table(coverage(data_type).versions[coverage_version].path)
-    elif isinstance(coverage_ht, hl.Table):
-        return coverage_ht
-    else:
-        return None
 
 
 def _public_release_ht_path(data_type: str, version: str) -> str:

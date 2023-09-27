@@ -292,7 +292,6 @@ na12878 = VersionedMatrixTableResource(
 )
 
 
-
 def _public_release_ht_path(data_type: str, version: str) -> str:
     """
     Get public release table path.

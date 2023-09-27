@@ -1050,26 +1050,20 @@ def compute_coverage_stats(
     mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
 
     # Annotate rows now
-    ht = (
-        mt.select_rows(
-            mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
-            median_approx=hl.or_else(hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0),
-            total_DP=hl.agg.sum(mt.DP),
-            **{
-                f"over_{x}": count_array_expr[i] / n_samples
-                for i, x in zip(
-                    range(
-                        len(coverage_over_x_bins) - 1, -1, -1
-                    ),  # Reverse the bin index as count_array_expr has the reverse order
-                    coverage_over_x_bins,
-                )
-            },
-        )
-        .rows()
-        .key_by("locus")
-        .select_globals()
-        .drop("alleles")
-    )
+    ht = mt.select_rows(
+        mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
+        median_approx=hl.or_else(hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0),
+        total_DP=hl.agg.sum(mt.DP),
+        **{
+            f"over_{x}": count_array_expr[i] / n_samples
+            for i, x in zip(
+                range(
+                    len(coverage_over_x_bins) - 1, -1, -1
+                ),  # Reverse the bin index as count_array_expr has the reverse order
+                coverage_over_x_bins,
+            )
+        },
+    ).rows()
 
     return ht.key_by("locus").select_globals().drop("alleles")
 

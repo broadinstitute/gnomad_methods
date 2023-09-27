@@ -14,7 +14,6 @@ from hail.utils.misc import new_temp_file
 
 import gnomad.utils.filtering as filter_utils
 from gnomad.utils.gen_stats import to_phred
-from gnomad_qc.v3.create_release.prepare_vcf_data_release import FAF_POPS
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -95,8 +94,6 @@ VRS_CHROM_IDS = {
         "Y": "ga4gh:SQ.BT7QyW5iXaX_1PSX-msSGYsqRdMKqkj-",
     },
 }
-
-FAF_POPULATIONS = FAF_POPS.keys()
 
 
 def pop_max_expr(
@@ -2057,7 +2054,6 @@ def add_gks_va(
     label_version: str = "3.1.2",
     ancestry_groups: list = None,
     ancestry_groups_dict: dict = None,
-    faf_index_dict: dict = None,
     by_sex: bool = False,
     freq_index_dict: dict = None,
 ) -> dict:
@@ -2199,24 +2195,21 @@ def add_gks_va(
         "cohort": {"id": "ALL"},
     }
 
-    ancillaryResults = {"homozygotes": overall_freq["homozygote_count"]}
-
-    sorted_faf95 = []
-
-    for pop in FAF_POPULATIONS:
-        faf_value = input_struct.faf[faf_index_dict[f"{pop}-adj"]].faf95
-        sorted_faf95.append([pop, faf_value])
-
-    faf95_dict = sorted(sorted_faf95, key=lambda x: x[1])[-1]
-
-    if faf95_dict[-1] > 0.0:
-        ancillaryResults["popMaxFAF95"] = {
-            "frequency": faf95_dict[-1],
+    # Create ancillaryResults for additional frequency and popMaxFAF95 information
+    ancillaryResults = {
+        "homozygotes": overall_freq["homozygote_count"],
+        "popMaxFAF95": {
+            "frequency": input_struct.faf95.popmax,
             "confidenceInterval": 0.95,
-            "popFreqId": f"{gnomad_id}.{faf95_dict.pop.upper()}",
-        }
+        },
+    }
+
+    if input_struct.faf95.popmax_population is not None:
+        ancillaryResults["popMaxFAF95"]["popFreqID"] = (
+            f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}",
+        )
     else:
-        ancillaryResults["popMaxFAF95"] = None
+        ancillaryResults["popMaxFAF95"]["popFreqID"] = None
 
     # Add mean coverage depth statistics if the input was annotated
     # with coverage information.

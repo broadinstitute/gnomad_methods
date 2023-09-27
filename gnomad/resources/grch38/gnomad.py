@@ -4,6 +4,7 @@ import logging
 from typing import Optional, Union
 
 import hail as hl
+from gnomad_qc.v3.create_release.prepare_vcf_data_release import FAF_POPS
 
 from gnomad.resources.resource_utils import (
     DataException,
@@ -86,6 +87,7 @@ POPS = {
         "sas",
     ],
 }
+FAF_POPULATIONS = FAF_POPS.keys()
 """
 Global ancestry groups in gnomAD by version.
 """
@@ -527,9 +529,36 @@ def gnomad_gks(
 
     # Select relevant fields, checkpoint, and filter to interval before adding
     # annotations
-    keep_fields = [ht.freq, ht.info.vrs, ht.popmax, ht.faf]
+    ht = ht.annotate(
+        faf95=hl.rbind(
+            hl.sorted(
+                hl.array(
+                    [
+                        hl.struct(
+                            faf=ht.faf[ht.faf_index_dict[f"{pop}-adj"]].faf95,
+                            population=pop,
+                        )
+                        for pop in FAF_POPULATIONS
+                    ]
+                ),
+                key=lambda f: (-f.faf, f.population),
+            ),
+            lambda fafs: hl.if_else(
+                hl.len(fafs) > 0,
+                hl.struct(
+                    popmax=fafs[0].faf,
+                    popmax_population=hl.if_else(
+                        fafs[0].faf == 0, hl.missing(hl.tstr), fafs[0].population
+                    ),
+                ),
+                hl.struct(
+                    popmax=hl.missing(hl.tfloat), popmax_population=hl.missing(hl.tstr)
+                ),
+            ),
+        )
+    )
 
-    ht_globals = ht.globals().collect()[0]
+    keep_fields = [ht.freq, ht.info.vrs, ht.faf95]
 
     if not skip_coverage:
         keep_fields.append(ht.mean_depth)
@@ -569,7 +598,6 @@ def gnomad_gks(
                 label_version=version,
                 ancestry_groups=pops_list,
                 ancestry_groups_dict=POP_NAMES,
-                faf_index_dict=ht_globals.faf_index_dict,
                 by_sex=by_sex,
                 freq_index_dict=ht_freq_index_dict,
             )

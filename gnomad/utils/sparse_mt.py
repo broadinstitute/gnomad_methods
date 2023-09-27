@@ -1065,7 +1065,13 @@ def compute_coverage_stats(
         },
     ).rows()
 
-    return ht.key_by("locus").select_globals().drop("alleles")
+    current_keys = list(ht.key)
+
+    return (
+        ht.key_by(*row_key_fields)
+        .select_globals()
+        .drop(*[k for k in current_keys if k not in row_key_fields])
+    )
 
 
 def filter_ref_blocks(

@@ -227,10 +227,7 @@ def snps_variant_recalibrator(
     j.cpu(4)
     j.storage("20G")
 
-    j.declare_resource_group(
-        recalibration={"index": "{root}.idx", "base": "{root}"},
-        tranches={"base": "{root}"},
-    )
+    j.declare_resource_group(recalibration={"index": "{root}.idx", "base": "{root}"})
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["SNP_RECALIBRATION_TRANCHE_VALUES"]]
@@ -509,12 +506,12 @@ def indels_variant_recalibrator(
     if out_bucket:
         if tranche_idx is not None:
             b.write_output(
-                j.tranches["base"],
+                j.tranches,
                 f"{out_bucket}recalibration/INDELS/indels.{tranche_idx}.tranches",
             )
         else:
             b.write_output(
-                j.tranches["base"], f"{out_bucket}recalibration/INDELS/indels.tranches"
+                j.tranches, f"{out_bucket}recalibration/INDELS/indels.tranches"
             )
     return j
 

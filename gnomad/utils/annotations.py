@@ -1549,6 +1549,8 @@ def generate_freq_group_membership_array(
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
     downsamplings: Optional[List[int]] = None,
     ds_pop_counts: Optional[Dict[str, int]] = None,
+    remove_zero_sample_groups: bool = False,
+    no_raw_group: bool = False,
 ) -> hl.Table:
     """
     Generate a Table with a 'group_membership' array for each sample indicating whether the sample belongs to specific stratification groups.
@@ -1575,6 +1577,11 @@ def generate_freq_group_membership_array(
         expressions that define the values to stratify frequency calculations by.
     :param downsamplings: List of downsampling values to include in the stratifications.
     :param ds_pop_counts: Dictionary of population counts for each downsampling value.
+    :param remove_zero_sample_groups: Whether to remove groups with a sample count of 0.
+        Default is False.
+    :param no_raw_group: Whether to remove the raw group from the 'group_membership'
+        annotation and the 'freq_meta' and 'freq_meta_sample_count' global annotations.
+        Default is False.
     :return: Table with the 'group_membership' array annotation.
     """
     errors = []
@@ -1680,6 +1687,12 @@ def generate_freq_group_membership_array(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
     )
 
+    if remove_zero_sample_groups:
+        filter_freq = hl.enumerate(freq_meta_sample_count).filter(lambda x: x > 0)
+        freq_meta_sample_count = filter_freq.map(lambda x: x[1])
+        idx_keep = filter_freq.map(lambda x: x[0])
+        sample_group_filters = [sample_group_filters[i] for i in idx_keep]
+
     # Annotate columns with group_membership.
     ht = ht.select(group_membership=[x[1] for x in sample_group_filters])
 
@@ -1688,9 +1701,17 @@ def generate_freq_group_membership_array(
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]
 
-    # Add the "raw" group, representing all samples, to the freq_meta_expr list.
-    freq_meta.insert(1, {"group": "raw"})
-    freq_meta_sample_count.insert(1, freq_meta_sample_count[0])
+    if not no_raw_group:
+        # Sample group membership for the "raw" group, representing all samples, is
+        # the same as the first group in the group_membership array.
+        ht = ht.annotate(
+            group_membership=hl.array([ht.group_membership[0]]).extend(
+                ht.group_membership
+            )
+        )
+        # Add the "raw" group, representing all samples, to the freq_meta_expr list.
+        freq_meta.insert(1, {"group": "raw"})
+        freq_meta_sample_count.insert(1, freq_meta_sample_count[0])
 
     global_expr = {
         "freq_meta": freq_meta,

@@ -1,6 +1,9 @@
 # noqa: D100
 
+import logging
 from typing import Optional
+
+import hail as hl
 
 from gnomad.resources.resource_utils import (
     DataException,
@@ -9,6 +12,16 @@ from gnomad.resources.resource_utils import (
     VersionedMatrixTableResource,
     VersionedTableResource,
 )
+from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.utils.annotations import add_gks_va, add_gks_vrs
+from gnomad.utils.vcf import FAF_POPS
+
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 CURRENT_EXOME_RELEASE = ""
 CURRENT_GENOME_RELEASE = "3.1.2"
@@ -413,3 +426,163 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     contig = f".{contig}" if contig else ""
     version_prefix = "r" if version.startswith("3.0") else "v"
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
+
+
+def gnomad_gks(
+    locus_interval: hl.IntervalExpression,
+    version: str,
+    data_type: str = "genomes",
+    by_ancestry_group: bool = False,
+    by_sex: bool = False,
+    vrs_only: bool = False,
+    custom_ht: hl.Table = None,
+    skip_checkpoint: bool = False,
+    skip_coverage: bool = False,
+    custom_coverage_ht: hl.Table = None,
+) -> list:
+    """
+    Perform gnomad GKS annotations on a range of variants at once.
+
+    :param locus_interval: Hail IntervalExpression of locus<reference_genome>.
+        e.g. hl.locus_interval('chr1', 6424776, 6461367, reference_genome="GRCh38")
+    :param version: String of version of gnomAD release to use.
+    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
+    :param by_ancestry_group: Boolean to pass to obtain frequency information for each cohort.
+    :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex.
+    :param vrs_only: Boolean to pass for only VRS info to be returned
+        (will not include allele frequency information).
+    :param custom_ht: Table to use instead of what public_release() method would return for the version.
+    :param skip_checkpoint: Bool to pass to skip checkpointing selected fields
+        (checkpointing may be desirable for large datasets by reducing data copies across the cluster).
+    :param skip_coverage: Bool to pass to skip adding coverage statistics.
+    :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table.
+    :return: List of dictionaries containing VRS information
+        (and freq info split by ancestry groups and sex if desired) for specified variant.
+    """
+    # Read public_release table if no custom table provided
+    if custom_ht:
+        ht = custom_ht
+    else:
+        ht = hl.read_table(public_release(data_type).versions[version].path)
+
+    high_level_version = f"v{version.split('.')[0]}"
+
+    # Read coverage statistics if requested
+    if high_level_version == "v3":
+        coverage_version = "3.0.1"
+    else:
+        raise NotImplementedError(
+            "gnomad_gks() is currently only implemented for gnomAD v3."
+        )
+
+    coverage_ht = None
+
+    if not skip_coverage:
+        if custom_coverage_ht:
+            coverage_ht = custom_coverage_ht
+        else:
+            coverage_ht = hl.read_table(
+                coverage("genomes").versions[coverage_version].path
+            )
+        ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
+
+    # Retrieve ancestry groups from the imported POPS dictionary.
+    pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
+
+    # Throw warnings if contradictory arguments are passed.
+    if by_ancestry_group and vrs_only:
+        logger.warning(
+            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
+            " 'by_ancestry_groups' list and returning only VRS information."
+        )
+    elif by_sex and not by_ancestry_group:
+        logger.warning(
+            "Splitting whole database by sex is not yet supported. If using 'by_sex',"
+            " please also specify 'by_ancestry_group' to stratify by."
+        )
+
+    # Call and return add_gks_vrs and add_gks_va for chosen arguments.
+
+    # Select relevant fields, checkpoint, and filter to interval before adding
+    # annotations
+    ht = ht.annotate(
+        faf95=hl.rbind(
+            hl.sorted(
+                hl.array(
+                    [
+                        hl.struct(
+                            faf=ht.faf[ht.faf_index_dict[f"{pop}-adj"]].faf95,
+                            population=pop,
+                        )
+                        for pop in FAF_POPS
+                    ]
+                ),
+                key=lambda f: (-f.faf, f.population),
+            ),
+            lambda fafs: hl.if_else(
+                hl.len(fafs) > 0,
+                hl.struct(
+                    popmax=fafs[0].faf,
+                    popmax_population=hl.if_else(
+                        fafs[0].faf == 0, hl.missing(hl.tstr), fafs[0].population
+                    ),
+                ),
+                hl.struct(
+                    popmax=hl.missing(hl.tfloat), popmax_population=hl.missing(hl.tstr)
+                ),
+            ),
+        )
+    )
+
+    keep_fields = [ht.freq, ht.info.vrs, ht.faf95]
+
+    if not skip_coverage:
+        keep_fields.append(ht.mean_depth)
+
+    ht = ht.select(*keep_fields)
+
+    # Checkpoint narrower set of columns if not skipped.
+    ht = hl.filter_intervals(ht, [locus_interval])
+    if not skip_checkpoint:
+        ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
+
+    # Collect all variants as structs, so all dictionary construction can be
+    # done in native Python
+    variant_list = ht.collect()
+    ht_freq_index_dict = ht.freq_index_dict.collect()[0]
+
+    # Assemble output dicts with VRS and optionally frequency, append to list,
+    # then return list
+    outputs = []
+    for variant in variant_list:
+        vrs_variant = add_gks_vrs(variant.locus, variant.vrs)
+
+        out = {
+            "locus": {
+                "contig": variant.locus.contig,
+                "position": variant.locus.position,
+                "reference_genome": variant.locus.reference_genome.name,
+            },
+            "alleles": variant.alleles,
+            "gks_vrs_variant": vrs_variant,
+        }
+
+        if not vrs_only:
+            va_freq_dict = add_gks_va(
+                input_struct=variant,
+                label_name="gnomAD",
+                label_version=version,
+                ancestry_groups=pops_list,
+                ancestry_groups_dict=POP_NAMES,
+                by_sex=by_sex,
+                freq_index_dict=ht_freq_index_dict,
+            )
+
+            # Assign existing VRS information to "focusAllele" key
+            va_freq_dict["focusAllele"] = vrs_variant
+            out["gks_va_freq"] = va_freq_dict
+
+        # Append variant dictionary to list of outputs
+        outputs.append(out)
+
+    return outputs

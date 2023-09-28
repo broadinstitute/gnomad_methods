@@ -22,19 +22,24 @@
   "axiom_poly_resource_vcf_index": "gs://gcp-public-data--broad-references/hg38/v0/Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz.tbi",
 
   "SNP_RECALIBRATION_TRANCHE_VALUES": [100.0, 99.95, 99.9, 99.8, 99.6, 99.5, 99.4, 99.3, 99.0, 98.0, 97.0, 90.0],
-  "SNP_HARD_FILTER_LEVEL": 90.0,
+  "SNP_HARD_FILTER_LEVEL_CHR22": 90.0,
+  "SNP_HARD_FILTER_LEVEL": 99.7,
   "SNP_RECALIBRATION_ANNOTATION_VALUES": ["QD", "MQRankSum", "ReadPosRankSum", "FS", "MQ", "SOR", "DP"],
   "SNP_RECALIBRATION_ANNOTATION_VALUES_AS": ["AS_QD", "AS_MQRankSum", "AS_ReadPosRankSum", "AS_FS", "AS_MQ"],
 
   "INDEL_RECALIBRATION_TRANCHE_VALUES": [100.0, 99.95, 99.9, 99.5, 99.0, 97.0, 96.0, 95.0, 94.0, 93.5, 93.0, 92.0, 91.0, 90.0],
-  "INDEL_HARD_FILTER_LEVEL": 90.0,
+  "INDEL_HARD_FILTER_LEVEL_CHR22": 90.0,
+  "INDEL_HARD_FILTER_LEVEL": 99.0,
   "INDEL_RECALIBRATION_ANNOTATION_VALUES": ["FS", "ReadPosRankSum", "MQRankSum", "QD", "SOR", "DP"],
   "INDEL_RECALIBRATION_ANNOTATION_VALUES_AS": ["AS_FS", "AS_ReadPosRankSum", "AS_MQRankSum", "AS_QD"],
 
   "GATK_IMAGE": "us.gcr.io/broad-gatk/gatk:4.2.6.1",
 
   "NUMBER_OF_HAPLOTYPE_CALLER_INTERVALS": 50,
-  "NUMBER_OF_GENOMICS_DB_INTERVALS": 5,
-  "UNPADDED_INTERVALS": "gs://gnomad-tmp-4day/julia/gnomad.exomes.v4.0.interval_qc_pass.all_platforms.chr22.intervals",
-  "EVEN_INTERVALS": "gs://gnomad-tmp-4day/julia/xgen.pad0.dsp.pad0.union.chr22.intervals"
+  "NUMBER_OF_GENOMICS_DB_INTERVALS_CHR22": 5,
+  "NUMBER_OF_GENOMICS_DB_INTERVALS": 50,
+  "EVALUATION_INTERVALS_CHR22": "gs://gnomad-tmp-4day/julia/gnomad.exomes.v4.0.interval_qc_pass.all_platforms.chr22.intervals",
+  "EVALUATION_INTERVALS": "gs://gnomad/v4.0/sample_qc/exomes/interval_qc/gnomad.exomes.v4.0.interval_qc_pass.all_platforms.intervals",
+  "CALLING_INTERVALS_CHR22": "gs://gnomad-tmp-4day/julia/xgen.pad0.dsp.pad0.union.chr22.intervals",
+  "CALLING_INTERVALS": "gs://gnomad/resources/intervals/xgen.pad0.dsp.pad0.union.intervals"
 }

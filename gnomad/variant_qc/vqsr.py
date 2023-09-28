@@ -48,10 +48,10 @@ def split_intervals(
 
     j.command(f"""set -e
     # Modes other than INTERVAL_SUBDIVISION will produce an unpredicted number
-    # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS number of
+    # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS_CHR22 number of
     # output files because our workflow is not dynamic.
     gatk --java-options "-Xms{java_mem}g" SplitIntervals \\
-      -L {utils['EVEN_INTERVALS']} \\
+      -L {utils['CALLING_INTERVALS']} \\
       --interval-padding 150 \\
       -O {j.intervals} \\
       -scatter {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} \\
@@ -138,7 +138,7 @@ def snps_variant_recalibrator_create_model(
           VariantRecalibrator \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
-          -L {utils['UNPADDED_INTERVALS']} \\
+          -L {utils['EVALUATION_INTERVALS']} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
@@ -367,7 +367,7 @@ def indels_variant_recalibrator_create_model(
           --gcs-project-for-requester-pays {gcp_billing_project} \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
-          -L {utils['UNPADDED_INTERVALS']} \\
+          -L {utils['EVALUATION_INTERVALS']} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
@@ -664,19 +664,13 @@ def apply_recalibration(
             interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
             echo $interval
         """)
-        # overwrite VCF with overlap issue addressed
-        # j.command(f"""
-        #    interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
-        #    bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf2['vcf.gz']} --output-type z
-        #    tabix  {j.output_vcf2['vcf.gz']}
-        # """)
-        # overwrite VCF with overlap issue addressed
-    #    j.command(f"""
-    #            interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
-    #            bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
-    #            tabix -f {j.output_vcf['vcf.gz']}
-    #            df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-    #        """)
+        #  overwrite VCF with overlap issue addressed
+        j.command(f"""
+                interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+                bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
+                tabix -f {j.output_vcf['vcf.gz']}
+                df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
+            """)
 
     if out_bucket:
         b.write_output(j.output_vcf, f"{outpath}{filename}")
@@ -1129,10 +1123,23 @@ def main():
         default="",
         help="String to add to end of batch name.",
     )
+    parser.add_argument(
+        "--test-on-chr22",
+        action='store_true',
+        help='If passed, will search resource file for _CHR22 versions of some files'
+
+    )
 
     args = parser.parse_args()
 
     use_as_annotations = False if args.no_as_annotations else True
+
+    # a smarter man with more time would have an idea for implementing this!
+    # arg_suffix = ""
+
+    # if args.test_on_chr22:
+    #     arg_uffix="_CHR22"
+
 
     print("billing project as: ", args.batch_billing_project)
 

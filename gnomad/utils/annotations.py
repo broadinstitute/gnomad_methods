@@ -1733,6 +1733,7 @@ def compute_freq_by_strata(
     mt: hl.MatrixTable,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
     select_fields: Optional[List[str]] = None,
+    group_membership_includes_raw_group: bool = True,
 ) -> hl.Table:
     """
     Compute call statistics and, when passed, entry aggregation function(s) by strata.
@@ -1757,6 +1758,9 @@ def compute_freq_by_strata(
         function.
     :param select_fields: Optional list of row fields from `mt` to keep on the output
         Table.
+    :param group_membership_includes_raw_group: Whether the 'group_membership'
+        annotation includes an entry for the 'raw' group, representing all samples.
+        Default is True.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
     if entry_agg_funcs is None:
@@ -1804,10 +1808,17 @@ def compute_freq_by_strata(
                 lambda i: hl.agg.filter(ht.adj_array[i], agg_func(ann_expr[i], *args))
             )
         )
+        # Create final agg list by inserting or changing the "raw" group,
+        # representing all samples, in the adj_agg_list.
         raw_agg_expr = ann_expr.aggregate(lambda x: agg_func(x, *args))
-        # Create final agg list by inserting the "raw" group, representing all samples,
-        # into the adj_agg_list.
-        return adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
+        if group_membership_includes_raw_group:
+            adj_agg_expr[1] = raw_agg_expr
+        else:
+            adj_agg_expr = (
+                adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
+            )
+
+        return adj_agg_expr
 
     freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)
 

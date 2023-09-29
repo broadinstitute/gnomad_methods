@@ -1932,8 +1932,8 @@ def update_structured_annotations(
 
 def gks_compute_seqloc_digest(
     ht: hl.Table,
-    export_tmpfile: str = new_temp_file("gks-seqloc-pre.tsv"),
-    computed_tmpfile: str = new_temp_file("gks-seqloc-post.tsv"),
+    export_tmpfile: Optional[str] = None,
+    computed_tmpfile: Optional[str] = None,
 ):
     """
     Compute sequence location digest-based id for a hail variant Table.
@@ -1943,11 +1943,16 @@ def gks_compute_seqloc_digest(
     one added by add_gks_vrs, that can be used to construct ga4gh.vrs models.
 
     :param ht: hail table with VRS annotation
-    :param export_tmpfile: file path to export the table to.
-    :param computed_tmpfile: file path to write the updated rows to,
+    :param export_tmpfile: Optional file path to export the table to.
+    :param computed_tmpfile: Optional file path to write the updated rows to,
         which is then imported as a hail table
     :return: a hail table with the VRS annotation updated with the new SequenceLocations
     """
+    if export_tmpfile is None:
+        export_tmpfile = new_temp_file("gks-seqloc-pre.tsv")
+    if computed_tmpfile is None:
+        computed_tmpfile = new_temp_file("gks-seqloc-post.tsv")
+
     logger.info("Exporting ht to %s", export_tmpfile)
     ht.select("vrs_json").export(export_tmpfile, header=True)
 

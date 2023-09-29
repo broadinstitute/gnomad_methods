@@ -265,7 +265,7 @@ def compute_binned_truth_sample_concordance(
         score=indexed_binned_score_ht.score,
         global_bin=indexed_binned_score_ht.bin,
     )
-
+    ht = ht.checkpoint(hl.utils.new_temp_file("pre_bin", "ht"))
     # Annotate the truth sample bin
     bin_ht = compute_ranked_bin(
         ht,

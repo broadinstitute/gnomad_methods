@@ -69,7 +69,7 @@ def create_binned_ht(
     :return: table with bin number for each variant
     """
 
-    def _update_bin_expr(
+    def _new_bin_expr(
         bin_expr: Dict[str, hl.expr.BooleanExpression],
         new_expr: hl.expr.BooleanExpression,
         new_id: str,
@@ -83,29 +83,28 @@ def create_binned_ht(
         :return: Dictionary of `bin_expr` updated with `new_expr` added as an additional stratification to all
             expressions already in `bin_expr`
         """
-        bin_expr.update(
-            {
-                f"{new_id}_{bin_id}": bin_expr & new_expr
-                for bin_id, bin_expr in bin_expr.items()
-            }
-        )
-        return bin_expr
+        new_bin_expr = {
+            f"{new_id}_{bin_id}": bin_expr & new_expr
+            for bin_id, bin_expr in bin_expr.items()
+        }
+        return new_bin_expr
 
     # Desired bins and sub-bins
     bin_expr = {"bin": True}
 
     if singleton:
-        bin_expr = _update_bin_expr(bin_expr, ht.ac_raw == 1, "singleton")
+        bin_expr = _new_bin_expr(bin_expr, ht.ac_raw == 1, "singleton")
 
     if biallelic:
-        bin_expr = _update_bin_expr(bin_expr, ~ht.was_split, "biallelic")
+        bin_expr = _new_bin_expr(bin_expr, ~ht.was_split, "biallelic")
 
     if adj:
-        bin_expr = _update_bin_expr(bin_expr, (ht.ac > 0), "adj")
+        bin_expr = _new_bin_expr(bin_expr, (ht.ac > 0), "adj")
 
     if add_substrat:
+        new_bin_expr = {}
         for add_id, add_expr in add_substrat.items():
-            bin_expr = _update_bin_expr(bin_expr, add_expr, add_id)
+            new_bin_expr.update(_new_bin_expr(bin_expr, add_expr, add_id))
 
     bin_ht = compute_ranked_bin(
         ht, score_expr=ht.score, bin_expr=bin_expr, n_bins=n_bins

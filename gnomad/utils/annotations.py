@@ -7,8 +7,6 @@ import logging
 from timeit import default_timer as timer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
-import ga4gh.core as ga4gh_core
-import ga4gh.vrs as ga4gh_vrs
 import hail as hl
 from hail.utils.misc import new_temp_file
 

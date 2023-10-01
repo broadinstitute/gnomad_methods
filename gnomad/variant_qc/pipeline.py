@@ -73,6 +73,7 @@ def create_binned_ht(
         bin_expr: Dict[str, hl.expr.BooleanExpression],
         new_expr: hl.expr.BooleanExpression,
         new_id: str,
+        update: bool = False,
     ) -> Dict[str, hl.expr.BooleanExpression]:
         """
         Update a dictionary of expressions to add another stratification.
@@ -87,24 +88,29 @@ def create_binned_ht(
             f"{new_id}_{bin_id}": bin_expr & new_expr
             for bin_id, bin_expr in bin_expr.items()
         }
-        return new_bin_expr
+        if update:
+            bin_expr.update(new_bin_expr)
+            return bin_expr
+        else:
+            return new_bin_expr
 
     # Desired bins and sub-bins
     bin_expr = {"bin": True}
 
     if singleton:
-        bin_expr = _new_bin_expr(bin_expr, ht.ac_raw == 1, "singleton")
+        bin_expr = _new_bin_expr(bin_expr, ht.ac_raw == 1, "singleton", update=True)
 
     if biallelic:
-        bin_expr = _new_bin_expr(bin_expr, ~ht.was_split, "biallelic")
+        bin_expr = _new_bin_expr(bin_expr, ~ht.was_split, "biallelic", update=True)
 
     if adj:
-        bin_expr = _new_bin_expr(bin_expr, (ht.ac > 0), "adj")
+        bin_expr = _new_bin_expr(bin_expr, (ht.ac > 0), "adj", update=True)
 
-    if add_substrat:
+    if add_substrat is not None:
         new_bin_expr = {}
         for add_id, add_expr in add_substrat.items():
             new_bin_expr.update(_new_bin_expr(bin_expr, add_expr, add_id))
+        bin_expr.update(new_bin_expr)
 
     bin_ht = compute_ranked_bin(
         ht, score_expr=ht.score, bin_expr=bin_expr, n_bins=n_bins

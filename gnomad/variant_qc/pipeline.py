@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
 import pyspark.sql
@@ -70,7 +70,7 @@ def create_binned_ht(
     """
 
     def _new_bin_expr(
-        bin_expr: Dict[str, hl.expr.BooleanExpression],
+        bin_expr: Union[Dict[str, hl.expr.BooleanExpression], Dict[str, bool]],
         new_expr: hl.expr.BooleanExpression,
         new_id: str,
         update: bool = False,

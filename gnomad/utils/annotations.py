@@ -237,70 +237,65 @@ def faf_expr(
     return faf_expr, hl.eval(faf_meta)
 
 
-def pop_max_for_faf_expr(
+def gen_anc_grp_max_faf_exp(
     faf: hl.expr.ArrayExpression,
     faf_meta: hl.expr.ArrayExpression,
 ) -> hl.expr.StructExpression:
     """
-    Create an expression containing the information about the population that has the highest FAF in `faf_meta`.
+    Return the filtering allele frequencies (FAF) for the genetic ancestry group(s) in `faf_meta` with the highest FAFs.
 
     This resulting struct contains the following fields:
 
         - faf95_max: float64
-        - faf95_max_pop: str
+        - faf95_max_gen_anc_grp: str
         - faf99_max: float64
-        - faf99_max_pop: str
+        - faf99_max_gen_anc_grp: str
 
     :param faf: ArrayExpression of Structs with fields ['faf95', 'faf99']
     :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as returned by faf_expr)
 
-    :return: Popmax struct for faf
+    :return: Struct containing max FAFs and their genetic ancestry groups
     """
-    popmax_faf_indices = hl.range(0, hl.len(faf_meta)).filter(
+    faf_pop_indices = hl.range(0, hl.len(faf_meta)).filter(
         lambda i: (hl.set(faf_meta[i].keys()) == {"group", "pop"})
         & (faf_meta[i]["group"] == "adj")
     )
-    popmax_faf_indices = hl.eval(popmax_faf_indices)
+    faf_pop_indices = hl.eval(faf_pop_indices)
 
-    faf95 = hl.rbind(
-        hl.sorted(
-            hl.array(
-                [
-                    hl.struct(faf=faf[i].faf95, population=faf_meta[i]["pop"])
-                    for i in popmax_faf_indices
-                ]
+    def _calculate_max_faf(faf_expr, indices, faf_item):
+        return hl.rbind(
+            hl.sorted(
+                hl.array(
+                    [
+                        hl.struct(
+                            faf=faf_expr[i][faf_item], population=faf_meta[i]["pop"]
+                        )
+                        for i in indices
+                    ]
+                ),
+                key=lambda f: f.faf,
+                reverse=True,
             ),
-            key=lambda f: (-f.faf, f.population),
-        ),
-        lambda fafs: hl.if_else(
-            (hl.len(fafs) > 0) & (fafs[0].faf > 0),
-            hl.struct(faf95_max=fafs[0].faf, faf95_max_pop=fafs[0].population),
-            hl.struct(
-                faf95_max=hl.missing(hl.tfloat), faf95_max_pop=hl.missing(hl.tstr)
+            lambda fafs: hl.if_else(
+                (hl.len(fafs) > 0) & (fafs[0].faf > 0),
+                hl.struct(faf_max=fafs[0].faf, faf_max_gen_anc_grp=fafs[0].population),
+                hl.struct(
+                    faf_max=hl.missing(hl.tfloat),
+                    faf_max_gen_anc_grp=hl.missing(hl.tstr),
+                ),
             ),
-        ),
-    )
+        )
 
-    faf99 = hl.rbind(
-        hl.sorted(
-            hl.array(
-                [
-                    hl.struct(faf=faf[i].faf99, population=faf_meta[i]["pop"])
-                    for i in popmax_faf_indices
-                ]
-            ),
-            key=lambda f: (-f.faf, f.population),
-        ),
-        lambda fafs: hl.if_else(
-            (hl.len(fafs) > 0) & (fafs[0].faf > 0),
-            hl.struct(faf99_max=fafs[0].faf, faf99_max_pop=fafs[0].population),
-            hl.struct(
-                faf99_max=hl.missing(hl.tfloat), faf99_max_pop=hl.missing(hl.tstr)
-            ),
-        ),
+    faf95 = _calculate_max_faf(faf, faf_pop_indices, "faf95")
+    faf95 = faf95.select(
+        faf95_max=faf95.faf_max, faf95_max_gen_anc_grp=faf95.faf_max_gen_anc_grp
     )
-    faf_popmax = faf95.annotate(**faf99)
-    return faf_popmax
+    faf99 = _calculate_max_faf(faf, faf_pop_indices, "faf99")
+    faf99 = faf99.select(
+        faf99_max=faf99.faf_max, faf99_max_gen_anc_grp=faf99.faf_max_gen_anc_grp
+    )
+    fafmax = faf95.annotate(**faf99)
+    return fafmax
 
 
 def qual_hist_expr(

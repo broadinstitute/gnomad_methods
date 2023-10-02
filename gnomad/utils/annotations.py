@@ -262,7 +262,15 @@ def gen_anc_grp_max_faf_exp(
     )
     faf_pop_indices = hl.eval(faf_pop_indices)
 
-    def _calculate_max_faf(faf_expr, indices, faf_item):
+    def _calculate_max_faf(faf_expr, indices, faf_item) -> hl.expr.StructExpression:
+        """
+        Return the max FAF and its genetic ancestry group for the given FAF item (e.g. faf95 or faf99).
+
+        :param faf_expr: ArrayExpression of Structs with fields ['faf95', 'faf99']
+        :param indices: Indices of the populations to consider
+        :param faf_item: FAF item to consider (e.g. faf95 or faf99)
+        :return: Struct containing max FAF and its genetic ancestry group
+        """
         return hl.rbind(
             hl.sorted(
                 hl.array(

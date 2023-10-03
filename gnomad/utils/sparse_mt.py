@@ -7,6 +7,7 @@ import hail as hl
 
 from gnomad.utils.annotations import (
     fs_from_sb,
+    generate_freq_group_membership_array,
     get_adj_expr,
     get_lowqual_expr,
     pab_max_expr,
@@ -911,6 +912,7 @@ def compute_coverage_stats(
     interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
     row_key_fields: List[str] = ["locus"],
+    strata_expr: Optional[Dict[str, hl.expr.Expression]] = None,
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -936,10 +938,17 @@ def compute_coverage_stats(
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
         n_samples = mtds.variant_data.count_cols()
+        ht = mtds.variant_data.cols()
     else:
         n_samples = mtds.count_cols()
-    logging.info("Computing coverage stats on %d samples.", n_samples)
+        ht = mtds.cols()
 
+    if strata_expr is None:
+        strata_expr = {}
+
+    group_membership_ht = generate_freq_group_membership_array(ht, strata_expr)
+
+    logging.info("Computing coverage stats on %d samples.", n_samples)
     # Filter datasets to interval list
     if interval_ht is not None:
         reference_ht = reference_ht.filter(

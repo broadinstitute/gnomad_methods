@@ -1688,7 +1688,7 @@ def generate_freq_group_membership_array(
     )
 
     if remove_zero_sample_groups:
-        filter_freq = hl.enumerate(freq_meta_sample_count).filter(lambda x: x[0] > 0)
+        filter_freq = hl.enumerate(freq_meta_sample_count).filter(lambda x: x[1] > 0)
         freq_meta_sample_count = filter_freq.map(lambda x: x[1])
         idx_keep = hl.eval(filter_freq.map(lambda x: x[0]))
         sample_group_filters = [sample_group_filters[i] for i in idx_keep]
@@ -1761,8 +1761,14 @@ def compute_freq_by_strata(
     :param select_fields: Optional list of row fields from `mt` to keep on the output
         Table.
     :param group_membership_includes_raw_group: Whether the 'group_membership'
-        annotation includes an entry for the 'raw' group, representing all samples.
-        Default is True.
+        annotation includes an entry for the 'raw' group, representing all samples. If
+        False, the 'raw' group is inserted as the second element in all added
+        annotations using the same 'group_membership' as the first element, resulting
+        in array lengths of 'group_membership'+1. If True, the second element of each
+        added annotation is still the 'raw' group, but the group membership is
+        determined by the values in the second element of 'group_membership', and the
+        output annotations will be the same length as 'group_membership'. Default is
+        True.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
     if entry_agg_funcs is None:

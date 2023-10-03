@@ -1043,16 +1043,35 @@ def compute_coverage_stats(
     coverage_counter_expr = hl.agg.counter(
         hl.min(max_coverage_bin, hl.or_else(mt.DP, 0))
     )
+    mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
 
+    # Annotate rows now
+    ht = mt.select_rows(
+        **mt.group_membership.map(
+            lambda x: hl.agg.filter(
+                x,
+                hl.struct(
+                    coverage_counter=coverage_counter_expr,
+                    mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
+                    median_approx=hl.or_else(
+                        hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0
+                    ),
+                    total_DP=hl.agg.sum(mt.DP),
+                ),
+            )
+        )
+    ).rows()
+    ht.describe()
     # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
     # and computes the cumulative sum over them.
     # It needs to be in reverse order because we want the sum over samples
     # covered by > X.
+    coverage_counter_expr = ht.coverage_counter
     count_array_expr = hl.cumulative_sum(
         hl.array(
             [
                 hl.int32(coverage_counter_expr.get(max_coverage_bin, 0))
-            ]  # The coverage was already floored to the max_coverage_bin, so no more aggregation is needed for the max bin
+            ]  # The coverage was already floored to the max_coverage_bin, so no more # aggregation is needed for the max bin
             # For each of the other bins, coverage needs to be summed between the
             # boundaries
         ).extend(
@@ -1065,32 +1084,18 @@ def compute_coverage_stats(
             )
         )
     )
-    mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
 
-    # Annotate rows now
-    ht = mt.select_rows(
-        **mt.group_membership.map(
-            lambda x: hl.agg.filter(
-                x,
-                hl.struct(
-                    mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
-                    median_approx=hl.or_else(
-                        hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0
-                    ),
-                    total_DP=hl.agg.sum(mt.DP),
-                    **{
-                        f"over_{x}": count_array_expr[i] / n_samples
-                        for i, x in zip(
-                            range(len(coverage_over_x_bins) - 1, -1, -1),
-                            # Reverse the bin index as count_array_expr has the reverse
-                            # order
-                            coverage_over_x_bins,
-                        )
-                    },
-                ),
+    ht = ht.annotate(
+        **{
+            f"over_{x}": count_array_expr[i] / n_samples
+            for i, x in zip(
+                range(len(coverage_over_x_bins) - 1, -1, -1),
+                # Reverse the bin index as count_array_expr has the reverse order.
+                coverage_over_x_bins,
             )
-        )
-    ).rows()
+        }
+    )
+
     ht.describe()
 
     current_keys = list(ht.key)

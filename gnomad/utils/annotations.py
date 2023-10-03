@@ -1244,10 +1244,14 @@ def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.expr.Expressio
     return hl.fold(
         lambda i, j: hl.struct(
             **{
-                "bin_edges": i.bin_edges,  # Bin edges are the same for all histograms
-                "bin_freq": hl.zip(i.bin_freq, j.bin_freq).map(lambda x: x[0] + x[1]),
-                "n_smaller": i.n_smaller + j.n_smaller,
-                "n_larger": i.n_larger + j.n_larger,
+                "bin_edges": hl.or_else(i.bin_edges, j.bin_edges),
+                "bin_freq": hl.zip(
+                    hl.or_else(i.bin_freq, hl.literal([hl.missing(hl.tint)])),
+                    hl.or_else(j.bin_freq, hl.literal([hl.missing(hl.tint)])),
+                    fill_missing=True,
+                ).map(lambda x: hl.or_else(x[0], 0) + hl.or_else(x[1], 0)),
+                "n_smaller": hl.or_else(i.n_smaller, 0) + hl.or_else(j.n_smaller, 0),
+                "n_larger": hl.or_else(i.n_larger, 0) + hl.or_else(j.n_larger, 0),
             }
         ),
         hists[0].select("bin_edges", "bin_freq", "n_smaller", "n_larger"),

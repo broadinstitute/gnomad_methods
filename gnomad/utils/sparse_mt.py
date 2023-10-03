@@ -912,7 +912,7 @@ def compute_coverage_stats(
     interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
     row_key_fields: List[str] = ["locus"],
-    strata_expr: Optional[Dict[str, hl.expr.Expression]] = None,
+    strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -938,14 +938,18 @@ def compute_coverage_stats(
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
         n_samples = mtds.variant_data.count_cols()
-        ht = mtds.variant_data.cols()
+        mt = mtds.variant_data
     else:
         n_samples = mtds.count_cols()
-        ht = mtds.cols()
+        mt = mtds
 
     if strata_expr is None:
         strata_expr = {}
 
+    # Annotate the MT cols with each of the expressions in strata_expr and redefine
+    # strata_expr based on the column HT with added annotations.
+    ht = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()}).cols()
+    strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
     group_membership_ht = generate_freq_group_membership_array(ht, strata_expr)
 
     logging.info("Computing coverage stats on %d samples.", n_samples)

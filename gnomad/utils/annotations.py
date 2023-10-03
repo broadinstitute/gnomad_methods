@@ -1688,9 +1688,9 @@ def generate_freq_group_membership_array(
     )
 
     if remove_zero_sample_groups:
-        filter_freq = hl.enumerate(freq_meta_sample_count).filter(lambda x: x > 0)
+        filter_freq = hl.enumerate(freq_meta_sample_count).filter(lambda x: x[0] > 0)
         freq_meta_sample_count = filter_freq.map(lambda x: x[1])
-        idx_keep = filter_freq.map(lambda x: x[0])
+        idx_keep = hl.eval(filter_freq.map(lambda x: x[0]))
         sample_group_filters = [sample_group_filters[i] for i in idx_keep]
 
     # Annotate columns with group_membership.
@@ -1711,7 +1711,9 @@ def generate_freq_group_membership_array(
         )
         # Add the "raw" group, representing all samples, to the freq_meta_expr list.
         freq_meta.insert(1, {"group": "raw"})
-        freq_meta_sample_count.insert(1, freq_meta_sample_count[0])
+        freq_meta_sample_count = hl.array([freq_meta_sample_count[0]]).extend(
+            freq_meta_sample_count
+        )
 
     global_expr = {
         "freq_meta": freq_meta,
@@ -1812,11 +1814,13 @@ def compute_freq_by_strata(
         # representing all samples, in the adj_agg_list.
         raw_agg_expr = ann_expr.aggregate(lambda x: agg_func(x, *args))
         if group_membership_includes_raw_group:
-            adj_agg_expr[1] = raw_agg_expr
+            extend_idx = 2
         else:
-            adj_agg_expr = (
-                adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
-            )
+            extend_idx = 1
+
+        adj_agg_expr = (
+            adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[extend_idx:])
+        )
 
         return adj_agg_expr
 

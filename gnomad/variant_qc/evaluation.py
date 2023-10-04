@@ -81,6 +81,23 @@ def compute_ranked_bin(
         _rand=hl.rand_unif(0, 1),
     )
 
+    # Checkpoint bin Table prior to variant count aggregation.
+    bin_ht = bin_ht.checkpoint(hl.utils.new_temp_file("bin", "ht"))
+
+    # Compute variant counts per group defined by bin_expr. This is used to determine
+    # bin assignment.
+    bin_group_variant_counts = bin_ht.aggregate(
+        hl.Struct(
+            **{
+                bin_id: hl.agg.filter(
+                    bin_ht[f"_filter_{bin_id}"],
+                    hl.agg.count(),
+                )
+                for bin_id in bin_expr
+            }
+        )
+    )
+
     logger.info(
         "Sorting the HT by score_expr followed by a random float between 0 and 1. "
         "Then adding a row index per grouping defined by bin_expr..."
@@ -97,22 +114,6 @@ def compute_ranked_bin(
     )
     bin_ht = bin_ht.key_by("locus", "alleles")
 
-    # Annotate globals with variant counts per group defined by bin_expr. This
-    # is used to determine bin assignment
-    bin_ht = bin_ht.annotate_globals(
-        bin_group_variant_counts=bin_ht.aggregate(
-            hl.Struct(
-                **{
-                    bin_id: hl.agg.filter(
-                        bin_ht[f"_filter_{bin_id}"],
-                        hl.agg.count(),
-                    )
-                    for bin_id in bin_expr
-                }
-            )
-        )
-    )
-
     logger.info("Binning ranked rows into %d bins...", n_bins)
     bin_ht = bin_ht.select(
         "snv",
@@ -123,7 +124,7 @@ def compute_ranked_bin(
                         n_bins
                         * (
                             bin_ht[f"{bin_id}_rank"]
-                            / hl.float64(bin_ht.bin_group_variant_counts[bin_id])
+                            / hl.float64(bin_group_variant_counts[bin_id])
                         )
                     )
                     + 1
@@ -143,20 +144,18 @@ def compute_ranked_bin(
     # in bin names in the table
     if compute_snv_indel_separately:
         bin_expr_no_snv = {
-            bin_id.rsplit("_", 1)[0] for bin_id in bin_ht.bin_group_variant_counts
+            bin_id.rsplit("_", 1)[0] for bin_id in bin_group_variant_counts
         }
-        bin_ht = bin_ht.annotate_globals(
-            bin_group_variant_counts=hl.struct(
-                **{
-                    bin_id: hl.struct(
-                        **{
-                            snv: bin_ht.bin_group_variant_counts[f"{bin_id}_{snv}"]
-                            for snv in ["snv", "indel"]
-                        }
-                    )
-                    for bin_id in bin_expr_no_snv
-                }
-            )
+        bin_group_variant_counts = hl.struct(
+            **{
+                bin_id: hl.struct(
+                    **{
+                        snv: bin_group_variant_counts[f"{bin_id}_{snv}"]
+                        for snv in ["snv", "indel"]
+                    }
+                )
+                for bin_id in bin_expr_no_snv
+            }
         )
 
         bin_ht = bin_ht.transmute(
@@ -169,6 +168,8 @@ def compute_ranked_bin(
                 for bin_id in bin_expr_no_snv
             }
         )
+
+    bin_ht = bin_ht.annotate_globals(bin_group_variant_counts=bin_group_variant_counts)
 
     return bin_ht
 
@@ -264,7 +265,7 @@ def compute_binned_truth_sample_concordance(
         score=indexed_binned_score_ht.score,
         global_bin=indexed_binned_score_ht.bin,
     )
-
+    ht = ht.checkpoint(hl.utils.new_temp_file("pre_bin", "ht"))
     # Annotate the truth sample bin
     bin_ht = compute_ranked_bin(
         ht,

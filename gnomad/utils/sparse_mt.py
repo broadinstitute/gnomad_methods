@@ -952,7 +952,9 @@ def compute_coverage_stats(
     # strata_expr based on the column HT with added annotations.
     ht = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()}).cols()
     strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
-    group_membership_ht = generate_freq_group_membership_array(ht, strata_expr)
+    group_membership_ht = generate_freq_group_membership_array(
+        ht, strata_expr, no_raw_group=True
+    )
 
     logging.info("Computing coverage stats on %d samples.", n_samples)
     # Filter datasets to interval list
@@ -1121,12 +1123,12 @@ def compute_coverage_stats(
         # stratification to the globals.
         ht = ht.annotate_globals(
             coverage_stats_meta=(
-                group_membership_ht.index_globals()
-                .freq_meta[1:]
-                .map(lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group")))
+                group_membership_ht.index_globals().freq_meta.map(
+                    lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
+                )
             ),
             coverage_stats_meta_sample_count=(
-                group_membership_ht.index_globals().freq_meta_sample_count[1:]
+                group_membership_ht.index_globals().freq_meta_sample_count
             ),
         )
 

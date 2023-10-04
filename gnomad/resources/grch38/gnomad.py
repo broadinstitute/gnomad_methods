@@ -585,7 +585,28 @@ def gnomad_gks(
         )
     )
 
-    keep_fields = [ht.freq, ht.info.vrs, ht.faf95, ht.filters, ht.region_flag]
+    # Add >0.9 allele balance for heterozygotes count flag
+    # The bins are each 5pct so the last 2 are .9-.95, 0.95-1
+    ht = ht.annotate(ab_hist_alt_bin_freq=ht.qual_hists.ab_hist_alt.bin_freq)
+    # ht = ht.annotate(
+    #     allele_balance_qual_flag=hl.sum(
+    #         # ht.qual_hists.ab_hist_alt.bin_freq[-2:]
+    #         [
+    #             ht.qual_hists.ab_hist_alt.bin_freq[18],
+    #             ht.qual_hists.ab_hist_alt.bin_freq[19],
+    #         ]
+    #     )
+    # )
+
+    keep_fields = [
+        ht.freq,
+        ht.info.vrs,
+        ht.faf95,
+        ht.filters,
+        ht.region_flag,
+        # ht.allele_balance_qual_flag,
+        ht.ab_hist_alt_bin_freq,
+    ]
 
     if not skip_coverage:
         keep_fields.append(ht.mean_depth)

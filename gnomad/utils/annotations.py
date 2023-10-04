@@ -2632,6 +2632,12 @@ def add_gks_va(
         "cohort": {"id": "ALL"},
     }
 
+    if len(input_struct.ab_hist_alt_bin_freq) != 20:
+        logger.error(
+            "ab_hist_alt.bin_freq had %s items, expected 20",
+            len(input_struct.ab_hist_alt_bin_freq),
+        )
+
     # Create ancillaryResults for additional frequency and popMaxFAF95 information
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
@@ -2641,6 +2647,12 @@ def add_gks_va(
         },
         "qcFilters": list(input_struct.filters),
         "lowComplexityRegion": input_struct.region_flag.lcr,
+        "heterozygousAlleleBalanceFlagged": sum(
+            [
+                input_struct.ab_hist_alt_bin_freq[18],
+                input_struct.ab_hist_alt_bin_freq[19],
+            ]
+        ),
     }
 
     if input_struct.faf95.popmax_population is not None:

@@ -1763,7 +1763,7 @@ def compute_freq_by_strata(
     :param group_membership_includes_raw_group: Whether the 'group_membership'
         annotation includes an entry for the 'raw' group, representing all samples. If
         False, the 'raw' group is inserted as the second element in all added
-        annotations using the same 'group_membership' as the first element, resulting
+        annotations using the same 'group_membership', resulting
         in array lengths of 'group_membership'+1. If True, the second element of each
         added annotation is still the 'raw' group, but the group membership is
         determined by the values in the second element of 'group_membership', and the

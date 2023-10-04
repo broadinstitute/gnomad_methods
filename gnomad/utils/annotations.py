@@ -2639,6 +2639,7 @@ def add_gks_va(
             "frequency": input_struct.faf95.popmax,
             "confidenceInterval": 0.95,
         },
+        "qcFilters": list(input_struct.filters),
     }
 
     if input_struct.faf95.popmax_population is not None:

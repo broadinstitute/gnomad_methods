@@ -585,7 +585,7 @@ def gnomad_gks(
         )
     )
 
-    keep_fields = [ht.freq, ht.info.vrs, ht.faf95]
+    keep_fields = [ht.freq, ht.info.vrs, ht.faf95, ht.filters]
 
     if not skip_coverage:
         keep_fields.append(ht.mean_depth)

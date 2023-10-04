@@ -947,6 +947,9 @@ def compute_coverage_stats(
 
     if strata_expr is None:
         strata_expr = {}
+        no_strata = True
+    else:
+        no_strata = False
 
     # Annotate the MT cols with each of the expressions in strata_expr and redefine
     # strata_expr based on the column HT with added annotations.
@@ -1114,7 +1117,7 @@ def compute_coverage_stats(
         .select_globals()
         .drop(*[k for k in current_keys if k not in row_key_fields])
     )
-    if strata_expr is None:
+    if no_strata:
         # If there was no stratification, move coverage_stats annotations to the top
         # level.
         ht = ht.select(**{k: ht.coverage_stats[0][k] for k in ht.coverage_stats})

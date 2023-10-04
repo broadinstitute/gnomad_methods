@@ -1,9 +1,9 @@
 """
 Script to run VQSR on an AS-annotated Sites VCF
-Example input: 
-python3 ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr.py \\ 
-    --input-vcf gs://gnomad-tmp/gnomad_v4.0_testing/annotations/exomes/gnomad.exomes.v4.0.info.AS.chr22.vcf.bgz \\ 
-    --out-bucket gs://gnomad-marten/vqsr_20230921/results --out-vcf-name chr22tester \\ 
+Example input:
+python3 ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr.py \\
+    --input-vcf gs://gnomad-tmp/gnomad_v4.0_testing/annotations/exomes/gnomad.exomes.v4.0.info.AS.chr22.vcf.bgz \\
+    --out-bucket gs://gnomad-marten/vqsr_20230921/results --out-vcf-name chr22tester \\
     --resources ~/Documents/GitHub/gnomad_methods/gnomad/variant_qc/vqsr_resources.json --billing-project marten-trial \\
     --transmitted-singletons gs://gnomad-tmp/gnomad_v4.0_testing/annotations/exomes/gnomad.exomes.v4.0.transmitted_singleton.raw.chr22.vcf.bgz \\
     --batch-suffix chr22testlarge --n-samples 700000
@@ -47,11 +47,12 @@ def split_intervals(
     )
 
     j.command(f"""set -e
-    # Modes other than INTERVAL_SUBDIVISION will produce an unpredicted number 
-    # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS number of 
+    # Modes other than INTERVAL_SUBDIVISION will produce an unpredicted number
+    # of intervals. But we have to expect exactly the NUMBER_OF_GENOMICS_DB_INTERVALS_CHR22 number of
     # output files because our workflow is not dynamic.
     gatk --java-options "-Xms{java_mem}g" SplitIntervals \\
-      -L {utils['UNPADDED_INTERVALS']} \\
+      -L {utils['CALLING_INTERVALS']} \\
+      --interval-padding 150 \\
       -O {j.intervals} \\
       -scatter {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} \\
       -R {utils['ref_fasta']} \\
@@ -116,7 +117,7 @@ def snps_variant_recalibrator_create_model(
     java_mem = ncpu * 8 - 10
     j.storage("50G")
 
-    downsample_factor = 75 if is_large_callset else 10
+    downsample_factor = 75  # if is_large_callset else 10
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["SNP_RECALIBRATION_TRANCHE_VALUES"]]
@@ -137,6 +138,7 @@ def snps_variant_recalibrator_create_model(
           VariantRecalibrator \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
+          -L {utils['EVALUATION_INTERVALS']} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
@@ -279,7 +281,7 @@ def snps_variant_recalibrator(
     j.command(cmd)
 
     if out_bucket:
-        if tranche_idx:
+        if tranche_idx is not None:
             b.write_output(
                 j.tranches,
                 f"{out_bucket}recalibration/SNPS/snps.{tranche_idx}.tranches",
@@ -343,8 +345,7 @@ def indels_variant_recalibrator_create_model(
     java_mem = ncpu * 8 - 10
     j.storage("50G")
 
-    # downsample_factor = 75 if is_large_callset else 10
-    downsample_factor = 10
+    downsample_factor = 75 if not is_small_callset else 10
 
     tranche_cmdl = " ".join(
         [f"-tranche {v}" for v in utils["INDEL_RECALIBRATION_TRANCHE_VALUES"]]
@@ -366,6 +367,7 @@ def indels_variant_recalibrator_create_model(
           --gcs-project-for-requester-pays {gcp_billing_project} \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
+          -L {utils['EVALUATION_INTERVALS']} \\
           --tranches-file {j.tranches} \\
           --trust-all-polymorphic \\
           {tranche_cmdl} \\
@@ -502,7 +504,7 @@ def indels_variant_recalibrator(
     j.command(cmd)
 
     if out_bucket:
-        if tranche_idx:
+        if tranche_idx is not None:
             b.write_output(
                 j.tranches,
                 f"{out_bucket}recalibration/INDELS/indels.{tranche_idx}.tranches",
@@ -520,6 +522,7 @@ def gather_tranches(
     tranches: List[hb.ResourceFile],
     mode: str,
     disk_size: int,
+    gcp_billing_project: str,
 ) -> Job:
     """
     Third step of VQSR for SNPs: run GatherTranches to gather scattered per-interval
@@ -552,6 +555,7 @@ def gather_tranches(
     j.command(f"""set -euo pipefail
         gatk --java-options "-Xms6g" \\
           GatherTranches \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --mode {mode} \\
           {inputs_cmdl} \\
           --output {j.out_tranches}""")
@@ -570,6 +574,7 @@ def apply_recalibration(
     utils: Dict,
     disk_size: int,
     use_as_annotations: bool,
+    gcp_billing_project: str,
     scatter: Optional[int] = None,
     interval: Optional[hb.ResourceGroup] = None,
     out_bucket: Optional[str] = None,
@@ -622,11 +627,11 @@ def apply_recalibration(
     )
 
     j.command(f"""set -euo pipefail
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
         gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
           -O tmp.indel.recalibrated.vcf \\
           -V {input_vcf} \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --recal-file {indels_recalibration} \\
           --tranches-file {indels_tranches} \\
           --truth-sensitivity-filter-level {utils['INDEL_HARD_FILTER_LEVEL']} \\
@@ -635,31 +640,35 @@ def apply_recalibration(
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
           -mode INDEL
 
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-        rm {indels_recalibration} {indels_tranches}
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
         gatk --java-options "-Xms5g" \\
           ApplyVQSR \\
           -O {j.output_vcf['vcf.gz']} \\
           -V tmp.indel.recalibrated.vcf \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --recal-file {snps_recalibration} \\
           --tranches-file {snps_tranches} \\
           --truth-sensitivity-filter-level {utils['SNP_HARD_FILTER_LEVEL']} \\
           --create-output-variant-index true \\
           {f'-L {interval} ' if interval else ''} \\
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
-          -mode SNP
-        df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-                """)
+          -mode SNP""")
 
     # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
-    # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
+    # merge. This makes sure the INDEL is ONLY in ONE of two consecutive
+    # chunks (not both)
     if interval:
-        # overwrite VCF with overlap issue addressed
+        j.command(
+            f"""bcftools query -f '%CHROM\n' {j.output_vcf['vcf.gz']} | cut -f1 | uniq -c """
+        )
+        j.command(f"""
+            interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
+            echo $interval
+        """)
+        #  overwrite VCF with overlap issue addressed
         j.command(f"""
                 interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
                 bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
-                tabix {j.output_vcf['vcf.gz']}
+                tabix -f {j.output_vcf['vcf.gz']}
                 df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
             """)
 
@@ -675,6 +684,7 @@ def gather_vcfs(
     out_vcf_name: str,
     utils: Dict,
     disk_size: int,
+    gcp_billing_project: str,
     out_bucket: str = None,
 ) -> Job:
     """
@@ -708,12 +718,13 @@ def gather_vcfs(
         mkdir tmp/
         gatk --java-options "-Xms6g -Djava.io.tmpdir=`pwd`/tmp" \\
           GatherVcfsCloud \\
+          --gcs-project-for-requester-pays {gcp_billing_project} \\
           --ignore-safety-checks \\
           --gather-type BLOCK \\
           {input_cmdl} \\
           --output {j.output_vcf['vcf.gz']} \\
           --tmp-dir `pwd`/tmp
-          
+
         tabix {j.output_vcf['vcf.gz']}""")
     if out_bucket:
         b.write_output(j.output_vcf, f"{out_bucket}{filename}")
@@ -771,6 +782,7 @@ def make_vqsr_jobs(
     snp_max_gaussians = 6
     indel_max_gaussians = 4
 
+    # Iif it is a large callset, run in scatter mode
     if is_large_callset:
         # 1. Run SNP recalibrator in a scattered mode
         # file exists:
@@ -820,6 +832,7 @@ def make_vqsr_jobs(
             tranches=snps_tranches,
             mode="SNP",
             disk_size=small_disk,
+            gcp_billing_project=gcp_billing_project,
         ).out_tranches
 
         # 2. Run INDEL recalibrator in a scattered mode
@@ -870,10 +883,12 @@ def make_vqsr_jobs(
             tranches=indels_tranches,
             mode="INDEL",
             disk_size=small_disk,
+            gcp_billing_project=gcp_billing_project,
         ).out_tranches
 
         # 3. Apply recalibration
-        # Doesn't require too much storage in scatter mode (<500MB on gnomad VCF for each scatter), use small_disk
+        # Doesn't require too much storage in scatter mode (<500MB on gnomad VCF
+        # for each scatter), use small_disk
         scattered_vcfs = [
             apply_recalibration(
                 b=b,
@@ -886,6 +901,7 @@ def make_vqsr_jobs(
                 utils=utils,
                 disk_size=small_disk,
                 use_as_annotations=use_as_annotations,
+                gcp_billing_project=gcp_billing_project,
                 scatter=idx,
                 interval=intervals[f"interval_{idx}"],
                 out_bucket=out_bucket,
@@ -894,13 +910,14 @@ def make_vqsr_jobs(
         ]
 
         # 4. Gather VCFs
-        gather_vcfs(
+        gathered_vcf_job = gather_vcfs(
             b=b,
             input_vcfs=scattered_vcfs,
             out_vcf_name=output_vcf_name,
             utils=utils,
             disk_size=huge_disk,
             out_bucket=out_bucket,
+            gcp_billing_project=gcp_billing_project,
         )
 
     else:
@@ -932,7 +949,7 @@ def make_vqsr_jobs(
         indels_recalibration = indels_variant_recalibrator_job.recalibration
         indels_tranches = indels_variant_recalibrator_job.tranches
 
-        apply_recalibration(
+        recalibrated_gathered_vcf_job = apply_recalibration(
             b=b,
             input_vcf=sites_only_vcf,
             out_vcf_name=output_vcf_name,
@@ -943,6 +960,7 @@ def make_vqsr_jobs(
             utils=utils,
             disk_size=huge_disk,
             use_as_annotations=use_as_annotations,
+            gcp_billing_project=gcp_billing_project,
             out_bucket=out_bucket,
         )
 
@@ -979,14 +997,16 @@ def vqsr_workflow(
     """
     hl.init(
         backend="batch",
+        tmp_dir="gs://gnomad-tmp-4day/",
         gcs_requester_pays_configuration=gcp_billing_project,
+        regions=["us-central1"],
     )
 
-    tmp_vqsr_bucket = f"{out_bucket}/vqsr/"
+    tmp_vqsr_bucket = f"{out_bucket}/"
 
     backend = hb.ServiceBackend(
         billing_project=batch_billing_project,
-        remote_tmpdir=tmp_vqsr_bucket,
+        remote_tmpdir="gs://gnomad-tmp-4day/",
     )
 
     with open(resources, "r") as f:
@@ -1006,6 +1026,8 @@ def vqsr_workflow(
         b=b, utils=utils, gcp_billing_project=gcp_billing_project
     )
 
+    is_small_callset = False
+    is_large_callset = False
     if run_mode == "small":
         is_small_callset = True
     elif run_mode == "large":
@@ -1057,12 +1079,12 @@ def main():
     parser.add_argument(
         "--run-mode",
         type=str,
-        default=None,
-        choices=["small", "large"],
+        default="standard",
+        choices=["small", "standard", "large"],
         help=(
-            "Option to pass if running a small or large database. This affects the size"
-            " of the clusters and, if --large is set, will run in a scattered mode (one"
-            " job for each partition)."
+            "Option to pass so that the mode/resources fit the size of the database."
+            " This affects the size of the clusters and, if --large is set, will run in"
+            " a scattered mode (one job for each partition)."
         ),
     )
     parser.add_argument(
@@ -1101,12 +1123,25 @@ def main():
         default="",
         help="String to add to end of batch name.",
     )
+    parser.add_argument(
+        "--test-on-chr22",
+        action='store_true',
+        help='If passed, will search resource file for _CHR22 versions of some files'
+
+    )
 
     args = parser.parse_args()
 
     use_as_annotations = False if args.no_as_annotations else True
 
-    print("billing project as: ", args.billing_project)
+    # a smarter man with more time would have an idea for implementing this!
+    # arg_suffix = ""
+
+    # if args.test_on_chr22:
+    #     arg_uffix="_CHR22"
+
+
+    print("billing project as: ", args.batch_billing_project)
 
     vqsr_workflow(
         sites_only_vcf=args.input_vcf,

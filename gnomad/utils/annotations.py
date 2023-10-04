@@ -1613,6 +1613,8 @@ def generate_freq_group_membership_array(
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
     downsamplings: Optional[List[int]] = None,
     ds_pop_counts: Optional[Dict[str, int]] = None,
+    remove_zero_sample_groups: bool = False,
+    no_raw_group: bool = False,
 ) -> hl.Table:
     """
     Generate a Table with a 'group_membership' array for each sample indicating whether the sample belongs to specific stratification groups.
@@ -1639,6 +1641,11 @@ def generate_freq_group_membership_array(
         expressions that define the values to stratify frequency calculations by.
     :param downsamplings: List of downsampling values to include in the stratifications.
     :param ds_pop_counts: Dictionary of population counts for each downsampling value.
+    :param remove_zero_sample_groups: Whether to remove groups with a sample count of 0.
+        Default is False.
+    :param no_raw_group: Whether to remove the raw group from the 'group_membership'
+        annotation and the 'freq_meta' and 'freq_meta_sample_count' global annotations.
+        Default is False.
     :return: Table with the 'group_membership' array annotation.
     """
     errors = []
@@ -1744,6 +1751,12 @@ def generate_freq_group_membership_array(
         [hl.agg.count_where(x[1]) for x in sample_group_filters]
     )
 
+    if remove_zero_sample_groups:
+        filter_freq = hl.enumerate(freq_meta_sample_count).filter(lambda x: x[1] > 0)
+        freq_meta_sample_count = filter_freq.map(lambda x: x[1])
+        idx_keep = hl.eval(filter_freq.map(lambda x: x[0]))
+        sample_group_filters = [sample_group_filters[i] for i in idx_keep]
+
     # Annotate columns with group_membership.
     ht = ht.select(group_membership=[x[1] for x in sample_group_filters])
 
@@ -1752,9 +1765,19 @@ def generate_freq_group_membership_array(
         dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
     ]
 
-    # Add the "raw" group, representing all samples, to the freq_meta_expr list.
-    freq_meta.insert(1, {"group": "raw"})
-    freq_meta_sample_count.insert(1, freq_meta_sample_count[0])
+    if not no_raw_group:
+        # Sample group membership for the "raw" group, representing all samples, is
+        # the same as the first group in the group_membership array.
+        ht = ht.annotate(
+            group_membership=hl.array([ht.group_membership[0]]).extend(
+                ht.group_membership
+            )
+        )
+        # Add the "raw" group, representing all samples, to the freq_meta_expr list.
+        freq_meta.insert(1, {"group": "raw"})
+        freq_meta_sample_count = hl.array([freq_meta_sample_count[0]]).extend(
+            freq_meta_sample_count
+        )
 
     global_expr = {
         "freq_meta": freq_meta,
@@ -1776,6 +1799,7 @@ def compute_freq_by_strata(
     mt: hl.MatrixTable,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
     select_fields: Optional[List[str]] = None,
+    group_membership_includes_raw_group: bool = True,
 ) -> hl.Table:
     """
     Compute call statistics and, when passed, entry aggregation function(s) by strata.
@@ -1800,6 +1824,15 @@ def compute_freq_by_strata(
         function.
     :param select_fields: Optional list of row fields from `mt` to keep on the output
         Table.
+    :param group_membership_includes_raw_group: Whether the 'group_membership'
+        annotation includes an entry for the 'raw' group, representing all samples. If
+        False, the 'raw' group is inserted as the second element in all added
+        annotations using the same 'group_membership', resulting
+        in array lengths of 'group_membership'+1. If True, the second element of each
+        added annotation is still the 'raw' group, but the group membership is
+        determined by the values in the second element of 'group_membership', and the
+        output annotations will be the same length as 'group_membership'. Default is
+        True.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
     if entry_agg_funcs is None:
@@ -1847,10 +1880,19 @@ def compute_freq_by_strata(
                 lambda i: hl.agg.filter(ht.adj_array[i], agg_func(ann_expr[i], *args))
             )
         )
+        # Create final agg list by inserting or changing the "raw" group,
+        # representing all samples, in the adj_agg_list.
         raw_agg_expr = ann_expr.aggregate(lambda x: agg_func(x, *args))
-        # Create final agg list by inserting the "raw" group, representing all samples,
-        # into the adj_agg_list.
-        return adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[1:])
+        if group_membership_includes_raw_group:
+            extend_idx = 2
+        else:
+            extend_idx = 1
+
+        adj_agg_expr = (
+            adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[extend_idx:])
+        )
+
+        return adj_agg_expr
 
     freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)
 

@@ -1061,7 +1061,7 @@ def compute_coverage_stats(
                     total_DP=hl.agg.sum(mt.DP),
                 ),
             ),
-            mt.group_membership
+            mt.group_membership,
         )
     ).rows()
     ht = ht.checkpoint(hl.utils.new_temp_file("coverage_stats", "ht"))
@@ -1075,9 +1075,7 @@ def compute_coverage_stats(
             hl.array(
                 # The coverage was already floored to the max_coverage_bin, so no more
                 # aggregation is needed for the max bin.
-                [
-                    hl.int32(x.coverage_counter.get(max_coverage_bin, 0))
-                ]
+                [hl.int32(x.coverage_counter.get(max_coverage_bin, 0))]
                 # For each of the other bins, coverage needs to be summed between the
                 # boundaries.
             ).extend(
@@ -1109,7 +1107,11 @@ def compute_coverage_stats(
         )
     )
     current_keys = list(ht.key)
-    ht = ht.key_by(*row_key_fields).select_globals().drop(*[k for k in current_keys if k not in row_key_fields])
+    ht = (
+        ht.key_by(*row_key_fields)
+        .select_globals()
+        .drop(*[k for k in current_keys if k not in row_key_fields])
+    )
     if strata_expr is None:
         # If there was no stratification, move coverage_stats annotations to the top
         # level.
@@ -1118,12 +1120,15 @@ def compute_coverage_stats(
         # If there was stratification, add the metadata and sample count info for the
         # stratification to the globals.
         ht = ht.annotate_globals(
-            coverage_stats_meta=group_membership_ht.index_globals().freq_meta[1:].map(
-                lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
+            coverage_stats_meta=(
+                group_membership_ht.index_globals()
+                .freq_meta[1:]
+                .map(lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group")))
             ),
-            coverage_stats_meta_sample_count=group_membership_ht.index_globals().freq_meta_sample_count[1:],
+            coverage_stats_meta_sample_count=(
+                group_membership_ht.index_globals().freq_meta_sample_count[1:]
+            ),
         )
-    ht.describe()
 
     return ht
 

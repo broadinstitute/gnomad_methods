@@ -544,7 +544,10 @@ def build_models(
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage above `cov_cutoff`.
-    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= cov_cutoff)
+    # TODO: Parameterize this.
+    high_cov_ht = coverage_ht.filter(
+        (coverage_ht.exome_coverage >= cov_cutoff) & (coverage_ht.exome_coverage <= 100)
+    )
     agg_expr = {
         "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
         "possible_variants": hl.agg.sum(high_cov_ht.possible_variants),
@@ -883,6 +886,9 @@ def annotate_exploded_vep_for_constraint_groupings(
 
     # Explode the specified VEP annotation.
     ht = explode_by_vep_annotation(ht, vep_annotation)
+    # TODO: Need to figure out where to actually add this, but the point is we don't
+    #  want to use both refseq and Ensembl, only Ensembl.
+    ht = ht.filter(ht[vep_annotation].transcript_id.startswith("ENST"))
 
     # Collect the annotations used for groupings.
     groupings = get_constraint_grouping_expr(

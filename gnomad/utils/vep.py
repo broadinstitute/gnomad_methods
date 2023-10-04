@@ -629,7 +629,9 @@ def filter_vep_transcript_csqs(
         return t
 
     transcript_csqs = t[vep_root].transcript_consequences
-    criteria = [lambda csq: True]
+    # TODO: Need to figure out where to actually add this, but the point is we don't
+    #  want to use both refseq and Ensembl, only Ensembl.
+    criteria = [lambda csq: csq.transcript_id.startswith("ENST")]
     if synonymous:
         criteria.append(lambda csq: csq.most_severe_consequence == "synonymous_variant")
     if canonical:

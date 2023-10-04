@@ -1120,7 +1120,7 @@ def compute_coverage_stats(
     if no_strata:
         # If there was no stratification, move coverage_stats annotations to the top
         # level.
-        ht = ht.select(**{k: ht.coverage_stats[0][k] for k in ht.coverage_stats})
+        ht = ht.select(**{k: ht.coverage_stats[0][k] for k in ht.coverage_stats[0]})
     else:
         # If there was stratification, add the metadata and sample count info for the
         # stratification to the globals.

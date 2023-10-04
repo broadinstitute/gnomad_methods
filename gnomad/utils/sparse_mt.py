@@ -933,6 +933,8 @@ def compute_coverage_stats(
     :param coverage_over_x_bins: List of boundaries for computing samples over X
     :param row_key_fields: List of row key fields to use for joining `mtds` with
         `reference_ht`
+    :param strata_expr: Optional list of dicts containing expressions to stratify the
+        coverage stats by.
     :return: Table with per-base coverage stats
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1028,11 +1030,11 @@ def compute_coverage_stats(
     # Unfilter entries so that entries with no ref block overlap aren't null
     mt = mt.unfilter_entries()
 
-    group_membership_ht.describe()
+    # Annotate with group membership
     mt = mt.annotate_cols(
         group_membership=group_membership_ht[mt.col_key].group_membership
     )
-    mt.describe()
+
     # Compute coverage stats
     coverage_over_x_bins = sorted(coverage_over_x_bins)
     max_coverage_bin = coverage_over_x_bins[-1]
@@ -1047,7 +1049,7 @@ def compute_coverage_stats(
 
     # Annotate rows now
     ht = mt.select_rows(
-        **mt.group_membership.map(
+        coverage_stats=hl.agg.array_agg(
             lambda x: hl.agg.filter(
                 x,
                 hl.struct(
@@ -1058,53 +1060,72 @@ def compute_coverage_stats(
                     ),
                     total_DP=hl.agg.sum(mt.DP),
                 ),
-            )
+            ),
+            mt.group_membership
         )
     ).rows()
-    ht.describe()
-    # This expression aggregates the DP counter in reverse order of the coverage_over_x_bins
-    # and computes the cumulative sum over them.
+    ht = ht.checkpoint(hl.utils.new_temp_file("coverage_stats", "ht"))
+
+    # This expression aggregates the DP counter in reverse order of the
+    # coverage_over_x_bins and computes the cumulative sum over them.
     # It needs to be in reverse order because we want the sum over samples
     # covered by > X.
-    coverage_counter_expr = ht.coverage_counter
-    count_array_expr = hl.cumulative_sum(
-        hl.array(
-            [
-                hl.int32(coverage_counter_expr.get(max_coverage_bin, 0))
-            ]  # The coverage was already floored to the max_coverage_bin, so no more # aggregation is needed for the max bin
-            # For each of the other bins, coverage needs to be summed between the
-            # boundaries
-        ).extend(
-            hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
-                lambda i: hl.sum(
-                    hl.range(
-                        hl_coverage_over_x_bins[i - 1], hl_coverage_over_x_bins[i]
-                    ).map(lambda j: hl.int32(coverage_counter_expr.get(j, 0)))
+    count_array_expr = ht.coverage_stats.map(
+        lambda x: hl.cumulative_sum(
+            hl.array(
+                # The coverage was already floored to the max_coverage_bin, so no more
+                # aggregation is needed for the max bin.
+                [
+                    hl.int32(x.coverage_counter.get(max_coverage_bin, 0))
+                ]
+                # For each of the other bins, coverage needs to be summed between the
+                # boundaries.
+            ).extend(
+                hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
+                    lambda i: hl.sum(
+                        hl.range(
+                            hl_coverage_over_x_bins[i - 1], hl_coverage_over_x_bins[i]
+                        ).map(lambda j: hl.int32(x.coverage_counter.get(j, 0)))
+                    )
                 )
             )
         )
     )
 
     ht = ht.annotate(
-        **{
-            f"over_{x}": count_array_expr[i] / n_samples
-            for i, x in zip(
-                range(len(coverage_over_x_bins) - 1, -1, -1),
-                # Reverse the bin index as count_array_expr has the reverse order.
-                coverage_over_x_bins,
-            )
-        }
+        coverage_stats=hl.map(
+            lambda c, g: c.annotate(
+                **{
+                    f"over_{x}": g[i] / n_samples
+                    for i, x in zip(
+                        range(len(coverage_over_x_bins) - 1, -1, -1),
+                        # Reverse the bin index as count_array_expr has reverse order.
+                        coverage_over_x_bins,
+                    )
+                }
+            ),
+            ht.coverage_stats,
+            count_array_expr,
+        )
     )
-
+    current_keys = list(ht.key)
+    ht = ht.key_by(*row_key_fields).select_globals().drop(*[k for k in current_keys if k not in row_key_fields])
+    if strata_expr is None:
+        # If there was no stratification, move coverage_stats annotations to the top
+        # level.
+        ht = ht.select(**{k: ht.coverage_stats[0][k] for k in ht.coverage_stats})
+    else:
+        # If there was stratification, add the metadata and sample count info for the
+        # stratification to the globals.
+        ht = ht.annotate_globals(
+            coverage_stats_meta=group_membership_ht.index_globals().freq_meta[1:].map(
+                lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
+            ),
+            coverage_stats_meta_sample_count=group_membership_ht.index_globals().freq_meta_sample_count[1:],
+        )
     ht.describe()
 
-    current_keys = list(ht.key)
-
-    return (
-        ht.key_by(*row_key_fields)
-        .select_globals()
-        .drop(*[k for k in current_keys if k not in row_key_fields])
-    )
+    return ht
 
 
 def filter_ref_blocks(

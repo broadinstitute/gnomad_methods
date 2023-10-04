@@ -2640,6 +2640,7 @@ def add_gks_va(
             "confidenceInterval": 0.95,
         },
         "qcFilters": list(input_struct.filters),
+        "lowComplexityRegion": input_struct.region_flag.lcr,
     }
 
     if input_struct.faf95.popmax_population is not None:

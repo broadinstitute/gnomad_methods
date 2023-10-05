@@ -255,7 +255,7 @@ def gen_anc_faf_max_expr(
         `faf_expr` is used, contains fields 'faf95' and 'faf99'.
     :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
         returned by faf_expr)
-    :return: Genetic Ancestry group struct for FAF
+    :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
         lambda i: (hl.set(i[1].keys()) == {"group", "pop"}) & (i[1]["group"] == "adj")
@@ -263,7 +263,7 @@ def gen_anc_faf_max_expr(
     max_fafs_expr = hl.struct()
 
     # Iterate through faf thresholds, generally 'faf95' and 'faf99', and
-    # take the highest faf value, '[0]', and its gen_anc from the sorted faf array
+    # take the maximum faf value, '[0]', and its gen_anc from the sorted faf array
     for threshold in faf[0].keys():
         faf_struct = hl.sorted(
             faf_gen_anc_indices.map(

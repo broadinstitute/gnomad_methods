@@ -954,7 +954,7 @@ def compute_coverage_stats(
     ht = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()}).cols()
     strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
 
-    # Use the function for creating a the frequency stratified `freq_meta`,
+    # Use the function for creating the frequency stratified by `freq_meta`,
     # `freq_meta_sample_count`, and `group_membership` annotations to give
     # stratification group membership info for computing coverage. By default, this
     # function returns annotations where the second element is a placeholder for the

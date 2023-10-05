@@ -472,7 +472,7 @@ def build_models(
         "mu_snp",
     ),
     lower_cov_cutoff: int = COVERAGE_CUTOFF,
-    upper_cov_cutoff: int = None,
+    upper_cov_cutoff: Optional[int] = None,
 ) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.

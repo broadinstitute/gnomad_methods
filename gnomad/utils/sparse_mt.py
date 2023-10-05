@@ -939,10 +939,8 @@ def compute_coverage_stats(
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
     if is_vds:
-        n_samples = mtds.variant_data.count_cols()
         mt = mtds.variant_data
     else:
-        n_samples = mtds.count_cols()
         mt = mtds
 
     if strata_expr is None:
@@ -955,11 +953,23 @@ def compute_coverage_stats(
     # strata_expr based on the column HT with added annotations.
     ht = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()}).cols()
     strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
+
+    # Use the function for creating a the frequency stratified `freq_meta`,
+    # `freq_meta_sample_count`, and `group_membership` annotations to give
+    # stratification group membership info for computing coverage. By default, this
+    # function returns annotations where the second element is a placeholder for the
+    # "raw" frequency of all samples, where the first 2 elements are the same sample
+    # set, but freq_meta startswith [{"group": "adj", "group": "raw", ...]. Use
+    # `no_raw_group` to exclude the "raw" group so there is a single annotation
+    # representing the full samples set. `freq_meta` is updated below to remove "group"
+    # from all dicts.
     group_membership_ht = generate_freq_group_membership_array(
         ht, strata_expr, no_raw_group=True
     )
+    n_samples = group_membership_ht.count()
+    sample_counts = group_membership_ht.index_globals().freq_meta_sample_count
 
-    logging.info("Computing coverage stats on %d samples.", n_samples)
+    logger.info("Computing coverage stats on %d samples.", n_samples)
     # Filter datasets to interval list
     if interval_ht is not None:
         reference_ht = reference_ht.filter(
@@ -1052,7 +1062,7 @@ def compute_coverage_stats(
     )
     mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
 
-    # Annotate rows now
+    # Annotate all rows with coverage stats for each strata group.
     ht = mt.select_rows(
         coverage_stats=hl.agg.array_agg(
             lambda x: hl.agg.filter(
@@ -1097,18 +1107,19 @@ def compute_coverage_stats(
 
     ht = ht.annotate(
         coverage_stats=hl.map(
-            lambda c, g: c.annotate(
+            lambda c, g, n: c.annotate(
                 **{
-                    f"over_{x}": g[i] / n_samples
+                    f"over_{x}": g[i] / n
                     for i, x in zip(
                         range(len(coverage_over_x_bins) - 1, -1, -1),
                         # Reverse the bin index as count_array_expr has reverse order.
                         coverage_over_x_bins,
                     )
                 }
-            ),
+            ).drop("coverage_counter"),
             ht.coverage_stats,
             count_array_expr,
+            sample_counts,
         )
     )
     current_keys = list(ht.key)

@@ -263,7 +263,7 @@ def gen_anc_faf_max_expr(
     max_fafs_expr = hl.struct()
 
     # Iterate through faf thresholds, generally 'faf95' and 'faf99', and
-    # take the highest faf value, [0], and it's gen_anc from the sorted faf array
+    # take the highest faf value, '[0]', and its gen_anc from the sorted faf array
     for threshold in faf[0].keys():
         faf_struct = hl.sorted(
             faf_gen_anc_indices.map(

@@ -540,9 +540,9 @@ def build_models(
         Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
-    :param lower_cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff
+    :param lower_cov_cutoff: Lower median coverage cutoff. Sites with coverage above this cutoff
         are considered well covered. Default is `COVERAGE_CUTOFF`.
-    :param upper_cov_cutoff: Median coverage cutoff. Sites with coverage above this cutoff
+    :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
         are excluded Default is None.
     :return: Coverage model and plateau models.
     """

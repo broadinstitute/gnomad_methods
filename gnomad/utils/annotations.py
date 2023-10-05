@@ -298,6 +298,54 @@ def faf_expr(
     return faf_expr, hl.eval(faf_meta)
 
 
+def gen_anc_faf_max_expr(
+    faf: hl.expr.ArrayExpression,
+    faf_meta: hl.expr.ArrayExpression,
+) -> hl.expr.StructExpression:
+    """
+    Retrieve the maximum FAF and corresponding genetic ancestry for each of the thresholds in `faf`.
+
+    This resulting struct contains the following fields:
+
+        - faf95_max: float64
+        - faf95_max_gen_anc: str
+        - faf99_max: float64
+        - faf99_max_gen_anc: str
+
+    :param faf: ArrayExpression of Structs of FAF thresholds previously computed. When
+        `faf_expr` is used, contains fields 'faf95' and 'faf99'.
+    :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
+        returned by faf_expr)
+    :return: Genetic ancestry group struct for FAF max
+    """
+    faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
+        lambda i: (hl.set(i[1].keys()) == {"group", "pop"}) & (i[1]["group"] == "adj")
+    )
+    max_fafs_expr = hl.struct()
+
+    # Iterate through faf thresholds, generally 'faf95' and 'faf99', and
+    # take the maximum faf value, '[0]', and its gen_anc from the sorted faf array
+    for threshold in faf[0].keys():
+        faf_struct = hl.sorted(
+            faf_gen_anc_indices.map(
+                lambda x: {
+                    f"{threshold}_max": hl.or_missing(
+                        faf[x[0]][threshold] > 0, faf[x[0]][threshold]
+                    ),
+                    f"{threshold}_max_gen_anc": hl.or_missing(
+                        faf[x[0]][threshold] > 0, x[1]["pop"]
+                    ),
+                }
+            ),
+            key=lambda faf: faf[f"{threshold}_max"],
+            reverse=True,
+        )[0]
+
+        max_fafs_expr = max_fafs_expr.annotate(**faf_struct)
+
+    return max_fafs_expr
+
+
 def qual_hist_expr(
     gt_expr: Optional[hl.expr.CallExpression] = None,
     gq_expr: Optional[hl.expr.NumericExpression] = None,

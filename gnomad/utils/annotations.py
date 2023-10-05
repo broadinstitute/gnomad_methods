@@ -237,73 +237,52 @@ def faf_expr(
     return faf_expr, hl.eval(faf_meta)
 
 
-def gen_anc_grp_max_faf_exp(
+def gen_anc_faf_max_expr(
     faf: hl.expr.ArrayExpression,
     faf_meta: hl.expr.ArrayExpression,
 ) -> hl.expr.StructExpression:
     """
-    Return the filtering allele frequencies (FAF) for the genetic ancestry group(s) in `faf_meta` with the highest FAFs.
+    Retrieve the maximum FAF and corresponding genetic ancestry for each of the thresholds in `faf`.
 
     This resulting struct contains the following fields:
 
         - faf95_max: float64
-        - faf95_max_gen_anc_grp: str
+        - faf95_max_gen_anc: str
         - faf99_max: float64
-        - faf99_max_gen_anc_grp: str
+        - faf99_max_gen_anc: str
 
-    :param faf: ArrayExpression of Structs with fields ['faf95', 'faf99']
-    :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as returned by faf_expr)
-
-    :return: Struct containing max FAFs and their genetic ancestry groups
+    :param faf: ArrayExpression of Structs of FAF thresholds previously computed. When
+        `faf_expr` is used, contains fields 'faf95' and 'faf99'.
+    :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
+        returned by faf_expr)
+    :return: Genetic Ancestry group struct for FAF
     """
-    faf_pop_indices = hl.range(0, hl.len(faf_meta)).filter(
-        lambda i: (hl.set(faf_meta[i].keys()) == {"group", "pop"})
-        & (faf_meta[i]["group"] == "adj")
+    faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
+        lambda i: (hl.set(i[1].keys()) == {"group", "pop"}) & (i[1]["group"] == "adj")
     )
-    faf_pop_indices = hl.eval(faf_pop_indices)
+    max_fafs_expr = hl.struct()
 
-    def _calculate_max_faf(faf_expr, indices, faf_item) -> hl.expr.StructExpression:
-        """
-        Return the max FAF and its genetic ancestry group for the given FAF item (e.g. faf95 or faf99).
-
-        :param faf_expr: ArrayExpression of Structs with fields ['faf95', 'faf99']
-        :param indices: Indices of the populations to consider
-        :param faf_item: FAF item to consider (e.g. faf95 or faf99)
-        :return: Struct containing max FAF and its genetic ancestry group
-        """
-        return hl.rbind(
-            hl.sorted(
-                hl.array(
-                    [
-                        hl.struct(
-                            faf=faf_expr[i][faf_item], population=faf_meta[i]["pop"]
-                        )
-                        for i in indices
-                    ]
-                ),
-                key=lambda f: f.faf,
-                reverse=True,
+    # Iterate through faf thresholds, generally 'faf95' and 'faf99', and
+    # take the highest faf value, '[0]', and its gen_anc from the sorted faf array
+    for threshold in faf[0].keys():
+        faf_struct = hl.sorted(
+            faf_gen_anc_indices.map(
+                lambda x: {
+                    f"{threshold}_max": hl.or_missing(
+                        faf[x[0]][threshold] > 0, faf[x[0]][threshold]
+                    ),
+                    f"{threshold}_max_gen_anc": hl.or_missing(
+                        faf[x[0]][threshold] > 0, x[1]["pop"]
+                    ),
+                }
             ),
-            lambda fafs: hl.if_else(
-                (hl.len(fafs) > 0) & (fafs[0].faf > 0),
-                hl.struct(faf_max=fafs[0].faf, faf_max_gen_anc_grp=fafs[0].population),
-                hl.struct(
-                    faf_max=hl.missing(hl.tfloat),
-                    faf_max_gen_anc_grp=hl.missing(hl.tstr),
-                ),
-            ),
-        )
+            key=lambda faf: faf[f"{threshold}_max"],
+            reverse=True,
+        )[0]
 
-    faf95 = _calculate_max_faf(faf, faf_pop_indices, "faf95")
-    faf95 = faf95.select(
-        faf95_max=faf95.faf_max, faf95_max_gen_anc_grp=faf95.faf_max_gen_anc_grp
-    )
-    faf99 = _calculate_max_faf(faf, faf_pop_indices, "faf99")
-    faf99 = faf99.select(
-        faf99_max=faf99.faf_max, faf99_max_gen_anc_grp=faf99.faf_max_gen_anc_grp
-    )
-    fafmax = faf95.annotate(**faf99)
-    return fafmax
+        max_fafs_expr = max_fafs_expr.annotate(**faf_struct)
+
+    return max_fafs_expr
 
 
 def qual_hist_expr(

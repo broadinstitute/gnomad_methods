@@ -546,7 +546,7 @@ def build_models(
         are excluded from the high coverage Table. Default is None.
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage above `lower_cov_cutoff`.
+    # Filter to sites with coverage equal to or above `lower_cov_cutoff`.
     high_cov_ht = coverage_ht.filter((coverage_ht.exome_coverage >= lower_cov_cutoff))
 
     # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.

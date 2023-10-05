@@ -2632,11 +2632,26 @@ def add_gks_va(
         "cohort": {"id": "ALL"},
     }
 
-    if len(input_struct.ab_hist_alt_bin_freq) != 20:
-        logger.error(
-            "ab_hist_alt.bin_freq had %s items, expected 20",
-            len(input_struct.ab_hist_alt_bin_freq),
+    # Check allele balance for heterozygotes values.
+    # Flagged values are those in bins >0.9. Each is 0.05, so last 2.
+    if len(input_struct.ab_hist_alt.bin_freq) != 20:
+        raise ValueError(
+            f"{gnomad_id} ab_hist_alt.bin_freq had "
+            f"{len(input_struct.ab_hist_alt.bin_freq)} items, expected 20"
         )
+    # The bin_freq should be in order but we can verify the order from bin_edges
+    ab_bin_freq = list(
+        map(
+            lambda tpl: tpl[1],
+            sorted(
+                zip(
+                    input_struct.ab_hist_alt.bin_edges,
+                    input_struct.ab_hist_alt.bin_freq,
+                ),
+                key=lambda tpl: tpl[0],
+            ),
+        )
+    )
 
     # Create ancillaryResults for additional frequency and popMaxFAF95 information
     ancillaryResults = {
@@ -2647,12 +2662,7 @@ def add_gks_va(
         },
         "qcFilters": list(input_struct.filters),
         "lowComplexityRegion": input_struct.region_flag.lcr,
-        "heterozygousAlleleBalanceFlagged": sum(
-            [
-                input_struct.ab_hist_alt_bin_freq[18],
-                input_struct.ab_hist_alt_bin_freq[19],
-            ]
-        ),
+        "heterozygousAlleleBalanceFlagged": sum(ab_bin_freq[-2:]),
     }
 
     if input_struct.faf95.popmax_population is not None:

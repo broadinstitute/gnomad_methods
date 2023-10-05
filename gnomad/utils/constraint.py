@@ -549,7 +549,7 @@ def build_models(
     # Filter to sites with coverage above `lower_cov_cutoff`.
     high_cov_ht = coverage_ht.filter((coverage_ht.exome_coverage >= lower_cov_cutoff))
 
-    # Filter to site with coverage below `upper_cov_cutoff` if specified.
+    # Filter to sites with coverage below `upper_cov_cutoff` if specified.
     if upper_cov_cutoff:
         high_cov_ht = high_cov_ht.filter(high_cov_ht.exome_coverage <= upper_cov_cutoff)
 

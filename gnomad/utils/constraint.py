@@ -543,7 +543,7 @@ def build_models(
     :param lower_cov_cutoff: Lower median coverage cutoff. Sites with coverage above this cutoff
         are considered well covered. Default is `COVERAGE_CUTOFF`.
     :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
-        are excluded Default is None.
+        are excluded from the high coverage Table. Default is None.
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage above `lower_cov_cutoff`.

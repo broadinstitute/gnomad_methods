@@ -2561,7 +2561,7 @@ def add_gks_va(
 
         # Dictionary to be returned containing information for a specified group.
         freq_record = {
-            "id": f"{gnomad_id},{group_id.upper()}",
+            "id": f"{gnomad_id}.{group_id.upper()}",
             "type": "CohortAlleleFrequency",
             "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
             "focusAllele": "#/focusAllele",

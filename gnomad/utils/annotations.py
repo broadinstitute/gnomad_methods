@@ -2000,7 +2000,11 @@ def update_structured_annotations(
             updated_struct_expr = {}
             updated_flag_expr = {}
             for ann, expr in update_exprs.items():
-                updated_flag, updated_ann = _update_struct(struct_expr[ann], expr)
+                if ann in struct_expr:
+                    updated_flag, updated_ann = _update_struct(struct_expr[ann], expr)
+                else:
+                    updated_flag = {"": True}
+                    updated_ann = expr
                 updated_flag_expr.update(
                     {ann + ("." + k if k else ""): v for k, v in updated_flag.items()}
                 )

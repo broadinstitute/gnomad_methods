@@ -322,6 +322,15 @@ methylation_sites = GnomadPublicTableResource(
     },
 )
 
+# Methylation scores range from 0-12.
+methylation_sites_chrx = TableResource(
+    path="gs://gcp-public-data--gnomad/resources/grch38/methylation_sites/methylation_chrX.ht",
+    import_func=_import_methylation_sites,
+    import_args={
+        "path": "gs://gcp-public-data--gnomad/resources/grch38/methylation_sites/methylation_chrX.bed",
+    },
+)
+
 lcr_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/lcr_intervals/LCRFromHengHg38.ht",
     import_func=hl.import_locus_intervals,

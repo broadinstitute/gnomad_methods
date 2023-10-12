@@ -322,7 +322,8 @@ methylation_sites = GnomadPublicTableResource(
     },
 )
 
-# Methylation scores range from 0-12.
+# Methylation scores for chromosome X range from 0-12 and are described in Chen et al
+# (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
 methylation_sites_chrx = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.ht",
     import_func=_import_methylation_sites,

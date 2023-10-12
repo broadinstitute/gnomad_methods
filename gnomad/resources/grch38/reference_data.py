@@ -324,7 +324,7 @@ methylation_sites = GnomadPublicTableResource(
 
 # Methylation scores range from 0-12.
 methylation_sites_chrx = GnomadPublicTableResource(
-    path="gs://gcp-public-data--gnomad/resources/grch38/methylation_sites/methylation_chrX.ht",
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.ht",
     import_func=_import_methylation_sites,
     import_args={
         "path": "gs://gcp-public-data--gnomad/resources/grch38/methylation_sites/methylation_chrX.bed",

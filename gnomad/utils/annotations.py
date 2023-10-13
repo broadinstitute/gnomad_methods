@@ -100,6 +100,7 @@ def pop_max_expr(
     freq: hl.expr.ArrayExpression,
     freq_meta: hl.expr.ArrayExpression,
     pops_to_exclude: Optional[Set[str]] = None,
+    pop_label: str = "pop",
 ) -> hl.expr.StructExpression:
     """
 
@@ -118,7 +119,7 @@ def pop_max_expr(
     :param freq: ArrayExpression of Structs with fields ['AC', 'AF', 'AN', 'homozygote_count']
     :param freq_meta: ArrayExpression of meta dictionaries corresponding to freq (as returned by annotate_freq)
     :param pops_to_exclude: Set of populations to skip for popmax calcluation
-
+    :param pop_label: Label of the population field in the meta dictionary
     :return: Popmax struct
     """
     _pops_to_exclude = (
@@ -129,12 +130,12 @@ def pop_max_expr(
 
     # pylint: disable=invalid-unary-operand-type
     popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (hl.set(freq_meta[i].keys()) == {"group", "pop"})
+        lambda i: (hl.set(freq_meta[i].keys()) == {"group", pop_label})
         & (freq_meta[i]["group"] == "adj")
-        & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+        & (~_pops_to_exclude.contains(freq_meta[i][pop_label]))
     )
     freq_filtered = popmax_freq_indices.map(
-        lambda i: freq[i].annotate(pop=freq_meta[i]["pop"])
+        lambda i: freq[i].annotate(**{pop_label: freq_meta[i][pop_label]})
     ).filter(lambda f: f.AC > 0)
 
     sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
@@ -210,6 +211,7 @@ def faf_expr(
     locus: hl.expr.LocusExpression,
     pops_to_exclude: Optional[Set[str]] = None,
     faf_thresholds: List[float] = [0.95, 0.99],
+    pop_label: str = "pop",
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
     Calculate the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
@@ -234,6 +236,7 @@ def faf_expr(
     :param locus: locus
     :param pops_to_exclude: Set of populations to exclude from faf calculation (typically bottlenecked or consanguineous populations)
     :param faf_thresholds: List of FAF thresholds to compute
+    :param pop_label: Label of the population field in the meta dictionary
     :return: (FAF expression, FAF metadata)
     """
     _pops_to_exclude = (
@@ -248,8 +251,8 @@ def faf_expr(
         & (
             (freq_meta[i].size() == 1)
             | (
-                (hl.set(freq_meta[i].keys()) == {"pop", "group"})
-                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+                (hl.set(freq_meta[i].keys()) == {pop_label, "group"})
+                & (~_pops_to_exclude.contains(freq_meta[i][pop_label]))
             )
         )
     )
@@ -259,8 +262,8 @@ def faf_expr(
         & (
             (freq_meta[i].size() == 2)
             | (
-                (hl.set(freq_meta[i].keys()) == {"pop", "group", "sex"})
-                & (~_pops_to_exclude.contains(freq_meta[i]["pop"]))
+                (hl.set(freq_meta[i].keys()) == {pop_label, "group", "sex"})
+                & (~_pops_to_exclude.contains(freq_meta[i][pop_label]))
             )
         )
     )
@@ -301,6 +304,7 @@ def faf_expr(
 def gen_anc_faf_max_expr(
     faf: hl.expr.ArrayExpression,
     faf_meta: hl.expr.ArrayExpression,
+    pop_label: str = "pop",
 ) -> hl.expr.StructExpression:
     """
     Retrieve the maximum FAF and corresponding genetic ancestry for each of the thresholds in `faf`.
@@ -316,10 +320,12 @@ def gen_anc_faf_max_expr(
         `faf_expr` is used, contains fields 'faf95' and 'faf99'.
     :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
         returned by faf_expr)
+    :param pop_label: Label of the population field in the meta dictionary
     :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
-        lambda i: (hl.set(i[1].keys()) == {"group", "pop"}) & (i[1]["group"] == "adj")
+        lambda i: (hl.set(i[1].keys()) == {"group", pop_label})
+        & (i[1]["group"] == "adj")
     )
     max_fafs_expr = hl.struct()
 
@@ -333,7 +339,7 @@ def gen_anc_faf_max_expr(
                         faf[x[0]][threshold] > 0, faf[x[0]][threshold]
                     ),
                     f"{threshold}_max_gen_anc": hl.or_missing(
-                        faf[x[0]][threshold] > 0, x[1]["pop"]
+                        faf[x[0]][threshold] > 0, x[1][pop_label]
                     ),
                 }
             ),

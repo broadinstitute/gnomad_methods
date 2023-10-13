@@ -615,8 +615,7 @@ def filter_arrays_by_meta(
 
     if isinstance(items_to_filter, list):
         items_to_filter = [[k] for k in items_to_filter]
-        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
-        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
+        items_to_filter_set = hl.set(items_to_filter)
         if apply_keep_to_only_items_in_filter:
             filter_func = lambda m, k: (
                 hl.len(hl.set(m.keys()).difference(items_to_filter_set)) == 0
@@ -627,7 +626,6 @@ def filter_arrays_by_meta(
         items_to_filter = [
             [(k, v) for v in values] for k, values in items_to_filter.items()
         ]
-        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
         items_to_filter_set = hl.set(hl.flatten(items_to_filter))
         if apply_keep_to_only_items_in_filter:
             filter_func = lambda m, k: (

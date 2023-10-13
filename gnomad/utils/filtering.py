@@ -541,6 +541,7 @@ def filter_arrays_by_meta(
     items_to_filter: Union[Dict[str, List[str]], List[str]],
     keep: bool = True,
     combine_operator: str = "and",
+    apply_keep_to_only_items_in_filter: bool = False,
 ) -> Tuple[
     hl.expr.ArrayExpression,
     Union[Dict[str, hl.expr.ArrayExpression], hl.expr.ArrayExpression],
@@ -568,17 +569,30 @@ def filter_arrays_by_meta(
     or at least one of the specified criteria must be met (`combine_operator` = "or")
     by the `meta_expr` item in order to be filtered.
 
+    The `apply_keep_to_only_items_in_filter` parameter can be used to apply the `keep`
+    parameter to only the items specified in the `items_to_filter` parameter. For
+    example, by default, if:
+        - `keep` is True
+        - `combine_operator` is "and"
+        - `items_to_filter` is ["sex", "downsampling"]
+    then all items in `meta_expr` with both "sex" and "downsampling" as keys will be
+    kept. However, if `apply_keep_to_only_items_in_filter` is True, then the items
+    in `meta_expr` will only be kept if "sex" and "downsampling" are the only keys in
+    the meta dict.
+
     :param meta_expr: Metadata expression that contains the values of the elements in
         `meta_indexed_expr`. The most often used expression is `freq_meta` to index into
         a 'freq' array.
-    :param meta_indexed_expr: Either a Dictionary where the keys are the expression name
+    :param meta_indexed_exprs: Either a Dictionary where the keys are the expression name
         and the values are the expressions indexed by the `meta_expr` such as a 'freq'
         array or just a single expression indexed by the `meta_expr`.
     :param items_to_filter: Items to filter by, either a list or a dictionary.
     :param keep: Whether to keep or remove the items specified by `items_to_filter`.
     :param combine_operator: Whether to use "and" or "or" to combine the items
         specified by `items_to_filter`.
-    :param meta_based_array_expr: Optional array based on freq meta expression to be filtered.
+    :param apply_keep_to_only_items_in_filter: Whether to apply the `keep` parameter to
+        only the items specified in the `items_to_filter` parameter or to all items in
+        `meta_expr`. See the example above for more details. Default is False.
     :return: A Tuple of the filtered metadata expression and a dictionary of metadata
         indexed expressions when meta_indexed_expr is a Dictionary or a single filtered
         array expression when meta_indexed_expr is a single array expression.
@@ -599,13 +613,28 @@ def filter_arrays_by_meta(
         )
 
     if isinstance(items_to_filter, list):
-        filter_func = lambda m, k: m.contains(k)
         items_to_filter = [[k] for k in items_to_filter]
+        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
+        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
+        if apply_keep_to_only_items_in_filter:
+            filter_func = lambda m, k: (
+                hl.len(hl.set(m.keys()).difference(items_to_filter_set)) == 0
+            ) & m.contains(k)
+        else:
+            filter_func = lambda m, k: m.contains(k)
     elif isinstance(items_to_filter, dict):
-        filter_func = lambda m, k: (m.get(k[0], "") == k[1])
         items_to_filter = [
             [(k, v) for v in values] for k, values in items_to_filter.items()
         ]
+        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
+        items_to_filter_set = hl.set(hl.flatten(items_to_filter))
+        if apply_keep_to_only_items_in_filter:
+            filter_func = lambda m, k: (
+                (hl.len(hl.set(m.items()).difference(items_to_filter_set)) == 0)
+                & (m.get(k[0], "") == k[1])
+            )
+        else:
+            filter_func = lambda m, k: (m.get(k[0], "") == k[1])
     else:
         raise TypeError("items_to_filter must be a list or a dictionary!")
 

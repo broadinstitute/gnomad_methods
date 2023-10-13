@@ -573,7 +573,7 @@ def filter_arrays_by_meta(
     specified in the `items_to_filter` parameter. For example, by default, if `keep` is
     True, `combine_operator` is "and", and `items_to_filter` is ["sex", "downsampling"],
     then all items in `meta_expr` with both "sex" and "downsampling" as keys will be
-    kept. However, if `apply_keep_to_only_items_in_filter` is True, then the items
+    kept. However, if `exact_match` is True, then the items
     in `meta_expr` will only be kept if "sex" and "downsampling" are the only keys in
     the meta dict.
 

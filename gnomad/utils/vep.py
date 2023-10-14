@@ -93,7 +93,7 @@ Constant that contains the local path to the VEP config file
 
 VEP_CSQ_FIELDS = {
     "101": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info",
-    "105": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|UNIPROT_ISOFORM|SOURCE|SIFT|PolyPhen|DOMAINS|miRNA|HGVS_OFFSET|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|TRANSCRIPTION_FACTORS|LoF|LoF_filter|LoF_flags|LoF_info",
+    "105": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|UNIPROT_ISOFORM|SOURCE|DOMAINS|miRNA|HGVS_OFFSET|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|TRANSCRIPTION_FACTORS|LoF|LoF_filter|LoF_flags|LoF_info",
 }
 """
 Constant that defines the order of VEP annotations used in VCF export, currently stored in a dictionary with the VEP version as the key.
@@ -207,8 +207,9 @@ def vep_or_lookup_vep(
 
         if vep_version not in vep_context.versions:
             logger.warning(
-                "No VEPed context Table available for genome build %s and VEP version"
-                " %s, all variants will be VEPed using the following VEP:\n%s",
+                "No VEPed context Table available for genome build %s and VEP"
+                " version %s, all variants will be VEPed using the following"
+                " VEP:\n%s",
                 reference,
                 vep_version,
                 vep_help,
@@ -402,6 +403,7 @@ def filter_vep_to_synonymous_variants(
 def vep_struct_to_csq(
     vep_expr: hl.expr.StructExpression,
     csq_fields: str = VEP_CSQ_FIELDS[CURRENT_VEP_VERSION],
+    has_polyphen_sift: bool = True,
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
@@ -417,6 +419,7 @@ def vep_struct_to_csq(
 
     :param vep_expr: The input VEP Struct
     :param csq_fields: The | delimited list of fields to include in the CSQ (in that order), default is the CSQ fields of the CURRENT_VEP_VERSION.
+    :param has_polyphen_sift: Whether the input VEP Struct has PolyPhen and SIFT annotations. Default is True.
     :return: The corresponding CSQ strings
     """
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
@@ -476,18 +479,27 @@ def vep_struct_to_csq(
                         "-" + hl.str(element.protein_end),
                     ),
                     "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&"),
-                    "sift": (
-                        element.sift_prediction
-                        + "("
-                        + hl.format("%.3f", element.sift_score)
-                        + ")"
-                    ),
-                    "polyphen": (
-                        element.polyphen_prediction
-                        + "("
-                        + hl.format("%.3f", element.polyphen_score)
-                        + ")"
-                    ),
+                }
+            )
+            if has_polyphen_sift:
+                fields.update(
+                    {
+                        "sift": (
+                            element.sift_prediction
+                            + "("
+                            + hl.format("%.3f", element.sift_score)
+                            + ")"
+                        ),
+                        "polyphen": (
+                            element.polyphen_prediction
+                            + "("
+                            + hl.format("%.3f", element.polyphen_score)
+                            + ")"
+                        ),
+                    }
+                )
+            fields.update(
+                {
                     "domains": hl.delimit(
                         element.domains.map(lambda d: d.db + ":" + d.name), "&"
                     ),
@@ -606,7 +618,6 @@ def filter_vep_transcript_csqs(
     canonical: bool = True,
     mane_select: bool = False,
     filter_empty_csq: bool = True,
-    ensembl_only: bool = True,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
@@ -623,7 +634,6 @@ def filter_vep_transcript_csqs(
     :param canonical: Whether to filter to only canonical transcripts. Default is True.
     :param mane_select: Whether to filter to only MANE Select transcripts. Default is False.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Default is True.
-    :param ensembl_only: Whether to filter to only Ensembl transcipts. This option is useful for deduplicating transcripts that are the same between RefSeq and Emsembl. Default is True.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
@@ -638,8 +648,6 @@ def filter_vep_transcript_csqs(
         criteria.append(lambda csq: csq.canonical == 1)
     if mane_select:
         criteria.append(lambda csq: hl.is_defined(csq.mane_select))
-    if ensembl_only:
-        criteria.append(lambda csq: csq.transcript_id.startswith("ENST"))
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)

@@ -2053,7 +2053,7 @@ def gks_compute_seqloc_digest(
     # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
     # imported. Importing ga4gh here to avoid this issue.
     import ga4gh.core as ga4gh_core
-    import ga4gh.vrs.models as ga4gh_vrs
+    import ga4gh.vrs as ga4gh_vrs
 
     if export_tmpfile is None:
         export_tmpfile = new_temp_file("gks-seqloc-pre.tsv")
@@ -2129,7 +2129,7 @@ def add_gks_vrs(
     # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
     # imported. Importing ga4gh here to avoid this issue.
     import ga4gh.core as ga4gh_core
-    import ga4gh.vrs.models as ga4gh_vrs
+    import ga4gh.vrs as ga4gh_vrs
 
     build_in = input_locus.reference_genome.name
     chr_in = input_locus.contig

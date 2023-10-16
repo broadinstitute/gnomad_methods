@@ -2050,6 +2050,8 @@ def gks_compute_seqloc_digest(
         which is then imported as a hail table
     :return: a hail table with the VRS annotation updated with the new SequenceLocations
     """
+    # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
+    # imported. Importing ga4gh here to avoid this issue.
     import ga4gh.core as ga4gh_core
     import ga4gh.vrs.models as ga4gh_vrs
 
@@ -2124,6 +2126,8 @@ def add_gks_vrs(
     :param input_vrs: VRS struct (such as from a ht.info.vrs field).
     :return: Python dictionary conforming to GA4GH GKS VRS structure.
     """
+    # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
+    # imported. Importing ga4gh here to avoid this issue.
     import ga4gh.core as ga4gh_core
     import ga4gh.vrs.models as ga4gh_vrs
 

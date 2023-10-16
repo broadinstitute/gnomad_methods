@@ -618,6 +618,7 @@ def filter_vep_transcript_csqs(
     canonical: bool = True,
     mane_select: bool = False,
     filter_empty_csq: bool = True,
+    ensembl_only: bool = True,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
@@ -634,6 +635,7 @@ def filter_vep_transcript_csqs(
     :param canonical: Whether to filter to only canonical transcripts. Default is True.
     :param mane_select: Whether to filter to only MANE Select transcripts. Default is False.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Default is True.
+    :param ensembl_only: Whether to filter to only Ensembl transcipts. This option is useful for deduplicating transcripts that are the same between RefSeq and Emsembl. Default is True.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
@@ -648,6 +650,8 @@ def filter_vep_transcript_csqs(
         criteria.append(lambda csq: csq.canonical == 1)
     if mane_select:
         criteria.append(lambda csq: hl.is_defined(csq.mane_select))
+    if ensembl_only:
+        criteria.append(lambda csq: csq.transcript_id.startswith("ENST"))
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)

@@ -207,8 +207,9 @@ def vep_or_lookup_vep(
 
         if vep_version not in vep_context.versions:
             logger.warning(
-                "No VEPed context Table available for genome build %s and VEP version"
-                " %s, all variants will be VEPed using the following VEP:\n%s",
+                "No VEPed context Table available for genome build %s and VEP"
+                " version %s, all variants will be VEPed using the following"
+                " VEP:\n%s",
                 reference,
                 vep_version,
                 vep_help,
@@ -402,6 +403,7 @@ def filter_vep_to_synonymous_variants(
 def vep_struct_to_csq(
     vep_expr: hl.expr.StructExpression,
     csq_fields: str = VEP_CSQ_FIELDS[CURRENT_VEP_VERSION],
+    has_polyphen_sift: bool = True,
 ) -> hl.expr.ArrayExpression:
     """
     Given a VEP Struct, returns and array of VEP VCF CSQ strings (one per consequence in the struct).
@@ -417,6 +419,7 @@ def vep_struct_to_csq(
 
     :param vep_expr: The input VEP Struct
     :param csq_fields: The | delimited list of fields to include in the CSQ (in that order), default is the CSQ fields of the CURRENT_VEP_VERSION.
+    :param has_polyphen_sift: Whether the input VEP Struct has PolyPhen and SIFT annotations. Default is True.
     :return: The corresponding CSQ strings
     """
     _csq_fields = [f.lower() for f in csq_fields.split("|")]
@@ -476,18 +479,27 @@ def vep_struct_to_csq(
                         "-" + hl.str(element.protein_end),
                     ),
                     "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&"),
-                    "sift": (
-                        element.sift_prediction
-                        + "("
-                        + hl.format("%.3f", element.sift_score)
-                        + ")"
-                    ),
-                    "polyphen": (
-                        element.polyphen_prediction
-                        + "("
-                        + hl.format("%.3f", element.polyphen_score)
-                        + ")"
-                    ),
+                }
+            )
+            if has_polyphen_sift:
+                fields.update(
+                    {
+                        "sift": (
+                            element.sift_prediction
+                            + "("
+                            + hl.format("%.3f", element.sift_score)
+                            + ")"
+                        ),
+                        "polyphen": (
+                            element.polyphen_prediction
+                            + "("
+                            + hl.format("%.3f", element.polyphen_score)
+                            + ")"
+                        ),
+                    }
+                )
+            fields.update(
+                {
                     "domains": hl.delimit(
                         element.domains.map(lambda d: d.db + ":" + d.name), "&"
                     ),

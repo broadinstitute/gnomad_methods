@@ -7,6 +7,8 @@ import logging
 from timeit import default_timer as timer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
+import ga4gh.core as ga4gh_core
+import ga4gh.vrs as ga4gh_vrs
 import hail as hl
 from hail.utils.misc import new_temp_file
 
@@ -2050,9 +2052,6 @@ def gks_compute_seqloc_digest(
         which is then imported as a hail table
     :return: a hail table with the VRS annotation updated with the new SequenceLocations
     """
-    import ga4gh.core as ga4gh_core
-    import ga4gh.vrs.models as ga4gh_vrs
-
     if export_tmpfile is None:
         export_tmpfile = new_temp_file("gks-seqloc-pre.tsv")
     if computed_tmpfile is None:
@@ -2124,9 +2123,6 @@ def add_gks_vrs(
     :param input_vrs: VRS struct (such as from a ht.info.vrs field).
     :return: Python dictionary conforming to GA4GH GKS VRS structure.
     """
-    import ga4gh.core as ga4gh_core
-    import ga4gh.vrs.models as ga4gh_vrs
-
     build_in = input_locus.reference_genome.name
     chr_in = input_locus.contig
 

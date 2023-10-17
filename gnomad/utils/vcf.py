@@ -18,6 +18,7 @@ SORT_ORDER = [
     "downsampling",
     "popmax",
     "pop",
+    "gen_anc",
     "subpop",
     "sex",
     "group",

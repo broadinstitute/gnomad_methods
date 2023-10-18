@@ -881,8 +881,8 @@ def compare_related_global_and_row_lengths(
             global_len = hl.eval(hl.len(t[global_field]))
             outcome = "Failed" if global_len != row_len else "Passed"
             logger.info(
-                f"%s global and row lengths comparison: Length of %s in"
-                f" globals (%d) does %smatch length of %s in rows (%d)",
+                "%s global and row lengths comparison: Length of %s in"
+                " globals (%d) does %smatch length of %s in rows (%d)",
                 outcome,
                 global_field,
                 global_len,

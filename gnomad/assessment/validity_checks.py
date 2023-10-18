@@ -871,7 +871,7 @@ def compare_related_global_and_row_lengths(
     Compare the lengths of global and row annotations.
 
     :param t: Input MatrixTable or Table.
-    :param len_comp_globals_rows: Dictionary with global annotation (key) and list of row annotations (value) to compare.
+    :param len_comp_globals_rows: Dictionary with row annotation (key) and list of associated global annotations (value) to compare.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t

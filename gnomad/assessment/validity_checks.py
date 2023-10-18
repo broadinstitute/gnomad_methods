@@ -1,6 +1,7 @@
 # noqa: D100
 
 import logging
+from pprint import pprint
 from typing import Dict, List, Optional, Union
 
 import hail as hl
@@ -228,7 +229,9 @@ def summarize_variant_filters(
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
     single_filter_count: bool = False,
-    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
+    monoallelic_expr: Optional[
+        Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]
+    ] = None,
     extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
     n_rows: int = 50,
     n_cols: int = 140,
@@ -251,7 +254,7 @@ def summarize_variant_filters(
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
-    :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
+    :param monoallelic_expr: When passed, either a single boolean expression or dictionary of strings and boolean expressions to log how many monoallelic sites are in the Table. Default is None.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
     :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param n_cols: Number of columns to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
@@ -268,11 +271,14 @@ def summarize_variant_filters(
         logger.info("Exploded variant filter counts: %s", filters)
 
     if monoallelic_expr is not None:
-        if isinstance(t, hl.MatrixTable):
-            mono_sites = t.filter_rows(monoallelic_expr).count_rows()
-        else:
-            mono_sites = t.filter(monoallelic_expr).count()
-        logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
+        if isinstance(monoallelic_expr, hl.expr.BooleanExpression):
+            monoallelic_expr = {"monoallellic": monoallelic_expr}
+        for k, m_expr in monoallelic_expr.items():
+            if isinstance(t, hl.MatrixTable):
+                mono_sites = t.filter_rows(m_expr).count_rows()
+            else:
+                mono_sites = t.filter(m_expr).count()
+            logger.info("There are %d %s sites in the dataset.", mono_sites, k)
 
     filtered_expr = hl.len(t.filters) > 0
     problematic_region_expr = hl.any(
@@ -862,7 +868,9 @@ def validate_release_t(
     subsets: List[str] = [""],
     pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
     missingness_threshold: float = 0.5,
-    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
+    monoallelic_expr: Optional[
+        Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]
+    ] = None,
     verbose: bool = False,
     show_percent_sites: bool = True,
     delimiter: str = "-",
@@ -882,6 +890,7 @@ def validate_release_t(
     samples_sum_check: bool = True,
     sex_chr_check: bool = True,
     missingness_check: bool = True,
+    pprint_globals: bool = True,
 ) -> None:
     """
     Perform a battery of validity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -899,7 +908,7 @@ def validate_release_t(
     :param subsets: List of subsets to be checked.
     :param pops: List of pops within main callset.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
-    :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
+    :param monoallelic_expr: When passed, either a single boolean expression or dictionary of strings and boolean expressions to log how many monoallelic sites are in the Table. Default is None.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
@@ -919,8 +928,14 @@ def validate_release_t(
     :param samples_sum_check: When True, runs the sum_group_callstats method. Default is True.
     :param sex_chr_check: When True, runs the check_sex_chr_metricss method. Default is True.
     :param missingness_check: When True, runs the compute_missingness method. Default is True.
+    :param pprint_globals: When True, Pretty Print the globals of the input Table. Default is True.
     :return: None (stdout display of results from the battery of validity checks).
     """
+    if pprint_globals:
+        logger.info("GLOBALS OF INPUT TABLE:")
+        global_pprint = {g: hl.eval(t[g]) for g in t.globals}
+        pprint(global_pprint, sort_dicts=False)
+
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
         summarize_variants(t)
@@ -1060,15 +1075,15 @@ def count_vep_annotated_variants_per_interval(
 
     logger.info(
         "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
-        " likely these genes are not covered by the variants in 'vep_ht'. These genes"
-        " are: %s",
+        " likely these genes are not covered by the variants in 'vep_ht'. These"
+        " genes are: %s",
         len(gene_sets.na_genes),
         gene_sets.na_genes,
     )
 
     logger.info(
-        "%s gene(s) have a subset of variants annotated as protein-coding biotype in"
-        " their defined intervals",
+        "%s gene(s) have a subset of variants annotated as protein-coding biotype"
+        " in their defined intervals",
         len(gene_sets.partial_pcg_genes),
     )
 

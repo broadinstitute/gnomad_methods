@@ -863,6 +863,34 @@ def vcf_field_check(
     return True
 
 
+def compare_related_global_and_row_lengths(
+    t: Union[hl.MatrixTable, hl.Table],
+    len_comp_globals_rows: Dict[str, List[str]] = None,
+) -> None:
+    """
+    Compare the lengths of global and row annotations.
+
+    :param t: Input MatrixTable or Table.
+    :param len_comp_globals_rows: Dictionary with global annotation (key) and list of row annotations (value) to compare.
+    :return: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+    for row_field, global_fields in len_comp_globals_rows.items():
+        row_len = len(t.head(1)[row_field].collect()[0])
+        for global_field in global_fields:
+            global_len = hl.eval(hl.len(t[global_field]))
+            outcome = "Failed" if global_len != row_len else "Passed"
+            logger.info(
+                f"%s global and row lengths comparison: Length of %s in"
+                f" globals (%d) does not match length of %s in rows (%d)",
+                outcome,
+                global_field,
+                global_len,
+                row_field,
+                row_len,
+            )
+
+
 def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
@@ -891,6 +919,7 @@ def validate_release_t(
     sex_chr_check: bool = True,
     missingness_check: bool = True,
     pprint_globals: bool = True,
+    len_comp_globals_rows: Dict[str, List[str]] = None,
 ) -> None:
     """
     Perform a battery of validity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -929,12 +958,17 @@ def validate_release_t(
     :param sex_chr_check: When True, runs the check_sex_chr_metricss method. Default is True.
     :param missingness_check: When True, runs the compute_missingness method. Default is True.
     :param pprint_globals: When True, Pretty Print the globals of the input Table. Default is True.
+    :param len_comp_globals_rows: When passed, a dictionary of globals (keys) and rows (values) to check that the length of the global key is equal to the length of the row value. Default is None.
     :return: None (stdout display of results from the battery of validity checks).
     """
     if pprint_globals:
         logger.info("GLOBALS OF INPUT TABLE:")
         global_pprint = {g: hl.eval(t[g]) for g in t.globals}
         pprint(global_pprint, sort_dicts=False)
+
+    if len_comp_globals_rows is not None:
+        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGHTS TO ROW ANOTATIONS:")
+        compare_related_global_and_row_lengths(t, len_comp_globals_rows)
 
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")

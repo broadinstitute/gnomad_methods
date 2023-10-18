@@ -891,6 +891,16 @@ def compare_related_global_and_row_lengths(
             )
 
 
+def pprint_global_anns(t: Union[hl.MatrixTable, hl.Table]) -> None:
+    """
+    Pretty print global annotations.
+
+    :param t: Input MatrixTable or Table.
+    """
+    global_pprint = {g: hl.eval(t[g]) for g in t.globals}
+    pprint(global_pprint, sort_dicts=False)
+
+
 def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
@@ -918,7 +928,7 @@ def validate_release_t(
     samples_sum_check: bool = True,
     sex_chr_check: bool = True,
     missingness_check: bool = True,
-    pprint_globals: bool = True,
+    pprint_globals: bool = False,
     len_comp_globals_rows: Dict[str, List[str]] = None,
 ) -> None:
     """
@@ -963,8 +973,7 @@ def validate_release_t(
     """
     if pprint_globals:
         logger.info("GLOBALS OF INPUT TABLE:")
-        global_pprint = {g: hl.eval(t[g]) for g in t.globals}
-        pprint(global_pprint, sort_dicts=False)
+        pprint_global_anns(t)
 
     if len_comp_globals_rows is not None:
         logger.info("COMPARE GLOBAL ANNOTATIONS' LENGHTS TO ROW ANOTATIONS:")

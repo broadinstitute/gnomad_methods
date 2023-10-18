@@ -882,11 +882,11 @@ def compare_related_global_and_row_lengths(
             outcome = "Failed" if global_len != row_len else "Passed"
             logger.info(
                 f"%s global and row lengths comparison: Length of %s in"
-                f" globals (%d) does %s match length of %s in rows (%d)",
+                f" globals (%d) does %smatch length of %s in rows (%d)",
                 outcome,
                 global_field,
                 global_len,
-                "NOT" if outcome == "Failed" else "",
+                "NOT " if outcome == "Failed" else "",
                 row_field,
                 row_len,
             )

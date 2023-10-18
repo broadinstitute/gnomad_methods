@@ -2633,13 +2633,14 @@ def add_gks_va(
     }
 
     # Check allele balance for heterozygotes values.
-    # Flagged values are those in bins >0.9. Each is 0.05, so last 2.
+    # Flagged allele balance values are those in bins > 0.90.
+    # Each bin is 0.05, so flagged values are in the last 2 bins.
     if len(input_struct.ab_hist_alt.bin_freq) != 20:
         raise ValueError(
             f"{gnomad_id} ab_hist_alt.bin_freq had "
             f"{len(input_struct.ab_hist_alt.bin_freq)} items, expected 20"
         )
-    # The bin_freq should be in order but we can verify the order from bin_edges
+    # The bin_freq should be in order but we can verify the order from bin_edges.
     ab_bin_freq = list(
         map(
             lambda tpl: tpl[1],
@@ -2653,7 +2654,7 @@ def add_gks_va(
         )
     )
 
-    # Create ancillaryResults for additional frequency and popMaxFAF95 information
+    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
         "popMaxFAF95": {

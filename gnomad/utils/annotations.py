@@ -2667,9 +2667,9 @@ def add_gks_va(
 
     if input_struct.faf95.popmax_population is not None:
         popFreqId = f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}"
-        ancillaryResults["popMaxFAF95"]["popFreqId"] = popFreqId
     else:
-        ancillaryResults["popMaxFAF95"]["popFreqId"] = None
+        popFreqId = f"{gnomad_id}.NO_COHORTS"
+    ancillaryResults["popMaxFAF95"]["popFreqId"] = popFreqId
 
     # Add mean coverage depth statistics if the input was annotated
     # with coverage information.

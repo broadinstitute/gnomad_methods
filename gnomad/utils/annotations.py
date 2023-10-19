@@ -2352,6 +2352,24 @@ def update_structured_annotations(
     return ht.annotate(**updated_rows)
 
 
+def freq_index_key(subset=None, pop=None, sex=None, raw=False):
+    """
+    Return the index into freq_index_dict for a given subset, population, and sex.
+    If raw, return the raw index, else the adj.
+
+    e.g. (example values only)
+
+    freq_index_key(subset=None, pop="afr", sex="XX")
+
+      -> freq_index_dict["afr-XX-adj"]
+
+      -> 20
+    """
+    parts = [s for s in [subset, pop, sex] if s is not None]
+    parts.append("raw" if raw else "adj")
+    return "-".join(parts)
+
+
 def gks_compute_seqloc_digest(
     ht: hl.Table,
     export_tmpfile: Optional[str] = None,
@@ -2572,6 +2590,11 @@ def add_gks_va(
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
 
+        # Add hemizygote allele count if variant is non-autosomal/non-PAR.
+        # Only XY groups can be hemizygous. Other group AC is mixed homo/hetero.
+        if not input_struct.in_autosome_or_par and group_sex == "XY":
+            freq_record["ancillaryResults"]["hemizygotes"] = group_freq.AC
+
         return freq_record
 
     # Create a list to then add the dictionaries for frequency reports for
@@ -2661,6 +2684,11 @@ def add_gks_va(
         "lowComplexityRegion": input_struct.region_flag.lcr,
         "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
     }
+
+    # Add hemizygote count if not autosomal or PAR.
+    if not input_struct.in_autosome_or_par:
+        hemizygote_count = input_struct.freq[freq_index_dict["XY-adj"]].AC
+        ancillaryResults["hemizygotes"] = hemizygote_count
 
     if input_struct.faf95.popmax_population is not None:
         grpMaxFAF95 = (

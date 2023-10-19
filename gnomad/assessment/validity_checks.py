@@ -229,9 +229,7 @@ def summarize_variant_filters(
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
     single_filter_count: bool = False,
-    site_gt_check_expr: Optional[
-        Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]
-    ] = None,
+    site_gt_check_expr: Dict[str, hl.expr.BooleanExpression] = None,
     extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
     n_rows: int = 50,
     n_cols: int = 140,
@@ -254,7 +252,7 @@ def summarize_variant_filters(
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
-    :param site_gt_check_expr: Optional boolean expression or dictionary of strings and boolean expressions typically used to log how many monoallelic or 100% heterozygous sites are in the Table.
+    :param site_gt_check_expr: Optional dictionary of strings and boolean expressions typically used to log how many monoallelic or 100% heterozygous sites are in the Table.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
     :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param n_cols: Number of columns to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
@@ -271,8 +269,6 @@ def summarize_variant_filters(
         logger.info("Exploded variant filter counts: %s", filters)
 
     if site_gt_check_expr is not None:
-        if isinstance(site_gt_check_expr, hl.expr.BooleanExpression):
-            site_gt_check_expr = {"site GT check": site_gt_check_expr}
         for k, m_expr in site_gt_check_expr.items():
             if isinstance(t, hl.MatrixTable):
                 gt_check_sites = t.filter_rows(m_expr).count_rows()
@@ -863,32 +859,48 @@ def vcf_field_check(
     return True
 
 
-def compare_global_and_row_annot_lengths(
+def check_global_and_row_annot_lengths(
     t: Union[hl.MatrixTable, hl.Table],
-    len_comp_globals_rows: Dict[str, List[str]] = None,
+    row_to_globals_check: Dict[str, List[str]] = None,
+    check_all_rows: bool = False,
 ) -> None:
     """
     Check that the lengths of row annotations match the lengths of associated global annotations.
 
     :param t: Input MatrixTable or Table.
-    :param len_comp_globals_rows: Dictionary with row annotation (key) and list of associated global annotations (value) to check for consistent lengths.
+    :param row_to_globals_check: Dictionary with row annotation (key) and list of associated global annotations (value) to compare.
+    :param check_all_rows: If True, check all rows in `t`; if False, check only the first row. Default is False.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
-    t = t.head(1)
-    for row_field, global_fields in len_comp_globals_rows.items():
-        row_len = len(t[row_field].collect()[0])
+    if not check_all_rows:
+        t = t.head(1)
+    for row_field, global_fields in row_to_globals_check.items():
+        rows = t[row_field].collect()
+        if not check_all_rows:
+            logger.info(
+                "Checking length of %s in first row against length of globals: %s",
+                row_field,
+                global_fields,
+            )
+            rows = [rows[0]]
         for global_field in global_fields:
             global_len = hl.eval(hl.len(t[global_field]))
-            outcome = "Failed" if global_len != row_len else "Passed"
+            failed_rows = 0
+            for row in rows:
+                row_len = len(row)
+                failed_rows += 1 if global_len != row_len else 0
+            outcome = "Failed" if failed_rows > 0 else "Passed"
             logger.info(
                 "%s global and row lengths comparison: Length of %s in"
-                " globals (%d) does %smatch length of %s in rows (%d)",
+                " globals (%d) does %smatch length of %s in %d out of %d rows (%d)",
                 outcome,
                 global_field,
                 global_len,
                 "NOT " if outcome == "Failed" else "",
                 row_field,
+                failed_rows if outcome == "Failed" else len(rows),
+                len(rows),
                 row_len,
             )
 
@@ -908,9 +920,7 @@ def validate_release_t(
     subsets: List[str] = [""],
     pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
     missingness_threshold: float = 0.5,
-    site_gt_check_expr: Optional[
-        Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]
-    ] = None,
+    site_gt_check_expr: Dict[str, hl.expr.BooleanExpression] = None,
     verbose: bool = False,
     show_percent_sites: bool = True,
     delimiter: str = "-",
@@ -931,7 +941,8 @@ def validate_release_t(
     sex_chr_check: bool = True,
     missingness_check: bool = True,
     pprint_globals: bool = False,
-    len_comp_globals_rows: Dict[str, List[str]] = None,
+    row_to_globals_check: Optional[Dict[str, List[str]]] = None,
+    check_all_rows_in_row_to_global_check: bool = False,
 ) -> None:
     """
     Perform a battery of validity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -970,16 +981,19 @@ def validate_release_t(
     :param sex_chr_check: When True, runs the check_sex_chr_metricss method. Default is True.
     :param missingness_check: When True, runs the compute_missingness method. Default is True.
     :param pprint_globals: When True, Pretty Print the globals of the input Table. Default is True.
-    :param len_comp_globals_rows: Optional dictionary of globals (keys) and rows (values) to be checked. When passed, function checks that the lengths of the global and row annotations are equal.
+    :param row_to_globals_check: Optional dictionary of globals (keys) and rows (values) to be checked. When passed, function checks that the lengths of the global and row annotations are equal.
+    :param check_all_rows_in_row_to_global_check: If True, check all rows in `t` in `row_to_globals_check`; if False, check only the first row. Default is False.
     :return: None (stdout display of results from the battery of validity checks).
     """
     if pprint_globals:
         logger.info("GLOBALS OF INPUT TABLE:")
         pprint_global_anns(t)
 
-    if len_comp_globals_rows is not None:
+    if row_to_globals_check is not None:
         logger.info("COMPARE GLOBAL ANNOTATIONS' LENGTHS TO ROW ANNOTATIONS:")
-        compare_global_and_row_annot_lengths(t, len_comp_globals_rows)
+        check_global_and_row_annot_lengths(
+            t, row_to_globals_check, check_all_rows_in_row_to_global_check
+        )
 
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")

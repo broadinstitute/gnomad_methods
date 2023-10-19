@@ -254,7 +254,7 @@ def summarize_variant_filters(
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
-    :param monoallelic_expr: When passed, either a single boolean expression or dictionary of strings and boolean expressions to log how many monoallelic sites are in the Table. Default is None.
+    :param monoallelic_expr: Optional boolean expression or dictionary of strings and boolean expressions used to log how many monoallelic sites are in the Table.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
     :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param n_cols: Number of columns to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
@@ -948,7 +948,7 @@ def validate_release_t(
     :param subsets: List of subsets to be checked.
     :param pops: List of pops within main callset.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
-    :param monoallelic_expr: When passed, either a single boolean expression or dictionary of strings and boolean expressions to log how many monoallelic sites are in the Table. Default is None.
+    :param monoallelic_expr: Optional boolean expression or dictionary of strings and boolean expressions used to log how many monoallelic sites are in `t`.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
@@ -969,7 +969,7 @@ def validate_release_t(
     :param sex_chr_check: When True, runs the check_sex_chr_metricss method. Default is True.
     :param missingness_check: When True, runs the compute_missingness method. Default is True.
     :param pprint_globals: When True, Pretty Print the globals of the input Table. Default is True.
-    :param len_comp_globals_rows: When passed, a dictionary of globals (keys) and rows (values) to check that the length of the global key is equal to the length of the row value. Default is None.
+    :param len_comp_globals_rows: Optional dictionary of globals (keys) and rows (values) to be checked. When passed, function checks that the lengths of the global and row annotations are equal.
     :return: None (stdout display of results from the battery of validity checks).
     """
     if pprint_globals:
@@ -977,7 +977,7 @@ def validate_release_t(
         pprint_global_anns(t)
 
     if len_comp_globals_rows is not None:
-        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGHTS TO ROW ANOTATIONS:")
+        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGTHS TO ROW ANNOTATIONS:")
         compare_related_global_and_row_lengths(t, len_comp_globals_rows)
 
     if summarize_variants_check:

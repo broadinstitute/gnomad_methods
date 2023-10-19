@@ -2659,7 +2659,7 @@ def add_gks_va(
         "homozygotes": overall_freq["homozygote_count"],
         "qcFilters": list(input_struct.filters),
         "lowComplexityRegion": input_struct.region_flag.lcr,
-        "heterozygousAlleleBalanceFlagged": sum(ab_bin_freq[-2:]),
+        "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
     }
 
     if input_struct.faf95.popmax_population is not None:

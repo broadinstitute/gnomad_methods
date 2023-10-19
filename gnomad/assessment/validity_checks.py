@@ -868,10 +868,10 @@ def compare_global_and_row_annot_lengths(
     len_comp_globals_rows: Dict[str, List[str]] = None,
 ) -> None:
     """
-    Compare the lengths of global and row annotations.
+    Check that the lengths of row annotations match the lengths of associated global annotations.
 
     :param t: Input MatrixTable or Table.
-    :param len_comp_globals_rows: Dictionary with row annotation (key) and list of associated global annotations (value) to compare.
+    :param len_comp_globals_rows: Dictionary with row annotation (key) and list of associated global annotations (value) to check for consistent lengths.
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -978,7 +978,7 @@ def validate_release_t(
         pprint_global_anns(t)
 
     if len_comp_globals_rows is not None:
-        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGHTS TO ROW ANOTATIONS:")
+        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGTHS TO ROW ANNOTATIONS:")
         compare_global_and_row_annot_lengths(t, len_comp_globals_rows)
 
     if summarize_variants_check:

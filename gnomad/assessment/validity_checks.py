@@ -755,8 +755,10 @@ def compute_missingness(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     logger.info(
-        "Missingness threshold (upper cutoff for what is allowed for missingness"
-        " checks): %.2f",
+        (
+            "Missingness threshold (upper cutoff for what is allowed for missingness"
+            " checks): %.2f"
+        ),
         missingness_threshold,
     )
     metrics_missing = {}
@@ -863,7 +865,7 @@ def vcf_field_check(
     return True
 
 
-def compare_related_global_and_row_lengths(
+def compare_global_and_row_annot_lengths(
     t: Union[hl.MatrixTable, hl.Table],
     len_comp_globals_rows: Dict[str, List[str]] = None,
 ) -> None:
@@ -882,8 +884,10 @@ def compare_related_global_and_row_lengths(
             global_len = hl.eval(hl.len(t[global_field]))
             outcome = "Failed" if global_len != row_len else "Passed"
             logger.info(
-                "%s global and row lengths comparison: Length of %s in"
-                " globals (%d) does %smatch length of %s in rows (%d)",
+                (
+                    "%s global and row lengths comparison: Length of %s in"
+                    " globals (%d) does %smatch length of %s in rows (%d)"
+                ),
                 outcome,
                 global_field,
                 global_len,
@@ -978,8 +982,8 @@ def validate_release_t(
         pprint_global_anns(t)
 
     if len_comp_globals_rows is not None:
-        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGTHS TO ROW ANNOTATIONS:")
-        compare_related_global_and_row_lengths(t, len_comp_globals_rows)
+        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGHTS TO ROW ANOTATIONS:")
+        compare_global_and_row_annot_lengths(t, len_comp_globals_rows)
 
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
@@ -1119,16 +1123,20 @@ def count_vep_annotated_variants_per_interval(
     )
 
     logger.info(
-        "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
-        " likely these genes are not covered by the variants in 'vep_ht'. These"
-        " genes are: %s",
+        (
+            "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
+            " likely these genes are not covered by the variants in 'vep_ht'. These"
+            " genes are: %s"
+        ),
         len(gene_sets.na_genes),
         gene_sets.na_genes,
     )
 
     logger.info(
-        "%s gene(s) have a subset of variants annotated as protein-coding biotype"
-        " in their defined intervals",
+        (
+            "%s gene(s) have a subset of variants annotated as protein-coding biotype"
+            " in their defined intervals"
+        ),
         len(gene_sets.partial_pcg_genes),
     )
 

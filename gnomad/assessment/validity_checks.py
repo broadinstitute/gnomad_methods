@@ -861,7 +861,7 @@ def vcf_field_check(
 
 def check_global_and_row_annot_lengths(
     t: Union[hl.MatrixTable, hl.Table],
-    row_to_globals_check: Dict[str, List[str]] = None,
+    row_to_globals_check: Dict[str, List[str]],
     check_all_rows: bool = False,
 ) -> None:
     """
@@ -876,32 +876,34 @@ def check_global_and_row_annot_lengths(
     if not check_all_rows:
         t = t.head(1)
     for row_field, global_fields in row_to_globals_check.items():
-        rows = t[row_field].collect()
         if not check_all_rows:
             logger.info(
                 "Checking length of %s in first row against length of globals: %s",
                 row_field,
                 global_fields,
             )
-            rows = [rows[0]]
         for global_field in global_fields:
             global_len = hl.eval(hl.len(t[global_field]))
-            failed_rows = 0
-            for row in rows:
-                row_len = len(row)
-                failed_rows += 1 if global_len != row_len else 0
-            outcome = "Failed" if failed_rows > 0 else "Passed"
+            row_len_expr = hl.len(t[row_field])
+            failed_rows = t.aggregate(
+                hl.struct(
+                    n_fail=hl.agg.count_where(row_len_expr != global_len),
+                    row_len=hl.agg.counter(row_len_expr),
+                )
+            )
+            outcome = "Failed" if failed_rows["n_fail"] > 0 else "Passed"
+            n_rows = t.count()
             logger.info(
                 "%s global and row lengths comparison: Length of %s in"
-                " globals (%d) does %smatch length of %s in %d out of %d rows (%d)",
+                " globals (%d) does %smatch length of %s in %d out of %d rows (%s)",
                 outcome,
                 global_field,
                 global_len,
                 "NOT " if outcome == "Failed" else "",
                 row_field,
-                failed_rows if outcome == "Failed" else len(rows),
-                len(rows),
-                row_len,
+                failed_rows["n_fail"] if outcome == "Failed" else n_rows,
+                n_rows,
+                failed_rows["row_len"],
             )
 
 

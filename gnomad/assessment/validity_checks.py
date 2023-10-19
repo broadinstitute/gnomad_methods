@@ -875,8 +875,9 @@ def compare_related_global_and_row_lengths(
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
+    t = t.head(1)
     for row_field, global_fields in len_comp_globals_rows.items():
-        row_len = len(t.head(1)[row_field].collect()[0])
+        row_len = len(t[row_field].collect()[0])
         for global_field in global_fields:
             global_len = hl.eval(hl.len(t[global_field]))
             outcome = "Failed" if global_len != row_len else "Passed"

@@ -1,6 +1,7 @@
 # noqa: D100
 
 import logging
+from pprint import pprint
 from typing import Dict, List, Optional, Union
 
 import hail as hl
@@ -228,7 +229,7 @@ def summarize_variant_filters(
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
     single_filter_count: bool = False,
-    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
+    site_gt_check_expr: Dict[str, hl.expr.BooleanExpression] = None,
     extra_filter_checks: Optional[Dict[str, hl.expr.Expression]] = None,
     n_rows: int = 50,
     n_cols: int = 140,
@@ -251,7 +252,7 @@ def summarize_variant_filters(
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
     :param single_filter_count: If True, explode the Table's filter column and give a supplement total count of each filter. Default is False.
-    :param monoallelic_expr: Optional boolean expression of monoallelic status that logs how many monoallelic sites are in the Table.
+    :param site_gt_check_expr: Optional dictionary of strings and boolean expressions typically used to log how many monoallelic or 100% heterozygous sites are in the Table.
     :param extra_filter_checks: Optional dictionary containing filter condition name (key) and extra filter expressions (value) to be examined.
     :param n_rows: Number of rows to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 50.
     :param n_cols: Number of columns to display only when showing percentages of filtered variants grouped by multiple conditions. Default is 140.
@@ -267,12 +268,13 @@ def summarize_variant_filters(
         filters = exp_t.aggregate(hl.agg.counter(exp_t.filters))
         logger.info("Exploded variant filter counts: %s", filters)
 
-    if monoallelic_expr is not None:
-        if isinstance(t, hl.MatrixTable):
-            mono_sites = t.filter_rows(monoallelic_expr).count_rows()
-        else:
-            mono_sites = t.filter(monoallelic_expr).count()
-        logger.info("There are %d monoallelic sites in the dataset.", mono_sites)
+    if site_gt_check_expr is not None:
+        for k, m_expr in site_gt_check_expr.items():
+            if isinstance(t, hl.MatrixTable):
+                gt_check_sites = t.filter_rows(m_expr).count_rows()
+            else:
+                gt_check_sites = t.filter(m_expr).count()
+            logger.info("There are %d %s sites in the dataset.", gt_check_sites, k)
 
     filtered_expr = hl.len(t.filters) > 0
     problematic_region_expr = hl.any(
@@ -857,12 +859,70 @@ def vcf_field_check(
     return True
 
 
+def check_global_and_row_annot_lengths(
+    t: Union[hl.MatrixTable, hl.Table],
+    row_to_globals_check: Dict[str, List[str]],
+    check_all_rows: bool = False,
+) -> None:
+    """
+    Check that the lengths of row annotations match the lengths of associated global annotations.
+
+    :param t: Input MatrixTable or Table.
+    :param row_to_globals_check: Dictionary with row annotation (key) and list of associated global annotations (value) to compare.
+    :param check_all_rows: If True, check all rows in `t`; if False, check only the first row. Default is False.
+    :return: None
+    """
+    t = t.rows() if isinstance(t, hl.MatrixTable) else t
+    if not check_all_rows:
+        t = t.head(1)
+    for row_field, global_fields in row_to_globals_check.items():
+        if not check_all_rows:
+            logger.info(
+                "Checking length of %s in first row against length of globals: %s",
+                row_field,
+                global_fields,
+            )
+        for global_field in global_fields:
+            global_len = hl.eval(hl.len(t[global_field]))
+            row_len_expr = hl.len(t[row_field])
+            failed_rows = t.aggregate(
+                hl.struct(
+                    n_fail=hl.agg.count_where(row_len_expr != global_len),
+                    row_len=hl.agg.counter(row_len_expr),
+                )
+            )
+            outcome = "Failed" if failed_rows["n_fail"] > 0 else "Passed"
+            n_rows = t.count()
+            logger.info(
+                "%s global and row lengths comparison: Length of %s in"
+                " globals (%d) does %smatch length of %s in %d out of %d rows (%s)",
+                outcome,
+                global_field,
+                global_len,
+                "NOT " if outcome == "Failed" else "",
+                row_field,
+                failed_rows["n_fail"] if outcome == "Failed" else n_rows,
+                n_rows,
+                failed_rows["row_len"],
+            )
+
+
+def pprint_global_anns(t: Union[hl.MatrixTable, hl.Table]) -> None:
+    """
+    Pretty print global annotations.
+
+    :param t: Input MatrixTable or Table.
+    """
+    global_pprint = {g: hl.eval(t[g]) for g in t.globals}
+    pprint(global_pprint, sort_dicts=False)
+
+
 def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
     pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
     missingness_threshold: float = 0.5,
-    monoallelic_expr: Optional[hl.expr.BooleanExpression] = None,
+    site_gt_check_expr: Dict[str, hl.expr.BooleanExpression] = None,
     verbose: bool = False,
     show_percent_sites: bool = True,
     delimiter: str = "-",
@@ -882,6 +942,9 @@ def validate_release_t(
     samples_sum_check: bool = True,
     sex_chr_check: bool = True,
     missingness_check: bool = True,
+    pprint_globals: bool = False,
+    row_to_globals_check: Optional[Dict[str, List[str]]] = None,
+    check_all_rows_in_row_to_global_check: bool = False,
 ) -> None:
     """
     Perform a battery of validity checks on a specified group of subsets in a MatrixTable containing variant annotations.
@@ -899,7 +962,7 @@ def validate_release_t(
     :param subsets: List of subsets to be checked.
     :param pops: List of pops within main callset.
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
-    :param monoallelic_expr: When passed, log how many monoallelic sites are in the Table.
+    :param site_gt_check_expr: Optional boolean expression or dictionary of strings and boolean expressions typically used to log how many monoallelic or 100% heterozygous sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
@@ -919,8 +982,21 @@ def validate_release_t(
     :param samples_sum_check: When True, runs the sum_group_callstats method. Default is True.
     :param sex_chr_check: When True, runs the check_sex_chr_metricss method. Default is True.
     :param missingness_check: When True, runs the compute_missingness method. Default is True.
+    :param pprint_globals: When True, Pretty Print the globals of the input Table. Default is True.
+    :param row_to_globals_check: Optional dictionary of globals (keys) and rows (values) to be checked. When passed, function checks that the lengths of the global and row annotations are equal.
+    :param check_all_rows_in_row_to_global_check: If True, check all rows in `t` in `row_to_globals_check`; if False, check only the first row. Default is False.
     :return: None (stdout display of results from the battery of validity checks).
     """
+    if pprint_globals:
+        logger.info("GLOBALS OF INPUT TABLE:")
+        pprint_global_anns(t)
+
+    if row_to_globals_check is not None:
+        logger.info("COMPARE GLOBAL ANNOTATIONS' LENGTHS TO ROW ANNOTATIONS:")
+        check_global_and_row_annot_lengths(
+            t, row_to_globals_check, check_all_rows_in_row_to_global_check
+        )
+
     if summarize_variants_check:
         logger.info("BASIC SUMMARY OF INPUT TABLE:")
         summarize_variants(t)
@@ -932,7 +1008,7 @@ def validate_release_t(
             variant_filter_field,
             problematic_regions,
             single_filter_count,
-            monoallelic_expr,
+            site_gt_check_expr,
         )
 
     if raw_adj_check:
@@ -1060,15 +1136,15 @@ def count_vep_annotated_variants_per_interval(
 
     logger.info(
         "%s gene(s) have no variants annotated as protein-coding in Biotype. It is"
-        " likely these genes are not covered by the variants in 'vep_ht'. These genes"
-        " are: %s",
+        " likely these genes are not covered by the variants in 'vep_ht'. These"
+        " genes are: %s",
         len(gene_sets.na_genes),
         gene_sets.na_genes,
     )
 
     logger.info(
-        "%s gene(s) have a subset of variants annotated as protein-coding biotype in"
-        " their defined intervals",
+        "%s gene(s) have a subset of variants annotated as protein-coding biotype"
+        " in their defined intervals",
         len(gene_sets.partial_pcg_genes),
     )
 

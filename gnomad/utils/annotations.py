@@ -2550,7 +2550,6 @@ def add_gks_va(
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
-        group_index: int,
         group_id: str,
         group_label: str,
         group_sex: str = None,
@@ -2568,8 +2567,16 @@ def add_gks_va(
         :return: Dictionary containing variant frequency information,
             - (by genetic ancestry group and sex if desired) for specified variant.
         """
+        if group_sex:
+            cohort_id = f"{group_id.upper()}.{group_sex}"
+        else:
+            cohort_id = f"{group_id.upper()}"
+        record_id = f"{gnomad_id}.{cohort_id}"
+
         # Obtain frequency information for the specified variant.
-        group_freq = input_struct.freq[group_index]
+        group_freq = input_struct.freq[
+            freq_index_dict[freq_index_key(pop=group_id, sex=group_sex)]
+        ]
 
         # Cohort characteristics.
         characteristics = []
@@ -2579,14 +2586,14 @@ def add_gks_va(
 
         # Dictionary to be returned containing information for a specified group.
         freq_record = {
-            "id": f"{gnomad_id}.{group_id.upper()}",
+            "id": record_id,
             "type": "CohortAlleleFrequency",
             "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
             "alleleFrequency": group_freq["AF"],
-            "cohort": {"id": group_id.upper(), "characteristics": characteristics},
+            "cohort": {"id": cohort_id, "characteristics": characteristics},
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
 
@@ -2612,10 +2619,7 @@ def add_gks_va(
     # Iterate through provided groups and generate dictionaries.
     if ancestry_groups:
         for group in ancestry_groups:
-            key = f"{group}-adj"
-            index_value = freq_index_dict.get(key)
             group_result = _create_group_dicts(
-                group_index=index_value,
                 group_id=group,
                 group_label=ancestry_groups_dict[group],
             )
@@ -2624,12 +2628,8 @@ def add_gks_va(
             if by_sex:
                 sex_list = []
                 for sex in ["XX", "XY"]:
-                    sex_key = f"{group}-{sex}-adj"
-                    sex_index_value = freq_index_dict.get(sex_key)
-                    sex_id = f"{group}.{sex}"
                     sex_result = _create_group_dicts(
-                        group_index=sex_index_value,
-                        group_id=sex_id,
+                        group_id=group,
                         group_label=ancestry_groups_dict[group],
                         group_sex=sex,
                     )

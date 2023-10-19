@@ -2592,8 +2592,16 @@ def add_gks_va(
 
         # Add hemizygote allele count if variant is non-autosomal/non-PAR.
         # Only XY groups can be hemizygous. Other group AC is mixed homo/hetero.
-        if not input_struct.in_autosome_or_par and group_sex == "XY":
-            freq_record["ancillaryResults"]["hemizygotes"] = group_freq.AC
+        # If not a by_sex group, include the XY hemizygote count for XY subgroup.
+        if not input_struct.in_autosome_or_par:
+            if group_sex == "XY":
+                freq_record["ancillaryResults"]["hemizygotes"] = group_freq.AC
+            elif group_sex is None:
+                # Group is not by_sex, but still need to report hemizygotes.
+                hemi_group_freq = input_struct.freq[
+                    freq_index_dict[freq_index_key(pop=group_id, sex="XY")]
+                ]
+                freq_record["ancillaryResults"]["hemizygotes"] = hemi_group_freq.AC
 
         return freq_record
 

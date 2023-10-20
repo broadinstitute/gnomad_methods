@@ -2657,20 +2657,25 @@ def add_gks_va(
     # Create ancillaryResults for additional frequency and popMaxFAF95 information.
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
-        "popMaxFAF95": {
-            "frequency": input_struct.faf95.popmax,
-            "confidenceInterval": 0.95,
-        },
         "qcFilters": list(input_struct.filters),
         "lowComplexityRegion": input_struct.region_flag.lcr,
         "heterozygousAlleleBalanceFlagged": sum(ab_bin_freq[-2:]),
     }
 
     if input_struct.faf95.popmax_population is not None:
-        popFreqId = f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}"
+        grpMaxFAF95 = (
+            {
+                "frequency": input_struct.faf95.popmax,
+                "confidenceInterval": 0.95,
+                "grpFreqId": (
+                    f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}"
+                ),
+            },
+        )
     else:
-        popFreqId = f"{gnomad_id}.NO_COHORTS"
-    ancillaryResults["popMaxFAF95"]["popFreqId"] = popFreqId
+        grpMaxFAF95 = None
+
+    ancillaryResults["grpMaxFAF95"] = grpMaxFAF95
 
     # Add mean coverage depth statistics if the input was annotated
     # with coverage information.

@@ -63,8 +63,6 @@ pyyaml==6.0.1
     # via pre-commit
 snowballstemmer==2.2.0
     # via pydocstyle
-statsmodels==0.14.0
-    # via -r requirements-dev.in
 tomlkit==0.12.1
     # via pylint
 virtualenv==20.24.3

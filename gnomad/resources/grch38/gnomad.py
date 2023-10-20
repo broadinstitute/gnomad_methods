@@ -132,6 +132,7 @@ HGDP_POPS = [
     "japanese",
     "papuanhighlands",
     "papuansepik",
+    "adygei",
     "orcadian",
     "biaka",
     "yakut",

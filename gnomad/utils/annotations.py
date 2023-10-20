@@ -2656,13 +2656,13 @@ def add_gks_va(
     # The bin_freq should be in order but we can verify the order from bin_edges.
     ab_bin_freq = list(
         map(
-            lambda tpl: tpl[1],
+            lambda x: x[1],
             sorted(
                 zip(
                     input_struct.ab_hist_alt.bin_edges,
                     input_struct.ab_hist_alt.bin_freq,
                 ),
-                key=lambda tpl: tpl[0],
+                key=lambda x: x[0],
             ),
         )
     )

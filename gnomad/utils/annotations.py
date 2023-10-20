@@ -2352,24 +2352,6 @@ def update_structured_annotations(
     return ht.annotate(**updated_rows)
 
 
-def freq_index_key(subset=None, pop=None, sex=None, raw=False):
-    """
-    Return the index into freq_index_dict for a given subset, population, and sex.
-    If raw, return the raw index, else the adj.
-
-    e.g. (example values only)
-
-    freq_index_key(subset=None, pop="afr", sex="XX")
-
-      -> freq_index_dict["afr-XX-adj"]
-
-      -> 20
-    """
-    parts = [s for s in [subset, pop, sex] if s is not None]
-    parts.append("raw" if raw else "adj")
-    return "-".join(parts)
-
-
 def gks_compute_seqloc_digest(
     ht: hl.Table,
     export_tmpfile: Optional[str] = None,
@@ -2569,14 +2551,14 @@ def add_gks_va(
         """
         if group_sex:
             cohort_id = f"{group_id.upper()}.{group_sex}"
+            freq_index_key = f"{group_id}-{group_sex}-adj"
         else:
             cohort_id = f"{group_id.upper()}"
+            freq_index_key = f"{group_id}-adj"
         record_id = f"{gnomad_id}.{cohort_id}"
 
         # Obtain frequency information for the specified variant.
-        group_freq = input_struct.freq[
-            freq_index_dict[freq_index_key(pop=group_id, sex=group_sex)]
-        ]
+        group_freq = input_struct.freq[freq_index_dict[freq_index_key]]
 
         # Cohort characteristics.
         characteristics = []
@@ -2606,7 +2588,7 @@ def add_gks_va(
             elif group_sex is None:
                 # Group is not by_sex, but still need to report hemizygotes.
                 hemi_group_freq = input_struct.freq[
-                    freq_index_dict[freq_index_key(pop=group_id, sex="XY")]
+                    freq_index_dict[f"{group_id}-XY-adj"]
                 ]
                 freq_record["ancillaryResults"]["hemizygotes"] = hemi_group_freq.AC
 

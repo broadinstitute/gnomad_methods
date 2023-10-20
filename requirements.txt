@@ -9,3 +9,4 @@ onnxruntime
 scikit-learn
 skl2onnx
 slackclient==2.5.0
+statsmodels

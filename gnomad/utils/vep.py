@@ -382,6 +382,29 @@ def filter_vep_to_canonical_transcripts(
     )
 
 
+def filter_vep_to_mane_select_transcripts(
+    mt: Union[hl.MatrixTable, hl.Table],
+    vep_root: str = "vep",
+    filter_empty_csq: bool = False,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filter VEP transcript consequences to those in the MANE Select transcript.
+
+    :param mt: Input Table or MatrixTable.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty. Default is False.
+    :return: Table or MatrixTable with VEP transcript consequences filtered.
+    """
+    return filter_vep_transcript_csqs(
+        mt,
+        vep_root,
+        synonymous=False,
+        canonical=False,
+        mane_select=True,
+        filter_empty_csq=filter_empty_csq,
+    )
+
+
 def filter_vep_to_synonymous_variants(
     mt: Union[hl.MatrixTable, hl.Table],
     vep_root: str = "vep",

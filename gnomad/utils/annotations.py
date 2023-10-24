@@ -1046,31 +1046,45 @@ def missing_callstats_expr() -> hl.expr.StructExpression:
 
 
 def set_female_y_metrics_to_na_expr(
-    t: Union[hl.Table, hl.MatrixTable]
+    t: Union[hl.Table, hl.MatrixTable],
+    freq_expr: Union[hl.expr.ArrayExpression, str] = "freq",
+    freq_meta_expr: Union[hl.expr.ArrayExpression, str] = "freq_meta",
+    freq_index_dict_expr: Union[hl.expr.DictExpression, str] = "freq_index_dict",
 ) -> hl.expr.ArrayExpression:
     """
     Set Y-variant frequency callstats for female-specific metrics to missing structs.
 
-    .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
-
-    :param t: Table or MatrixTable for which to adjust female metrics
-    :return: Hail array expression to set female Y-variant metrics to missing values
+    :param t: Table or MatrixTable for which to adjust female metrics.
+    :param freq_expr: Array expression or string annotation name for the frequency
+        array. Default is "freq".
+    :param freq_meta_expr: Array expression or string annotation name for the frequency
+        metadata. Default is "freq_meta".
+    :param freq_index_dict_expr: Dict expression or string annotation name for the
+        frequency metadata index dictionary. Default is "freq_index_dict".
+    :return: Hail array expression to set female Y-variant metrics to missing values.
     """
+    if isinstance(freq_expr, str):
+        freq_expr = t[freq_expr]
+    if isinstance(freq_meta_expr, str):
+        freq_meta_expr = t[freq_meta_expr]
+    if isinstance(freq_index_dict_expr, str):
+        freq_index_dict_expr = t[freq_index_dict_expr]
+
     female_idx = hl.map(
-        lambda x: t.freq_index_dict[x],
-        hl.filter(lambda x: x.contains("XX"), t.freq_index_dict.keys()),
+        lambda x: freq_index_dict_expr[x],
+        hl.filter(lambda x: x.contains("XX"), freq_index_dict_expr.keys()),
     )
-    freq_idx_range = hl.range(hl.len(t.freq_meta))
+    freq_idx_range = hl.range(hl.len(freq_meta_expr))
 
     new_freq_expr = hl.if_else(
         (t.locus.in_y_nonpar() | t.locus.in_y_par()),
         hl.map(
             lambda x: hl.if_else(
-                female_idx.contains(x), missing_callstats_expr(), t.freq[x]
+                female_idx.contains(x), missing_callstats_expr(), freq_expr[x]
             ),
             freq_idx_range,
         ),
-        t.freq,
+        freq_expr,
     )
 
     return new_freq_expr

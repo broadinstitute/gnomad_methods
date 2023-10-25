@@ -16,7 +16,7 @@ logging.basicConfig(
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
-COVERAGE_CUTOFF = 40
+COVERAGE_CUTOFF = 30
 """
 Minimum median exome coverage differentiating high coverage sites from low coverage sites.
 
@@ -471,7 +471,7 @@ def build_models(
         "methylation_level",
         "mu_snp",
     ),
-    lower_cov_cutoff: int = COVERAGE_CUTOFF,
+    high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
 ) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
@@ -486,7 +486,7 @@ def build_models(
     sites (transversions and non CpG transitions).
 
     The plateau models only consider high coverage sites, or sites above a median
-    coverage of `lower_cov_cutoff` and median coverage below `upper_cov_cutoff`.
+    coverage of `high_cov_definition` and median coverage below `upper_cov_cutoff`.
 
     Plateau model: adjusts proportion of expected variation based on location in the
     genome and CpG status.
@@ -495,14 +495,14 @@ def build_models(
     - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
     This function also builds models (coverage models) to calibrate the proportion of
-    expected variation at low coverage sites (sites below `lower_cov_cutoff`).
+    expected variation at low coverage sites (sites below `high_cov_definition`).
 
     The coverage models are built by creating a scaling factor across all high coverage
     sites, applying this ratio to the low coverage sites, and running a linear
     regression.
 
     Coverage model: corrects proportion of expected variation at low coverage sites.
-    Low coverage sites are defined as sites with median coverage < `lower_cov_cutoff`.
+    Low coverage sites are defined as sites with median coverage < `high_cov_definition`.
 
     The x and y of the coverage model:
     - x: log10 groupings of exome coverage at low coverage sites
@@ -541,15 +541,15 @@ def build_models(
         Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
-    :param lower_cov_cutoff: Lower median coverage cutoff. Sites with coverage above this cutoff
+    :param high_cov_definition: Lower median coverage cutoff. Sites with coverage above this cutoff
         are considered well covered. Default is `COVERAGE_CUTOFF`.
     :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
         are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether or not to skip generating the coverage model.
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage equal to or above `lower_cov_cutoff`.
-    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= lower_cov_cutoff)
+    # Filter to sites with coverage equal to or above `high_cov_definition`.
+    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= high_cov_definition)
 
     # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.
     if upper_cov_cutoff is not None:
@@ -597,9 +597,9 @@ def build_models(
         )
 
     if skip_coverage_model is not None:
-        # Filter to sites with coverage below `lower_cov_cutoff` and larger than 0.
+        # Filter to sites with coverage below `high_cov_definition` and larger than 0.
         low_cov_ht = coverage_ht.filter(
-            (coverage_ht.exome_coverage < lower_cov_cutoff)
+            (coverage_ht.exome_coverage < high_cov_definition)
             & (coverage_ht.exome_coverage > 0)
         )
 

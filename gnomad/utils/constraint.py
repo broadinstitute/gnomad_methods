@@ -474,7 +474,7 @@ def build_models(
     high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
-) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
+) -> Tuple[[Union[Tuple[float, float], None], hl.expr.StructExpression]]:
     """
     Build coverage and plateau models.
 
@@ -545,7 +545,8 @@ def build_models(
         are considered well covered. Default is `COVERAGE_CUTOFF`.
     :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
         are excluded from the high coverage Table. Default is None.
-    :param skip_coverage_model: Whether or not to skip generating the coverage model.
+    :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
+        None is returned instead of the coverage model. Default is False
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage equal to or above `high_cov_definition`.
@@ -596,7 +597,7 @@ def build_models(
             hl.struct(**plateau_models_agg_expr)
         )
 
-    if skip_coverage_model is not None:
+    if skip_coverage_model:
         # Filter to sites with coverage below `high_cov_definition` and larger than 0.
         low_cov_ht = coverage_ht.filter(
             (coverage_ht.exome_coverage < high_cov_definition)

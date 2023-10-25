@@ -1095,8 +1095,8 @@ def compute_pli(
         expected_values = {"Null": 1.0, "Rec": 0.463, "LI": 0.089}
 
     # Set up initial values.
-    last_pi = {"Null": 0, "Rec": 0, "LI": 0}
-    pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
+    last_pi = {k: 0 for k in expected_values.keys()}
+    pi = {k: 1 / len(expected_values.keys()) for k in expected_values.keys()}
 
     dpois_expr = {
         k: hl.or_missing(

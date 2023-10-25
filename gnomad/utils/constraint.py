@@ -473,6 +473,7 @@ def build_models(
     ),
     lower_cov_cutoff: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
+    skip_coverage_model: bool = False,
 ) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
@@ -544,6 +545,7 @@ def build_models(
         are considered well covered. Default is `COVERAGE_CUTOFF`.
     :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
         are excluded from the high coverage Table. Default is None.
+    :param skip_coverage_model: Whether or not to skip generating the coverage model.
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage equal to or above `lower_cov_cutoff`.
@@ -594,39 +596,45 @@ def build_models(
             hl.struct(**plateau_models_agg_expr)
         )
 
-    # Filter to sites with coverage below `lower_cov_cutoff` and larger than 0.
-    low_cov_ht = coverage_ht.filter(
-        (coverage_ht.exome_coverage < lower_cov_cutoff)
-        & (coverage_ht.exome_coverage > 0)
-    )
+    low_cov = False
 
-    # Create a metric that represents the relative mutability of the exome calculated
-    # on high coverage sites and will be used as scaling factor when building the
-    # coverage model.
-    high_coverage_scale_factor = high_cov_ht.aggregate(
-        hl.agg.sum(high_cov_ht.observed_variants)
-        / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
-    )
-
-    # Generate a Table with all necessary annotations (x and y listed above)
-    # for the coverage model.
-    low_cov_group_ht = low_cov_ht.group_by(
-        log_coverage=hl.log10(low_cov_ht.exome_coverage)
-    ).aggregate(
-        low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
-        / (
-            high_coverage_scale_factor
-            * hl.agg.sum(low_cov_ht.possible_variants * low_cov_ht.mu_snp)
+    if skip_coverage_model is not None:
+        # Filter to sites with coverage below `lower_cov_cutoff` and larger than 0.
+        low_cov_ht = coverage_ht.filter(
+            (coverage_ht.exome_coverage < lower_cov_cutoff)
+            & (coverage_ht.exome_coverage > 0)
         )
-    )
 
-    # Build the coverage model.
-    # TODO: consider weighting here as well
-    coverage_model_expr = build_coverage_model(
-        low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
-        log_coverage_expr=low_cov_group_ht.log_coverage,
-    )
-    coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
+        # Create a metric that represents the relative mutability of the exome calculated
+        # on high coverage sites and will be used as scaling factor when building the
+        # coverage model.
+        high_coverage_scale_factor = high_cov_ht.aggregate(
+            hl.agg.sum(high_cov_ht.observed_variants)
+            / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
+        )
+
+        # Generate a Table with all necessary annotations (x and y listed above)
+        # for the coverage model.
+        low_cov_group_ht = low_cov_ht.group_by(
+            log_coverage=hl.log10(low_cov_ht.exome_coverage)
+        ).aggregate(
+            low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
+            / (
+                high_coverage_scale_factor
+                * hl.agg.sum(low_cov_ht.possible_variants * low_cov_ht.mu_snp)
+            )
+        )
+
+        # Build the coverage model.
+        # TODO: consider weighting here as well
+        coverage_model_expr = build_coverage_model(
+            low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
+            log_coverage_expr=low_cov_group_ht.log_coverage,
+        )
+        coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
+    else:
+        coverage_model = None
+
     return coverage_model, plateau_models
 
 

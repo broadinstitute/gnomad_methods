@@ -597,7 +597,7 @@ def build_models(
             hl.struct(**plateau_models_agg_expr)
         )
 
-    if skip_coverage_model is False:
+    if not skip_coverage_model:
         # Filter to sites with coverage below `high_cov_definition` and larger than 0.
         low_cov_ht = coverage_ht.filter(
             (coverage_ht.exome_coverage < high_cov_definition)

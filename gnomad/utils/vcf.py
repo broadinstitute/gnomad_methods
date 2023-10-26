@@ -483,8 +483,8 @@ def adjust_vcf_incompatible_types(
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                "Coercing field info.%s from int64 to int32 for VCF output. Value will"
-                " be capped at int32 max value.",
+                "Coercing field info.%s from int64 to int32 for VCF output. Value"
+                " will be capped at int32 max value.",
                 f,
             )
             info_type_convert_expr.update(
@@ -996,7 +996,10 @@ def make_hist_bin_edges_expr(
                 f"{prefix}{call_type}": "|".join(
                     map(
                         lambda x: f"{x:.1f}",
-                        ht.head(1)[f"age_hist_{call_type}"].collect()[0].bin_edges,
+                        ht.head(1)
+                        .histograms.age_hists[f"age_hist_{call_type}"]
+                        .collect()[0]
+                        .bin_edges,
                     )
                 )
                 for call_type in ["het", "hom"]
@@ -1013,7 +1016,7 @@ def make_hist_bin_edges_expr(
             edges_dict[hist_name] = "|".join(
                 map(
                     lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
-                    ht.head(1)[hist_type][hist].collect()[0].bin_edges,
+                    ht.head(1).histograms[hist_type][hist].collect()[0].bin_edges,
                 )
             )
 

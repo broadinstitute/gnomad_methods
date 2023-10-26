@@ -474,7 +474,7 @@ def build_models(
     high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
-) -> Tuple[[Union[Tuple[float, float], None], hl.expr.StructExpression]]:
+) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
 

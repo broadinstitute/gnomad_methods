@@ -245,7 +245,7 @@ INFO_DICT = {
         "Description": "Variant falls outside of UK Biobank exome capture regions."
     },
     "outside_broad_capture_region": {
-        "Variant falls outside of Broad exome capture regions."
+        "Description": "Variant falls outside of Broad exome capture regions."
     },
     "rf_positive_label": {
         "Description": (
@@ -346,7 +346,7 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
     "revel_max": {
         "Number": "1",
         "Description": (
-            "The maximum dbNSFP's Revel score at a site's Mane SELECT or canonical"
+            "The maximum dbNSFP's Revel score at a site's MANE Select or canonical"
             " transcript. Scores ranges from 0 to 1. Variants with higher scores are"
             " predicted to be more likely to be deleterious."
         ),
@@ -769,7 +769,6 @@ def make_info_dict(
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
-    :param combined_fields: If True, use alternate logic to auto-populate dictionary values associated with combined annotations.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.

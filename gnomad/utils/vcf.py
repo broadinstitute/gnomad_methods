@@ -732,6 +732,7 @@ def create_label_groups(
 
 def make_info_dict(
     prefix: str = "",
+    suffix: str = "",
     prefix_before_metric: bool = True,
     pop_names: Dict[str, str] = POP_NAMES,
     label_groups: Dict[str, List[str]] = None,
@@ -757,6 +758,7 @@ def make_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations
 
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
+    :param suffix: Suffix string for data, e.g. "gnomAD". Default is empty string.
     :param prefix_before_metric: Whether prefix should be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
@@ -767,7 +769,7 @@ def make_info_dict(
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
-    :param combined_fields: If True, use alternate logic to auto-populate dictionary values associated with combined annotations. #TODO: Implement this
+    :param combined_fields: If True, use alternate logic to auto-populate dictionary values associated with combined annotations.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -775,12 +777,14 @@ def make_info_dict(
     """
     if prefix != "":
         prefix = f"{prefix}{label_delimiter}"
+    if suffix != "":
+        suffix = f"{label_delimiter}{suffix}"
 
     info_dict = dict()
 
     if age_hist_data:
         age_hist_dict = {
-            f"{prefix}age_hist_het_bin_freq": {
+            f"{prefix}age_hist_het_bin_freq{suffix}": {
                 "Number": "A",
                 "Description": (
                     f"Histogram of ages of heterozygous individuals{description_text};"
@@ -788,21 +792,21 @@ def make_info_dict(
                     f" of any genotype bin: {age_hist_data}"
                 ),
             },
-            f"{prefix}age_hist_het_n_smaller": {
+            f"{prefix}age_hist_het_n_smaller{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling below lowest histogram bin edge for"
                     f" heterozygous individuals{description_text}"
                 ),
             },
-            f"{prefix}age_hist_het_n_larger": {
+            f"{prefix}age_hist_het_n_larger{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling above highest histogram bin edge for"
                     f" heterozygous individuals{description_text}"
                 ),
             },
-            f"{prefix}age_hist_hom_bin_freq": {
+            f"{prefix}age_hist_hom_bin_freq{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Histogram of ages of homozygous alternate"
@@ -811,14 +815,14 @@ def make_info_dict(
                     f" bin: {age_hist_data}"
                 ),
             },
-            f"{prefix}age_hist_hom_n_smaller": {
+            f"{prefix}age_hist_hom_n_smaller{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling below lowest histogram bin edge for"
                     f" homozygous alternate individuals{description_text}"
                 ),
             },
-            f"{prefix}age_hist_hom_n_larger": {
+            f"{prefix}age_hist_hom_n_larger{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling above highest histogram bin edge for"
@@ -830,40 +834,40 @@ def make_info_dict(
 
     if popmax:
         popmax_dict = {
-            f"{prefix}popmax": {
+            f"{prefix}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     f"Population with the maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}AC{label_delimiter}popmax": {
+            f"{prefix}AC{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Allele count in the population with the maximum allele"
                     f" frequency{description_text}"
                 ),
             },
-            f"{prefix}AN{label_delimiter}popmax": {
+            f"{prefix}AN{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Total number of alleles in the population with the maximum allele"
                     f" frequency{description_text}"
                 ),
             },
-            f"{prefix}AF{label_delimiter}popmax": {
+            f"{prefix}AF{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     f"Maximum allele frequency across populations{description_text}"
                 ),
             },
-            f"{prefix}nhomalt{label_delimiter}popmax": {
+            f"{prefix}nhomalt{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of homozygous individuals in the population with the"
                     f" maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}faf95{label_delimiter}popmax": {
+            f"{prefix}faf95{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Filtering allele frequency (using Poisson 95% CI) for the"
@@ -872,44 +876,44 @@ def make_info_dict(
             },
         }
         info_dict.update(popmax_dict)
-    if grpmax:
+    elif grpmax:
         grpmax_dict = {
-            f"{prefix}grpmax": {
+            f"{prefix}grpmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Genetic ancestry group with the maximum allele"
                     f" frequency{description_text}"
                 ),
             },
-            f"{prefix}AC{label_delimiter}grpmax": {
+            f"{prefix}AC{label_delimiter}grpmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Allele count in the genetic ancestry group with the maximum allele"
                     f" frequency{description_text}"
                 ),
             },
-            f"{prefix}AN{label_delimiter}grpmax": {
+            f"{prefix}AN{label_delimiter}grpmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Total number of alleles in the genetic ancestry group with the"
                     f" maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}AF{label_delimiter}grpmax": {
+            f"{prefix}AF{label_delimiter}grpmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Maximum allele frequency across genetic ancestry"
                     f" groups{description_text}"
                 ),
             },
-            f"{prefix}nhomalt{label_delimiter}grpmax": {
+            f"{prefix}nhomalt{label_delimiter}grpmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of homozygous individuals in the genetic ancestry group"
                     f" with the maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}faf95{label_delimiter}grpmax": {
+            f"{prefix}faf95{label_delimiter}grpmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Filtering allele frequency (using Poisson 95% CI) for the genetic"
@@ -919,30 +923,30 @@ def make_info_dict(
             },
         }
         info_dict.update(grpmax_dict)
-    if fafmax:
+    elif fafmax:
         fafmax_dict = {
-            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max": {
+            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Maximum filtering allele frequency (using Poisson 95% CI)"
                     f" across genetic_ancestry groups{description_text}"
                 ),
             },
-            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{label_delimiter}gen{label_delimiter}anc": {
+            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{label_delimiter}gen{label_delimiter}anc{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Genetic ancestry group with maximum filtering allele"
                     f" frequency (using Poisson 95% CI){description_text}"
                 ),
             },
-            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max": {
+            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Maximum filtering allele frequency (using Poisson 99% CI)"
                     f" across genetic_ancestry groups{description_text}"
                 ),
             },
-            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{label_delimiter}gen{label_delimiter}anc": {
+            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{label_delimiter}gen{label_delimiter}anc{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Genetic ancestry group with maximum filtering allele"
@@ -966,12 +970,12 @@ def make_info_dict(
             metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
             if prefix_before_metric:
                 metric_label_dict = {
-                    metric: f"{prefix}{metric}{label_delimiter}{combo}"
+                    metric: f"{prefix}{metric}{label_delimiter}{combo}{suffix}"
                     for metric in metrics
                 }
             else:
                 metric_label_dict = {
-                    metric: f"{metric}{label_delimiter}{prefix}{combo}"
+                    metric: f"{metric}{label_delimiter}{prefix}{combo}{suffix}"
                     for metric in metrics
                 }
 

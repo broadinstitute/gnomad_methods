@@ -274,6 +274,12 @@ INFO_DICT = {
             " cohort)"
         )
     },
+    "sibling_singleton": {
+        "Description": (
+            "Variant was a callset-wide doubleton that was present only in two siblings"
+            " (i.e., a singleton amongst unrelated samples in cohort)."
+        )
+    },
     "original_alleles": {"Description": "Alleles before splitting multiallelics"},
     "variant_type": {
         "Description": "Variant type (snv, indel, multi-snv, multi-indel, or mixed)"

@@ -237,7 +237,7 @@ INFO_DICT = {
     "fail_interval_qc": {
         "Description": (
             "Less than 85 percent of samples meet 20X coverage if variant is in"
-            " autosomal or PAR region or 10X coverage for non-PAR regions of"
+            " autosomal or PAR regions or 10X coverage for non-PAR regions of"
             " chromosomes X and Y."
         )
     },
@@ -346,9 +346,11 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
     "revel_max": {
         "Number": "1",
         "Description": (
-            "The maximum dbNSFP's Revel score at a site's MANE Select or canonical"
-            " transcript. Scores ranges from 0 to 1. Variants with higher scores are"
-            " predicted to be more likely to be deleterious."
+            "The maximum REVEL score at a site's MANE Select or canonical transcript."
+             "It's an ensemble score for predicting the pathogenicity of missense "
+             "variants (based on 13 other variant predictors). Scores ranges from 0 to 1. "
+             "Variants with higher scores are predicted to be more likely to be "
+             "deleterious."
         ),
     },
     "spliceai_ds_max": {

@@ -878,7 +878,7 @@ def make_info_dict(
             },
         }
         info_dict.update(popmax_dict)
-    elif grpmax:
+    if grpmax:
         grpmax_dict = {
             f"{prefix}grpmax{suffix}": {
                 "Number": "A",
@@ -925,6 +925,7 @@ def make_info_dict(
             },
         }
         info_dict.update(grpmax_dict)
+
     if fafmax:
         fafmax_dict = {
             f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{suffix}": {

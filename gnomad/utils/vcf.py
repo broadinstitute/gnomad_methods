@@ -346,11 +346,11 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
     "revel_max": {
         "Number": "1",
         "Description": (
-            "The maximum REVEL score at a site's MANE Select or canonical transcript."
-             "It's an ensemble score for predicting the pathogenicity of missense "
-             "variants (based on 13 other variant predictors). Scores ranges from 0 to 1. "
-             "Variants with higher scores are predicted to be more likely to be "
-             "deleterious."
+            "The maximum REVEL score at a site's MANE Select or canonical"
+            " transcript.It's an ensemble score for predicting the pathogenicity of"
+            " missense variants (based on 13 other variant predictors). Scores ranges"
+            " from 0 to 1. Variants with higher scores are predicted to be more likely"
+            " to be deleterious."
         ),
     },
     "spliceai_ds_max": {
@@ -744,6 +744,7 @@ def make_info_dict(
     popmax: bool = False,
     grpmax: bool = False,
     fafmax: bool = False,
+    callstats: bool = False,
     description_text: str = "",
     age_hist_data: str = None,
     sort_order: List[str] = SORT_ORDER,
@@ -924,7 +925,7 @@ def make_info_dict(
             },
         }
         info_dict.update(grpmax_dict)
-    elif fafmax:
+    if fafmax:
         fafmax_dict = {
             f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{suffix}": {
                 "Number": "A",
@@ -957,7 +958,7 @@ def make_info_dict(
         }
         info_dict.update(fafmax_dict)
 
-    else:
+    if callstats or faf:
         group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
         combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 

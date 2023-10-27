@@ -17,6 +17,7 @@ SORT_ORDER = [
     "subset",
     "downsampling",
     "popmax",
+    "grpmax",
     "pop",
     "gen_anc",
     "subpop",
@@ -95,7 +96,7 @@ ALLELE_TYPE_FIELDS = [
 Allele-type annotations.
 """
 
-REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "segdup"]
+REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "non_par", "segdup"]
 """
 Annotations about variant region type.
 
@@ -144,6 +145,14 @@ INFO_DICT = {
             " heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
         ),
     },
+    "inbreeding_coeff": {
+        "Number": "A",
+        "Description": (
+            "Inbreeding coefficient, the excess heterozygosity at a variant site,"
+            " computed as 1 - (the number of heterozygous genotypes)/(the number of"
+            " heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
+        ),
+    },
     "MQ": {
         "Description": (
             "Root mean square of the mapping quality of reads across all samples"
@@ -180,6 +189,18 @@ INFO_DICT = {
             " variants for VQSR"
         )
     },
+    "positive_train_site": {
+        "Description": (
+            "Variant was used to build the positive training set of high-quality"
+            " variants for VQSR"
+        )
+    },
+    "negative_train_site": {
+        "Description": (
+            "Variant was used to build the negative training set of low-quality"
+            " variants for VQSR"
+        )
+    },
     "BaseQRankSum": {
         "Description": (
             "Z-score from Wilcoxon rank sum test of alternate vs. reference base"
@@ -207,7 +228,25 @@ INFO_DICT = {
             "Variant (on sex chromosome) falls outside a pseudoautosomal region"
         )
     },
+    "non_par": {
+        "Description": (
+            "Variant (on sex chromosome) falls outside a pseudoautosomal region"
+        )
+    },
     "segdup": {"Description": "Variant falls within a segmental duplication region"},
+    "fail_interval_qc": {
+        "Description": (
+            "Less than 85 percent of samples meet 20X coverage if variant is in"
+            " autosomal or PAR region or 10X coverage for non-PAR regions of"
+            " chromosomes X and Y."
+        )
+    },
+    "outside_ukb_capture_region": {
+        "Description": "Variant falls outside of UK Biobank exome capture regions."
+    },
+    "outside_broad_capture_region": {
+        "Variant falls outside of Broad exome capture regions."
+    },
     "rf_positive_label": {
         "Description": (
             "Variant was labelled as a positive example for training of random forest"
@@ -263,6 +302,7 @@ INFO_DICT = {
     "monoallelic": {
         "Description": "All samples are homozygous alternate for the variant"
     },
+    "only_het": {"Description": "All samples are heterozygous for the variant"},
     "QUALapprox": {
         "Number": "1",
         "Description": "Sum of PL[0] values; used to approximate the QUAL score",
@@ -297,31 +337,56 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
             " deleterious."
         ),
     },
-    "revel_score": {
+    "revel_max": {
         "Number": "1",
         "Description": (
-            "dbNSFP's Revel score from 0 to 1. Variants with higher scores are"
+            "The maximum dbNSFP's Revel score at a site's Mane SELECT or canonical"
+            " transcript. Scores ranges from 0 to 1. Variants with higher scores are"
             " predicted to be more likely to be deleterious."
         ),
     },
-    "splice_ai_max_ds": {
+    "spliceai_ds_max": {
         "Number": "1",
         "Description": (
             "Illumina's SpliceAI max delta score; interpreted as the probability of the"
             " variant being splice-altering."
         ),
     },
-    "splice_ai_consequence": {
-        "Description": (
-            "The consequence term associated with the max delta score in"
-            " 'splice_ai_max_ds'."
-        ),
-    },
-    "primate_ai_score": {
+    "pangolin_largest_ds": {
         "Number": "1",
         "Description": (
-            "PrimateAI's deleteriousness score from 0 (less deleterious) to 1 (more"
-            " deleterious)."
+            "Pangolin's largest delta score across 2 splicing consequences, which"
+            " reflects the probability of the variant being splice-altering"
+        ),
+    },
+    "phylop": {
+        "Number": "1",
+        "Description": (
+            "Base-wise conservation score across the 241 placental mammals in the"
+            " Zoonomia project. Score ranges from -20 to 9.28, and reflects"
+            " acceleration (faster evolution than expected under neutral drift,"
+            " assigned negative scores) as well as conservation (slower than expected"
+            " evolution, assigned positive scores)."
+        ),
+    },
+    "sift_max": {
+        "Number": "1",
+        "Description": (
+            "Score reflecting the scaled probability of the amino acid substitution"
+            " being tolerated, ranging from 0 to 1. Scores below 0.05 are predicted to"
+            " impact protein function. We prioritize max scores for MANE Select"
+            " transcripts where possible and otherwise report a score for the canonical"
+            " transcript."
+        ),
+    },
+    "polyphen_max": {
+        "Number": "1",
+        "Description": (
+            "Score that predicts the possible impact of an amino acid substitution on"
+            " the structure and function of a human protein, ranging from 0.0"
+            " (tolerated) to 1.0 (deleterious).  We prioritize max scores for MANE"
+            " Select transcripts where possible and otherwise report a score for the"
+            " canonical transcript."
         ),
     },
 }
@@ -668,6 +733,8 @@ def make_info_dict(
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
     popmax: bool = False,
+    grpmax: bool = False,
+    fafmax: bool = False,
     description_text: str = "",
     age_hist_data: str = None,
     sort_order: List[str] = SORT_ORDER,
@@ -692,6 +759,9 @@ def make_info_dict(
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
+    :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
+    :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
+    :param combined_fields: If True, use alternate logic to auto-populate dictionary values associated with combined annotations. #TODO: Implement this
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -757,7 +827,7 @@ def make_info_dict(
             f"{prefix}popmax": {
                 "Number": "A",
                 "Description": (
-                    f"Population with maximum allele frequency{description_text}"
+                    f"Population with the maximum allele frequency{description_text}"
                 ),
             },
             f"{prefix}AC{label_delimiter}popmax": {
@@ -796,6 +866,85 @@ def make_info_dict(
             },
         }
         info_dict.update(popmax_dict)
+    if grpmax:
+        grpmax_dict = {
+            f"{prefix}grpmax": {
+                "Number": "A",
+                "Description": (
+                    "Genetic ancestry group with the maximum allele"
+                    f" frequency{description_text}"
+                ),
+            },
+            f"{prefix}AC{label_delimiter}grpmax": {
+                "Number": "A",
+                "Description": (
+                    "Allele count in the genetic ancestry group with the maximum allele"
+                    f" frequency{description_text}"
+                ),
+            },
+            f"{prefix}AN{label_delimiter}grpmax": {
+                "Number": "A",
+                "Description": (
+                    "Total number of alleles in the genetic ancestry group with the"
+                    f" maximum allele frequency{description_text}"
+                ),
+            },
+            f"{prefix}AF{label_delimiter}grpmax": {
+                "Number": "A",
+                "Description": (
+                    "Maximum allele frequency across genetic ancestry"
+                    f" groups{description_text}"
+                ),
+            },
+            f"{prefix}nhomalt{label_delimiter}grpmax": {
+                "Number": "A",
+                "Description": (
+                    "Count of homozygous individuals in the genetic ancestry group"
+                    f" with the maximum allele frequency{description_text}"
+                ),
+            },
+            f"{prefix}faf95{label_delimiter}grpmax": {
+                "Number": "A",
+                "Description": (
+                    "Filtering allele frequency (using Poisson 95% CI) for the genetic"
+                    " ancestry group with the maximum allele"
+                    f" frequency{description_text}"
+                ),
+            },
+        }
+        info_dict.update(grpmax_dict)
+    if fafmax:
+        fafmax_dict = {
+            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max": {
+                "Number": "A",
+                "Description": (
+                    "Maximum filtering allele frequency (using Poisson 95% CI)"
+                    f" across genetic_ancestry groups{description_text}"
+                ),
+            },
+            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{label_delimiter}gen{label_delimiter}anc": {
+                "Number": "A",
+                "Description": (
+                    "Genetic ancestry group with maximum filtering allele"
+                    f" frequency (using Poisson 95% CI){description_text}"
+                ),
+            },
+            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max": {
+                "Number": "A",
+                "Description": (
+                    "Maximum filtering allele frequency (using Poisson 99% CI)"
+                    f" across genetic_ancestry groups{description_text}"
+                ),
+            },
+            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{label_delimiter}gen{label_delimiter}anc": {
+                "Number": "A",
+                "Description": (
+                    "Genetic ancestry group with maximum filtering allele"
+                    f" frequency (using Poisson 99% CI){description_text}"
+                ),
+            },
+        }
+        info_dict.update(fafmax_dict)
 
     else:
         group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
@@ -960,7 +1109,9 @@ def make_vcf_filter_dict(
                 " < 20; DP < 10; and AB < 0.2 for het calls)"
             )
         },
-        "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
+        "InbreedingCoeff": {
+            "Description": f"Inbreeding coefficient < {inbreeding_cutoff}"
+        },
         "PASS": {"Description": "Passed all variant filters"},
         variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
     }

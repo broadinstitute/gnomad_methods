@@ -957,7 +957,7 @@ def make_info_dict(
                 ),
             },
         }
-        if prefix == "joint" or suffix == "joint":
+        if prefix == "joint_" or suffix == "_joint":
             fafmax_dict.update(
                 {
                     f"{prefix}fafmax{label_delimiter}data_type{suffix}": {

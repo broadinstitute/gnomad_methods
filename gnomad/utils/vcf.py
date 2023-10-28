@@ -915,14 +915,6 @@ def make_info_dict(
                     f" with the maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}faf95{label_delimiter}grpmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    "Filtering allele frequency (using Poisson 95% CI) for the genetic"
-                    " ancestry group with the maximum allele"
-                    f" frequency{description_text}"
-                ),
-            },
         }
         info_dict.update(grpmax_dict)
 

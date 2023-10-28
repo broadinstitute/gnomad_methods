@@ -347,7 +347,7 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
         "Number": "1",
         "Description": (
             "The maximum REVEL score at a site's MANE Select or canonical"
-            " transcript.It's an ensemble score for predicting the pathogenicity of"
+            " transcript. It's an ensemble score for predicting the pathogenicity of"
             " missense variants (based on 13 other variant predictors). Scores ranges"
             " from 0 to 1. Variants with higher scores are predicted to be more likely"
             " to be deleterious."

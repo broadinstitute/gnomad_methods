@@ -952,7 +952,7 @@ def make_info_dict(
         if prefix == "joint_" or suffix == "_joint":
             fafmax_dict.update(
                 {
-                    f"{prefix}fafmax{label_delimiter}data_type{suffix}": {
+                    f"{prefix}fafmax{label_delimiter}data{label_delimiter}type{suffix}": {
                         "Number": "A",
                         "Description": (
                             "Data type with maximum filtering allele frequency"

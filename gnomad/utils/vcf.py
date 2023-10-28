@@ -1197,6 +1197,7 @@ def make_hist_dict(
     adj: bool,
     hist_metric_list: List[str] = HISTS,
     label_delimiter: str = "_",
+    drop_n_smaller_larger: bool = False,
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
@@ -1205,6 +1206,7 @@ def make_hist_dict(
     :param adj: Whether to create a header dict for raw or adj quality histograms.
     :param hist_metric_list: List of hists for which to build hist info dict
     :param label_delimiter: String used as delimiter in values stored in hist_metric_list.
+    :param drop_n_smaller_larger: Whether to drop n_smaller and n_larger annotations from header dict. Default is False.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
@@ -1228,21 +1230,41 @@ def make_hist_dict(
                 "Number": "A",
                 "Description": f"Histogram for {hist_text}; bin edges are: {edges}",
             },
-            f"{hist}_n_smaller": {
-                "Number": "A",
-                "Description": (
-                    f"Count of {hist_fields[0].upper()} values falling below lowest"
-                    f" histogram bin edge {hist_text}"
-                ),
-            },
-            f"{hist}_n_larger": {
-                "Number": "A",
-                "Description": (
-                    f"Count of {hist_fields[0].upper()} values falling above highest"
-                    f" histogram bin edge {hist_text}"
-                ),
-            },
         }
+        # These annotations are frequently zero and are dropped from gnomad
+        # releases for most histograms
+        if not drop_n_smaller_larger:
+            hist_dict.update(
+                {
+                    f"{hist}_n_smaller": {
+                        "Number": "A",
+                        "Description": (
+                            f"Count of {hist_fields[0].upper()} values falling below"
+                            f" lowest histogram bin edge {hist_text}"
+                        ),
+                    },
+                    f"{hist}_n_larger": {
+                        "Number": "A",
+                        "Description": (
+                            f"Count of {hist_fields[0].upper()} values falling above"
+                            f" highest histogram bin edge {hist_text}"
+                        ),
+                    },
+                }
+            )
+        # Only add n_larger for dp qual histograms
+        if "dp" in hist:
+            hist_dict.update(
+                {
+                    f"{hist}_n_larger": {
+                        "Number": "A",
+                        "Description": (
+                            f"Count of {hist_fields[0].upper()} values falling above"
+                            f" highest histogram bin edge {hist_text}"
+                        ),
+                    },
+                }
+            )
 
         header_hist_dict.update(hist_dict)
 

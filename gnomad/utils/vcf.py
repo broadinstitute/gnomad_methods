@@ -746,7 +746,7 @@ def make_info_dict(
     fafmax: bool = False,
     callstats: bool = False,
     description_text: str = "",
-    age_hist_data: str = None,
+    age_hist_distribution: str = None,
     sort_order: List[str] = SORT_ORDER,
 ) -> Dict[str, Dict[str, str]]:
     """
@@ -773,7 +773,7 @@ def make_info_dict(
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
-    :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
+    :param str age_hist_distribution: Pipe-delimited string of overall age distribution.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     """
@@ -784,14 +784,14 @@ def make_info_dict(
 
     info_dict = dict()
 
-    if age_hist_data:
+    if age_hist_distribution:
         age_hist_dict = {
             f"{prefix}age_hist_het_bin_freq{suffix}": {
                 "Number": "A",
                 "Description": (
                     f"Histogram of ages of heterozygous individuals{description_text};"
                     f" bin edges are: {bin_edges['het']}; total number of individuals"
-                    f" of any genotype bin: {age_hist_data}"
+                    f" of any genotype bin: {age_hist_distribution}"
                 ),
             },
             f"{prefix}age_hist_het_n_smaller{suffix}": {
@@ -814,7 +814,7 @@ def make_info_dict(
                     "Histogram of ages of homozygous alternate"
                     f" individuals{description_text}; bin edges are:"
                     f" {bin_edges['hom']}; total number of individuals of any genotype"
-                    f" bin: {age_hist_data}"
+                    f" bin: {age_hist_distribution}"
                 ),
             },
             f"{prefix}age_hist_hom_n_smaller{suffix}": {

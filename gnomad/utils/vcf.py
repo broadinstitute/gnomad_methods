@@ -1329,7 +1329,7 @@ def build_vcf_export_reference(
         ],
     }
     if keep_chrM:
-        ref_args["contigs"].append("chrM")
+        ref_args["contigs"].append("M")
         ref_args.update({"mt_contigs": ref.mt_contigs})
 
     export_reference = hl.ReferenceGenome(**ref_args)

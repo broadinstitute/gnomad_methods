@@ -319,6 +319,16 @@ INFO_DICT = {
             "Allele-specific forward/reverse read counts for strand bias tests"
         ),
     },
+    "SB": {
+        "Number": "4",
+        "Description": (
+            "Aggregate counts of strand depth across all non-reference sites. The"
+            " values are the of the depth of reference allele on forward strand, depth"
+            " of the reference allele on reverse strand,  depth of all alternate"
+            " alleles on forward strand, depth of all alternate alleles on reverse"
+            " strand."
+        ),
+    },
 }
 """
 Dictionary used during VCF export to export row (variant) annotations.

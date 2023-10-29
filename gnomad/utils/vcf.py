@@ -1232,7 +1232,7 @@ def make_hist_dict(
             },
         }
         # These annotations are frequently zero and are dropped from gnomad
-        # releases for most histograms
+        # releases for most histograms.
         if not drop_n_smaller_larger:
             hist_dict.update(
                 {
@@ -1252,7 +1252,7 @@ def make_hist_dict(
                     },
                 }
             )
-        # Only add n_larger for dp qual histograms
+        # Only add n_larger for dp qual histograms.
         if "dp" in hist:
             hist_dict.update(
                 {

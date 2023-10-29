@@ -1299,8 +1299,8 @@ def set_female_y_metrics_to_na(
 def build_vcf_export_reference(
     name: str,
     build: str = "GRCh38",
-    keep_contigs: List[str] = [f"chr{i}" for i in range(1, 23)]
-    + ["chrX", "chrY", "chrM"],
+    keep_contigs: List[str] = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"],
+    keep_chrM: bool = True,
 ) -> hl.ReferenceGenome:
     """
     Create export reference based on reference genome defined by `build`.
@@ -1311,23 +1311,28 @@ def build_vcf_export_reference(
 
     :param name: Name to use for new reference.
     :param build: Reference genome build to use as starting reference genome.
-    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is autosomes, sex chromosomes, and chrM.
+    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is autosomes and sex chromosomes.
+    :param keep_chrM: Whether to keep chrM. Default is True.
     :return: Reference genome for VCF export containing only contigs in `keep_contigs`.
     """
     ref = hl.get_reference(build)
 
-    export_reference = hl.ReferenceGenome(
-        name=name,
-        contigs=keep_contigs,
-        lengths={contig: ref.lengths[contig] for contig in keep_contigs},
-        x_contigs=ref.x_contigs,
-        y_contigs=ref.y_contigs,
-        par=[
+    ref_args = {
+        "name": name,
+        "contigs": keep_contigs,
+        "lengths": {contig: ref.lengths[contig] for contig in keep_contigs},
+        "x_contigs": ref.x_contigs,
+        "y_contigs": ref.y_contigs,
+        "par": [
             (interval.start.contig, interval.start.position, interval.end.position)
             for interval in ref.par
         ],
-        mt_contigs=ref.mt_contigs,
-    )
+    }
+    if keep_chrM:
+        ref_args["keep_contigs"].append("chrM")
+        ref_args.update({"mt_contigs": ref.mt_contigs})
+
+    export_reference = hl.ReferenceGenome(**ref_args)
 
     return export_reference
 

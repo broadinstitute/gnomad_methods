@@ -1316,21 +1316,25 @@ def build_vcf_export_reference(
     :return: Reference genome for VCF export containing only contigs in `keep_contigs`.
     """
     ref = hl.get_reference(build)
+    ref_args = {}
 
-    ref_args = {
-        "name": name,
-        "contigs": keep_contigs,
-        "lengths": {contig: ref.lengths[contig] for contig in keep_contigs},
-        "x_contigs": ref.x_contigs,
-        "y_contigs": ref.y_contigs,
-        "par": [
-            (interval.start.contig, interval.start.position, interval.end.position)
-            for interval in ref.par
-        ],
-    }
     if keep_chrM:
-        ref_args["contigs"].append("M")
+        keep_contigs.extend(ref.mt_contigs)
         ref_args.update({"mt_contigs": ref.mt_contigs})
+
+    ref_args.update(
+        {
+            "name": name,
+            "contigs": keep_contigs,
+            "lengths": {contig: ref.lengths[contig] for contig in keep_contigs},
+            "x_contigs": ref.x_contigs,
+            "y_contigs": ref.y_contigs,
+            "par": [
+                (interval.start.contig, interval.start.position, interval.end.position)
+                for interval in ref.par
+            ],
+        }
+    )
 
     export_reference = hl.ReferenceGenome(**ref_args)
 

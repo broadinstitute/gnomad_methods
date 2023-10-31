@@ -408,8 +408,6 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
             )
 
     version_prefix = "r" if version.startswith("3.0") else "v"
-    # For exomes, add ".all" to path to pull coverage table for all samples
-    # (rather than coverage stratified by platform and subset).
     return f"gs://gcp-public-data--gnomad/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.summary.tsv.bgz"
 
 

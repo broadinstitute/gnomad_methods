@@ -314,7 +314,8 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     :return: path to coverage Table
     """
     version_prefix = "r" if version.startswith("3.0") else "v"
-    # For exomes, add ".all" to path to pull coverage table for all samples (rather than coverage stratified by platform and subset).
+    # For exomes, add ".all" to path to pull coverage table for all samples
+    # (rather than coverage stratified by platform and subset).
     return (
         f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage{'.all' if data_type=='exomes' else ''}.ht"
     )
@@ -411,7 +412,8 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
             )
 
     version_prefix = "r" if version.startswith("3.0") else "v"
-    # For exomes, add ".all" to path to pull coverage table for all samples (rather than coverage stratified by platform and subset).
+    # For exomes, add ".all" to path to pull coverage table for all samples
+    # (rather than coverage stratified by platform and subset).
     return (
         f"gs://gcp-public-data--gnomad/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage{'.all' if data_type=='exomes' else '.summary'}.tsv.bgz"
     )

@@ -23,19 +23,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-CURRENT_EXOME_RELEASE = ""
+CURRENT_EXOME_RELEASE = "4.0"
 CURRENT_GENOME_RELEASE = "3.1.2"
 
-CURRENT_EXOME_COVERAGE_RELEASE = ""
+CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 
-EXOME_RELEASES = []
+EXOME_RELEASES = ["4.0"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2"]
 
-EXOME_COVERAGE_RELEASES = []
-GENOME_COVERAGE_RELEASES = GENOME_RELEASES + ["3.0.1"]
+EXOME_COVERAGE_RELEASES = ["4.0"]
+GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
 
-DATA_TYPES = ["genomes"]
+DATA_TYPES = ["exomes", "genomes"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
@@ -394,8 +394,8 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
 
     if data_type == "exomes":
         if version is None:
-            version = CURRENT_EXOME_RELEASE
-        elif version not in EXOME_RELEASES:
+            version = CURRENT_EXOME_COVERAGE_RELEASE
+        elif version not in EXOME_COVERAGE_RELEASES:
             raise DataException(
                 f"Version {version} of gnomAD exomes for GRCh38 does not exist"
             )

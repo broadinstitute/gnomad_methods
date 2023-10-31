@@ -2551,10 +2551,10 @@ def add_gks_va(
         """
         if group_sex:
             cohort_id = f"{group_id.upper()}.{group_sex}"
-            freq_index_key = f"{group_id}-{group_sex}-adj"
+            freq_index_key = f"{group_id}_{group_sex}_adj"
         else:
             cohort_id = f"{group_id.upper()}"
-            freq_index_key = f"{group_id}-adj"
+            freq_index_key = f"{group_id}_adj"
         record_id = f"{gnomad_id}.{cohort_id}"
 
         # Obtain frequency information for the specified variant.
@@ -2588,7 +2588,7 @@ def add_gks_va(
             elif group_sex is None:
                 # Group is not by_sex, but still need to report hemizygotes.
                 hemi_group_freq = input_struct.freq[
-                    freq_index_dict[f"{group_id}-XY-adj"]
+                    freq_index_dict[f"{group_id}_XY_adj"]
                 ]
                 freq_record["ancillaryResults"]["hemizygotes"] = hemi_group_freq.AC
 
@@ -2645,6 +2645,38 @@ def add_gks_va(
         "cohort": {"id": "ALL"},
     }
 
+    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
+    ancillaryResults = {
+        "homozygotes": overall_freq["homozygote_count"],
+    }
+
+    # Add hemizygote count if not autosomal or PAR.
+    if not input_struct.in_autosome_or_par:
+        hemizygote_count = input_struct.freq[freq_index_dict["XY_adj"]].AC
+        ancillaryResults["hemizygotes"] = hemizygote_count
+
+    if input_struct.faf95.popmax_population is not None:
+        grpMaxFAF95 = {
+            "frequency": input_struct.grpMaxFAF95.popmax,
+            "confidenceInterval": 0.95,
+            "groupId": (
+                f"{gnomad_id}.{input_struct.grpMaxFAF95.popmax_population.upper()}"
+            ),
+        }
+    else:
+        grpMaxFAF95 = None
+    ancillaryResults["grpMaxFAF95"] = grpMaxFAF95
+
+    # Add joint group max FAF if it exists
+    if "jointGrpMaxFAF95" in input_struct:
+        ancillaryResults["jointGrpMaxFAF95"] = {
+            "frequency": input_struct.jointGrpMaxFAF95.popmax,
+            "confidenceInterval": 0.95,
+            "groupId": (
+                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.popmax_population.upper()}"
+            ),
+        }
+
     # Check allele balance for heterozygotes values.
     # Flagged allele balance values are those in bins > 0.90.
     # Each bin is 0.05, so flagged values are in the last 2 bins.
@@ -2667,33 +2699,12 @@ def add_gks_va(
         )
     )
 
-    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
-    ancillaryResults = {
-        "homozygotes": overall_freq["homozygote_count"],
+    qualityMeasures = {
         "qcFilters": list(input_struct.filters),
-        "lowComplexityRegion": input_struct.region_flag.lcr,
+        "lowComplexityRegion": input_struct.lcr,
         "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
     }
-
-    # Add hemizygote count if not autosomal or PAR.
-    if not input_struct.in_autosome_or_par:
-        hemizygote_count = input_struct.freq[freq_index_dict["XY-adj"]].AC
-        ancillaryResults["hemizygotes"] = hemizygote_count
-
-    if input_struct.faf95.popmax_population is not None:
-        grpMaxFAF95 = (
-            {
-                "frequency": input_struct.faf95.popmax,
-                "confidenceInterval": 0.95,
-                "grpFreqId": (
-                    f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}"
-                ),
-            },
-        )
-    else:
-        grpMaxFAF95 = None
-
-    ancillaryResults["grpMaxFAF95"] = grpMaxFAF95
+    ancillaryResults["qualityMeasures"] = qualityMeasures
 
     # Add mean coverage depth statistics if the input was annotated
     # with coverage information.

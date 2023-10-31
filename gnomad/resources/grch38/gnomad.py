@@ -479,6 +479,63 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
 
+def add_grpMaxFAF95_v3(ht: hl.Table) -> hl.Table:
+    ht = ht.annotate(
+        grpMaxFAF95=hl.rbind(
+            hl.sorted(
+                hl.array(
+                    [
+                        hl.struct(
+                            faf=ht.faf[ht.faf_index_dict[f"{pop}_adj"]].faf95,
+                            population=pop,
+                        )
+                        for pop in FAF_POPS
+                    ]
+                ),
+                key=lambda f: (-f.faf, f.population),
+            ),
+            lambda fafs: hl.if_else(
+                hl.len(fafs) > 0,
+                hl.struct(
+                    popmax=fafs[0].faf,
+                    popmax_population=hl.if_else(
+                        fafs[0].faf == 0, hl.missing(hl.tstr), fafs[0].population
+                    ),
+                ),
+                hl.struct(
+                    popmax=hl.missing(hl.tfloat), popmax_population=hl.missing(hl.tstr)
+                ),
+            ),
+        ),
+    )
+    return ht
+
+
+def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
+    ht = ht.annotate(
+        grpMaxFAF95=hl.struct(
+            popmax=ht.fafmax.faf95_max, popmax_population=ht.fafmax.faf95_max_gen_anc
+        ),
+        jointGrpMaxFAF95=hl.struct(
+            popmax=ht.joint_fafmax.faf95_max,
+            popmax_population=ht.joint_fafmax.faf95_max_gen_anc,
+        ),
+    )
+    return ht
+
+
+def add_grpMaxFAF95(ht: hl.Table) -> hl.Table:
+    """
+    Adds a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
+
+    Accepts tables with popmax FAF fields in v3 and v4 formats.
+    """
+    if "fafmax" in ht.row and "faf95_max" in ht.fafmax:
+        return add_grpMaxFAF95_v4(ht)
+    else:
+        return add_grpMaxFAF95_v3(ht)
+
+
 def gnomad_gks(
     locus_interval: hl.IntervalExpression,
     version: str,
@@ -521,9 +578,11 @@ def gnomad_gks(
     # Read coverage statistics if requested
     if high_level_version == "v3":
         coverage_version = "3.0.1"
+    elif high_level_version == "v4":
+        coverage_version = "3.0.1"
     else:
         raise NotImplementedError(
-            "gnomad_gks() is currently only implemented for gnomAD v3."
+            "gnomad_gks() is currently only implemented for gnomAD v3 and v4."
         )
 
     coverage_ht = None
@@ -552,52 +611,40 @@ def gnomad_gks(
             " please also specify 'by_ancestry_group' to stratify by."
         )
 
-    # Call and return add_gks_vrs and add_gks_va for chosen arguments.
-
     # Select relevant fields, checkpoint, and filter to interval before adding
     # annotations
-    ht = ht.annotate(
-        faf95=hl.rbind(
-            hl.sorted(
-                hl.array(
-                    [
-                        hl.struct(
-                            faf=ht.faf[ht.faf_index_dict[f"{pop}-adj"]].faf95,
-                            population=pop,
-                        )
-                        for pop in FAF_POPS
-                    ]
-                ),
-                key=lambda f: (-f.faf, f.population),
-            ),
-            lambda fafs: hl.if_else(
-                hl.len(fafs) > 0,
-                hl.struct(
-                    popmax=fafs[0].faf,
-                    popmax_population=hl.if_else(
-                        fafs[0].faf == 0, hl.missing(hl.tstr), fafs[0].population
-                    ),
-                ),
-                hl.struct(
-                    popmax=hl.missing(hl.tfloat), popmax_population=hl.missing(hl.tstr)
-                ),
-            ),
-        ),
-        in_autosome_or_par=ht.locus.in_autosome_or_par(),
-    )
+
+    # Pull up LCR flag and make referrable in the same field
+    if high_level_version == "v3":  # v3
+        ht = ht.annotate(lcr=ht.region_flag.lcr)
+    else:  # v4
+        ht = ht.annotate(lcr=ht.region_flags.lcr)
+
+    # Pull up v3 / v4 allele balance histogram arrays
+    if high_level_version == "v3":  # v3
+        ht = ht.annotate(ab_hist_alt=ht.qual_hists.ab_hist_alt)
+    else:  # v4
+        ht = ht.annotate(ab_hist_alt=ht.histograms.qual_hists.ab_hist_alt)
+
+    ht = add_grpMaxFAF95(ht)
+
+    ht = ht.annotate(in_autosome_or_par=ht.locus.in_autosome_or_par())
 
     keep_fields = [
         ht.freq,
         ht.info.vrs,
-        ht.faf95,
+        ht.grpMaxFAF95,
         ht.filters,
-        ht.region_flag,
-        ht.qual_hists.ab_hist_alt,
+        ht.lcr,
+        ht.ab_hist_alt,
         ht.in_autosome_or_par,
     ]
 
     if not skip_coverage:
         keep_fields.append(ht.mean_depth)
+
+    if "jointGrpMaxFAF95" in ht.row:
+        keep_fields.append(ht.jointGrpMaxFAF95)
 
     ht = ht.select(*keep_fields)
 
@@ -610,6 +657,9 @@ def gnomad_gks(
     # done in native Python
     variant_list = ht.collect()
     ht_freq_index_dict = ht.freq_index_dict.collect()[0]
+    # gnomad v4 renamed freq_index_dict keys to use underscores instead of dashes.
+    # Use underscores for v3 as well.
+    ht_freq_index_dict = {k.replace("-", "_"): v for k, v in ht_freq_index_dict.items()}
 
     # Assemble output dicts with VRS and optionally frequency, append to list,
     # then return list

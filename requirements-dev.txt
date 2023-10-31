@@ -18,9 +18,9 @@ dill==0.3.7
     # via pylint
 distlib==0.3.7
     # via virtualenv
-filelock==3.12.4
+filelock==3.13.1
     # via virtualenv
-identify==2.5.30
+identify==2.5.31
     # via pre-commit
 iniconfig==2.0.0
     # via pytest
@@ -53,9 +53,9 @@ pycodestyle==2.11.1
     # via autopep8
 pydocstyle==6.3.0
     # via -r requirements-dev.in
-pylint==3.0.1
+pylint==3.0.2
     # via -r requirements-dev.in
-pytest==7.4.2
+pytest==7.4.3
     # via -r requirements-dev.in
 pyyaml==6.0.1
     # via pre-commit
@@ -63,7 +63,7 @@ snowballstemmer==2.2.0
     # via pydocstyle
 tomlkit==0.12.1
     # via pylint
-virtualenv==20.24.5
+virtualenv==20.24.6
     # via pre-commit
 
 # The following packages are considered to be unsafe in a requirements file:

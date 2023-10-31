@@ -394,7 +394,7 @@ def coverage_tsv_path(data_type: str, version: Optional[str] = None) -> str:
 
     if data_type == "exomes":
         if version is None:
-            version = CURRENT_EXOME_RELEASE
+            version = CURRENT_EXOME_COVERAGE_RELEASE
         elif version not in EXOME_COVERAGE_RELEASES:
             raise DataException(
                 f"Version {version} of gnomAD exomes for GRCh38 does not exist"

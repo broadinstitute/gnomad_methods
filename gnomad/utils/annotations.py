@@ -2655,7 +2655,7 @@ def add_gks_va(
         hemizygote_count = input_struct.freq[freq_index_dict["XY_adj"]].AC
         ancillaryResults["hemizygotes"] = hemizygote_count
 
-    if input_struct.faf95.popmax_population is not None:
+    if input_struct.grpMaxFAF95.popmax_population is not None:
         grpMaxFAF95 = {
             "frequency": input_struct.grpMaxFAF95.popmax,
             "confidenceInterval": 0.95,
@@ -2668,7 +2668,10 @@ def add_gks_va(
     ancillaryResults["grpMaxFAF95"] = grpMaxFAF95
 
     # Add joint group max FAF if it exists
-    if "jointGrpMaxFAF95" in input_struct:
+    if (
+        "jointGrpMaxFAF95" in input_struct
+        and input_struct.jointGrpMaxFAF95.popmax_population is not None
+    ):
         ancillaryResults["jointGrpMaxFAF95"] = {
             "frequency": input_struct.jointGrpMaxFAF95.popmax,
             "confidenceInterval": 0.95,

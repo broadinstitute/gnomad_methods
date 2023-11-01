@@ -486,7 +486,7 @@ def add_grpMaxFAF95_v3(ht: hl.Table) -> hl.Table:
                 hl.array(
                     [
                         hl.struct(
-                            faf=ht.faf[ht.faf_index_dict[f"{pop}_adj"]].faf95,
+                            faf=ht.faf[ht.faf_index_dict[f"{pop}-adj"]].faf95,
                             population=pop,
                         )
                         for pop in FAF_POPS

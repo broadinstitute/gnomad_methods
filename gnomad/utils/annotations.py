@@ -2655,17 +2655,15 @@ def add_gks_va(
         hemizygote_count = input_struct.freq[freq_index_dict["XY_adj"]].AC
         ancillaryResults["hemizygotes"] = hemizygote_count
 
+    # Add group max FAF if it exists
     if input_struct.grpMaxFAF95.popmax_population is not None:
-        grpMaxFAF95 = {
+        ancillaryResults["grpMaxFAF95"] = {
             "frequency": input_struct.grpMaxFAF95.popmax,
             "confidenceInterval": 0.95,
             "groupId": (
                 f"{gnomad_id}.{input_struct.grpMaxFAF95.popmax_population.upper()}"
             ),
         }
-    else:
-        grpMaxFAF95 = None
-    ancillaryResults["grpMaxFAF95"] = grpMaxFAF95
 
     # Add joint group max FAF if it exists
     if (
@@ -2679,6 +2677,8 @@ def add_gks_va(
                 f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.popmax_population.upper()}"
             ),
         }
+
+    final_freq_dict["ancillaryResults"] = ancillaryResults
 
     # Check allele balance for heterozygotes values.
     # Flagged allele balance values are those in bins > 0.90.
@@ -2707,14 +2707,13 @@ def add_gks_va(
         "lowComplexityRegion": input_struct.lcr,
         "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
     }
-    ancillaryResults["qualityMeasures"] = qualityMeasures
 
     # Add mean coverage depth statistics if the input was annotated
     # with coverage information.
     if "mean_depth" in input_struct:
-        ancillaryResults["meanDepth"] = input_struct.mean_depth
+        qualityMeasures["meanDepth"] = input_struct.mean_depth
 
-    final_freq_dict["ancillaryResults"] = ancillaryResults
+    final_freq_dict["qualityMeasures"] = qualityMeasures
 
     # If ancestry_groups were passed, add the ancestry group dictionary to the
     # final frequency dictionary to be returned.

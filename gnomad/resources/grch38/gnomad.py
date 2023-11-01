@@ -480,6 +480,12 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
 
 
 def add_grpMaxFAF95_v3(ht: hl.Table) -> hl.Table:
+    """
+    Add a grpMaxFAF95 annotation using the v3 style faf and faf_index_dict structures.
+
+    :param ht: Input hail table.
+    :return: Annotated hail table.
+    """
     ht = ht.annotate(
         grpMaxFAF95=hl.rbind(
             hl.sorted(
@@ -512,6 +518,12 @@ def add_grpMaxFAF95_v3(ht: hl.Table) -> hl.Table:
 
 
 def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
+    """
+    Add a grpMaxFAF95 and jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
+
+    :param ht: Input hail table.
+    :return: Annotated hail table.
+    """
     ht = ht.annotate(
         grpMaxFAF95=hl.struct(
             popmax=ht.fafmax.faf95_max, popmax_population=ht.fafmax.faf95_max_gen_anc
@@ -526,9 +538,13 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
 
 def add_grpMaxFAF95(ht: hl.Table) -> hl.Table:
     """
-    Adds a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
+    Add a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
 
     Accepts tables with popmax FAF fields in v3 and v4 formats.
+    If the table includes the v4 style joint_fafmax, also adds jointGrpMaxFAF95.
+
+    :param ht: Input hail table. Can be v3 or v4.
+    :return: Annotated hail table.
     """
     if "fafmax" in ht.row and "faf95_max" in ht.fafmax:
         return add_grpMaxFAF95_v4(ht)

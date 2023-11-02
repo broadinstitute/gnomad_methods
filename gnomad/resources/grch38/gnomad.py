@@ -649,6 +649,7 @@ def gnomad_gks(
     keep_fields = [
         ht.freq,
         ht.info.vrs,
+        ht.info.monoallelic,
         ht.grpMaxFAF95,
         ht.filters,
         ht.lcr,

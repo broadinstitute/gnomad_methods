@@ -2714,8 +2714,7 @@ def add_gks_va(
         qualityMeasures["meanDepth"] = input_struct.mean_depth
 
     # Add monoallelic flag (all samples homozygous for alternate allele)
-    if final_freq_dict["focusAlleleCount"] == final_freq_dict["locusAlleleCount"]:
-        qualityMeasures["monoallelic"] = True
+    qualityMeasures["monoallelic"] = input_struct.monoallelic
 
     final_freq_dict["qualityMeasures"] = qualityMeasures
 

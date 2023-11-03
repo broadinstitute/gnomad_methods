@@ -917,7 +917,7 @@ def compute_expected_variants(
     plateau_models_expr: hl.StructExpression,
     mu_expr: hl.Float64Expression,
     cov_corr_expr: hl.Float64Expression,
-    poss_expr: hl.Int64Expression,
+    possible_variants_expr: hl.Int64Expression,
     cpg_expr: hl.BooleanExpression,
     pop: Optional[str] = None,
 ) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:

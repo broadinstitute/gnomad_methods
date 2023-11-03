@@ -930,7 +930,7 @@ def compute_expected_variants(
         calibrates mutation rate to proportion observed for high coverage exomes. It
         includes models for CpG, non-CpG sites, and each population in `POPS`.
     :param mu_expr: Float64Expression of mutation rate.
-    :param poss_expr: Int64Expression of possible variants.
+    :param possible_variants_expr: Int64Expression of possible variant counts.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param pop: Optional population to use when applying plateau model. Default is

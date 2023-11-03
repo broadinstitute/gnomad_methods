@@ -960,7 +960,7 @@ def compute_expected_variants(
     # 'expected_variants', for specified population.
     agg_expr = {
         f"predicted_proportion_observed{pop}": agg_func(ppo_expr),
-        f"expected_variants{pop}": agg_func(ppo_expr * cov_corr_expr * poss_expr),
+        f"expected_variants{pop}": agg_func(ppo_expr * cov_corr_expr * possible_variants_expr),
     }
 
     # Generate sum aggregators for 'observed_variants' and 'possible_variants' on

@@ -917,6 +917,7 @@ def compute_expected_variants(
     plateau_models_expr: hl.StructExpression,
     mu_expr: hl.Float64Expression,
     cov_corr_expr: hl.Float64Expression,
+    possible_variants_expr: hl.Int64Expression,
     cpg_expr: hl.BooleanExpression,
     pop: Optional[str] = None,
 ) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:
@@ -929,6 +930,7 @@ def compute_expected_variants(
         calibrates mutation rate to proportion observed for high coverage exomes. It
         includes models for CpG, non-CpG sites, and each population in `POPS`.
     :param mu_expr: Float64Expression of mutation rate.
+    :param possible_variants_expr: Int64Expression of possible variant counts.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param pop: Optional population to use when applying plateau model. Default is
@@ -958,7 +960,9 @@ def compute_expected_variants(
     # 'expected_variants', for specified population.
     agg_expr = {
         f"predicted_proportion_observed{pop}": agg_func(ppo_expr),
-        f"expected_variants{pop}": agg_func(ppo_expr * cov_corr_expr),
+        f"expected_variants{pop}": agg_func(
+            ppo_expr * cov_corr_expr * possible_variants_expr
+        ),
     }
 
     # Generate sum aggregators for 'observed_variants' and 'possible_variants' on

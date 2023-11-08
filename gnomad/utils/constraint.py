@@ -821,6 +821,7 @@ def get_constraint_grouping_expr(
         "annotation": vep_annotation_expr.most_severe_consequence,
         "modifier": hl.coalesce(lof_expr, polyphen_prediction_expr, "None"),
         "gene": vep_annotation_expr.gene_symbol,
+        "gene_id": vep_annotation_expr.gene_id,
     }
     if coverage_expr is not None:
         groupings["coverage"] = coverage_expr

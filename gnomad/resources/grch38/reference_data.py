@@ -98,6 +98,26 @@ def _import_ensembl_interval(path) -> hl.Table:
     )
     return ensembl
 
+def _import_gtex_rsem(path) -> hl.Table:
+    """
+    Import GTEx RSEM data from a text file.
+
+    File is expected to have isoform expression data, with transcript IDs as the
+    first column and gene IDs as the second column, the following columns are GTEx
+    sample names replaced by unique tissue names.
+
+    :param path: Path to the GTEx RSEM file.
+    :return: Table with GTEx RSEM data.
+    """
+    # TODO: do we want HT or MT?
+    gtex = hl.import_matrix_table(path, row_key='transcript_id',
+                                  row_fields={'transcript_id': hl.tstr, 'gene_id': hl.tstr}, entry_type=hl.tfloat64,
+                                  force_bgz=True)
+
+    gtex = gtex.annotate_cols(tissue=gtex.col_id.split("\\.")[0])
+
+    return gtex
+
 
 # Resources with no versioning needed
 purcell_5k_intervals = GnomadPublicTableResource(
@@ -361,6 +381,25 @@ telomeres_and_centromeres = GnomadPublicTableResource(
     },
 )
 
+gtex_rsem = VersionedTableResource(
+    default_version="v10",
+    versions={
+        "v7": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v7.ht",
+            import_func=_import_gtex_rsem,
+            import_args={
+                "path": " gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
+            },
+        ),
+        "v10": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_v10_rsem.ht",
+            import_func=_import_gtex_rsem,
+            import_args={ # TODO: update path
+                "path": "gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
+            },
+        ),
+    },
+)
 
 def get_truth_ht() -> Table:
     """

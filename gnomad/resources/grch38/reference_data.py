@@ -110,6 +110,8 @@ def _import_gtex_rsem(path) -> hl.Table:
     :return: Table with GTEx RSEM data.
     """
     # TODO: do we want HT or MT?
+    # TODO: do we add preprocessing step to replace sample names with tissue names by
+    #  providing a mapping file?
     gtex = hl.import_matrix_table(path, row_key='transcript_id',
                                   row_fields={'transcript_id': hl.tstr, 'gene_id': hl.tstr}, entry_type=hl.tfloat64,
                                   force_bgz=True)

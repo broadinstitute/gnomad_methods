@@ -98,6 +98,7 @@ def _import_ensembl_interval(path) -> hl.Table:
     )
     return ensembl
 
+
 def _import_gtex_rsem(path) -> hl.Table:
     """
     Import GTEx RSEM data from a text file.
@@ -112,9 +113,13 @@ def _import_gtex_rsem(path) -> hl.Table:
     # TODO: do we want HT or MT?
     # TODO: do we add preprocessing step to replace sample names with tissue names by
     #  providing a mapping file?
-    gtex = hl.import_matrix_table(path, row_key='transcript_id',
-                                  row_fields={'transcript_id': hl.tstr, 'gene_id': hl.tstr}, entry_type=hl.tfloat64,
-                                  force_bgz=True)
+    gtex = hl.import_matrix_table(
+        path,
+        row_key="transcript_id",
+        row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
+        entry_type=hl.tfloat64,
+        force_bgz=True,
+    )
 
     gtex = gtex.annotate_cols(tissue=gtex.col_id.split("\\.")[0])
 
@@ -390,18 +395,21 @@ gtex_rsem = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v7.ht",
             import_func=_import_gtex_rsem,
             import_args={
-                "path": " gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
+                "path": (
+                    " gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz"
+                ),
             },
         ),
         "v10": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_v10_rsem.ht",
             import_func=_import_gtex_rsem,
-            import_args={ # TODO: update path
+            import_args={  # TODO: update path
                 "path": "gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
             },
         ),
     },
 )
+
 
 def get_truth_ht() -> Table:
     """

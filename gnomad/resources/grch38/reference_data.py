@@ -106,10 +106,9 @@ def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
     .. note::
         Files are downloaded from https://www.gtexportal.org/home/downloads/adult-gtex.
         We get the transcript TPM under Bulk tissue expression and sample attributes
-        under Metadata.
-
-    File is expected to have transcript expression data, with transcript IDs as the
-    first column and gene IDs as the second column.
+        under Metadata. The transcript TPM file is expected to have transcript
+        expression data, with transcript IDs as the first column and gene IDs as the
+        second column.
 
     :param gtex_path: Path to the GTEx RSEM file.
     :param meta_path: Path to the GTEx sample attributes file.

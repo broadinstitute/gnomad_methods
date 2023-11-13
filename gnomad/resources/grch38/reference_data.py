@@ -99,29 +99,33 @@ def _import_ensembl_interval(path) -> hl.Table:
     return ensembl
 
 
-def _import_gtex_rsem(path) -> hl.Table:
+def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
     """
-    Import GTEx RSEM data from a text file.
+    Import GTEx RSEM data from expression data and sample attributes file.
 
-    File is expected to have isoform expression data, with transcript IDs as the
-    first column and gene IDs as the second column, the following columns are GTEx
-    sample names replaced by unique tissue names.
+    .. note::
+        Files are downloaded from https://www.gtexportal.org/home/downloads/adult-gtex.
+        We get the transcript TPM under Bulk tissue expression and sample attributes
+        under Metadata.
 
-    :param path: Path to the GTEx RSEM file.
-    :return: Table with GTEx RSEM data.
+    File is expected to have transcript expression data, with transcript IDs as the
+    first column and gene IDs as the second column.
+
+    :param gtex_path: Path to the GTEx RSEM file.
+    :param meta_path: Path to the GTEx sample attributes file.
+    :return: Matrix Table with GTEx RSEM data with tissue information.
     """
-    # TODO: do we want HT or MT?
-    # TODO: do we add preprocessing step to replace sample names with tissue names by
-    #  providing a mapping file?
+    meta = hl.import_table(meta_path, force_bgz=True, impute=True)
+    meta = meta.key_by("SAMPID")
+
     gtex = hl.import_matrix_table(
-        path,
+        gtex_path,
         row_key="transcript_id",
         row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
         entry_type=hl.tfloat64,
         force_bgz=True,
     )
-
-    gtex = gtex.annotate_cols(tissue=gtex.col_id.split("\\.")[0])
+    gtex = gtex.annotate_cols(tissue=meta[gtex.col_id].SMTSD.replace(" ", ""))
 
     return gtex
 
@@ -392,21 +396,29 @@ gtex_rsem = VersionedTableResource(
     default_version="v10",
     versions={
         "v7": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v7.ht",
+            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v7.mt",
             import_func=_import_gtex_rsem,
-            import_args={
-                "path": (
-                    " gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz"
+            import_args={ # TODO: update path
+                "gtex_path": (
+                    "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz"
+                ),
+                "meta_path": (
+                    "gs://gnomad-qin/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz"
                 ),
             },
         ),
         "v10": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_v10_rsem.ht",
+            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v10.mt",
             import_func=_import_gtex_rsem,
-            import_args={  # TODO: update path
-                "path": "gs://gcp-public-data--gnomad/papers/2019-tx-annotation/data/GRCH37_hg19/reheadered.GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
+            import_args={ # TODO: update path and name
+                "gtex_path": (
+                    "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_20231130_v10_RSEMv1.2.22_transcript_tpm.txt.gz"
+                ),
+                "meta_path": (
+                    "gs://gnomad-qin/annotations_v10_GTEx_v10_Annotations_SampleAttributesDS.txt.gz"
+                ),
             },
-        ),
+        )
     },
 )
 

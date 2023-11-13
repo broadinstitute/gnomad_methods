@@ -18,13 +18,15 @@ def summarize_rsem_mt(
     function to use to summarize the expression by tissue. By default, the median is
     used.
 
-    The output can be returned in one of the following formats (both keyed by
-    "transcript_id" and "gene_id"):
-      - A Table with an 'rsem' field containing an array of summarized expression
-        values by tissue, where the order of tissues in the array is indicated by the
-        "tissues" global annotation (`tissue_as_row` set to False).
-      - A Table with a row annotation for each tissue containing the summarized tissue
-        expression value (`tissue_as_row` set to True).
+    .. note::
+
+        The output can be returned in one of the following formats (both keyed by
+        "transcript_id" and "gene_id"):
+            - A Table with an 'rsem' field containing an array of summarized expression
+              values by tissue, where the order of tissues in the array is indicated by
+              the "tissues" global annotation (`tissue_as_row` set to False).
+            - A Table with a row annotation for each tissue containing the summarized
+              tissue expression value (`tissue_as_row` set to True).
 
     :param rsem_mt: MatrixTable of RSEM quantifications.
     :param tissue_expr: Column expression indicating tissue type.

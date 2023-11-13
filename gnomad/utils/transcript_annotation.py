@@ -43,7 +43,7 @@ def summarize_rsem_mt(
     )
 
     if tissue_as_row:
-        rsem_ht = rsem_mt.rename("rsem", "").make_table()
+        rsem_ht = rsem_mt.rename({"rsem": ""}).make_table()
     else:
         rsem_ht = rsem_mt.localize_entries(
             columns_array_field_name="tissues", entries_array_field_name="rsem"

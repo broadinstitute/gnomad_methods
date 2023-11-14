@@ -2574,7 +2574,9 @@ def add_gks_va(
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
-            "alleleFrequency": group_freq["AF"],
+            "alleleFrequency": (
+                group_freq["AF"] if group_freq["AF"] is not None else 0.0
+            ),
             "cohort": {"id": cohort_id, "characteristics": characteristics},
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
@@ -2641,7 +2643,9 @@ def add_gks_va(
         ),  # Information can be populated with the result of add_gks_vrs()
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
-        "alleleFrequency": overall_freq["AF"],
+        "alleleFrequency": (
+            overall_freq["AF"] if overall_freq["AF"] is not None else 0.0
+        ),
         "cohort": {"id": "ALL"},
     }
 

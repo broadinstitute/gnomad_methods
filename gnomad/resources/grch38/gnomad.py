@@ -519,14 +519,21 @@ def add_grpMaxFAF95_v3(ht: hl.Table) -> hl.Table:
 
 def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
     """
-    Add a grpMaxFAF95 and jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
+    Add a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
+
+    Also includes a jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
 
     :param ht: Input hail table.
     :return: Annotated hail table.
     """
+    if "gnomad" in ht.fafmax:
+        fafmax_field = ht.fafmax.gnomad
+    else:
+        fafmax_field = ht.fafmax
     ht = ht.annotate(
         grpMaxFAF95=hl.struct(
-            popmax=ht.fafmax.faf95_max, popmax_population=ht.fafmax.faf95_max_gen_anc
+            popmax=fafmax_field.faf95_max,
+            popmax_population=fafmax_field.faf95_max_gen_anc,
         ),
         jointGrpMaxFAF95=hl.struct(
             popmax=ht.joint_fafmax.faf95_max,
@@ -534,22 +541,6 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
         ),
     )
     return ht
-
-
-def add_grpMaxFAF95(ht: hl.Table) -> hl.Table:
-    """
-    Add a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
-
-    Accepts tables with popmax FAF fields in v3 and v4 formats.
-    If the table includes the v4 style joint_fafmax, also adds jointGrpMaxFAF95.
-
-    :param ht: Input hail table. Can be v3 or v4.
-    :return: Annotated hail table.
-    """
-    if "fafmax" in ht.row and "faf95_max" in ht.fafmax:
-        return add_grpMaxFAF95_v4(ht)
-    else:
-        return add_grpMaxFAF95_v3(ht)
 
 
 def gnomad_gks(
@@ -642,7 +633,10 @@ def gnomad_gks(
     else:  # v4
         ht = ht.annotate(ab_hist_alt=ht.histograms.qual_hists.ab_hist_alt)
 
-    ht = add_grpMaxFAF95(ht)
+    if high_level_version == "v3":
+        ht = add_grpMaxFAF95_v3(ht)
+    else:
+        ht = add_grpMaxFAF95_v4(ht)
 
     ht = ht.annotate(in_autosome_or_par=ht.locus.in_autosome_or_par())
 

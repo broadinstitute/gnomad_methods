@@ -586,7 +586,7 @@ def gnomad_gks(
     if high_level_version == "v3":
         coverage_version = "3.0.1"
     elif high_level_version == "v4":
-        coverage_version = "3.0.1"
+        coverage_version = "4.0"
     else:
         raise NotImplementedError(
             "gnomad_gks() is currently only implemented for gnomAD v3 and v4."
@@ -598,9 +598,16 @@ def gnomad_gks(
         if custom_coverage_ht:
             coverage_ht = custom_coverage_ht
         else:
-            coverage_ht = hl.read_table(
-                coverage("genomes").versions[coverage_version].path
-            )
+            # in v4, only exomes have coverage
+            # in v3, only genomes have coverage (only genomes exist)
+            if high_level_version == "v3":
+                coverage_ht = hl.read_table(
+                    coverage("genomes").versions[coverage_version].path
+                )
+            else:
+                coverage_ht = hl.read_table(
+                    coverage("exomes").versions[coverage_version].path
+                )
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
 
     # Retrieve ancestry groups from the imported POPS dictionary.

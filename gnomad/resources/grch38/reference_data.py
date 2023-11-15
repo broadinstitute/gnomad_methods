@@ -114,8 +114,8 @@ def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
     :param meta_path: Path to the GTEx sample attributes file.
     :return: Matrix Table with GTEx RSEM data with tissue information.
     """
-    meta = hl.import_table(meta_path, force_bgz=True, impute=True)
-    meta = meta.key_by("SAMPID")
+    meta_ht = hl.import_table(meta_path, force_bgz=True, impute=True)
+    meta_ht = meta_ht.key_by("SAMPID")
 
     gtex = hl.import_matrix_table(
         gtex_path,
@@ -123,8 +123,9 @@ def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
         row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
         entry_type=hl.tfloat64,
         force_bgz=True,
+        min_partitions=1000,
     )
-    gtex = gtex.annotate_cols(tissue=meta[gtex.col_id].SMTSD.replace(" ", ""))
+    gtex = gtex.annotate_cols(tissue=meta_ht[gtex.col_id].SMTSD.replace(" ", ""))
 
     return gtex
 

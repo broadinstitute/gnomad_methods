@@ -24,9 +24,9 @@ def split_intervals(
     """
     j = b.new_job(f"""Make {utils['NUMBER_OF_GENOMICS_DB_INTERVALS']} intervals""")
     j.image(utils['GATK_IMAGE'])
-    java_mem = 3
+    java_mem = 4
     j.memory('standard')  # ~ 4G/core ~ 4G
-    j.storage('16G')
+    j.storage('1G')
     j.declare_resource_group(
         intervals={
             f'interval_{idx}': f'{{root}}/{str(idx).zfill(4)}-scattered.interval_list'
@@ -94,14 +94,14 @@ def snps_variant_recalibrator_create_model(
     """
     j = b.new_job('VQSR: SNPsVariantRecalibratorCreateModel')
     j.image(utils['GATK_IMAGE'])
-    j.memory('highmem')
+    j.memory('standard')    # ‘lowmem’ ~1Gi/core, ‘standard’ ~4Gi/core, and ‘highmem’ ~7Gi/core in Hail Batch
     if is_small_callset:
-        ncpu = 8  # ~ 8G/core ~ 64G
+        ncpu = 8
     else:
-        ncpu = 16  # ~ 8G/core ~ 128G
+        ncpu = 16
     j.cpu(ncpu)
-    java_mem = ncpu * 8 - 10
-    j.storage('50G')
+    java_mem = ncpu * 4 - 10    # cpus*memory(per core)
+    j.storage('2G')     # GATK can read files directly from Google Buckets, so we are no longer staging large files
 
     downsample_factor = 75 if is_huge_callset else 10
 
@@ -198,10 +198,10 @@ def snps_variant_recalibrator(
     j = b.new_job('VQSR: SNPsVariantRecalibratorScattered')
 
     j.image(utils['GATK_IMAGE'])
-    mem_gb = 64  # ~ twice the sum of all input resources and input VCF sizes
+    mem_gb = 32  # ~ twice the sum of all input resources and input VCF sizes
     j.memory(f'{mem_gb}G')
     j.cpu(4)
-    j.storage('20G')
+    j.storage('2G')
 
     j.declare_resource_group(recalibration={'index': '{root}.idx', 'base': '{root}'})
 
@@ -218,7 +218,7 @@ def snps_variant_recalibrator(
     )
 
     cmd = f"""set -euo pipefail
-        gatk --java-options "-Xms{mem_gb-1}g -XX:+UseParallelGC -XX:ParallelGCThreads=3" \\
+        gatk --java-options "-Xms{mem_gb}g -XX:+UseParallelGC -XX:ParallelGCThreads=4" \\
           VariantRecalibrator \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
@@ -298,14 +298,14 @@ def indels_variant_recalibrator_create_model(
     """
     j = b.new_job('VQSR: INDELsVariantRecalibratorCreateModel')
     j.image(utils['GATK_IMAGE'])
-    j.memory('highmem')
+    j.memory('standard')    # ‘lowmem’ ~1Gi/core, ‘standard’ ~4Gi/core, and ‘highmem’ ~7Gi/core in Hail Batch
     if is_small_callset:
-        ncpu = 8  # ~ 8G/core ~ 64G
+        ncpu = 8
     else:
-        ncpu = 16  # ~ 8G/core ~ 128G
+        ncpu = 16
     j.cpu(ncpu)
-    java_mem = ncpu * 8 - 10
-    j.storage('50G')
+    java_mem = ncpu * 4 - 10
+    j.storage('2G')
 
     # downsample_factor = 75 if is_huge_callset else 10
     downsample_factor = 10
@@ -324,7 +324,7 @@ def indels_variant_recalibrator_create_model(
 
     j.command(
         f"""set -euo pipefail
-        gatk --java-options "-Xms{java_mem}g -XX:+UseParallelGC -XX:ParallelGCThreads={ncpu-2}" \\
+        gatk --java-options "-Xms{java_mem}g -XX:+UseParallelGC -XX:ParallelGCThreads={ncpu}" \\
           VariantRecalibrator \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
@@ -401,10 +401,10 @@ def indels_variant_recalibrator(
     j = b.new_job('VQSR: INDELsVariantRecalibratorScattered')
 
     j.image(utils['GATK_IMAGE'])
-    mem_gb = 64  # ~ twice the sum of all input resources and input VCF sizes
+    mem_gb = 32  # ~ twice the sum of all input resources and input VCF sizes
     j.memory(f'{mem_gb}G')
     j.cpu(4)
-    j.storage('20G')
+    j.storage('2G')
 
     j.declare_resource_group(recalibration={'index': '{root}.idx', 'base': '{root}'})
 
@@ -421,7 +421,7 @@ def indels_variant_recalibrator(
     )
 
     cmd = f"""set -euo pipefail
-        gatk --java-options "-Xms{mem_gb-1}g -XX:+UseParallelGC -XX:ParallelGCThreads=3" \\
+        gatk --java-options "-Xms{mem_gb}g -XX:+UseParallelGC -XX:ParallelGCThreads=4" \\
           VariantRecalibrator \\
           -V {sites_only_vcf} \\
           -O {j.recalibration} \\
@@ -462,7 +462,6 @@ def gather_tranches(
         b: hb.Batch,
         tranches: List[hb.ResourceFile],
         mode: str,
-        disk_size: int,
 ) -> Job:
     """
     Third step of VQSR for SNPs: run GatherTranches to gather scattered per-interval
@@ -480,19 +479,18 @@ def gather_tranches(
     :param b: Batch object to add jobs to
     :param tranches: index for the tranches file
     :param mode: Recalibration mode to employ, either SNP or INDEL
-    :param disk_size: disk size to be used for the job
     :return: a Job object with one output j.out_tranches
     """
     j = b.new_job(f'VQSR: {mode}GatherTranches')
     j.image('us.gcr.io/broad-dsde-methods/gatk-for-ccdg@sha256:9e9f105ecf3534fbda91a4f2c2816ec3edf775882917813337a8d6e18092c959')
-    j.memory('8G')
+    j.memory('1G')
     j.cpu(2)
-    j.storage(f'{disk_size}G')
+    j.storage('1G')
 
     inputs_cmdl = ' '.join([f'--input {t}' for t in tranches])
     j.command(
         f"""set -euo pipefail
-        gatk --java-options "-Xms6g" \\
+        gatk --java-options "-Xms1g" \\
           GatherTranches \\
           --mode {mode} \\
           {inputs_cmdl} \\
@@ -550,15 +548,17 @@ def apply_recalibration(
     if scatter is not None:
         filename = f'{out_vcf_name}_vqsr_recalibrated_{scatter}'
         outpath = f'{out_bucket}apply_recalibration/scatter/'
+        storage = '4G'
     else:
         filename = f'{out_vcf_name}_vqsr_recalibrated'
         outpath = out_bucket
+        storage = f'{disk_size}G'
 
     j = b.new_job('VQSR: ApplyRecalibration')
     # couldn't find a public image with both gatk and bcftools installed
     j.image('docker.io/lindonkambule/vqsr_gatk_bcftools_img:latest')
     j.memory('8G')
-    j.storage(f'{disk_size}G')
+    j.storage(storage)
     j.declare_resource_group(
         output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'},
         intermediate_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
@@ -594,21 +594,8 @@ def apply_recalibration(
           {'--use-allele-specific-annotations ' if use_as_annotations else ''} \\
           -mode SNP
         df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-                """
+        """
     )
-
-    # An INDEL at the beginning of a chunk will overlap with the previous chunk and will cause issues when trying to
-    # merge. This makes sure the INDEL is ONLY in ONE of two consecutive chunks (not both)
-    if interval:
-        # overwrite VCF with overlap issue addressed
-        j.command(
-            f"""
-                interval=$(cat {interval} | tail -n1 | awk '{{print $1":"$2"-"$3}}')
-                bcftools view -t $interval {j.output_vcf['vcf.gz']} --output-file {j.output_vcf['vcf.gz']} --output-type z
-                tabix {j.output_vcf['vcf.gz']}
-                df -h; pwd; du -sh $(dirname {j.output_vcf['vcf.gz']})
-            """
-        )
 
     if out_bucket:
         b.write_output(j.output_vcf, f'{outpath}{filename}')
@@ -620,7 +607,6 @@ def gather_vcfs(
         b: hb.Batch,
         input_vcfs: List[hb.ResourceGroup],
         out_vcf_name: str,
-        utils: Dict,
         disk_size: int,
         out_bucket: str = None,
 ) -> Job:
@@ -631,39 +617,30 @@ def gather_vcfs(
     :param b: Batch object to add jobs to
     :param input_vcfs: list of VCFs to be gathered
     :param out_vcf_name: output vcf filename
-    :param utils: a dictionary containing paths to resource files to be used to split genome
     :param disk_size: disk size to be used for the job
     :param out_bucket: full path to output bucket to write the gathered VCF to
     :return: a Job object with one ResourceGroup output j.output_vcf
     """
     filename = f'{out_vcf_name}_vqsr_recalibrated'
     j = b.new_job('VQSR: FinalGatherVcf')
-    j.image(utils['GATK_IMAGE'])
+    j.image('docker.io/lindonkambule/vqsr_gatk_bcftools_img:latest')
     j.memory(f'16G')
-    j.storage(f'{disk_size}G')
+    j.storage(f'{int(disk_size*0.1)}G')
 
     j.declare_resource_group(
         output_vcf={'vcf.gz': '{root}.vcf.gz', 'vcf.gz.tbi': '{root}.vcf.gz.tbi'}
     )
 
-    input_cmdl = ' '.join([f'--input {v["vcf.gz"]}' for v in input_vcfs])
-    j.command(
-        f"""set -euo pipefail
-        # --ignore-safety-checks makes a big performance difference so we include it in our invocation.
-        # This argument disables expensive checks that the file headers contain the same set of
-        # genotyped samples and that files are in order by position of first record.
-        cd /io
-        mkdir tmp/
-        gatk --java-options "-Xms6g -Djava.io.tmpdir=`pwd`/tmp" \\
-          GatherVcfsCloud \\
-          --ignore-safety-checks \\
-          --gather-type BLOCK \\
-          {input_cmdl} \\
-          --output {j.output_vcf['vcf.gz']} \\
-          --tmp-dir `pwd`/tmp
-          
-        tabix {j.output_vcf['vcf.gz']}"""
-    )
+    vqsr_vcf_chunks = '\n'.join([f'{v["vcf.gz"]}' for v in input_vcfs])
+
+    # The -D option is supported only with -a
+    j.command(f'echo "{vqsr_vcf_chunks}" > list_concatenate.txt')
+    j.command(f"""
+                bcftools concat -a -D -f list_concatenate.txt -o {j.output_vcf['vcf.gz']} -Oz
+                tabix {j.output_vcf['vcf.gz']}
+                """
+              )
+
     if out_bucket:
         b.write_output(j.output_vcf, f'{out_bucket}{filename}')
     return j
@@ -761,7 +738,6 @@ def make_vqsr_jobs(
             b=b,
             tranches=snps_tranches,
             mode='SNP',
-            disk_size=small_disk,
         ).out_tranches
 
         # 2. Run INDEL recalibrator in a scattered mode
@@ -804,7 +780,6 @@ def make_vqsr_jobs(
             b=b,
             tranches=indels_tranches,
             mode='INDEL',
-            disk_size=small_disk,
         ).out_tranches
 
         # 3. Apply recalibration
@@ -833,7 +808,6 @@ def make_vqsr_jobs(
             b=b,
             input_vcfs=scattered_vcfs,
             out_vcf_name=output_vcf_name,
-            utils=utils,
             disk_size=huge_disk,
             out_bucket=out_bucket,
         )

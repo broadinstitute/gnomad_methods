@@ -1,5 +1,5 @@
 """Utils module containing generic functions that are useful for adding transcript expression-aware annotations."""
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import hail as hl
 
@@ -71,3 +71,77 @@ def summarize_rsem_mt(
         )
 
     return transcript_ht.key_by("transcript_id", "gene_id"), gene_ht.key_by("gene_id")
+
+
+def get_expression_proportion(
+    transcript_ht: hl.Table,
+    gene_ht: hl.Table,
+    tissues_to_filter: Optional[List[str]] = None,
+    tissue_as_row: bool = False,
+) -> hl.Table:
+    """
+    Calculate the proportion of expression of transcript to gene per tissue.
+
+    :param transcript_ht: Table of summarized transcript expression by tissue
+    :param gene_ht: Table of summarized gene expression by tissue
+    :param tissues_to_filter: Optional list of tissues to filter out
+    :param tissue_as_row: If True, the input Table is with a row annotation for each
+        tissue instead of an array of values. Default is False.
+    :return: Table with expression proportion of transcript to gene per tissue
+        and mean expression proportion across tissues
+    """
+    if tissue_as_row:
+        tissues1 = list(gene_ht.row)
+        tissues1.remove("gene_id")
+        gene_ht = gene_ht.select(
+            gene_expression=hl.array([gene_ht[tissue] for tissue in tissues1])
+        ).annotate_globals(tissues=tissues1)
+
+        tissues2 = list(transcript_ht.row)
+        tissues2.remove("transcript_id")
+        tissues2.remove("gene_id")
+        transcript_ht = transcript_ht.select(
+            transcript_expression=hl.array(
+                [transcript_ht[tissue] for tissue in tissues2]
+            )
+        ).annotate_globals(tissues=tissues2)
+
+    # Join the transcript expression table and gene expression table
+    transcript_ht = transcript_ht.annotate(
+        gene_expression=gene_ht[transcript_ht.gene_id].gene_expression
+    )
+
+    if tissues_to_filter is not None:
+        tissues_indices = []
+        for i, t in enumerate(hl.eval(transcript_ht.tissues)):
+            if t not in tissues_to_filter:
+                tissues_indices.append(i)
+
+        transcript_ht = transcript_ht.annotate(
+            transcript_expression=hl.array(
+                [transcript_ht.transcript_expression[i] for i in tissues_indices]
+            ),
+            gene_expression=hl.array(
+                [transcript_ht.gene_expression[i] for i in tissues_indices]
+            ),
+        )
+
+        transcript_ht = transcript_ht.select_globals(
+            tissues=hl.array([transcript_ht.tissues[i] for i in tissues_indices])
+        )
+
+    # Calculate the proportion of expression of transcript to gene per tissue
+    transcript_ht = transcript_ht.annotate(
+        exp_prop=hl.or_else(
+            transcript_ht.transcript_expression / transcript_ht.gene_expression,
+            hl.empty_array(hl.tfloat64),
+        ),
+    )
+    # Calculate the mean expression proportion across tissues
+    transcript_ht = transcript_ht.annotate(
+        exp_prop_mean=hl.mean(
+            hl.filter(lambda e: ~hl.is_nan(e), transcript_ht.exp_prop),
+        )
+    )
+
+    return transcript_ht

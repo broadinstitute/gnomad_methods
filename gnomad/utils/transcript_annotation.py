@@ -18,10 +18,8 @@ def summarize_rsem_mt(
     function to use to summarize the expression by tissue. By default, the median is
     used.
 
-    .. note::
-
-        The output can be returned in one of the following formats (both keyed by
-        "transcript_id" and "gene_id"):
+    The output can be returned in one of the following formats (both keyed by
+    "transcript_id" and "gene_id"):
 
         - A Table with an 'rsem' field containing an array of summarized expression
           values by tissue, where the order of tissues in the array is indicated by

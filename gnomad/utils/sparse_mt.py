@@ -958,7 +958,7 @@ def compute_coverage_stats(
         raise ValueError(
             "Only one of 'compute_an_only' or 'compute_coverage_only' can be True."
         )
-
+    no_strata = False
     if group_membership_ht is not None:
         if strata_expr is not None:
             raise ValueError(
@@ -968,8 +968,6 @@ def compute_coverage_stats(
         if strata_expr is None:
             strata_expr = {}
             no_strata = True
-        else:
-            no_strata = False
 
         # Annotate the MT cols with each of the expressions in strata_expr and redefine
         # strata_expr based on the column HT with added annotations.

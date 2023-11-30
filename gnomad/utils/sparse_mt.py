@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.utils.annotations import (
+    annotate_adj,
     fs_from_sb,
     generate_freq_group_membership_array,
     get_adj_expr,
@@ -913,6 +914,9 @@ def compute_coverage_stats(
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
     row_key_fields: List[str] = ["locus"],
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
+    group_membership_ht: Optional[hl.Table] = None,
+    compute_an_only: bool = False,
+    compute_coverage_only: bool = False,
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -934,7 +938,14 @@ def compute_coverage_stats(
     :param row_key_fields: List of row key fields to use for joining `mtds` with
         `reference_ht`
     :param strata_expr: Optional list of dicts containing expressions to stratify the
-        coverage stats by.
+        coverage stats by. Only one of `group_membership_ht` or `strata_expr` can be
+        specified.
+    :param group_membership_ht: Optional Table containing group membership annotations
+        to stratify the coverage stats by. Only one of `group_membership_ht` or
+        `strata_expr` can be specified.
+    :param compute_an_only: Whether to compute the AN only. Default is False.
+    :param compute_coverage_only: Whether to compute the coverage stats only. Default
+        is False.
     :return: Table with per-base coverage stats
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -943,34 +954,53 @@ def compute_coverage_stats(
     else:
         mt = mtds
 
-    if strata_expr is None:
-        strata_expr = {}
-        no_strata = True
+    if compute_an_only and compute_coverage_only:
+        raise ValueError(
+            "Only one of 'compute_an_only' or 'compute_coverage_only' can be True."
+        )
+
+    if group_membership_ht is not None:
+        if strata_expr is not None:
+            raise ValueError(
+                "Only one of 'group_membership_ht' or 'strata_expr' can be specified."
+            )
     else:
-        no_strata = False
+        if strata_expr is None:
+            strata_expr = {}
+            no_strata = True
+        else:
+            no_strata = False
 
-    # Annotate the MT cols with each of the expressions in strata_expr and redefine
-    # strata_expr based on the column HT with added annotations.
-    ht = mt.annotate_cols(**{k: v for d in strata_expr for k, v in d.items()}).cols()
-    strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
+        # Annotate the MT cols with each of the expressions in strata_expr and redefine
+        # strata_expr based on the column HT with added annotations.
+        ht = mt.annotate_cols(
+            **{k: v for d in strata_expr for k, v in d.items()}
+        ).cols()
+        strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
 
-    # Use the function for creating the frequency stratified by `freq_meta`,
-    # `freq_meta_sample_count`, and `group_membership` annotations to give
-    # stratification group membership info for computing coverage. By default, this
-    # function returns annotations where the second element is a placeholder for the
-    # "raw" frequency of all samples, where the first 2 elements are the same sample
-    # set, but freq_meta startswith [{"group": "adj", "group": "raw", ...]. Use
-    # `no_raw_group` to exclude the "raw" group so there is a single annotation
-    # representing the full samples set. `freq_meta` is updated below to remove "group"
-    # from all dicts.
-    group_membership_ht = generate_freq_group_membership_array(
-        ht, strata_expr, no_raw_group=True
-    )
+        # Use the function for creating the frequency stratified by `freq_meta`,
+        # `freq_meta_sample_count`, and `group_membership` annotations to give
+        # stratification group membership info for computing coverage. By default, this
+        # function returns annotations where the second element is a placeholder for the
+        # "raw" frequency of all samples, where the first 2 elements are the same sample
+        # set, but freq_meta startswith [{"group": "adj", "group": "raw", ...]. Use
+        # `no_raw_group` to exclude the "raw" group so there is a single annotation
+        # representing the full samples set. `freq_meta` is updated below to remove
+        # "group" from all dicts.
+        group_membership_ht = generate_freq_group_membership_array(
+            ht, strata_expr, no_raw_group=True
+        )
+
+    if not compute_coverage_only and group_membership_ht is None:
+        logger.warning(
+            "'group_membership_ht' is not specified, no AN values are adj filtered."
+        )
+
     n_samples = group_membership_ht.count()
     sample_counts = group_membership_ht.index_globals().freq_meta_sample_count
 
     logger.info("Computing coverage stats on %d samples.", n_samples)
-    # Filter datasets to interval list
+    # Filter datasets to interval list.
     if interval_ht is not None:
         reference_ht = reference_ht.filter(
             hl.is_defined(interval_ht[reference_ht.locus])
@@ -986,23 +1016,36 @@ def compute_coverage_stats(
                 " not supported."
             )
 
-    # Create an outer join with the reference Table
+    if "LGT" in mt.entry:
+        gt_field = "LGT"
+    elif "GT" in mt.entry:
+        gt_field = "GT"
+    else:
+        raise ValueError("No genotype field found in entry fields.")
+
+    # Create an outer join with the reference Table.
     def join_with_ref(mt: hl.MatrixTable) -> hl.MatrixTable:
         """
         Outer join MatrixTable with reference Table.
 
-        Add 'in_ref' annotation indicating whether a given position is found in the reference Table.
+        Add 'in_ref' annotation indicating whether a given position is found in the
+        reference Table.
 
         :param mt: Input MatrixTable.
         :return: MatrixTable with 'in_ref' annotation added.
         """
-        keep_entries = ["DP"]
+        keep_entries = ["DP", gt_field]
         if "END" in mt.entry:
             keep_entries.append("END")
-        if "LGT" in mt.entry:
-            keep_entries.append("LGT")
-        if "GT" in mt.entry:
-            keep_entries.append("GT")
+
+        # Add GQ and AD/LAD for adj AN filtering if not computing coverage only.
+        if not compute_coverage_only:
+            keep_entries.append("GQ")
+            if "LAD" in mt.entry:
+                keep_entries.append("LAD")
+            elif "AD" in mt.entry:
+                keep_entries.append("AD")
+
         mt_col_key_fields = list(mt.col_key)
         mt_row_key_fields = list(mt.row_key)
         t = mt.select_entries(*keep_entries).select_cols().select_rows()
@@ -1027,101 +1070,155 @@ def compute_coverage_stats(
         return t._unlocalize_entries("__entries", "__cols", mt_col_key_fields)
 
     if is_vds:
+        rmt = mtds.reference_data
+        rmt_keep_entries = ["END", "DP"]
+        if not compute_coverage_only:
+            rmt_keep_entries.append("GQ")
         mtds = hl.vds.VariantDataset(
-            mtds.reference_data.select_entries("END", "DP").select_cols().select_rows(),
+            rmt.select_entries(*rmt_keep_entries).select_cols().select_rows(),
             join_with_ref(mtds.variant_data),
         )
 
-        # Densify
+        # Densify.
         mt = hl.vds.to_dense_mt(mtds)
     else:
         mtds = join_with_ref(mtds)
-        # Densify
+        # Densify.
         mt = hl.experimental.densify(mtds)
 
-    # Filter rows where the reference is missing
+    # Filter rows where the reference is missing.
     mt = mt.filter_rows(mt._in_ref)
 
-    # Unfilter entries so that entries with no ref block overlap aren't null
+    # Unfilter entries so that entries with no ref block overlap aren't null.
     mt = mt.unfilter_entries()
 
-    # Annotate with group membership
+    # Annotate with group membership.
     mt = mt.annotate_cols(
         group_membership=group_membership_ht[mt.col_key].group_membership
     )
 
-    # Compute coverage stats
-    coverage_over_x_bins = sorted(coverage_over_x_bins)
-    max_coverage_bin = coverage_over_x_bins[-1]
-    hl_coverage_over_x_bins = hl.array(coverage_over_x_bins)
-
-    # This expression creates a counter DP -> number of samples for DP between
-    # 0 and max_coverage_bin
-    coverage_counter_expr = hl.agg.counter(
-        hl.min(max_coverage_bin, hl.or_else(mt.DP, 0))
-    )
-    mean_expr = hl.agg.mean(hl.or_else(mt.DP, 0))
-
-    # Annotate all rows with coverage stats for each strata group.
-    ht = mt.select_rows(
-        coverage_stats=hl.agg.array_agg(
-            lambda x: hl.agg.filter(
-                x,
-                hl.struct(
-                    coverage_counter=coverage_counter_expr,
-                    mean=hl.if_else(hl.is_nan(mean_expr), 0, mean_expr),
-                    median_approx=hl.or_else(
-                        hl.agg.approx_median(hl.or_else(mt.DP, 0)), 0
-                    ),
-                    total_DP=hl.agg.sum(mt.DP),
-                ),
-            ),
-            mt.group_membership,
+    # Annotate with adj for adj AN if not computing coverage only.
+    mt_keep_entries = []
+    global_expr = {}
+    if not compute_coverage_only:
+        mt = annotate_adj(mt)
+        # Use ploidy to determine the number of alleles for each sample at each site.
+        mt = mt.annotate_entries(ploidy=mt[gt_field].ploidy)
+        mt_keep_entries.extend(["adj", "ploidy"])
+        # Keep track of which groups should aggregate adj genotypes.
+        global_expr["adj_group"] = group_membership_ht.index_globals().freq_meta.map(
+            lambda x: x.get("group", "NA") == "adj"
         )
-    ).rows()
-    ht = ht.checkpoint(hl.utils.new_temp_file("coverage_stats", "ht"))
+    if not compute_an_only:
+        mt = mt.annotate_entries(
+            DP=hl.if_else(hl.is_missing(mt.DP) | hl.is_nan(mt.DP), 0, mt.DP)
+        )
+        mt_keep_entries.append("DP")
 
-    # This expression aggregates the DP counter in reverse order of the
-    # coverage_over_x_bins and computes the cumulative sum over them.
-    # It needs to be in reverse order because we want the sum over samples
-    # covered by > X.
-    count_array_expr = ht.coverage_stats.map(
-        lambda x: hl.cumulative_sum(
-            hl.array(
-                # The coverage was already floored to the max_coverage_bin, so no more
-                # aggregation is needed for the max bin.
-                [hl.int32(x.coverage_counter.get(max_coverage_bin, 0))]
-                # For each of the other bins, coverage needs to be summed between the
-                # boundaries.
-            ).extend(
-                hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
-                    lambda i: hl.sum(
-                        hl.range(
-                            hl_coverage_over_x_bins[i - 1], hl_coverage_over_x_bins[i]
-                        ).map(lambda j: hl.int32(x.coverage_counter.get(j, 0)))
+    # Convert MT to HT with a row annotation that is an array of all samples entries
+    # for that variant.
+    mt = mt.select_entries(*mt_keep_entries)
+    ht = mt.localize_entries("entries", "cols")
+
+    # For each stratification group in group_membership, determine the indices of the
+    # samples that belong to that group.
+    n_groups = hl.eval(hl.len(group_membership_ht.index_globals().freq_meta))
+    global_expr["indices_by_group"] = hl.range(n_groups).map(
+        lambda g_i: hl.range(n_samples).filter(
+            lambda s_i: ht.cols[s_i].group_membership[g_i]
+        )
+    )
+    ht = ht.annotate_globals(**global_expr)
+
+    # Keep only the row annotations needed for the calculations.
+    ht = ht.select(**{ann: ht.entries.map(lambda e: e[ann]) for ann in mt_keep_entries})
+
+    agg_expr = {}
+    if not compute_coverage_only:
+        # Sum the ploidy of all samples for each group indicated by indices_by_group
+        # to get the AN for each stratification group.
+        agg_expr["AN"] = hl.map(
+            lambda s_indices, adj: s_indices.aggregate(
+                lambda i: hl.if_else(
+                    adj,
+                    hl.agg.filter(ht.adj[i], hl.agg.sum(ht.ploidy[i])),
+                    hl.agg.sum(ht.ploidy[i]),
+                )
+            ),
+            ht.indices_by_group,
+            ht.adj_group,
+        )
+
+    if not compute_an_only:
+        # Compute coverage stats.
+        coverage_over_x_bins = sorted(coverage_over_x_bins)
+        max_cov_bin = coverage_over_x_bins[-1]
+        hl_coverage_over_x_bins = hl.array(coverage_over_x_bins)
+
+        # Annotate all rows with coverage stats for each strata group.
+        agg_expr["coverage_stats"] = hl.map(
+            lambda s_indices: s_indices.aggregate(
+                lambda i: hl.struct(
+                    # This expression creates a counter DP -> number of samples
+                    # for DP between 0 and max_cov_bin.
+                    coverage_counter=hl.agg.counter(hl.min(max_cov_bin, ht.DP[i])),
+                    mean=hl.agg.mean(ht.DP[i]),
+                    median_approx=hl.agg.approx_median(ht.DP[i]),
+                    total_DP=hl.agg.sum(ht.DP[i]),
+                )
+            ),
+            ht.indices_by_group,
+        )
+
+    ht = ht.select(**agg_expr).checkpoint(
+        hl.utils.new_temp_file("coverage_stats", "ht")
+    )
+
+    if not compute_an_only:
+        # This expression aggregates the DP counter in reverse order of the
+        # coverage_over_x_bins and computes the cumulative sum over them.
+        # It needs to be in reverse order because we want the sum over samples
+        # covered by > X.
+        count_array_expr = ht.coverage_stats.map(
+            lambda x: hl.cumulative_sum(
+                hl.array(
+                    # The coverage was already floored to the max_coverage_bin, so no
+                    # more aggregation is needed for the max bin.
+                    [hl.int32(x.coverage_counter.get(max_cov_bin, 0))]
+                    # For each of the other bins, coverage needs to be summed between
+                    # the boundaries.
+                ).extend(
+                    hl.range(hl.len(hl_coverage_over_x_bins) - 1, 0, step=-1).map(
+                        lambda i: hl.sum(
+                            hl.range(
+                                hl_coverage_over_x_bins[i - 1],
+                                hl_coverage_over_x_bins[i],
+                            ).map(lambda j: hl.int32(x.coverage_counter.get(j, 0)))
+                        )
                     )
                 )
             )
         )
-    )
 
-    ht = ht.annotate(
-        coverage_stats=hl.map(
-            lambda c, g, n: c.annotate(
-                **{
-                    f"over_{x}": g[i] / n
-                    for i, x in zip(
-                        range(len(coverage_over_x_bins) - 1, -1, -1),
-                        # Reverse the bin index as count_array_expr has reverse order.
-                        coverage_over_x_bins,
-                    )
-                }
-            ).drop("coverage_counter"),
-            ht.coverage_stats,
-            count_array_expr,
-            sample_counts,
+        ht = ht.annotate(
+            coverage_stats=hl.map(
+                lambda c, g, n: c.annotate(
+                    **{
+                        f"over_{x}": g[i] / n
+                        for i, x in zip(
+                            range(len(coverage_over_x_bins) - 1, -1, -1),
+                            # Reverse the bin index as count_array_expr has reverse
+                            # order.
+                            coverage_over_x_bins,
+                        )
+                    }
+                ).drop("coverage_counter"),
+                ht.coverage_stats,
+                count_array_expr,
+                sample_counts,
+            )
         )
-    )
+
     current_keys = list(ht.key)
     ht = (
         ht.key_by(*row_key_fields)
@@ -1131,20 +1228,35 @@ def compute_coverage_stats(
     if no_strata:
         # If there was no stratification, move coverage_stats annotations to the top
         # level.
-        ht = ht.select(**{k: ht.coverage_stats[0][k] for k in ht.coverage_stats[0]})
+        select_expr = {}
+        if not compute_an_only:
+            select_expr.update(
+                {k: ht.coverage_stats[0][k] for k in ht.coverage_stats[0]}
+            )
+        if not compute_coverage_only:
+            select_expr["AN"] = ht.AN[0]
+
+        ht = ht.select(**select_expr)
     else:
         # If there was stratification, add the metadata and sample count info for the
         # stratification to the globals.
-        ht = ht.annotate_globals(
-            coverage_stats_meta=(
-                group_membership_ht.index_globals().freq_meta.map(
-                    lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
-                )
-            ),
-            coverage_stats_meta_sample_count=(
+        global_expr = {}
+        if not compute_an_only:
+            global_expr[
+                "coverage_stats_meta"
+            ] = group_membership_ht.index_globals().freq_meta.map(
+                lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
+            )
+            global_expr["coverage_stats_meta_sample_count"] = (
                 group_membership_ht.index_globals().freq_meta_sample_count
-            ),
-        )
+            )
+        if not compute_coverage_only:
+            global_expr["AN_meta"] = group_membership_ht.index_globals().freq_meta
+            global_expr["AN_meta_sample_count"] = (
+                group_membership_ht.index_globals().freq_meta_sample_count
+            )
+
+        ht = ht.annotate_globals(**global_expr)
 
     return ht
 

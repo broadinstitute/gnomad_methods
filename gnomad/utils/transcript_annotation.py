@@ -3,6 +3,8 @@ from typing import Callable, List, Optional, Tuple
 
 import hail as hl
 
+from gnomad.utils.vep import add_most_severe_consequence_to_consequence
+
 
 def summarize_rsem_mt(
     rsem_mt: hl.MatrixTable,
@@ -82,13 +84,13 @@ def get_expression_proportion(
     """
     Calculate the proportion of expression of transcript to gene per tissue.
 
-    :param transcript_ht: Table of summarized transcript expression by tissue
-    :param gene_ht: Table of summarized gene expression by tissue
-    :param tissues_to_filter: Optional list of tissues to filter out
+    :param transcript_ht: Table of summarized transcript expression by tissue.
+    :param gene_ht: Table of summarized gene expression by tissue.
+    :param tissues_to_filter: Optional list of tissues to filter out.
     :param tissue_as_row: If True, the input Table is with a row annotation for each
         tissue instead of an array of values. Default is False.
     :return: Table with expression proportion of transcript to gene per tissue
-        and mean expression proportion across tissues
+        and mean expression proportion across tissues.
     """
     if tissue_as_row:
         tissues1 = list(gene_ht.row)
@@ -145,3 +147,102 @@ def get_expression_proportion(
     )
 
     return transcript_ht
+
+
+def tx_annotate_variants(
+    variant_ht: hl.Table,
+    tx_ht: hl.Table,
+    tx_annotation_type: str = "expression",
+    filter_to_protein_coding: bool = True,
+    filter_to_genes: List[str] = None,
+    filter_to_csqs: List[str] = None,
+    filter_to_homs: bool = False,
+) -> hl.Table:
+    """
+    Annotate variants with transcript-based expression values or expression proportion from GTEx.
+
+    :param variant_ht: Table of variants to annotate, it should contain at
+        least the following nested fields: `vep.transcript_consequences`,
+        `freq`.
+    :param tx_ht: Table of transcript expression information.
+    :param tx_annotation_type: Type of transcript annotation to add. Options are
+        'expression' or 'expression_proportion'. Default is 'expression'.
+    :param filter_to_protein_coding: If True, filter to protein coding
+        transcripts. Default is True.
+    :param filter_to_genes: List of genes to filter to.
+    :param filter_to_csqs: List of consequence terms to filter to.
+    :param filter_to_homs: If True, filter to variants with at least one
+        homozygote in `freq` field. Default is False.
+    :return: MatrixTable with transcript expression information annotated
+    """
+    # GTEx data has transcript IDs without version numbers, so we need to
+    # remove the version numbers from the transcript IDs in the variant table
+    tx_ht = tx_ht.key_by()
+    tx_ht = tx_ht.annotate(transcript_id=tx_ht.transcript_id.split("\\.")[0])
+    tx_ht = tx_ht.key_by(tx_ht.transcript_id)
+
+    variant_ht = variant_ht.annotate(
+        vep=variant_ht.vep.annotate(
+            transcript_consequences=variant_ht.vep.transcript_consequences.map(
+                add_most_severe_consequence_to_consequence
+            )
+        )
+    )
+
+    # Explode the transcript consequences to be able to key by transcript ID
+    variant_ht = variant_ht.explode(variant_ht.vep.transcript_consequences)
+
+    if filter_to_protein_coding:
+        variant_ht = variant_ht.filter(
+            variant_ht.vep.transcript_consequences.biotype == "protein_coding"
+        )
+
+    if filter_to_genes:
+        variant_ht = variant_ht.filter(
+            hl.literal(filter_to_genes).contains(
+                variant_ht.vep.transcript_consequences.gene_id
+            )
+        )
+
+    if filter_to_csqs:
+        variant_ht = variant_ht.filter(
+            hl.literal(filter_to_csqs).contains(
+                variant_ht.vep.transcript_consequences.most_severe_consequence
+            )
+        )
+
+    if filter_to_homs:
+        variant_ht = variant_ht.filter(variant_ht.freq[0].homozygote_count > 0)
+
+    # Annotate the variant table with the transcript expression information
+    variant_ht = variant_ht.annotate(
+        tx_data=tx_ht[variant_ht.vep.transcript_consequences.transcript_id]
+    )
+
+    # Aggregate the transcript expression information by gene, csq, etc.
+    tx_annot_ht = variant_ht.group_by(
+        locus=variant_ht.locus,
+        alleles=variant_ht.alleles,
+        gene_id=variant_ht.vep.transcript_consequences.gene_id,
+        gene_symbol=variant_ht.vep.transcript_consequences.gene_symbol,
+        csq=variant_ht.vep.transcript_consequences.most_severe_consequence,
+        lof=variant_ht.vep.transcript_consequences.lof,
+        lof_flags=variant_ht.vep.transcript_consequences.lof_flags,
+    ).aggregate(
+        tx_annotation=hl.agg.array_sum(
+            variant_ht.tx_data.transcript_expression
+            if tx_annotation_type == "expression"
+            else variant_ht.tx_data.exp_prop
+        )
+    )
+
+    # Remove unnecessary global annotations and add tissue and
+    # expression_type in global annotations
+    tx_annot_ht = tx_annot_ht.select_globals().annotate_globals(
+        tissues=tx_ht.index_globals().tissues,
+        tx_annotation_type=tx_annotation_type,
+    )
+
+    tx_annot_ht = tx_annot_ht.key_by(tx_annot_ht.locus, tx_annot_ht.alleles)
+
+    return tx_annot_ht

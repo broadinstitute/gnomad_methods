@@ -395,14 +395,6 @@ telomeres_and_centromeres = GnomadPublicTableResource(
 gtex_rsem = VersionedTableResource(
     default_version="v10",
     versions={
-        "v7": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v7.mt",
-            import_func=_import_gtex_rsem,
-            import_args={  # TODO: update path
-                "gtex_path": "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
-                "meta_path": "gs://gnomad-qin/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz",
-            },
-        ),
         "v10": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v10.mt",
             import_func=_import_gtex_rsem,

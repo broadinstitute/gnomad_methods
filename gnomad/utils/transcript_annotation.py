@@ -152,7 +152,6 @@ def get_expression_proportion(
 def tx_annotate_variants(
     variant_ht: hl.Table,
     tx_ht: hl.Table,
-    tx_annotation_type: str = "expression",
     filter_to_protein_coding: bool = True,
     filter_to_genes: List[str] = None,
     filter_to_csqs: List[str] = None,
@@ -165,8 +164,6 @@ def tx_annotate_variants(
         least the following nested fields: `vep.transcript_consequences`,
         `freq`.
     :param tx_ht: Table of transcript expression information.
-    :param tx_annotation_type: Type of transcript annotation to add. Options are
-        'expression' or 'expression_proportion'. Default is 'expression'.
     :param filter_to_protein_coding: If True, filter to protein coding
         transcripts. Default is True.
     :param filter_to_genes: List of genes to filter to.
@@ -220,27 +217,25 @@ def tx_annotate_variants(
     )
 
     # Aggregate the transcript expression information by gene, csq, etc.
+    # TODO: Should we filter to only exonic variants since it's mostly exomes
+    #  data?
     tx_annot_ht = variant_ht.group_by(
+        gene_id=variant_ht.vep.transcript_consequences.gene_id,
         locus=variant_ht.locus,
         alleles=variant_ht.alleles,
-        gene_id=variant_ht.vep.transcript_consequences.gene_id,
         gene_symbol=variant_ht.vep.transcript_consequences.gene_symbol,
         csq=variant_ht.vep.transcript_consequences.most_severe_consequence,
         lof=variant_ht.vep.transcript_consequences.lof,
         lof_flags=variant_ht.vep.transcript_consequences.lof_flags,
     ).aggregate(
-        tx_annotation=hl.agg.array_sum(
-            variant_ht.tx_data.transcript_expression
-            if tx_annotation_type == "expression"
-            else variant_ht.tx_data.exp_prop
-        )
+        tx_annotation=hl.agg.array_sum(variant_ht.tx_data.transcript_expression),
+        mean_proportion=hl.agg.sum(variant_ht.tx_data.exp_prop_mean),
     )
 
     # Remove unnecessary global annotations and add tissue and
     # expression_type in global annotations
     tx_annot_ht = tx_annot_ht.select_globals().annotate_globals(
         tissues=tx_ht.index_globals().tissues,
-        tx_annotation_type=tx_annotation_type,
     )
 
     tx_annot_ht = tx_annot_ht.key_by(tx_annot_ht.locus, tx_annot_ht.alleles)

@@ -478,8 +478,7 @@ def vep_struct_to_csq(
 
         # Add exception for transcripts
         if feature_type == "Transcript":
-            fields.update(
-                {
+            transcript_dict = {
                     "canonical": hl.if_else(element.canonical == 1, "YES", ""),
                     "ensp": element.protein_id,
                     "gene": element.gene_id,
@@ -495,15 +494,18 @@ def vep_struct_to_csq(
                         "",
                         "-" + hl.str(element.cds_end),
                     ),
-                    "mirna": hl.delimit(element.mirna, "&"),
+                    "mirna": hl.delimit(element.mirna, "&") if 'mirna' in element else None,
                     "protein_position": hl.str(element.protein_start) + hl.if_else(
                         element.protein_start == element.protein_end,
                         "",
                         "-" + hl.str(element.protein_end),
                     ),
-                    "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&"),
+                    "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&") if "uniprot_isoform" in element else None,
                 }
-            )
+            # Retain transcript dict updates only for fields that exist in the csq fields.
+            transcript_dict = {k:v for k,v in transcript_dict.items() if k in [x.lower() for x in csq_fields.split('|')]}
+            fields.update(transcript_dict)
+            
             if has_polyphen_sift:
                 fields.update(
                     {
@@ -530,7 +532,8 @@ def vep_struct_to_csq(
             )
         elif feature_type == "MotifFeature":
             fields["motif_score_change"] = hl.format("%.3f", element.motif_score_change)
-            fields["transcription_factors"] = hl.delimit(
+            if "transcription_factors" in element:
+                fields["transcription_factors"] = hl.delimit(
                 element.transcription_factors, "&"
             )
 
@@ -555,6 +558,7 @@ def vep_struct_to_csq(
         )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
+
 
 
 def get_most_severe_consequence_for_summary(

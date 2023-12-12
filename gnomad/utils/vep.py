@@ -479,33 +479,41 @@ def vep_struct_to_csq(
         # Add exception for transcripts
         if feature_type == "Transcript":
             transcript_dict = {
-                    "canonical": hl.if_else(element.canonical == 1, "YES", ""),
-                    "ensp": element.protein_id,
-                    "gene": element.gene_id,
-                    "symbol": element.gene_symbol,
-                    "symbol_source": element.gene_symbol_source,
-                    "cdna_position": hl.str(element.cdna_start) + hl.if_else(
-                        element.cdna_start == element.cdna_end,
-                        "",
-                        "-" + hl.str(element.cdna_end),
-                    ),
-                    "cds_position": hl.str(element.cds_start) + hl.if_else(
-                        element.cds_start == element.cds_end,
-                        "",
-                        "-" + hl.str(element.cds_end),
-                    ),
-                    "mirna": hl.delimit(element.mirna, "&") if 'mirna' in element else None,
-                    "protein_position": hl.str(element.protein_start) + hl.if_else(
-                        element.protein_start == element.protein_end,
-                        "",
-                        "-" + hl.str(element.protein_end),
-                    ),
-                    "uniprot_isoform": hl.delimit(element.uniprot_isoform, "&") if "uniprot_isoform" in element else None,
-                }
+                "canonical": hl.if_else(element.canonical == 1, "YES", ""),
+                "ensp": element.protein_id,
+                "gene": element.gene_id,
+                "symbol": element.gene_symbol,
+                "symbol_source": element.gene_symbol_source,
+                "cdna_position": hl.str(element.cdna_start) + hl.if_else(
+                    element.cdna_start == element.cdna_end,
+                    "",
+                    "-" + hl.str(element.cdna_end),
+                ),
+                "cds_position": hl.str(element.cds_start) + hl.if_else(
+                    element.cds_start == element.cds_end,
+                    "",
+                    "-" + hl.str(element.cds_end),
+                ),
+                "mirna": hl.delimit(element.mirna, "&") if "mirna" in element else None,
+                "protein_position": hl.str(element.protein_start) + hl.if_else(
+                    element.protein_start == element.protein_end,
+                    "",
+                    "-" + hl.str(element.protein_end),
+                ),
+                "uniprot_isoform": (
+                    hl.delimit(element.uniprot_isoform, "&")
+                    if "uniprot_isoform" in element
+                    else None
+                ),
+            }
             # Retain transcript dict updates only for fields that exist in the csq fields.
-            transcript_dict = {k:v for k,v in transcript_dict.items() if k in [x.lower() for x in csq_fields.split('|')]}
+            transcript_dict = {
+                k: v
+                for k, v in transcript_dict.items()
+                if k in [x.lower() for x in csq_fields.split("|")]
+            }
             fields.update(transcript_dict)
-            
+
             if has_polyphen_sift:
                 fields.update(
                     {
@@ -534,8 +542,8 @@ def vep_struct_to_csq(
             fields["motif_score_change"] = hl.format("%.3f", element.motif_score_change)
             if "transcription_factors" in element:
                 fields["transcription_factors"] = hl.delimit(
-                element.transcription_factors, "&"
-            )
+                    element.transcription_factors, "&"
+                )
 
         return hl.delimit(
             [hl.or_else(hl.str(fields.get(f, "")), "") for f in _csq_fields], "|"
@@ -558,7 +566,6 @@ def vep_struct_to_csq(
         )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
-
 
 
 def get_most_severe_consequence_for_summary(

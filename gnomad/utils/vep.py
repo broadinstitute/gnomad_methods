@@ -506,7 +506,8 @@ def vep_struct_to_csq(
                     else None
                 ),
             }
-            # Retain transcript dict updates only for fields that exist in the csq fields.
+            # Retain transcript dict updates only for fields that exist in the csq 
+            # fields.
             transcript_dict = {
                 k: v
                 for k, v in transcript_dict.items()

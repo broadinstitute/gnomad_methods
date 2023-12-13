@@ -87,6 +87,6 @@ def tissue_expression_ht_to_array(
         tissues = [t for t in tissues if t not in tissues_to_filter]
 
     ht = ht.select_globals(tissues=tissues)
-    ht = ht.select(tissue_expression=ht.tissues.map(lambda x: ht[x]))
+    ht = ht.select(tissue_expression=[ht[t] for t in tissues])
 
     return ht

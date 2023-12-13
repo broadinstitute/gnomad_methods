@@ -14,7 +14,9 @@ logger.setLevel(logging.INFO)
 
 def summarize_transcript_expression(
     mt: hl.MatrixTable,
-    transcript_expression_expr: Union[hl.expr.NumericExpression, str] = "x",
+    transcript_expression_expr: Union[
+        hl.expr.NumericExpression, str
+    ] = "transcript_tpm",
     tissue_expr: Union[hl.expr.StringExpression, str] = "tissue",
     summary_agg_func: Optional[Callable] = None,
 ) -> Tuple[hl.Table, hl.Table]:
@@ -30,9 +32,9 @@ def summarize_transcript_expression(
 
     :param mt: MatrixTable of transcript (rows) expression quantifications (entry) by
         sample (columns).
-    :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param transcript_expression_expr: Entry expression indicating transcript expression
-        quantification. Default is 'x'.
+        quantification. Default is 'transcript_tpm'.
+    :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
         transcript expression quantification by tissue. Example: `hl.agg.mean`. Default
         is None, which will use a median aggregation.

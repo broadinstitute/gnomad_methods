@@ -42,6 +42,12 @@ def summarize_transcript_expression(
     if summary_agg_func is None:
         summary_agg_func = lambda x: hl.median(hl.agg.collect(x))
 
+    if isinstance(transcript_expression_expr, str):
+        transcript_expression_expr = mt[transcript_expression_expr]
+
+    if isinstance(tissue_expr, str):
+        tissue_expr = mt[tissue_expr]
+
     mt = mt.group_cols_by(tissue=tissue_expr).aggregate(
         tx=summary_agg_func(transcript_expression_expr)
     )

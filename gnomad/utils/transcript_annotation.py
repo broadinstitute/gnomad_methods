@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.vep import add_most_severe_consequence_to_consequence
+from gnomad.utils.vep import process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -144,6 +144,7 @@ def tx_annotate_variants(
     filter_to_genes: List[str] = None,
     filter_to_csqs: List[str] = None,
     filter_to_homs: bool = False,
+    vep_annotation: str = "transcript_consequences",
 ) -> hl.Table:
     """
     Annotate variants with transcript-based expression values or expression proportion from GTEx.
@@ -158,7 +159,14 @@ def tx_annotate_variants(
     :param filter_to_csqs: List of consequence terms to filter to.
     :param filter_to_homs: If True, filter to variants with at least one
         homozygote in `freq` field. Default is False.
-    :return: MatrixTable with transcript expression information annotated
+    :param vep_annotation: Name of annotation in 'vep' annotation,
+        one of the processed consequences: ["transcript_consequences",
+        "worst_csq_by_gene", "worst_csq_for_variant",
+        "worst_csq_by_gene_canonical", "worst_csq_for_variant_canonical"].
+        For exapmle, if you want to annotate each variant with the worst
+        consequence per gene and the transcript expression, you would use
+        "worst_csq_by_gene". Default is "transcript_consequences".
+    :return: Table with transcript expression information annotated
     """
     # GTEx data has transcript IDs without version numbers, so we need to
     # remove the version numbers from the transcript IDs in the variant table
@@ -166,33 +174,26 @@ def tx_annotate_variants(
     tx_ht = tx_ht.annotate(transcript_id=tx_ht.transcript_id.split("\\.")[0])
     tx_ht = tx_ht.key_by(tx_ht.transcript_id)
 
-    variant_ht = variant_ht.annotate(
-        vep=variant_ht.vep.annotate(
-            transcript_consequences=variant_ht.vep.transcript_consequences.map(
-                add_most_severe_consequence_to_consequence
-            )
-        )
-    )
+    variant_ht = process_consequences(variant_ht)
 
-    # Explode the transcript consequences to be able to key by transcript ID
-    variant_ht = variant_ht.explode(variant_ht.vep.transcript_consequences)
+    # Explode the processed transcript consequences to be able to key by
+    # transcript ID
+    variant_ht = variant_ht.explode(variant_ht.vep[vep_annotation])
 
     if filter_to_protein_coding:
         variant_ht = variant_ht.filter(
-            variant_ht.vep.transcript_consequences.biotype == "protein_coding"
+            variant_ht.vep[vep_annotation].biotype == "protein_coding"
         )
 
     if filter_to_genes:
         variant_ht = variant_ht.filter(
-            hl.literal(filter_to_genes).contains(
-                variant_ht.vep.transcript_consequences.gene_id
-            )
+            hl.literal(filter_to_genes).contains(variant_ht.vep[vep_annotation].gene_id)
         )
 
     if filter_to_csqs:
         variant_ht = variant_ht.filter(
             hl.literal(filter_to_csqs).contains(
-                variant_ht.vep.transcript_consequences.most_severe_consequence
+                variant_ht.vep[vep_annotation].most_severe_consequence
             )
         )
 
@@ -201,20 +202,20 @@ def tx_annotate_variants(
 
     # Annotate the variant table with the transcript expression information
     variant_ht = variant_ht.annotate(
-        tx_data=tx_ht[variant_ht.vep.transcript_consequences.transcript_id]
+        tx_data=tx_ht[variant_ht.vep[vep_annotation].transcript_id]
     )
 
     # Aggregate the transcript expression information by gene, csq, etc.
     # TODO: Should we filter to only exonic variants since it's mostly exomes
     #  data?
     tx_annot_ht = variant_ht.group_by(
-        gene_id=variant_ht.vep.transcript_consequences.gene_id,
+        gene_id=variant_ht.vep[vep_annotation].gene_id,
         locus=variant_ht.locus,
         alleles=variant_ht.alleles,
-        gene_symbol=variant_ht.vep.transcript_consequences.gene_symbol,
-        csq=variant_ht.vep.transcript_consequences.most_severe_consequence,
-        lof=variant_ht.vep.transcript_consequences.lof,
-        lof_flags=variant_ht.vep.transcript_consequences.lof_flags,
+        gene_symbol=variant_ht.vep[vep_annotation].gene_symbol,
+        csq=variant_ht.vep[vep_annotation].most_severe_consequence,
+        lof=variant_ht.vep[vep_annotation].lof,
+        lof_flags=variant_ht.vep[vep_annotation].lof_flags,
     ).aggregate(
         tx_annotation=hl.agg.array_sum(variant_ht.tx_data.transcript_expression),
         mean_proportion=hl.agg.sum(variant_ht.tx_data.exp_prop_mean),

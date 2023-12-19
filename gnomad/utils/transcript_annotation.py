@@ -14,10 +14,12 @@ logger.setLevel(logging.INFO)
 
 def summarize_transcript_expression(
     mt: hl.MatrixTable,
-    transcript_expression_expr: Union[hl.expr.NumericExpression, str] = "x",
+    transcript_expression_expr: Union[
+        hl.expr.NumericExpression, str
+    ] = "transcript_tpm",
     tissue_expr: Union[hl.expr.StringExpression, str] = "tissue",
     summary_agg_func: Optional[Callable] = None,
-) -> Tuple[hl.Table, hl.Table]:
+) -> hl.Table:
     """
     Summarize a transcript expression MatrixTable by transcript, gene, and tissue.
 
@@ -30,17 +32,22 @@ def summarize_transcript_expression(
 
     :param mt: MatrixTable of transcript (rows) expression quantifications (entry) by
         sample (columns).
-    :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param transcript_expression_expr: Entry expression indicating transcript expression
         quantification. Default is 'x'.
+    :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
         transcript expression quantification by tissue. Example: `hl.agg.mean`. Default
         is None, which will use a median aggregation.
-    :return: A Table of summarized transcript expression by tissue and a Table of
-        summarized gene expression by tissue.
+    :return: A Table of summarized transcript expression by tissue
     """
     if summary_agg_func is None:
         summary_agg_func = lambda x: hl.median(hl.agg.collect(x))
+
+    if isinstance(transcript_expression_expr, str):
+        transcript_expression_expr = mt[transcript_expression_expr]
+
+    if isinstance(tissue_expr, str):
+        tissue_expr = mt[tissue_expr]
 
     mt = mt.group_cols_by(tissue=tissue_expr).aggregate(
         tx=summary_agg_func(transcript_expression_expr)
@@ -49,14 +56,7 @@ def summarize_transcript_expression(
     transcript_ht = mt.rename({"tx": ""}).make_table()
     transcript_ht = transcript_ht.key_by("transcript_id", "gene_id")
 
-    gene_ht = transcript_ht.group_by("gene_id").aggregate(
-        **{
-            tissue: hl.agg.sum(transcript_ht[tissue])
-            for tissue in list(transcript_ht.row_value)
-        }
-    )
-
-    return transcript_ht, gene_ht
+    return transcript_ht
 
 
 def tissue_expression_ht_to_array(
@@ -94,7 +94,6 @@ def tissue_expression_ht_to_array(
 
 def get_expression_proportion(
     transcript_ht: hl.Table,
-    gene_ht: hl.Table,
     tissues_to_filter: Optional[List[str]] = None,
 ) -> hl.Table:
     """
@@ -109,27 +108,30 @@ def get_expression_proportion(
     transcript_ht = tissue_expression_ht_to_array(
         transcript_ht, tissues_to_filter=tissues_to_filter
     )
-    gene_ht = tissue_expression_ht_to_array(
-        gene_ht, tissues=hl.eval(transcript_ht.tissues)
+
+    # Calculate the sum of transcript expression by gene per tissue.
+    gene_ht = transcript_ht.group_by("gene_id").aggregate(
+        expression_sum=hl.agg.array_sum(transcript_ht.tissue_expression)
     )
 
-    # Join the transcript expression table and gene expression table.
-    transcript_ht = transcript_ht.annotate(
-        gene_expression=gene_ht[transcript_ht.gene_id].tissue_expression
-    )
-
-    # Calculate the proportion of expression of transcript to gene per tissue.
-    transcript_ht = transcript_ht.annotate(
-        exp_prop=hl.or_else(
-            transcript_ht.transcript_expression / transcript_ht.gene_expression,
-            hl.empty_array(hl.tfloat64),
-        ),
-    )
     # Calculate the mean expression proportion across tissues.
     transcript_ht = transcript_ht.annotate(
+        gene_exp_sum=gene_ht[transcript_ht.gene_id].expression_sum,
+        exp_prop=hl.map(
+            lambda x, y: x / y,
+            transcript_ht.tissue_expression,
+            gene_ht[transcript_ht.gene_id].expression_sum,
+        ),
         exp_prop_mean=hl.mean(
-            hl.filter(lambda e: ~hl.is_nan(e), transcript_ht.exp_prop),
-        )
+            hl.filter(
+                lambda e: ~hl.is_nan(e),
+                hl.map(
+                    lambda x, y: x / y,
+                    transcript_ht.tissue_expression,
+                    gene_ht[transcript_ht.gene_id].expression_sum,
+                ),
+            )
+        ),
     )
 
     return transcript_ht

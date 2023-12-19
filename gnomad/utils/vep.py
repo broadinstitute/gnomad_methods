@@ -292,7 +292,7 @@ def process_consequences(
     def find_worst_transcript_consequence(
         tcl: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
-        """Get worst transcript_consequence from an array of em."""
+        """Get the worst transcript_consequence from an array of all annotated transcript consequences."""
         flag_score = 500
         no_flag_score = flag_score * (1 + penalize_flags)
 

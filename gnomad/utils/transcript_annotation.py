@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.vep import add_most_severe_consequence_to_consequence
+from gnomad.utils.vep import process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -148,6 +148,7 @@ def tx_annotate_variants(
         "lof",
         "lof_flags",
     ),
+    vep_annotation: str = "transcript_consequences",
 ) -> hl.Table:
     """
     Annotate variants with transcript-based expression values or expression proportion from GTEx.
@@ -161,6 +162,13 @@ def tx_annotate_variants(
     :param tissues_to_filter: Optional list of tissues to exclude from the output.
     :param additional_group_by: Optional list of additional fields to group by before
         sum aggregation.
+    :param vep_annotation: Name of annotation in 'vep' annotation,
+        one of the processed consequences: ["transcript_consequences",
+        "worst_csq_by_gene", "worst_csq_for_variant",
+        "worst_csq_by_gene_canonical", "worst_csq_for_variant_canonical"].
+        For example, if you want to annotate each variant with the worst
+        consequence in each gene it falls on and the transcript expression,
+        you would use "worst_csq_by_gene". Default is "transcript_consequences".
     :return: Input Table with transcript expression information annotated.
     """
     # Filter to tissues of interest and convert to arrays for easy aggregation.
@@ -171,19 +179,15 @@ def tx_annotate_variants(
     # Calculate the mean expression proportion across all tissues.
     tx_ht = tx_ht.annotate(exp_prop_mean=hl.mean(tx_ht.expression_proportion))
 
-    # Add the most severe consequence to the transcript consequences.
-    variant_ht = variant_ht.select(
-        transcript_consequences=variant_ht.vep.transcript_consequences.map(
-            add_most_severe_consequence_to_consequence
-        )
-    )
+    variant_ht = process_consequences(variant_ht)
 
-    # Explode the transcript consequences to be able to key by transcript ID.
-    variant_ht = variant_ht.explode(variant_ht.transcript_consequences)
+    # Explode the processed transcript consequences to be able to key by
+    # transcript ID
+    variant_ht = variant_ht.explode(variant_ht.vep[vep_annotation])
 
     if filter_to_protein_coding:
         variant_ht = variant_ht.filter(
-            variant_ht.transcript_consequences.biotype == "protein_coding"
+            variant_ht.vep[vep_annotation].biotype == "protein_coding"
         )
 
     grouping = ["transcript_id", "gene_id"] + list(additional_group_by)

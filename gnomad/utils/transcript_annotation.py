@@ -138,7 +138,7 @@ def get_expression_proportion(
 
 
 def tx_annotate_variants(
-    variant_ht: hl.Table,
+    ht: hl.Table,
     tx_ht: hl.Table,
     filter_to_protein_coding: bool = True,
     tissues_to_filter: Optional[List[str]] = None,
@@ -153,9 +153,8 @@ def tx_annotate_variants(
     """
     Annotate variants with transcript-based expression values or expression proportion from GTEx.
 
-    :param variant_ht: Table of variants to annotate, it should contain at
-        least the following nested fields: `vep.transcript_consequences`,
-        `freq`.
+    :param ht: Table of variants to annotate, it should contain at least the following
+        nested fields: `vep.transcript_consequences`, `freq`.
     :param tx_ht: Table of transcript expression information.
     :param filter_to_protein_coding: If True, filter to protein coding
         transcripts. Default is True.
@@ -179,40 +178,36 @@ def tx_annotate_variants(
     # Calculate the mean expression proportion across all tissues.
     tx_ht = tx_ht.annotate(exp_prop_mean=hl.mean(tx_ht.expression_proportion))
 
-    variant_ht = process_consequences(variant_ht)
+    ht = process_consequences(ht)
 
     # Explode the processed transcript consequences to be able to key by
     # transcript ID
-    variant_ht = variant_ht.explode(variant_ht.vep[vep_annotation])
+    ht = ht.explode(ht.vep[vep_annotation])
 
     if filter_to_protein_coding:
-        variant_ht = variant_ht.filter(
-            variant_ht.vep[vep_annotation].biotype == "protein_coding"
-        )
+        ht = ht.filter(ht.vep[vep_annotation].biotype == "protein_coding")
 
     grouping = ["transcript_id", "gene_id"] + list(additional_group_by)
-    variant_ht = variant_ht.select(
-        **{a: variant_ht.transcript_consequences[a] for a in grouping}
-    )
+    ht = ht.select(**{a: ht.vep[vep_annotation][a] for a in grouping})
 
     # Aggregate the transcript expression information by gene_id and annotation in
     # additional_group_by.
-    variant_to_tx = tx_ht[variant_ht.transcript_id, variant_ht.gene_id]
+    variant_to_tx = tx_ht[ht.transcript_id, ht.gene_id]
     grouping = ["locus", "alleles", "gene_id"] + list(additional_group_by)
-    tx_annot_ht = variant_ht.group_by(*grouping).aggregate(
+    ht = ht.group_by(*grouping).aggregate(
         **{a: hl.agg.array_sum(variant_to_tx[a]) for a in agg_annotations},
         exp_prop_mean=hl.agg.sum(variant_to_tx.exp_prop_mean),
     )
 
     # Reformat the transcript expression information to be a struct per tissue.
-    tx_annot_ht = tx_annot_ht.select(
+    ht = ht.select(
         "exp_prop_mean",
         **{
-            t: hl.struct(**{a: tx_annot_ht[a][i] for a in agg_annotations})
+            t: hl.struct(**{a: ht[a][i] for a in agg_annotations})
             for i, t in enumerate(tissues)
         },
     )
 
-    tx_annot_ht = tx_annot_ht.key_by(tx_annot_ht.locus, tx_annot_ht.alleles)
+    ht = ht.key_by(ht.locus, ht.alleles)
 
-    return tx_annot_ht
+    return ht

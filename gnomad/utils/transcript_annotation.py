@@ -33,7 +33,7 @@ def summarize_transcript_expression(
     :param mt: MatrixTable of transcript (rows) expression quantifications (entry) by
         sample (columns).
     :param transcript_expression_expr: Entry expression indicating transcript expression
-        quantification. Default is 'x'.
+        quantification. Default is 'transcript_tpm'.
     :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
         transcript expression quantification by tissue. Example: `hl.agg.mean`. Default

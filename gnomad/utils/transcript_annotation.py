@@ -163,9 +163,9 @@ def tx_annotate_variants(
         one of the processed consequences: ["transcript_consequences",
         "worst_csq_by_gene", "worst_csq_for_variant",
         "worst_csq_by_gene_canonical", "worst_csq_for_variant_canonical"].
-        For exapmle, if you want to annotate each variant with the worst
-        consequence per gene and the transcript expression, you would use
-        "worst_csq_by_gene". Default is "transcript_consequences".
+        For example, if you want to annotate each variant with the worst
+        consequence in each gene it falls on and the transcript expression,
+        you would use "worst_csq_by_gene". Default is "transcript_consequences".
     :return: Table with transcript expression information annotated
     """
     # GTEx data has transcript IDs without version numbers, so we need to

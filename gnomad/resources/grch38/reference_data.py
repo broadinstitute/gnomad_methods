@@ -139,7 +139,7 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
         .SMTSD.replace(" ", "")
         .replace("-", "_")
         .replace("\\(", "_")
-        .replace("\\)", "_")
+        .replace("\\)", "")
     )
 
     mt = mt.key_rows_by("transcript_id", "gene_id")

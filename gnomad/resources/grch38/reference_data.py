@@ -126,7 +126,13 @@ def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
         min_partitions=1000,
     )
     gtex = gtex.rename({"x": "transcript_tpm"})
-    gtex = gtex.annotate_cols(tissue=meta_ht[gtex.col_id].SMTSD.replace(" ", ""))
+    gtex = gtex.annotate_cols(
+        tissue=meta_ht[gtex.col_id]
+        .SMTSD.replace(" ", "")
+        .replace("-", "_")
+        .replace("(", "_")
+        .replace(")", "_")
+    )
 
     return gtex
 

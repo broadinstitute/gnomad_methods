@@ -99,7 +99,7 @@ def _import_ensembl_interval(path) -> hl.Table:
     return ensembl
 
 
-def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
+def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
     """
     Import GTEx RSEM data from expression data and sample attributes file.
 
@@ -117,24 +117,34 @@ def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
     meta_ht = hl.import_table(meta_path, force_bgz=True, impute=True)
     meta_ht = meta_ht.key_by("SAMPID")
 
-    gtex = hl.import_matrix_table(
+    mt = hl.import_matrix_table(
         gtex_path,
-        row_key="transcript_id",
         row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
         entry_type=hl.tfloat64,
         force_bgz=True,
         min_partitions=1000,
     )
-    gtex = gtex.rename({"x": "transcript_tpm"})
-    gtex = gtex.annotate_cols(
-        tissue=meta_ht[gtex.col_id]
+
+    mt = mt.rename({"x": "transcript_tpm"})
+
+    # GTEx data has gene IDs and transcript IDs with version numbers, we need
+    # to remove the version numbers so that it can later be joined with the
+    # variant Table
+    mt = mt.annotate(
+        transcript_id=mt.transcript_id.split("\\.")[0],
+        gene_id=mt.gene_id.split("\\.")[0],
+    )
+    mt = mt.annotate_cols(
+        tissue=meta_ht[mt.col_id]
         .SMTSD.replace(" ", "")
         .replace("-", "_")
         .replace("\\(", "_")
         .replace("\\)", "_")
     )
 
-    return gtex
+    mt = mt.key_rows_by("transcript_id", "gene_id")
+
+    return mt
 
 
 # Resources with no versioning needed

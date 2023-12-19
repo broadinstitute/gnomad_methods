@@ -130,8 +130,8 @@ def _import_gtex_rsem(gtex_path, meta_path) -> hl.MatrixTable:
         tissue=meta_ht[gtex.col_id]
         .SMTSD.replace(" ", "")
         .replace("-", "_")
-        .replace("(", "_")
-        .replace(")", "_")
+        .replace("\\(", "_")
+        .replace("\\)", "_")
     )
 
     return gtex

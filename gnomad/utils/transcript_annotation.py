@@ -36,7 +36,7 @@ def summarize_transcript_expression(
         quantification. Default is 'transcript_tpm'.
     :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
-        transcript expression quantification by tissue. Example: `hl.agg.mean`. Default
+        transcript expression quantification by tissue. Example: `hl.mean`. Default
         is None, which will use a median aggregation.
     :return: A Table of summarized transcript expression by tissue
     """
@@ -67,6 +67,31 @@ def summarize_transcript_expression(
     )
 
     return ht
+
+
+def get_expression_proportion(ht: hl.Table) -> hl.expr.StructExpression:
+    """
+    Calculate the proportion of expression of transcript to gene per tissue.
+
+    :param ht: Table of summarized transcript expression by tissue.
+    :return: Table with expression proportion of transcript to gene per tissue
+        and mean expression proportion across tissues.
+    """
+    tissues = list(ht.row_value)
+
+    # Calculate the sum of transcript expression by gene per tissue.
+    gene_ht = ht.group_by("gene_id").aggregate(
+        **{tissue: hl.agg.sum(ht[tissue]) for tissue in tissues}
+    )
+
+    # Return the proportion of expression of transcript to gene per tissue.
+    gene = gene_ht[ht.gene_id]
+    return hl.struct(
+        **{
+            tissue: hl.utils.misc.divide_null(ht[tissue], gene[tissue])
+            for tissue in tissues
+        }
+    )
 
 
 def filter_expression_ht_by_tissues(
@@ -113,9 +138,10 @@ def tissue_expression_ht_to_array(
     """
     Convert a Table with a row annotation for each tissue to a Table with tissues as an array.
 
-    The output is a Table with a field 'tissue_expression' containing an array of
-    summarized expression values by tissue, where the order of tissues in the array is
-    indicated by the "tissues" global annotation.
+    The output is a Table with fields in `annotations_to_extract`,
+    each containing an array of summarized expression values or proportion
+    by tissue, where the order of tissues in the array is indicated by
+    the "tissues" global annotation.
 
     :param ht: Table with a row annotation for each tissue.
     :param tissues_to_keep: Optional list of tissues to keep in the 'tissue_expression'
@@ -145,28 +171,3 @@ def tissue_expression_ht_to_array(
         )
 
     return ht
-
-
-def get_expression_proportion(ht: hl.Table) -> hl.expr.StructExpression:
-    """
-    Calculate the proportion of expression of transcript to gene per tissue.
-
-    :param ht: Table of summarized transcript expression by tissue.
-    :return: Table with expression proportion of transcript to gene per tissue
-        and mean expression proportion across tissues.
-    """
-    tissues = list(ht.row_value)
-
-    # Calculate the sum of transcript expression by gene per tissue.
-    gene_ht = ht.group_by("gene_id").aggregate(
-        **{tissue: hl.agg.sum(ht[tissue]) for tissue in tissues}
-    )
-
-    # Return the proportion of expression of transcript to gene per tissue.
-    gene = gene_ht[ht.gene_id]
-    return hl.struct(
-        **{
-            tissue: hl.utils.misc.divide_null(ht[tissue], gene[tissue])
-            for tissue in tissues
-        }
-    )

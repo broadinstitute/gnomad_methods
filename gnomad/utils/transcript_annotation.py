@@ -175,49 +175,6 @@ def tissue_expression_ht_to_array(
     return ht
 
 
-def get_expression_proportion(
-    transcript_ht: hl.Table,
-    gene_ht: hl.Table,
-    tissues_to_filter: Optional[List[str]] = None,
-) -> hl.Table:
-    """
-    Calculate the proportion of expression of transcript to gene per tissue.
-
-    :param transcript_ht: Table of summarized transcript expression by tissue.
-    :param gene_ht: Table of summarized gene expression by tissue.
-    :param tissues_to_filter: Optional list of tissues to filter out
-    :return: Table with expression proportion of transcript to gene per tissue
-        and mean expression proportion across tissues.
-    """
-    transcript_ht = tissue_expression_ht_to_array(
-        transcript_ht, tissues_to_filter=tissues_to_filter
-    )
-    gene_ht = tissue_expression_ht_to_array(
-        gene_ht, tissues=hl.eval(transcript_ht.tissues)
-    )
-
-    # Join the transcript expression table and gene expression table.
-    transcript_ht = transcript_ht.annotate(
-        gene_expression=gene_ht[transcript_ht.gene_id].tissue_expression
-    )
-
-    # Calculate the proportion of expression of transcript to gene per tissue.
-    transcript_ht = transcript_ht.annotate(
-        exp_prop=hl.or_else(
-            transcript_ht.transcript_expression / transcript_ht.gene_expression,
-            hl.empty_array(hl.tfloat64),
-        ),
-    )
-    # Calculate the mean expression proportion across tissues.
-    transcript_ht = transcript_ht.annotate(
-        exp_prop_mean=hl.mean(
-            hl.filter(lambda e: ~hl.is_nan(e), transcript_ht.exp_prop),
-        )
-    )
-
-    return transcript_ht
-
-
 def tx_annotate_variants(
     ht: hl.Table,
     tx_ht: hl.Table,

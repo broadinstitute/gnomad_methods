@@ -96,7 +96,7 @@ def filter_expression_ht_by_tissues(
         logger.info("Filtering tissues: %s", tissues_to_filter)
         tissues = [t for t in tissues if t not in tissues_to_filter]
 
-    ht = ht.select(tissues)
+    ht = ht.select(*tissues)
 
     return ht
 

@@ -109,7 +109,6 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
         under Metadata. The transcript TPM file is expected to have transcript
         expression data, with transcript IDs as the first column and gene IDs as the
         second column.
-
     :param gtex_path: Path to the GTEx RSEM file.
     :param meta_path: Path to the GTEx sample attributes file.
     :return: Matrix Table with GTEx RSEM data with tissue information.
@@ -119,6 +118,7 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
 
     mt = hl.import_matrix_table(
         gtex_path,
+        row_key="transcript_id",
         row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
         entry_type=hl.tfloat64,
         force_bgz=True,
@@ -130,10 +130,6 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
     # GTEx data has gene IDs and transcript IDs with version numbers, we need
     # to remove the version numbers so that it can later be joined with the
     # variant Table
-    mt = mt.annotate(
-        transcript_id=mt.transcript_id.split("\\.")[0],
-        gene_id=mt.gene_id.split("\\.")[0],
-    )
     mt = mt.annotate_cols(
         tissue=meta_ht[mt.col_id]
         .SMTSD.replace(" ", "")
@@ -141,9 +137,12 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
         .replace("\\(", "_")
         .replace("\\)", "")
     )
-
-    mt = mt.key_rows_by("transcript_id", "gene_id")
-
+    mt = mt.key_rows_by()
+    mt = mt.annotate_rows(
+        transcript_id=mt.transcript_id.split("\\.")[0],
+        gene_id=mt.gene_id.split("\\.")[0],
+    )
+    mt = mt.key_rows_by("transcript_id")
     return mt
 
 

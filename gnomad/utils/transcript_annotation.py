@@ -175,30 +175,27 @@ def tissue_expression_ht_to_array(
     return ht
 
 
-def tx_annotate_variants(
+def preprocess_variants_for_tx(
     ht: hl.Table,
-    tx_ht: hl.Table,
+    filter_to_genes: Optional[Union[Tuple[str], List[str]]] = None,
+    filter_to_csqs: Optional[Union[Tuple[str], List[str]]] = None,
+    ignore_splicing: bool = True,
+    filter_to_homs: bool = False,
     filter_to_protein_coding: bool = True,
-    tissues_to_filter: Optional[List[str]] = None,
-    additional_group_by: Optional[Union[Tuple[str], List[str]]] = (
-        "gene_symbol",
-        "most_severe_consequence",
-        "lof",
-        "lof_flags",
-    ),
     vep_annotation: str = "transcript_consequences",
 ) -> hl.Table:
     """
-    Annotate variants with transcript-based expression values or expression proportion from GTEx.
+    Filter variants to those that fall on transcripts of interest.
 
-    :param ht: Table of variants to annotate, it should contain at least the following
-        nested fields: `vep.transcript_consequences`, `freq`.
-    :param tx_ht: Table of transcript expression information.
+    :param ht: Table of variants to filter, it should contain at least the
+        following nested fields: `vep.transcript_consequences`, `freq`.
+    :param filter_to_genes: List of genes to filter to.
+    :param filter_to_csqs: List of consequence terms to filter to.
+    :param ignore_splicing: If True, ignore splice variants. Default is True.
+    :param filter_to_homs: If True, filter to variants with at least one
+        homozygote in `freq` field. Default is False.
     :param filter_to_protein_coding: If True, filter to protein coding
         transcripts. Default is True.
-    :param tissues_to_filter: Optional list of tissues to exclude from the output.
-    :param additional_group_by: Optional list of additional fields to group by before
-        sum aggregation.
     :param vep_annotation: Name of annotation in 'vep' annotation,
         one of the processed consequences: ["transcript_consequences",
         "worst_csq_by_gene", "worst_csq_for_variant",
@@ -206,35 +203,118 @@ def tx_annotate_variants(
         For example, if you want to annotate each variant with the worst
         consequence in each gene it falls on and the transcript expression,
         you would use "worst_csq_by_gene". Default is "transcript_consequences".
+    :return: Table of variants that fall on transcripts of interest.
+    """
+    # TODO: Filter to only CDS regions?
+    ht = ht.select(freq=ht.freq, vep=ht.vep)
+
+    ht = process_consequences(ht)
+    ht = ht.select(freq=ht.freq, vep_processed_csqs=ht.vep[vep_annotation])
+
+    # Explode the processed transcript consequences to be able to key by
+    # transcript ID
+    ht = ht.explode(ht.vep_processed_csqs)
+
+    if filter_to_genes:
+        ht = ht.filter(
+            hl.literal(filter_to_genes).contains(ht.vep_processed_csqs.gene_id)
+        )
+
+    if filter_to_csqs:
+        ht = ht.filter(
+            hl.literal(filter_to_csqs).contains(
+                ht.vep_processed_csqs.most_severe_consequence
+            )
+        )
+
+    # TODO: Need to modify process consequences to ignore splice variants,
+    #  because these can occur on intronic regions?
+    splicing = hl.literal(
+        ["splice_acceptor_variant", "splice_donor_variant", "splice_region_variant"]
+    )
+    if ignore_splicing:
+        ht = ht.filter(
+            ~splicing.contains(ht.vep_processed_csqs.most_severe_consequence)
+        )
+
+    if filter_to_homs:
+        ht = ht.filter(ht.freq[0].homozygote_count > 0)
+
+    if filter_to_protein_coding:
+        ht = ht.filter(ht.vep_processed_csqs.biotype == "protein_coding")
+
+    return ht
+
+
+def tx_annotate_variants(
+    ht: hl.Table,
+    tx_ht: hl.Table,
+    tissues_to_filter: Optional[List[str]] = None,
+    additional_group_by: Optional[Union[Tuple[str], List[str]]] = (
+        "gene_symbol",
+        "most_severe_consequence",
+        "lof",
+        "lof_flags",
+    ),
+) -> hl.Table:
+    """
+    Annotate variants with transcript-based expression values or expression proportion from GTEx.
+
+    :param ht: Table of variants to annotate, it should contain at least the following
+        nested fields: `vep.transcript_consequences`, `freq`.
+    :param tx_ht: Table of transcript expression information.
+    :param tissues_to_filter: Optional list of tissues to exclude from the output.
+    :param additional_group_by: Optional list of additional fields to group by before
+        sum aggregation.
     :return: Input Table with transcript expression information annotated.
     """
     # Filter to tissues of interest and convert to arrays for easy aggregation.
     tx_ht = tissue_expression_ht_to_array(tx_ht, tissues_to_filter=tissues_to_filter)
-    agg_annotations = list(tx_ht.row_value)
-    tissues = hl.eval(tx_ht.tissues)
 
     # Calculate the mean expression proportion across all tissues.
     tx_ht = tx_ht.annotate(exp_prop_mean=hl.mean(tx_ht.expression_proportion))
 
-    ht = process_consequences(ht)
-
-    # Explode the processed transcript consequences to be able to key by
-    # transcript ID
-    ht = ht.explode(ht.vep[vep_annotation])
-
-    if filter_to_protein_coding:
-        ht = ht.filter(ht.vep[vep_annotation].biotype == "protein_coding")
-
     grouping = ["transcript_id", "gene_id"] + list(additional_group_by)
-    ht = ht.select(**{a: ht.vep[vep_annotation][a] for a in grouping})
+    ht = ht.select(**{a: ht.vep_processed_csqs[a] for a in grouping})
+
+    ht = ht.annotate(**tx_ht[ht.transcript_id, ht.gene_id])
+    ht = ht.annotate_globals(tissues=tx_ht.index_globals().tissues)
+
+    return ht
+
+
+def tx_aggregate_variants(
+    ht: hl.Table,
+    agg_annotations: Optional[List[str]] = (
+        "transcript_expression",
+        "expression_proportion",
+    ),
+    additional_group_by: Optional[Union[Tuple[str], List[str]]] = (
+        "gene_symbol",
+        "most_severe_consequence",
+        "lof",
+        "lof_flags",
+    ),
+) -> hl.Table:
+    """
+    Aggregate transcript-based expression values or expression proportion from GTEx.
+
+    :param ht: Table of variants annotated with transcript expression information.
+    :param agg_annotations: Optional list of annotations to aggregate. Default is
+        ['transcript_expression', 'expression_proportion', 'exp_prop_mean'].
+    :param additional_group_by: Optional list of additional fields to group by before
+        sum aggregation.
+    :return: Table of variants with transcript expression information aggregated.
+    """
+    tissues = hl.eval(ht.tissues)
+    # TODO: to key by only locus to get base-level annotation
+    grouping = ["locus", "alleles", "gene_id"] + list(additional_group_by)
 
     # Aggregate the transcript expression information by gene_id and annotation in
     # additional_group_by.
-    variant_to_tx = tx_ht[ht.transcript_id, ht.gene_id]
-    grouping = ["locus", "alleles", "gene_id"] + list(additional_group_by)
     ht = ht.group_by(*grouping).aggregate(
-        **{a: hl.agg.array_sum(variant_to_tx[a]) for a in agg_annotations},
-        exp_prop_mean=hl.agg.sum(variant_to_tx.exp_prop_mean),
+        **{a: hl.agg.array_sum(ht[a]) for a in agg_annotations},
+        exp_prop_mean=hl.agg.sum(ht.exp_prop_mean),
     )
 
     # Reformat the transcript expression information to be a struct per tissue.

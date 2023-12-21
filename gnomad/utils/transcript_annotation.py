@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.vep import CSQ_CODING_HIGH_IMPACT, process_consequences
+from gnomad.utils.vep import process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -206,10 +206,18 @@ def preprocess_variants_for_tx(
     :return: Table of variants that fall on transcripts of interest.
     """
     # TODO: Filter to only CDS regions?
-    ht = ht.select(freq=ht.freq, vep=ht.vep)
-
-    ht = process_consequences(ht)
-    ht = ht.select(freq=ht.freq, vep_processed_csqs=ht.vep[vep_annotation])
+    if "freq" not in list(ht.row_value):
+        logger.info(
+            "No 'freq' field found in input Table. You cannot use the filter_to_homs"
+            " option."
+        )
+        ht = ht.select(vep=ht.vep)
+        ht = process_consequences(ht)
+        ht = ht.select(vep_processed_csqs=ht.vep[vep_annotation])
+    else:
+        ht = ht.select(freq=ht.freq, vep=ht.vep)
+        ht = process_consequences(ht)
+        ht = ht.select(freq=ht.freq, vep_processed_csqs=ht.vep[vep_annotation])
 
     # Explode the processed transcript consequences to be able to key by
     # transcript ID

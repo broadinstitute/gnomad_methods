@@ -4,7 +4,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.vep import process_consequences
+from gnomad.utils.vep import CSQ_CODING_HIGH_IMPACT, process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -307,7 +307,7 @@ def tx_aggregate_variants(
     :return: Table of variants with transcript expression information aggregated.
     """
     tissues = hl.eval(ht.tissues)
-    # TODO: to key by only locus to get base-level annotation
+    # TODO: group_by and key_by locus to get base-level annotation
     grouping = ["locus", "alleles", "gene_id"] + list(additional_group_by)
 
     # Aggregate the transcript expression information by gene_id and annotation in

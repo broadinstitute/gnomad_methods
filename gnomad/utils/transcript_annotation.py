@@ -16,10 +16,12 @@ logger.setLevel(logging.INFO)
 
 def summarize_transcript_expression(
     mt: hl.MatrixTable,
-    transcript_expression_expr: Union[hl.expr.NumericExpression, str] = "x",
+    transcript_expression_expr: Union[
+        hl.expr.NumericExpression, str
+    ] = "transcript_tpm",
     tissue_expr: Union[hl.expr.StringExpression, str] = "tissue",
     summary_agg_func: Optional[Callable] = None,
-) -> Tuple[hl.Table, hl.Table]:
+) -> hl.Table:
     """
     Summarize a transcript expression MatrixTable by transcript, gene, and tissue.
 
@@ -32,109 +34,145 @@ def summarize_transcript_expression(
 
     :param mt: MatrixTable of transcript (rows) expression quantifications (entry) by
         sample (columns).
-    :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param transcript_expression_expr: Entry expression indicating transcript expression
-        quantification. Default is 'x'.
+        quantification. Default is 'transcript_tpm'.
+    :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
-        transcript expression quantification by tissue. Example: `hl.agg.mean`. Default
+        transcript expression quantification by tissue. Example: `hl.mean`. Default
         is None, which will use a median aggregation.
-    :return: A Table of summarized transcript expression by tissue and a Table of
-        summarized gene expression by tissue.
+    :return: A Table of summarized transcript expression by tissue
     """
     if summary_agg_func is None:
         summary_agg_func = lambda x: hl.median(hl.agg.collect(x))
 
+    if isinstance(transcript_expression_expr, str):
+        transcript_expression_expr = mt[transcript_expression_expr]
+
+    if isinstance(tissue_expr, str):
+        tissue_expr = mt[tissue_expr]
+
     mt = mt.group_cols_by(tissue=tissue_expr).aggregate(
         tx=summary_agg_func(transcript_expression_expr)
     )
+    ht = mt.rename({"tx": ""}).make_table().key_by("transcript_id", "gene_id")
 
-    transcript_ht = mt.rename({"tx": ""}).make_table()
-    transcript_ht = transcript_ht.key_by("transcript_id", "gene_id")
-
-    gene_ht = transcript_ht.group_by("gene_id").aggregate(
+    # Annotate with the proportion of expression of transcript to gene per tissue.
+    ht = ht.annotate(expression_proportion=get_expression_proportion(ht))
+    ht = ht.select(
         **{
-            tissue: hl.agg.sum(transcript_ht[tissue])
-            for tissue in list(transcript_ht.row_value)
+            t: hl.struct(
+                transcript_expression=ht[t],
+                expression_proportion=ht.expression_proportion[t],
+            )
+            for t in ht.expression_proportion
         }
     )
 
-    return transcript_ht, gene_ht
+    return ht
 
 
-def tissue_expression_ht_to_array(
+def get_expression_proportion(ht: hl.Table) -> hl.expr.StructExpression:
+    """
+    Calculate the proportion of expression of transcript to gene per tissue.
+
+    :param ht: Table of summarized transcript expression by tissue.
+    :return: Table with expression proportion of transcript to gene per tissue
+        and mean expression proportion across tissues.
+    """
+    tissues = list(ht.row_value)
+
+    # Calculate the sum of transcript expression by gene per tissue.
+    gene_ht = ht.group_by("gene_id").aggregate(
+        **{tissue: hl.agg.sum(ht[tissue]) for tissue in tissues}
+    )
+
+    # Return the proportion of expression of transcript to gene per tissue.
+    gene = gene_ht[ht.gene_id]
+    return hl.struct(
+        **{
+            tissue: hl.utils.misc.divide_null(ht[tissue], gene[tissue])
+            for tissue in tissues
+        }
+    )
+
+
+def filter_expression_ht_by_tissues(
     ht: hl.Table,
-    tissues: Optional[List[str]] = None,
+    tissues_to_keep: Optional[List[str]] = None,
     tissues_to_filter: Optional[List[str]] = None,
 ) -> hl.Table:
     """
-    Convert a Table with a row annotation for each tissue to a Table with tissues as an array.
-
-    The output is a Table with a field 'tissue_expression' containing an array of
-    summarized expression values by tissue, where the order of tissues in the array is
-    indicated by the "tissues" global annotation.
+    Filter a Table with a row annotation for each tissue to only include specified tissues.
 
     :param ht: Table with a row annotation for each tissue.
-    :param tissues: Optional list of tissues to keep in the 'tissue_expression' array.
-        Default is all non-key rows in the Table.
-    :param tissues_to_filter: Optional list of tissues to exclude from the tissue
-        expression array.
-    :return: Table with a field 'tissue_expression' containing an array of summarized
-        expression values by tissue.
+    :param tissues_to_keep: Optional list of tissues to keep in the Table. Default is
+        all non-key rows in the Table.
+    :param tissues_to_filter: Optional list of tissues to exclude from the Table.
+    :return: Table with only specified tissues.
     """
-    if tissues is None:
+    if tissues_to_keep is None and tissues_to_filter is None:
+        logger.info(
+            "No tissues_to_keep or tissues_to_filter specified. Returning input Table."
+        )
+        return ht
+
+    if tissues_to_keep is None:
         tissues = list(ht.row_value)
 
     if tissues_to_filter is not None:
         logger.info("Filtering tissues: %s", tissues_to_filter)
         tissues = [t for t in tissues if t not in tissues_to_filter]
 
-    ht = ht.select_globals(tissues=tissues)
-    ht = ht.select(tissue_expression=[ht[t] for t in tissues])
+    ht = ht.select(*tissues)
 
     return ht
 
 
-def get_expression_proportion(
-    transcript_ht: hl.Table,
-    gene_ht: hl.Table,
+def tissue_expression_ht_to_array(
+    ht: hl.Table,
+    tissues_to_keep: Optional[List[str]] = None,
     tissues_to_filter: Optional[List[str]] = None,
+    annotations_to_extract: Optional[Union[Tuple[str], List[str]]] = (
+        "transcript_expression",
+        "expression_proportion",
+    ),
 ) -> hl.Table:
     """
-    Calculate the proportion of expression of transcript to gene per tissue.
+    Convert a Table with a row annotation for each tissue to a Table with tissues as an array.
 
-    :param transcript_ht: Table of summarized transcript expression by tissue.
-    :param gene_ht: Table of summarized gene expression by tissue.
-    :param tissues_to_filter: Optional list of tissues to filter out
-    :return: Table with expression proportion of transcript to gene per tissue
-        and mean expression proportion across tissues.
+    The output is a Table with fields in `annotations_to_extract`,
+    each containing an array of summarized expression values or proportion
+    by tissue, where the order of tissues in the array is indicated by
+    the "tissues" global annotation.
+
+    :param ht: Table with a row annotation for each tissue.
+    :param tissues_to_keep: Optional list of tissues to keep in the 'tissue_expression'
+        array. Default is all non-key rows in the Table.
+    :param tissues_to_filter: Optional list of tissues to exclude from the tissue
+        expression array.
+    :param annotations_to_extract: Optional list of tissue struct fields to extract
+        into top level array annotations. If None, the returned Table will contain a
+        single top level annotation 'tissue_expression' that contains an array of
+        structs by tissue. Default is ('transcript_expression', 'expression_proportion').
+    :return: Table with requested tissue struct annotations pulled into arrays of
+        tissue values and a 'tissues' global annotation indicating the order of tissues
+        in the arrays.
     """
-    transcript_ht = tissue_expression_ht_to_array(
-        transcript_ht, tissues_to_filter=tissues_to_filter
-    )
-    gene_ht = tissue_expression_ht_to_array(
-        gene_ht, tissues=hl.eval(transcript_ht.tissues)
-    )
+    ht = filter_expression_ht_by_tissues(ht, tissues_to_keep, tissues_to_filter)
 
-    # Join the transcript expression table and gene expression table.
-    transcript_ht = transcript_ht.annotate(
-        gene_expression=gene_ht[transcript_ht.gene_id].tissue_expression
-    )
+    tissues = list(ht.row_value)
+    ht = ht.select_globals(tissues=tissues)
+    ht = ht.select(tissue_expression=[ht[t] for t in tissues])
 
-    # Calculate the proportion of expression of transcript to gene per tissue.
-    transcript_ht = transcript_ht.annotate(
-        exp_prop=hl.or_else(
-            transcript_ht.transcript_expression / transcript_ht.gene_expression,
-            hl.empty_array(hl.tfloat64),
-        ),
-    )
-    # Calculate the mean expression proportion across tissues.
-    transcript_ht = transcript_ht.annotate(
-        exp_prop_mean=hl.mean(
-            hl.filter(lambda e: ~hl.is_nan(e), transcript_ht.exp_prop),
+    if annotations_to_extract is not None:
+        ht = ht.select(
+            **{
+                a: ht.tissue_expression.map(lambda x: x[a])
+                for a in annotations_to_extract
+            }
         )
-    )
 
-    return transcript_ht
+    return ht
 
 
 def tx_annotate_variants(

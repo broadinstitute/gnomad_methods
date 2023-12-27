@@ -143,16 +143,16 @@ def tissue_expression_ht_to_array(
     The output is a Table with one of the two formats: either an annotation of
     'tissue_expression' containing an array of structs by tissue, where each element of
     the array is the Table's row value for a given tissue, like this:
-    tissue_expression': array<struct {
-        transcript_expression: float64,
-        expression_proportion: float64
-    }>
+    # tissue_expression': array<struct {
+    #     transcript_expression: float64,
+    #     expression_proportion: float64
+    # }>
 
     or a Table with one array annotation for each field defined in the
     'annotations_to_extract' argument, where each array is an array of the given field
     values by tissue, like this:
-    'transcript_expression': array<float64>
-    'expression_proportion': array<float64>
+    # 'transcript_expression': array<float64>
+    # 'expression_proportion': array<float64>
 
     The order of tissues in the array is indicated by the "tissues" global annotation.
 

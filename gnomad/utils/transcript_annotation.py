@@ -209,17 +209,19 @@ def preprocess_variants_for_tx(
         "splice_donor_variant",
         "splice_region_variant",
     ]
+    keep_csqs = True
+    if ignore_splicing:
+        if filter_to_csqs is not None:
+            filter_to_csqs = [csq for csq in filter_to_csqs if csq not in splice_csqs]
+        else:
+            # TODO: Need to modify process consequences to ignore splice variants,
+            #  because these can occur on intronic regions?
+            filter_to_csqs = splice_csqs
+            keep_csqs = False
+
     if filter_to_csqs is not None:
         logger.info("Adding most severe consequence to VEP transcript consequences...")
         ht = process_consequences(ht, vep_root=vep_root)
-        keep_csqs = True
-        if ignore_splicing:
-            filter_to_csqs = [csq for csq in filter_to_csqs if csq not in splice_csqs]
-    elif ignore_splicing:
-        # TODO: Need to modify process consequences to ignore splice variants,
-        #  because these can occur on intronic regions?
-        filter_to_csqs = splice_csqs
-        keep_csqs = False
 
     return filter_vep_transcript_csqs(
         ht,

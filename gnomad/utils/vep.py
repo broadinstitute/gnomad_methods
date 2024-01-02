@@ -718,7 +718,7 @@ def filter_vep_transcript_csqs(
         False.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
         is empty, after filtering 'transcript_consequences' to the specified criteria.
-            Default is True.
+        Default is True.
     :param ensembl_only: Whether to filter to only Ensembl transcipts. This option is
         useful for deduplicating transcripts that are the same between RefSeq and
         Emsembl. Default is True.

@@ -272,7 +272,10 @@ def tx_annotate_variants(
     # Explode the processed transcript consequences to be able to key by
     # transcript ID.
     ht = explode_by_vep_annotation(ht, vep_annotation=vep_annotation, vep_root=vep_root)
-    ht = ht.annotate(**tx_ht[ht.transcript_id, ht.gene_id])
+    ht = ht.transpose(
+        **ht[vep_annotation],
+        **tx_ht[ht[vep_annotation].transcript_id, ht[vep_annotation].gene_id],
+    )
     ht = ht.annotate_globals(tissues=tissues)
 
     return ht
@@ -280,10 +283,6 @@ def tx_annotate_variants(
 
 def tx_aggregate_variants(
     ht: hl.Table,
-    agg_annotations: Optional[List[str]] = (
-        "transcript_expression",
-        "expression_proportion",
-    ),
     additional_group_by: Optional[Union[Tuple[str], List[str]]] = (
         "gene_symbol",
         "most_severe_consequence",
@@ -295,8 +294,6 @@ def tx_aggregate_variants(
     Aggregate transcript-based expression values or expression proportion from GTEx.
 
     :param ht: Table of variants annotated with transcript expression information.
-    :param agg_annotations: Optional list of annotations to aggregate. Default is
-        ['transcript_expression', 'expression_proportion', 'exp_prop_mean'].
     :param additional_group_by: Optional list of additional fields to group by before
         sum aggregation.
     :return: Table of variants with transcript expression information aggregated.
@@ -308,17 +305,8 @@ def tx_aggregate_variants(
     # Aggregate the transcript expression information by gene_id and annotation in
     # additional_group_by.
     ht = ht.group_by(*grouping).aggregate(
-        **{a: hl.agg.array_sum(ht[a]) for a in agg_annotations},
         exp_prop_mean=hl.agg.sum(ht.exp_prop_mean),
-    )
-
-    # Reformat the transcript expression information to be a struct per tissue.
-    ht = ht.select(
-        "exp_prop_mean",
-        **{
-            t: hl.struct(**{a: ht[a][i] for a in agg_annotations})
-            for i, t in enumerate(tissues)
-        },
+        **{t: hl.struct(**{a: hl.agg.sum(ht[t][a]) for a in ht[t]}) for t in tissues},
     )
 
     ht = ht.key_by(ht.locus, ht.alleles)

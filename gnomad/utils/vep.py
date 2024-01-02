@@ -770,7 +770,7 @@ def filter_vep_transcript_csqs(
         logger.info("Filtering to genes of interest...")
         genes = hl.literal(genes)
         gene_field = "gene_symbol" if match_by_gene_symbol else "gene_id"
-        if keep_csqs:
+        if keep_genes:
             criteria.append(lambda csq: genes.contains(csq[gene_field]))
         else:
             criteria.append(lambda csq: ~genes.contains(csq[gene_field]))

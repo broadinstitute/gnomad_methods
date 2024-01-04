@@ -275,19 +275,26 @@ def process_consequences(
     mt: Union[hl.MatrixTable, hl.Table],
     vep_root: str = "vep",
     penalize_flags: bool = True,
+    csq_order: Optional[List[str]] = None,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Add most_severe_consequence into [vep_root].transcript_consequences, and worst_csq_by_gene, any_lof into [vep_root].
 
     `most_severe_consequence` is the worst consequence for a transcript.
 
-    :param mt: Input MT
-    :param vep_root: Root for vep annotation (probably vep)
-    :param penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them as equal to HC
-    :return: MT with better formatted consequences
+    :param mt: Input MT.
+    :param vep_root: Root for vep annotation (probably vep).
+    :param penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them
+        as equal to HC.
+    :param csq_order: Optional list indicating the order of VEP consequences, sorted
+        from high to low impact. Default is None, which uses the value of the
+        `CSQ_ORDER` global.
+    :return: MT with better formatted consequences.
     """
-    csqs = hl.literal(CSQ_ORDER)
-    csq_dict = hl.literal(dict(zip(CSQ_ORDER, range(len(CSQ_ORDER)))))
+    if csq_order is None:
+        csq_order = CSQ_ORDER
+    csqs = hl.literal(csq_order)
+    csq_dict = hl.literal(dict(zip(csq_order, range(len(csq_order)))))
 
     def find_worst_transcript_consequence(
         tcl: hl.expr.ArrayExpression,
@@ -420,6 +427,36 @@ def filter_vep_to_synonymous_variants(
     """
     return filter_vep_transcript_csqs(
         mt, vep_root, canonical=False, filter_empty_csq=filter_empty_csq
+    )
+
+
+def filter_vep_to_gene_list(
+    t: Union[hl.MatrixTable, hl.Table],
+    genes: List[str],
+    match_by_gene_symbol: bool = False,
+    vep_root: str = "vep",
+    filter_empty_csq: bool = False,
+):
+    """
+    Filter VEP transcript consequences to those in a set of genes.
+
+    :param t: Input Table or MatrixTable.
+    :param genes: Genes of interest to filter VEP transcript consequences to.
+    :param match_by_gene_symbol: Whether to match values in `genes` to VEP transcript
+        consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
+    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
+        is empty. Default is False.
+    :return: Table or MatrixTable with VEP transcript consequences filtered.
+    """
+    return filter_vep_transcript_csqs(
+        t,
+        vep_root,
+        synonymous=False,
+        canonical=False,
+        filter_empty_csq=filter_empty_csq,
+        genes=genes,
+        match_by_gene_symbol=match_by_gene_symbol,
     )
 
 
@@ -654,23 +691,52 @@ def filter_vep_transcript_csqs(
     mane_select: bool = False,
     filter_empty_csq: bool = True,
     ensembl_only: bool = True,
+    protein_coding: bool = False,
+    csqs: List[str] = None,
+    keep_csqs: bool = True,
+    genes: Optional[List[str]] = None,
+    keep_genes: bool = True,
+    match_by_gene_symbol: bool = False,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
 
-    Transcript consequences can be filtered to those where 'most_severe_consequence' is 'synonymous_variant' and/or the transcript is the canonical transcript,
-    if the `synonymous` and `canonical` parameter are set to True, respectively.
+    Transcript consequences can be filtered to those where 'most_severe_consequence' is
+    'synonymous_variant' and/or the transcript is the canonical transcript, if the
+    `synonymous` and `canonical` parameter are set to True, respectively.
 
-    If `filter_empty_csq` parameter is set to True, the Table/MatrixTable is filtered to variants where 'transcript_consequences' within the VEP annotation
-    is not empty after the specified filtering criteria is applied.
+    If `filter_empty_csq` parameter is set to True, the Table/MatrixTable is filtered
+    to variants where 'transcript_consequences' within the VEP annotation is not empty
+    after the specified filtering criteria is applied.
 
     :param t: Input Table or MatrixTable.
     :param vep_root: Name used for VEP annotation. Default is 'vep'.
-    :param synonymous: Whether to filter to variants where the most severe consequence is 'synonymous_variant'. Default is True.
+    :param synonymous: Whether to filter to variants where the most severe consequence
+        is 'synonymous_variant'. Default is True.
     :param canonical: Whether to filter to only canonical transcripts. Default is True.
-    :param mane_select: Whether to filter to only MANE Select transcripts. Default is False.
-    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences' is empty, after filtering 'transcript_consequences' to the specified criteria. Default is True.
-    :param ensembl_only: Whether to filter to only Ensembl transcipts. This option is useful for deduplicating transcripts that are the same between RefSeq and Emsembl. Default is True.
+    :param mane_select: Whether to filter to only MANE Select transcripts. Default is
+        False.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
+        is empty, after filtering 'transcript_consequences' to the specified criteria.
+        Default is True.
+    :param ensembl_only: Whether to filter to only Ensembl transcipts. This option is
+        useful for deduplicating transcripts that are the same between RefSeq and
+        Emsembl. Default is True.
+    :param protein_coding: Whether to filter to only protein-coding transcripts.
+        Default is False.
+    :param csqs: Optional list of consequence terms to filter to. Transcript
+        consequences are filtered to those where 'most_severe_consequence' is in the
+        list of consequence terms `csqs`. Default is None.
+    :param keep_csqs: Whether to keep transcript consequences that are in `csqs`. If
+        set to False, transcript consequences that are in `csqs` will be removed.
+        Default is True.
+    :param genes: Optional list of genes to filter VEP transcript consequences to.
+        Default is None.
+    :param keep_genes: Whether to keep transcript consequences that are in `genes`. If
+        set to False, transcript consequences that are in `genes` will be removed.
+        Default is True.
+    :param match_by_gene_symbol: Whether to match values in `genes` to VEP transcript
+        consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
@@ -680,13 +746,34 @@ def filter_vep_transcript_csqs(
     transcript_csqs = t[vep_root].transcript_consequences
     criteria = [lambda csq: True]
     if synonymous:
-        criteria.append(lambda csq: csq.most_severe_consequence == "synonymous_variant")
+        logger.info("Filtering to most severe consequence of synonymous_variant...")
+        csqs = ["synonymous_variant"]
+    if csqs is not None:
+        csqs = hl.literal(csqs)
+        if keep_csqs:
+            criteria.append(lambda csq: csqs.contains(csq.most_severe_consequence))
+        else:
+            criteria.append(lambda csq: ~csqs.contains(csq.most_severe_consequence))
     if canonical:
+        logger.info("Filtering to canonical transcripts")
         criteria.append(lambda csq: csq.canonical == 1)
     if mane_select:
+        logger.info("Filtering to MANE Select transcripts...")
         criteria.append(lambda csq: hl.is_defined(csq.mane_select))
     if ensembl_only:
+        logger.info("Filtering to Ensembl transcripts...")
         criteria.append(lambda csq: csq.transcript_id.startswith("ENST"))
+    if protein_coding:
+        logger.info("Filtering to protein coding transcripts...")
+        criteria.append(lambda csq: csq.biotype == "protein_coding")
+    if genes is not None:
+        logger.info("Filtering to genes of interest...")
+        genes = hl.literal(genes)
+        gene_field = "gene_symbol" if match_by_gene_symbol else "gene_id"
+        if keep_genes:
+            criteria.append(lambda csq: genes.contains(csq[gene_field]))
+        else:
+            criteria.append(lambda csq: ~genes.contains(csq[gene_field]))
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)

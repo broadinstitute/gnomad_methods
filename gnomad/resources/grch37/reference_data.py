@@ -18,32 +18,13 @@ def _import_gencode(gtf_path: str, **kwargs) -> hl.Table:
     :param gtf_path: Path to GENCODE GTF file.
     :return: Table with GENCODE annotation information.
     """
-    ht = hl.experimental.import_gtf(
-        gtf_path,
-        **kwargs,
-    )
+    ht = hl.experimental.import_gtf(gtf_path, **kwargs)
+
     # Only get gene and transcript stable IDs (without version numbers if they
     # exist), early versions of GENCODE have no version numbers but later ones do.
     ht = ht.annotate(
         gene_id=ht.gene_id.split("\\.")[0],
         transcript_id=ht.transcript_id.split("\\.")[0],
-    )
-    return ht
-
-
-def _extract_gencode_cds(gencode_path: str) -> hl.Table:
-    """
-    Extract CDS regions from GENCODE annotations Table.
-
-    :param gencode_path: GENCODE annotations Table.
-    :return: GENCODE annotations Table with only CDS regions.
-    """
-    ht = hl.read_table(gencode_path)
-
-    ht = (
-        ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
-        .select("gene_id", "transcript_id")
-        .distinct()
     )
     return ht
 
@@ -76,13 +57,13 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTabl
         **kwargs,
     )
 
-    mt = mt.rename({"x": "transcript_tpm"})
+    mt = mt.rename({"x": "transcript_tpm", "col_id": "s"})
 
     # GTEx data has gene IDs and transcript IDs with version numbers, we need
     # to remove the version numbers so that it can later be joined with VEP
     # transcript consequences transcript_id.
     mt = mt.annotate_cols(
-        tissue=meta_ht[mt.col_id]
+        tissue=meta_ht[mt.s]
         .SMTSD.replace(" ", "")
         .replace("-", "_")
         .replace("\\(", "_")
@@ -92,7 +73,8 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTabl
         transcript_id=mt.transcript_id.split("\\.")[0],
         gene_id=mt.gene_id.split("\\.")[0],
     )
-    mt = mt.key_rows_by("transcript_id")
+    mt = mt.key_rows_by("transcript_id").drop("row_id")
+
     return mt
 
 
@@ -401,19 +383,6 @@ gencode = VersionedTableResource(
                 "reference_genome": "GRCh37",
                 "force_bgz": True,
                 "min_partitions": 10,
-            },
-        ),
-    },
-)
-
-gencode_cds = VersionedTableResource(
-    default_version="v19",
-    versions={
-        "v19": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch37/gencode/gencode.v19.cds.ht",
-            import_func=_extract_gencode_cds,
-            import_args={
-                "gencode_path": gencode.versions["v19"].path,
             },
         ),
     },

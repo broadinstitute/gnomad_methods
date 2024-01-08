@@ -11,27 +11,38 @@ from gnomad.resources.resource_utils import (
 )
 
 
-def _import_gencode_cds(gtf_path: str, **kwargs) -> hl.Table:
+def _import_gencode(gtf_path: str, **kwargs) -> hl.Table:
     """
-    Get CDS intervals from GENCODE GTF file.
+    Import GENCODE annotations GTF file as a Hail Table.
 
     :param gtf_path: Path to GENCODE GTF file.
-    :return: Table with CDS intervals.
+    :return: Table with GENCODE annotation information.
     """
     ht = hl.experimental.import_gtf(
         gtf_path,
         **kwargs,
     )
+    # Only get gene and transcript stable IDs (without version numbers if they
+    # exist), early versions of GENCODE have no version numbers but later ones do.
     ht = ht.annotate(
         gene_id=ht.gene_id.split("\\.")[0],
         transcript_id=ht.transcript_id.split("\\.")[0],
     )
-    ht = (
+    return ht
+
+
+def _extract_gencode_cds(ht: hl.Table) -> hl.Table:
+    """
+    Extract CDS regions from GENCODE annotations Table.
+
+    :param ht: GENCODE annotations Table.
+    :return: GENCODE annotations Table with only CDS regions.
+    """
+    return (
         ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
         .select("gene_id", "transcript_id")
         .distinct()
     )
-    return ht
 
 
 def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
@@ -39,6 +50,7 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTabl
     Import GTEx RSEM data from expression data and sample attributes file.
 
     .. note::
+
         Files are downloaded from https://www.gtexportal.org/home/downloads/adult-gtex.
         We get the transcript TPM under Bulk tissue expression and sample attributes
         under Metadata. The transcript TPM file is expected to have transcript
@@ -55,7 +67,6 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTabl
 
     mt = hl.import_matrix_table(
         gtex_path,
-        row_key="transcript_id",
         row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
         entry_type=hl.tfloat64,
         force_bgz=True,
@@ -74,7 +85,6 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTabl
         .replace("\\(", "_")
         .replace("\\)", "")
     )
-    mt = mt.key_rows_by()
     mt = mt.annotate_rows(
         transcript_id=mt.transcript_id.split("\\.")[0],
         gene_id=mt.gene_id.split("\\.")[0],
@@ -362,17 +372,32 @@ def get_truth_ht() -> hl.Table:
     )
 
 
-gtex_rsem = VersionedTableResource(
+gtex_rsem = VersionedMatrixTableResource(
     default_version="v7",
     versions={
-        "v7": GnomadPublicTableResource(
+        "v7": GnomadPublicMatrixTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch37/gtex_rsem/gtex_rsem_v7.mt",
             import_func=_import_gtex_rsem,
             import_args={
                 "gtex_path": "gs://gcp-public-data--gnomad/resources/grch37/gtex/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
                 "meta_path": "gs://gcp-public-data--gnomad/resources/grch37/gtex/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz",
                 "min_partitions": 1000,
+            },
+        ),
+    },
+)
+
+gencode = VersionedTableResource(
+    default_version="v19",
+    versions={
+        "v19": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch37/gencode/gencode.v19.annotation.ht",
+            import_func=_import_gencode,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch37/gencode/gencode.v19.annotation.gtf.gz",
                 "reference_genome": "GRCh37",
+                "force_bgz": True,
+                "min_partitions": 12,
             },
         ),
     },
@@ -382,14 +407,9 @@ gencode_cds = VersionedTableResource(
     default_version="v19",
     versions={
         "v19": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch37/gencode_cds/gencode_v19_cds.ht",
-            import_func=_import_gencode_cds,
-            import_args={
-                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch37/gencode/gencode.v19.annotation.gtf.gz",
-                "reference_genome": "GRCh37",
-                "force_bgz": True,
-                "min_partitions": 12,
-            },
+            path="gs://gnomad-public-requester-pays/resources/grch37/gencode/gencode.v19.cds.ht",
+            import_func=_extract_gencode_cds,
+            import_args={"ht": gencode.ht()},
         ),
     },
 )

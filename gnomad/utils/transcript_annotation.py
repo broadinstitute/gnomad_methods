@@ -23,12 +23,29 @@ def summarize_transcript_expression(
     """
     Summarize a transcript expression MatrixTable by transcript, gene, and tissue.
 
-    The `summary_agg_func` argument allows the user to specify a Hail
-    aggregation function to use to summarize the expression by tissue. By
-    default, the median is used.
+    The `summary_agg_func` argument allows the user to specify a Hail aggregation
+    function to use to summarize the expression by tissue. By default, the median is
+    used.
 
-    The returned Table has a row annotation for each tissue containing the
-    summarized tissue expression value.
+    The returned Table has a row annotation for each tissue containing a struct with the
+    summarized tissue expression value ('transcript_expression') and the proportion of
+    expression of transcript to gene per tissue ('expression_proportion').
+
+    Returned Table Schema example::
+
+        Row fields:
+            'transcript_id': str
+            'gene_id': str
+            'tissue_1': struct {
+              transcript_expression: float64,
+              expression_proportion: float64
+            }
+            'tissue_2': struct {
+              transcript_expression: float64,
+              expression_proportion: float64
+            }
+
+        Key: ['transcript_id', 'gene_id']
 
     :param mt: MatrixTable of transcript (rows) expression quantifications (entry) by
         sample (columns).
@@ -36,9 +53,9 @@ def summarize_transcript_expression(
         quantification. Default is 'transcript_tpm'.
     :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
-        transcript expression quantification by tissue. Example: `hl.agg.mean`.
-        Default is None, which will use a median aggregation.
-    :return: A Table of summarized transcript expression by tissue
+        transcript expression quantification by tissue. Example: `hl.agg.mean`. Default
+        is None, which will use a median aggregation.
+    :return: A Table of summarized transcript expression by tissue.
     """
     if summary_agg_func is None:
         summary_agg_func = lambda x: hl.median(hl.agg.collect(x))
@@ -54,9 +71,7 @@ def summarize_transcript_expression(
     )
     ht = mt.rename({"tx": ""}).make_table().key_by("transcript_id", "gene_id")
 
-    # Annotate with the proportion of expression of transcript to gene per tissue. The
-    # returned Table has a row annotation for each tissue containing the summarized
-    # tissue expression value.
+    # Annotate with the proportion of expression of transcript to gene per tissue.
     ht = ht.annotate(expression_proportion=get_expression_proportion(ht))
     ht = ht.select(
         **{
@@ -140,19 +155,25 @@ def tissue_expression_ht_to_array(
     """
     Convert a Table with a row annotation for each tissue to a Table with tissues as an array.
 
-    The output is a Table with one of the two formats: either an annotation of
-    'tissue_expression' containing an array of structs by tissue, where each element of
-    the array is the Table's row value for a given tissue, like this:
-    # tissue_expression': array<struct {
-    #     transcript_expression: float64,
-    #     expression_proportion: float64
-    # }>
+    The output is a Table with one of the two formats:
+        - An annotation of 'tissue_expression' containing an array of structs by
+          tissue, where each element of the array is the Table's row value for a given
+          tissue.
 
-    or a Table with one array annotation for each field defined in the
-    'annotations_to_extract' argument, where each array is an array of the given field
-    values by tissue, like this:
-    # 'transcript_expression': array<float64>
-    # 'expression_proportion': array<float64>
+            Example::
+
+                tissue_expression': array<struct {
+                    transcript_expression: float64,
+                    expression_proportion: float64
+                }>
+
+        - One array annotation for each field defined in the 'annotations_to_extract'
+          argument, where each array is an array of the given field values by tissue.
+
+            Example::
+
+                'transcript_expression': array<float64>
+                'expression_proportion': array<float64>
 
     The order of tissues in the array is indicated by the "tissues" global annotation.
 

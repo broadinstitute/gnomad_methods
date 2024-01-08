@@ -81,6 +81,12 @@ CSQ_ORDER = (
     + CSQ_NON_CODING
 )
 
+SPLICE_CSQS = [
+    "splice_acceptor_variant",
+    "splice_donor_variant",
+    "splice_region_variant",
+]
+
 POSSIBLE_REFS = ("GRCh37", "GRCh38")
 """
 Constant containing supported references
@@ -282,7 +288,7 @@ def process_consequences(
 
     `most_severe_consequence` is the worst consequence for a transcript.
 
-    :param mt: Input MT.
+    :param mt: Input Table or MatrixTable.
     :param vep_root: Root for vep annotation (probably vep).
     :param penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them
         as equal to HC.
@@ -719,7 +725,7 @@ def filter_vep_transcript_csqs(
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
         is empty, after filtering 'transcript_consequences' to the specified criteria.
         Default is True.
-    :param ensembl_only: Whether to filter to only Ensembl transcipts. This option is
+    :param ensembl_only: Whether to filter to only Ensembl transcripts. This option is
         useful for deduplicating transcripts that are the same between RefSeq and
         Emsembl. Default is True.
     :param protein_coding: Whether to filter to only protein-coding transcripts.

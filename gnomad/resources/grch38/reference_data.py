@@ -99,6 +99,31 @@ def _import_ensembl_interval(path) -> hl.Table:
     return ensembl
 
 
+def _import_gencode_cds(gtf_path: str) -> hl.Table:
+    """
+    Get CDS intervals from GENCODE GTF file.
+
+    :param gtf_path: Path to GENCODE GTF file.
+    :return: Table with CDS intervals.
+    """
+    ht = hl.experimental.import_gtf(
+        gtf_path,
+        "GRCh38",
+        force_bgz=True,
+        min_partitions=12,
+    )
+    ht = ht.annotate(
+        gene_id=ht.gene_id.split("\\.")[0],
+        transcript_id=ht.transcript_id.split("\\.")[0],
+    )
+    ht = (
+        ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
+        .select("gene_id", "transcript_id")
+        .distinct()
+    )
+    return ht
+
+
 def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
     """
     Import GTEx RSEM data from expression data and sample attributes file.
@@ -417,6 +442,19 @@ gtex_rsem = VersionedTableResource(
             import_args={  # TODO: update path and name
                 "gtex_path": "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_20231130_v10_RSEMv1.2.22_transcript_tpm.txt.gz",
                 "meta_path": "gs://gnomad-qin/annotations_v10_GTEx_v10_Annotations_SampleAttributesDS.txt.gz",
+            },
+        ),
+    },
+)
+
+gencode_cds = VersionedTableResource(
+    default_version="v39",
+    versions={
+        "v39": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode_cds/gencode_v39_cds.ht",
+            import_func=_import_gencode_cds,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz",
             },
         ),
     },

@@ -11,6 +11,31 @@ from gnomad.resources.resource_utils import (
 )
 
 
+def _import_gencode_cds(gtf_path: str) -> hl.Table:
+    """
+    Get CDS intervals from GENCODE GTF file.
+
+    :param gtf_path: Path to GENCODE GTF file.
+    :return: Table with CDS intervals.
+    """
+    ht = hl.experimental.import_gtf(
+        gtf_path,
+        "GRCh37",
+        force_bgz=True,
+        min_partitions=12,
+    )
+    ht = ht.annotate(
+        gene_id=ht.gene_id.split("\\.")[0],
+        transcript_id=ht.transcript_id.split("\\.")[0],
+    )
+    ht = (
+        ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
+        .select("gene_id", "transcript_id")
+        .distinct()
+    )
+    return ht
+
+
 def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
     """
     Import GTEx RSEM data from expression data and sample attributes file.
@@ -341,11 +366,24 @@ gtex_rsem = VersionedTableResource(
     default_version="v7",
     versions={
         "v7": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v7.mt",
+            path="gs://gnomad-public-requester-pays/resources/grch37/gtex_rsem/gtex_rsem_v7.mt",
             import_func=_import_gtex_rsem,
             import_args={  # TODO: update path
                 "gtex_path": "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
                 "meta_path": "gs://gnomad-qin/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz",
+            },
+        ),
+    },
+)
+
+gencode_cds = VersionedTableResource(
+    default_version="v19",
+    versions={
+        "v39": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode_cds/gencode_v19_cds.ht",
+            import_func=_import_gencode_cds,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v19.annotation.gtf.gz",
             },
         ),
     },

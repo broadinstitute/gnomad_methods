@@ -31,18 +31,21 @@ def _import_gencode(gtf_path: str, **kwargs) -> hl.Table:
     return ht
 
 
-def _extract_gencode_cds(ht: hl.Table) -> hl.Table:
+def _extract_gencode_cds(gencode_path: str) -> hl.Table:
     """
     Extract CDS regions from GENCODE annotations Table.
 
-    :param ht: GENCODE annotations Table.
+    :param gencode_path: GENCODE annotations Table.
     :return: GENCODE annotations Table with only CDS regions.
     """
-    return (
+    ht = hl.read_table(gencode_path)
+
+    ht = (
         ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
         .select("gene_id", "transcript_id")
         .distinct()
     )
+    return ht
 
 
 def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
@@ -409,7 +412,9 @@ gencode_cds = VersionedTableResource(
         "v19": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch37/gencode/gencode.v19.cds.ht",
             import_func=_extract_gencode_cds,
-            import_args={"ht": gencode.ht()},
+            import_args={
+                "gencode_path": gencode.versions["v19"].path,
+            },
         ),
     },
 )

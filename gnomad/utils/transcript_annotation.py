@@ -7,6 +7,8 @@ import hail as hl
 from gnomad.resources.grch37 import gencode
 from gnomad.utils.filtering import filter_gencode_to_cds
 from gnomad.utils.vep import (
+    CSQ_CODING_HIGH_IMPACT,
+    CSQ_ORDER,
     SPLICE_CSQS,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,

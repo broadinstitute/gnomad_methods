@@ -4,6 +4,8 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
 
+from gnomad.resources.grch37 import gencode
+from gnomad.utils.filtering import filter_gencode_to_cds
 from gnomad.utils.vep import (
     SPLICE_CSQS,
     explode_by_vep_annotation,
@@ -182,7 +184,6 @@ def tissue_expression_ht_to_array(
 
 def preprocess_variants_for_tx(
     ht: hl.Table,
-    cds_intervals: Optional[hl.Table] = None,
     filter_to_cds: bool = True,
     filter_to_genes: Optional[List[str]] = None,
     match_by_gene_symbol: bool = False,
@@ -209,7 +210,9 @@ def preprocess_variants_for_tx(
         prepared for annotation.
     """
     if filter_to_cds:
-        ht = ht.filter(hl.is_defined(cds_intervals[ht.locus]))
+        logger.info("Filtering to CDS regions...")
+        cds = filter_gencode_to_cds(gencode)
+        ht = ht.filter(hl.is_defined(cds[ht.locus]))
 
     keep_csqs = True
     if ignore_splicing:
@@ -272,7 +275,7 @@ def tx_annotate_variants(
     # Explode the processed transcript consequences to be able to key by
     # transcript ID.
     ht = explode_by_vep_annotation(ht, vep_annotation=vep_annotation, vep_root=vep_root)
-    ht = ht.transpose(
+    ht = ht.transmute(
         **ht[vep_annotation],
         **tx_ht[ht[vep_annotation].transcript_id, ht[vep_annotation].gene_id],
     )
@@ -304,18 +307,19 @@ def tx_aggregate_variants(
     """
     tissues = hl.eval(ht.tissues)
 
-    if additional_grouping:
-        grouping = ["locus", "gene_id"] + list(additional_group_by)
-    else:
-        grouping = ["locus", "gene_id"]
+    grouping = (
+        ["locus", "gene_id"] + list(additional_group_by)
+        if additional_grouping
+        else ["locus", "gene_id"]
+    )
 
-    # Aggregate the transcript expression information by locus, gene_id and annotation in
-    # additional_group_by.
+    # Aggregate the transcript expression information by locus, gene_id and
+    # annotations in additional_group_by.
     ht = ht.group_by(*grouping).aggregate(
         exp_prop_mean=hl.agg.sum(ht.exp_prop_mean),
         **{t: hl.struct(**{a: hl.agg.sum(ht[t][a]) for a in ht[t]}) for t in tissues},
     )
 
-    ht = ht.key_by(ht.locus, ht.alleles)
+    ht = ht.key_by(ht.locus, ht.alleles) if additional_grouping else ht.key_by(ht.locus)
 
     return ht

@@ -357,3 +357,102 @@ def tx_aggregate_variants(
     ht = ht.key_by(ht.locus, ht.alleles) if additional_grouping else ht.key_by(ht.locus)
 
     return ht
+
+
+def keep_loftee_for_high_impact(ht: hl.expr) -> hl.Table:
+    """
+    Keep the LOFTEE annotations for high_impact coding variants after transcript expression annotation.
+
+    :param ht: Table of variants annotated with transcript expression
+        information.
+    :return: Table of variants annotated with transcript expression information
+        filtered to keep LOFTEE annotations for high_impact coding variants.
+    """
+    csq_high = hl.literal(set(CSQ_CODING_HIGH_IMPACT))
+    ht = ht.annotate(
+        lof=hl.if_else(
+            csq_high.contains(ht.most_severe_consequence),
+            ht.lof,
+            hl.missing(hl.tstr),
+        ),
+        lof_flag=hl.if_else(
+            csq_high.contains(ht.most_severe_consequence),
+            ht.lof_flags,
+            hl.missing(hl.tstr),
+        ),
+    )
+    return ht
+
+
+def get_worst_csq_per_variant(
+    ht: hl.Table, keep_loftee_for_csq_high: bool = False
+) -> hl.Table:
+    """
+    Get the worst consequence of each variant (keyed by locus and alleles) or each locus (keyed by locus).
+
+    :param ht: Table of variants annotated with transcript expression information.
+    :param keep_loftee_for_csq_high: If False, include "OS" (Other Splice) annotations
+        from 'lof' of LOFTEE. "OS" could be annotated in protein_coding regions on any
+        variant except the ones in UTRs, stop_gained and frameshift_variant according to
+        LOFTEE settings. "OS" showed to be more constraint than "LC" variants. Default is
+        False.
+    :return: Table of variants annotated with transcript expression information with
+        annotations of the worst consequence of each variant or locus.
+    """
+
+    def _get_csq_order(keep_loftee_for_csq_high: bool) -> list:
+        """
+        Get the order of consequence terms.
+
+        :param keep_loftee_for_csq_high: If False, include "OS" (Other Splice)
+        :return: The order of consequence terms.
+        """
+        csq_order = []
+        lof_values = (
+            ["HC", "LC", hl.missing(hl.tstr)]
+            if keep_loftee_for_csq_high
+            else ["HC", "OS", "LC", hl.missing(hl.tstr)]
+        )
+        for lof in lof_values:
+            for no_lof_flag in [True, False]:
+                for consequence in CSQ_ORDER:
+                    csq_order.append((lof, no_lof_flag, consequence))
+        return csq_order
+
+    def _get_sort_key(x, csq_order):
+        """
+        Get sort key for transcript consequence.
+
+        :param x: The field to be sorted.
+        :param csq_order: The order of consequence terms.
+        :return: The sort key.
+        """
+        return csq_order[
+            (
+                x.lof,
+                hl.or_else(hl.is_missing(x.lof_flags), False),
+                x.most_severe_consequence,
+            )
+        ]
+
+    ht = ht.collect_by_key("tx_annotation")
+
+    csq_order = []
+    # TODO: Do we add PolyPhen to prioritize missense variants?
+    if keep_loftee_for_csq_high:
+        ht = ht.annotate(
+            tx_annotation=ht.tx_annotation.map(keep_loftee_for_high_impact)
+        )
+
+    csq_order = hl.literal(
+        {x: i for i, x in enumerate(_get_csq_order(keep_loftee_for_csq_high))}
+    )
+
+    ht = ht.select(
+        **hl.sorted(
+            ht.tx_annotation,
+            key=lambda x: _get_sort_key(x, csq_order),
+        )[0]
+    )
+
+    return ht

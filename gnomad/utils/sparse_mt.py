@@ -911,8 +911,8 @@ def densify_all_reference_sites(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
     interval_ht: Optional[hl.Table] = None,
-    row_key_fields: Union[Tuple[str], List[str]] = "locus",
-    entry_keep_fields: Union[Tuple[str], List[str]] = "DP",
+    row_key_fields: Union[Tuple[str], List[str]] = ("locus",),
+    entry_keep_fields: Union[Tuple[str], List[str]] = ("DP",),
 ) -> hl.MatrixTable:
     """
     Densify a sparse Matrix Table at all reference sites.

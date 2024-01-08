@@ -36,8 +36,25 @@ def summarize_transcript_expression(
     function to use to summarize the expression by tissue. By default, the median is
     used.
 
-    The returned Table has a row annotation for each tissue containing the summarized
-    tissue expression value.
+    The returned Table has a row annotation for each tissue containing a struct with the
+    summarized tissue expression value ('transcript_expression') and the proportion of
+    expression of transcript to gene per tissue ('expression_proportion').
+
+    Returned Table Schema example::
+
+        Row fields:
+            'transcript_id': str
+            'gene_id': str
+            'tissue_1': struct {
+              transcript_expression: float64,
+              expression_proportion: float64
+            }
+            'tissue_2': struct {
+              transcript_expression: float64,
+              expression_proportion: float64
+            }
+
+        Key: ['transcript_id', 'gene_id']
 
     :param mt: MatrixTable of transcript (rows) expression quantifications (entry) by
         sample (columns).
@@ -45,9 +62,9 @@ def summarize_transcript_expression(
         quantification. Default is 'transcript_tpm'.
     :param tissue_expr: Column expression indicating tissue type. Default is 'tissue'.
     :param summary_agg_func: Optional aggregation function to use to summarize the
-        transcript expression quantification by tissue. Example: `hl.mean`. Default
+        transcript expression quantification by tissue. Example: `hl.agg.mean`. Default
         is None, which will use a median aggregation.
-    :return: A Table of summarized transcript expression by tissue
+    :return: A Table of summarized transcript expression by tissue.
     """
     if summary_agg_func is None:
         summary_agg_func = lambda x: hl.median(hl.agg.collect(x))
@@ -83,8 +100,8 @@ def get_expression_proportion(ht: hl.Table) -> hl.expr.StructExpression:
     Calculate the proportion of expression of transcript to gene per tissue.
 
     :param ht: Table of summarized transcript expression by tissue.
-    :return: Table with expression proportion of transcript to gene per tissue
-        and mean expression proportion across tissues.
+    :return: StructExpression containing the proportion of expression of transcript to
+        gene per tissue.
     """
     tissues = list(ht.row_value)
 
@@ -147,16 +164,33 @@ def tissue_expression_ht_to_array(
     """
     Convert a Table with a row annotation for each tissue to a Table with tissues as an array.
 
-    The output is a Table with fields in `annotations_to_extract`,
-    each containing an array of summarized expression values or proportion
-    by tissue, where the order of tissues in the array is indicated by
-    the "tissues" global annotation.
+    The output is a Table with one of the two formats:
+        - An annotation of 'tissue_expression' containing an array of structs by
+          tissue, where each element of the array is the Table's row value for a given
+          tissue.
+
+            Example::
+
+                tissue_expression': array<struct {
+                    transcript_expression: float64,
+                    expression_proportion: float64
+                }>
+
+        - One array annotation for each field defined in the 'annotations_to_extract'
+          argument, where each array is an array of the given field values by tissue.
+
+            Example::
+
+                'transcript_expression': array<float64>
+                'expression_proportion': array<float64>
+
+    The order of tissues in the array is indicated by the "tissues" global annotation.
 
     :param ht: Table with a row annotation for each tissue.
-    :param tissues_to_keep: Optional list of tissues to keep in the 'tissue_expression'
+    :param tissues_to_keep: Optional list of tissues to keep in the tissue expression
         array. Default is all non-key rows in the Table.
-    :param tissues_to_filter: Optional list of tissues to exclude from the tissue
-        expression array.
+    :param tissues_to_filter: Optional list of tissues to exclude from the
+        tissue expression array.
     :param annotations_to_extract: Optional list of tissue struct fields to extract
         into top level array annotations. If None, the returned Table will contain a
         single top level annotation 'tissue_expression' that contains an array of

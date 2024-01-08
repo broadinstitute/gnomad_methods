@@ -11,7 +11,7 @@ from gnomad.resources.resource_utils import (
 )
 
 
-def _import_gencode_cds(gtf_path: str) -> hl.Table:
+def _import_gencode_cds(gtf_path: str, **kwargs) -> hl.Table:
     """
     Get CDS intervals from GENCODE GTF file.
 
@@ -20,9 +20,7 @@ def _import_gencode_cds(gtf_path: str) -> hl.Table:
     """
     ht = hl.experimental.import_gtf(
         gtf_path,
-        "GRCh37",
-        force_bgz=True,
-        min_partitions=12,
+        **kwargs,
     )
     ht = ht.annotate(
         gene_id=ht.gene_id.split("\\.")[0],
@@ -383,11 +381,14 @@ gtex_rsem = VersionedTableResource(
 gencode_cds = VersionedTableResource(
     default_version="v19",
     versions={
-        "v39": GnomadPublicTableResource(
+        "v19": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch37/gencode_cds/gencode_v19_cds.ht",
             import_func=_import_gencode_cds,
             import_args={
                 "gtf_path": "gs://gcp-public-data--gnomad/resources/grch37/gencode/gencode.v19.annotation.gtf.gz",
+                "reference_genome": "GRCh37",
+                "force_bgz": True,
+                "min_partitions": 12,
             },
         ),
     },

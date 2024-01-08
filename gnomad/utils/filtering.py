@@ -383,20 +383,6 @@ def filter_to_clinvar_pathogenic(
     return t
 
 
-def filter_gencode_to_cds(ht: hl.Table) -> hl.Table:
-    """
-    Filter Gencode Table to only CDS regions.
-
-    :param ht: Input Gencode Table that is converted from a GTF file.
-    :return: Table filtered to CDS intervals with necessary fields.
-    """
-    return (
-        ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
-        .select("gene_id", "transcript_id")
-        .distinct()
-    )
-
-
 def remove_fields_from_constant(
     constant: List[str], fields_to_remove: List[str]
 ) -> List[str]:

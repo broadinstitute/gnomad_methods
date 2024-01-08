@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
 
@@ -905,6 +905,105 @@ def impute_sex_ploidy(
             ),
         }
     )
+
+
+def densify_all_reference_sites(
+    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
+    reference_ht: hl.Table,
+    interval_ht: Optional[hl.Table] = None,
+    row_key_fields: Union[Tuple[str], List[str]] = "locus",
+    entry_keep_fields: Union[Tuple[str], List[str]] = "DP",
+) -> hl.MatrixTable:
+    """
+    Densify a sparse Matrix Table at all reference sites.
+
+    :param mtds: Input sparse Matrix Table or VariantDataset.
+    :param reference_ht: Table of reference sites.
+    :param interval_ht: Table of intervals to filter to.
+    :param row_key_fields: Fields to use as row key.
+    :param entry_keep_fields: Fields to keep in entries.
+    :return: Densified Matrix Table.
+    """
+    is_vds = isinstance(mtds, hl.vds.VariantDataset)
+
+    # Filter datasets to interval list.
+    if interval_ht is not None:
+        reference_ht = reference_ht.filter(
+            hl.is_defined(interval_ht[reference_ht.locus])
+        )
+
+        if is_vds:
+            mtds = hl.vds.filter_intervals(
+                vds=mtds, intervals=interval_ht, split_reference_blocks=True
+            )
+        else:
+            raise NotImplementedError(
+                "Filtering to an interval list for a sparse Matrix Table is currently"
+                " not supported."
+            )
+
+    entry_keep_fields = list(entry_keep_fields)
+    if is_vds:
+        mt = mtds.variant_data
+    else:
+        mt = mtds
+        entry_keep_fields.append("END")
+
+    # Get the total number of samples.
+    n_samples = mt.count_cols()
+
+    # Determine the genotype field.
+    if "LGT" in mt.entry:
+        gt_field = "LGT"
+    elif "GT" in mt.entry:
+        gt_field = "GT"
+    else:
+        raise ValueError("No genotype field found in entry fields.")
+
+    entry_keep_fields.append(gt_field)
+    mt_col_key_fields = list(mt.col_key)
+    mt_row_key_fields = list(mt.row_key)
+    ht = mt.select_entries(*entry_keep_fields).select_cols().select_rows()
+
+    # Localize entries and perform an outer join with the reference HT.
+    ht = ht._localize_entries("__entries", "__cols")
+    ht = (
+        ht.key_by(*row_key_fields)
+        .join(
+            reference_ht.key_by(*row_key_fields).select(_in_ref=True),
+            how="outer",
+        )
+        .key_by(*mt_row_key_fields)
+    )
+
+    # Fill in missing entries with missing values for each entry field.
+    ht = ht.annotate(
+        __entries=hl.or_else(
+            ht.__entries,
+            hl.range(n_samples).map(
+                lambda x: hl.missing(ht.__entries.dtype.element_type)
+            ),
+        )
+    )
+
+    # Unlocalize entries to turn the HT back to a MT.
+    mt = ht._unlocalize_entries("__entries", "__cols", mt_col_key_fields)
+
+    # Densify VDS/sparse MT at all sites.
+    if is_vds:
+        mt = hl.vds.to_dense_mt(
+            hl.vds.VariantDataset(mtds.reference_data.select_cols().select_rows(), mt)
+        )
+    else:
+        mt = hl.experimental.densify(mt)
+
+    # Filter rows where the reference is missing.
+    mt = mt.filter_rows(mt._in_ref)
+
+    # Unfilter entries so that entries with no ref block overlap aren't null.
+    mt = mt.unfilter_entries()
+
+    return mt
 
 
 def compute_coverage_stats(

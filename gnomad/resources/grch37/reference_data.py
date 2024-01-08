@@ -36,7 +36,7 @@ def _import_gencode_cds(gtf_path: str) -> hl.Table:
     return ht
 
 
-def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
+def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
     """
     Import GTEx RSEM data from expression data and sample attributes file.
 
@@ -46,8 +46,10 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
         under Metadata. The transcript TPM file is expected to have transcript
         expression data, with transcript IDs as the first column and gene IDs as the
         second column.
+
     :param gtex_path: Path to the GTEx RSEM file.
     :param meta_path: Path to the GTEx sample attributes file.
+    :param kwargs: Any additional parameters to be passed to Hail's `import_matrix_table`.
     :return: Matrix Table with GTEx RSEM data with tissue information.
     """
     meta_ht = hl.import_table(meta_path, force_bgz=True, impute=True)
@@ -59,14 +61,14 @@ def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
         row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
         entry_type=hl.tfloat64,
         force_bgz=True,
-        min_partitions=1000,
+        **kwargs,
     )
 
     mt = mt.rename({"x": "transcript_tpm"})
 
     # GTEx data has gene IDs and transcript IDs with version numbers, we need
-    # to remove the version numbers so that it can later be joined with the
-    # variant Table
+    # to remove the version numbers so that it can later be joined with VEP
+    # transcript consequences transcript_id.
     mt = mt.annotate_cols(
         tissue=meta_ht[mt.col_id]
         .SMTSD.replace(" ", "")
@@ -368,9 +370,11 @@ gtex_rsem = VersionedTableResource(
         "v7": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch37/gtex_rsem/gtex_rsem_v7.mt",
             import_func=_import_gtex_rsem,
-            import_args={  # TODO: update path
-                "gtex_path": "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
-                "meta_path": "gs://gnomad-qin/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz",
+            import_args={
+                "gtex_path": "gs://gcp-public-data--gnomad/resources/grch37/gtex/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
+                "meta_path": "gs://gcp-public-data--gnomad/resources/grch37/gtex/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz",
+                "min_partitions": 1000,
+                "reference_genome": "GRCh37",
             },
         ),
     },
@@ -380,10 +384,10 @@ gencode_cds = VersionedTableResource(
     default_version="v19",
     versions={
         "v39": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gencode_cds/gencode_v19_cds.ht",
+            path="gs://gnomad-public-requester-pays/resources/grch37/gencode_cds/gencode_v19_cds.ht",
             import_func=_import_gencode_cds,
             import_args={
-                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v19.annotation.gtf.gz",
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch37/gencode/gencode.v19.annotation.gtf.gz",
             },
         ),
     },

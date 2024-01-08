@@ -99,78 +99,6 @@ def _import_ensembl_interval(path) -> hl.Table:
     return ensembl
 
 
-def _import_gencode_cds(gtf_path: str) -> hl.Table:
-    """
-    Get CDS intervals from GENCODE GTF file.
-
-    :param gtf_path: Path to GENCODE GTF file.
-    :return: Table with CDS intervals.
-    """
-    ht = hl.experimental.import_gtf(
-        gtf_path,
-        "GRCh38",
-        force_bgz=True,
-        min_partitions=12,
-    )
-    ht = ht.annotate(
-        gene_id=ht.gene_id.split("\\.")[0],
-        transcript_id=ht.transcript_id.split("\\.")[0],
-    )
-    ht = (
-        ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
-        .select("gene_id", "transcript_id")
-        .distinct()
-    )
-    return ht
-
-
-def _import_gtex_rsem(gtex_path: str, meta_path: str) -> hl.MatrixTable:
-    """
-    Import GTEx RSEM data from expression data and sample attributes file.
-
-    .. note::
-        Files are downloaded from https://www.gtexportal.org/home/downloads/adult-gtex.
-        We get the transcript TPM under Bulk tissue expression and sample attributes
-        under Metadata. The transcript TPM file is expected to have transcript
-        expression data, with transcript IDs as the first column and gene IDs as the
-        second column.
-    :param gtex_path: Path to the GTEx RSEM file.
-    :param meta_path: Path to the GTEx sample attributes file.
-    :return: Matrix Table with GTEx RSEM data with tissue information.
-    """
-    meta_ht = hl.import_table(meta_path, force_bgz=True, impute=True)
-    meta_ht = meta_ht.key_by("SAMPID")
-
-    mt = hl.import_matrix_table(
-        gtex_path,
-        row_key="transcript_id",
-        row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
-        entry_type=hl.tfloat64,
-        force_bgz=True,
-        min_partitions=1000,
-    )
-
-    mt = mt.rename({"x": "transcript_tpm"})
-
-    # GTEx data has gene IDs and transcript IDs with version numbers, we need
-    # to remove the version numbers so that it can later be joined with the
-    # variant Table
-    mt = mt.annotate_cols(
-        tissue=meta_ht[mt.col_id]
-        .SMTSD.replace(" ", "")
-        .replace("-", "_")
-        .replace("\\(", "_")
-        .replace("\\)", "")
-    )
-    mt = mt.key_rows_by()
-    mt = mt.annotate_rows(
-        transcript_id=mt.transcript_id.split("\\.")[0],
-        gene_id=mt.gene_id.split("\\.")[0],
-    )
-    mt = mt.key_rows_by("transcript_id")
-    return mt
-
-
 # Resources with no versioning needed
 purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.ht",
@@ -430,33 +358,6 @@ telomeres_and_centromeres = GnomadPublicTableResource(
         "path": "gs://gcp-public-data--gnomad/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.bed",
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
-    },
-)
-
-gtex_rsem = VersionedTableResource(
-    default_version="v10",
-    versions={
-        "v10": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gtex_rsem/gtex_rsem_v10.mt",
-            import_func=_import_gtex_rsem,
-            import_args={  # TODO: update path and name
-                "gtex_path": "gs://gnomad-qin/bulk-gex_v7_rna-seq_GTEx_Analysis_20231130_v10_RSEMv1.2.22_transcript_tpm.txt.gz",
-                "meta_path": "gs://gnomad-qin/annotations_v10_GTEx_v10_Annotations_SampleAttributesDS.txt.gz",
-            },
-        ),
-    },
-)
-
-gencode_cds = VersionedTableResource(
-    default_version="v39",
-    versions={
-        "v39": GnomadPublicTableResource(
-            path="gs://gnomad-public-requester-pays/resources/grch38/gencode_cds/gencode_v39_cds.ht",
-            import_func=_import_gencode_cds,
-            import_args={
-                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz",
-            },
-        ),
     },
 )
 

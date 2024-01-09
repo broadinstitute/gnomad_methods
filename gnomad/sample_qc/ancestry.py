@@ -22,7 +22,7 @@ logger.setLevel(logging.INFO)
 POP_NAMES = {
     "afr": "African/African-American",
     "ami": "Amish",
-    "amr": "Latino",
+    "amr": "Admixed American",
     "asj": "Ashkenazi Jewish",
     "eas": "East Asian",
     "eur": "European",

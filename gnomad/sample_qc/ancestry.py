@@ -32,6 +32,7 @@ POP_NAMES = {
     "mid": "Middle Eastern",
     "nfe": "Non-Finnish European",
     "oth": "Other",
+    "remaining": "Remaining individuals",
     "sas": "South Asian",
     "uniform": "Uniform",
     "sas_non_consang": "South Asian (F < 0.05)",

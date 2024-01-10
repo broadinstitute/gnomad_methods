@@ -1861,6 +1861,87 @@ def generate_freq_group_membership_array(
     return ht
 
 
+def compute_freq_by_strata(
+    mt: hl.MatrixTable,
+    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
+    select_fields: Optional[List[str]] = None,
+    group_membership_includes_raw_group: bool = True,
+) -> hl.Table:
+    """
+    Compute call statistics and, when passed, entry aggregation function(s) by strata.
+
+    The computed call statistics are AC, AF, AN, and homozygote_count. The entry
+    aggregation functions are applied to the MatrixTable entries and aggregated. The
+    MatrixTable must contain a 'group_membership' annotation (like the one added by
+    `generate_freq_group_membership_array`) that is a list of bools to aggregate the
+    columns by.
+
+    .. note::
+        This function is primarily used through `annotate_freq` but can be used
+        independently if desired. Please see the `annotate_freq` function for more
+        complete documentation.
+
+    :param mt: Input MatrixTable.
+    :param entry_agg_funcs: Optional dict of entry aggregation functions. When
+        specified, additional annotations are added to the output Table/MatrixTable.
+        The keys of the dict are the names of the annotations and the values are tuples
+        of functions. The first function is used to transform the `mt` entries in some
+        way, and the second function is used to aggregate the output from the first
+        function.
+    :param select_fields: Optional list of row fields from `mt` to keep on the output
+        Table.
+    :param group_membership_includes_raw_group: Whether the 'group_membership'
+        annotation includes an entry for the 'raw' group, representing all samples. If
+        False, the 'raw' group is inserted as the second element in all added
+        annotations using the same 'group_membership', resulting
+        in array lengths of 'group_membership'+1. If True, the second element of each
+        added annotation is still the 'raw' group, but the group membership is
+        determined by the values in the second element of 'group_membership', and the
+        output annotations will be the same length as 'group_membership'. Default is
+        True.
+    :return: Table or MatrixTable with allele frequencies by strata.
+    """
+    if not group_membership_includes_raw_group:
+        # Add the 'raw' group to the 'group_membership' annotation.
+        mt = mt.annotate_cols(
+            group_membership=hl.array([mt.group_membership[0]]).extend(
+                mt.group_membership
+            )
+        )
+
+    # Add adj_group global annotation indicating that the second element in
+    # group_membership is 'raw' and all others are 'adj'.
+    mt = mt.annotate_globals(
+        adj_group=hl.range(hl.len(mt.group_membership.take(1)[0])).map(lambda x: x != 1)
+    )
+
+    if entry_agg_funcs is None:
+        entry_agg_funcs = {}
+
+    def _get_freq_expr(gt_expr: hl.expr.CallExpression) -> hl.expr.StructExpression:
+        """
+        Get struct expression with call statistics.
+
+        :param gt_expr: CallExpression to compute call statistics on.
+        :return: StructExpression with call statistics.
+        """
+        # Get the source Table for the CallExpression to grab alleles.
+        ht = gt_expr._indices.source
+        freq_expr = hl.agg.call_stats(gt_expr, ht.alleles)
+        # Select non-ref allele (assumes bi-allelic).
+        freq_expr = freq_expr.annotate(
+            AC=freq_expr.AC[1],
+            AF=freq_expr.AF[1],
+            homozygote_count=freq_expr.homozygote_count[1],
+        )
+
+        return freq_expr
+
+    entry_agg_funcs["freq"] = (lambda x: x.GT, _get_freq_expr)
+
+    return agg_by_strata(mt, entry_agg_funcs, select_fields).drop("adj_group")
+
+
 def agg_by_strata(
     mt: hl.MatrixTable,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
@@ -2010,87 +2091,6 @@ def agg_by_strata(
     )
 
     return ht.drop("cols")
-
-
-def compute_freq_by_strata(
-    mt: hl.MatrixTable,
-    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
-    select_fields: Optional[List[str]] = None,
-    group_membership_includes_raw_group: bool = True,
-) -> hl.Table:
-    """
-    Compute call statistics and, when passed, entry aggregation function(s) by strata.
-
-    The computed call statistics are AC, AF, AN, and homozygote_count. The entry
-    aggregation functions are applied to the MatrixTable entries and aggregated. The
-    MatrixTable must contain a 'group_membership' annotation (like the one added by
-    `generate_freq_group_membership_array`) that is a list of bools to aggregate the
-    columns by.
-
-    .. note::
-        This function is primarily used through `annotate_freq` but can be used
-        independently if desired. Please see the `annotate_freq` function for more
-        complete documentation.
-
-    :param mt: Input MatrixTable.
-    :param entry_agg_funcs: Optional dict of entry aggregation functions. When
-        specified, additional annotations are added to the output Table/MatrixTable.
-        The keys of the dict are the names of the annotations and the values are tuples
-        of functions. The first function is used to transform the `mt` entries in some
-        way, and the second function is used to aggregate the output from the first
-        function.
-    :param select_fields: Optional list of row fields from `mt` to keep on the output
-        Table.
-    :param group_membership_includes_raw_group: Whether the 'group_membership'
-        annotation includes an entry for the 'raw' group, representing all samples. If
-        False, the 'raw' group is inserted as the second element in all added
-        annotations using the same 'group_membership', resulting
-        in array lengths of 'group_membership'+1. If True, the second element of each
-        added annotation is still the 'raw' group, but the group membership is
-        determined by the values in the second element of 'group_membership', and the
-        output annotations will be the same length as 'group_membership'. Default is
-        True.
-    :return: Table or MatrixTable with allele frequencies by strata.
-    """
-    if not group_membership_includes_raw_group:
-        # Add the 'raw' group to the 'group_membership' annotation.
-        mt = mt.annotate_cols(
-            group_membership=hl.array([mt.group_membership[0]]).extend(
-                mt.group_membership
-            )
-        )
-
-    # Add adj_group global annotation indicating that the second element in
-    # group_membership is 'raw' and all others are 'adj'.
-    mt = mt.annotate_globals(
-        adj_group=hl.range(hl.len(mt.group_membership.take(1)[0])).map(lambda x: x != 1)
-    )
-
-    if entry_agg_funcs is None:
-        entry_agg_funcs = {}
-
-    def _get_freq_expr(gt_expr: hl.expr.CallExpression) -> hl.expr.StructExpression:
-        """
-        Get struct expression with call statistics.
-
-        :param gt_expr: CallExpression to compute call statistics on.
-        :return: StructExpression with call statistics.
-        """
-        # Get the source Table for the CallExpression to grab alleles.
-        ht = gt_expr._indices.source
-        freq_expr = hl.agg.call_stats(gt_expr, ht.alleles)
-        # Select non-ref allele (assumes bi-allelic).
-        freq_expr = freq_expr.annotate(
-            AC=freq_expr.AC[1],
-            AF=freq_expr.AF[1],
-            homozygote_count=freq_expr.homozygote_count[1],
-        )
-
-        return freq_expr
-
-    entry_agg_funcs["freq"] = (lambda x: x.GT, _get_freq_expr)
-
-    return agg_by_strata(mt, entry_agg_funcs, select_fields).drop("adj_group")
 
 
 def update_structured_annotations(

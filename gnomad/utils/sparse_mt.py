@@ -986,6 +986,15 @@ def compute_coverage_stats(
         group_membership_ht = generate_freq_group_membership_array(
             ht, strata_expr, no_raw_group=True
         )
+        group_membership_ht = group_membership_ht.annotate_globals(
+            freq_meta=group_membership_ht.freq_meta.map(
+                lambda x: hl.dict(
+                    x.items().map(
+                        lambda m: hl.if_else(m[0] == "group", ("group", "raw"), m)
+                    )
+                )
+            )
+        )
 
     n_samples = group_membership_ht.count()
     sample_counts = group_membership_ht.index_globals().freq_meta_sample_count

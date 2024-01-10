@@ -1291,7 +1291,7 @@ def compute_coverage_stats(
                 )
             )
         )
-        bin_expr = hl.cumulative_sum(hl.array(max_bin_expr).extend(bin_expr))
+        bin_expr = hl.cumulative_sum(hl.array([max_bin_expr]).extend(bin_expr))
 
         # Use reversed bins as count_array_expr has reverse order.
         bin_expr = {f"over_{x}": bin_expr[i] / n for i, x in enumerate(rev_cov_bins)}

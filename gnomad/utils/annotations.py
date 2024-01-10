@@ -1997,27 +1997,27 @@ def agg_by_strata(
             "'group_membership_ht' is specified, using sample stratification indicated "
             "by its 'group_membership' annotation."
         )
+        group_globals = group_membership_ht.index_globals()
         n_groups = len(group_membership_ht.group_membership.take(1)[0])
         mt = mt.annotate_cols(
             group_membership=group_membership_ht[mt.col_key].group_membership
         )
         if "adj_group" not in global_expr:
-            if "adj_group" in group_membership_ht.index_globals():
-                global_expr["adj_group"] = mt.index_globals().adj_group
+            if "adj_group" in group_globals:
+                global_expr["adj_group"] = group_globals.adj_group
                 logger.info(
                     "Using the 'adj_group' global annotation on 'group_membership_ht'."
                 )
-            elif "freq_meta" in group_membership_ht.index_globals():
+            elif "freq_meta" in group_globals:
                 logger.info(
                     "The 'freq_meta' global annotation is found in "
                     "'group_membership_ht', using it to determine the adj filtered "
                     "stratification groups."
                 )
-                freq_meta = group_membership_ht.index_globals().freq_meta
-
-            global_expr["adj_group"] = freq_meta.map(
-                lambda x: x.get("group", "NA") == "adj"
-            )
+                freq_meta = group_globals.freq_meta
+                global_expr["adj_group"] = freq_meta.map(
+                    lambda x: x.get("group", "NA") == "adj"
+                )
 
     if "adj_group" not in global_expr:
         global_expr["adj_group"] = hl.range(n_groups).map(lambda x: False)
@@ -2032,8 +2032,10 @@ def agg_by_strata(
 
     # Keep only the entries needed for the aggregation functions.
     select_expr = {}
+    has_adj = False
     if hl.eval(hl.any(global_expr["adj_group"])):
         select_expr["adj"] = mt.adj
+        has_adj = True
 
     select_expr.update(**{ann: f[0](mt) for ann, f in entry_agg_funcs.items()})
     mt = mt.select_entries(**select_expr)
@@ -2072,14 +2074,12 @@ def agg_by_strata(
         :param ann_expr: Expression to aggregate by group.
         :return: Aggregated array expression.
         """
+        f = lambda i, adj: agg_func(ann_expr[i])
+        if has_adj:
+            f = lambda i, adj: hl.if_else(adj, hl.agg.filter(ht.adj[i], f), f)
+
         return hl.map(
-            lambda s_indices, adj: s_indices.aggregate(
-                lambda i: hl.if_else(
-                    adj,
-                    hl.agg.filter(ht.adj[i], agg_func(ann_expr[i])),
-                    agg_func(ann_expr[i]),
-                )
-            ),
+            lambda s_indices, adj: s_indices.aggregate(lambda i: f(i, adj)),
             ht.indices_by_group,
             ht.adj_group,
         )

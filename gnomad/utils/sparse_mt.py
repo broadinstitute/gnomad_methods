@@ -1102,15 +1102,23 @@ def compute_coverage_stats(
 
     ht_globals = ht.index_globals()
     if isinstance(ht.coverage_stats, hl.expr.ArrayExpression):
-        cov_stats_expr = hl.map(
-            lambda c, n: _cov_stats(c, n),
-            ht.coverage_stats,
-            ht_globals.strata_sample_count,
+        ht = ht.annotate_globals(
+            coverage_stats_meta=ht_globals.strata_meta.map(
+                lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
+            ),
+            coverage_stats_meta_sample_count=ht_globals.strata_sample_count,
         )
+        cov_stats_expr = {
+            "coverage_stats": hl.map(
+                lambda c, n: _cov_stats(c, n),
+                ht.coverage_stats,
+                ht_globals.strata_sample_count,
+            )
+        }
     else:
         cov_stats_expr = _cov_stats(ht.coverage_stats, ht_globals.sample_count)
 
-    ht = ht.annotate(coverage_stats=cov_stats_expr)
+    ht = ht.transmute(**cov_stats_expr)
 
     return ht
 
@@ -1212,7 +1220,7 @@ def compute_stats_per_ref_site(
         group_membership_ht = generate_freq_group_membership_array(
             ht, strata_expr, no_raw_group=True
         )
-        group_membership_ht = group_membership_ht.annotate(
+        group_membership_ht = group_membership_ht.annotate_globals(
             freq_meta=group_membership_ht.freq_meta.map(
                 lambda x: hl.dict(
                     x.items().map(

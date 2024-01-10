@@ -908,6 +908,132 @@ def impute_sex_ploidy(
     )
 
 
+def compute_coverage_stats(
+    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
+    reference_ht: hl.Table,
+    interval_ht: Optional[hl.Table] = None,
+    coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
+    row_key_fields: List[str] = ["locus"],
+    strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
+    group_membership_ht: Optional[hl.Table] = None,
+    include_an: bool = False,
+) -> hl.Table:
+    """
+    Compute coverage statistics for every base of the `reference_ht` provided.
+
+    The following coverage stats are calculated:
+        - mean
+        - median
+        - total DP
+        - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
+
+    The `reference_ht` is a Table that contains a row for each locus coverage that should be
+    computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
+    created using `get_reference_ht`.
+
+    :param mtds: Input sparse MT or VDS
+    :param reference_ht: Input reference HT
+    :param interval_ht: Optional Table containing intervals to filter to
+    :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :param row_key_fields: List of row key fields to use for joining `mtds` with
+        `reference_ht`
+    :param strata_expr: Optional list of dicts containing expressions to stratify the
+        coverage stats by. Only one of `group_membership_ht` or `strata_expr` can be
+        specified.
+    :param group_membership_ht: Optional Table containing group membership annotations
+        to stratify the coverage stats by. Only one of `group_membership_ht` or
+        `strata_expr` can be specified.
+    :param include_an: Whether to also compute AN. Default is False.
+    :return: Table with per-base coverage stats.
+    """
+    is_vds = isinstance(mtds, hl.vds.VariantDataset)
+    if is_vds:
+        mt = mtds.variant_data
+    else:
+        mt = mtds
+
+    # Determine the genotype field.
+    gt_field = set(mt.entry) & {"GT", "LGT"}
+    if len(gt_field) == 0:
+        raise ValueError("No genotype field found in entry fields.")
+
+    gt_field = gt_field.pop()
+
+    # Add function to compute coverage stats.
+    cov_bins = sorted(coverage_over_x_bins)
+    rev_cov_bins = list(reversed(cov_bins))
+    max_cov_bin = cov_bins[-1]
+    cov_bins = hl.array(cov_bins)
+    entry_agg_funcs = {
+        "coverage_stats": (
+            lambda t: hl.if_else(hl.is_missing(t.DP) | hl.is_nan(t.DP), 0, t.DP),
+            lambda dp: hl.struct(
+                # This expression creates a counter DP -> number of samples for DP
+                # between 0 and max_cov_bin.
+                coverage_counter=hl.agg.counter(hl.min(max_cov_bin, dp)),
+                mean=hl.agg.mean(dp),
+                median_approx=hl.agg.approx_median(dp),
+                total_DP=hl.agg.sum(dp),
+            ),
+        )
+    }
+
+    if include_an:
+        entry_agg_funcs["AN"] = get_allele_number_agg_func(gt_field)
+
+    ht = compute_stats_per_ref_site(
+        mtds,
+        reference_ht,
+        entry_agg_funcs,
+        row_key_fields=row_key_fields,
+        interval_ht=interval_ht,
+        entry_keep_fields=[gt_field, "DP"],
+        strata_expr=strata_expr,
+        group_membership_ht=group_membership_ht,
+    )
+
+    # This expression aggregates the DP counter in reverse order of the cov_bins and
+    # computes the cumulative sum over them. It needs to be in reverse order because we
+    # want the sum over samples covered by > X.
+    def _cov_stats(
+        cov_stat: hl.expr.StructExpression, n: hl.expr.Int32Expression
+    ) -> hl.expr.StructExpression:
+        # The coverage was already floored to the max_coverage_bin, so no more
+        # aggregation is needed for the max bin.
+        count_expr = cov_stat.coverage_counter
+        max_bin_expr = hl.int32(count_expr.get(max_cov_bin, 0))
+
+        # For each of the other bins, coverage is summed between the boundaries.
+        bin_expr = hl.range(hl.len(cov_bins) - 1, 0, step=-1)
+        bin_expr = bin_expr.map(
+            lambda i: hl.sum(
+                hl.range(cov_bins[i - 1], cov_bins[i]).map(
+                    lambda j: hl.int32(count_expr.get(j, 0))
+                )
+            )
+        )
+        bin_expr = hl.cumulative_sum(hl.array([max_bin_expr]).extend(bin_expr))
+
+        # Use reversed bins as count_array_expr has reverse order.
+        bin_expr = {f"over_{x}": bin_expr[i] / n for i, x in enumerate(rev_cov_bins)}
+
+        return cov_stat.annotate(**bin_expr).drop("coverage_counter")
+
+    ht_globals = ht.index_globals()
+    if isinstance(ht.coverage_stats, hl.expr.ArrayExpression):
+        cov_stats_expr = hl.map(
+            lambda c, n: _cov_stats(c, n),
+            ht.coverage_stats,
+            ht_globals.strata_sample_count,
+        )
+    else:
+        cov_stats_expr = _cov_stats(ht.coverage_stats, ht_globals.sample_count)
+
+    ht = ht.annotate(coverage_stats=cov_stats_expr)
+
+    return ht
+
+
 def densify_all_reference_sites(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
@@ -1185,132 +1311,6 @@ def compute_allele_number_per_ref_site(
     entry_agg_funcs = {"AN": get_allele_number_agg_func(gt_field)}
 
     return compute_stats_per_ref_site(mtds, reference_ht, entry_agg_funcs, **kwargs)
-
-
-def compute_coverage_stats(
-    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
-    reference_ht: hl.Table,
-    interval_ht: Optional[hl.Table] = None,
-    coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
-    row_key_fields: List[str] = ["locus"],
-    strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
-    group_membership_ht: Optional[hl.Table] = None,
-    include_an: bool = False,
-) -> hl.Table:
-    """
-    Compute coverage statistics for every base of the `reference_ht` provided.
-
-    The following coverage stats are calculated:
-        - mean
-        - median
-        - total DP
-        - fraction of samples with coverage above X, for each x in `coverage_over_x_bins`
-
-    The `reference_ht` is a Table that contains a row for each locus coverage that should be
-    computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
-    created using `get_reference_ht`.
-
-    :param mtds: Input sparse MT or VDS
-    :param reference_ht: Input reference HT
-    :param interval_ht: Optional Table containing intervals to filter to
-    :param coverage_over_x_bins: List of boundaries for computing samples over X
-    :param row_key_fields: List of row key fields to use for joining `mtds` with
-        `reference_ht`
-    :param strata_expr: Optional list of dicts containing expressions to stratify the
-        coverage stats by. Only one of `group_membership_ht` or `strata_expr` can be
-        specified.
-    :param group_membership_ht: Optional Table containing group membership annotations
-        to stratify the coverage stats by. Only one of `group_membership_ht` or
-        `strata_expr` can be specified.
-    :param include_an: Whether to also compute AN. Default is False.
-    :return: Table with per-base coverage stats.
-    """
-    is_vds = isinstance(mtds, hl.vds.VariantDataset)
-    if is_vds:
-        mt = mtds.variant_data
-    else:
-        mt = mtds
-
-    # Determine the genotype field.
-    gt_field = set(mt.entry) & {"GT", "LGT"}
-    if len(gt_field) == 0:
-        raise ValueError("No genotype field found in entry fields.")
-
-    gt_field = gt_field.pop()
-
-    # Add function to compute coverage stats.
-    cov_bins = sorted(coverage_over_x_bins)
-    rev_cov_bins = list(reversed(cov_bins))
-    max_cov_bin = cov_bins[-1]
-    cov_bins = hl.array(cov_bins)
-    entry_agg_funcs = {
-        "coverage_stats": (
-            lambda t: hl.if_else(hl.is_missing(t.DP) | hl.is_nan(t.DP), 0, t.DP),
-            lambda dp: hl.struct(
-                # This expression creates a counter DP -> number of samples for DP
-                # between 0 and max_cov_bin.
-                coverage_counter=hl.agg.counter(hl.min(max_cov_bin, dp)),
-                mean=hl.agg.mean(dp),
-                median_approx=hl.agg.approx_median(dp),
-                total_DP=hl.agg.sum(dp),
-            ),
-        )
-    }
-
-    if include_an:
-        entry_agg_funcs["AN"] = get_allele_number_agg_func(gt_field)
-
-    ht = compute_stats_per_ref_site(
-        mtds,
-        reference_ht,
-        entry_agg_funcs,
-        row_key_fields=row_key_fields,
-        interval_ht=interval_ht,
-        entry_keep_fields=[gt_field, "DP"],
-        strata_expr=strata_expr,
-        group_membership_ht=group_membership_ht,
-    )
-
-    # This expression aggregates the DP counter in reverse order of the cov_bins and
-    # computes the cumulative sum over them. It needs to be in reverse order because we
-    # want the sum over samples covered by > X.
-    def _cov_stats(
-        cov_stat: hl.expr.StructExpression, n: hl.expr.Int32Expression
-    ) -> hl.expr.StructExpression:
-        # The coverage was already floored to the max_coverage_bin, so no more
-        # aggregation is needed for the max bin.
-        count_expr = cov_stat.coverage_counter
-        max_bin_expr = hl.int32(count_expr.get(max_cov_bin, 0))
-
-        # For each of the other bins, coverage is summed between the boundaries.
-        bin_expr = hl.range(hl.len(cov_bins) - 1, 0, step=-1)
-        bin_expr = bin_expr.map(
-            lambda i: hl.sum(
-                hl.range(cov_bins[i - 1], cov_bins[i]).map(
-                    lambda j: hl.int32(count_expr.get(j, 0))
-                )
-            )
-        )
-        bin_expr = hl.cumulative_sum(hl.array([max_bin_expr]).extend(bin_expr))
-
-        # Use reversed bins as count_array_expr has reverse order.
-        bin_expr = {f"over_{x}": bin_expr[i] / n for i, x in enumerate(rev_cov_bins)}
-
-        return cov_stat.annotate(**bin_expr).drop("coverage_counter")
-
-    ht_globals = ht.index_globals()
-    if isinstance(ht.coverage_stats, hl.expr.ArrayExpression):
-        cov_stats_expr = hl.map(
-            lambda c, n: _cov_stats(c, n),
-            ht.coverage_stats,
-            ht_globals.strata_sample_count,
-        )
-    else:
-        cov_stats_expr = _cov_stats(ht.coverage_stats, ht_globals.sample_count)
-
-    ht = ht.annotate(coverage_stats=cov_stats_expr)
-
-    return ht
 
 
 def filter_ref_blocks(

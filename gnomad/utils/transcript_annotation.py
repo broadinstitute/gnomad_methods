@@ -484,6 +484,8 @@ def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
     :return: Table of maximum transcript expression proportion per gene and maximum
         mean transcript expression proportion across all tissues for each gene.
     """
+    # TODO: Use isinstance to check if tx_annotation is already a struct.
+    # TODO: Should we make it compatible with existing v2 pext?
     tissues = hl.eval(ht.tissues)
     csq_all = hl.literal(set(CSQ_CODING_ALL_IMPACT))
 

@@ -611,6 +611,7 @@ def gnomad_gks(
                 coverage(data_type).versions[coverage_version].path
             )
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
+        ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
     pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
@@ -662,6 +663,7 @@ def gnomad_gks(
 
     if not skip_coverage:
         keep_fields.append(ht.mean_depth)
+        keep_fields.append(ht.fraction_cov_over_20)
 
     if "jointGrpMaxFAF95" in ht.row:
         keep_fields.append(ht.jointGrpMaxFAF95)

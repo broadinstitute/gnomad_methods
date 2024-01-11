@@ -2712,10 +2712,13 @@ def add_gks_va(
         "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
     }
 
-    # Add mean coverage depth statistics if the input was annotated
+    # Add coverage depth statistics if the input was annotated
     # with coverage information.
     if "mean_depth" in input_struct:
         qualityMeasures["meanDepth"] = input_struct.mean_depth
+
+    if "fraction_cov_over_20" in input_struct:
+        qualityMeasures["fractionCoverage20x"] = input_struct.fraction_cov_over_20
 
     # Add monoallelic flag (all samples homozygous for alternate allele)
     qualityMeasures["monoallelic"] = input_struct.monoallelic

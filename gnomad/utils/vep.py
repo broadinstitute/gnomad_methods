@@ -51,6 +51,10 @@ CSQ_CODING_LOW_IMPACT = [
     "coding_sequence_variant",
 ]
 
+CSQ_CODING_ALL_IMPACT = (
+    CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT
+)
+
 CSQ_NON_CODING = [
     "mature_miRNA_variant",
     "5_prime_UTR_variant",

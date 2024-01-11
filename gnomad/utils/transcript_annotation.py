@@ -7,6 +7,7 @@ import hail as hl
 from gnomad.resources.grch37 import gencode
 from gnomad.utils.filtering import filter_gencode_to_cds
 from gnomad.utils.vep import (
+    CSQ_CODING_ALL_IMPACT,
     CSQ_CODING_HIGH_IMPACT,
     CSQ_ORDER,
     SPLICE_CSQS,
@@ -458,3 +459,52 @@ def get_worst_csq_per_variant(
     )
 
     return ht
+
+
+def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
+    """
+    Get the maximum pext value of each gene.
+
+    .. note::
+        For a minority of genes, when RSEM assigns higher relative expression to
+        non-coding transcripts, the sum of the value of coding transcripts can be
+        much smaller than the gene expression value for the transcript, resulting in
+        low pext scores for all coding variants in the gene, and thus resulting in
+        possible filtering of all variants for a given gene. In many cases this
+        appears to be the result of spurious non-coding transcripts with a high
+        degree of exon overlap with true coding transcripts.
+
+        To get around this artifact from affecting our analyses, you can calculate
+        the maximum pext score for all variants across all protein coding genes,
+        and removed any gene where the maximum pext score is below a given threshold.
+
+    :param ht: Table of variants annotated with transcript expression information,
+        and aggregated by additional grouping fields, including at least 'gene_id',
+        'gene_symbol', 'most_severe_consequence', etc.
+    :return: Table of maximum transcript expression proportion per gene and maximum
+        mean transcript expression proportion across all tissues for each gene.
+    """
+    tissues = hl.eval(ht.tissues)
+    csq_all = hl.literal(set(CSQ_CODING_ALL_IMPACT))
+
+    # Filter to coding variants.
+    ht = ht.filter(csq_all.contains(ht.most_severe_consequence))
+
+    # Select expression proportion for each tissue and mean expression proportion.
+    ht = ht.select(
+        "gene_id",
+        "gene_symbol",
+        "exp_prop_mean",
+        **{t: ht[t].expression_proportion for t in tissues},
+    )
+
+    # Group by gene and get max of expression proportion for each tissue and mean
+    # expression proportion.
+    max_ht = ht.group_by("gene_id", "gene_symbol").aggregate(
+        max_pexts=hl.struct(
+            **{t: hl.agg.max(ht[t]) for t in tissues},
+            exp_prop_mean=hl.agg.max(ht.exp_prop_mean),
+        )
+    )
+
+    return max_ht

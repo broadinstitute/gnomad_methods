@@ -51,7 +51,6 @@ POP_NAMES = {
     "oeu": "Other European",
     "onf": "Other Non-Finnish European",
     "unk": "Unknown",
-    "remaining": "Remaining",
 }
 
 POP_COLORS = {

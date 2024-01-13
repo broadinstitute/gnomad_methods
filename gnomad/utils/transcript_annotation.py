@@ -466,17 +466,18 @@ def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
     Get the maximum pext value of each gene.
 
     .. note::
-        For a minority of genes, when RSEM assigns higher relative expression to
+        "For a minority of genes, when RSEM assigns higher relative expression to
         non-coding transcripts, the sum of the value of coding transcripts can be
-        much smaller than the gene expression value for the transcript, resulting in
+        much smaller than the gene expression value of all transcripts, resulting in
         low pext scores for all coding variants in the gene, and thus resulting in
         possible filtering of all variants for a given gene. In many cases this
         appears to be the result of spurious non-coding transcripts with a high
         degree of exon overlap with true coding transcripts.
 
-        To get around this artifact from affecting our analyses, you can calculate
+        To get around this artifact from affecting the analyses, you can calculate
         the maximum pext score for all variants across all protein coding genes,
-        and removed any gene where the maximum pext score is below a given threshold.
+        and removed any gene where the maximum pext score is below a given threshold."
+        -- adapted from https://doi.org/10.1038/s41586-020-2329-2
 
     :param ht: Table of variants annotated with transcript expression information,
         and aggregated by additional grouping fields, including at least 'gene_id',

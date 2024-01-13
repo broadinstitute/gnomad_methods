@@ -4,10 +4,10 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
 
-from gnomad.resources.grch37 import gencode
-from gnomad.utils.filtering import filter_gencode_to_cds
+from gnomad.utils.filtering import filter_to_gencode_cds
 from gnomad.utils.vep import (
-    SPLICE_CSQS,
+    CSQ_CODING,
+    CSQ_SPLICE,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,
     process_consequences,
@@ -219,6 +219,7 @@ def tissue_expression_ht_to_array(
 def preprocess_variants_for_tx(
     ht: hl.Table,
     filter_to_cds: bool = True,
+    gencode_ht: Optional[hl.Table] = None,
     filter_to_genes: Optional[List[str]] = None,
     match_by_gene_symbol: bool = False,
     filter_to_csqs: Optional[List[str]] = None,
@@ -230,7 +231,9 @@ def preprocess_variants_for_tx(
     Prepare a Table of variants with vep transcript consequences for annotation.
 
     :param ht: Table of variants with 'vep' annotations.
-    :param cds_intervals: Optional Table of CDS intervals. Default is None.
+    :param gencode_ht: Optional Gencode resource Table containing CDS interval
+        information. Default is None, which will use the default version of the Gencode
+        Table resource for the reference build of the input Table `ht`.
     :param filter_to_cds: Whether to filter to CDS regions. Default is True.
     :param filter_to_genes: Optional list of genes to filter to. Default is None.
     :param match_by_gene_symbol: Whether to match by gene symbol instead of gene ID.
@@ -245,15 +248,14 @@ def preprocess_variants_for_tx(
     """
     if filter_to_cds:
         logger.info("Filtering to CDS regions...")
-        cds = filter_gencode_to_cds(gencode)
-        ht = ht.filter(hl.is_defined(cds[ht.locus]))
+        ht = filter_to_gencode_cds(ht, gencode_ht=gencode_ht)
 
     keep_csqs = True
     if ignore_splicing:
         if filter_to_csqs is not None:
-            filter_to_csqs = [csq for csq in filter_to_csqs if csq not in SPLICE_CSQS]
+            filter_to_csqs = [csq for csq in filter_to_csqs if csq not in CSQ_SPLICE]
         else:
-            filter_to_csqs = SPLICE_CSQS
+            filter_to_csqs = CSQ_SPLICE
             keep_csqs = False
 
     if filter_to_csqs is not None:
@@ -320,7 +322,6 @@ def tx_annotate_variants(
 
 def tx_aggregate_variants(
     ht: hl.Table,
-    additional_grouping: bool = False,
     additional_group_by: Optional[Union[Tuple[str], List[str]]] = (
         "alleles",
         "gene_symbol",
@@ -333,19 +334,16 @@ def tx_aggregate_variants(
     Aggregate transcript-based expression values or expression proportion from GTEx.
 
     :param ht: Table of variants annotated with transcript expression information.
-    :param additional_grouping: Whether to group by additional fields before sum
-        aggregation. Default is False.
     :param additional_group_by: Optional list of additional fields to group by before
-        sum aggregation.
+        sum aggregation. If None, the returned Table will be grouped by only "locus"
+        and "gene_id" before the sum aggregation.
     :return: Table of variants with transcript expression information aggregated.
     """
     tissues = hl.eval(ht.tissues)
 
-    grouping = (
-        ["locus", "gene_id"] + list(additional_group_by)
-        if additional_grouping
-        else ["locus", "gene_id"]
-    )
+    grouping = ["locus", "gene_id"]
+    if additional_group_by is not None:
+        grouping = grouping + list(additional_group_by)
 
     # Aggregate the transcript expression information by locus, gene_id and
     # annotations in additional_group_by.
@@ -354,6 +352,60 @@ def tx_aggregate_variants(
         **{t: hl.struct(**{a: hl.agg.sum(ht[t][a]) for a in ht[t]}) for t in tissues},
     )
 
-    ht = ht.key_by(ht.locus, ht.alleles) if additional_grouping else ht.key_by(ht.locus)
+    # If 'alleles' is in the Table, key by 'locus' and 'alleles'.
+    keys = ["locus"]
+    if "alleles" in ht.row:
+        keys.append("alleles")
+
+    ht = ht.key_by(*keys)
+
+    return ht
+
+
+def process_annotate_aggregate_variants(
+    ht: hl.Table,
+    tx_ht: hl.Table,
+    tissues_to_filter: Optional[List[str]] = None,
+    vep_root: str = "vep",
+    vep_annotation: str = "transcript_consequences",
+    filter_to_csqs: Optional[List[str]] = CSQ_CODING,
+    additional_group_by: Optional[Union[Tuple[str], List[str]]] = (
+        "alleles",
+        "gene_symbol",
+        "most_severe_consequence",
+        "lof",
+        "lof_flags",
+    ),
+    **kwargs,
+) -> hl.Table:
+    """
+    One-stop usage of preprocess_variants_for_tx, tx_annotate_variants and tx_aggregate_variants.
+
+    :param ht: Table of variants to annotate, it should contain at least the
+         following nested fields: `vep.transcript_consequences`, `freq`.
+    :param tx_ht: Table of transcript expression information.
+    :param tissues_to_filter: Optional list of tissues to exclude from the output.
+    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
+    :param vep_annotation: Name of annotation in 'vep' annotation, refer to the
+        function where it is used for more details.
+    :param filter_to_csqs: Optional list of consequences to filter to. Default is None.
+    :param additional_group_by: Optional list of additional fields to group by before
+        sum aggregation. If None, the returned Table will be grouped by only "locus"
+        and "gene_id" before the sum aggregation.
+    :return: Table of variants with transcript expression information aggregated.
+    """
+    tx_ht = tx_annotate_variants(
+        preprocess_variants_for_tx(
+            ht, vep_root=vep_root, filter_to_csqs=filter_to_csqs, **kwargs
+        ),
+        tx_ht,
+        tissues_to_filter=tissues_to_filter,
+        vep_root=vep_root,
+        vep_annotation=vep_annotation,
+    )
+
+    tx_ht = tx_aggregate_variants(tx_ht, additional_group_by=additional_group_by)
+    tx_ht = tx_ht.collect_by_key("tx_annotation")
+    ht = ht.annotate(**tx_ht[ht.key])
 
     return ht

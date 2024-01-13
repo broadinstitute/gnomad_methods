@@ -383,18 +383,55 @@ def filter_to_clinvar_pathogenic(
     return t
 
 
-def filter_gencode_to_cds(ht: hl.Table) -> hl.Table:
+def filter_to_gencode_cds(
+    t: Union[hl.MatrixTable, hl.Table], gencode_ht: Optional[hl.Table] = None
+) -> hl.Table:
     """
-    Filter Gencode Table to only CDS regions.
+    Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.
 
-    :param ht: Input Gencode Table that is converted from a GTF file.
-    :return: Table filtered to CDS intervals with necessary fields.
+    Example use:
+
+    .. code-block:: python
+
+        from gnomad.resources.grch37.reference_data import gencode
+        gencode_ht = gencode.ht()
+        gencode_ht = filter_gencode_to_cds(gencode_ht)
+
+    .. note::
+
+        If no Gencode Table is provided, the default version of the Gencode Table
+        resource for the genome build of the input Table/MatrixTable will be used.
+
+    :param t: Input Table/MatrixTable to filter.
+    :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable
+        to CDS regions. Default is None, which will use the default version of the
+        Gencode Table resource.
+    :return: Table/MatrixTable filtered to loci in Gencode CDS intervals.
     """
-    return (
-        ht.filter((ht.feature == "CDS") & (ht.transcript_type == "protein_coding"))
-        .select("gene_id", "transcript_id")
-        .distinct()
+    if gencode_ht is None:
+        build = get_reference_genome(t.locus).name
+        if build == "GRCh37":
+            from gnomad.resources.grch37.reference_data import gencode
+        elif build == "GRCh38":
+            from gnomad.resources.grch38.reference_data import gencode
+
+        logger.info(
+            "No Gencode Table was supplied, using Gencode version %s",
+            gencode.default_version,
+        )
+        gencode_ht = gencode.ht()
+
+    gencode_ht = gencode_ht.filter(
+        (gencode_ht.feature == "CDS") & (gencode_ht.transcript_type == "protein_coding")
     )
+    filter_expr = hl.is_defined(gencode_ht[t.locus])
+
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows(filter_expr)
+    else:
+        t = t.filter(filter_expr)
+
+    return t
 
 
 def remove_fields_from_constant(

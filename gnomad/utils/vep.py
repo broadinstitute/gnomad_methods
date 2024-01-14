@@ -85,11 +85,19 @@ CSQ_ORDER = (
     + CSQ_NON_CODING
 )
 
-SPLICE_CSQS = [
+CSQ_CODING = CSQ_CODING_HIGH_IMPACT + CSQ_CODING_MEDIUM_IMPACT + CSQ_CODING_LOW_IMPACT
+"""
+Constant containing all coding consequences.
+"""
+
+CSQ_SPLICE = [
     "splice_acceptor_variant",
     "splice_donor_variant",
     "splice_region_variant",
 ]
+"""
+Constant containing all splice consequences.
+"""
 
 POSSIBLE_REFS = ("GRCh37", "GRCh38")
 """

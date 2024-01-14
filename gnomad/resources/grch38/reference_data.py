@@ -383,3 +383,38 @@ def get_truth_ht() -> Table:
         .repartition(200, shuffle=False)
         .persist()
     )
+
+
+def _import_gencode(gtf_path: str, **kwargs) -> hl.Table:
+    """
+    Import GENCODE annotations GTF file as a Hail Table.
+
+    :param gtf_path: Path to GENCODE GTF file.
+    :return: Table with GENCODE annotation information.
+    """
+    ht = hl.experimental.import_gtf(gtf_path, **kwargs)
+
+    # Only get gene and transcript stable IDs (without version numbers if they
+    # exist), early versions of GENCODE have no version numbers but later ones do.
+    ht = ht.annotate(
+        gene_id=ht.gene_id.split("\\.")[0],
+        transcript_id=ht.transcript_id.split("\\.")[0],
+    )
+    return ht
+
+
+gencode = VersionedTableResource(
+    default_version="v39",
+    versions={
+        "v39": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v39.annotation.ht",
+            import_func=_import_gencode,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz",
+                "reference_genome": "GRCh38",
+                "force_bgz": True,
+                "min_partitions": 10,
+            },
+        ),
+    },
+)

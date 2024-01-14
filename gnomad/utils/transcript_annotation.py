@@ -447,6 +447,8 @@ def get_worst_csq_per_variant(
     Get the worst consequence of each variant (keyed by locus and alleles) or each locus (keyed by locus).
 
     :param ht: Table of variants annotated with transcript expression information.
+         The Table should have a struct field 'tx_annotation' containing the
+         transcript expression annotations.
     :param keep_loftee_for_csq_high: If False, include "OS" (Other Splice) annotations
         from 'lof' of LOFTEE. "OS" could be annotated in protein_coding regions on any
         variant except the ones in UTRs, stop_gained and frameshift_variant according to
@@ -491,10 +493,10 @@ def get_worst_csq_per_variant(
             )
         ]
 
-    ht = ht.collect_by_key("tx_annotation")
-
     csq_order = []
-    # TODO: Do we add PolyPhen to prioritize missense variants?
+    # TODO: Do we add PolyPhen to prioritize missense variants? I didn't because the
+    #  code was written only on tx_annotation HT, which doesn't have PolyPhen. Now
+    #  that we have annotate tx_annotation back to the variant HT, we can use 'vep'.
     if keep_loftee_for_csq_high:
         ht = ht.annotate(
             tx_annotation=ht.tx_annotation.map(keep_loftee_for_high_impact)

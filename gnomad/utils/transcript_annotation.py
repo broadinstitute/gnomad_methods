@@ -461,7 +461,9 @@ def get_worst_csq_per_variant(
     return ht
 
 
-def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
+def get_max_pext_per_gene(
+    ht: hl.Table, tissues_to_filter: Optional[List[str]] = None
+) -> hl.Table:
     """
     Get the maximum pext value of each gene.
 
@@ -479,9 +481,13 @@ def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
         and removed any gene where the maximum pext score is below a given threshold."
         -- adapted from https://doi.org/10.1038/s41586-020-2329-2
 
+        For example, for all genes on context HT of gnomAD v2.1.1, 665 genes have a
+        mean pext < 0.2. (There was a typo in the paper, it should be 665 instead of 668.)
+
     :param ht: Table of variants annotated with transcript expression information,
         and aggregated by additional grouping fields, including at least 'gene_id',
         'gene_symbol', 'most_severe_consequence', etc.
+    :param tissues_to_filter: Optional list of tissues to exclude
     :return: Table of maximum transcript expression proportion per gene and maximum
         mean transcript expression proportion across all tissues for each gene.
     """
@@ -494,17 +500,20 @@ def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
             "Input Table must have 'gene_id', 'gene_symbol', and"
             " 'most_severe_consequence' fields."
         )
+
     tissues = hl.eval(ht.tissues)
-    csq_all = hl.literal(set(CSQ_CODING_ALL_IMPACT))
+    if tissues_to_filter is not None:
+        logger.info("Filtering tissues: %s", tissues_to_filter)
+        tissues = [t for t in tissues if t not in tissues_to_filter]
 
     # Filter to coding variants.
+    csq_all = hl.literal(set(CSQ_CODING_ALL_IMPACT))
     ht = ht.filter(csq_all.contains(ht.most_severe_consequence))
 
     # Select expression proportion for each tissue and mean expression proportion.
     ht = ht.select(
         "gene_id",
         "gene_symbol",
-        "exp_prop_mean",
         **{t: ht[t].expression_proportion for t in tissues},
     )
 
@@ -513,8 +522,16 @@ def get_max_pext_per_gene(ht: hl.Table) -> hl.Table:
     max_ht = ht.group_by("gene_id", "gene_symbol").aggregate(
         max_pexts=hl.struct(
             **{t: hl.agg.max(ht[t]) for t in tissues},
-            exp_prop_mean=hl.agg.max(ht.exp_prop_mean),
         )
+    )
+    max_ht = max_ht.annotate(
+        max_pexts_mean=hl.mean(
+            [max_ht.max_pexts[t] for t in max_ht.max_pexts if t in tissues]
+        )
+    )
+    logger.info(
+        "%d genes has a mean pext < 0.2",
+        max_ht.filter(max_ht.max_pexts_mean < 0.2).count(),
     )
 
     return max_ht

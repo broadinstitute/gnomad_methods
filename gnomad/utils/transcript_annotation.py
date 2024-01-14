@@ -548,10 +548,12 @@ def get_max_pext_per_gene(
     if "tx_annotation" in ht.row:
         ht = ht.explode("tx_annotation")
         ht = ht.select(**ht.tx_annotation)
-    if tuple(["gene_id", "gene_symbol", "most_severe_consequence"]) not in ht.row:
+
+    required_fields = ["gene_id", "gene_symbol", "most_severe_consequence"]
+    if not all(field in ht.row for field in required_fields):
         raise ValueError(
-            "Input Table must have 'gene_id', 'gene_symbol', and"
-            " 'most_severe_consequence' fields."
+            "Input Table must have 'gene_id', 'gene_symbol', "
+            "and 'most_severe_consequence' fields."
         )
 
     tissues = hl.eval(ht.tissues)

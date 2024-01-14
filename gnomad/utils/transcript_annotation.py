@@ -491,9 +491,9 @@ def get_max_pext_per_gene(
     :return: Table of maximum transcript expression proportion per gene and maximum
         mean transcript expression proportion across all tissues for each gene.
     """
-    # TODO: Should we make it compatible with existing v2 pext?
-    # If the input Table already has a 'tx_annotation' field, use it.
+    # If the tx_annotation is still nested, explode it and select the nested fields.
     if "tx_annotation" in ht.row:
+        ht = ht.explode("tx_annotation")
         ht = ht.select(**ht.tx_annotation)
     if ["gene_id", "gene_symbol", "most_severe_consequence"] not in ht.row:
         raise ValueError(
@@ -502,12 +502,11 @@ def get_max_pext_per_gene(
         )
 
     tissues = hl.eval(ht.tissues)
-    if tissues_to_filter is not None:
-        logger.info("Filtering tissues: %s", tissues_to_filter)
-        tissues = [t for t in tissues if t not in tissues_to_filter]
+    logger.info("Filtering %d tissues: %s", len(tissues_to_filter), tissues_to_filter)
+    tissues = [t for t in tissues if t not in tissues_to_filter]
 
     # Filter to coding variants.
-    csq_all = hl.literal(set(CSQ_CODING_ALL_IMPACT))
+    csq_all = hl.literal(set(CSQ_CODING))
     ht = ht.filter(csq_all.contains(ht.most_severe_consequence))
 
     # Select expression proportion for each tissue and mean expression proportion.
@@ -525,12 +524,10 @@ def get_max_pext_per_gene(
         )
     )
     max_ht = max_ht.annotate(
-        max_pexts_mean=hl.mean(
-            [max_ht.max_pexts[t] for t in max_ht.max_pexts if t in tissues]
-        )
+        max_pexts_mean=hl.mean([max_ht.max_pexts[t] for t in max_ht.max_pexts])
     )
     logger.info(
-        "%d genes has a mean pext < 0.2",
+        "%d genes has a mean pext < 0.2...",
         max_ht.filter(max_ht.max_pexts_mean < 0.2).count(),
     )
 

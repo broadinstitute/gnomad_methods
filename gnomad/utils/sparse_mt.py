@@ -1076,11 +1076,6 @@ def compute_coverage_stats(
     # Unfilter entries so that entries with no ref block overlap aren't null.
     mt = mt.unfilter_entries()
 
-    # Annotate with group membership
-    mt = mt.annotate_cols(
-        group_membership=group_membership_ht[mt.col_key].group_membership
-    )
-
     # Compute coverage stats.
     cov_bins = sorted(coverage_over_x_bins)
     rev_cov_bins = list(reversed(cov_bins))

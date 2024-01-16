@@ -7,26 +7,9 @@ from gnomad.resources.resource_utils import (
     GnomadPublicTableResource,
     VersionedMatrixTableResource,
     VersionedTableResource,
+    import_gencode,
     import_sites_vcf,
 )
-
-
-def _import_gencode(gtf_path: str, **kwargs) -> hl.Table:
-    """
-    Import GENCODE annotations GTF file as a Hail Table.
-
-    :param gtf_path: Path to GENCODE GTF file.
-    :return: Table with GENCODE annotation information.
-    """
-    ht = hl.experimental.import_gtf(gtf_path, **kwargs)
-
-    # Only get gene and transcript stable IDs (without version numbers if they
-    # exist), early versions of GENCODE have no version numbers but later ones do.
-    ht = ht.annotate(
-        gene_id=ht.gene_id.split("\\.")[0],
-        transcript_id=ht.transcript_id.split("\\.")[0],
-    )
-    return ht
 
 
 def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
@@ -377,7 +360,7 @@ gencode = VersionedTableResource(
     versions={
         "v19": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch37/gencode/gencode.v19.annotation.ht",
-            import_func=_import_gencode,
+            import_func=import_gencode,
             import_args={
                 "gtf_path": "gs://gcp-public-data--gnomad/resources/grch37/gencode/gencode.v19.annotation.gtf.gz",
                 "reference_genome": "GRCh37",

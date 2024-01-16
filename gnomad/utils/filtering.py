@@ -414,6 +414,8 @@ def filter_to_gencode_cds(
             from gnomad.resources.grch37.reference_data import gencode
         elif build == "GRCh38":
             from gnomad.resources.grch38.reference_data import gencode
+        else:
+            raise ValueError(f"Unsupported reference genome build: {build}")
 
         logger.info(
             "No Gencode Table was supplied, using Gencode version %s",

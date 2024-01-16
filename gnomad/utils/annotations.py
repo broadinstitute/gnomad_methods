@@ -1944,7 +1944,7 @@ def compute_freq_by_strata(
 
 def agg_by_strata(
     mt: hl.MatrixTable,
-    entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
+    entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
     select_fields: Optional[List[str]] = None,
     group_membership_ht: Optional[hl.Table] = None,
 ) -> hl.Table:
@@ -1969,12 +1969,6 @@ def agg_by_strata(
         annotation is expected to be present on `mt`.
     :return: Table with annotations of stratified aggregations.
     """
-    if entry_agg_funcs is None:
-        raise TypeError(
-            "'agg_by_strata' expects a 'entry_agg_funcs' dictionary but it was not"
-            " supplied. Without the dictionary, no aggregations will occur."
-        )
-
     if group_membership_ht is None and "group_membership" not in mt.col:
         raise ValueError(
             "The 'group_membership' annotation is not found in the input MatrixTable "
@@ -1987,7 +1981,7 @@ def agg_by_strata(
     if group_membership_ht is None:
         logger.info(
             "'group_membership_ht' is not specified, using sample stratification "
-            "indicated by the 'group_membership' annotation on mt."
+            "indicated by the 'group_membership' annotation on the input MatrixTable."
         )
         group_globals = mt.index_globals()
     else:
@@ -2003,25 +1997,26 @@ def agg_by_strata(
     global_expr = {}
     n_groups = len(mt.group_membership.take(1)[0])
     if "adj_group" in group_globals:
-        global_expr["adj_group"] = group_globals.adj_group
-        logger.info("Using the 'adj_group' global annotation on 'group_membership_ht'.")
-    elif "freq_meta" in group_globals:
         logger.info(
-            "The 'freq_meta' global annotation is found in "
-            "'group_membership_ht', using it to determine the adj filtered "
+            "Using the 'adj_group' global annotation to determine adj filtered "
             "stratification groups."
         )
-        freq_meta = group_globals.freq_meta
-        global_expr["adj_group"] = freq_meta.map(
+        global_expr["adj_group"] = group_globals.adj_group
+    elif "freq_meta" in group_globals:
+        logger.info(
+            "No 'adj_group' global annotation found, using the 'freq_meta' global "
+            "annotation to determine adj filtered stratification groups."
+        )
+        global_expr["adj_group"] = group_globals.freq_meta.map(
             lambda x: x.get("group", "NA") == "adj"
         )
     else:
+        logger.info(
+            "No 'adj_group' or 'freq_meta' global annotations found. All groups will "
+            "be considered non-adj."
+        )
         global_expr["adj_group"] = hl.range(n_groups).map(lambda x: False)
 
-    # NOTE: Unsure if we still want this check here since the adj_group and n_groups
-    # always be from the same table or built within this function? Its a cheap operation
-    # so I'm leaning towards keeping it even though I'm not sure this is the right place
-    # for this check.
     n_adj_group = hl.eval(hl.len(global_expr["adj_group"]))
     if n_adj_group != n_groups:
         raise ValueError(

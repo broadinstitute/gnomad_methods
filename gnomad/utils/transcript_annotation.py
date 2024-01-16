@@ -406,8 +406,5 @@ def process_annotate_aggregate_variants(
 
     tx_ht = tx_aggregate_variants(tx_ht, additional_group_by=additional_group_by)
     tx_ht = tx_ht.collect_by_key("tx_annotation")
-    ht = ht.annotate(**tx_ht[ht.key]).annotate_globals(
-        tissues=tx_ht.index_globals().tissues
-    )
 
-    return ht
+    return tx_ht

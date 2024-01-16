@@ -687,3 +687,21 @@ DBSNP_B154_CHR_CONTIG_RECODING = {
 def import_sites_vcf(**kwargs) -> hl.Table:
     """Import site-level data from a VCF into a Hail Table."""
     return hl.import_vcf(**kwargs).rows()
+
+
+def import_gencode(gtf_path: str, **kwargs) -> hl.Table:
+    """
+    Import GENCODE annotations GTF file as a Hail Table.
+
+    :param gtf_path: Path to GENCODE GTF file.
+    :return: Table with GENCODE annotation information.
+    """
+    ht = hl.experimental.import_gtf(gtf_path, **kwargs)
+
+    # Only get gene and transcript stable IDs (without version numbers if they
+    # exist), early versions of GENCODE have no version numbers but later ones do.
+    ht = ht.annotate(
+        gene_id=ht.gene_id.split("\\.")[0],
+        transcript_id=ht.transcript_id.split("\\.")[0],
+    )
+    return ht

@@ -1042,17 +1042,18 @@ def compute_coverage_stats(
 
     gt_field = gt_field.pop()
 
-    no_strata = False
-    if group_membership_ht is not None:
-        if strata_expr is not None:
-            raise ValueError(
-                "Only one of 'group_membership_ht' or 'strata_expr' can be specified."
-            )
-    else:
-        if strata_expr is None:
-            strata_expr = {}
-            no_strata = True
+    if group_membership_ht is not None and strata_expr is not None:
+        raise ValueError(
+            "Only one of 'group_membership_ht' or 'strata_expr' can be specified."
+        )
 
+    # Initialize no_strata and default strata_expr if neither group_membership_ht nor
+    # strata_expr is provided.
+    no_strata = group_membership_ht is None and strata_expr is None
+    if no_strata:
+        strata_expr = {}
+
+    if group_membership_ht is None:
         # Annotate the MT cols with each of the expressions in strata_expr and redefine
         # strata_expr based on the column HT with added annotations.
         ht = mt.annotate_cols(
@@ -1066,9 +1067,12 @@ def compute_coverage_stats(
         # 'freq_meta_sample_count', and 'group_membership'. By default, this
         # function returns annotations where the second element is a placeholder for the
         # "raw" frequency of all samples, where the first 2 elements are the same sample
-        # set, but 'freq_meta' startswith [{"group": "adj", "group": "raw", ...]. Use
+        # set, but 'freq_meta' starts with [{"group": "adj", "group": "raw", ...]. Use
         # `no_raw_group` to exclude the "raw" group so there is a single annotation
-        # representing the full samples set and update 'freq_meta' "group" to all "raw".
+        # representing the full samples set. Update all 'freq_meta' entries' "group"
+        # to "raw" because `generate_freq_group_membership_array` will return them all
+        # as "adj" since it was built for frequency computation, but for the coverage
+        # computation we don't want to do any filtering.
         group_membership_ht = generate_freq_group_membership_array(
             ht, strata_expr, no_raw_group=True
         )
@@ -1146,7 +1150,6 @@ def compute_coverage_stats(
         )
         bin_expr = hl.cumulative_sum(hl.array([max_bin_expr]).extend(bin_expr))
 
-        # Use reversed bins as count_array_expr has reverse order.
         bin_expr = {f"over_{x}": bin_expr[i] / n for i, x in enumerate(rev_cov_bins)}
 
         return cov_stat.annotate(**bin_expr).drop("coverage_counter")

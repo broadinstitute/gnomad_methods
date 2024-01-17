@@ -1909,10 +1909,12 @@ def compute_freq_by_strata(
             )
         )
 
-    # Add adj_group global annotation indicating that the second element in
+    # Add adj_groups global annotation indicating that the second element in
     # group_membership is 'raw' and all others are 'adj'.
     mt = mt.annotate_globals(
-        adj_group=hl.range(hl.len(mt.group_membership.take(1)[0])).map(lambda x: x != 1)
+        adj_groups=hl.range(hl.len(mt.group_membership.take(1)[0])).map(
+            lambda x: x != 1
+        )
     )
 
     if entry_agg_funcs is None:
@@ -1939,7 +1941,7 @@ def compute_freq_by_strata(
 
     entry_agg_funcs["freq"] = (lambda x: x.GT, _get_freq_expr)
 
-    return agg_by_strata(mt, entry_agg_funcs, select_fields).drop("adj_group")
+    return agg_by_strata(mt, entry_agg_funcs, select_fields).drop("adj_groups")
 
 
 def agg_by_strata(
@@ -1996,38 +1998,38 @@ def agg_by_strata(
 
     global_expr = {}
     n_groups = len(mt.group_membership.take(1)[0])
-    if "adj_group" in group_globals:
+    if "adj_groups" in group_globals:
         logger.info(
-            "Using the 'adj_group' global annotation to determine adj filtered "
+            "Using the 'adj_groups' global annotation to determine adj filtered "
             "stratification groups."
         )
-        global_expr["adj_group"] = group_globals.adj_group
+        global_expr["adj_groups"] = group_globals.adj_groups
     elif "freq_meta" in group_globals:
         logger.info(
-            "No 'adj_group' global annotation found, using the 'freq_meta' global "
+            "No 'adj_groups' global annotation found, using the 'freq_meta' global "
             "annotation to determine adj filtered stratification groups."
         )
-        global_expr["adj_group"] = group_globals.freq_meta.map(
+        global_expr["adj_groups"] = group_globals.freq_meta.map(
             lambda x: x.get("group", "NA") == "adj"
         )
     else:
         logger.info(
-            "No 'adj_group' or 'freq_meta' global annotations found. All groups will "
+            "No 'adj_groups' or 'freq_meta' global annotations found. All groups will "
             "be considered non-adj."
         )
-        global_expr["adj_group"] = hl.range(n_groups).map(lambda x: False)
+        global_expr["adj_groups"] = hl.range(n_groups).map(lambda x: False)
 
-    n_adj_group = hl.eval(hl.len(global_expr["adj_group"]))
-    if n_adj_group != n_groups:
+    n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
+    if n_adj_groups != n_groups:
         raise ValueError(
-            f"The number of elements in the 'adj_group' ({n_adj_group}) global "
+            f"The number of elements in the 'adj_groups' ({n_adj_groups}) global "
             "annotation does not match the number of elements in the "
             f"'group_membership' annotation ({n_groups})!",
         )
 
     # Keep only the entries needed for the aggregation functions.
     select_expr = {**{ann: f[0](mt) for ann, f in entry_agg_funcs.items()}}
-    has_adj = hl.eval(hl.any(global_expr["adj_group"]))
+    has_adj = hl.eval(hl.any(global_expr["adj_groups"]))
     if has_adj:
         select_expr["adj"] = mt.adj
 
@@ -2074,7 +2076,7 @@ def agg_by_strata(
         return hl.map(
             lambda s_indices, adj: s_indices.aggregate(lambda i: f(i, adj)),
             ht.indices_by_group,
-            ht.adj_group,
+            ht.adj_groups,
         )
 
     # Add annotations for any supplied entry transform and aggregation functions.

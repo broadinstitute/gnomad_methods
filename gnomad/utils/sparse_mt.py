@@ -1053,7 +1053,7 @@ def compute_stats_per_ref_site(
 
         # Identify if adj annotation is needed.
         group_globals = group_membership_ht.index_globals()
-        if "adj_group" in group_globals or "freq_meta" in group_globals:
+        if "adj_groups" in group_globals or "freq_meta" in group_globals:
             if "adj" in mt.entry:
                 entry_keep_fields.add("adj")
             else:

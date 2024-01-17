@@ -960,11 +960,13 @@ def compute_coverage_stats(
         raise ValueError(
             "Only one of 'group_membership_ht' or 'strata_expr' can be specified."
         )
-        
-    # Initialize no_strata and default strata_expr if neither group_membership_ht nor strata_expr is provided
+
+    # Initialize no_strata and default strata_expr if neither group_membership_ht nor
+    # strata_expr is provided.
     no_strata = group_membership_ht is None and strata_expr is None
     if no_strata:
         strata_expr = {}
+
     if group_membership_ht is None:
         # Annotate the MT cols with each of the expressions in strata_expr and redefine
         # strata_expr based on the column HT with added annotations.
@@ -981,8 +983,10 @@ def compute_coverage_stats(
         # "raw" frequency of all samples, where the first 2 elements are the same sample
         # set, but 'freq_meta' starts with [{"group": "adj", "group": "raw", ...]. Use
         # `no_raw_group` to exclude the "raw" group so there is a single annotation
-        # representing the full samples set and update all 'freq_meta' entries' "group"
-        # to "raw".
+        # representing the full samples set. Update all 'freq_meta' entries' "group"
+        # to "raw" because `generate_freq_group_membership_array` will return them all
+        # as "adj" since it was built for frequency computation, but for the coverage
+        # computation we don't want to do any filtering.
         group_membership_ht = generate_freq_group_membership_array(
             ht, strata_expr, no_raw_group=True
         )

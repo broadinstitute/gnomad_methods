@@ -1912,7 +1912,9 @@ def compute_freq_by_strata(
     # Add adj_groups global annotation indicating that the second element in
     # group_membership is 'raw' and all others are 'adj'.
     mt = mt.annotate_globals(
-        adj_groups=hl.range(hl.len(mt.group_membership.take(1)[0])).map(lambda x: x != 1)
+        adj_groups=hl.range(hl.len(mt.group_membership.take(1)[0])).map(
+            lambda x: x != 1
+        )
     )
 
     if entry_agg_funcs is None:

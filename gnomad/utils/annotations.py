@@ -1998,7 +1998,7 @@ def agg_by_strata(
     n_groups = len(mt.group_membership.take(1)[0])
     if "adj_groups" in group_globals:
         logger.info(
-            "Using the 'adj_group' global annotation to determine adj filtered "
+            "Using the 'adj_groups' global annotation to determine adj filtered "
             "stratification groups."
         )
         global_expr["adj_groups"] = group_globals.adj_groups

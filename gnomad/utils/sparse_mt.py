@@ -927,21 +927,20 @@ def densify_all_reference_sites(
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
 
+    if interval_ht is not None and not is_vds:
+        raise NotImplementedError(
+            "Filtering to an interval list for a sparse Matrix Table is currently"
+            " not supported."
+        )
+
     # Filter datasets to interval list.
     if interval_ht is not None:
         reference_ht = reference_ht.filter(
             hl.is_defined(interval_ht[reference_ht.locus])
         )
-
-        if is_vds:
-            mtds = hl.vds.filter_intervals(
-                vds=mtds, intervals=interval_ht, split_reference_blocks=True
-            )
-        else:
-            raise NotImplementedError(
-                "Filtering to an interval list for a sparse Matrix Table is currently"
-                " not supported."
-            )
+        mtds = hl.vds.filter_intervals(
+            vds=mtds, intervals=interval_ht, split_reference_blocks=True
+        )
 
     entry_keep_fields = set(entry_keep_fields)
     if is_vds:
@@ -952,7 +951,6 @@ def densify_all_reference_sites(
 
     # Get the total number of samples.
     n_samples = mt.count_cols()
-
     mt_col_key_fields = list(mt.col_key)
     mt_row_key_fields = list(mt.row_key)
     ht = mt.select_entries(*entry_keep_fields).select_cols().select_rows()

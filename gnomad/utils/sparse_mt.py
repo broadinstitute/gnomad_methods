@@ -1317,7 +1317,6 @@ def compute_allele_number_per_ref_site(
         logger.info("No genotype field found in entry fields!")
 
     # Use ploidy to determine the number of alleles for each sample at each site.
-    gt_field = gt_field.pop()
     entry_agg_funcs = {"AN": get_allele_number_agg_func(gt_field)}
 
     return compute_stats_per_ref_site(mtds, reference_ht, entry_agg_funcs, **kwargs)

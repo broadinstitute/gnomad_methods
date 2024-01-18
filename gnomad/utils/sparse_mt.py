@@ -1028,23 +1028,37 @@ def compute_stats_per_ref_site(
     else:
         mt = mtds
 
-    if entry_keep_fields is None:
-        entry_keep_fields = []
-
-    entry_keep_fields = set(entry_keep_fields)
-
-    # Determine the genotype field.
-    gt_field = set(mt.entry) & {"GT", "LGT"}
-    if len(gt_field) == 0:
-        raise ValueError("No genotype field found in entry fields.")
-
-    gt_field = gt_field.pop()
-    entry_keep_fields.add(gt_field)
-
     if group_membership_ht is not None and strata_expr is not None:
         raise ValueError(
             "Only one of 'group_membership_ht' or 'strata_expr' can be specified."
         )
+
+    # Determine if the adj annotation is needed. It is only needed if "adj_groups" is
+    # in the globals of the group_membership_ht and any entry is True, or "freq_meta"
+    # is in the globals of the group_membership_ht and any entry has "group" == "adj".
+    g = {} if group_membership_ht is None else group_membership_ht.globals
+    adj = hl.any(g.get("adj_groups", hl.empty_array("bool"))) | hl.any(
+        g.get("freq_meta", hl.empty_array("dict<str, str>")).map(
+            lambda x: x.get("group", "NA") == "adj"
+        )
+    )
+
+    # Determine the entry fields on mt that should be densified.
+    # "GT" or "LGT" is required for the genotype.
+    # If the adj annotation is needed then "adj" must be present on mt, or AD/LAD, DP,
+    # and GQ must be present.
+    en = set(mt.entry)
+    gt_field = (en & {"GT"} or en & {"LGT"}).pop()
+    ad_field = (en & {"AD"} or en & {"LAD"}).pop()
+    adj_fields = {} if adj else en & {"adj"} or {"DP", "GQ", ad_field}
+
+    if not gt_field:
+        print("No genotype field found in entry fields!")
+
+    if adj and not adj_fields.issubset(en):
+        print("No adj or allele depth fields found in entry fields!")
+
+    entry_keep_fields = set(entry_keep_fields or {}) | {gt_field} | adj_fields
 
     # Initialize no_strata and default strata_expr if neither group_membership_ht nor
     # strata_expr is provided.
@@ -1052,21 +1066,7 @@ def compute_stats_per_ref_site(
     if no_strata:
         strata_expr = {}
 
-    add_adj = False
-    if group_membership_ht is not None:
-        # Identify if adj annotation is needed.
-        group_globals = group_membership_ht.index_globals()
-        if "adj_groups" in group_globals or "freq_meta" in group_globals:
-            if "adj" in mt.entry:
-                entry_keep_fields.add("adj")
-            else:
-                add_adj = True
-                ad_field = set(mt.entry) & {"AD", "LAD"}
-                if len(ad_field) == 0:
-                    raise ValueError("No AD or LAD field found in entry fields!")
-
-                entry_keep_fields |= {"DP", "GQ", ad_field.pop()}
-    else:
+    if group_membership_ht is None:
         logger.warning(
             "'group_membership_ht' is not specified, no stats are adj filtered."
         )
@@ -1119,7 +1119,7 @@ def compute_stats_per_ref_site(
     )
 
     # Annotate with adj if needed.
-    if add_adj:
+    if adj and "adj" not in mt.entry:
         mt = annotate_adj(mt)
 
     ht = agg_by_strata(mt, entry_agg_funcs, group_membership_ht=group_membership_ht)

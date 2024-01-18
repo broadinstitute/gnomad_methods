@@ -1037,9 +1037,12 @@ def compute_stats_per_ref_site(
     # in the globals of the group_membership_ht and any entry is True, or "freq_meta"
     # is in the globals of the group_membership_ht and any entry has "group" == "adj".
     g = {} if group_membership_ht is None else group_membership_ht.globals
-    adj = hl.any(g.get("adj_groups", hl.empty_array("bool"))) | hl.any(
-        g.get("freq_meta", hl.empty_array("dict<str, str>")).map(
-            lambda x: x.get("group", "NA") == "adj"
+    adj = hl.eval(
+        hl.any(g.get("adj_groups", hl.empty_array("bool")))
+        | hl.any(
+            g.get("freq_meta", hl.empty_array("dict<str, str>")).map(
+                lambda x: x.get("group", "NA") == "adj"
+            )
         )
     )
 

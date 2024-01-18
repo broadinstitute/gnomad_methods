@@ -1053,7 +1053,7 @@ def compute_stats_per_ref_site(
     en = set(mt.entry)
     gt_field = (en & {"GT"} or en & {"LGT"}).pop()
     ad_field = (en & {"AD"} or en & {"LAD"}).pop()
-    adj_fields = {} if adj else en & {"adj"} or {"DP", "GQ", ad_field}
+    adj_fields = set([]) if adj else en & {"adj"} or {"DP", "GQ", ad_field}
 
     if not gt_field:
         logger.info("No genotype field found in entry fields!")
@@ -1064,7 +1064,7 @@ def compute_stats_per_ref_site(
             "so adj can't be computed!"
         )
 
-    entry_keep_fields = set(entry_keep_fields or {}) | {gt_field} | adj_fields
+    entry_keep_fields = set(entry_keep_fields or set([])) | {gt_field} | adj_fields
 
     # Initialize no_strata and default strata_expr if neither group_membership_ht nor
     # strata_expr is provided.

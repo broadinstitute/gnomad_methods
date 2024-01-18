@@ -1053,7 +1053,7 @@ def compute_stats_per_ref_site(
     en = set(mt.entry)
     gt_field = (en & {"GT"} or en & {"LGT"}).pop()
     ad_field = (en & {"AD"} or en & {"LAD"}).pop()
-    adj_fields = set([]) if adj else en & {"adj"} or {"DP", "GQ", ad_field}
+    adj_fields = en & {"adj"} or {"DP", "GQ", ad_field} if adj else set([])
 
     if not gt_field:
         logger.info("No genotype field found in entry fields!")

@@ -1053,10 +1053,13 @@ def compute_stats_per_ref_site(
     adj_fields = {} if adj else en & {"adj"} or {"DP", "GQ", ad_field}
 
     if not gt_field:
-        print("No genotype field found in entry fields!")
+        logger.info("No genotype field found in entry fields!")
 
     if adj and not adj_fields.issubset(en):
-        print("No adj or allele depth fields found in entry fields!")
+        logger.info(
+            "No 'adj' found in entry fields, and one of AD/LAD, DP, and GQ is missing "
+            "so adj can't be computed!"
+        )
 
     entry_keep_fields = set(entry_keep_fields or {}) | {gt_field} | adj_fields
 
@@ -1190,11 +1193,10 @@ def compute_coverage_stats(
         mt = mtds
 
     # Determine the genotype field.
-    gt_field = set(mt.entry) & {"GT", "LGT"}
-    if len(gt_field) == 0:
-        raise ValueError("No genotype field found in entry fields.")
-
-    gt_field = gt_field.pop()
+    en = set(mt.entry)
+    gt_field = (en & {"GT"} or en & {"LGT"}).pop()
+    if not gt_field:
+        logger.info("No genotype field found in entry fields!")
 
     # Add function to compute coverage stats.
     cov_bins = sorted(coverage_over_x_bins)
@@ -1306,9 +1308,10 @@ def compute_allele_number_per_ref_site(
     else:
         mt = mtds
 
-    gt_field = set(mt.entry) & {"GT", "LGT"}
-    if len(gt_field) == 0:
-        raise ValueError("No genotype field found in entry fields.")
+    en = set(mt.entry)
+    gt_field = (en & {"GT"} or en & {"LGT"}).pop()
+    if not gt_field:
+        logger.info("No genotype field found in entry fields!")
 
     # Use ploidy to determine the number of alleles for each sample at each site.
     gt_field = gt_field.pop()

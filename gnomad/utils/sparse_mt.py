@@ -1259,7 +1259,7 @@ def compute_coverage_stats(
 
     ht_globals = ht.index_globals()
     if isinstance(ht.coverage_stats, hl.expr.ArrayExpression):
-        ht = ht.annotate_globals(
+        ht = ht.select_globals(
             coverage_stats_meta=ht_globals.strata_meta.map(
                 lambda x: hl.dict(x.items().filter(lambda m: m[0] != "group"))
             ),

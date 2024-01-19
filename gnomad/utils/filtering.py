@@ -426,6 +426,12 @@ def filter_to_gencode_cds(
     gencode_ht = gencode_ht.filter(
         (gencode_ht.feature == "CDS") & (gencode_ht.transcript_type == "protein_coding")
     )
+    logger.warning(
+        "When filtering to Gencode CDS intervals, it's not filtering by "
+        "transcript, variants that are not in CDS regions but are "
+        "annotated as a coding variants by VEP might be filtered out by "
+        "this."
+    )
     filter_expr = hl.is_defined(gencode_ht[t.locus])
 
     if isinstance(t, hl.MatrixTable):

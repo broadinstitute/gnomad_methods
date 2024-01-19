@@ -1197,7 +1197,8 @@ def compute_coverage_stats(
         mt = mtds
 
     # Determine the genotype field.
-    gt_field = set(mt.entry) & {"GT", "LGT"}
+    en = set(mt.entry)
+    gt_field = en & {"GT"} or en & {"LGT"}
     if not gt_field:
         raise ValueError("No genotype field found in entry fields!")
 
@@ -1314,7 +1315,7 @@ def compute_allele_number_per_ref_site(
 
     # Determine the genotype field.
     en = set(mt.entry)
-    gt_field = set(mt.entry) & {"GT", "LGT"}
+    gt_field = en & {"GT"} or en & {"LGT"}
     if not gt_field:
         raise ValueError(
             "No genotype field found in entry fields, needed for ploidy calculation!"

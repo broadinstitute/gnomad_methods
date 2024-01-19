@@ -711,6 +711,7 @@ def filter_vep_transcript_csqs(
     genes: Optional[List[str]] = None,
     keep_genes: bool = True,
     match_by_gene_symbol: bool = False,
+    amio_acids: bool = False,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
@@ -751,6 +752,8 @@ def filter_vep_transcript_csqs(
         Default is True.
     :param match_by_gene_symbol: Whether to match values in `genes` to VEP transcript
         consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
+    :param amio_acids: Whether to filter to variants whose amic_acids annotation is
+        defined (not None or '*'). Default is False.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
@@ -788,6 +791,11 @@ def filter_vep_transcript_csqs(
             criteria.append(lambda csq: genes.contains(csq[gene_field]))
         else:
             criteria.append(lambda csq: ~genes.contains(csq[gene_field]))
+    if amio_acids:
+        logger.info("Filtering to variants with defined amio_acids annotation...")
+        criteria.append(
+            lambda csq: (csq.amino_acids is not None) & (csq.amino_acids != "*")
+        )
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)

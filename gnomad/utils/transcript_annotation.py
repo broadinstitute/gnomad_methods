@@ -221,6 +221,7 @@ def tissue_expression_ht_to_array(
 def preprocess_variants_for_tx(
     ht: hl.Table,
     filter_to_cds: bool = True,
+    filter_by_amino_acids: bool = True,
     gencode_ht: Optional[hl.Table] = None,
     filter_to_genes: Optional[List[str]] = None,
     match_by_gene_symbol: bool = False,
@@ -274,6 +275,7 @@ def preprocess_variants_for_tx(
         keep_csqs=keep_csqs,
         genes=filter_to_genes,
         match_by_gene_symbol=match_by_gene_symbol,
+        amio_acids=filter_by_amino_acids,
     )
 
 

@@ -2069,9 +2069,13 @@ def agg_by_strata(
         :param ann_expr: Expression to aggregate by group.
         :return: Aggregated array expression.
         """
-        f = lambda i, adj: agg_func(ann_expr[i])
+        f_no_adj = lambda i, *args: agg_func(ann_expr[i])
         if has_adj:
-            f = lambda i, adj: hl.if_else(adj, hl.agg.filter(ht.adj[i], f), f)
+            f = lambda i, adj: hl.if_else(
+                adj, hl.agg.filter(ht.adj[i], f_no_adj(i)), f_no_adj(i)
+            )
+        else:
+            f = f_no_adj
 
         return hl.map(
             lambda s_indices, adj: s_indices.aggregate(lambda i: f(i, adj)),

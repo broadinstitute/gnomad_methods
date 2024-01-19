@@ -1051,20 +1051,20 @@ def compute_stats_per_ref_site(
     # If the adj annotation is needed then "adj" must be present on mt, or AD/LAD, DP,
     # and GQ must be present.
     en = set(mt.entry)
-    gt_field = (en & {"GT"} or en & {"LGT"}).pop()
-    ad_field = (en & {"AD"} or en & {"LAD"}).pop()
-    adj_fields = en & {"adj"} or {"DP", "GQ", ad_field} if adj else set([])
+    gt_field = en & {"GT"} or en & {"LGT"}
+    ad_field = en & {"AD"} or en & {"LAD"}
+    adj_fields = en & {"adj"} or ({"DP", "GQ"} | ad_field) if adj else set([])
 
     if not gt_field:
-        logger.info("No genotype field found in entry fields!")
+        raise ValueError("No genotype field found in entry fields!")
 
     if adj and not adj_fields.issubset(en):
-        logger.info(
+        raise ValueError(
             "No 'adj' found in entry fields, and one of AD/LAD, DP, and GQ is missing "
             "so adj can't be computed!"
         )
 
-    entry_keep_fields = set(entry_keep_fields or set([])) | {gt_field} | adj_fields
+    entry_keep_fields = set(entry_keep_fields or set([])) | gt_field | adj_fields
 
     # Initialize no_strata and default strata_expr if neither group_membership_ht nor
     # strata_expr is provided.
@@ -1197,10 +1197,11 @@ def compute_coverage_stats(
         mt = mtds
 
     # Determine the genotype field.
-    en = set(mt.entry)
-    gt_field = (en & {"GT"} or en & {"LGT"}).pop()
+    gt_field = set(mt.entry) & {"GT", "LGT"}
     if not gt_field:
-        logger.info("No genotype field found in entry fields!")
+        raise ValueError("No genotype field found in entry fields!")
+
+    gt_field = gt_field.pop()
 
     # Add function to compute coverage stats.
     cov_bins = sorted(coverage_over_x_bins)
@@ -1313,12 +1314,14 @@ def compute_allele_number_per_ref_site(
 
     # Determine the genotype field.
     en = set(mt.entry)
-    gt_field = (en & {"GT"} or en & {"LGT"}).pop()
+    gt_field = set(mt.entry) & {"GT", "LGT"}
     if not gt_field:
-        raise ValueError("No genotype field found in entry fields, needed for ploidy calculation!")
+        raise ValueError(
+            "No genotype field found in entry fields, needed for ploidy calculation!"
+        )
 
     # Use ploidy to determine the number of alleles for each sample at each site.
-    entry_agg_funcs = {"AN": get_allele_number_agg_func(gt_field)}
+    entry_agg_funcs = {"AN": get_allele_number_agg_func(gt_field.pop())}
 
     return compute_stats_per_ref_site(mtds, reference_ht, entry_agg_funcs, **kwargs)
 

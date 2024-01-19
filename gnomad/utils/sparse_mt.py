@@ -917,7 +917,7 @@ def densify_all_reference_sites(
     """
     Densify a VariantDataset or Sparse MatrixTable at all sites in a reference Table.
 
-    :param mtds: Input sparse Matrix Table or VariantDataset.
+    :param mtds: Input sparse MatrixTable or VariantDataset.
     :param reference_ht: Table of reference sites.
     :param interval_ht: Optional Table of intervals to filter to.
     :param row_key_fields: Fields to use as row key. Defaults to locus.
@@ -982,7 +982,7 @@ def densify_all_reference_sites(
     else:
         mt = hl.experimental.densify(mt)
 
-    # Filter rows where the reference is missing.
+    # Remove rows where the reference is missing.
     mt = mt.filter_rows(mt._in_ref)
 
     # Unfilter entries so that entries with no ref block overlap aren't null.

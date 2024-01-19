@@ -1131,6 +1131,7 @@ def compute_stats_per_ref_site(
     ht = agg_by_strata(mt, entry_agg_funcs, group_membership_ht=group_membership_ht)
     ht = ht.checkpoint(hl.utils.new_temp_file("agg_stats", "ht"))
 
+    # Drop no longer needed fields
     current_keys = list(ht.key)
     ht = ht.key_by(*row_key_fields).select_globals()
     ht = ht.drop(*[k for k in current_keys if k not in row_key_fields])
@@ -1138,7 +1139,7 @@ def compute_stats_per_ref_site(
     group_globals = group_membership_ht.index_globals()
     global_expr = {}
     if no_strata:
-        # If there was no stratification, move coverage_stats annotations to the top
+        # If there was no stratification, move aggregated annotations to the top
         # level.
         ht = ht.select(**{ann: ht[ann][0] for ann in entry_agg_funcs})
         global_expr["sample_count"] = group_globals.freq_meta_sample_count[0]
@@ -1305,16 +1306,16 @@ def compute_allele_number_per_ref_site(
     :param kwargs: Keyword arguments to pass to `compute_stats_per_ref_site`.
     :return: Table of allele number per reference site.
     """
-    # Determine the genotype field.
     if isinstance(mtds, hl.vds.VariantDataset):
         mt = mtds.variant_data
     else:
         mt = mtds
 
+    # Determine the genotype field.
     en = set(mt.entry)
     gt_field = (en & {"GT"} or en & {"LGT"}).pop()
     if not gt_field:
-        logger.info("No genotype field found in entry fields!")
+        raise ValueError("No genotype field found in entry fields, needed for ploidy calculation!")
 
     # Use ploidy to determine the number of alleles for each sample at each site.
     entry_agg_funcs = {"AN": get_allele_number_agg_func(gt_field)}

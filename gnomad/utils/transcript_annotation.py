@@ -218,10 +218,9 @@ def tissue_expression_ht_to_array(
     return ht
 
 
-def preprocess_variants_for_tx(
+def tx_filter_variants_by_csqs(
     ht: hl.Table,
     filter_to_cds: bool = True,
-    filter_by_amino_acids: bool = True,
     gencode_ht: Optional[hl.Table] = None,
     filter_to_genes: Optional[List[str]] = None,
     match_by_gene_symbol: bool = False,
@@ -231,18 +230,19 @@ def preprocess_variants_for_tx(
     vep_root: str = "vep",
 ) -> hl.Table:
     """
-    Prepare a Table of variants with vep transcript consequences for annotation.
+    Prepare a Table of variants with VEP transcript consequences for annotation.
 
     :param ht: Table of variants with 'vep' annotations.
     :param gencode_ht: Optional Gencode resource Table containing CDS interval
-        information. Default is None, which will use the default version of the Gencode
-        Table resource for the reference build of the input Table `ht`.
+        information. This is only used when `filter_to_cds` is set to True. Default is
+        None, which will use the default version of the Gencode Table resource for
+        the reference build of the input Table `ht`.
     :param filter_to_cds: Whether to filter to CDS regions. Default is True.
     :param filter_to_genes: Optional list of genes to filter to. Default is None.
     :param match_by_gene_symbol: Whether to match by gene symbol instead of gene ID.
         Default is False.
     :param filter_to_csqs: Optional list of consequences to filter to. Default is None.
-    :param ignore_splicing: If True, ignore splice variants. Default is True.
+    :param ignore_splicing: If True, ignore splice consequences. Default is True.
     :param filter_to_protein_coding: Whether to filter to protein coding transcripts.
         Default is True.
     :param vep_root: Name used for root VEP annotation. Default is 'vep'.
@@ -275,7 +275,9 @@ def preprocess_variants_for_tx(
         keep_csqs=keep_csqs,
         genes=filter_to_genes,
         match_by_gene_symbol=match_by_gene_symbol,
-        amio_acids=filter_by_amino_acids,
+        additional_filtering_criteria=(
+            lambda csq: (csq.amino_acids is not None) & (csq.amino_acids != "*")
+        ),
     )
 
 
@@ -289,18 +291,18 @@ def tx_annotate_variants(
     """
     Annotate variants with transcript-based expression values or expression proportion from GTEx.
 
-    :param ht: Table of variants to annotate, it should contain at least the following
-        nested fields: `vep.transcript_consequences`, `freq`.
+    :param ht: Table of variants to annotate, it should contain the nested fields:
+        `vep.transcript_consequences`.
     :param tx_ht: Table of transcript expression information.
     :param tissues_to_filter: Optional list of tissues to exclude from the output.
     :param vep_root: Name used for root VEP annotation. Default is 'vep'.
-    :param vep_annotation: Name of annotation in 'vep' annotation,
-        one of the processed consequences: ["transcript_consequences",
-        "worst_csq_by_gene", "worst_csq_for_variant",
-        "worst_csq_by_gene_canonical", "worst_csq_for_variant_canonical"].
-        For example, if you want to annotate each variant with the worst
-        consequence in each gene it falls on and the transcript expression,
-        you would use "worst_csq_by_gene". Default is "transcript_consequences".
+    :param vep_annotation: Name of annotation in `vep_root`, one of the processed
+        consequences: ["transcript_consequences", "worst_csq_by_gene",
+        "worst_csq_for_variant", "worst_csq_by_gene_canonical",
+        "worst_csq_for_variant_canonical"]. For example, if you want to annotate
+        each variant with the worst consequence in each gene it falls on and the
+        transcript expression, you would use "worst_csq_by_gene". Default is
+        "transcript_consequences".
     :return: Input Table with transcript expression information annotated.
     """
     # Filter to tissues of interest.
@@ -366,7 +368,7 @@ def tx_aggregate_variants(
     return ht
 
 
-def process_annotate_aggregate_variants(
+def combined_tx_pipeline(
     ht: hl.Table,
     tx_ht: hl.Table,
     tissues_to_filter: Optional[List[str]] = None,
@@ -383,7 +385,7 @@ def process_annotate_aggregate_variants(
     **kwargs,
 ) -> hl.Table:
     """
-    One-stop usage of preprocess_variants_for_tx, tx_annotate_variants and tx_aggregate_variants.
+    One-stop usage of `tx_filter_variants_by_csqs`, `tx_annotate_variants` and `tx_aggregate_variants`.
 
     :param ht: Table of variants to annotate, it should contain at least the
          following nested fields: `vep.transcript_consequences`, `freq`.
@@ -399,7 +401,7 @@ def process_annotate_aggregate_variants(
     :return: Table of variants with transcript expression information aggregated.
     """
     tx_ht = tx_annotate_variants(
-        preprocess_variants_for_tx(
+        tx_filter_variants_by_csqs(
             ht, vep_root=vep_root, filter_to_csqs=filter_to_csqs, **kwargs
         ),
         tx_ht,

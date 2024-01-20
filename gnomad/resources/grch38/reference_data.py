@@ -396,7 +396,7 @@ gencode = VersionedTableResource(
                 "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz",
                 "reference_genome": "GRCh38",
                 "force_bgz": True,
-                "min_partitions": 10,
+                "min_partitions": 100,
             },
         ),
     },

@@ -368,7 +368,7 @@ def tx_aggregate_variants(
     return ht
 
 
-def perform_tx_based_annotation_pipeline(
+def perform_tx_annotation_pipeline(
     ht: hl.Table,
     tx_ht: hl.Table,
     tissues_to_filter: Optional[List[str]] = None,

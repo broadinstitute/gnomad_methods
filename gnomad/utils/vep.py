@@ -801,7 +801,7 @@ def filter_vep_transcript_csqs(
             criteria.append(lambda csq: ~genes.contains(csq[gene_field]))
     if additional_filtering_criteria is not None:
         logger.info("Filtering to variants with additional criteria...")
-        criteria = criteria.append(additional_filtering_criteria)
+        criteria = criteria + [additional_filtering_criteria]
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)

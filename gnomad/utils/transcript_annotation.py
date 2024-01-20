@@ -514,3 +514,78 @@ def get_worst_csq_per_variant(
     )
 
     return ht
+
+
+def get_max_pext_per_gene(
+    ht: hl.Table, tissues_to_filter: Optional[List[str]] = None
+) -> hl.Table:
+    """
+    Get the maximum pext value of each gene.
+
+    .. note::
+        "For a minority of genes, when RSEM assigns higher relative expression to
+        non-coding transcripts, the sum of the value of coding transcripts can be
+        much smaller than the gene expression value of all transcripts, resulting in
+        low pext scores for all coding variants in the gene, and thus resulting in
+        possible filtering of all variants for a given gene. In many cases this
+        appears to be the result of spurious non-coding transcripts with a high
+        degree of exon overlap with true coding transcripts.
+
+        To get around this artifact from affecting the analyses, you can calculate
+        the maximum pext score for all variants across all protein coding genes,
+        and removed any gene where the maximum pext score is below a given threshold."
+        -- adapted from https://doi.org/10.1038/s41586-020-2329-2
+
+        For example, for all genes on context HT of gnomAD v2.1.1, 665 genes have a
+        mean pext < 0.2. (There was a typo in the paper, it should be 665 instead of 668.)
+
+    :param ht: Table of variants annotated with transcript expression information,
+        and aggregated by additional grouping fields, including at least 'gene_id',
+        'gene_symbol', 'most_severe_consequence', etc.
+    :param tissues_to_filter: Optional list of tissues to exclude
+    :return: Table of maximum transcript expression proportion per gene and maximum
+        mean transcript expression proportion across all tissues for each gene.
+    """
+    # If the tx_annotation is still nested, explode it and select the nested fields.
+    if "tx_annotation" in ht.row:
+        ht = ht.explode("tx_annotation")
+        ht = ht.select(**ht.tx_annotation)
+
+    required_fields = ["gene_id", "gene_symbol", "most_severe_consequence"]
+    if not all(field in ht.row for field in required_fields):
+        raise ValueError(
+            "Input Table must have 'gene_id', 'gene_symbol', "
+            "and 'most_severe_consequence' fields."
+        )
+
+    tissues = hl.eval(ht.tissues)
+    logger.info("Filtering %d tissues: %s", len(tissues_to_filter), tissues_to_filter)
+    tissues = [t for t in tissues if t not in tissues_to_filter]
+
+    # Filter to coding variants.
+    csq_all = hl.literal(set(CSQ_CODING))
+    ht = ht.filter(csq_all.contains(ht.most_severe_consequence))
+
+    # Select expression proportion for each tissue and mean expression proportion.
+    ht = ht.select(
+        "gene_id",
+        "gene_symbol",
+        **{t: ht[t].expression_proportion for t in tissues},
+    )
+
+    # Group by gene and get max of expression proportion for each tissue and mean
+    # expression proportion.
+    max_ht = ht.group_by("gene_id", "gene_symbol").aggregate(
+        max_pexts=hl.struct(
+            **{t: hl.agg.max(ht[t]) for t in tissues},
+        )
+    )
+    max_ht = max_ht.annotate(
+        max_pexts_mean=hl.mean([max_ht.max_pexts[t] for t in max_ht.max_pexts])
+    )
+    logger.info(
+        "%d genes has a mean pext < 0.2...",
+        max_ht.filter(max_ht.max_pexts_mean < 0.2).count(),
+    )
+
+    return max_ht

@@ -402,6 +402,16 @@ def filter_to_gencode_cds(
         If no Gencode Table is provided, the default version of the Gencode Table
         resource for the genome build of the input Table/MatrixTable will be used.
 
+    .. warning::
+
+        This Gencode CDS interval filter does not take into account the
+        transcript_id, it filters to any locus that is found in a CDS interval for
+        any protein coding transcript. Therefore, if downstream analyses require
+        filtering to CDS intervals by transcript, an additional step must be taken.
+        For example, when filtering VEP transcript consequences, there may be cases
+        where a variant is retained with this filter, but is considered outside the
+        CDS intervals of some of the transcripts in the VEP annotation.
+
     :param t: Input Table/MatrixTable to filter.
     :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable
         to CDS regions. Default is None, which will use the default version of the
@@ -427,10 +437,8 @@ def filter_to_gencode_cds(
         (gencode_ht.feature == "CDS") & (gencode_ht.transcript_type == "protein_coding")
     )
     logger.warning(
-        "When filtering to Gencode CDS intervals, it's not filtering by "
-        "transcript, variants that are not in CDS regions but are "
-        "annotated as a coding variants by VEP might be filtered out by "
-        "this."
+        "This Gencode CDS interval filter does not filter by transcript! Please see the"
+        " documentation for more details to confirm it's being used as intended."
     )
     filter_expr = hl.is_defined(gencode_ht[t.locus])
 

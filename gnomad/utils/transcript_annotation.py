@@ -368,7 +368,7 @@ def tx_aggregate_variants(
     return ht
 
 
-def combined_tx_pipeline(
+def perform_tx_annotation_pipeline(
     ht: hl.Table,
     tx_ht: hl.Table,
     tissues_to_filter: Optional[List[str]] = None,
@@ -411,7 +411,6 @@ def combined_tx_pipeline(
     )
 
     tx_ht = tx_aggregate_variants(tx_ht, additional_group_by=additional_group_by)
-    tx_ht = tx_ht.collect_by_key("tx_annotation")
 
     return tx_ht
 

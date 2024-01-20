@@ -456,12 +456,11 @@ def filter_vep_to_gene_list(
 
     .. note::
 
-       Filtering to a list of genes by their gene_id or gene_symbol will filter to
+       Filtering to a list of genes by their 'gene_id' or 'gene_symbol' will filter to
        all variants that are annotated to the gene, including
        ['upstream_gene_variant', 'downstream_gene_variant'], which will not be the
        same as if you filter to a gene interval. If you only want variants inside
-       certain gene boundaries and filter faster, you can filter the variant first to an
-       interval list and further filter to specific genes.
+       certain gene boundaries and a faster filter, you can first filter `t` to an interval list and then apply this filter.
 
     :param t: Input Table or MatrixTable.
     :param genes: Genes of interest to filter VEP transcript consequences to.
@@ -720,7 +719,7 @@ def filter_vep_transcript_csqs(
     genes: Optional[List[str]] = None,
     keep_genes: bool = True,
     match_by_gene_symbol: bool = False,
-    additional_filtering_criteria: Optional[Callable] = None,
+    additional_filtering_criteria: Optional[List[Callable]] = None,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
@@ -761,7 +760,7 @@ def filter_vep_transcript_csqs(
         Default is True.
     :param match_by_gene_symbol: Whether to match values in `genes` to VEP transcript
         consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
-    :param additional_filtering_criteria: Optional filtering criteria to apply to.
+    :param additional_filtering_criteria: Optional list of additional filtering criteria to apply to the VEP transcript consequences.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
@@ -801,7 +800,7 @@ def filter_vep_transcript_csqs(
             criteria.append(lambda csq: ~genes.contains(csq[gene_field]))
     if additional_filtering_criteria is not None:
         logger.info("Filtering to variants with additional criteria...")
-        criteria = criteria + [additional_filtering_criteria]
+        criteria = criteria + additional_filtering_criteria
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
     is_mt = isinstance(t, hl.MatrixTable)

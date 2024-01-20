@@ -230,12 +230,20 @@ def tx_filter_variants_by_csqs(
     """
     Prepare a Table of variants with VEP transcript consequences for annotation.
 
+    .. note::
+
+        When `filter_to_cds` is set to True, the returned Table will be further
+        filtered by defined 'amino_acids' annotation, which is to filter out certain
+        consequences, such as 'stop_retained_variant', that are kept by all CDS
+        intervals but don't belong to CDS of the transcript they fall on.
+
     :param ht: Table of variants with 'vep' annotations.
     :param gencode_ht: Optional Gencode resource Table containing CDS interval
         information. This is only used when `filter_to_cds` is set to True. Default is
         None, which will use the default version of the Gencode Table resource for
         the reference build of the input Table `ht`.
-    :param filter_to_cds: Whether to filter to CDS regions. Default is True.
+    :param filter_to_cds: Whether to filter to CDS regions. Default is True. And it
+        will be further filtered by defined 'amino_acids' annotation.
     :param filter_to_genes: Optional list of genes to filter to. Default is None.
     :param match_by_gene_symbol: Whether to match by gene symbol instead of gene ID.
         Default is False.
@@ -247,9 +255,13 @@ def tx_filter_variants_by_csqs(
     :return: Table of variants with preprocessed/filtered transcript consequences
         prepared for annotation.
     """
+    additional_filtering_criteria = None
     if filter_to_cds:
         logger.info("Filtering to CDS regions...")
         ht = filter_to_gencode_cds(ht, gencode_ht=gencode_ht)
+        additional_filtering_criteria = [
+            lambda csq: hl.is_defined(csq.amino_acids) & (csq.amino_acids != "*")
+        ]
 
     keep_csqs = True
     if ignore_splicing:
@@ -273,9 +285,7 @@ def tx_filter_variants_by_csqs(
         keep_csqs=keep_csqs,
         genes=filter_to_genes,
         match_by_gene_symbol=match_by_gene_symbol,
-        additional_filtering_criteria=(
-            lambda csq: (csq.amino_acids is not None) & (csq.amino_acids != "*")
-        ),
+        additional_filtering_criteria=additional_filtering_criteria,
     )
 
 
@@ -290,11 +300,12 @@ def tx_annotate_variants(
     Annotate variants with transcript-based expression values or expression proportion from GTEx.
 
     :param ht: Table of variants to annotate, it should contain the nested fields:
-        `vep.transcript_consequences`.
+        `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
     :param tissues_to_filter: Optional list of tissues to exclude from the output.
+        Default is None.
     :param vep_root: Name used for root VEP annotation. Default is 'vep'.
-    :param vep_annotation: Name of annotation in `vep_root`, one of the processed
+    :param vep_annotation: Name of annotation under vep_root, one of the processed
         consequences: ["transcript_consequences", "worst_csq_by_gene",
         "worst_csq_for_variant", "worst_csq_by_gene_canonical",
         "worst_csq_for_variant_canonical"]. For example, if you want to annotate
@@ -385,13 +396,13 @@ def perform_tx_annotation_pipeline(
     """
     One-stop usage of `tx_filter_variants_by_csqs`, `tx_annotate_variants` and `tx_aggregate_variants`.
 
-    :param ht: Table of variants to annotate, it should contain at least the
-         following nested fields: `vep.transcript_consequences`, `freq`.
+    :param ht: Table of variants to annotate, it should contain the nested fields:
+        `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
     :param tissues_to_filter: Optional list of tissues to exclude from the output.
     :param vep_root: Name used for root VEP annotation. Default is 'vep'.
-    :param vep_annotation: Name of annotation in 'vep' annotation, refer to the
-        function where it is used for more details.
+    :param vep_annotation: Name of annotation under vep_root. Default is
+        'transcript_consequences'.
     :param filter_to_csqs: Optional list of consequences to filter to. Default is None.
     :param additional_group_by: Optional list of additional fields to group by before
         sum aggregation. If None, the returned Table will be grouped by only "locus"

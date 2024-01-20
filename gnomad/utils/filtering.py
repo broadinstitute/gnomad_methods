@@ -410,7 +410,8 @@ def filter_to_gencode_cds(
         filtering to CDS intervals by transcript, an additional step must be taken.
         For example, when filtering VEP transcript consequences, there may be cases
         where a variant is retained with this filter, but is considered outside the
-        CDS intervals of some of the transcripts in the VEP annotation.
+        CDS intervals of the transcript per the VEP predicted consequence of the
+        variant.
 
     :param t: Input Table/MatrixTable to filter.
     :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable

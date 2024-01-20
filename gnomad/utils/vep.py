@@ -460,7 +460,8 @@ def filter_vep_to_gene_list(
        all variants that are annotated to the gene, including
        ['upstream_gene_variant', 'downstream_gene_variant'], which will not be the
        same as if you filter to a gene interval. If you only want variants inside
-       certain gene boundaries and a faster filter, you can first filter `t` to an interval list and then apply this filter.
+       certain gene boundaries and a faster filter, you can first filter `t` to an
+       interval list and then apply this filter.
 
     :param t: Input Table or MatrixTable.
     :param genes: Genes of interest to filter VEP transcript consequences to.

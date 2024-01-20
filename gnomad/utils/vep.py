@@ -761,7 +761,8 @@ def filter_vep_transcript_csqs(
         Default is True.
     :param match_by_gene_symbol: Whether to match values in `genes` to VEP transcript
         consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
-    :param additional_filtering_criteria: Optional list of additional filtering criteria to apply to the VEP transcript consequences.
+    :param additional_filtering_criteria: Optional list of additional filtering
+        criteria to apply to the VEP transcript consequences.
     :return: Table or MatrixTable filtered to specified criteria.
     """
     if not synonymous and not (canonical or mane_select) and not filter_empty_csq:

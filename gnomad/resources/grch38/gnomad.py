@@ -29,11 +29,17 @@ CURRENT_GENOME_RELEASE = "3.1.2"
 CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 
+CURRENT_EXOME_AN_RELEASE = "4.1"
+CURRENT_GENOME_AN_RELEASE = "4.1"
+
 EXOME_RELEASES = ["4.0"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2"]
 
 EXOME_COVERAGE_RELEASES = ["4.0"]
 GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
+
+EXOME_AN_RELEASES = ["4.1"]
+GENOME_AN_RELEASES = ["4.1"]
 
 DATA_TYPES = ["exomes", "genomes"]
 MAJOR_RELEASES = ["v3", "v4"]
@@ -305,16 +311,25 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites.ht"
 
 
-def _public_coverage_ht_path(data_type: str, version: str) -> str:
+def _public_coverage_ht_path(
+    data_type: str, version: str, coverage_type="coverage"
+) -> str:
     """
     Get public coverage hail table.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh38
+    :param coverage_type: One of "coverage" or "allele_number"
     :return: path to coverage Table
     """
+    if coverage_type not in ["coverage", "allele_number"]:
+        raise ValueError(
+            "coverage_type must be one of 'coverage' or 'allele_number', not"
+            f" {coverage_type}!"
+        )
+
     version_prefix = "r" if version.startswith("3.0") else "v"
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.ht"
+    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.{coverage_type}.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -373,6 +388,37 @@ def coverage(data_type: str) -> VersionedTableResource:
         {
             release: GnomadPublicTableResource(
                 path=_public_coverage_ht_path(data_type, release)
+            )
+            for release in releases
+        },
+    )
+
+
+def all_sites_an(data_type: str) -> VersionedTableResource:
+    """
+    Retrieve gnomAD's all sites allele number table by data_type.
+
+    :param data_type: One of "exomes" or "genomes"
+    :return: All Sites Allele Number Table
+    """
+    if data_type not in DATA_TYPES:
+        raise DataException(
+            f"{data_type} not in {DATA_TYPES}, please select a data type from"
+            f" {DATA_TYPES}"
+        )
+
+    if data_type == "exomes":
+        current_release = CURRENT_EXOME_AN_RELEASE
+        releases = EXOME_AN_RELEASES
+    else:
+        current_release = CURRENT_GENOME_AN_RELEASE
+        releases = GENOME_AN_RELEASES
+
+    return VersionedTableResource(
+        current_release,
+        {
+            release: GnomadPublicTableResource(
+                path=_public_coverage_ht_path(data_type, release, "allele_number")
             )
             for release in releases
         },

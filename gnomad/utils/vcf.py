@@ -561,7 +561,12 @@ def adjust_vcf_incompatible_types(
                 f,
             )
             info_type_convert_expr.update(
-                {f: hl.int32(hl.min(2**31 - 1, ht.info[f]))}
+                {
+                    f: hl.or_missing(
+                        hl.is_defined(ht.info[f]),
+                        hl.int32(hl.min(2**31 - 1, ht.info[f])),
+                    )
+                }
             )
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
@@ -570,7 +575,13 @@ def adjust_vcf_incompatible_types(
                 f,
             )
             info_type_convert_expr.update(
-                {f: ht.info[f].map(lambda x: hl.int32(hl.min(2**31 - 1, x)))}
+                {
+                    f: ht.info[f].map(
+                        lambda x: hl.or_missing(
+                            hl.is_defined(x), hl.int32(hl.min(2**31 - 1, x))
+                        )
+                    )
+                }
             )
 
     ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))

@@ -399,7 +399,7 @@ def all_sites_an(data_type: str) -> VersionedTableResource:
     Retrieve gnomAD's all sites allele number table by data_type.
 
     :param data_type: One of "exomes" or "genomes"
-    :return: All Sites Allele Number Table
+    :return: All sites allele number VersionedTableResource
     """
     if data_type not in DATA_TYPES:
         raise DataException(

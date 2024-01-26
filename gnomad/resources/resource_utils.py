@@ -350,7 +350,7 @@ class ExpressionResource(BaseResource):
 
         :param force_import: If ``True``, force the import of the resource even if it
             already exists.
-        :param read_args: Any additional arguments to pass to hl.experimental.
+        :param read_args: Any additional arguments to pass to hl.experimental.read_expression.
         :return: Hail Expression resource.
         """
         if self.path is None or force_import:

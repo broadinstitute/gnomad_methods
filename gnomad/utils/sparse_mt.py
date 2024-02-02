@@ -940,7 +940,7 @@ def densify_all_reference_sites(
             hl.is_defined(interval_ht[reference_ht.locus])
         )
         mtds = hl.vds.filter_intervals(
-            vds=mtds, intervals=interval_ht, split_reference_blocks=True
+            vds=mtds, intervals=interval_ht, split_reference_blocks=False
         )
 
     entry_keep_fields = set(entry_keep_fields)
@@ -954,7 +954,7 @@ def densify_all_reference_sites(
     n_samples = mt.count_cols()
     mt_col_key_fields = list(mt.col_key)
     mt_row_key_fields = list(mt.row_key)
-    ht = mt.select_entries(*entry_keep_fields).select_cols().select_rows()
+    ht = mt.select_entries(*entry_keep_fields).select_cols()
 
     # Localize entries and perform an outer join with the reference HT.
     ht = ht._localize_entries("__entries", "__cols")
@@ -999,6 +999,8 @@ def compute_stats_per_ref_site(
     row_key_fields: Union[Tuple[str], List[str]] = ("locus",),
     interval_ht: Optional[hl.Table] = None,
     entry_keep_fields: Union[Tuple[str], List[str], Set[str]] = None,
+    row_keep_fields: Union[Tuple[str], List[str], Set[str]] = None,
+    entry_agg_group_membership: Optional[Dict[str, List[dict[str, str]]]] = None,
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
 ) -> hl.Table:
@@ -1018,6 +1020,16 @@ def compute_stats_per_ref_site(
         densification in `densify_all_reference_sites`. Should include any fields
         needed for the functions in `entry_agg_funcs`. By default, only GT or LGT is
         kept.
+    :param row_keep_fields: Fields to keep in rows after performing the stats
+        aggregation. By default, only the row key fields are kept.
+    :param entry_agg_group_membership: Optional dict indicating the subset of group
+        strata in 'freq_meta' to use the entry aggregation functions on. The keys of
+        the dict can be any of the keys in `entry_agg_funcs` and the values are lists
+        of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
+        the corresponding entry aggregation function. If provided, 'freq_meta' must be
+        present in `group_membership_ht` and represent the same strata as those in
+        'group_membership'. If not provided, all entries of the 'group_membership'
+        annotation will have the entry aggregation functions applied to them.
     :param strata_expr: Optional list of dicts of expressions to stratify by.
     :param group_membership_ht: Optional Table of group membership annotations.
     :return: Table of stats per site.
@@ -1033,10 +1045,16 @@ def compute_stats_per_ref_site(
             "Only one of 'group_membership_ht' or 'strata_expr' can be specified."
         )
 
+    g = {} if group_membership_ht is None else group_membership_ht.globals
+    if entry_agg_group_membership is not None and "freq_meta" not in g:
+        raise ValueError(
+            "The 'freq_meta' annotation must be present in 'group_membership_ht' if "
+            "'entry_agg_group_membership' is specified."
+        )
+
     # Determine if the adj annotation is needed. It is only needed if "adj_groups" is
     # in the globals of the group_membership_ht and any entry is True, or "freq_meta"
     # is in the globals of the group_membership_ht and any entry has "group" == "adj".
-    g = {} if group_membership_ht is None else group_membership_ht.globals
     adj = hl.eval(
         hl.any(g.get("adj_groups", hl.empty_array("bool")))
         | hl.any(
@@ -1128,7 +1146,13 @@ def compute_stats_per_ref_site(
     if adj and "adj" not in mt.entry:
         mt = annotate_adj(mt)
 
-    ht = agg_by_strata(mt, entry_agg_funcs, group_membership_ht=group_membership_ht)
+    ht = agg_by_strata(
+        mt,
+        entry_agg_funcs,
+        group_membership_ht=group_membership_ht,
+        select_fields=row_keep_fields,
+        entry_agg_group_membership=entry_agg_group_membership,
+    )
     ht = ht.checkpoint(hl.utils.new_temp_file("agg_stats", "ht"))
 
     # Drop no longer needed fields

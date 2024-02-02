@@ -1949,6 +1949,7 @@ def agg_by_strata(
     entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
     select_fields: Optional[List[str]] = None,
     group_membership_ht: Optional[hl.Table] = None,
+    entry_agg_group_membership: Optional[Dict[str, List[dict]]] = None,
 ) -> hl.Table:
     """
     Get row expression for annotations of each entry aggregation function(s) by strata.
@@ -1969,6 +1970,14 @@ def agg_by_strata(
     :param group_membership_ht: Optional Table containing group membership annotations
         to stratify the aggregations by. If not provided, the 'group_membership'
         annotation is expected to be present on `mt`.
+    :param entry_agg_group_membership: Optional dict indicating the subset of group
+        strata in 'freq_meta' to use the entry aggregation functions on. The keys of
+        the dict can be any of the keys in `entry_agg_funcs` and the values are lists
+        of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
+        the corresponding entry aggregation function. If provided, 'freq_meta' must be
+        present in `group_membership_ht` or `mt` and represent the same strata as those
+        in 'group_membership'. If not provided, all entries of the 'group_membership'
+        annotation will have the entry aggregation functions applied to them.
     :return: Table with annotations of stratified aggregations.
     """
     if group_membership_ht is None and "group_membership" not in mt.col:
@@ -2019,6 +2028,18 @@ def agg_by_strata(
         )
         global_expr["adj_groups"] = hl.range(n_groups).map(lambda x: False)
 
+    if entry_agg_group_membership is not None and "freq_meta" not in group_globals:
+        raise ValueError(
+            "The 'freq_meta' global annotation is not found and "
+            "'entry_agg_group_membership' is specified."
+        )
+
+    entry_agg_group_membership = entry_agg_group_membership or {}
+    entry_agg_group_membership = {
+        ann: [group_globals["freq_meta"].index(s) for s in strata]
+        for ann, strata in entry_agg_group_membership.items()
+    }
+
     n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
     if n_adj_groups != n_groups:
         raise ValueError(
@@ -2052,19 +2073,21 @@ def agg_by_strata(
     # own ArrayExpression. This is important to prevent memory issues when performing
     # the below array aggregations.
     ht = ht.select(
-        **{
-            ann: ht.entries.map(lambda e: e[ann])
-            for ann in select_fields + list(select_expr.keys())
-        }
+        *select_fields,
+        **{ann: ht.entries.map(lambda e: e[ann]) for ann in select_expr.keys()},
     )
 
     def _agg_by_group(
-        ht: hl.Table, agg_func: Callable, ann_expr: hl.expr.ArrayExpression
+        indices_by_group_expr: hl.expr.ArrayExpression,
+        adj_groups_expr: hl.expr.ArrayExpression,
+        agg_func: Callable,
+        ann_expr: hl.expr.ArrayExpression,
     ) -> hl.expr.ArrayExpression:
         """
         Aggregate `agg_expr` by group using the `agg_func` function.
 
-        :param ht: Input Hail Table.
+        :param indices_by_group_expr: ArrayExpression of indices of samples in each group.
+        :param adj_groups_expr: ArrayExpression indicating whether each group is adj.
         :param agg_func: Aggregation function to apply to `ann_expr`.
         :param ann_expr: Expression to aggregate by group.
         :return: Aggregated array expression.
@@ -2079,14 +2102,24 @@ def agg_by_strata(
 
         return hl.map(
             lambda s_indices, adj: s_indices.aggregate(lambda i: f(i, adj)),
-            ht.indices_by_group,
-            ht.adj_groups,
+            indices_by_group_expr,
+            adj_groups_expr,
         )
 
     # Add annotations for any supplied entry transform and aggregation functions.
     ht = ht.select(
         *select_fields,
-        **{ann: _agg_by_group(ht, f[1], ht[ann]) for ann, f in entry_agg_funcs.items()},
+        **{
+            ann: _agg_by_group(
+                *[
+                    [ht[g][i] for i in entry_agg_group_membership.get(ann, [])] or ht[g]
+                    for g in ["indices_by_group", "adj_groups"]
+                ],
+                agg_func=f[1],
+                ann_expr=ht[ann],
+            )
+            for ann, f in entry_agg_funcs.items()
+        },
     )
 
     return ht.drop("cols")

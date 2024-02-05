@@ -602,6 +602,116 @@ def create_frequency_bins_expr(
     return bin_expr
 
 
+def get_is_haploid_expr(
+    gt_expr: Optional[hl.expr.CallExpression] = None,
+    locus_expr: Optional[hl.expr.LocusExpression] = None,
+    karyotype_expr: Optional[hl.expr.StringExpression] = None,
+) -> hl.expr.BooleanExpression:
+    """
+    Determine if a genotype or locus and karyotype combination is haploid.
+
+    .. note::
+
+        One of `gt_expr` or `locus_expr` and `karyotype_expr` is required.
+
+    :param gt_expr: Optional genotype expression.
+    :param locus_expr: Optional locus expression.
+    :param karyotype_expr: Optional sex karyotype expression.
+    :return: Boolean expression indicating if the genotype is haploid.
+    """
+    if gt_expr is None and locus_expr is None and karyotype_expr is None:
+        raise ValueError(
+            "One of 'gt_expr' or 'locus_expr' and 'karyotype_expr' is required."
+        )
+
+    if gt_expr is not None:
+        return gt_expr.is_haploid()
+
+    if locus_expr is None or karyotype_expr is None:
+        raise ValueError(
+            "Both 'locus_expr' and 'karyotype_expr' are required if no 'gt_expr' is "
+            "supplied."
+        )
+
+    xy = karyotype_expr == "XY"
+    xx = karyotype_expr == "XX"
+    x_nonpar = locus_expr.in_x_nonpar()
+    y_par = locus_expr.in_y_par()
+    y_nonpar = locus_expr.in_y_nonpar()
+
+    return ~locus_expr.in_autosome() & hl.or_missing(
+        ~(xx & (y_par | y_nonpar)), xy & (x_nonpar | y_nonpar)
+    )
+
+
+def get_dp_gq_adj_expr(
+    gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    gt_expr: Optional[hl.expr.CallExpression] = None,
+    locus_expr: Optional[hl.expr.LocusExpression] = None,
+    karyotype_expr: Optional[hl.expr.StringExpression] = None,
+    adj_gq: int = 20,
+    adj_dp: int = 10,
+    haploid_adj_dp: int = 5,
+) -> hl.expr.BooleanExpression:
+    """
+    Get adj annotation using only GQ and DP.
+
+    Defaults correspond to gnomAD values.
+
+    .. note::
+
+        This function can be used to annotate adj taking into account only GQ and DP.
+        It is useful for cases where the GT field is not available, such as in the
+        reference data of a VariantDataset.
+
+    .. note::
+
+        One of `gt_expr` or `locus_expr` and `karyotype_expr` is required.
+
+    :param gq_expr: GQ expression.
+    :param dp_expr: DP expression.
+    :param gt_expr: Optional genotype expression.
+    :param locus_expr: Optional locus expression.
+    :param karyotype_expr: Optional sex karyotype expression.
+    :param adj_gq: GQ threshold for adj. Default is 20.
+    :param adj_dp: DP threshold for adj. Default is 10.
+    :param haploid_adj_dp: Haploid DP threshold for adj. Default is 5.
+    :return: Boolean expression indicating adj filter using GQ and DP.
+    """
+    return (gq_expr >= adj_gq) & hl.if_else(
+        get_is_haploid_expr(gt_expr, locus_expr, karyotype_expr),
+        dp_expr >= haploid_adj_dp,
+        dp_expr >= adj_dp,
+    )
+
+
+def get_adj_het_ab_expr(
+    gt_expr: hl.expr.CallExpression,
+    dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    ad_expr: hl.expr.ArrayNumericExpression,
+    adj_ab: float = 0.2,
+) -> hl.expr.BooleanExpression:
+    """
+    Get adj het AB annotation.
+
+    :param gt_expr: Genotype expression.
+    :param dp_expr: DP expression.
+    :param ad_expr: AD expression.
+    :param adj_ab: AB threshold for adj. Default is 0.2.
+    :return: Boolean expression indicating adj het AB filter.
+    """
+    return (
+        hl.case()
+        .when(~gt_expr.is_het(), True)
+        .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+        .default(
+            (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
+            & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+        )
+    )
+
+
 def get_adj_expr(
     gt_expr: hl.expr.CallExpression,
     gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
@@ -617,19 +727,14 @@ def get_adj_expr(
 
     Defaults correspond to gnomAD values.
     """
-    return (
-        (gq_expr >= adj_gq)
-        & hl.if_else(gt_expr.is_haploid(), dp_expr >= haploid_adj_dp, dp_expr >= adj_dp)
-        & (
-            hl.case()
-            .when(~gt_expr.is_het(), True)
-            .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
-            .default(
-                (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
-                & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
-            )
-        )
-    )
+    return get_dp_gq_adj_expr(
+        gq_expr,
+        dp_expr,
+        gt_expr=gt_expr,
+        adj_gq=adj_gq,
+        adj_dp=adj_dp,
+        haploid_adj_dp=haploid_adj_dp,
+    ) & get_adj_het_ab_expr(gt_expr, dp_expr, ad_expr, adj_ab)
 
 
 def annotate_adj(

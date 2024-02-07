@@ -479,44 +479,6 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
 
 
-def add_grpMaxFAF95_v3(ht: hl.Table) -> hl.Table:
-    """
-    Add a grpMaxFAF95 annotation using the v3 style faf and faf_index_dict structures.
-
-    :param ht: Input hail table.
-    :return: Annotated hail table.
-    """
-    ht = ht.annotate(
-        grpMaxFAF95=hl.rbind(
-            hl.sorted(
-                hl.array(
-                    [
-                        hl.struct(
-                            faf=ht.faf[ht.faf_index_dict[f"{pop}-adj"]].faf95,
-                            population=pop,
-                        )
-                        for pop in FAF_POPS
-                    ]
-                ),
-                key=lambda f: (-f.faf, f.population),
-            ),
-            lambda fafs: hl.if_else(
-                hl.len(fafs) > 0,
-                hl.struct(
-                    popmax=fafs[0].faf,
-                    popmax_population=hl.if_else(
-                        fafs[0].faf == 0, hl.missing(hl.tstr), fafs[0].population
-                    ),
-                ),
-                hl.struct(
-                    popmax=hl.missing(hl.tfloat), popmax_population=hl.missing(hl.tstr)
-                ),
-            ),
-        ),
-    )
-    return ht
-
-
 def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
     """
     Add a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.

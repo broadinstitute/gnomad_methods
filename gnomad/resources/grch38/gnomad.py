@@ -591,8 +591,8 @@ def gnomad_gks(
     if data_type == "genomes":
         coverage_version = coverage_version_3_0_1
     else:
-       coverage_version = coverage_version_4_0
-    
+        coverage_version = coverage_version_4_0
+
     if high_level_version != "v4":
         raise NotImplementedError(
             "gnomad_gks() is currently only implemented for gnomAD v4."

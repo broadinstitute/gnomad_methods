@@ -2669,7 +2669,7 @@ def add_gks_va(
             ),
         }
 
-    # Add joint group max FAF if it exists
+    # Add joint group max FAF if it exists.
     if (
         "jointGrpMaxFAF95" in input_struct
         and input_struct.jointGrpMaxFAF95.popmax_population is not None

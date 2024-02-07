@@ -583,22 +583,19 @@ def gnomad_gks(
     high_level_version = f"v{version.split('.')[0]}"
 
     # Read coverage statistics if requested
-    coverage_version_3_0_1 = "3.0.1"  # v3/v4 genomes coverage
+    coverage_version_3_0_1 = "3.0.1"  # v4 genomes coverage
     coverage_version_4_0 = "4.0"  # v4 exomes coverage
 
     # In v4, exomes have coverage in v4 coverage table,
     #   genomes have coverage in v3 coverage table.
-    # In v3, only genomes have coverage (only genomes exist).
-    if high_level_version == "v3":
+    if data_type == "genomes":
         coverage_version = coverage_version_3_0_1
-    elif high_level_version == "v4":
-        if data_type == "exomes":
-            coverage_version = coverage_version_4_0
-        elif data_type == "genomes":
-            coverage_version = coverage_version_3_0_1
     else:
+       coverage_version = coverage_version_4_0
+    
+    if high_level_version != "v4":
         raise NotImplementedError(
-            "gnomad_gks() is currently only implemented for gnomAD v3 and v4."
+            "gnomad_gks() is currently only implemented for gnomAD v4."
         )
 
     coverage_ht = None
@@ -629,24 +626,15 @@ def gnomad_gks(
         )
 
     # Select relevant fields, checkpoint, and filter to interval before adding
-    # annotations
+    # annotations.
 
-    # Pull up LCR flag and make referrable in the same field
-    if high_level_version == "v3":  # v3
-        ht = ht.annotate(lcr=ht.region_flag.lcr)
-    else:  # v4
-        ht = ht.annotate(lcr=ht.region_flags.lcr)
+    # Pull up LCR flag and make referrable in the same field.
+    ht = ht.annotate(lcr=ht.region_flags.lcr)
 
-    # Pull up v3 / v4 allele balance histogram arrays
-    if high_level_version == "v3":  # v3
-        ht = ht.annotate(ab_hist_alt=ht.qual_hists.ab_hist_alt)
-    else:  # v4
-        ht = ht.annotate(ab_hist_alt=ht.histograms.qual_hists.ab_hist_alt)
+    # Pull up v3 / v4 allele balance histogram arrays.
+    ht = ht.annotate(ab_hist_alt=ht.histograms.qual_hists.ab_hist_alt)
 
-    if high_level_version == "v3":
-        ht = add_grpMaxFAF95_v3(ht)
-    else:
-        ht = add_grpMaxFAF95_v4(ht)
+    ht = add_grpMaxFAF95_v4(ht)
 
     ht = ht.annotate(in_autosome_or_par=ht.locus.in_autosome_or_par())
 
@@ -676,7 +664,7 @@ def gnomad_gks(
         ht = ht.checkpoint(hl.utils.new_temp_file("vrs_checkpoint", extension="ht"))
 
     # Collect all variants as structs, so all dictionary construction can be
-    # done in native Python
+    # done in native Python.
     variant_list = ht.collect()
     ht_freq_index_dict = ht.freq_index_dict.collect()[0]
     # gnomad v4 renamed freq_index_dict keys to use underscores instead of dashes.

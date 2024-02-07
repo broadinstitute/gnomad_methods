@@ -606,6 +606,8 @@ def get_is_haploid_expr(
     gt_expr: Optional[hl.expr.CallExpression] = None,
     locus_expr: Optional[hl.expr.LocusExpression] = None,
     karyotype_expr: Optional[hl.expr.StringExpression] = None,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
 ) -> hl.expr.BooleanExpression:
     """
     Determine if a genotype or locus and karyotype combination is haploid.
@@ -617,6 +619,8 @@ def get_is_haploid_expr(
     :param gt_expr: Optional genotype expression.
     :param locus_expr: Optional locus expression.
     :param karyotype_expr: Optional sex karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
     :return: Boolean expression indicating if the genotype is haploid.
     """
     if gt_expr is None and locus_expr is None and karyotype_expr is None:
@@ -633,14 +637,22 @@ def get_is_haploid_expr(
             "supplied."
         )
 
-    xy = karyotype_expr == "XY"
-    xx = karyotype_expr == "XX"
-    x_nonpar = locus_expr.in_x_nonpar()
-    y_par = locus_expr.in_y_par()
-    y_nonpar = locus_expr.in_y_nonpar()
+    source_mt = locus_expr._indices.source
+    col_ht = source_mt.annotate_cols(
+        xy=karyotype_expr == xy_karyotype_str, xx=karyotype_expr == xx_karyotype_str
+    ).cols()
+    row_ht = source_mt.annotate_rows(
+        in_non_par=~locus_expr.in_autosome_or_par(),
+        x_nonpar=locus_expr.in_x_nonpar(),
+        y_par=locus_expr.in_y_par(),
+        y_nonpar=locus_expr.in_y_nonpar(),
+    ).rows()
+    col_idx = col_ht[source_mt.col_key]
+    row_idx = row_ht[source_mt.row_key]
 
-    return ~locus_expr.in_autosome() & hl.or_missing(
-        ~(xx & (y_par | y_nonpar)), xy & (x_nonpar | y_nonpar)
+    return row_idx.in_non_par & hl.or_missing(
+        ~(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar)),
+        col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar),
     )
 
 

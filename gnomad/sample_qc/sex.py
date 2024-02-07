@@ -23,25 +23,40 @@ def adjusted_sex_ploidy_expr(
     xx_karyotype_str: str = "XX",
 ) -> hl.expr.CallExpression:
     """
-    Create an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y.
+    Create an entry expression to convert XY to haploid on non-PAR X/Y and XX to missing on Y.
 
-    :param locus_expr: Locus
-    :param gt_expr: Genotype
-    :param karyotype_expr: Karyotype
-    :param xy_karyotype_str: Male sex karyotype representation
-    :param xx_karyotype_str: Female sex karyotype representation
+    :param locus_expr: Locus expression.
+    :param gt_expr: Genotype expression.
+    :param karyotype_expr: Sex karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
     :return: Genotype adjusted for sex ploidy
     """
-    male = karyotype_expr == xy_karyotype_str
-    female = karyotype_expr == xx_karyotype_str
-    x_nonpar = locus_expr.in_x_nonpar()
-    y_par = locus_expr.in_y_par()
-    y_nonpar = locus_expr.in_y_nonpar()
+    source_mt = locus_expr._indices.source
+    col_ht = source_mt.annotate_cols(
+        xy=karyotype_expr == xy_karyotype_str, xx=karyotype_expr == xx_karyotype_str
+    ).cols()
+    row_ht = source_mt.annotate_rows(
+        in_autosome_or_par=locus_expr.in_autosome_or_par(),
+        x_nonpar=locus_expr.in_x_nonpar(),
+        y_par=locus_expr.in_y_par(),
+        y_nonpar=locus_expr.in_y_nonpar(),
+    ).rows()
+    col_idx = col_ht[source_mt.col_key]
+    row_idx = row_ht[source_mt.row_key]
+
     return (
         hl.case(missing_false=True)
-        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
+        .when(row_idx.in_autosome_or_par, gt_expr)
+        .when(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar), hl.null(hl.tcall))
+        .when(
+            col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar) & gt_expr.is_het(),
+            hl.null(hl.tcall),
+        )
+        .when(
+            col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar),
+            hl.call(gt_expr[0], phased=False),
+        )
         .default(gt_expr)
     )
 

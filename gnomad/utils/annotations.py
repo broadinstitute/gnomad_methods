@@ -1,14 +1,10 @@
 # noqa: D100
 
-import csv
 import itertools
-import json
 import logging
-from timeit import default_timer as timer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
-from hail.utils.misc import new_temp_file
 
 import gnomad.utils.filtering as filter_utils
 from gnomad.utils.gen_stats import to_phred

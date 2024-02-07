@@ -14,7 +14,6 @@ from gnomad.resources.resource_utils import (
 )
 from gnomad.sample_qc.ancestry import POP_NAMES
 from gnomad.utils.annotations import add_gks_va, add_gks_vrs
-from gnomad.utils.vcf import FAF_POPS
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

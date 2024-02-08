@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 
+from gnomad.utils.annotations import prep_ploidy_ht
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -32,22 +34,13 @@ def adjusted_sex_ploidy_expr(
     :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
     :return: Genotype adjusted for sex ploidy
     """
-    source_mt = locus_expr._indices.source
-    col_ht = source_mt.annotate_cols(
-        xy=karyotype_expr == xy_karyotype_str, xx=karyotype_expr == xx_karyotype_str
-    ).cols()
-    row_ht = source_mt.annotate_rows(
-        in_autosome_or_par=locus_expr.in_autosome_or_par(),
-        x_nonpar=locus_expr.in_x_nonpar(),
-        y_par=locus_expr.in_y_par(),
-        y_nonpar=locus_expr.in_y_nonpar(),
-    ).rows()
-    col_idx = col_ht[source_mt.col_key]
-    row_idx = row_ht[source_mt.row_key]
+    col_idx, row_idx = prep_ploidy_ht(
+        locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
+    )
 
     return (
         hl.case(missing_false=True)
-        .when(row_idx.in_autosome_or_par, gt_expr)
+        .when(~row_idx.in_non_par, gt_expr)
         .when(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar), hl.null(hl.tcall))
         .when(
             col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar) & gt_expr.is_het(),

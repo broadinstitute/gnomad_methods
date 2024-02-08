@@ -602,6 +602,48 @@ def create_frequency_bins_expr(
     return bin_expr
 
 
+def prep_ploidy_ht(
+    locus_expr: hl.expr.LocusExpression = None,
+    karyotype_expr: hl.expr.StringExpression = None,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
+) -> Tuple[hl.expr.StructExpression, hl.expr.StructExpression]:
+    """
+    Prepare relevant ploidy annotations for downstream calculations on a matrix table.
+
+    This method annotates the matrix table with the following fields:
+
+        - `xy`: Boolean indicating if the sample is XY
+        - `xx`: Boolean indicating if the sample is XX
+        - `in_non_par`: Boolean indicating if the locus is in a non-PAR region
+        - `x_nonpar`: Boolean indicating if the locus is in a non-PAR region of the X chromosome
+        - `y_par`: Boolean indicating if the locus is in a PAR region of the Y chromosome
+        - `y_nonpar`: Boolean indicating if the locus is in a non-PAR region of the Y chromosome
+
+    This method is used as an optimization for the `get_is_haploid_expr`
+     and `adjusted_sex_ploidy_expr` methods.
+
+    :param locus_expr: Locus expression.
+    :param karyotype_expr: Karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Tuple of index expressions for columns and rows.
+    """
+    source_mt = locus_expr._indices.source
+    col_ht = source_mt.annotate_cols(
+        xy=karyotype_expr == xy_karyotype_str, xx=karyotype_expr == xx_karyotype_str
+    ).cols()
+    row_ht = source_mt.annotate_rows(
+        in_non_par=~locus_expr.in_autosome_or_par(),
+        x_nonpar=locus_expr.in_x_nonpar(),
+        y_par=locus_expr.in_y_par(),
+        y_nonpar=locus_expr.in_y_nonpar(),
+    ).rows()
+    col_idx = col_ht[source_mt.col_key]
+    row_idx = row_ht[source_mt.row_key]
+    return col_idx, row_idx
+
+
 def get_is_haploid_expr(
     gt_expr: Optional[hl.expr.CallExpression] = None,
     locus_expr: Optional[hl.expr.LocusExpression] = None,
@@ -637,18 +679,9 @@ def get_is_haploid_expr(
             "supplied."
         )
 
-    source_mt = locus_expr._indices.source
-    col_ht = source_mt.annotate_cols(
-        xy=karyotype_expr == xy_karyotype_str, xx=karyotype_expr == xx_karyotype_str
-    ).cols()
-    row_ht = source_mt.annotate_rows(
-        in_non_par=~locus_expr.in_autosome_or_par(),
-        x_nonpar=locus_expr.in_x_nonpar(),
-        y_par=locus_expr.in_y_par(),
-        y_nonpar=locus_expr.in_y_nonpar(),
-    ).rows()
-    col_idx = col_ht[source_mt.col_key]
-    row_idx = row_ht[source_mt.row_key]
+    col_idx, row_idx = prep_ploidy_ht(
+        locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
+    )
 
     return row_idx.in_non_par & hl.or_missing(
         ~(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar)),
@@ -1014,7 +1047,7 @@ def fs_from_sb(
 
 
 def sor_from_sb(
-    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
 ) -> hl.expr.Float64Expression:
     """
     Compute `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.

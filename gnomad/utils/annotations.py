@@ -602,6 +602,49 @@ def create_frequency_bins_expr(
     return bin_expr
 
 
+def prep_ploidy_ht(
+    locus_expr: hl.expr.LocusExpression = None,
+    karyotype_expr: hl.expr.StringExpression = None,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
+) -> Tuple[hl.expr.StructExpression, hl.expr.StructExpression]:
+    """
+    Prepare relevant ploidy annotations for downstream calculations on a matrix table.
+
+    This method annotates the matrix table with the following fields:
+
+        - `xy`: Boolean indicating if the sample is XY
+        - `xx`: Boolean indicating if the sample is XX
+        - `in_non_par`: Boolean indicating if the locus is in a non-PAR region
+        - `x_nonpar`: Boolean indicating if the locus is in a non-PAR region of the X chromosome
+        - `y_par`: Boolean indicating if the locus is in a PAR region of the Y chromosome
+        - `y_nonpar`: Boolean indicating if the locus is in a non-PAR region of the Y chromosome
+
+    This method is used as an optimization for the `get_is_haploid_expr`
+     and `adjusted_sex_ploidy_expr` methods.
+
+    :param locus_expr: Locus expression.
+    :param karyotype_expr: Karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Tuple of index expressions for columns and rows.
+    """
+    source_mt = locus_expr._indices.source
+    col_ht = source_mt.annotate_cols(
+        xy=karyotype_expr.upper() == xy_karyotype_str,
+        xx=karyotype_expr.upper() == xx_karyotype_str,
+    ).cols()
+    row_ht = source_mt.annotate_rows(
+        in_non_par=~locus_expr.in_autosome_or_par(),
+        x_nonpar=locus_expr.in_x_nonpar(),
+        y_par=locus_expr.in_y_par(),
+        y_nonpar=locus_expr.in_y_nonpar(),
+    ).rows()
+    col_idx = col_ht[source_mt.col_key]
+    row_idx = row_ht[source_mt.row_key]
+    return col_idx, row_idx
+
+
 def get_is_haploid_expr(
     gt_expr: Optional[hl.expr.CallExpression] = None,
     locus_expr: Optional[hl.expr.LocusExpression] = None,
@@ -636,19 +679,11 @@ def get_is_haploid_expr(
             "Both 'locus_expr' and 'karyotype_expr' are required if no 'gt_expr' is "
             "supplied."
         )
-
-    source_mt = locus_expr._indices.source
-    col_ht = source_mt.annotate_cols(
-        xy=karyotype_expr == xy_karyotype_str, xx=karyotype_expr == xx_karyotype_str
-    ).cols()
-    row_ht = source_mt.annotate_rows(
-        in_non_par=~locus_expr.in_autosome_or_par(),
-        x_nonpar=locus_expr.in_x_nonpar(),
-        y_par=locus_expr.in_y_par(),
-        y_nonpar=locus_expr.in_y_nonpar(),
-    ).rows()
-    col_idx = col_ht[source_mt.col_key]
-    row_idx = row_ht[source_mt.row_key]
+    # An optimization that annotates the locus's matrix table with the
+    # fields in the case statements below as an optimization step
+    col_idx, row_idx = prep_ploidy_ht(
+        locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
+    )
 
     return row_idx.in_non_par & hl.or_missing(
         ~(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar)),
@@ -669,7 +704,7 @@ def get_dp_gq_adj_expr(
     """
     Get adj annotation using only GQ and DP.
 
-    Defaults correspond to gnomAD values.
+    Default thresholds correspond to gnomAD values.
 
     .. note::
 
@@ -689,7 +724,7 @@ def get_dp_gq_adj_expr(
     :param adj_gq: GQ threshold for adj. Default is 20.
     :param adj_dp: DP threshold for adj. Default is 10.
     :param haploid_adj_dp: Haploid DP threshold for adj. Default is 5.
-    :return: Boolean expression indicating adj filter using GQ and DP.
+    :return: Boolean expression indicating adj filter.
     """
     return (gq_expr >= adj_gq) & hl.if_else(
         get_is_haploid_expr(gt_expr, locus_expr, karyotype_expr),
@@ -1014,7 +1049,7 @@ def fs_from_sb(
 
 
 def sor_from_sb(
-    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
 ) -> hl.expr.Float64Expression:
     """
     Compute `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
@@ -2088,7 +2123,7 @@ def agg_by_strata(
         to stratify the aggregations by. If not provided, the 'group_membership'
         annotation is expected to be present on `mt`.
     :param entry_agg_group_membership: Optional dict indicating the subset of group
-        strata in 'freq_meta' to use the entry aggregation functions on. The keys of
+        strata in 'freq_meta' to run the entry aggregation functions on. The keys of
         the dict can be any of the keys in `entry_agg_funcs` and the values are lists
         of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
         the corresponding entry aggregation function. If provided, 'freq_meta' must be
@@ -2147,8 +2182,8 @@ def agg_by_strata(
 
     if entry_agg_group_membership is not None and "freq_meta" not in group_globals:
         raise ValueError(
-            "The 'freq_meta' global annotation is not found and "
-            "'entry_agg_group_membership' is specified."
+            "The 'freq_meta' global annotation must be supplied when the"
+            " 'entry_agg_group_membership' is specified."
         )
 
     entry_agg_group_membership = entry_agg_group_membership or {}
@@ -2224,6 +2259,9 @@ def agg_by_strata(
         )
 
     # Add annotations for any supplied entry transform and aggregation functions.
+    # Filter groups to only those in entry_agg_group_membership if specified.
+    # If there are no specific entry group indices for an annotation, use ht[g]
+    # to consider all groups without filtering.
     ht = ht.select(
         *select_fields,
         **{

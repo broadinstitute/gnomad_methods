@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 
-from gnomad.utils.annotations import prep_ploidy_ht
+from gnomad.utils.annotations import annotate_and_index_source_mt_for_sex_ploidy
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,11 +32,11 @@ def adjusted_sex_ploidy_expr(
     :param karyotype_expr: Sex karyotype expression.
     :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
     :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
-    :return: Genotype adjusted for sex ploidy
+    :return: Genotype adjusted for sex ploidy.
     """
-    # An optimization that annotates the locus's matrix table with the
-    # fields in the case statements below as an optimization step
-    col_idx, row_idx = prep_ploidy_ht(
+    # An optimization that annotates the locus's source matrix table with the
+    # fields in the case statements below, so they are not re-computed for every entry.
+    col_idx, row_idx = annotate_and_index_source_mt_for_sex_ploidy(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )
 

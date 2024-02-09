@@ -602,7 +602,7 @@ def create_frequency_bins_expr(
     return bin_expr
 
 
-def prep_ploidy_ht(
+def annotate_and_index_source_mt_for_sex_ploidy(
     locus_expr: hl.expr.LocusExpression = None,
     karyotype_expr: hl.expr.StringExpression = None,
     xy_karyotype_str: str = "XY",
@@ -611,17 +611,21 @@ def prep_ploidy_ht(
     """
     Prepare relevant ploidy annotations for downstream calculations on a matrix table.
 
-    This method annotates the matrix table with the following fields:
+    This method is used as an optimization for the `get_is_haploid_expr` and
+    `adjusted_sex_ploidy_expr` methods.
 
-        - `xy`: Boolean indicating if the sample is XY
-        - `xx`: Boolean indicating if the sample is XX
-        - `in_non_par`: Boolean indicating if the locus is in a non-PAR region
-        - `x_nonpar`: Boolean indicating if the locus is in a non-PAR region of the X chromosome
-        - `y_par`: Boolean indicating if the locus is in a PAR region of the Y chromosome
-        - `y_nonpar`: Boolean indicating if the locus is in a non-PAR region of the Y chromosome
+    This method annotates the `locus_expr` source matrix table with the following
+    fields:
 
-    This method is used as an optimization for the `get_is_haploid_expr`
-     and `adjusted_sex_ploidy_expr` methods.
+        - `xy`: Boolean indicating if the sample is XY.
+        - `xx`: Boolean indicating if the sample is XX.
+        - `in_non_par`: Boolean indicating if the locus is in a non-PAR region.
+        - `x_nonpar`: Boolean indicating if the locus is in a non-PAR region of the X
+          chromosome.
+        - `y_par`: Boolean indicating if the locus is in a PAR region of the Y
+          chromosome.
+        - `y_nonpar`: Boolean indicating if the locus is in a non-PAR region of the Y
+          chromosome.
 
     :param locus_expr: Locus expression.
     :param karyotype_expr: Karyotype expression.
@@ -642,6 +646,7 @@ def prep_ploidy_ht(
     ).rows()
     col_idx = col_ht[source_mt.col_key]
     row_idx = row_ht[source_mt.row_key]
+
     return col_idx, row_idx
 
 
@@ -681,7 +686,7 @@ def get_is_haploid_expr(
         )
     # An optimization that annotates the locus's matrix table with the
     # fields in the case statements below as an optimization step
-    col_idx, row_idx = prep_ploidy_ht(
+    col_idx, row_idx = annotate_and_index_source_mt_for_sex_ploidy(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )
 
@@ -691,7 +696,7 @@ def get_is_haploid_expr(
     )
 
 
-def get_dp_gq_adj_expr(
+def get_gq_dp_adj_expr(
     gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
     dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
     gt_expr: Optional[hl.expr.CallExpression] = None,
@@ -733,7 +738,7 @@ def get_dp_gq_adj_expr(
     )
 
 
-def get_adj_het_ab_expr(
+def get_het_ab_adj_expr(
     gt_expr: hl.expr.CallExpression,
     dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
     ad_expr: hl.expr.ArrayNumericExpression,
@@ -774,14 +779,14 @@ def get_adj_expr(
 
     Defaults correspond to gnomAD values.
     """
-    return get_dp_gq_adj_expr(
+    return get_gq_dp_adj_expr(
         gq_expr,
         dp_expr,
         gt_expr=gt_expr,
         adj_gq=adj_gq,
         adj_dp=adj_dp,
         haploid_adj_dp=haploid_adj_dp,
-    ) & get_adj_het_ab_expr(gt_expr, dp_expr, ad_expr, adj_ab)
+    ) & get_het_ab_adj_expr(gt_expr, dp_expr, ad_expr, adj_ab)
 
 
 def annotate_adj(

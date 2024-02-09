@@ -34,6 +34,8 @@ def adjusted_sex_ploidy_expr(
     :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
     :return: Genotype adjusted for sex ploidy
     """
+    # An optimization that annotates the locus's matrix table with the
+    # fields in the case statements below as an optimization step
     col_idx, row_idx = prep_ploidy_ht(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )

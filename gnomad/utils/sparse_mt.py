@@ -1165,7 +1165,10 @@ def compute_stats_per_ref_site(
     )
 
     if sex_karyotype_ht is not None:
-        mt = mt.annotate_cols(sex_karyotype=sex_karyotype_ht[mt.col_key])
+        gt_field = gt_field.pop()
+        mt = mt.annotate_cols(
+            sex_karyotype=sex_karyotype_ht[mt.col_key][sex_karyotype_field]
+        )
         mt = mt.annotate_entries(
             **{
                 gt_field: adjusted_sex_ploidy_expr(

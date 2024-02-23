@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
+from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.utils.annotations import (
     agg_by_strata,
     annotate_adj,
@@ -1003,6 +1004,7 @@ def compute_stats_per_ref_site(
     entry_agg_group_membership: Optional[Dict[str, List[dict[str, str]]]] = None,
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
+    sex_karyotype_field: Optional[str] = None,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
@@ -1032,6 +1034,11 @@ def compute_stats_per_ref_site(
         annotation will have the entry aggregation functions applied to them.
     :param strata_expr: Optional list of dicts of expressions to stratify by.
     :param group_membership_ht: Optional Table of group membership annotations.
+    :param sex_karyotype_field: Optional field to use to adjust genotypes for sex
+        karyotype before stats aggregation. If provided, the field must be present in
+        the columns of `mtds` (variant_data MT if `mtds` is a VDS) and use "XX" and
+        "XY" as values. If not provided, no sex karyotype adjustment is performed.
+        Default is None.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1039,6 +1046,12 @@ def compute_stats_per_ref_site(
         mt = mtds.variant_data
     else:
         mt = mtds
+
+    if sex_karyotype_field is not None and sex_karyotype_field not in mt.col:
+        raise ValueError(
+            f"The supplied 'sex_karyotype_field', {sex_karyotype_field}, is not present"
+            " in the columns of the input!"
+        )
 
     if group_membership_ht is not None and strata_expr is not None:
         raise ValueError(
@@ -1083,6 +1096,17 @@ def compute_stats_per_ref_site(
         )
 
     entry_keep_fields = set(entry_keep_fields or set([])) | gt_field | adj_fields
+
+    # Write the sex karyotype field out to a temp HT so we can annotate the field back
+    # onto the MT after 'densify_all_reference_sites' removes all column annotations.
+    if sex_karyotype_field is not None:
+        sex_karyotype_ht = (
+            mt.cols()
+            .select(sex_karyotype_field)
+            .checkpoint(hl.utils.new_temp_file("sex_karyotype_ht", "ht"))
+        )
+    else:
+        sex_karyotype_ht = None
 
     # Initialize no_strata and default strata_expr if neither group_membership_ht nor
     # strata_expr is provided.
@@ -1142,8 +1166,23 @@ def compute_stats_per_ref_site(
         entry_keep_fields=entry_keep_fields,
     )
 
+    if sex_karyotype_ht is not None:
+        logger.info("Adjusting genotype ploidy based on sex karyotype.")
+        gt_field = gt_field.pop()
+        mt = mt.annotate_cols(
+            sex_karyotype=sex_karyotype_ht[mt.col_key][sex_karyotype_field]
+        )
+        mt = mt.annotate_entries(
+            **{
+                gt_field: adjusted_sex_ploidy_expr(
+                    mt.locus, mt[gt_field], mt.sex_karyotype
+                )
+            }
+        )
+
     # Annotate with adj if needed.
     if adj and "adj" not in mt.entry:
+        logger.info("Annotating the MT with adj.")
         mt = annotate_adj(mt)
 
     ht = agg_by_strata(

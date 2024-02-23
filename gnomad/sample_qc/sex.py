@@ -42,8 +42,8 @@ def adjusted_sex_ploidy_expr(
 
     return (
         hl.case(missing_false=True)
+        .when(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar), hl.missing(hl.tcall))
         .when(~row_idx.in_non_par, gt_expr)
-        .when(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar), hl.null(hl.tcall))
         .when(
             col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar) & gt_expr.is_het(),
             hl.null(hl.tcall),

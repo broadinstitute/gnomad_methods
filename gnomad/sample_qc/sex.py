@@ -45,7 +45,6 @@ def adjusted_sex_ploidy_expr(
         # Added to reduce the checks by entry.
         .when(row_idx.in_autosome, gt_expr)
         .when((row_idx.y_par | row_idx.y_nonpar) & col_idx.xx, hl.missing(hl.tcall))
-        # Added to reduce the checks by entry.
         .when(~row_idx.in_non_par, gt_expr)
         .when(
             (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy & gt_expr.is_het(),

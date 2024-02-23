@@ -640,7 +640,7 @@ def annotate_and_index_source_mt_for_sex_ploidy(
     ).cols()
     row_ht = source_mt.annotate_rows(
         in_non_par=~locus_expr.in_autosome_or_par(),
-        in_autosome=~locus_expr.in_autosome(),
+        in_autosome=locus_expr.in_autosome(),
         x_nonpar=locus_expr.in_x_nonpar(),
         y_par=locus_expr.in_y_par(),
         y_nonpar=locus_expr.in_y_nonpar(),

@@ -790,6 +790,8 @@ def get_constraint_grouping_expr(
             `include_transcript_group` is True)
         - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
             True)
+        - mane_select from `vep_annotation_expr` (added when `include_mane_select_group` is
+            True)
 
     .. note::
         This function expects that the following fields are present in
@@ -800,6 +802,7 @@ def get_constraint_grouping_expr(
         - gene_symbol
         - transcript_id (if `include_transcript_group` is True)
         - canonical (if `include_canonical_group` is True)
+        - mane_select (if `include_mane_select_group` is True)
 
     :param vep_annotation_expr: StructExpression of VEP annotation.
     :param coverage_expr: Optional Int32Expression of exome coverage. Default is None.
@@ -859,6 +862,8 @@ def annotate_exploded_vep_for_constraint_groupings(
         - transcript - id from 'transcript_id' in `vep_annotation` (added when
             `include_transcript_group` is True)
         - canonical from `vep_annotation` (added when `include_canonical_group` is
+            True)
+        - mane_select from `vep_annotation` (added when `include_mane_select_group` is
             True)
 
     .. note::

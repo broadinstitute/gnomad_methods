@@ -1098,7 +1098,7 @@ def compute_stats_per_ref_site(
     entry_keep_fields = set(entry_keep_fields or set([])) | gt_field | adj_fields
 
     # Write the sex karyotype field out to a temp HT so we can annotate the field back
-    # onto the MT after 'densify_all_reference_sites' removes all column annotations.  
+    # onto the MT after 'densify_all_reference_sites' removes all column annotations.
     if sex_karyotype_field is not None:
         sex_karyotype_ht = (
             mt.cols()

@@ -1165,6 +1165,7 @@ def compute_stats_per_ref_site(
     )
 
     if sex_karyotype_ht is not None:
+        logger.info("Adjusting genotype ploidy based on sex karyotype.")
         gt_field = gt_field.pop()
         mt = mt.annotate_cols(
             sex_karyotype=sex_karyotype_ht[mt.col_key][sex_karyotype_field]
@@ -1179,6 +1180,7 @@ def compute_stats_per_ref_site(
 
     # Annotate with adj if needed.
     if adj and "adj" not in mt.entry:
+        logger.info("Annotating the MT with adj.")
         mt = annotate_adj(mt)
 
     ht = agg_by_strata(

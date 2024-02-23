@@ -42,14 +42,16 @@ def adjusted_sex_ploidy_expr(
 
     return (
         hl.case(missing_false=True)
+        # Added to reduce the checks by entry.
+        .when(row_idx.in_autosome, gt_expr)
+        .when((row_idx.y_par | row_idx.y_nonpar) & col_idx.xx, hl.missing(hl.tcall))
         .when(~row_idx.in_non_par, gt_expr)
-        .when(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar), hl.null(hl.tcall))
         .when(
-            col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar) & gt_expr.is_het(),
+            (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy & gt_expr.is_het(),
             hl.null(hl.tcall),
         )
         .when(
-            col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar),
+            (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy,
             hl.call(gt_expr[0], phased=False),
         )
         .default(gt_expr)

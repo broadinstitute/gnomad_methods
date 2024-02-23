@@ -990,6 +990,10 @@ def densify_all_reference_sites(
     # Unfilter entries so that entries with no ref block overlap aren't null.
     mt = mt.unfilter_entries()
 
+    # Rekey by requested row key field and drop unused keys.
+    mt = mt.key_rows_by(*row_key_fields)
+    mt = mt.drop(*[k for k in mt_row_key_fields if k not in row_key_fields])
+
     return mt
 
 
@@ -1192,12 +1196,7 @@ def compute_stats_per_ref_site(
         select_fields=row_keep_fields,
         entry_agg_group_membership=entry_agg_group_membership,
     )
-    ht = ht.checkpoint(hl.utils.new_temp_file("agg_stats", "ht"))
-
-    # Drop no longer needed fields
-    current_keys = list(ht.key)
-    ht = ht.key_by(*row_key_fields).select_globals()
-    ht = ht.drop(*[k for k in current_keys if k not in row_key_fields])
+    ht = ht.select_globals().checkpoint(hl.utils.new_temp_file("agg_stats", "ht"))
 
     group_globals = group_membership_ht.index_globals()
     global_expr = {}

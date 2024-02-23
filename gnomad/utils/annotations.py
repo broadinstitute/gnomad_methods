@@ -603,8 +603,8 @@ def create_frequency_bins_expr(
 
 
 def annotate_and_index_source_mt_for_sex_ploidy(
-    locus_expr: hl.expr.LocusExpression = None,
-    karyotype_expr: hl.expr.StringExpression = None,
+    locus_expr: hl.expr.LocusExpression,
+    karyotype_expr: hl.expr.StringExpression,
     xy_karyotype_str: str = "XY",
     xx_karyotype_str: str = "XX",
 ) -> Tuple[hl.expr.StructExpression, hl.expr.StructExpression]:

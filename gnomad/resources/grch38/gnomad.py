@@ -535,15 +535,20 @@ def gnomad_gks(
     :return: List of dictionaries containing VRS information
         (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
-    # Read public_release table if no custom table provided
+    # Obtain the high level version number and verify that it is 4.
+    high_level_version = f"v{version.split('.')[0]}"
+    if high_level_version != "v4":
+        raise NotImplementedError(
+            "gnomad_gks() is currently only implemented for gnomAD v4."
+        )
+
+    # Read public_release table if no custom table provided.
     if custom_ht:
         ht = custom_ht
     else:
         ht = hl.read_table(public_release(data_type).versions[version].path)
 
-    high_level_version = f"v{version.split('.')[0]}"
-
-    # Read coverage statistics if requested
+    # Read coverage statistics if requested.
     coverage_version_3_0_1 = "3.0.1"  # v4 genomes coverage
     coverage_version_4_0 = "4.0"  # v4 exomes coverage
 
@@ -553,11 +558,6 @@ def gnomad_gks(
         coverage_version = coverage_version_3_0_1
     else:
         coverage_version = coverage_version_4_0
-
-    if high_level_version != "v4":
-        raise NotImplementedError(
-            "gnomad_gks() is currently only implemented for gnomAD v4."
-        )
 
     coverage_ht = None
 
@@ -572,8 +572,11 @@ def gnomad_gks(
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
-    pops_list = list(POPS["v4" if data_type=="exomes" else "v3"]) if by_ancestry_group else None
-
+    pops_list = (
+        list(POPS["v4" if data_type == "exomes" else "v3"])
+        if by_ancestry_group
+        else None
+    )
 
     # Throw warnings if contradictory arguments are passed.
     if by_ancestry_group and vrs_only:

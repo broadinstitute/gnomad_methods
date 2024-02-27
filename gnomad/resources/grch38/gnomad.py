@@ -572,7 +572,8 @@ def gnomad_gks(
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
-    pops_list = list(POPS[high_level_version]) if by_ancestry_group else None
+    pops_list = list(POPS["v4" if data_type=="exomes" else "v3"]) if by_ancestry_group else None
+
 
     # Throw warnings if contradictory arguments are passed.
     if by_ancestry_group and vrs_only:
@@ -592,7 +593,7 @@ def gnomad_gks(
     # Pull up LCR flag and make referrable in the same field.
     ht = ht.annotate(lcr=ht.region_flags.lcr)
 
-    # Pull up v3 / v4 allele balance histogram arrays.
+    # Pull up allele balance histogram arrays.
     ht = ht.annotate(ab_hist_alt=ht.histograms.qual_hists.ab_hist_alt)
 
     ht = add_grpMaxFAF95_v4(ht)

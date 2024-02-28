@@ -1,14 +1,10 @@
 # noqa: D100
 
-import csv
 import itertools
-import json
 import logging
-from timeit import default_timer as timer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
-from hail.utils.misc import new_temp_file
 
 import gnomad.utils.filtering as filter_utils
 from gnomad.utils.gen_stats import to_phred
@@ -2352,87 +2348,6 @@ def update_structured_annotations(
     return ht.annotate(**updated_rows)
 
 
-def gks_compute_seqloc_digest(
-    ht: hl.Table,
-    export_tmpfile: Optional[str] = None,
-    computed_tmpfile: Optional[str] = None,
-):
-    """
-    Compute sequence location digest-based id for a hail variant Table.
-
-    Exports table to tsv, computes SequenceLocation digests, reimports and replaces
-    the vrs_json field with the result. Input table must have a .vrs field, like the
-    one added by add_gks_vrs, that can be used to construct ga4gh.vrs models.
-
-    :param ht: hail table with VRS annotation
-    :param export_tmpfile: Optional file path to export the table to.
-    :param computed_tmpfile: Optional file path to write the updated rows to,
-        which is then imported as a hail table
-    :return: a hail table with the VRS annotation updated with the new SequenceLocations
-    """
-    # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
-    # imported. Importing ga4gh here to avoid this issue.
-    import ga4gh.core as ga4gh_core
-    import ga4gh.vrs as ga4gh_vrs
-
-    if export_tmpfile is None:
-        export_tmpfile = new_temp_file("gks-seqloc-pre.tsv")
-    if computed_tmpfile is None:
-        computed_tmpfile = new_temp_file("gks-seqloc-post.tsv")
-
-    logger.info("Exporting ht to %s", export_tmpfile)
-    ht.select("vrs_json").export(export_tmpfile, header=True)
-
-    logger.info(
-        "Computing SequenceLocation digests and writing to %s", computed_tmpfile
-    )
-    start = timer()
-    counter = 0
-    with open(computed_tmpfile, "w", encoding="utf-8") as f_out:
-        with open(export_tmpfile, "r", encoding="utf-8") as f:
-            reader = csv.reader(f, delimiter="\t")
-            header = None
-            for line in reader:
-                if header is None:
-                    header = line
-                    f_out.write("\t".join(header))
-                    f_out.write("\n")
-                    continue
-                else:
-                    locus, alleles, vrs_json = line
-                    vrs_variant = json.loads(vrs_json)
-                    location = vrs_variant["location"]
-                    location.pop("_id")
-                    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
-                        ga4gh_vrs.models.SequenceLocation(**location)
-                    )
-                    vrs_variant["location"]["_id"] = location_id
-                    # serialize outputs to JSON and write to TSV
-                    vrs_json = json.dumps(vrs_variant)
-                    alleles = json.dumps(json.loads(alleles))
-                    f_out.write("\t".join([locus, alleles, vrs_json]))
-                    f_out.write("\n")
-                    counter += 1
-    end = timer()
-    logger.info(
-        "Computed %s SequenceLocation digests in %s seconds", counter, (end - start)
-    )
-    logger.info("Importing VRS records with computed SequenceLocation digests")
-    ht_with_location = hl.import_table(
-        computed_tmpfile, types={"locus": "tstr", "alleles": "tstr", "vrs_json": "tstr"}
-    )
-    ht_with_location_parsed = ht_with_location.annotate(
-        locus=hl.locus(
-            contig=ht_with_location.locus.split(":")[0],
-            pos=hl.int32(ht_with_location.locus.split(":")[1]),
-            reference_genome="GRCh38",
-        ),
-        alleles=hl.parse_json(ht_with_location.alleles, dtype=hl.tarray(hl.tstr)),
-    ).key_by("locus", "alleles")
-
-    return ht.drop("vrs_json").join(ht_with_location_parsed, how="left")
-
-
 def add_gks_vrs(
     input_locus: hl.locus,
     input_vrs: hl.struct,
@@ -2532,7 +2447,6 @@ def add_gks_va(
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
-        group_index: int,
         group_id: str,
         group_label: str,
         group_sex: str = None,
@@ -2550,8 +2464,16 @@ def add_gks_va(
         :return: Dictionary containing variant frequency information,
             - (by genetic ancestry group and sex if desired) for specified variant.
         """
+        if group_sex:
+            cohort_id = f"{group_id.upper()}.{group_sex}"
+            freq_index_key = f"{group_id}_{group_sex}_adj"
+        else:
+            cohort_id = f"{group_id.upper()}"
+            freq_index_key = f"{group_id}_adj"
+        record_id = f"{gnomad_id}.{cohort_id}"
+
         # Obtain frequency information for the specified variant.
-        group_freq = input_struct.freq[group_index]
+        group_freq = input_struct.freq[freq_index_dict[freq_index_key]]
 
         # Cohort characteristics.
         characteristics = []
@@ -2561,16 +2483,31 @@ def add_gks_va(
 
         # Dictionary to be returned containing information for a specified group.
         freq_record = {
-            "id": f"{gnomad_id},{group_id.upper()}",
+            "id": record_id,
             "type": "CohortAlleleFrequency",
             "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
-            "alleleFrequency": group_freq["AF"],
-            "cohort": {"id": group_id.upper(), "characteristics": characteristics},
+            "alleleFrequency": (
+                group_freq["AF"] if group_freq["AF"] is not None else 0.0
+            ),
+            "cohort": {"id": cohort_id, "characteristics": characteristics},
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
+
+        # Add hemizygote allele count if variant is non-autosomal/non-PAR.
+        # Only XY groups can be hemizygous. Other group AC is mixed homo/hetero.
+        # If not a by_sex group, include the XY hemizygote count for XY subgroup.
+        if not input_struct.in_autosome_or_par:
+            if group_sex == "XY":
+                freq_record["ancillaryResults"]["hemizygotes"] = group_freq.AC
+            elif group_sex is None:
+                # Group is not by_sex, but still need to report hemizygotes.
+                hemi_group_freq = input_struct.freq[
+                    freq_index_dict[f"{group_id}_XY_adj"]
+                ]
+                freq_record["ancillaryResults"]["hemizygotes"] = hemi_group_freq.AC
 
         return freq_record
 
@@ -2581,10 +2518,7 @@ def add_gks_va(
     # Iterate through provided groups and generate dictionaries.
     if ancestry_groups:
         for group in ancestry_groups:
-            key = f"{group}-adj"
-            index_value = freq_index_dict.get(key)
             group_result = _create_group_dicts(
-                group_index=index_value,
                 group_id=group,
                 group_label=ancestry_groups_dict[group],
             )
@@ -2593,12 +2527,8 @@ def add_gks_va(
             if by_sex:
                 sex_list = []
                 for sex in ["XX", "XY"]:
-                    sex_key = f"{group}-{sex}-adj"
-                    sex_index_value = freq_index_dict.get(sex_key)
-                    sex_id = f"{group}.{sex}"
                     sex_result = _create_group_dicts(
-                        group_index=sex_index_value,
-                        group_id=sex_id,
+                        group_id=group,
                         group_label=ancestry_groups_dict[group],
                         group_sex=sex,
                     )
@@ -2628,32 +2558,87 @@ def add_gks_va(
         ),  # Information can be populated with the result of add_gks_vrs()
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
-        "alleleFrequency": overall_freq["AF"],
+        "alleleFrequency": (
+            overall_freq["AF"] if overall_freq["AF"] is not None else 0.0
+        ),
         "cohort": {"id": "ALL"},
     }
 
-    # Create ancillaryResults for additional frequency and popMaxFAF95 information
+    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
-        "popMaxFAF95": {
-            "frequency": input_struct.faf95.popmax,
-            "confidenceInterval": 0.95,
-        },
     }
 
-    if input_struct.faf95.popmax_population is not None:
-        ancillaryResults["popMaxFAF95"][
-            "popFreqID"
-        ] = f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}"
-    else:
-        ancillaryResults["popMaxFAF95"]["popFreqID"] = None
+    # Add hemizygote count if not autosomal or PAR.
+    if not input_struct.in_autosome_or_par:
+        hemizygote_count = input_struct.freq[freq_index_dict["XY_adj"]].AC
+        ancillaryResults["hemizygotes"] = hemizygote_count
 
-    # Add mean coverage depth statistics if the input was annotated
-    # with coverage information.
-    if "mean_depth" in input_struct:
-        ancillaryResults["meanDepth"] = input_struct.mean_depth
+    # Add group max FAF if it exists
+    if input_struct.grpMaxFAF95.popmax_population is not None:
+        ancillaryResults["grpMaxFAF95"] = {
+            "frequency": input_struct.grpMaxFAF95.popmax,
+            "confidenceInterval": 0.95,
+            "groupId": (
+                f"{gnomad_id}.{input_struct.grpMaxFAF95.popmax_population.upper()}"
+            ),
+        }
+
+    # Add joint group max FAF if it exists.
+    if (
+        "jointGrpMaxFAF95" in input_struct
+        and input_struct.jointGrpMaxFAF95.popmax_population is not None
+    ):
+        ancillaryResults["jointGrpMaxFAF95"] = {
+            "frequency": input_struct.jointGrpMaxFAF95.popmax,
+            "confidenceInterval": 0.95,
+            "groupId": (
+                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.popmax_population.upper()}"
+            ),
+        }
 
     final_freq_dict["ancillaryResults"] = ancillaryResults
+
+    # Check allele balance for heterozygotes values.
+    # Flagged allele balance values are those in bins > 0.90.
+    # Each bin is 0.05, so flagged values are in the last 2 bins.
+    if len(input_struct.ab_hist_alt.bin_freq) != 20:
+        raise ValueError(
+            f"{gnomad_id} ab_hist_alt.bin_freq had "
+            f"{len(input_struct.ab_hist_alt.bin_freq)} items, expected 20"
+        )
+    # The bin_freq should be in order but we can verify the order from bin_edges.
+    ab_bin_freq = list(
+        map(
+            lambda x: x[1],
+            sorted(
+                zip(
+                    input_struct.ab_hist_alt.bin_edges,
+                    input_struct.ab_hist_alt.bin_freq,
+                ),
+                key=lambda x: x[0],
+            ),
+        )
+    )
+
+    qualityMeasures = {
+        "qcFilters": list(input_struct.filters),
+        "lowComplexityRegion": input_struct.lcr,
+        "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
+    }
+
+    # Add coverage depth statistics if the input was annotated
+    # with coverage information.
+    if "mean_depth" in input_struct:
+        qualityMeasures["meanDepth"] = input_struct.mean_depth
+
+    if "fraction_cov_over_20" in input_struct:
+        qualityMeasures["fractionCoverage20x"] = input_struct.fraction_cov_over_20
+
+    # Add monoallelic flag (all samples homozygous for alternate allele)
+    qualityMeasures["monoallelic"] = input_struct.monoallelic
+
+    final_freq_dict["qualityMeasures"] = qualityMeasures
 
     # If ancestry_groups were passed, add the ancestry group dictionary to the
     # final frequency dictionary to be returned.

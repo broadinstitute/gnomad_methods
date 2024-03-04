@@ -1301,7 +1301,7 @@ def add_gencode_annotations(
 
     :param ht: Input Table.
     :param gencode_ht: Table with GENCODE annotations.
-    :return: Table with annotations from GENCODE added.
+    :return: Table with transcript annotations from GENCODE added.
     """
     gencode_ht = gencode_ht.annotate(
         length=gencode_ht.interval.end.position

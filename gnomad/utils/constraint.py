@@ -1314,23 +1314,18 @@ def add_gencode_transcript_annotations(
         chromosome=gencode_ht.interval.start.contig,
     )
 
-    # Obtain transcript annotations from GENCODE file.
-    annotations_to_add = annotations + ("chromosome", "transcript_id")
+    # Obtain CDS annotations from GENCODE file and calculate CDS length and
+    # number of exons.
+    annotations_to_add = annotations + ("chromosome", "transcript_id", "length")
 
-    gencode_transcript = (
-        gencode_ht.filter(gencode_ht.feature == "transcript")
+    gencode_cds = (
+        gencode_ht.filter(gencode_ht.feature == "CDS")
         .select(*annotations_to_add)
         .key_by("transcript_id")
         .drop("interval")
     )
 
-    # Obtain CDS annotations from GENCODE file and calculate CDS length and
-    # number of exons.
-    gencode_cds = gencode_ht.filter(gencode_ht.feature == "CDS").select(
-        "transcript_id", "length"
-    )
-
-    gencode_cds = (
+    computed_cds_info = (
         gencode_cds.group_by("transcript_id")
         .aggregate(
             cds_length=hl.agg.sum(gencode_cds.length), num_coding_exons=hl.agg.count()
@@ -1338,12 +1333,14 @@ def add_gencode_transcript_annotations(
         .key_by("transcript_id")
     )
 
+    gencode_cds = gencode_cds.annotate(**computed_cds_info[gencode_cds.key]).drop(
+        "length"
+    )
     gencode_cds = gencode_cds.checkpoint(
         new_temp_file(prefix="gencode_cds", extension="ht")
     )
 
     # Add GENCODE annotations to input Table.
-    ht = ht.annotate(**gencode_transcript[ht.transcript])
     ht = ht.annotate(**gencode_cds[ht.transcript])
 
     return ht

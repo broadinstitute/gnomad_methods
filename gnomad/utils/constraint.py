@@ -1282,3 +1282,58 @@ def calculate_raw_z_score_sd(
         sd_expr = hl.agg.stats(raw_z_expr).stdev
 
     return hl.agg.filter(filter_expr, sd_expr)
+
+
+def add_gencode_annotations(
+    ht: hl.Table,
+    gencode_ht: hl.Table,
+) -> hl.Table:
+    """
+    Add GENCODE annotations to Table based on transcript id.
+
+    .. note::
+        Added annotations are:
+        - chromosome
+        - level
+        - transcript_type
+        - cds_length
+        - num_coding_exomes
+
+    :param ht: Input Table.
+    :param gencode_ht: Table with GENCODE annotations.
+    :return: Table with annotations from GENCODE added.
+    """
+    gencode_ht = gencode_ht.annotate(
+        length=gencode_ht.interval.end.position
+        - gencode_ht.interval.start.position
+        + 1,
+        chromosome=gencode_ht.interval.start.contig,
+    )
+
+    # Obtain transcript annotations from GENCODE file.
+    gencode_transcript = (
+        gencode_ht.filter(gencode_ht.feature == "transcript")
+        .select("chromosome", "transcript_id", "level", "transcript_type")
+        .key_by("transcript_id")
+        .drop("interval")
+    )
+
+    # Obtain CDS annotations from GENCODE file and calculate CDS length and
+    # number of exons.
+    gencode_cds = gencode_ht.filter(gencode_ht.feature == "CDS").select(
+        "transcript_id", "length"
+    )
+
+    gencode_cds = (
+        gencode_cds.group_by("transcript_id")
+        .aggregate(
+            cds_length=hl.agg.sum(gencode_cds.length), num_coding_exons=hl.agg.count()
+        )
+        .key_by("transcript_id")
+    )
+
+    # Add GENCODE annotations to input Table.
+    ht = ht.annotate(**gencode_transcript[ht.transcript])
+    ht = ht.annotate(**gencode_cds[ht.transcript])
+
+    return ht

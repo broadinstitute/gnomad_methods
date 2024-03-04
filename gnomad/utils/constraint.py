@@ -1282,3 +1282,65 @@ def calculate_raw_z_score_sd(
         sd_expr = hl.agg.stats(raw_z_expr).stdev
 
     return hl.agg.filter(filter_expr, sd_expr)
+
+
+def add_gencode_transcript_annotations(
+    ht: hl.Table,
+    gencode_ht: hl.Table,
+    annotations: List[str] = ["level", "transcript_type"],
+) -> hl.Table:
+    """
+    Add GENCODE annotations to Table based on transcript id.
+
+    .. note::
+        Added annotations by default are:
+        - level
+        - transcript_type
+
+        Computed annotations are:
+        - chromosome
+        - cds_length
+        - num_coding_exons
+
+    :param ht: Input Table.
+    :param gencode_ht: Table with GENCODE annotations.
+    :param annotations: List of GENCODE annotations to add. Default is ["level", "transcript_type"].
+        Added annotations also become keys for the group by when computing "cds_length" and "num_coding_exons".
+    :return: Table with transcript annotations from GENCODE added.
+    """
+    gencode_ht = gencode_ht.annotate(
+        length=gencode_ht.interval.end.position
+        - gencode_ht.interval.start.position
+        + 1,
+        chromosome=gencode_ht.interval.start.contig,
+    )
+
+    # Obtain CDS annotations from GENCODE file and calculate CDS length and
+    # number of exons.
+    annotations_to_add = set(annotations + ["chromosome", "transcript_id", "length"])
+
+    gencode_cds = (
+        gencode_ht.filter(gencode_ht.feature == "CDS")
+        .select(*annotations_to_add)
+        .key_by("transcript_id")
+        .drop("interval")
+    )
+
+    annotations_to_add.remove("length")
+
+    gencode_cds = (
+        gencode_cds.group_by(*annotations_to_add)
+        .aggregate(
+            cds_length=hl.agg.sum(gencode_cds.length), num_coding_exons=hl.agg.count()
+        )
+        .key_by("transcript_id")
+    )
+
+    gencode_cds = gencode_cds.checkpoint(
+        new_temp_file(prefix="gencode_cds", extension="ht")
+    )
+
+    # Add GENCODE annotations to input Table.
+    ht = ht.annotate(**gencode_cds[ht.transcript])
+
+    return ht

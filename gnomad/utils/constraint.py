@@ -1315,9 +1315,11 @@ def add_gencode_transcript_annotations(
     )
 
     # Obtain transcript annotations from GENCODE file.
+    annotations_to_add = annotations + ("chromosome", "transcript_id")
+
     gencode_transcript = (
         gencode_ht.filter(gencode_ht.feature == "transcript")
-        .select("chromosome", "transcript_id", "level", "transcript_type")
+        .select(*annotations_to_add)
         .key_by("transcript_id")
         .drop("interval")
     )

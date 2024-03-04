@@ -1305,7 +1305,7 @@ def add_gencode_transcript_annotations(
     :param ht: Input Table.
     :param gencode_ht: Table with GENCODE annotations.
     :param annotations: List of GENCODE annotations to add. Default is ["level", "transcript_type"].
-        Added annotations also become keys for the group by when computing "cds_length", and "num_coding_exons".
+        Added annotations also become keys for the group by when computing "cds_length" and "num_coding_exons".
     :return: Table with transcript annotations from GENCODE added.
     """
     gencode_ht = gencode_ht.annotate(

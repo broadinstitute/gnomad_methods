@@ -1284,23 +1284,27 @@ def calculate_raw_z_score_sd(
     return hl.agg.filter(filter_expr, sd_expr)
 
 
-def add_gencode_annotations(
+def add_gencode_transcript_annotations(
     ht: hl.Table,
     gencode_ht: hl.Table,
+    annotations: Tuple[str] = ("level", "transcript_type"),
 ) -> hl.Table:
     """
     Add GENCODE annotations to Table based on transcript id.
 
     .. note::
-        Added annotations are:
-        - chromosome
+        Added annotations by default are:
         - level
         - transcript_type
+
+        Computed annotations are:
+        - chromosome
         - cds_length
-        - num_coding_exomes
+        - num_coding_exons
 
     :param ht: Input Table.
     :param gencode_ht: Table with GENCODE annotations.
+    :param annotations: Tuple of GENCODE annotations to add. Default is ("level", "transcript_type"). Annotations will also be computed for "chromosome", "cds_length", and "num_coding_exons".
     :return: Table with transcript annotations from GENCODE added.
     """
     gencode_ht = gencode_ht.annotate(
@@ -1330,6 +1334,10 @@ def add_gencode_annotations(
             cds_length=hl.agg.sum(gencode_cds.length), num_coding_exons=hl.agg.count()
         )
         .key_by("transcript_id")
+    )
+
+    gencode_cds = gencode_cds.checkpoint(
+        new_temp_file(prefix="gencode_cds", extension="ht")
     )
 
     # Add GENCODE annotations to input Table.

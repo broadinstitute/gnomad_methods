@@ -683,7 +683,7 @@ def make_combo_header_text(
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
 
     For example, if preposition is "for", group_types is ["group", "pop", "sex"], and combo_fields is ["adj", "afr", "female"],
-    this function will return the string " for female samples of African-American/African ancestry".
+    this function will return the string " for female samples in the African-American/African genetic ancestry group".
 
     :param preposition: Relevant preposition to precede automatically generated text.
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
@@ -706,11 +706,15 @@ def make_combo_header_text(
     if "subpop" in combo_dict or "pop" in combo_dict:
         if "subpop" in combo_dict:
             header_text = (
-                header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
+                header_text
+                + f" in the {pop_names[combo_dict['subpop']]} genetic ancestry group"
             )
 
         else:
-            header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
+            header_text = (
+                header_text
+                + f" in the {pop_names[combo_dict['pop']]} genetic ancestry group"
+            )
 
     if "group" in combo_dict:
         if combo_dict["group"] == "raw":
@@ -938,7 +942,7 @@ def make_info_dict(
                 "Number": "A",
                 "Description": (
                     "Maximum filtering allele frequency (using Poisson 95% CI)"
-                    f" across genetic_ancestry groups{description_text}"
+                    f" across genetic ancestry groups{description_text}"
                 ),
             },
             f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{label_delimiter}gen{label_delimiter}anc{suffix}": {
@@ -952,7 +956,7 @@ def make_info_dict(
                 "Number": "A",
                 "Description": (
                     "Maximum filtering allele frequency (using Poisson 99% CI)"
-                    f" across genetic_ancestry groups{description_text}"
+                    f" across genetic ancestry groups{description_text}"
                 ),
             },
             f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{label_delimiter}gen{label_delimiter}anc{suffix}": {

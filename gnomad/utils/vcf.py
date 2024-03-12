@@ -707,7 +707,7 @@ def make_combo_header_text(
         if "subpop" in combo_dict:
             header_text = (
                 header_text
-                + f" in the {pop_names[combo_dict['subpop']]} genetic ancestry group"
+                + f" in the {pop_names[combo_dict['subpop']]} genetic ancestry subgroup"
             )
 
         else:

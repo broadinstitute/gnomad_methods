@@ -290,7 +290,7 @@ def process_consequences(
     vep_root: str = "vep",
     penalize_flags: bool = True,
     csq_order: Optional[List[str]] = None,
-    has_polyphen_sift: bool = False,
+    has_polyphen: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Add most_severe_consequence into [vep_root].transcript_consequences, and worst_csq_by_gene, any_lof into [vep_root].
@@ -304,8 +304,10 @@ def process_consequences(
     :param csq_order: Optional list indicating the order of VEP consequences, sorted
         from high to low impact. Default is None, which uses the value of the
         `CSQ_ORDER` global.
-    :param has_polyphen_sift: Whether the input VEP Struct has PolyPhen and SIFT.
-        Default is False.
+    :param has_polyphen: Whether the input VEP Struct has PolyPhen and SIFT.
+        Default is True. Note: VEP105-annotated context HT still has PolyPhen inside
+        vep struct but removed from the VEP105-annotated release HTs, so this has to be
+        set to False if using gnomAD v4.0 and later release HTs.
     :return: MT with better formatted consequences.
     """
     if csq_order is None:
@@ -325,7 +327,7 @@ def process_consequences(
         modifier -= hl.if_else(flag_condition, flag_score, no_flag_score)
         modifier -= hl.if_else(tc.lof == "OS", 20, 0)
         modifier -= hl.if_else(tc.lof == "LC", 10, 0)
-        if has_polyphen_sift:
+        if has_polyphen:
             modifier -= (
                 hl.case()
                 .when(tc.polyphen_prediction == "probably_damaging", 0.5)

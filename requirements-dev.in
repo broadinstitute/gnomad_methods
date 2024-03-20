@@ -1,7 +1,7 @@
 # Used to create the requirements-dev.txt file
 # Note: `pip-compile requirements-dev.in` needs to be run before changes in requirements-dev.in are reflected in
 # requirements-dev.txt, which is used for GitHub Actions
-black==23.7.0 # This should be kept in sync with the version in .pre-commit-config.yaml
+black==24.3.0 # This should be kept in sync with the version in .pre-commit-config.yaml
 isort==5.12.0 # This should be kept in sync with the version in .pre-commit-config.yaml
 autopep8==2.0.2 # This should be kept in sync with the version in .pre-commit-config.yaml
 pre-commit

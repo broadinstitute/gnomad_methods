@@ -315,14 +315,14 @@ def process_consequences(
     csqs = hl.literal(csq_order)
     csq_dict = hl.literal(dict(zip(csq_order, range(len(csq_order)))))
 
-    def csq_score(tc: hl.expr.StructExpression) -> int:
+    def _csq_score(tc: hl.expr.StructExpression) -> int:
         return csq_dict[tc.most_severe_consequence]
 
     flag_score = 500
     no_flag_score = flag_score * (1 + penalize_flags)
 
-    def csq_score_modifier(tc: hl.expr.StructExpression) -> float:
-        modifier = csq_score(tc)
+    def _csq_score_modifier(tc: hl.expr.StructExpression) -> float:
+        modifier = _csq_score(tc)
         flag_condition = (tc.lof == "HC") & (tc.lof_flags != "")
         modifier -= hl.if_else(flag_condition, flag_score, no_flag_score)
         modifier -= hl.if_else(tc.lof == "OS", 20, 0)
@@ -341,7 +341,7 @@ def process_consequences(
         tcl: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
         tcl = tcl.map(
-            lambda tc: tc.annotate(csq_score=csq_score(tc) - csq_score_modifier(tc))
+            lambda tc: tc.annotate(csq_score=_csq_score(tc) - _csq_score_modifier(tc))
         )
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 

@@ -290,11 +290,17 @@ def process_consequences(
     vep_root: str = "vep",
     penalize_flags: bool = True,
     csq_order: Optional[List[str]] = None,
+    has_polyphen: bool = True,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Add most_severe_consequence into [vep_root].transcript_consequences, and worst_csq_by_gene, any_lof into [vep_root].
 
     `most_severe_consequence` is the worst consequence for a transcript.
+
+    .. note::
+        From gnomAD v4.0 on, the PolyPhen annotation was removed from the VEP Struct
+        in the release HTs. When using this function with gnomAD v4.0 or later,
+        set `has_polyphen` to False.
 
     :param mt: Input Table or MatrixTable.
     :param vep_root: Root for VEP annotation (probably "vep").
@@ -303,6 +309,8 @@ def process_consequences(
     :param csq_order: Optional list indicating the order of VEP consequences, sorted
         from high to low impact. Default is None, which uses the value of the
         `CSQ_ORDER` global.
+    :param has_polyphen: Whether the input VEP Struct has a PolyPhen annotation which
+        will be used to modify the consequence score. Default is True.
     :return: MT with better formatted consequences.
     """
     if csq_order is None:
@@ -310,37 +318,33 @@ def process_consequences(
     csqs = hl.literal(csq_order)
     csq_dict = hl.literal(dict(zip(csq_order, range(len(csq_order)))))
 
+    def _csq_score(tc: hl.expr.StructExpression) -> int:
+        return csq_dict[tc.most_severe_consequence]
+
+    flag_score = 500
+    no_flag_score = flag_score * (1 + penalize_flags)
+
+    def _csq_score_modifier(tc: hl.expr.StructExpression) -> float:
+        modifier = _csq_score(tc)
+        flag_condition = (tc.lof == "HC") & (tc.lof_flags != "")
+        modifier -= hl.if_else(flag_condition, flag_score, no_flag_score)
+        modifier -= hl.if_else(tc.lof == "OS", 20, 0)
+        modifier -= hl.if_else(tc.lof == "LC", 10, 0)
+        if has_polyphen:
+            modifier -= (
+                hl.case()
+                .when(tc.polyphen_prediction == "probably_damaging", 0.5)
+                .when(tc.polyphen_prediction == "possibly_damaging", 0.25)
+                .when(tc.polyphen_prediction == "benign", 0.1)
+                .default(0)
+            )
+        return modifier
+
     def find_worst_transcript_consequence(
         tcl: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
-        """Get the worst transcript_consequence from an array of all annotated transcript consequences."""
-        flag_score = 500
-        no_flag_score = flag_score * (1 + penalize_flags)
-
-        def csq_score(tc):
-            return csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
-
         tcl = tcl.map(
-            lambda tc: tc.annotate(
-                csq_score=hl.case(missing_false=True)
-                .when(
-                    (tc.lof == "HC") & (tc.lof_flags == ""),
-                    csq_score(tc) - no_flag_score,
-                )
-                .when(
-                    (tc.lof == "HC") & (tc.lof_flags != ""), csq_score(tc) - flag_score
-                )
-                .when(tc.lof == "OS", csq_score(tc) - 20)
-                .when(tc.lof == "LC", csq_score(tc) - 10)
-                .when(
-                    tc.polyphen_prediction == "probably_damaging", csq_score(tc) - 0.5
-                )
-                .when(
-                    tc.polyphen_prediction == "possibly_damaging", csq_score(tc) - 0.25
-                )
-                .when(tc.polyphen_prediction == "benign", csq_score(tc) - 0.1)
-                .default(csq_score(tc))
-            )
+            lambda tc: tc.annotate(csq_score=_csq_score(tc) - _csq_score_modifier(tc))
         )
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 

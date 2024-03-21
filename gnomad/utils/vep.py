@@ -304,7 +304,7 @@ def process_consequences(
     :param csq_order: Optional list indicating the order of VEP consequences, sorted
         from high to low impact. Default is None, which uses the value of the
         `CSQ_ORDER` global.
-:param has_polyphen: Whether the input VEP Struct has a PolyPhen annotation which
+    :param has_polyphen: Whether the input VEP Struct has a PolyPhen annotation which
         will be used to modify the consequence score. Default is True.
 
               .. note::

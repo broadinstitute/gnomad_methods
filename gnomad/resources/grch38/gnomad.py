@@ -572,11 +572,7 @@ def gnomad_gks(
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
-    pops_list = (
-        list(POPS["v4" if data_type == "exomes" else "v3"])
-        if by_ancestry_group
-        else None
-    )
+    pops_list = list(POPS["v4"]) if by_ancestry_group else None
 
     # Throw warnings if contradictory arguments are passed.
     if by_ancestry_group and vrs_only:

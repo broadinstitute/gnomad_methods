@@ -297,6 +297,11 @@ def process_consequences(
 
     `most_severe_consequence` is the worst consequence for a transcript.
 
+    .. note::
+        From gnomAD v4.0 on, the PolyPhen annotation was removed from the VEP Struct
+        in the release HTs. When using this function with gnomAD v4.0 or later,
+        set `has_polyphen` to False.
+
     :param mt: Input Table or MatrixTable.
     :param vep_root: Root for VEP annotation (probably "vep").
     :param penalize_flags: Whether to penalize LOFTEE flagged variants, or treat them
@@ -306,13 +311,6 @@ def process_consequences(
         `CSQ_ORDER` global.
     :param has_polyphen: Whether the input VEP Struct has a PolyPhen annotation which
         will be used to modify the consequence score. Default is True.
-
-              .. note::
-
-            From gnomAD v4.0 on, the PolyPhen annotation was removed from the VEP
-            Struct in the release HTs. When using this function with gnomAD v4.0 or
-            later, set `has_polyphen` to False.
-
     :return: MT with better formatted consequences.
     """
     if csq_order is None:

@@ -304,10 +304,15 @@ def process_consequences(
     :param csq_order: Optional list indicating the order of VEP consequences, sorted
         from high to low impact. Default is None, which uses the value of the
         `CSQ_ORDER` global.
-    :param has_polyphen: Whether the input VEP Struct has PolyPhen and SIFT.
-        Default is True. Note: VEP105-annotated context HT still has PolyPhen inside
-        vep struct but removed from the VEP105-annotated release HTs, so this has to be
-        set to False if using gnomAD v4.0 and later release HTs.
+:param has_polyphen: Whether the input VEP Struct has a PolyPhen annotation which
+        will be used to modify the consequence score. Default is True.
+
+              .. note::
+
+            From gnomAD v4.0 on, the PolyPhen annotation was removed from the VEP
+            Struct in the release HTs. When using this function with gnomAD v4.0 or
+            later, set `has_polyphen` to False.
+
     :return: MT with better formatted consequences.
     """
     if csq_order is None:

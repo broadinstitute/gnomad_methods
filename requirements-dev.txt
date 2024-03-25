@@ -8,7 +8,7 @@ astroid==3.0.1
     # via pylint
 autopep8==2.0.2
     # via -r requirements-dev.in
-black==23.7.0
+black==24.3.0
     # via -r requirements-dev.in
 cfgv==3.4.0
     # via pre-commit

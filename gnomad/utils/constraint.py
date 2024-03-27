@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
+from gnomad.resources.grch38.gnomad import DOWNSAMPLINGS
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
@@ -232,6 +233,7 @@ def get_downsampling_freq_indices(
     variant_quality: str = "adj",
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = "None",
+    downsamplings: list = DOWNSAMPLINGS["v4"],
 ) -> hl.expr.ArrayExpression:
     """
     Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified `genetic_ancestry_label` and "variant_quality" values.
@@ -248,6 +250,7 @@ def get_downsampling_freq_indices(
         None.
     :param subset: Subset to use for filtering by the 'subset' key in
         `freq_meta_expr`. Default is "None".
+    :param downsamplings: List of strings specifying what levels of downsamplings to obtain.
     :return: ArrayExpression of indices of dictionaries in `freq_meta_expr` that only
         have the "downsampling" key with specified `genetic_ancestry_label` and
         "variant_quality" values.
@@ -260,6 +263,7 @@ def get_downsampling_freq_indices(
         lambda f: (f[1].get("group") == variant_quality)
         & (hl.any([f[1].get(l, "") == pop for l in gen_anc]))
         & f[1].contains("downsampling")
+        & hl.literal(downsamplings).contains(hl.int(f[1].get("downsampling", "0")))
         & (f[1].get("subset", "None") == subset)
     )
     # Get an array of indices and meta dictionaries sorted by "downsampling" key.
@@ -275,6 +279,7 @@ def downsampling_counts_expr(
     max_af: Optional[float] = None,
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = "None",
+    downsamplings: list = DOWNSAMPLINGS["v4"],
 ) -> hl.expr.ArrayExpression:
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
@@ -301,12 +306,18 @@ def downsampling_counts_expr(
         None.
     :param subset: Subset to use for filtering by the 'subset' key in
         `freq_meta_expr`. Default is "None".
+    :param downsamplings: List of strings specifying what levels of downsamplings to obtain.
     :return: Aggregation Expression for an array of the variant counts in downsamplings
         for specified population.
     """
     # Get an array of indices sorted by "downsampling" key.
     sorted_indices = get_downsampling_freq_indices(
-        freq_meta_expr, pop, variant_quality, genetic_ancestry_label, subset
+        freq_meta_expr,
+        pop,
+        variant_quality,
+        genetic_ancestry_label,
+        subset,
+        downsamplings,
     ).map(lambda x: x[0])
 
     def _get_criteria(i: hl.expr.Int32Expression) -> hl.expr.Int32Expression:

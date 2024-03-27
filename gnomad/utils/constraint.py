@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
+from gnomad.resources.grch38.gnomad import DOWNSAMPLINGS
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
@@ -230,22 +231,40 @@ def get_downsampling_freq_indices(
     freq_meta_expr: hl.expr.ArrayExpression,
     pop: str = "global",
     variant_quality: str = "adj",
+    genetic_ancestry_label: Optional[str] = None,
+    subset: Optional[str] = "None",
+    downsamplings: list = DOWNSAMPLINGS["v4"],
 ) -> hl.expr.ArrayExpression:
     """
-    Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified "pop" and "variant_quality" values.
+    Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified `genetic_ancestry_label` and "variant_quality" values.
 
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
         element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
         'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`.
-        Default is 'global'.
+    :param pop: Population to use for filtering by the `genetic_ancestry_label` key in
+        `freq_meta_expr`. Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
+    :param genetic_ancestry_label: Label defining the genetic ancestry groups. If None,
+        "gen_anc" or "pop" is used (in that order of preference) if present. Default is
+        None.
+    :param subset: Subset to use for filtering by the 'subset' key in
+        `freq_meta_expr`. Default is "None".
+    :param downsamplings: List of strings specifying what levels of downsamplings to obtain.
+    :return: ArrayExpression of indices of dictionaries in `freq_meta_expr` that only
+        have the "downsampling" key with specified `genetic_ancestry_label` and
+        "variant_quality" values.
     """
+    if genetic_ancestry_label is None:
+        gen_anc = ["gen_anc", "pop"]
+    else:
+        gen_anc = [genetic_ancestry_label]
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].get("group") == variant_quality)
-        & (f[1].get("pop") == pop)
+        & (hl.any([f[1].get(l, "") == pop for l in gen_anc]))
         & f[1].contains("downsampling")
+        & hl.literal(downsamplings).contains(hl.int(f[1].get("downsampling", "0")))
+        & (f[1].get("subset", "None") == subset)
     )
     # Get an array of indices and meta dictionaries sorted by "downsampling" key.
     return hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"]))
@@ -258,33 +277,47 @@ def downsampling_counts_expr(
     variant_quality: str = "adj",
     singleton: bool = False,
     max_af: Optional[float] = None,
+    genetic_ancestry_label: Optional[str] = None,
+    subset: Optional[str] = "None",
+    downsamplings: list = DOWNSAMPLINGS["v4"],
 ) -> hl.expr.ArrayExpression:
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
 
     The frequency metadata (`freq_meta_expr`) should be in a similar format to the
     `freq_meta` annotation added by `annotate_freq()`. Each downsampling should have
-    'group', 'pop', and 'downsampling' keys. Included downsamplings are those where
-    'group' == `variant_quality` and 'pop' == `pop`.
+    'group', `genetic_ancestry_label`, and 'downsampling' keys. Included downsamplings
+    are those where 'group' == `variant_quality` and `genetic_ancestry_label` == `pop`.
 
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations.
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
         element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
         'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param pop: Population to use for filtering by the 'pop' key in `freq_meta_expr`.
-        Default is 'global'.
+    :param pop: Population to use for filtering by the `genetic_ancestry_label` key in
+        `freq_meta_expr`. Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
     :param singleton: Whether to filter to only singletons before counting (AC == 1).
         Default is False.
     :param max_af: Maximum variant allele frequency to keep. By default no allele
         frequency cutoff is applied.
+    :param genetic_ancestry_label: Label defining the genetic ancestry groups. If None,
+        "gen_anc" or "pop" is used (in that order of preference) if present. Default is
+        None.
+    :param subset: Subset to use for filtering by the 'subset' key in
+        `freq_meta_expr`. Default is "None".
+    :param downsamplings: List of strings specifying what levels of downsamplings to obtain.
     :return: Aggregation Expression for an array of the variant counts in downsamplings
         for specified population.
     """
     # Get an array of indices sorted by "downsampling" key.
     sorted_indices = get_downsampling_freq_indices(
-        freq_meta_expr, pop, variant_quality
+        freq_meta_expr,
+        pop,
+        variant_quality,
+        genetic_ancestry_label,
+        subset,
+        downsamplings,
     ).map(lambda x: x[0])
 
     def _get_criteria(i: hl.expr.Int32Expression) -> hl.expr.Int32Expression:

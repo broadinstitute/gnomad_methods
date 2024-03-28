@@ -229,7 +229,7 @@ def count_variants_by_group(
 
 def get_downsampling_freq_indices(
     freq_meta_expr: hl.expr.ArrayExpression,
-    gen_anc: str = "global",
+    pop: str = "global",
     variant_quality: str = "adj",
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = "None",
@@ -241,7 +241,7 @@ def get_downsampling_freq_indices(
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
         element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
         'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param gen_anc: Genetic ancestry group to use for filtering by the `genetic_ancestry_label` key in
+    :param pop: Population to use for filtering by the `genetic_ancestry_label` key in
         `freq_meta_expr`. Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
@@ -261,7 +261,7 @@ def get_downsampling_freq_indices(
         gen_anc = [genetic_ancestry_label]
     indices = hl.enumerate(freq_meta_expr).filter(
         lambda f: (f[1].get("group") == variant_quality)
-        & (hl.any([f[1].get(l, "") == gen_anc for l in gen_anc]))
+        & (hl.any([f[1].get(l, "") == pop for l in gen_anc]))
         & f[1].contains("downsampling")
         & hl.literal(downsamplings).contains(hl.int(f[1].get("downsampling", "0")))
         & (f[1].get("subset", "None") == subset)
@@ -273,7 +273,7 @@ def get_downsampling_freq_indices(
 def downsampling_counts_expr(
     freq_expr: hl.expr.ArrayExpression,
     freq_meta_expr: hl.expr.ArrayExpression,
-    gen_anc: str = "global",
+    pop: str = "global",
     variant_quality: str = "adj",
     singleton: bool = False,
     max_af: Optional[float] = None,
@@ -293,7 +293,7 @@ def downsampling_counts_expr(
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
         element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
         'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param gen_anc: Genetic ancestry group to use for filtering by the `genetic_ancestry_label` key in
+    :param pop: Population to use for filtering by the `genetic_ancestry_label` key in
         `freq_meta_expr`. Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
@@ -313,7 +313,7 @@ def downsampling_counts_expr(
     # Get an array of indices sorted by "downsampling" key.
     sorted_indices = get_downsampling_freq_indices(
         freq_meta_expr,
-        gen_anc,
+        pop,
         variant_quality,
         genetic_ancestry_label,
         subset,
@@ -337,7 +337,7 @@ def downsampling_counts_expr(
 
     # Map `_get_criteria` function to each downsampling indexed by `sorted_indices` to
     # generate a list of 1's and 0's for each variant, where the length of the array is
-    # the total number of downsamplings for the specified genetic ancestry group and each element
+    # the total number of downsamplings for the specified population and each element
     # in the array indicates if the variant in the downsampling indexed by
     # `sorted_indices` meets the specified criteria.
     # Return an array sum aggregation that aggregates arrays generated from mapping.

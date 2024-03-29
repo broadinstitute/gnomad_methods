@@ -1158,7 +1158,7 @@ def make_vcf_filter_dict(
 def make_hist_bin_edges_expr(
     ht: hl.Table,
     hists: List[str] = HISTS,
-    row_name: str = "",
+    ann_with_hists: str = "",
     prefix: str = "",
     label_delimiter: str = "_",
     include_age_hists: bool = True,
@@ -1182,8 +1182,8 @@ def make_hist_bin_edges_expr(
         prefix += label_delimiter
 
     edges_dict = {}
-    if row_name and hasattr(ht[row_name], "histograms"):
-        ht_row = ht.head(1)[row_name]
+    if ann_with_hists and hasattr(ht[ann_with_hists], "histograms"):
+        ht_row = ht.head(1)[ann_with_hists]
     else:
         ht_row = ht.head(1)
 
@@ -1225,6 +1225,9 @@ def make_hist_dict(
     hist_metric_list: List[str] = HISTS,
     label_delimiter: str = "_",
     drop_n_smaller_larger: bool = False,
+    prefix: str = "",
+    suffix: str = "",
+    description_text: str = "",
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
@@ -1234,8 +1237,16 @@ def make_hist_dict(
     :param hist_metric_list: List of hists for which to build hist info dict
     :param label_delimiter: String used as delimiter in values stored in hist_metric_list.
     :param drop_n_smaller_larger: Whether to drop n_smaller and n_larger annotations from header dict. Default is False.
+    :param prefix: Prefix text for histogram annotations. Default is empty string.
+    :param suffix: Suffix text for histogram annotations. Default is empty string.
+    :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
+    if prefix != "":
+        prefix = f"{prefix}{label_delimiter}"
+    if suffix != "":
+        suffix = f"{label_delimiter}{suffix}"
+
     header_hist_dict = {}
     for hist in hist_metric_list:
         # Get hists for both raw and adj data
@@ -1253,9 +1264,12 @@ def make_hist_dict(
             hist_text = hist_text + " calculated on high quality genotypes"
 
         hist_dict = {
-            f"{hist}_bin_freq": {
+            f"{prefix}{hist}_bin_freq{suffix}": {
                 "Number": "A",
-                "Description": f"Histogram for {hist_text}; bin edges are: {edges}",
+                "Description": (
+                    f"Histogram for {hist_text}{description_text}; bin edges are:"
+                    f" {edges}"
+                ),
             },
         }
         # These annotations are frequently zero and are dropped from gnomad
@@ -1263,18 +1277,18 @@ def make_hist_dict(
         if not drop_n_smaller_larger:
             hist_dict.update(
                 {
-                    f"{hist}_n_smaller": {
+                    f"{prefix}{hist}_n_smaller{suffix}": {
                         "Number": "A",
                         "Description": (
                             f"Count of {hist_fields[0].upper()} values falling below"
-                            f" lowest histogram bin edge {hist_text}"
+                            f" lowest histogram bin edge {hist_text}{description_text}"
                         ),
                     },
-                    f"{hist}_n_larger": {
+                    f"{prefix}{hist}_n_larger{suffix}": {
                         "Number": "A",
                         "Description": (
                             f"Count of {hist_fields[0].upper()} values falling above"
-                            f" highest histogram bin edge {hist_text}"
+                            f" highest histogram bin edge {hist_text}{description_text}"
                         ),
                     },
                 }
@@ -1283,11 +1297,11 @@ def make_hist_dict(
         if "dp" in hist:
             hist_dict.update(
                 {
-                    f"{hist}_n_larger": {
+                    f"{prefix}{hist}_n_larger{suffix}": {
                         "Number": "A",
                         "Description": (
                             f"Count of {hist_fields[0].upper()} values falling above"
-                            f" highest histogram bin edge {hist_text}"
+                            f" highest histogram bin edge {hist_text}{description_text}"
                         ),
                     },
                 }

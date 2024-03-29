@@ -1168,7 +1168,7 @@ def make_hist_bin_edges_expr(
 
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
-    :param row_name: Name of row annotation containing histogram data. In exomes or
+    :param ann_with_hists: Name of row annotation containing histogram data. In exomes or
         genomes release HT, `histograms` is a row, but in the joint releast HT, it's
         under the row of `exomes`, `genomes`, or `joint`.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.

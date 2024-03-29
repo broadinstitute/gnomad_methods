@@ -1158,6 +1158,7 @@ def make_vcf_filter_dict(
 def make_hist_bin_edges_expr(
     ht: hl.Table,
     hists: List[str] = HISTS,
+    row_name: str = "",
     prefix: str = "",
     label_delimiter: str = "_",
     include_age_hists: bool = True,
@@ -1167,24 +1168,32 @@ def make_hist_bin_edges_expr(
 
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
+    :param row_name: Name of row annotation containing histogram data. In exomes or
+        genomes release HT, `histograms` is a row, but in the joint releast HT, it's
+        under the row of `exomes`, `genomes`, or `joint`.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
     :param label_delimiter: String used as delimiter between prefix and histogram annotation.
     :param include_age_hists: Include age histogram annotations.
-    :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
+    :return: Dictionary keyed by histogram annotation name, with corresponding
+        reformatted bin edges for values.
     """
     # Add underscore to prefix if it isn't empty
     if prefix != "":
         prefix += label_delimiter
 
     edges_dict = {}
+    if row_name and hasattr(ht[row_name], "histograms"):
+        ht_row = ht.head(1)[row_name]
+    else:
+        ht_row = ht.head(1)
+
     if include_age_hists:
         edges_dict.update(
             {
                 f"{prefix}{call_type}": "|".join(
                     map(
                         lambda x: f"{x:.1f}",
-                        ht.head(1)
-                        .histograms.age_hists[f"age_hist_{call_type}"]
+                        ht_row.histograms.age_hists[f"age_hist_{call_type}"]
                         .collect()[0]
                         .bin_edges,
                     )
@@ -1203,7 +1212,7 @@ def make_hist_bin_edges_expr(
             edges_dict[hist_name] = "|".join(
                 map(
                     lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
-                    ht.head(1).histograms[hist_type][hist].collect()[0].bin_edges,
+                    ht_row.histograms[hist_type][hist].collect()[0].bin_edges,
                 )
             )
 

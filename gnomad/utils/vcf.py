@@ -17,6 +17,7 @@ SORT_ORDER = [
     "subset",
     "downsampling",
     "popmax",
+    "grpmax",
     "pop",
     "gen_anc",
     "subpop",
@@ -38,7 +39,10 @@ HISTS = ["gq_hist_alt", "gq_hist_all", "dp_hist_alt", "dp_hist_all", "ab_hist_al
 Quality histograms used in VCF export.
 """
 
-FAF_POPS = ["afr", "amr", "eas", "nfe", "sas"]
+FAF_POPS = {
+    "v3": ["afr", "amr", "eas", "nfe", "sas"],
+    "v4": ["afr", "amr", "eas", "mid", "nfe", "sas"],
+}
 """
 Global populations that are included in filtering allele frequency (faf) calculations. Used in VCF export.
 """
@@ -95,7 +99,7 @@ ALLELE_TYPE_FIELDS = [
 Allele-type annotations.
 """
 
-REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "segdup"]
+REGION_FLAG_FIELDS = ["decoy", "lcr", "nonpar", "non_par", "segdup"]
 """
 Annotations about variant region type.
 
@@ -144,6 +148,14 @@ INFO_DICT = {
             " heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
         ),
     },
+    "inbreeding_coeff": {
+        "Number": "A",
+        "Description": (
+            "Inbreeding coefficient, the excess heterozygosity at a variant site,"
+            " computed as 1 - (the number of heterozygous genotypes)/(the number of"
+            " heterozygous genotypes expected under Hardy-Weinberg equilibrium)"
+        ),
+    },
     "MQ": {
         "Description": (
             "Root mean square of the mapping quality of reads across all samples"
@@ -180,6 +192,18 @@ INFO_DICT = {
             " variants for VQSR"
         )
     },
+    "positive_train_site": {
+        "Description": (
+            "Variant was used to build the positive training set of high-quality"
+            " variants for VQSR"
+        )
+    },
+    "negative_train_site": {
+        "Description": (
+            "Variant was used to build the negative training set of low-quality"
+            " variants for VQSR"
+        )
+    },
     "BaseQRankSum": {
         "Description": (
             "Z-score from Wilcoxon rank sum test of alternate vs. reference base"
@@ -207,7 +231,25 @@ INFO_DICT = {
             "Variant (on sex chromosome) falls outside a pseudoautosomal region"
         )
     },
+    "non_par": {
+        "Description": (
+            "Variant (on sex chromosome) falls outside a pseudoautosomal region"
+        )
+    },
     "segdup": {"Description": "Variant falls within a segmental duplication region"},
+    "fail_interval_qc": {
+        "Description": (
+            "Less than 85 percent of samples meet 20X coverage if variant is in"
+            " autosomal or PAR regions or 10X coverage for non-PAR regions of"
+            " chromosomes X and Y."
+        )
+    },
+    "outside_ukb_capture_region": {
+        "Description": "Variant falls outside of UK Biobank exome capture regions."
+    },
+    "outside_broad_capture_region": {
+        "Description": "Variant falls outside of Broad exome capture regions."
+    },
     "rf_positive_label": {
         "Description": (
             "Variant was labelled as a positive example for training of random forest"
@@ -233,6 +275,12 @@ INFO_DICT = {
             "Variant was a callset-wide doubleton that was transmitted within a family"
             " from a parent to a child (i.e., a singleton amongst unrelated samples in"
             " cohort)"
+        )
+    },
+    "sibling_singleton": {
+        "Description": (
+            "Variant was a callset-wide doubleton that was present only in two siblings"
+            " (i.e., a singleton amongst unrelated samples in cohort)."
         )
     },
     "original_alleles": {"Description": "Alleles before splitting multiallelics"},
@@ -263,6 +311,7 @@ INFO_DICT = {
     "monoallelic": {
         "Description": "All samples are homozygous alternate for the variant"
     },
+    "only_het": {"Description": "All samples are heterozygous for the variant"},
     "QUALapprox": {
         "Number": "1",
         "Description": "Sum of PL[0] values; used to approximate the QUAL score",
@@ -297,31 +346,58 @@ IN_SILICO_ANNOTATIONS_INFO_DICT = {
             " deleterious."
         ),
     },
-    "revel_score": {
+    "revel_max": {
         "Number": "1",
         "Description": (
-            "dbNSFP's Revel score from 0 to 1. Variants with higher scores are"
-            " predicted to be more likely to be deleterious."
+            "The maximum REVEL score at a site's MANE Select or canonical"
+            " transcript. It's an ensemble score for predicting the pathogenicity of"
+            " missense variants (based on 13 other variant predictors). Scores ranges"
+            " from 0 to 1. Variants with higher scores are predicted to be more likely"
+            " to be deleterious."
         ),
     },
-    "splice_ai_max_ds": {
+    "spliceai_ds_max": {
         "Number": "1",
         "Description": (
             "Illumina's SpliceAI max delta score; interpreted as the probability of the"
             " variant being splice-altering."
         ),
     },
-    "splice_ai_consequence": {
-        "Description": (
-            "The consequence term associated with the max delta score in"
-            " 'splice_ai_max_ds'."
-        ),
-    },
-    "primate_ai_score": {
+    "pangolin_largest_ds": {
         "Number": "1",
         "Description": (
-            "PrimateAI's deleteriousness score from 0 (less deleterious) to 1 (more"
-            " deleterious)."
+            "Pangolin's largest delta score across 2 splicing consequences, which"
+            " reflects the probability of the variant being splice-altering"
+        ),
+    },
+    "phylop": {
+        "Number": "1",
+        "Description": (
+            "Base-wise conservation score across the 241 placental mammals in the"
+            " Zoonomia project. Score ranges from -20 to 9.28, and reflects"
+            " acceleration (faster evolution than expected under neutral drift,"
+            " assigned negative scores) as well as conservation (slower than expected"
+            " evolution, assigned positive scores)."
+        ),
+    },
+    "sift_max": {
+        "Number": "1",
+        "Description": (
+            "Score reflecting the scaled probability of the amino acid substitution"
+            " being tolerated, ranging from 0 to 1. Scores below 0.05 are predicted to"
+            " impact protein function. We prioritize max scores for MANE Select"
+            " transcripts where possible and otherwise report a score for the canonical"
+            " transcript."
+        ),
+    },
+    "polyphen_max": {
+        "Number": "1",
+        "Description": (
+            "Score that predicts the possible impact of an amino acid substitution on"
+            " the structure and function of a human protein, ranging from 0.0"
+            " (tolerated) to 1.0 (deleterious).  We prioritize max scores for MANE"
+            " Select transcripts where possible and otherwise report a score for the"
+            " canonical transcript."
         ),
     },
 }
@@ -353,7 +429,7 @@ VRS_FIELDS_DICT = {
         ),
     },
     "VRS_States": {
-        "Number": "R",
+        "Number": ".",
         "Description": (
             "The literal sequence states used for the GA4GH VRS Alleles corresponding"
             " to the values in the REF and ALT fields"
@@ -483,12 +559,17 @@ def adjust_vcf_incompatible_types(
     for f, ft in ht.info.dtype.items():
         if ft == hl.dtype("int64"):
             logger.warning(
-                "Coercing field info.%s from int64 to int32 for VCF output. Value will"
-                " be capped at int32 max value.",
+                "Coercing field info.%s from int64 to int32 for VCF output. Value"
+                " will be capped at int32 max value.",
                 f,
             )
             info_type_convert_expr.update(
-                {f: hl.int32(hl.min(2**31 - 1, ht.info[f]))}
+                {
+                    f: hl.or_missing(
+                        hl.is_defined(ht.info[f]),
+                        hl.int32(hl.min(2**31 - 1, ht.info[f])),
+                    )
+                }
             )
         elif ft == hl.dtype("array<int64>"):
             logger.warning(
@@ -497,7 +578,13 @@ def adjust_vcf_incompatible_types(
                 f,
             )
             info_type_convert_expr.update(
-                {f: ht.info[f].map(lambda x: hl.int32(hl.min(2**31 - 1, x)))}
+                {
+                    f: ht.info[f].map(
+                        lambda x: hl.or_missing(
+                            hl.is_defined(x), hl.int32(hl.min(2**31 - 1, x))
+                        )
+                    )
+                }
             )
 
     ht = ht.annotate(info=ht.info.annotate(**info_type_convert_expr))
@@ -596,7 +683,7 @@ def make_combo_header_text(
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
 
     For example, if preposition is "for", group_types is ["group", "pop", "sex"], and combo_fields is ["adj", "afr", "female"],
-    this function will return the string " for female samples of African-American/African ancestry".
+    this function will return the string " for female samples in the African-American/African genetic ancestry group".
 
     :param preposition: Relevant preposition to precede automatically generated text.
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
@@ -619,11 +706,15 @@ def make_combo_header_text(
     if "subpop" in combo_dict or "pop" in combo_dict:
         if "subpop" in combo_dict:
             header_text = (
-                header_text + f" of {pop_names[combo_dict['subpop']]} ancestry"
+                header_text
+                + f" in the {pop_names[combo_dict['subpop']]} genetic ancestry subgroup"
             )
 
         else:
-            header_text = header_text + f" of {pop_names[combo_dict['pop']]} ancestry"
+            header_text = (
+                header_text
+                + f" in the {pop_names[combo_dict['pop']]} genetic ancestry group"
+            )
 
     if "group" in combo_dict:
         if combo_dict["group"] == "raw":
@@ -661,6 +752,7 @@ def create_label_groups(
 
 def make_info_dict(
     prefix: str = "",
+    suffix: str = "",
     prefix_before_metric: bool = True,
     pop_names: Dict[str, str] = POP_NAMES,
     label_groups: Dict[str, List[str]] = None,
@@ -668,8 +760,11 @@ def make_info_dict(
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
     popmax: bool = False,
+    grpmax: bool = False,
+    fafmax: bool = False,
+    callstats: bool = False,
     description_text: str = "",
-    age_hist_data: str = None,
+    age_hist_distribution: str = None,
     sort_order: List[str] = SORT_ORDER,
 ) -> Dict[str, Dict[str, str]]:
     """
@@ -684,6 +779,7 @@ def make_info_dict(
         - INFO fields for filtering allele frequency (faf) annotations
 
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
+    :param suffix: Suffix string for data, e.g. "gnomAD". Default is empty string.
     :param prefix_before_metric: Whether prefix should be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
     :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
@@ -692,57 +788,61 @@ def make_info_dict(
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
+    :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
+    :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
-    :param str age_hist_data: Pipe-delimited string of age histograms, from `get_age_distributions`.
+    :param str age_hist_distribution: Pipe-delimited string of overall age distribution.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :return: Dictionary keyed by VCF INFO annotations, where values are dictionaries of Number and Description attributes.
     """
     if prefix != "":
         prefix = f"{prefix}{label_delimiter}"
+    if suffix != "":
+        suffix = f"{label_delimiter}{suffix}"
 
     info_dict = dict()
 
-    if age_hist_data:
+    if age_hist_distribution:
         age_hist_dict = {
-            f"{prefix}age_hist_het_bin_freq": {
+            f"{prefix}age_hist_het_bin_freq{suffix}": {
                 "Number": "A",
                 "Description": (
                     f"Histogram of ages of heterozygous individuals{description_text};"
                     f" bin edges are: {bin_edges['het']}; total number of individuals"
-                    f" of any genotype bin: {age_hist_data}"
+                    f" of any genotype bin: {age_hist_distribution}"
                 ),
             },
-            f"{prefix}age_hist_het_n_smaller": {
+            f"{prefix}age_hist_het_n_smaller{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling below lowest histogram bin edge for"
                     f" heterozygous individuals{description_text}"
                 ),
             },
-            f"{prefix}age_hist_het_n_larger": {
+            f"{prefix}age_hist_het_n_larger{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling above highest histogram bin edge for"
                     f" heterozygous individuals{description_text}"
                 ),
             },
-            f"{prefix}age_hist_hom_bin_freq": {
+            f"{prefix}age_hist_hom_bin_freq{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Histogram of ages of homozygous alternate"
                     f" individuals{description_text}; bin edges are:"
                     f" {bin_edges['hom']}; total number of individuals of any genotype"
-                    f" bin: {age_hist_data}"
+                    f" bin: {age_hist_distribution}"
                 ),
             },
-            f"{prefix}age_hist_hom_n_smaller": {
+            f"{prefix}age_hist_hom_n_smaller{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling below lowest histogram bin edge for"
                     f" homozygous alternate individuals{description_text}"
                 ),
             },
-            f"{prefix}age_hist_hom_n_larger": {
+            f"{prefix}age_hist_hom_n_larger{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of age values falling above highest histogram bin edge for"
@@ -754,40 +854,40 @@ def make_info_dict(
 
     if popmax:
         popmax_dict = {
-            f"{prefix}popmax": {
+            f"{prefix}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
-                    f"Population with maximum allele frequency{description_text}"
+                    f"Population with the maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}AC{label_delimiter}popmax": {
+            f"{prefix}AC{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Allele count in the population with the maximum allele"
                     f" frequency{description_text}"
                 ),
             },
-            f"{prefix}AN{label_delimiter}popmax": {
+            f"{prefix}AN{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Total number of alleles in the population with the maximum allele"
                     f" frequency{description_text}"
                 ),
             },
-            f"{prefix}AF{label_delimiter}popmax": {
+            f"{prefix}AF{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     f"Maximum allele frequency across populations{description_text}"
                 ),
             },
-            f"{prefix}nhomalt{label_delimiter}popmax": {
+            f"{prefix}nhomalt{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Count of homozygous individuals in the population with the"
                     f" maximum allele frequency{description_text}"
                 ),
             },
-            f"{prefix}faf95{label_delimiter}popmax": {
+            f"{prefix}faf95{label_delimiter}popmax{suffix}": {
                 "Number": "A",
                 "Description": (
                     "Filtering allele frequency (using Poisson 95% CI) for the"
@@ -796,8 +896,93 @@ def make_info_dict(
             },
         }
         info_dict.update(popmax_dict)
+    if grpmax:
+        grpmax_dict = {
+            f"{prefix}grpmax{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Genetic ancestry group with the maximum allele"
+                    f" frequency{description_text}"
+                ),
+            },
+            f"{prefix}AC{label_delimiter}grpmax{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Allele count in the genetic ancestry group with the maximum allele"
+                    f" frequency{description_text}"
+                ),
+            },
+            f"{prefix}AN{label_delimiter}grpmax{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Total number of alleles in the genetic ancestry group with the"
+                    f" maximum allele frequency{description_text}"
+                ),
+            },
+            f"{prefix}AF{label_delimiter}grpmax{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Maximum allele frequency across genetic ancestry"
+                    f" groups{description_text}"
+                ),
+            },
+            f"{prefix}nhomalt{label_delimiter}grpmax{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Count of homozygous individuals in the genetic ancestry group"
+                    f" with the maximum allele frequency{description_text}"
+                ),
+            },
+        }
+        info_dict.update(grpmax_dict)
 
-    else:
+    if fafmax:
+        fafmax_dict = {
+            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Maximum filtering allele frequency (using Poisson 95% CI)"
+                    f" across genetic ancestry groups{description_text}"
+                ),
+            },
+            f"{prefix}fafmax{label_delimiter}faf95{label_delimiter}max{label_delimiter}gen{label_delimiter}anc{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Genetic ancestry group with maximum filtering allele"
+                    f" frequency (using Poisson 95% CI){description_text}"
+                ),
+            },
+            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Maximum filtering allele frequency (using Poisson 99% CI)"
+                    f" across genetic ancestry groups{description_text}"
+                ),
+            },
+            f"{prefix}fafmax{label_delimiter}faf99{label_delimiter}max{label_delimiter}gen{label_delimiter}anc{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Genetic ancestry group with maximum filtering allele"
+                    f" frequency (using Poisson 99% CI){description_text}"
+                ),
+            },
+        }
+        if prefix == "joint_" or suffix == "_joint":
+            fafmax_dict.update(
+                {
+                    f"{prefix}fafmax{label_delimiter}data{label_delimiter}type{suffix}": {
+                        "Number": "A",
+                        "Description": (
+                            "Data type with maximum filtering allele frequency"
+                            f" {description_text}"
+                        ),
+                    },
+                }
+            )
+
+        info_dict.update(fafmax_dict)
+
+    if callstats or faf:
         group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
         combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 
@@ -811,12 +996,12 @@ def make_info_dict(
             metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
             if prefix_before_metric:
                 metric_label_dict = {
-                    metric: f"{prefix}{metric}{label_delimiter}{combo}"
+                    metric: f"{prefix}{metric}{label_delimiter}{combo}{suffix}"
                     for metric in metrics
                 }
             else:
                 metric_label_dict = {
-                    metric: f"{metric}{label_delimiter}{prefix}{combo}"
+                    metric: f"{metric}{label_delimiter}{prefix}{combo}{suffix}"
                     for metric in metrics
                 }
 
@@ -960,7 +1145,9 @@ def make_vcf_filter_dict(
                 " < 20; DP < 10; and AB < 0.2 for het calls)"
             )
         },
-        "InbreedingCoeff": {"Description": f"InbreedingCoeff < {inbreeding_cutoff}"},
+        "InbreedingCoeff": {
+            "Description": f"Inbreeding coefficient < {inbreeding_cutoff}"
+        },
         "PASS": {"Description": "Passed all variant filters"},
         variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
     }
@@ -996,7 +1183,10 @@ def make_hist_bin_edges_expr(
                 f"{prefix}{call_type}": "|".join(
                     map(
                         lambda x: f"{x:.1f}",
-                        ht.head(1)[f"age_hist_{call_type}"].collect()[0].bin_edges,
+                        ht.head(1)
+                        .histograms.age_hists[f"age_hist_{call_type}"]
+                        .collect()[0]
+                        .bin_edges,
                     )
                 )
                 for call_type in ["het", "hom"]
@@ -1013,7 +1203,7 @@ def make_hist_bin_edges_expr(
             edges_dict[hist_name] = "|".join(
                 map(
                     lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
-                    ht.head(1)[hist_type][hist].collect()[0].bin_edges,
+                    ht.head(1).histograms[hist_type][hist].collect()[0].bin_edges,
                 )
             )
 
@@ -1025,6 +1215,7 @@ def make_hist_dict(
     adj: bool,
     hist_metric_list: List[str] = HISTS,
     label_delimiter: str = "_",
+    drop_n_smaller_larger: bool = False,
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
@@ -1033,6 +1224,7 @@ def make_hist_dict(
     :param adj: Whether to create a header dict for raw or adj quality histograms.
     :param hist_metric_list: List of hists for which to build hist info dict
     :param label_delimiter: String used as delimiter in values stored in hist_metric_list.
+    :param drop_n_smaller_larger: Whether to drop n_smaller and n_larger annotations from header dict. Default is False.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
     header_hist_dict = {}
@@ -1056,21 +1248,41 @@ def make_hist_dict(
                 "Number": "A",
                 "Description": f"Histogram for {hist_text}; bin edges are: {edges}",
             },
-            f"{hist}_n_smaller": {
-                "Number": "A",
-                "Description": (
-                    f"Count of {hist_fields[0].upper()} values falling below lowest"
-                    f" histogram bin edge {hist_text}"
-                ),
-            },
-            f"{hist}_n_larger": {
-                "Number": "A",
-                "Description": (
-                    f"Count of {hist_fields[0].upper()} values falling above highest"
-                    f" histogram bin edge {hist_text}"
-                ),
-            },
         }
+        # These annotations are frequently zero and are dropped from gnomad
+        # releases for most histograms.
+        if not drop_n_smaller_larger:
+            hist_dict.update(
+                {
+                    f"{hist}_n_smaller": {
+                        "Number": "A",
+                        "Description": (
+                            f"Count of {hist_fields[0].upper()} values falling below"
+                            f" lowest histogram bin edge {hist_text}"
+                        ),
+                    },
+                    f"{hist}_n_larger": {
+                        "Number": "A",
+                        "Description": (
+                            f"Count of {hist_fields[0].upper()} values falling above"
+                            f" highest histogram bin edge {hist_text}"
+                        ),
+                    },
+                }
+            )
+        # Only add n_larger for dp qual histograms.
+        if "dp" in hist:
+            hist_dict.update(
+                {
+                    f"{hist}_n_larger": {
+                        "Number": "A",
+                        "Description": (
+                            f"Count of {hist_fields[0].upper()} values falling above"
+                            f" highest histogram bin edge {hist_text}"
+                        ),
+                    },
+                }
+            )
 
         header_hist_dict.update(hist_dict)
 
@@ -1105,8 +1317,8 @@ def set_female_y_metrics_to_na(
 def build_vcf_export_reference(
     name: str,
     build: str = "GRCh38",
-    keep_contigs: List[str] = [f"chr{i}" for i in range(1, 23)]
-    + ["chrX", "chrY", "chrM"],
+    keep_contigs: List[str] = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"],
+    keep_chrM: bool = True,
 ) -> hl.ReferenceGenome:
     """
     Create export reference based on reference genome defined by `build`.
@@ -1117,23 +1329,32 @@ def build_vcf_export_reference(
 
     :param name: Name to use for new reference.
     :param build: Reference genome build to use as starting reference genome.
-    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is autosomes, sex chromosomes, and chrM.
+    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is autosomes and sex chromosomes.
+    :param keep_chrM: Whether to keep chrM. Default is True.
     :return: Reference genome for VCF export containing only contigs in `keep_contigs`.
     """
     ref = hl.get_reference(build)
+    ref_args = {}
 
-    export_reference = hl.ReferenceGenome(
-        name=name,
-        contigs=keep_contigs,
-        lengths={contig: ref.lengths[contig] for contig in keep_contigs},
-        x_contigs=ref.x_contigs,
-        y_contigs=ref.y_contigs,
-        par=[
-            (interval.start.contig, interval.start.position, interval.end.position)
-            for interval in ref.par
-        ],
-        mt_contigs=ref.mt_contigs,
+    if keep_chrM:
+        keep_contigs.extend(ref.mt_contigs)
+        ref_args.update({"mt_contigs": ref.mt_contigs})
+
+    ref_args.update(
+        {
+            "name": name,
+            "contigs": keep_contigs,
+            "lengths": {contig: ref.lengths[contig] for contig in keep_contigs},
+            "x_contigs": ref.x_contigs,
+            "y_contigs": ref.y_contigs,
+            "par": [
+                (interval.start.contig, interval.start.position, interval.end.position)
+                for interval in ref.par
+            ],
+        }
     )
+
+    export_reference = hl.ReferenceGenome(**ref_args)
 
     return export_reference
 

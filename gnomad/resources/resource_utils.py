@@ -109,16 +109,23 @@ class TableResource(BaseResource):
 
     expected_file_extensions: List[str] = [".ht"]
 
-    def ht(self, force_import: bool = False) -> hl.Table:
+    def ht(
+        self,
+        force_import: bool = False,
+        read_args: Optional[Dict[str, Any]] = None,
+    ) -> hl.Table:
         """
         Read and return the Hail Table resource.
 
+        :param force_import: If ``True``, force the import of the resource even if it
+            already exists.
+        :param read_args: Any additional arguments to pass to hl.read_table.
         :return: Hail Table resource
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.read_table(self.path)
+            return hl.read_table(self.path, **(read_args or {}))
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
@@ -144,16 +151,23 @@ class MatrixTableResource(BaseResource):
 
     expected_file_extensions: List[str] = [".mt"]
 
-    def mt(self, force_import: bool = False) -> hl.MatrixTable:
+    def mt(
+        self,
+        force_import: bool = False,
+        read_args: Optional[Dict[str, Any]] = None,
+    ) -> hl.MatrixTable:
         """
         Read and return the Hail MatrixTable resource.
 
+        :param force_import: If ``True``, force the import of the resource even if it
+            already exists.
+        :param read_args: Any additional arguments to pass to hl.read_matrix_table.
         :return: Hail MatrixTable resource
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.read_matrix_table(self.path)
+            return hl.read_matrix_table(self.path, **(read_args or {}))
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
@@ -179,16 +193,23 @@ class VariantDatasetResource(BaseResource):
 
     expected_file_extensions: List[str] = [".vds"]
 
-    def vds(self, force_import: bool = False) -> hl.vds.VariantDataset:
+    def vds(
+        self,
+        force_import: bool = False,
+        read_args: Optional[Dict[str, Any]] = None,
+    ) -> hl.vds.VariantDataset:
         """
         Read and return the Hail VariantDataset resource.
 
+        :param force_import: If ``True``, force the import of the resource even if it
+            already exists.
+        :param read_args: Any additional arguments to pass to hl.vds.read_vds.
         :return: Hail VariantDataset resource
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.vds.read_vds(self.path)
+            return hl.vds.read_vds(self.path, **(read_args or {}))
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
@@ -283,13 +304,14 @@ class BlockMatrixResource(BaseResource):
 
     expected_file_extensions: List[str] = [".bm"]
 
-    def bm(self) -> BlockMatrix:
+    def bm(self, read_args: Optional[Dict[str, Any]] = None) -> BlockMatrix:
         """
         Read and return the Hail MatrixTable resource.
 
+        :param read_args: Any additional arguments to pass to BlockMatrix.read.
         :return: Hail MatrixTable resource
         """
-        return BlockMatrix.read(self.path)
+        return BlockMatrix.read(self.path, **(read_args or {}))
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
@@ -318,16 +340,23 @@ class ExpressionResource(BaseResource):
 
     expected_file_extensions: List[str] = [".he"]
 
-    def he(self, force_import: bool = False) -> hl.expr.Expression:
+    def he(
+        self,
+        force_import: bool = False,
+        read_args: Optional[Dict[str, Any]] = None,
+    ) -> hl.expr.Expression:
         """
         Read and return the Hail Expression resource.
 
+        :param force_import: If ``True``, force the import of the resource even if it
+            already exists.
+        :param read_args: Any additional arguments to pass to hl.experimental.read_expression.
         :return: Hail Expression resource.
         """
         if self.path is None or force_import:
             return self.import_func(**self.import_args)
         else:
-            return hl.experimental.read_expression(self.path)
+            return hl.experimental.read_expression(self.path, **(read_args or {}))
 
     def import_resource(self, overwrite: bool = True, **kwargs) -> None:
         """
@@ -687,3 +716,21 @@ DBSNP_B154_CHR_CONTIG_RECODING = {
 def import_sites_vcf(**kwargs) -> hl.Table:
     """Import site-level data from a VCF into a Hail Table."""
     return hl.import_vcf(**kwargs).rows()
+
+
+def import_gencode(gtf_path: str, **kwargs) -> hl.Table:
+    """
+    Import GENCODE annotations GTF file as a Hail Table.
+
+    :param gtf_path: Path to GENCODE GTF file.
+    :return: Table with GENCODE annotation information.
+    """
+    ht = hl.experimental.import_gtf(gtf_path, **kwargs)
+
+    # Only get gene and transcript stable IDs (without version numbers if they
+    # exist), early versions of GENCODE have no version numbers but later ones do.
+    ht = ht.annotate(
+        gene_id=ht.gene_id.split("\\.")[0],
+        transcript_id=ht.transcript_id.split("\\.")[0],
+    )
+    return ht

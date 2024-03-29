@@ -10,6 +10,7 @@ from gnomad.utils.vep import (
     LOF_CSQ_SET,
     add_most_severe_consequence_to_consequence,
     filter_vep_to_canonical_transcripts,
+    filter_vep_to_mane_select_transcripts,
     get_most_severe_consequence_for_summary,
     process_consequences,
 )
@@ -167,6 +168,8 @@ def get_summary_counts(
     freq_field: str = "freq",
     filter_field: str = "filters",
     filter_decoy: bool = False,
+    canonical_only: bool = True,
+    mane_select_only: bool = False,
     index: int = 0,
 ) -> hl.Table:
     """
@@ -186,8 +189,9 @@ def get_summary_counts(
 
     Before calculating summary counts, function:
         - Filters out low confidence regions
-        - Filters to canonical transcripts
         - Uses the most severe consequence
+        - Filters to canonical transcripts (if `canonical_only` is True) or MANE Select
+          transcripts (if `mane_select_only` is True)
 
     Assumes that:
         - Input HT is annotated with VEP.
@@ -198,10 +202,17 @@ def get_summary_counts(
     :param ht: Input Table.
     :param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
     :param filter_field: Name of field in HT containing variant filter information. Default is "filters".
+    :param canonical_only: Whether to filter to canonical transcripts. Default is True.
+    :param mane_select_only: Whether to filter to MANE Select transcripts. Default is False.
     :param filter_decoy: Whether to filter decoy regions. Default is False.
     :param index: Which index of freq_expr to use for annotation. Default is 0.
     :return: Table grouped by frequency bin and aggregated across summary count categories.
     """
+    if canonical_only and mane_select_only:
+        raise ValueError(
+            "Only one of `canonical_only` and `mane_select_only` can be True."
+        )
+
     logger.info("Checking if multi-allelic variants have been split...")
     max_alleles = ht.aggregate(hl.agg.max(hl.len(ht.alleles)))
     if max_alleles > 2:
@@ -212,10 +223,14 @@ def get_summary_counts(
     ht = ht.filter((hl.len(ht[filter_field]) == 0))
     ht = filter_low_conf_regions(ht, filter_decoy=filter_decoy)
 
-    logger.info(
-        "Filtering to canonical transcripts and getting VEP summary annotations..."
-    )
-    ht = filter_vep_to_canonical_transcripts(ht)
+    if canonical_only:
+        logger.info("Filtering to canonical transcripts...")
+        ht = filter_vep_to_canonical_transcripts(ht)
+    elif mane_select_only:
+        logger.info("Filtering to mane select transcripts...")
+        ht = filter_vep_to_mane_select_transcripts(ht)
+
+    logger.info("Getting VEP summary annotations...")
     ht = get_most_severe_consequence_for_summary(ht)
 
     logger.info("Annotating with frequency bin information...")

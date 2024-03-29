@@ -7,8 +7,59 @@ from gnomad.resources.resource_utils import (
     GnomadPublicTableResource,
     VersionedMatrixTableResource,
     VersionedTableResource,
+    import_gencode,
     import_sites_vcf,
 )
+
+
+def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
+    """
+    Import GTEx RSEM data from expression data and sample attributes file.
+
+    .. note::
+
+        Files are downloaded from https://www.gtexportal.org/home/downloads/adult-gtex.
+        We get the transcript TPM under Bulk tissue expression and sample attributes
+        under Metadata. The transcript TPM file is expected to have transcript
+        expression data, with transcript IDs as the first column and gene IDs as the
+        second column.
+
+    :param gtex_path: Path to the GTEx RSEM file.
+    :param meta_path: Path to the GTEx sample attributes file.
+    :param kwargs: Any additional parameters to be passed to Hail's `import_matrix_table`.
+    :return: Matrix Table with GTEx RSEM data with tissue information.
+    """
+    meta_ht = hl.import_table(meta_path, force_bgz=True, impute=True)
+    meta_ht = meta_ht.key_by("SAMPID")
+
+    mt = hl.import_matrix_table(
+        gtex_path,
+        row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
+        entry_type=hl.tfloat64,
+        force_bgz=True,
+        **kwargs,
+    )
+
+    mt = mt.rename({"x": "transcript_tpm", "col_id": "s"})
+
+    # GTEx data has gene IDs and transcript IDs with version numbers, we need
+    # to remove the version numbers so that it can later be joined with VEP
+    # transcript consequences transcript_id.
+    mt = mt.annotate_cols(
+        tissue=meta_ht[mt.s]
+        .SMTSD.replace(" ", "")
+        .replace("-", "_")
+        .replace("\\(", "_")
+        .replace("\\)", "")
+    )
+    mt = mt.annotate_rows(
+        transcript_id=mt.transcript_id.split("\\.")[0],
+        gene_id=mt.gene_id.split("\\.")[0],
+    )
+    mt = mt.key_rows_by("transcript_id").drop("row_id")
+
+    return mt
+
 
 na12878_giab = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch37/na12878/NA12878_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-Solid-10X_CHROM1-X_v3.3_highconf.mt",
@@ -287,3 +338,35 @@ def get_truth_ht() -> hl.Table:
         .repartition(200, shuffle=False)
         .persist()
     )
+
+
+gtex_rsem = VersionedMatrixTableResource(
+    default_version="v7",
+    versions={
+        "v7": GnomadPublicMatrixTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch37/gtex_rsem/gtex_rsem_v7.mt",
+            import_func=_import_gtex_rsem,
+            import_args={
+                "gtex_path": "gs://gcp-public-data--gnomad/resources/grch37/gtex/bulk-gex_v7_rna-seq_GTEx_Analysis_2016-01-15_v7_RSEMv1.2.22_transcript_tpm.txt.gz",
+                "meta_path": "gs://gcp-public-data--gnomad/resources/grch37/gtex/annotations_v7_GTEx_v7_Annotations_SampleAttributesDS.txt.gz",
+                "min_partitions": 1000,
+            },
+        ),
+    },
+)
+
+gencode = VersionedTableResource(
+    default_version="v19",
+    versions={
+        "v19": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch37/gencode/gencode.v19.annotation.ht",
+            import_func=import_gencode,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch37/gencode/gencode.v19.annotation.gtf.gz",
+                "reference_genome": "GRCh37",
+                "force_bgz": True,
+                "min_partitions": 10,
+            },
+        ),
+    },
+)

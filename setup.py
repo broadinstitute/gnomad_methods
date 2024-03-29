@@ -15,7 +15,7 @@ with open("requirements.txt", "r") as requirements_file:
 
 setuptools.setup(
     name="gnomad",
-    version="0.6.4",
+    version="0.7.1",
     author="The Genome Aggregation Database",
     author_email="gnomad@broadinstitute.org",
     description="Hail utilities for the Genome Aggregation Database",
@@ -36,6 +36,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
         "Development Status :: 4 - Beta",
     ],
-    python_requires=">=3.6",
+    python_requires=">=3.9",
     install_requires=install_requires,
 )

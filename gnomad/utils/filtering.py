@@ -383,6 +383,74 @@ def filter_to_clinvar_pathogenic(
     return t
 
 
+def filter_to_gencode_cds(
+    t: Union[hl.MatrixTable, hl.Table], gencode_ht: Optional[hl.Table] = None
+) -> hl.Table:
+    """
+    Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.
+
+    Example use:
+
+    .. code-block:: python
+
+        from gnomad.resources.grch37.reference_data import gencode
+        gencode_ht = gencode.ht()
+        gencode_ht = filter_gencode_to_cds(gencode_ht)
+
+    .. note::
+
+        If no Gencode Table is provided, the default version of the Gencode Table
+        resource for the genome build of the input Table/MatrixTable will be used.
+
+    .. warning::
+
+        This Gencode CDS interval filter does not take into account the
+        transcript_id, it filters to any locus that is found in a CDS interval for
+        any protein coding transcript. Therefore, if downstream analyses require
+        filtering to CDS intervals by transcript, an additional step must be taken.
+        For example, when filtering VEP transcript consequences, there may be cases
+        where a variant is retained with this filter, but is considered outside the
+        CDS intervals of the transcript per the VEP predicted consequence of the
+        variant.
+
+    :param t: Input Table/MatrixTable to filter.
+    :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable
+        to CDS regions. Default is None, which will use the default version of the
+        Gencode Table resource.
+    :return: Table/MatrixTable filtered to loci in Gencode CDS intervals.
+    """
+    if gencode_ht is None:
+        build = get_reference_genome(t.locus).name
+        if build == "GRCh37":
+            from gnomad.resources.grch37.reference_data import gencode
+        elif build == "GRCh38":
+            from gnomad.resources.grch38.reference_data import gencode
+        else:
+            raise ValueError(f"Unsupported reference genome build: {build}")
+
+        logger.info(
+            "No Gencode Table was supplied, using Gencode version %s",
+            gencode.default_version,
+        )
+        gencode_ht = gencode.ht()
+
+    gencode_ht = gencode_ht.filter(
+        (gencode_ht.feature == "CDS") & (gencode_ht.transcript_type == "protein_coding")
+    )
+    logger.warning(
+        "This Gencode CDS interval filter does not filter by transcript! Please see the"
+        " documentation for more details to confirm it's being used as intended."
+    )
+    filter_expr = hl.is_defined(gencode_ht[t.locus])
+
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows(filter_expr)
+    else:
+        t = t.filter(filter_expr)
+
+    return t
+
+
 def remove_fields_from_constant(
     constant: List[str], fields_to_remove: List[str]
 ) -> List[str]:

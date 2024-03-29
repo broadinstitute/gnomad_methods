@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
-COVERAGE_CUTOFF = 40
+COVERAGE_CUTOFF = 30
 """
 Minimum median exome coverage differentiating high coverage sites from low coverage sites.
 
@@ -504,9 +504,10 @@ def build_models(
         "methylation_level",
         "mu_snp",
     ),
-    lower_cov_cutoff: int = COVERAGE_CUTOFF,
+    high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
-) -> Tuple[Tuple[float, float], hl.expr.StructExpression]:
+    skip_coverage_model: bool = False,
+) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
 
@@ -518,7 +519,7 @@ def build_models(
     sites (transversions and non CpG transitions).
 
     The plateau models only consider high coverage sites, or sites above a median
-    coverage of `lower_cov_cutoff` and median coverage below `upper_cov_cutoff`.
+    coverage of `high_cov_definition` and median coverage below `upper_cov_cutoff`.
 
     Plateau model: adjusts proportion of expected variation based on location in the
     genome and CpG status.
@@ -527,14 +528,14 @@ def build_models(
     - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
 
     This function also builds models (coverage models) to calibrate the proportion of
-    expected variation at low coverage sites (sites below `lower_cov_cutoff`).
+    expected variation at low coverage sites (sites below `high_cov_definition`).
 
     The coverage models are built by creating a scaling factor across all high coverage
     sites, applying this ratio to the low coverage sites, and running a linear
     regression.
 
     Coverage model: corrects proportion of expected variation at low coverage sites.
-    Low coverage sites are defined as sites with median coverage < `lower_cov_cutoff`.
+    Low coverage sites are defined as sites with median coverage < `high_cov_definition`.
 
     The x and y of the coverage model:
     - x: log10 groupings of exome coverage at low coverage sites
@@ -573,14 +574,16 @@ def build_models(
         Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
-    :param lower_cov_cutoff: Lower median coverage cutoff. Sites with coverage above this cutoff
+    :param high_cov_definition: Lower median coverage cutoff. Sites with coverage above this cutoff
         are considered well covered. Default is `COVERAGE_CUTOFF`.
     :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
         are excluded from the high coverage Table. Default is None.
+    :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
+        None is returned instead of the coverage model. Default is False.
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage equal to or above `lower_cov_cutoff`.
-    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= lower_cov_cutoff)
+    # Filter to sites with coverage equal to or above `high_cov_definition`.
+    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= high_cov_definition)
 
     # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.
     if upper_cov_cutoff is not None:
@@ -627,39 +630,43 @@ def build_models(
             hl.struct(**plateau_models_agg_expr)
         )
 
-    # Filter to sites with coverage below `lower_cov_cutoff` and larger than 0.
-    low_cov_ht = coverage_ht.filter(
-        (coverage_ht.exome_coverage < lower_cov_cutoff)
-        & (coverage_ht.exome_coverage > 0)
-    )
-
-    # Create a metric that represents the relative mutability of the exome calculated
-    # on high coverage sites and will be used as scaling factor when building the
-    # coverage model.
-    high_coverage_scale_factor = high_cov_ht.aggregate(
-        hl.agg.sum(high_cov_ht.observed_variants)
-        / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
-    )
-
-    # Generate a Table with all necessary annotations (x and y listed above)
-    # for the coverage model.
-    low_cov_group_ht = low_cov_ht.group_by(
-        log_coverage=hl.log10(low_cov_ht.exome_coverage)
-    ).aggregate(
-        low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
-        / (
-            high_coverage_scale_factor
-            * hl.agg.sum(low_cov_ht.possible_variants * low_cov_ht.mu_snp)
+    if not skip_coverage_model:
+        # Filter to sites with coverage below `high_cov_definition` and larger than 0.
+        low_cov_ht = coverage_ht.filter(
+            (coverage_ht.exome_coverage < high_cov_definition)
+            & (coverage_ht.exome_coverage > 0)
         )
-    )
 
-    # Build the coverage model.
-    # TODO: consider weighting here as well
-    coverage_model_expr = build_coverage_model(
-        low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
-        log_coverage_expr=low_cov_group_ht.log_coverage,
-    )
-    coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
+        # Create a metric that represents the relative mutability of the exome calculated
+        # on high coverage sites and will be used as scaling factor when building the
+        # coverage model.
+        high_coverage_scale_factor = high_cov_ht.aggregate(
+            hl.agg.sum(high_cov_ht.observed_variants)
+            / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
+        )
+
+        # Generate a Table with all necessary annotations (x and y listed above)
+        # for the coverage model.
+        low_cov_group_ht = low_cov_ht.group_by(
+            log_coverage=hl.log10(low_cov_ht.exome_coverage)
+        ).aggregate(
+            low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
+            / (
+                high_coverage_scale_factor
+                * hl.agg.sum(low_cov_ht.possible_variants * low_cov_ht.mu_snp)
+            )
+        )
+
+        # Build the coverage model.
+        # TODO: consider weighting here as well
+        coverage_model_expr = build_coverage_model(
+            low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
+            log_coverage_expr=low_cov_group_ht.log_coverage,
+        )
+        coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
+    else:
+        coverage_model = None
+
     return coverage_model, plateau_models
 
 
@@ -816,6 +823,8 @@ def get_constraint_grouping_expr(
             `include_transcript_group` is True)
         - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
             True)
+        - mane_select from `vep_annotation_expr` (added when `include_mane_select_group` is
+            True)
 
     .. note::
         This function expects that the following fields are present in
@@ -826,6 +835,7 @@ def get_constraint_grouping_expr(
         - gene_symbol
         - transcript_id (if `include_transcript_group` is True)
         - canonical (if `include_canonical_group` is True)
+        - mane_select (if `include_mane_select_group` is True)
 
     :param vep_annotation_expr: StructExpression of VEP annotation.
     :param coverage_expr: Optional Int32Expression of exome coverage. Default is None.
@@ -847,6 +857,7 @@ def get_constraint_grouping_expr(
         "annotation": vep_annotation_expr.most_severe_consequence,
         "modifier": hl.coalesce(lof_expr, polyphen_prediction_expr, "None"),
         "gene": vep_annotation_expr.gene_symbol,
+        "gene_id": vep_annotation_expr.gene_id,
     }
     if coverage_expr is not None:
         groupings["coverage"] = coverage_expr
@@ -884,6 +895,8 @@ def annotate_exploded_vep_for_constraint_groupings(
         - transcript - id from 'transcript_id' in `vep_annotation` (added when
             `include_transcript_group` is True)
         - canonical from `vep_annotation` (added when `include_canonical_group` is
+            True)
+        - mane_select from `vep_annotation` (added when `include_mane_select_group` is
             True)
 
     .. note::
@@ -943,6 +956,7 @@ def compute_expected_variants(
     plateau_models_expr: hl.StructExpression,
     mu_expr: hl.Float64Expression,
     cov_corr_expr: hl.Float64Expression,
+    possible_variants_expr: hl.Int64Expression,
     cpg_expr: hl.BooleanExpression,
     pop: Optional[str] = None,
 ) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:
@@ -955,6 +969,7 @@ def compute_expected_variants(
         calibrates mutation rate to proportion observed for high coverage exomes. It
         includes models for CpG, non-CpG sites, and each population in `POPS`.
     :param mu_expr: Float64Expression of mutation rate.
+    :param possible_variants_expr: Int64Expression of possible variant counts.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param pop: Optional population to use when applying plateau model. Default is
@@ -984,7 +999,9 @@ def compute_expected_variants(
     # 'expected_variants', for specified population.
     agg_expr = {
         f"predicted_proportion_observed{pop}": agg_func(ppo_expr),
-        f"expected_variants{pop}": agg_func(ppo_expr * cov_corr_expr),
+        f"expected_variants{pop}": agg_func(
+            ppo_expr * cov_corr_expr * possible_variants_expr
+        ),
     }
 
     # Generate sum aggregators for 'observed_variants' and 'possible_variants' on
@@ -1128,8 +1145,8 @@ def compute_pli(
         expected_values = {"Null": 1.0, "Rec": 0.463, "LI": 0.089}
 
     # Set up initial values.
-    last_pi = {"Null": 0, "Rec": 0, "LI": 0}
-    pi = {"Null": 1 / 3, "Rec": 1 / 3, "LI": 1 / 3}
+    last_pi = {k: 0 for k in expected_values.keys()}
+    pi = {k: 1 / len(expected_values.keys()) for k in expected_values.keys()}
 
     dpois_expr = {
         k: hl.or_missing(
@@ -1303,3 +1320,65 @@ def calculate_raw_z_score_sd(
         sd_expr = hl.agg.stats(raw_z_expr).stdev
 
     return hl.agg.filter(filter_expr, sd_expr)
+
+
+def add_gencode_transcript_annotations(
+    ht: hl.Table,
+    gencode_ht: hl.Table,
+    annotations: List[str] = ["level", "transcript_type"],
+) -> hl.Table:
+    """
+    Add GENCODE annotations to Table based on transcript id.
+
+    .. note::
+        Added annotations by default are:
+        - level
+        - transcript_type
+
+        Computed annotations are:
+        - chromosome
+        - cds_length
+        - num_coding_exons
+
+    :param ht: Input Table.
+    :param gencode_ht: Table with GENCODE annotations.
+    :param annotations: List of GENCODE annotations to add. Default is ["level", "transcript_type"].
+        Added annotations also become keys for the group by when computing "cds_length" and "num_coding_exons".
+    :return: Table with transcript annotations from GENCODE added.
+    """
+    gencode_ht = gencode_ht.annotate(
+        length=gencode_ht.interval.end.position
+        - gencode_ht.interval.start.position
+        + 1,
+        chromosome=gencode_ht.interval.start.contig,
+    )
+
+    # Obtain CDS annotations from GENCODE file and calculate CDS length and
+    # number of exons.
+    annotations_to_add = set(annotations + ["chromosome", "transcript_id", "length"])
+
+    gencode_cds = (
+        gencode_ht.filter(gencode_ht.feature == "CDS")
+        .select(*annotations_to_add)
+        .key_by("transcript_id")
+        .drop("interval")
+    )
+
+    annotations_to_add.remove("length")
+
+    gencode_cds = (
+        gencode_cds.group_by(*annotations_to_add)
+        .aggregate(
+            cds_length=hl.agg.sum(gencode_cds.length), num_coding_exons=hl.agg.count()
+        )
+        .key_by("transcript_id")
+    )
+
+    gencode_cds = gencode_cds.checkpoint(
+        new_temp_file(prefix="gencode_cds", extension="ht")
+    )
+
+    # Add GENCODE annotations to input Table.
+    ht = ht.annotate(**gencode_cds[ht.transcript])
+
+    return ht

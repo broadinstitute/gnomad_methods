@@ -10,6 +10,7 @@ from gnomad.resources.resource_utils import (
     GnomadPublicTableResource,
     VersionedMatrixTableResource,
     VersionedTableResource,
+    import_gencode,
     import_sites_vcf,
 )
 from gnomad.utils.vep import vep_or_lookup_vep
@@ -383,3 +384,20 @@ def get_truth_ht() -> Table:
         .repartition(200, shuffle=False)
         .persist()
     )
+
+
+gencode = VersionedTableResource(
+    default_version="v39",
+    versions={
+        "v39": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v39.annotation.ht",
+            import_func=import_gencode,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz",
+                "reference_genome": "GRCh38",
+                "force_bgz": True,
+                "min_partitions": 100,
+            },
+        ),
+    },
+)

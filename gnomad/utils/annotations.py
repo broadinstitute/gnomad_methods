@@ -1,14 +1,10 @@
 # noqa: D100
 
-import csv
 import itertools
-import json
 import logging
-from timeit import default_timer as timer
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
-from hail.utils.misc import new_temp_file
 
 import gnomad.utils.filtering as filter_utils
 from gnomad.utils.gen_stats import to_phred
@@ -602,6 +598,169 @@ def create_frequency_bins_expr(
     return bin_expr
 
 
+def annotate_and_index_source_mt_for_sex_ploidy(
+    locus_expr: hl.expr.LocusExpression,
+    karyotype_expr: hl.expr.StringExpression,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
+) -> Tuple[hl.expr.StructExpression, hl.expr.StructExpression]:
+    """
+    Prepare relevant ploidy annotations for downstream calculations on a matrix table.
+
+    This method is used as an optimization for the `get_is_haploid_expr` and
+    `adjusted_sex_ploidy_expr` methods.
+
+    This method annotates the `locus_expr` source matrix table with the following
+    fields:
+
+        - `xy`: Boolean indicating if the sample is XY.
+        - `xx`: Boolean indicating if the sample is XX.
+        - `in_non_par`: Boolean indicating if the locus is in a non-PAR region.
+        - `x_nonpar`: Boolean indicating if the locus is in a non-PAR region of the X
+          chromosome.
+        - `y_par`: Boolean indicating if the locus is in a PAR region of the Y
+          chromosome.
+        - `y_nonpar`: Boolean indicating if the locus is in a non-PAR region of the Y
+          chromosome.
+
+    :param locus_expr: Locus expression.
+    :param karyotype_expr: Karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Tuple of index expressions for columns and rows.
+    """
+    source_mt = locus_expr._indices.source
+    col_ht = source_mt.annotate_cols(
+        xy=karyotype_expr.upper() == xy_karyotype_str,
+        xx=karyotype_expr.upper() == xx_karyotype_str,
+    ).cols()
+    row_ht = source_mt.annotate_rows(
+        in_non_par=~locus_expr.in_autosome_or_par(),
+        in_autosome=locus_expr.in_autosome(),
+        x_nonpar=locus_expr.in_x_nonpar(),
+        y_par=locus_expr.in_y_par(),
+        y_nonpar=locus_expr.in_y_nonpar(),
+    ).rows()
+    col_idx = col_ht[source_mt.col_key]
+    row_idx = row_ht[source_mt.row_key]
+
+    return col_idx, row_idx
+
+
+def get_is_haploid_expr(
+    gt_expr: Optional[hl.expr.CallExpression] = None,
+    locus_expr: Optional[hl.expr.LocusExpression] = None,
+    karyotype_expr: Optional[hl.expr.StringExpression] = None,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
+) -> hl.expr.BooleanExpression:
+    """
+    Determine if a genotype or locus and karyotype combination is haploid.
+
+    .. note::
+
+        One of `gt_expr` or `locus_expr` and `karyotype_expr` is required.
+
+    :param gt_expr: Optional genotype expression.
+    :param locus_expr: Optional locus expression.
+    :param karyotype_expr: Optional sex karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Boolean expression indicating if the genotype is haploid.
+    """
+    if gt_expr is None and locus_expr is None and karyotype_expr is None:
+        raise ValueError(
+            "One of 'gt_expr' or 'locus_expr' and 'karyotype_expr' is required."
+        )
+
+    if gt_expr is not None:
+        return gt_expr.is_haploid()
+
+    if locus_expr is None or karyotype_expr is None:
+        raise ValueError(
+            "Both 'locus_expr' and 'karyotype_expr' are required if no 'gt_expr' is "
+            "supplied."
+        )
+    # An optimization that annotates the locus's matrix table with the
+    # fields in the case statements below as an optimization step
+    col_idx, row_idx = annotate_and_index_source_mt_for_sex_ploidy(
+        locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
+    )
+
+    return row_idx.in_non_par & hl.or_missing(
+        ~(col_idx.xx & (row_idx.y_par | row_idx.y_nonpar)),
+        col_idx.xy & (row_idx.x_nonpar | row_idx.y_nonpar),
+    )
+
+
+def get_gq_dp_adj_expr(
+    gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    gt_expr: Optional[hl.expr.CallExpression] = None,
+    locus_expr: Optional[hl.expr.LocusExpression] = None,
+    karyotype_expr: Optional[hl.expr.StringExpression] = None,
+    adj_gq: int = 20,
+    adj_dp: int = 10,
+    haploid_adj_dp: int = 5,
+) -> hl.expr.BooleanExpression:
+    """
+    Get adj annotation using only GQ and DP.
+
+    Default thresholds correspond to gnomAD values.
+
+    .. note::
+
+        This function can be used to annotate adj taking into account only GQ and DP.
+        It is useful for cases where the GT field is not available, such as in the
+        reference data of a VariantDataset.
+
+    .. note::
+
+        One of `gt_expr` or `locus_expr` and `karyotype_expr` is required.
+
+    :param gq_expr: GQ expression.
+    :param dp_expr: DP expression.
+    :param gt_expr: Optional genotype expression.
+    :param locus_expr: Optional locus expression.
+    :param karyotype_expr: Optional sex karyotype expression.
+    :param adj_gq: GQ threshold for adj. Default is 20.
+    :param adj_dp: DP threshold for adj. Default is 10.
+    :param haploid_adj_dp: Haploid DP threshold for adj. Default is 5.
+    :return: Boolean expression indicating adj filter.
+    """
+    return (gq_expr >= adj_gq) & hl.if_else(
+        get_is_haploid_expr(gt_expr, locus_expr, karyotype_expr),
+        dp_expr >= haploid_adj_dp,
+        dp_expr >= adj_dp,
+    )
+
+
+def get_het_ab_adj_expr(
+    gt_expr: hl.expr.CallExpression,
+    dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
+    ad_expr: hl.expr.ArrayNumericExpression,
+    adj_ab: float = 0.2,
+) -> hl.expr.BooleanExpression:
+    """
+    Get adj het AB annotation.
+
+    :param gt_expr: Genotype expression.
+    :param dp_expr: DP expression.
+    :param ad_expr: AD expression.
+    :param adj_ab: AB threshold for adj. Default is 0.2.
+    :return: Boolean expression indicating adj het AB filter.
+    """
+    return (
+        hl.case()
+        .when(~gt_expr.is_het(), True)
+        .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+        .default(
+            (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
+            & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+        )
+    )
+
+
 def get_adj_expr(
     gt_expr: hl.expr.CallExpression,
     gq_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
@@ -617,19 +776,14 @@ def get_adj_expr(
 
     Defaults correspond to gnomAD values.
     """
-    return (
-        (gq_expr >= adj_gq)
-        & hl.if_else(gt_expr.is_haploid(), dp_expr >= haploid_adj_dp, dp_expr >= adj_dp)
-        & (
-            hl.case()
-            .when(~gt_expr.is_het(), True)
-            .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
-            .default(
-                (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
-                & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
-            )
-        )
-    )
+    return get_gq_dp_adj_expr(
+        gq_expr,
+        dp_expr,
+        gt_expr=gt_expr,
+        adj_gq=adj_gq,
+        adj_dp=adj_dp,
+        haploid_adj_dp=haploid_adj_dp,
+    ) & get_het_ab_adj_expr(gt_expr, dp_expr, ad_expr, adj_ab)
 
 
 def annotate_adj(
@@ -897,7 +1051,7 @@ def fs_from_sb(
 
 
 def sor_from_sb(
-    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression]
+    sb: Union[hl.expr.ArrayNumericExpression, hl.expr.ArrayExpression],
 ) -> hl.expr.Float64Expression:
     """
     Compute `SOR` (Symmetric Odds Ratio test) annotation from  the `SB` (strand balance table) field.
@@ -1046,31 +1200,45 @@ def missing_callstats_expr() -> hl.expr.StructExpression:
 
 
 def set_female_y_metrics_to_na_expr(
-    t: Union[hl.Table, hl.MatrixTable]
+    t: Union[hl.Table, hl.MatrixTable],
+    freq_expr: Union[hl.expr.ArrayExpression, str] = "freq",
+    freq_meta_expr: Union[hl.expr.ArrayExpression, str] = "freq_meta",
+    freq_index_dict_expr: Union[hl.expr.DictExpression, str] = "freq_index_dict",
 ) -> hl.expr.ArrayExpression:
     """
     Set Y-variant frequency callstats for female-specific metrics to missing structs.
 
-    .. note:: Requires freq, freq_meta, and freq_index_dict annotations to be present in Table or MatrixTable
-
-    :param t: Table or MatrixTable for which to adjust female metrics
-    :return: Hail array expression to set female Y-variant metrics to missing values
+    :param t: Table or MatrixTable for which to adjust female metrics.
+    :param freq_expr: Array expression or string annotation name for the frequency
+        array. Default is "freq".
+    :param freq_meta_expr: Array expression or string annotation name for the frequency
+        metadata. Default is "freq_meta".
+    :param freq_index_dict_expr: Dict expression or string annotation name for the
+        frequency metadata index dictionary. Default is "freq_index_dict".
+    :return: Hail array expression to set female Y-variant metrics to missing values.
     """
+    if isinstance(freq_expr, str):
+        freq_expr = t[freq_expr]
+    if isinstance(freq_meta_expr, str):
+        freq_meta_expr = t[freq_meta_expr]
+    if isinstance(freq_index_dict_expr, str):
+        freq_index_dict_expr = t[freq_index_dict_expr]
+
     female_idx = hl.map(
-        lambda x: t.freq_index_dict[x],
-        hl.filter(lambda x: x.contains("XX"), t.freq_index_dict.keys()),
+        lambda x: freq_index_dict_expr[x],
+        hl.filter(lambda x: x.contains("XX"), freq_index_dict_expr.keys()),
     )
-    freq_idx_range = hl.range(hl.len(t.freq_meta))
+    freq_idx_range = hl.range(hl.len(freq_meta_expr))
 
     new_freq_expr = hl.if_else(
         (t.locus.in_y_nonpar() | t.locus.in_y_par()),
         hl.map(
             lambda x: hl.if_else(
-                female_idx.contains(x), missing_callstats_expr(), t.freq[x]
+                female_idx.contains(x), missing_callstats_expr(), freq_expr[x]
             ),
             freq_idx_range,
         ),
-        t.freq,
+        freq_expr,
     )
 
     return new_freq_expr
@@ -1887,80 +2055,228 @@ def compute_freq_by_strata(
         True.
     :return: Table or MatrixTable with allele frequencies by strata.
     """
+    if not group_membership_includes_raw_group:
+        # Add the 'raw' group to the 'group_membership' annotation.
+        mt = mt.annotate_cols(
+            group_membership=hl.array([mt.group_membership[0]]).extend(
+                mt.group_membership
+            )
+        )
+
+    # Add adj_groups global annotation indicating that the second element in
+    # group_membership is 'raw' and all others are 'adj'.
+    mt = mt.annotate_globals(
+        adj_groups=hl.range(hl.len(mt.group_membership.take(1)[0])).map(
+            lambda x: x != 1
+        )
+    )
+
     if entry_agg_funcs is None:
         entry_agg_funcs = {}
+
+    def _get_freq_expr(gt_expr: hl.expr.CallExpression) -> hl.expr.StructExpression:
+        """
+        Get struct expression with call statistics.
+
+        :param gt_expr: CallExpression to compute call statistics on.
+        :return: StructExpression with call statistics.
+        """
+        # Get the source Table for the CallExpression to grab alleles.
+        ht = gt_expr._indices.source
+        freq_expr = hl.agg.call_stats(gt_expr, ht.alleles)
+        # Select non-ref allele (assumes bi-allelic).
+        freq_expr = freq_expr.annotate(
+            AC=freq_expr.AC[1],
+            AF=freq_expr.AF[1],
+            homozygote_count=freq_expr.homozygote_count[1],
+        )
+
+        return freq_expr
+
+    entry_agg_funcs["freq"] = (lambda x: x.GT, _get_freq_expr)
+
+    return agg_by_strata(mt, entry_agg_funcs, select_fields).drop("adj_groups")
+
+
+def agg_by_strata(
+    mt: hl.MatrixTable,
+    entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
+    select_fields: Optional[List[str]] = None,
+    group_membership_ht: Optional[hl.Table] = None,
+    entry_agg_group_membership: Optional[Dict[str, List[dict]]] = None,
+) -> hl.Table:
+    """
+    Get row expression for annotations of each entry aggregation function(s) by strata.
+
+    The entry aggregation functions are applied to the MatrixTable entries and
+    aggregated. If no `group_membership_ht` (like the one returned by
+    `generate_freq_group_membership_array`) is supplied, `mt` must contain a
+    'group_membership' annotation that is a list of bools to aggregate the columns by.
+
+    :param mt: Input MatrixTable.
+    :param entry_agg_funcs: Dict of entry aggregation functions where the
+        keys of the dict are the names of the annotations and the values are tuples
+        of functions. The first function is used to transform the `mt` entries in some
+        way, and the second function is used to aggregate the output from the first
+        function.
+    :param select_fields: Optional list of row fields from `mt` to keep on the output
+        Table.
+    :param group_membership_ht: Optional Table containing group membership annotations
+        to stratify the aggregations by. If not provided, the 'group_membership'
+        annotation is expected to be present on `mt`.
+    :param entry_agg_group_membership: Optional dict indicating the subset of group
+        strata in 'freq_meta' to run the entry aggregation functions on. The keys of
+        the dict can be any of the keys in `entry_agg_funcs` and the values are lists
+        of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
+        the corresponding entry aggregation function. If provided, 'freq_meta' must be
+        present in `group_membership_ht` or `mt` and represent the same strata as those
+        in 'group_membership'. If not provided, all entries of the 'group_membership'
+        annotation will have the entry aggregation functions applied to them.
+    :return: Table with annotations of stratified aggregations.
+    """
+    if group_membership_ht is None and "group_membership" not in mt.col:
+        raise ValueError(
+            "The 'group_membership' annotation is not found in the input MatrixTable "
+            "and 'group_membership_ht' is not specified."
+        )
+
     if select_fields is None:
         select_fields = []
 
-    n_samples = mt.count_cols()
+    if group_membership_ht is None:
+        logger.info(
+            "'group_membership_ht' is not specified, using sample stratification "
+            "indicated by the 'group_membership' annotation on the input MatrixTable."
+        )
+        group_globals = mt.index_globals()
+    else:
+        logger.info(
+            "'group_membership_ht' is specified, using sample stratification indicated "
+            "by its 'group_membership' annotation."
+        )
+        group_globals = group_membership_ht.index_globals()
+        mt = mt.annotate_cols(
+            group_membership=group_membership_ht[mt.col_key].group_membership
+        )
+
+    global_expr = {}
     n_groups = len(mt.group_membership.take(1)[0])
+    if "adj_groups" in group_globals:
+        logger.info(
+            "Using the 'adj_groups' global annotation to determine adj filtered "
+            "stratification groups."
+        )
+        global_expr["adj_groups"] = group_globals.adj_groups
+    elif "freq_meta" in group_globals:
+        logger.info(
+            "No 'adj_groups' global annotation found, using the 'freq_meta' global "
+            "annotation to determine adj filtered stratification groups."
+        )
+        global_expr["adj_groups"] = group_globals.freq_meta.map(
+            lambda x: x.get("group", "NA") == "adj"
+        )
+    else:
+        logger.info(
+            "No 'adj_groups' or 'freq_meta' global annotations found. All groups will "
+            "be considered non-adj."
+        )
+        global_expr["adj_groups"] = hl.range(n_groups).map(lambda x: False)
+
+    if entry_agg_group_membership is not None and "freq_meta" not in group_globals:
+        raise ValueError(
+            "The 'freq_meta' global annotation must be supplied when the"
+            " 'entry_agg_group_membership' is specified."
+        )
+
+    entry_agg_group_membership = entry_agg_group_membership or {}
+    entry_agg_group_membership = {
+        ann: [group_globals["freq_meta"].index(s) for s in strata]
+        for ann, strata in entry_agg_group_membership.items()
+    }
+
+    n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
+    if n_adj_groups != n_groups:
+        raise ValueError(
+            f"The number of elements in the 'adj_groups' ({n_adj_groups}) global "
+            "annotation does not match the number of elements in the "
+            f"'group_membership' annotation ({n_groups})!",
+        )
+
+    # Keep only the entries needed for the aggregation functions.
+    select_expr = {**{ann: f[0](mt) for ann, f in entry_agg_funcs.items()}}
+    has_adj = hl.eval(hl.any(global_expr["adj_groups"]))
+    if has_adj:
+        select_expr["adj"] = mt.adj
+
+    mt = mt.select_entries(**select_expr)
+
+    # Convert MT to HT with a row annotation that is an array of all samples entries
+    # for that variant.
     ht = mt.localize_entries("entries", "cols")
-    ht = ht.annotate_globals(
-        indices_by_group=hl.range(n_groups).map(
-            lambda g_i: hl.range(n_samples).filter(
-                lambda s_i: ht.cols[s_i].group_membership[g_i]
-            )
+
+    # For each stratification group in group_membership, determine the indices of the
+    # samples that belong to that group.
+    global_expr["indices_by_group"] = hl.range(n_groups).map(
+        lambda g_i: hl.range(mt.count_cols()).filter(
+            lambda s_i: ht.cols[s_i].group_membership[g_i]
         )
     )
+    ht = ht.annotate_globals(**global_expr)
+
     # Pull out each annotation that will be used in the array aggregation below as its
     # own ArrayExpression. This is important to prevent memory issues when performing
     # the below array aggregations.
     ht = ht.select(
         *select_fields,
-        adj_array=ht.entries.map(lambda e: e.adj),
-        gt_array=ht.entries.map(lambda e: e.GT),
-        **{
-            ann: hl.map(lambda e, s: f[0](e, s), ht.entries, ht.cols)
-            for ann, f in entry_agg_funcs.items()
-        },
+        **{ann: ht.entries.map(lambda e: e[ann]) for ann in select_expr.keys()},
     )
 
     def _agg_by_group(
-        ht: hl.Table, agg_func: Callable, ann_expr: hl.expr.ArrayExpression, *args
+        indices_by_group_expr: hl.expr.ArrayExpression,
+        adj_groups_expr: hl.expr.ArrayExpression,
+        agg_func: Callable,
+        ann_expr: hl.expr.ArrayExpression,
     ) -> hl.expr.ArrayExpression:
         """
         Aggregate `agg_expr` by group using the `agg_func` function.
 
-        :param ht: Input Hail Table.
-        :param agg_func: Aggregation function to apply to `agg_expr`.
-        :param agg_expr: Expression to aggregate by group.
-        :param args: Additional arguments to pass to the `agg_func`.
+        :param indices_by_group_expr: ArrayExpression of indices of samples in each group.
+        :param adj_groups_expr: ArrayExpression indicating whether each group is adj.
+        :param agg_func: Aggregation function to apply to `ann_expr`.
+        :param ann_expr: Expression to aggregate by group.
         :return: Aggregated array expression.
         """
-        adj_agg_expr = ht.indices_by_group.map(
-            lambda s_indices: s_indices.aggregate(
-                lambda i: hl.agg.filter(ht.adj_array[i], agg_func(ann_expr[i], *args))
+        f_no_adj = lambda i, *args: agg_func(ann_expr[i])
+        if has_adj:
+            f = lambda i, adj: hl.if_else(
+                adj, hl.agg.filter(ht.adj[i], f_no_adj(i)), f_no_adj(i)
             )
-        )
-        # Create final agg list by inserting or changing the "raw" group,
-        # representing all samples, in the adj_agg_list.
-        raw_agg_expr = ann_expr.aggregate(lambda x: agg_func(x, *args))
-        if group_membership_includes_raw_group:
-            extend_idx = 2
         else:
-            extend_idx = 1
+            f = f_no_adj
 
-        adj_agg_expr = (
-            adj_agg_expr[:1].append(raw_agg_expr).extend(adj_agg_expr[extend_idx:])
+        return hl.map(
+            lambda s_indices, adj: s_indices.aggregate(lambda i: f(i, adj)),
+            indices_by_group_expr,
+            adj_groups_expr,
         )
 
-        return adj_agg_expr
-
-    freq_expr = _agg_by_group(ht, hl.agg.call_stats, ht.gt_array, ht.alleles)
-
-    # Select non-ref allele (assumes bi-allelic).
-    freq_expr = freq_expr.map(
-        lambda cs: cs.annotate(
-            AC=cs.AC[1],
-            AF=cs.AF[1],
-            homozygote_count=cs.homozygote_count[1],
-        )
-    )
     # Add annotations for any supplied entry transform and aggregation functions.
+    # Filter groups to only those in entry_agg_group_membership if specified.
+    # If there are no specific entry group indices for an annotation, use ht[g]
+    # to consider all groups without filtering.
     ht = ht.select(
         *select_fields,
-        **{ann: _agg_by_group(ht, f[1], ht[ann]) for ann, f in entry_agg_funcs.items()},
-        freq=freq_expr,
+        **{
+            ann: _agg_by_group(
+                *[
+                    [ht[g][i] for i in entry_agg_group_membership.get(ann, [])] or ht[g]
+                    for g in ["indices_by_group", "adj_groups"]
+                ],
+                agg_func=f[1],
+                ann_expr=ht[ann],
+            )
+            for ann, f in entry_agg_funcs.items()
+        },
     )
 
     return ht.drop("cols")
@@ -2030,87 +2346,6 @@ def update_structured_annotations(
         )
 
     return ht.annotate(**updated_rows)
-
-
-def gks_compute_seqloc_digest(
-    ht: hl.Table,
-    export_tmpfile: Optional[str] = None,
-    computed_tmpfile: Optional[str] = None,
-):
-    """
-    Compute sequence location digest-based id for a hail variant Table.
-
-    Exports table to tsv, computes SequenceLocation digests, reimports and replaces
-    the vrs_json field with the result. Input table must have a .vrs field, like the
-    one added by add_gks_vrs, that can be used to construct ga4gh.vrs models.
-
-    :param ht: hail table with VRS annotation
-    :param export_tmpfile: Optional file path to export the table to.
-    :param computed_tmpfile: Optional file path to write the updated rows to,
-        which is then imported as a hail table
-    :return: a hail table with the VRS annotation updated with the new SequenceLocations
-    """
-    # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
-    # imported. Importing ga4gh here to avoid this issue.
-    import ga4gh.core as ga4gh_core
-    import ga4gh.vrs as ga4gh_vrs
-
-    if export_tmpfile is None:
-        export_tmpfile = new_temp_file("gks-seqloc-pre.tsv")
-    if computed_tmpfile is None:
-        computed_tmpfile = new_temp_file("gks-seqloc-post.tsv")
-
-    logger.info("Exporting ht to %s", export_tmpfile)
-    ht.select("vrs_json").export(export_tmpfile, header=True)
-
-    logger.info(
-        "Computing SequenceLocation digests and writing to %s", computed_tmpfile
-    )
-    start = timer()
-    counter = 0
-    with open(computed_tmpfile, "w", encoding="utf-8") as f_out:
-        with open(export_tmpfile, "r", encoding="utf-8") as f:
-            reader = csv.reader(f, delimiter="\t")
-            header = None
-            for line in reader:
-                if header is None:
-                    header = line
-                    f_out.write("\t".join(header))
-                    f_out.write("\n")
-                    continue
-                else:
-                    locus, alleles, vrs_json = line
-                    vrs_variant = json.loads(vrs_json)
-                    location = vrs_variant["location"]
-                    location.pop("_id")
-                    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
-                        ga4gh_vrs.models.SequenceLocation(**location)
-                    )
-                    vrs_variant["location"]["_id"] = location_id
-                    # serialize outputs to JSON and write to TSV
-                    vrs_json = json.dumps(vrs_variant)
-                    alleles = json.dumps(json.loads(alleles))
-                    f_out.write("\t".join([locus, alleles, vrs_json]))
-                    f_out.write("\n")
-                    counter += 1
-    end = timer()
-    logger.info(
-        "Computed %s SequenceLocation digests in %s seconds", counter, (end - start)
-    )
-    logger.info("Importing VRS records with computed SequenceLocation digests")
-    ht_with_location = hl.import_table(
-        computed_tmpfile, types={"locus": "tstr", "alleles": "tstr", "vrs_json": "tstr"}
-    )
-    ht_with_location_parsed = ht_with_location.annotate(
-        locus=hl.locus(
-            contig=ht_with_location.locus.split(":")[0],
-            pos=hl.int32(ht_with_location.locus.split(":")[1]),
-            reference_genome="GRCh38",
-        ),
-        alleles=hl.parse_json(ht_with_location.alleles, dtype=hl.tarray(hl.tstr)),
-    ).key_by("locus", "alleles")
-
-    return ht.drop("vrs_json").join(ht_with_location_parsed, how="left")
 
 
 def add_gks_vrs(
@@ -2212,7 +2447,6 @@ def add_gks_va(
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
-        group_index: int,
         group_id: str,
         group_label: str,
         group_sex: str = None,
@@ -2230,8 +2464,16 @@ def add_gks_va(
         :return: Dictionary containing variant frequency information,
             - (by genetic ancestry group and sex if desired) for specified variant.
         """
+        if group_sex:
+            cohort_id = f"{group_id.upper()}.{group_sex}"
+            freq_index_key = f"{group_id}_{group_sex}_adj"
+        else:
+            cohort_id = f"{group_id.upper()}"
+            freq_index_key = f"{group_id}_adj"
+        record_id = f"{gnomad_id}.{cohort_id}"
+
         # Obtain frequency information for the specified variant.
-        group_freq = input_struct.freq[group_index]
+        group_freq = input_struct.freq[freq_index_dict[freq_index_key]]
 
         # Cohort characteristics.
         characteristics = []
@@ -2241,16 +2483,31 @@ def add_gks_va(
 
         # Dictionary to be returned containing information for a specified group.
         freq_record = {
-            "id": f"{gnomad_id},{group_id.upper()}",
+            "id": record_id,
             "type": "CohortAlleleFrequency",
             "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
-            "alleleFrequency": group_freq["AF"],
-            "cohort": {"id": group_id.upper(), "characteristics": characteristics},
+            "alleleFrequency": (
+                group_freq["AF"] if group_freq["AF"] is not None else 0.0
+            ),
+            "cohort": {"id": cohort_id, "characteristics": characteristics},
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
+
+        # Add hemizygote allele count if variant is non-autosomal/non-PAR.
+        # Only XY groups can be hemizygous. Other group AC is mixed homo/hetero.
+        # If not a by_sex group, include the XY hemizygote count for XY subgroup.
+        if not input_struct.in_autosome_or_par:
+            if group_sex == "XY":
+                freq_record["ancillaryResults"]["hemizygotes"] = group_freq.AC
+            elif group_sex is None:
+                # Group is not by_sex, but still need to report hemizygotes.
+                hemi_group_freq = input_struct.freq[
+                    freq_index_dict[f"{group_id}_XY_adj"]
+                ]
+                freq_record["ancillaryResults"]["hemizygotes"] = hemi_group_freq.AC
 
         return freq_record
 
@@ -2261,10 +2518,7 @@ def add_gks_va(
     # Iterate through provided groups and generate dictionaries.
     if ancestry_groups:
         for group in ancestry_groups:
-            key = f"{group}-adj"
-            index_value = freq_index_dict.get(key)
             group_result = _create_group_dicts(
-                group_index=index_value,
                 group_id=group,
                 group_label=ancestry_groups_dict[group],
             )
@@ -2273,12 +2527,8 @@ def add_gks_va(
             if by_sex:
                 sex_list = []
                 for sex in ["XX", "XY"]:
-                    sex_key = f"{group}-{sex}-adj"
-                    sex_index_value = freq_index_dict.get(sex_key)
-                    sex_id = f"{group}.{sex}"
                     sex_result = _create_group_dicts(
-                        group_index=sex_index_value,
-                        group_id=sex_id,
+                        group_id=group,
                         group_label=ancestry_groups_dict[group],
                         group_sex=sex,
                     )
@@ -2308,32 +2558,87 @@ def add_gks_va(
         ),  # Information can be populated with the result of add_gks_vrs()
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
-        "alleleFrequency": overall_freq["AF"],
+        "alleleFrequency": (
+            overall_freq["AF"] if overall_freq["AF"] is not None else 0.0
+        ),
         "cohort": {"id": "ALL"},
     }
 
-    # Create ancillaryResults for additional frequency and popMaxFAF95 information
+    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
-        "popMaxFAF95": {
-            "frequency": input_struct.faf95.popmax,
-            "confidenceInterval": 0.95,
-        },
     }
 
-    if input_struct.faf95.popmax_population is not None:
-        ancillaryResults["popMaxFAF95"][
-            "popFreqID"
-        ] = f"{gnomad_id}.{input_struct.faf95.popmax_population.upper()}"
-    else:
-        ancillaryResults["popMaxFAF95"]["popFreqID"] = None
+    # Add hemizygote count if not autosomal or PAR.
+    if not input_struct.in_autosome_or_par:
+        hemizygote_count = input_struct.freq[freq_index_dict["XY_adj"]].AC
+        ancillaryResults["hemizygotes"] = hemizygote_count
 
-    # Add mean coverage depth statistics if the input was annotated
-    # with coverage information.
-    if "mean_depth" in input_struct:
-        ancillaryResults["meanDepth"] = input_struct.mean_depth
+    # Add group max FAF if it exists
+    if input_struct.grpMaxFAF95.popmax_population is not None:
+        ancillaryResults["grpMaxFAF95"] = {
+            "frequency": input_struct.grpMaxFAF95.popmax,
+            "confidenceInterval": 0.95,
+            "groupId": (
+                f"{gnomad_id}.{input_struct.grpMaxFAF95.popmax_population.upper()}"
+            ),
+        }
+
+    # Add joint group max FAF if it exists.
+    if (
+        "jointGrpMaxFAF95" in input_struct
+        and input_struct.jointGrpMaxFAF95.popmax_population is not None
+    ):
+        ancillaryResults["jointGrpMaxFAF95"] = {
+            "frequency": input_struct.jointGrpMaxFAF95.popmax,
+            "confidenceInterval": 0.95,
+            "groupId": (
+                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.popmax_population.upper()}"
+            ),
+        }
 
     final_freq_dict["ancillaryResults"] = ancillaryResults
+
+    # Check allele balance for heterozygotes values.
+    # Flagged allele balance values are those in bins > 0.90.
+    # Each bin is 0.05, so flagged values are in the last 2 bins.
+    if len(input_struct.ab_hist_alt.bin_freq) != 20:
+        raise ValueError(
+            f"{gnomad_id} ab_hist_alt.bin_freq had "
+            f"{len(input_struct.ab_hist_alt.bin_freq)} items, expected 20"
+        )
+    # The bin_freq should be in order but we can verify the order from bin_edges.
+    ab_bin_freq = list(
+        map(
+            lambda x: x[1],
+            sorted(
+                zip(
+                    input_struct.ab_hist_alt.bin_edges,
+                    input_struct.ab_hist_alt.bin_freq,
+                ),
+                key=lambda x: x[0],
+            ),
+        )
+    )
+
+    qualityMeasures = {
+        "qcFilters": list(input_struct.filters),
+        "lowComplexityRegion": input_struct.lcr,
+        "heterozygousSkewedAlleleCount": sum(ab_bin_freq[-2:]),
+    }
+
+    # Add coverage depth statistics if the input was annotated
+    # with coverage information.
+    if "mean_depth" in input_struct:
+        qualityMeasures["meanDepth"] = input_struct.mean_depth
+
+    if "fraction_cov_over_20" in input_struct:
+        qualityMeasures["fractionCoverage20x"] = input_struct.fraction_cov_over_20
+
+    # Add monoallelic flag (all samples homozygous for alternate allele)
+    qualityMeasures["monoallelic"] = input_struct.monoallelic
+
+    final_freq_dict["qualityMeasures"] = qualityMeasures
 
     # If ancestry_groups were passed, add the ancestry group dictionary to the
     # final frequency dictionary to be returned.

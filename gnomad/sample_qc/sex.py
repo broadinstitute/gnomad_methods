@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 
+from gnomad.utils.annotations import annotate_and_index_source_mt_for_sex_ploidy
+
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -23,25 +25,35 @@ def adjusted_sex_ploidy_expr(
     xx_karyotype_str: str = "XX",
 ) -> hl.expr.CallExpression:
     """
-    Create an entry expression to convert males to haploid on non-PAR X/Y and females to missing on Y.
+    Create an entry expression to convert XY to haploid on non-PAR X/Y and XX to missing on Y.
 
-    :param locus_expr: Locus
-    :param gt_expr: Genotype
-    :param karyotype_expr: Karyotype
-    :param xy_karyotype_str: Male sex karyotype representation
-    :param xx_karyotype_str: Female sex karyotype representation
-    :return: Genotype adjusted for sex ploidy
+    :param locus_expr: Locus expression.
+    :param gt_expr: Genotype expression.
+    :param karyotype_expr: Sex karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Genotype adjusted for sex ploidy.
     """
-    male = karyotype_expr == xy_karyotype_str
-    female = karyotype_expr == xx_karyotype_str
-    x_nonpar = locus_expr.in_x_nonpar()
-    y_par = locus_expr.in_y_par()
-    y_nonpar = locus_expr.in_y_nonpar()
+    # An optimization that annotates the locus's source matrix table with the
+    # fields in the case statements below, so they are not re-computed for every entry.
+    col_idx, row_idx = annotate_and_index_source_mt_for_sex_ploidy(
+        locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
+    )
+
     return (
         hl.case(missing_false=True)
-        .when(female & (y_par | y_nonpar), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar) & gt_expr.is_het(), hl.null(hl.tcall))
-        .when(male & (x_nonpar | y_nonpar), hl.call(gt_expr[0], phased=False))
+        # Added to reduce the checks by entry.
+        .when(row_idx.in_autosome, gt_expr)
+        .when((row_idx.y_par | row_idx.y_nonpar) & col_idx.xx, hl.missing(hl.tcall))
+        .when(~row_idx.in_non_par, gt_expr)
+        .when(
+            (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy & gt_expr.is_het(),
+            hl.missing(hl.tcall),
+        )
+        .when(
+            (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy,
+            hl.call(gt_expr[0], phased=False),
+        )
         .default(gt_expr)
     )
 

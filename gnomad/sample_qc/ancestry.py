@@ -22,7 +22,7 @@ logger.setLevel(logging.INFO)
 POP_NAMES = {
     "afr": "African/African-American",
     "ami": "Amish",
-    "amr": "Latino",
+    "amr": "Admixed American",
     "asj": "Ashkenazi Jewish",
     "eas": "East Asian",
     "eur": "European",
@@ -32,6 +32,7 @@ POP_NAMES = {
     "mid": "Middle Eastern",
     "nfe": "Non-Finnish European",
     "oth": "Other",
+    "remaining": "Remaining individuals",
     "sas": "South Asian",
     "uniform": "Uniform",
     "sas_non_consang": "South Asian (F < 0.05)",
@@ -81,6 +82,7 @@ POP_COLORS = {
     "oeu": "#6AA5CD",
     "onf": "#6AA5CD",
     "unk": "#ABB9B9",
+    "remaining": "#ABB9B9",
     "": "#ABB9B9",
 }
 

@@ -763,6 +763,8 @@ def make_info_dict(
     grpmax: bool = False,
     fafmax: bool = False,
     callstats: bool = False,
+    freq_ctt: bool = False,
+    freq_cmh: bool = False,
     description_text: str = "",
     age_hist_distribution: str = None,
     sort_order: List[str] = SORT_ORDER,
@@ -790,6 +792,9 @@ def make_info_dict(
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
+    :param callstats: If True, use alternate logic to auto-populate dictionary values associated with callstats annotations.
+    :param freq_contingency: If True, use alternate logic to auto-populate dictionary values associated with frequency contingency table test (CTT) annotations.
+    :param freq_cmh: If True, use alternate logic to auto-populate dictionary values associated with frequency Cochran-Mantel-Haenszel (CMH) annotations.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_distribution: Pipe-delimited string of overall age distribution.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -982,7 +987,7 @@ def make_info_dict(
 
         info_dict.update(fafmax_dict)
 
-    if callstats or faf:
+    if callstats or faf or freq_ctt:
         group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
         combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 
@@ -993,7 +998,16 @@ def make_info_dict(
             for_combo = make_combo_header_text("for", group_dict, pop_names)
             in_combo = make_combo_header_text("in", group_dict, pop_names)
 
-            metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
+            metrics = [
+                "AC",
+                "AN",
+                "AF",
+                "nhomalt",
+                "faf95",
+                "faf99",
+                "CTT_odds_ratio",
+                "CTT_p_value",
+            ]
             if prefix_before_metric:
                 metric_label_dict = {
                     metric: f"{prefix}{metric}{label_delimiter}{combo}{suffix}"
@@ -1005,7 +1019,7 @@ def make_info_dict(
                     for metric in metrics
                 }
 
-            if not faf:
+            if callstats:
                 combo_dict = {
                     metric_label_dict["AC"]: {
                         "Number": "A",
@@ -1033,7 +1047,7 @@ def make_info_dict(
                         ),
                     },
                 }
-            else:
+            elif faf:
                 if ("XX" in combo_fields) | ("XY" in combo_fields):
                     faf_description_text = (
                         description_text + " in non-PAR regions of sex chromosomes only"
@@ -1056,7 +1070,46 @@ def make_info_dict(
                         ),
                     },
                 }
+            else:
+                combo_dict = {
+                    metric_label_dict["CTT_odds_ratio"]: {
+                        "Number": "A",
+                        "Description": (
+                            "Odds ratio from from Hail's contingency_table_test with"
+                            " `min_cell_count=100` comparing allele frequencies"
+                            f" between exomes and genomes{for_combo}{description_text}"
+                        ),
+                    },
+                    metric_label_dict["CTT_p_value"]: {
+                        "Number": "A",
+                        "Description": (
+                            "P-value from Hail's contingency_table_test with"
+                            " `min_cell_count=100` comparing allele frequencies"
+                            f" between exomes and genomes{for_combo}{description_text}"
+                        ),
+                    },
+                }
             info_dict.update(combo_dict)
+    if freq_cmh:
+        cmh_dict = {
+            f"{prefix}CMH_chisq{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Chi-squared test statistic from the Cochran-Mantel-Haenszel test"
+                    " comparing allele frequencies between exomes and genomes"
+                    f" stratified by genetic ancestry group{description_text}"
+                ),
+            },
+            f"{prefix}CMH_p_value{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Odds ratio from Cochran-Mantel-Haenszel test comparing allele"
+                    " frequencies between exomes and genomes stratified by genetic"
+                    f" ancestry group{description_text}"
+                ),
+            },
+        }
+        info_dict.update(cmh_dict)
 
     return info_dict
 

@@ -328,6 +328,13 @@ Dictionary used during VCF export to export row (variant) annotations.
 """
 
 REGION_FLAGS_JOINT_INFO_DICT = {
+    "fail_interval_qc": {
+        "Description": (
+            "Less than 85 percent of samples meet 20X coverage if variant is in"
+            " autosomal or PAR regions or 10X coverage for non-PAR regions of"
+            " chromosomes X and Y."
+        )
+    },
     "outside_ukb_capture_region": {
         "Description": "Variant falls outside of UK Biobank exome capture regions."
     },

@@ -327,6 +327,33 @@ INFO_DICT = {
 Dictionary used during VCF export to export row (variant) annotations.
 """
 
+REGION_FLAGS_JOINT_INFO_DICT = {
+    "outside_ukb_capture_region": {
+        "Description": "Variant falls outside of UK Biobank exome capture regions."
+    },
+    "outside_broad_capture_region": {
+        "Description": "Variant falls outside of Broad exome capture regions."
+    },
+    "outside_ukb_calling_region": {
+        "Description": (
+            "Variant falls outside of UK Biobank exome capture regions plus 150 bp"
+            " padding."
+        )
+    },
+    "outside_broad_calling_region": {
+        "Description": (
+            "Variant falls outside of Broad exome capture regions plus 150 bp padding."
+        )
+    },
+    "not_called_in_exomes": {
+        "Description": "Variant was not called in the gnomAD exomes."
+    },
+    "not_called_in_genomes": {
+        "Description": "Variant was not called in the gnomAD genomes."
+    },
+}
+
+
 IN_SILICO_ANNOTATIONS_INFO_DICT = {
     "cadd_raw_score": {
         "Number": "1",

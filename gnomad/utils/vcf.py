@@ -3,7 +3,7 @@
 import copy
 import itertools
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import hail as hl
 
@@ -1020,16 +1020,9 @@ def make_info_dict(
             for_combo = make_combo_header_text("for", group_dict, pop_names)
             in_combo = make_combo_header_text("in", group_dict, pop_names)
 
-            metrics = [
-                "AC",
-                "AN",
-                "AF",
-                "nhomalt",
-                "faf95",
-                "faf99",
-                "CTT_odds_ratio",
-                "CTT_p_value",
-            ]
+            metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
+            if freq_ctt:
+                metrics += ["CTT_odds_ratio", "CTT_p_value"]
             if prefix_before_metric:
                 metric_label_dict = {
                     metric: f"{prefix}{metric}{label_delimiter}{combo}{suffix}"
@@ -1233,7 +1226,7 @@ def make_vcf_filter_dict(
 def make_hist_bin_edges_expr(
     ht: hl.Table,
     hists: List[str] = HISTS,
-    ann_with_hists: str = "",
+    ann_with_hists: Optional[str] = None,
     prefix: str = "",
     label_delimiter: str = "_",
     include_age_hists: bool = True,
@@ -1258,9 +1251,9 @@ def make_hist_bin_edges_expr(
 
     edges_dict = {}
     if ann_with_hists and hasattr(ht[ann_with_hists], "histograms"):
-        ht_row = ht.head(1)[ann_with_hists]
+        ht_row = ht[ann_with_hists]
     else:
-        ht_row = ht.head(1)
+        ht_row = ht
 
     if include_age_hists:
         edges_dict.update(
@@ -1268,9 +1261,21 @@ def make_hist_bin_edges_expr(
                 f"{prefix}{call_type}": "|".join(
                     map(
                         lambda x: f"{x:.1f}",
-                        ht_row.histograms.age_hists[f"age_hist_{call_type}"]
-                        .collect()[0]
-                        .bin_edges,
+                        ht.aggregate(
+                            hl.agg.filter(
+                                hl.is_defined(
+                                    ht_row.histograms.age_hists[
+                                        f"age_hist_{call_type}"
+                                    ].bin_edges
+                                ),
+                                hl.agg.take(
+                                    ht_row.histograms.age_hists[
+                                        f"age_hist_{call_type}"
+                                    ].bin_edges,
+                                    1,
+                                ),
+                            )
+                        )[0],
                     )
                 )
                 for call_type in ["het", "hom"]
@@ -1287,7 +1292,14 @@ def make_hist_bin_edges_expr(
             edges_dict[hist_name] = "|".join(
                 map(
                     lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
-                    ht_row.histograms[hist_type][hist].collect()[0].bin_edges,
+                    ht.aggregate(
+                        hl.agg.filter(
+                            hl.is_defined(ht_row.histograms[hist_type][hist].bin_edges),
+                            hl.agg.take(
+                                ht_row.histograms[hist_type][hist].bin_edges, 1
+                            ),
+                        )
+                    )[0],
                 )
             )
 

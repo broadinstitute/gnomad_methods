@@ -1237,7 +1237,7 @@ def make_hist_bin_edges_expr(
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
     :param ann_with_hists: Name of row annotation containing histogram data. In exomes or
-        genomes release HT, `histograms` is a row, but in the joint releast HT, it's
+        genomes release HT, `histograms` is a row, but in the joint release HT, it's
         under the row of `exomes`, `genomes`, or `joint`.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
     :param label_delimiter: String used as delimiter between prefix and histogram annotation.
@@ -1246,62 +1246,68 @@ def make_hist_bin_edges_expr(
         reformatted bin edges for values.
     """
     # Add underscore to prefix if it isn't empty
-    if prefix != "":
+    if prefix:
         prefix += label_delimiter
 
     edges_dict = {}
-    if ann_with_hists and hasattr(ht[ann_with_hists], "histograms"):
-        ht_row = ht[ann_with_hists]
-    else:
-        ht_row = ht
 
     if include_age_hists:
-        edges_dict.update(
-            {
-                f"{prefix}{call_type}": "|".join(
-                    map(
-                        lambda x: f"{x:.1f}",
-                        ht.aggregate(
-                            hl.agg.filter(
-                                hl.is_defined(
-                                    ht_row.histograms.age_hists[
-                                        f"age_hist_{call_type}"
-                                    ].bin_edges
-                                ),
-                                hl.agg.take(
-                                    ht_row.histograms.age_hists[
-                                        f"age_hist_{call_type}"
-                                    ].bin_edges,
-                                    1,
-                                ),
-                            )
-                        )[0],
-                    )
+        for call_type in ["het", "hom"]:
+            if ann_with_hists:
+                bin_edges = (
+                    ht.filter(
+                        hl.is_defined(
+                            ht[ann_with_hists]
+                            .histograms.age_hists[f"age_hist_{call_type}"]
+                            .bin_edges
+                        )
+                    )[ann_with_hists]
+                    .histograms.age_hists[f"age_hist_{call_type}"]
+                    .bin_edges.take(1)[0]
                 )
-                for call_type in ["het", "hom"]
-            }
-        )
+            else:
+                bin_edges = (
+                    ht.filter(
+                        hl.is_defined(
+                            ht.histograms.age_hists[f"age_hist_{call_type}"].bin_edges
+                        )
+                    )
+                    .histograms.age_hists[f"age_hist_{call_type}"]
+                    .bin_edges.take(1)[0]
+                )
+
+            if bin_edges:
+                edges_dict[f"{prefix}{call_type}"] = "|".join(
+                    map(lambda x: f"{x:.1f}", bin_edges)
+                )
 
     for hist in hists:
         # Parse hists calculated on both raw and adj-filtered data
         for hist_type in [f"{prefix}raw_qual_hists", f"{prefix}qual_hists"]:
-            hist_name = hist
-            if "raw" in hist_type:
-                hist_name = f"{prefix}{hist}_raw"
+            hist_name = hist if "raw" not in hist_type else f"{prefix}{hist}_raw"
 
-            edges_dict[hist_name] = "|".join(
-                map(
-                    lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
-                    ht.aggregate(
-                        hl.agg.filter(
-                            hl.is_defined(ht_row.histograms[hist_type][hist].bin_edges),
-                            hl.agg.take(
-                                ht_row.histograms[hist_type][hist].bin_edges, 1
-                            ),
+            if ann_with_hists:
+                bin_edges = (
+                    ht.filter(
+                        hl.is_defined(
+                            ht[ann_with_hists].histograms[hist_type][hist].bin_edges
                         )
-                    )[0],
+                    )[ann_with_hists]
+                    .histograms[hist_type][hist]
+                    .bin_edges.take(1)[0]
                 )
-            )
+            else:
+                bin_edges = (
+                    ht.filter(hl.is_defined(ht.histograms[hist_type][hist].bin_edges))
+                    .histograms[hist_type][hist]
+                    .bin_edges.take(1)[0]
+                )
+            if bin_edges:
+                edges_dict[hist_name] = "|".join(
+                    map(
+                        lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)), bin_edges
+                    )
+                )
 
     return edges_dict
 

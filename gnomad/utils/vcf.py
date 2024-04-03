@@ -3,7 +3,7 @@
 import copy
 import itertools
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import hail as hl
 
@@ -105,6 +105,19 @@ Annotations about variant region type.
 
 .. note::
     decoy resource files do not currently exist for GRCh38/hg38.
+"""
+
+JOINT_REGION_FLAG_FIELDS = [
+    "fail_interval_qc",
+    "outside_broad_capture_region",
+    "outside_ukb_capture_region",
+    "outside_broad_calling_region",
+    "outside_ukb_calling_region",
+    "not_called_in_exomes",
+    "not_called_in_genomes",
+]
+"""
+Annotations about variant region type that are specifically created for joint dataset of exomes and genomes from gnomAD v4.1.
 """
 
 RF_FIELDS = [
@@ -326,6 +339,41 @@ INFO_DICT = {
 """
 Dictionary used during VCF export to export row (variant) annotations.
 """
+
+JOINT_REGION_FLAGS_INFO_DICT = {
+    "fail_interval_qc": {
+        "Description": (
+            "Less than 85 percent of samples meet 20X coverage if variant is in"
+            " autosomal or PAR regions or 10X coverage for non-PAR regions of"
+            " chromosomes X and Y."
+        )
+    },
+    "outside_ukb_capture_region": {
+        "Description": "Variant falls outside of the UK Biobank exome capture regions."
+    },
+    "outside_broad_capture_region": {
+        "Description": "Variant falls outside of the Broad exome capture regions."
+    },
+    "outside_ukb_calling_region": {
+        "Description": (
+            "Variant falls outside of the UK Biobank exome capture regions plus 150 bp"
+            " padding."
+        )
+    },
+    "outside_broad_calling_region": {
+        "Description": (
+            "Variant falls outside of the Broad exome capture regions plus 150 bp"
+            " padding."
+        )
+    },
+    "not_called_in_exomes": {
+        "Description": "Variant was not called in the gnomAD exomes."
+    },
+    "not_called_in_genomes": {
+        "Description": "Variant was not called in the gnomAD genomes."
+    },
+}
+
 
 IN_SILICO_ANNOTATIONS_INFO_DICT = {
     "cadd_raw_score": {
@@ -763,6 +811,8 @@ def make_info_dict(
     grpmax: bool = False,
     fafmax: bool = False,
     callstats: bool = False,
+    freq_ctt: bool = False,
+    freq_cmh: bool = False,
     description_text: str = "",
     age_hist_distribution: str = None,
     sort_order: List[str] = SORT_ORDER,
@@ -790,6 +840,9 @@ def make_info_dict(
     :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
+    :param callstats: If True, use alternate logic to auto-populate dictionary values associated with callstats annotations.
+    :param freq_contingency: If True, use alternate logic to auto-populate dictionary values associated with frequency contingency table test (CTT) annotations.
+    :param freq_cmh: If True, use alternate logic to auto-populate dictionary values associated with frequency Cochran-Mantel-Haenszel (CMH) annotations.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_distribution: Pipe-delimited string of overall age distribution.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -967,22 +1020,10 @@ def make_info_dict(
                 ),
             },
         }
-        if prefix == "joint_" or suffix == "_joint":
-            fafmax_dict.update(
-                {
-                    f"{prefix}fafmax{label_delimiter}data{label_delimiter}type{suffix}": {
-                        "Number": "A",
-                        "Description": (
-                            "Data type with maximum filtering allele frequency"
-                            f" {description_text}"
-                        ),
-                    },
-                }
-            )
 
         info_dict.update(fafmax_dict)
 
-    if callstats or faf:
+    if callstats or faf or freq_ctt:
         group_types = sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
         combos = make_label_combos(label_groups, label_delimiter=label_delimiter)
 
@@ -994,6 +1035,8 @@ def make_info_dict(
             in_combo = make_combo_header_text("in", group_dict, pop_names)
 
             metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
+            if freq_ctt:
+                metrics += ["CTT_odds_ratio", "CTT_p_value"]
             if prefix_before_metric:
                 metric_label_dict = {
                     metric: f"{prefix}{metric}{label_delimiter}{combo}{suffix}"
@@ -1005,7 +1048,7 @@ def make_info_dict(
                     for metric in metrics
                 }
 
-            if not faf:
+            if callstats:
                 combo_dict = {
                     metric_label_dict["AC"]: {
                         "Number": "A",
@@ -1033,7 +1076,7 @@ def make_info_dict(
                         ),
                     },
                 }
-            else:
+            elif faf:
                 if ("XX" in combo_fields) | ("XY" in combo_fields):
                     faf_description_text = (
                         description_text + " in non-PAR regions of sex chromosomes only"
@@ -1056,7 +1099,46 @@ def make_info_dict(
                         ),
                     },
                 }
+            else:
+                combo_dict = {
+                    metric_label_dict["CTT_odds_ratio"]: {
+                        "Number": "A",
+                        "Description": (
+                            "Odds ratio from from Hail's contingency_table_test with"
+                            " `min_cell_count=100` comparing allele frequencies"
+                            f" between exomes and genomes{for_combo}{description_text}"
+                        ),
+                    },
+                    metric_label_dict["CTT_p_value"]: {
+                        "Number": "A",
+                        "Description": (
+                            "P-value from Hail's contingency_table_test with"
+                            " `min_cell_count=100` comparing allele frequencies"
+                            f" between exomes and genomes{for_combo}{description_text}"
+                        ),
+                    },
+                }
             info_dict.update(combo_dict)
+    if freq_cmh:
+        cmh_dict = {
+            f"{prefix}CMH_chisq{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Chi-squared test statistic from the Cochran-Mantel-Haenszel test"
+                    " comparing allele frequencies between exomes and genomes"
+                    f" stratified by genetic ancestry group{description_text}"
+                ),
+            },
+            f"{prefix}CMH_p_value{suffix}": {
+                "Number": "A",
+                "Description": (
+                    "Odds ratio from Cochran-Mantel-Haenszel test comparing allele"
+                    " frequencies between exomes and genomes stratified by genetic"
+                    f" ancestry group{description_text}"
+                ),
+            },
+        }
+        info_dict.update(cmh_dict)
 
     return info_dict
 
@@ -1158,6 +1240,7 @@ def make_vcf_filter_dict(
 def make_hist_bin_edges_expr(
     ht: hl.Table,
     hists: List[str] = HISTS,
+    ann_with_hists: Optional[str] = None,
     prefix: str = "",
     label_delimiter: str = "_",
     include_age_hists: bool = True,
@@ -1167,45 +1250,78 @@ def make_hist_bin_edges_expr(
 
     :param ht: Table containing histogram variant annotations.
     :param hists: List of variant histogram annotations. Default is HISTS.
+    :param ann_with_hists: Name of row annotation containing histogram data. In exomes or
+        genomes release HT, `histograms` is a row, but in the joint release HT, it's
+        under the row of `exomes`, `genomes`, or `joint`.
     :param prefix: Prefix text for age histogram bin edges.  Default is empty string.
     :param label_delimiter: String used as delimiter between prefix and histogram annotation.
     :param include_age_hists: Include age histogram annotations.
-    :return: Dictionary keyed by histogram annotation name, with corresponding reformatted bin edges for values.
+    :return: Dictionary keyed by histogram annotation name, with corresponding
+        reformatted bin edges for values.
     """
     # Add underscore to prefix if it isn't empty
-    if prefix != "":
+    if prefix:
         prefix += label_delimiter
 
     edges_dict = {}
+
     if include_age_hists:
-        edges_dict.update(
-            {
-                f"{prefix}{call_type}": "|".join(
-                    map(
-                        lambda x: f"{x:.1f}",
-                        ht.head(1)
-                        .histograms.age_hists[f"age_hist_{call_type}"]
-                        .collect()[0]
-                        .bin_edges,
-                    )
+        for call_type in ["het", "hom"]:
+            if ann_with_hists:
+                bin_edges = (
+                    ht.filter(
+                        hl.is_defined(
+                            ht[ann_with_hists]
+                            .histograms.age_hists[f"age_hist_{call_type}"]
+                            .bin_edges
+                        )
+                    )[ann_with_hists]
+                    .histograms.age_hists[f"age_hist_{call_type}"]
+                    .bin_edges.take(1)[0]
                 )
-                for call_type in ["het", "hom"]
-            }
-        )
+            else:
+                bin_edges = (
+                    ht.filter(
+                        hl.is_defined(
+                            ht.histograms.age_hists[f"age_hist_{call_type}"].bin_edges
+                        )
+                    )
+                    .histograms.age_hists[f"age_hist_{call_type}"]
+                    .bin_edges.take(1)[0]
+                )
+
+            if bin_edges:
+                edges_dict[f"{prefix}{call_type}"] = "|".join(
+                    map(lambda x: f"{x:.1f}", bin_edges)
+                )
 
     for hist in hists:
         # Parse hists calculated on both raw and adj-filtered data
         for hist_type in [f"{prefix}raw_qual_hists", f"{prefix}qual_hists"]:
-            hist_name = hist
-            if "raw" in hist_type:
-                hist_name = f"{prefix}{hist}_raw"
+            hist_name = hist if "raw" not in hist_type else f"{prefix}{hist}_raw"
 
-            edges_dict[hist_name] = "|".join(
-                map(
-                    lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)),
-                    ht.head(1).histograms[hist_type][hist].collect()[0].bin_edges,
+            if ann_with_hists:
+                bin_edges = (
+                    ht.filter(
+                        hl.is_defined(
+                            ht[ann_with_hists].histograms[hist_type][hist].bin_edges
+                        )
+                    )[ann_with_hists]
+                    .histograms[hist_type][hist]
+                    .bin_edges.take(1)[0]
                 )
-            )
+            else:
+                bin_edges = (
+                    ht.filter(hl.is_defined(ht.histograms[hist_type][hist].bin_edges))
+                    .histograms[hist_type][hist]
+                    .bin_edges.take(1)[0]
+                )
+            if bin_edges:
+                edges_dict[hist_name] = "|".join(
+                    map(
+                        lambda x: f"{x:.2f}" if "ab" in hist else str(int(x)), bin_edges
+                    )
+                )
 
     return edges_dict
 
@@ -1216,6 +1332,9 @@ def make_hist_dict(
     hist_metric_list: List[str] = HISTS,
     label_delimiter: str = "_",
     drop_n_smaller_larger: bool = False,
+    prefix: str = "",
+    suffix: str = "",
+    description_text: str = "",
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for histogram annotations.
@@ -1225,8 +1344,16 @@ def make_hist_dict(
     :param hist_metric_list: List of hists for which to build hist info dict
     :param label_delimiter: String used as delimiter in values stored in hist_metric_list.
     :param drop_n_smaller_larger: Whether to drop n_smaller and n_larger annotations from header dict. Default is False.
+    :param prefix: Prefix text for histogram annotations. Default is empty string.
+    :param suffix: Suffix text for histogram annotations. Default is empty string.
+    :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :return: Dictionary keyed by VCF INFO annotations, where values are Dictionaries of Number and Description attributes.
     """
+    if prefix != "":
+        prefix = f"{prefix}{label_delimiter}"
+    if suffix != "":
+        suffix = f"{label_delimiter}{suffix}"
+
     header_hist_dict = {}
     for hist in hist_metric_list:
         # Get hists for both raw and adj data
@@ -1244,9 +1371,12 @@ def make_hist_dict(
             hist_text = hist_text + " calculated on high quality genotypes"
 
         hist_dict = {
-            f"{hist}_bin_freq": {
+            f"{prefix}{hist}_bin_freq{suffix}": {
                 "Number": "A",
-                "Description": f"Histogram for {hist_text}; bin edges are: {edges}",
+                "Description": (
+                    f"Histogram for {hist_text}{description_text}; bin edges are:"
+                    f" {edges}"
+                ),
             },
         }
         # These annotations are frequently zero and are dropped from gnomad
@@ -1254,18 +1384,18 @@ def make_hist_dict(
         if not drop_n_smaller_larger:
             hist_dict.update(
                 {
-                    f"{hist}_n_smaller": {
+                    f"{prefix}{hist}_n_smaller{suffix}": {
                         "Number": "A",
                         "Description": (
                             f"Count of {hist_fields[0].upper()} values falling below"
-                            f" lowest histogram bin edge {hist_text}"
+                            f" lowest histogram bin edge {hist_text}{description_text}"
                         ),
                     },
-                    f"{hist}_n_larger": {
+                    f"{prefix}{hist}_n_larger{suffix}": {
                         "Number": "A",
                         "Description": (
                             f"Count of {hist_fields[0].upper()} values falling above"
-                            f" highest histogram bin edge {hist_text}"
+                            f" highest histogram bin edge {hist_text}{description_text}"
                         ),
                     },
                 }
@@ -1274,11 +1404,11 @@ def make_hist_dict(
         if "dp" in hist:
             hist_dict.update(
                 {
-                    f"{hist}_n_larger": {
+                    f"{prefix}{hist}_n_larger{suffix}": {
                         "Number": "A",
                         "Description": (
                             f"Count of {hist_fields[0].upper()} values falling above"
-                            f" highest histogram bin edge {hist_text}"
+                            f" highest histogram bin edge {hist_text}{description_text}"
                         ),
                     },
                 }

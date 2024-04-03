@@ -107,6 +107,19 @@ Annotations about variant region type.
     decoy resource files do not currently exist for GRCh38/hg38.
 """
 
+JOINT_REGION_FLAG_FIELDS = [
+    "fail_interval_qc",
+    "outside_broad_capture_region",
+    "outside_ukb_capture_region",
+    "outside_broad_calling_region",
+    "outside_ukb_calling_region",
+    "not_called_in_exomes",
+    "not_called_in_genomes",
+]
+"""
+Annotations about variant region type that are specifically created for joint dataset of exomes and genomes from gnomAD v4.1.
+"""
+
 RF_FIELDS = [
     "rf_positive_label",
     "rf_negative_label",
@@ -327,7 +340,7 @@ INFO_DICT = {
 Dictionary used during VCF export to export row (variant) annotations.
 """
 
-REGION_FLAGS_JOINT_INFO_DICT = {
+JOINT_REGION_FLAGS_INFO_DICT = {
     "fail_interval_qc": {
         "Description": (
             "Less than 85 percent of samples meet 20X coverage if variant is in"
@@ -336,20 +349,21 @@ REGION_FLAGS_JOINT_INFO_DICT = {
         )
     },
     "outside_ukb_capture_region": {
-        "Description": "Variant falls outside of UK Biobank exome capture regions."
+        "Description": "Variant falls outside of the UK Biobank exome capture regions."
     },
     "outside_broad_capture_region": {
-        "Description": "Variant falls outside of Broad exome capture regions."
+        "Description": "Variant falls outside of the Broad exome capture regions."
     },
     "outside_ukb_calling_region": {
         "Description": (
-            "Variant falls outside of UK Biobank exome capture regions plus 150 bp"
+            "Variant falls outside of the UK Biobank exome capture regions plus 150 bp"
             " padding."
         )
     },
     "outside_broad_calling_region": {
         "Description": (
-            "Variant falls outside of Broad exome capture regions plus 150 bp padding."
+            "Variant falls outside of the Broad exome capture regions plus 150 bp"
+            " padding."
         )
     },
     "not_called_in_exomes": {

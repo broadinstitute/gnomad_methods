@@ -233,7 +233,7 @@ def get_downsampling_freq_indices(
     variant_quality: str = "adj",
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = "None",
-    downsamplings: list = DOWNSAMPLINGS["v4"],
+    downsamplings: Optional[List[int]] = None,
 ) -> hl.expr.ArrayExpression:
     """
     Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified `genetic_ancestry_label` and "variant_quality" values.
@@ -250,7 +250,8 @@ def get_downsampling_freq_indices(
         None.
     :param subset: Subset to use for filtering by the 'subset' key in
         `freq_meta_expr`. Default is "None".
-    :param downsamplings: List of strings specifying what levels of downsamplings to obtain.
+    :param downsamplings: Optional List of integers specifying what downsampling 
+        indices to obtain. Default is None, which will return all downsampling indices.
     :return: ArrayExpression of indices of dictionaries in `freq_meta_expr` that only
         have the "downsampling" key with specified `genetic_ancestry_label` and
         "variant_quality" values.
@@ -278,8 +279,8 @@ def downsampling_counts_expr(
     singleton: bool = False,
     max_af: Optional[float] = None,
     genetic_ancestry_label: Optional[str] = None,
-    subset: Optional[str] = "None",
-    downsamplings: list = DOWNSAMPLINGS["v4"],
+    subset: Optional[str] = None,
+    downsamplings: Optional[List[int]] = None,
 ) -> hl.expr.ArrayExpression:
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.

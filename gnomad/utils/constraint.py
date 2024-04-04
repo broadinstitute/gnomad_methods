@@ -260,13 +260,25 @@ def get_downsampling_freq_indices(
         gen_anc = ["gen_anc", "pop"]
     else:
         gen_anc = [genetic_ancestry_label]
-    indices = hl.enumerate(freq_meta_expr).filter(
-        lambda f: (f[1].get("group") == variant_quality)
-        & (hl.any([f[1].get(l, "") == pop for l in gen_anc]))
-        & f[1].contains("downsampling")
-        & hl.literal(downsamplings).contains(hl.int(f[1].get("downsampling", "0")))
-        & (f[1].get("subset", "None") == subset)
-    )
+
+    def _get_filter_expr(m: hl.expr.StructExpression) -> hl.expr.BooleanExpression:
+        filter_expr = (
+            (m.get("group") == variant_quality)
+            & (hl.any([m.get(l, "") == pop for l in gen_anc]))
+            & m.contains("downsampling")
+        )
+        if downsamplings is not None:
+            filter_expr &= hl.literal(downsamplings).contains(
+                hl.int(m.get("downsampling", "0"))
+            )
+        if subset is None:
+            filter_expr &= ~m.contains("subset")
+        else:
+            filter_expr &= m.get("subset", "") == subset
+        return filter_expr
+
+    indices = hl.enumerate(freq_meta_expr).filter(lambda f: _get_filter_expr(f[1]))
+
     # Get an array of indices and meta dictionaries sorted by "downsampling" key.
     return hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"]))
 

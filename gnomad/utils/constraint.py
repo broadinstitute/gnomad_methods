@@ -232,7 +232,7 @@ def get_downsampling_freq_indices(
     pop: str = "global",
     variant_quality: str = "adj",
     genetic_ancestry_label: Optional[str] = None,
-    subset: Optional[str] = "None",
+    subset: Optional[str] = None,
     downsamplings: Optional[List[int]] = None,
 ) -> hl.expr.ArrayExpression:
     """

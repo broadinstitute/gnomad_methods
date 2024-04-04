@@ -248,8 +248,9 @@ def get_downsampling_freq_indices(
     :param genetic_ancestry_label: Label defining the genetic ancestry groups. If None,
         "gen_anc" or "pop" is used (in that order of preference) if present. Default is
         None.
-    :param subset: Subset to use for filtering by the 'subset' key in
-        `freq_meta_expr`. Default is "None".
+    :param subset: Subset to use for filtering by the 'subset' key in `freq_meta_expr`.
+        Default is None, which will return all downsampling indices without a 'subset'
+        key in `freq_meta_expr`.
     :param downsamplings: Optional List of integers specifying what downsampling
         indices to obtain. Default is None, which will return all downsampling indices.
     :return: ArrayExpression of indices of dictionaries in `freq_meta_expr` that only

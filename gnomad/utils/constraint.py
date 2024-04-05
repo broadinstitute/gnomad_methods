@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
-from gnomad.resources.grch38.gnomad import DOWNSAMPLINGS
 from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
@@ -56,6 +55,7 @@ def count_variants_by_group(
     freq_meta_expr: Optional[hl.expr.ArrayExpression] = None,
     count_singletons: bool = False,
     count_downsamplings: Tuple[str] = (),
+    downsamplings: Optional[List[int]] = None,
     additional_grouping: Tuple[str] = (),
     partition_hint: int = 100,
     omit_methylation: bool = False,
@@ -130,6 +130,8 @@ def count_variants_by_group(
         Default is False.
     :param count_downsamplings: Tuple of populations to use for downsampling counts.
         Default is ().
+    :param downsamplings: Optional List of integers specifying what downsampling
+        indices to obtain. Default is None, which will return all downsampling counts.
     :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'.
         Default is ().
     :param partition_hint: Target number of partitions for aggregation. Default is 100.
@@ -209,7 +211,7 @@ def count_variants_by_group(
             freq_meta_expr,
             pop,
             max_af=max_af,
-            downsamplings=DOWNSAMPLINGS["v4"],
+            downsamplings=downsamplings,
         )
         if count_singletons:
             logger.info(
@@ -223,7 +225,7 @@ def count_variants_by_group(
                 freq_meta_expr,
                 pop,
                 max_af=max_af,
-                downsamplings=DOWNSAMPLINGS["v4"],
+                downsamplings=downsamplings,
                 singleton=True,
             )
     # Apply each variant count aggregation in `agg` to get counts for all

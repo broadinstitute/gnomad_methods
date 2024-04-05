@@ -862,7 +862,6 @@ def vcf_field_check(
 def check_global_and_row_annot_lengths(
     t: Union[hl.MatrixTable, hl.Table],
     row_to_globals_check: Dict[str, List[str]],
-    row_struct: Optional[str] = None,
     check_all_rows: bool = False,
 ) -> None:
     """
@@ -870,7 +869,6 @@ def check_global_and_row_annot_lengths(
 
     :param t: Input MatrixTable or Table.
     :param row_to_globals_check: Dictionary with row annotation (key) and list of associated global annotations (value) to compare.
-    :param row_struct: Optional string that nests the row annotations within a struct. Default is None.
     :param check_all_rows: If True, check all rows in `t`; if False, check only the first row. Default is False.
     :return: None
     """
@@ -885,12 +883,8 @@ def check_global_and_row_annot_lengths(
                 global_fields,
             )
         for global_field in global_fields:
-            if row_struct is not None:
-                global_len = hl.eval(hl.len(t[f"{row_struct}_globals"][global_field]))
-                row_len_expr = hl.len(t[row_struct][row_field])
-            else:
-                global_len = hl.eval(hl.len(t[global_field]))
-                row_len_expr = hl.len(t[row_field])
+            global_len = hl.eval(hl.len(t[global_field]))
+            row_len_expr = hl.len(t[row_field])
             failed_rows = t.aggregate(
                 hl.struct(
                     n_fail=hl.agg.count_where(row_len_expr != global_len),

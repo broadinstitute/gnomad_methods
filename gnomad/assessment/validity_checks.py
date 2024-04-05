@@ -701,7 +701,9 @@ def check_sex_chr_metrics(
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
 
-    t_x = hl.filter_intervals(t, [hl.parse_locus_interval("chrX")])
+    t_x = hl.filter_intervals(
+        t, [hl.parse_locus_interval("chrX", reference_genome="GRCh38")]
+    )
     t_xnonpar = t_x.filter(t_x.locus.in_x_nonpar())
     n = t_xnonpar.count()
     logger.info("Found %d X nonpar sites", n)

@@ -1012,15 +1012,6 @@ def compute_expected_variants(
         intercept = plateau_model[0]
         agg_func = hl.agg.sum
         ann_to_sum = ["observed_variants", "possible_variants"]
-    # If genetic ancestry group is "global", use the overall plateau model,
-    # but sum across array of downsampling counts.
-    elif pop == "global":
-        plateau_model = hl.literal(plateau_models_expr.total)[cpg_expr]
-        slope = plateau_model[1]
-        intercept = plateau_model[0]
-        agg_func = hl.agg.array_sum
-        pop = f"_{pop}"
-        ann_to_sum = [f"downsampling_counts{pop}"]
     else:
         plateau_model = hl.literal(plateau_models_expr[pop])
         slope = hl.map(lambda f: f[cpg_expr][1], plateau_model)

@@ -205,7 +205,11 @@ def count_variants_by_group(
             pop,
         )
         agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(
-            freq_expr, freq_meta_expr, pop, max_af=max_af
+            freq_expr,
+            freq_meta_expr,
+            pop,
+            max_af=max_af,
+            downsamplings=DOWNSAMPLINGS["v4"],
         )
         if count_singletons:
             logger.info(
@@ -215,7 +219,12 @@ def count_variants_by_group(
                 pop,
             )
             agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
-                freq_expr, freq_meta_expr, pop, max_af=max_af, singleton=True
+                freq_expr,
+                freq_meta_expr,
+                pop,
+                max_af=max_af,
+                downsamplings=DOWNSAMPLINGS["v4"],
+                singleton=True,
             )
     # Apply each variant count aggregation in `agg` to get counts for all
     # combinations of `grouping`.

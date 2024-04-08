@@ -409,7 +409,7 @@ def annotate_mutation_type(
 
 
 def trimer_from_heptamer(
-    t: Union[hl.MatrixTable, hl.Table]
+    t: Union[hl.MatrixTable, hl.Table],
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Trim heptamer context to create trimer context.
@@ -426,7 +426,7 @@ def trimer_from_heptamer(
 
 
 def collapse_strand(
-    t: Union[hl.Table, hl.MatrixTable]
+    t: Union[hl.Table, hl.MatrixTable],
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Return the deduplicated context by collapsing DNA strands.

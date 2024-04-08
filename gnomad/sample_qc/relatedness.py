@@ -411,7 +411,7 @@ def infer_families(
     """
 
     def group_parent_child_pairs_by_fam(
-        parent_child_pairs: Iterable[Tuple[str, str]]
+        parent_child_pairs: Iterable[Tuple[str, str]],
     ) -> List[List[Tuple[str, str]]]:
         """
         Group parent-child pairs into a list of families.

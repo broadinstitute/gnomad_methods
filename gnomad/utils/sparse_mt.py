@@ -1390,7 +1390,7 @@ def compute_allele_number_per_ref_site(
 
 
 def filter_ref_blocks(
-    t: Union[hl.MatrixTable, hl.Table]
+    t: Union[hl.MatrixTable, hl.Table],
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter ref blocks out of the Table or MatrixTable.

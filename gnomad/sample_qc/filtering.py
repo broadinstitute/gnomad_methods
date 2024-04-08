@@ -251,7 +251,8 @@ def compute_stratified_metrics_filter(
         **{
             f"fail_{metric}": (
                 ht._qc_metrics[metric] <= metrics_stats_expr[metric].lower
-            ) | (ht._qc_metrics[metric] >= metrics_stats_expr[metric].upper)
+            )
+            | (ht._qc_metrics[metric] >= metrics_stats_expr[metric].upper)
             for metric in qc_metrics
         }
     )

@@ -869,7 +869,8 @@ def impute_sex_ploidy(
                     f"{chrom}_mean_dp": hl.agg.filter(
                         chr_mt.LGT.is_non_ref(),
                         hl.agg.sum(chr_mt.DP),
-                    ) / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
+                    )
+                    / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
                 }
             ).cols()
         else:
@@ -899,12 +900,10 @@ def impute_sex_ploidy(
 
     return ht.annotate(
         **{
-            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"] / (
-                ht[f"{normalization_contig}_mean_dp"] / 2
-            ),
-            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"] / (
-                ht[f"{normalization_contig}_mean_dp"] / 2
-            ),
+            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"]
+            / (ht[f"{normalization_contig}_mean_dp"] / 2),
+            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"]
+            / (ht[f"{normalization_contig}_mean_dp"] / 2),
         }
     )
 

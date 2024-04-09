@@ -80,17 +80,31 @@ Used to stratify frequency annotations (AC, AN, AF) for each sex.
 
 POPS = {
     "v3": ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"],
-    "v4": [
-        "afr",
-        "amr",
-        "asj",
-        "eas",
-        "fin",
-        "mid",
-        "nfe",
-        "remaining",
-        "sas",
-    ],
+    "v4": {
+        "exomes": [
+            "afr",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "mid",
+            "nfe",
+            "remaining",
+            "sas",
+        ],
+        "genomes": [
+            "afr",
+            "ami",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "mid",
+            "nfe",
+            "remaining",
+            "sas",
+        ],
+    },
 }
 """
 Global ancestry groups in gnomAD by version.

@@ -79,7 +79,20 @@ Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
 POPS = {
-    "v3": ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"],
+    "v3": {
+        "genomes": [
+            "afr",
+            "ami",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "nfe",
+            "oth",
+            "sas",
+            "mid",
+        ]
+    },
     "v4": {
         "exomes": [
             "afr",

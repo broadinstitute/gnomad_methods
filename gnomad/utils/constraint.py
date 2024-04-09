@@ -995,7 +995,7 @@ def compute_expected_variants(
     :param plateau_models_expr: Linear models (output of `build_models()`, with the values
         of the dictionary formatted as a StructExpression of intercept and slope, that
         calibrates mutation rate to proportion observed for high coverage exomes. It
-        includes models for CpG, non-CpG sites, and each population in `POPS`.
+        includes models for CpG, non-CpG sites, and each population if specified.
     :param mu_expr: Float64Expression of mutation rate.
     :param possible_variants_expr: Int64Expression of possible variant counts.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.

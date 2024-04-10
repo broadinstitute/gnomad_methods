@@ -79,18 +79,45 @@ Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
 POPS = {
-    "v3": ["afr", "ami", "amr", "asj", "eas", "fin", "nfe", "oth", "sas", "mid"],
-    "v4": [
-        "afr",
-        "amr",
-        "asj",
-        "eas",
-        "fin",
-        "mid",
-        "nfe",
-        "remaining",
-        "sas",
-    ],
+    "v3": {
+        "genomes": [
+            "afr",
+            "ami",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "nfe",
+            "oth",
+            "sas",
+            "mid",
+        ]
+    },
+    "v4": {
+        "exomes": [
+            "afr",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "mid",
+            "nfe",
+            "remaining",
+            "sas",
+        ],
+        "genomes": [
+            "afr",
+            "ami",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "mid",
+            "nfe",
+            "remaining",
+            "sas",
+        ],
+    },
 }
 """
 Global ancestry groups in gnomAD by version.
@@ -572,11 +599,7 @@ def gnomad_gks(
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
-    pops_list = (
-        list(POPS["v4" if data_type == "exomes" else "v3"])
-        if by_ancestry_group
-        else None
-    )
+    pops_list = list(POPS["v4"][data_type]) if by_ancestry_group else None
 
     # Throw warnings if contradictory arguments are passed.
     if by_ancestry_group and vrs_only:

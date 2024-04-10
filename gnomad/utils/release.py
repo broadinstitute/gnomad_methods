@@ -25,7 +25,7 @@ logger.setLevel(logging.INFO)
 def make_faf_index_dict(
     faf_meta: List[Dict[str, str]],
     groups: List[str] = ["adj"],
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
+    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
     sexes: List[str] = SEXES,
     label_delimiter: str = "_",
 ) -> Dict[str, int]:
@@ -35,7 +35,7 @@ def make_faf_index_dict(
     :param faf_meta: Global annotation containing the set of groupings for each element of the faf array
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS
-    :param pops: List of sample global population names for gnomAD genomes. Default is POPS[CURRENT_MAJOR_RELEASE]
+    :param pops: List of sample global population names for gnomAD data type. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param label_delimiter: String used as delimiter when making group label combinations
     :return: Dictionary of faf annotation population groupings, where values are the corresponding 0-based indices for the
@@ -57,7 +57,7 @@ def make_faf_index_dict(
 def make_freq_index_dict(
     freq_meta: List[Dict[str, str]],
     groups: List[str] = GROUPS,
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE],
+    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
     sexes: List[str] = SEXES,
     subsets: List[str] = SUBSETS[CURRENT_MAJOR_RELEASE],
     downsamplings: Optional[List[int]] = None,
@@ -73,7 +73,7 @@ def make_freq_index_dict(
     :param freq_meta: List containing the set of groupings for each element of the freq array
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS
-    :param pops: List of sample global population names for gnomAD genomes. Default is POPS[CURRENT_MAJOR_RELEASE]
+    :param pops: List of sample global population names for gnomAD data type. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param subsets: List of sample subsets in dataset. Default is SUBSETS[CURRENT_MAJOR_RELEASE]
     :param downsamplings: List of downsampling cohort sizes present in global frequency array

@@ -197,7 +197,7 @@ def filter_low_conf_regions(
 
 
 def filter_to_autosomes(
-    t: Union[hl.MatrixTable, hl.Table]
+    t: Union[hl.MatrixTable, hl.Table],
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter the Table or MatrixTable to autosomes only.
@@ -470,7 +470,7 @@ def remove_fields_from_constant(
 
 
 def filter_x_nonpar(
-    t: Union[hl.Table, hl.MatrixTable]
+    t: Union[hl.Table, hl.MatrixTable],
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter to loci that are in non-PAR regions on chromosome X.
@@ -496,7 +496,7 @@ def filter_x_nonpar(
 
 
 def filter_y_nonpar(
-    t: Union[hl.Table, hl.MatrixTable]
+    t: Union[hl.Table, hl.MatrixTable],
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Filter to loci that are in non-PAR regions on chromosome Y.

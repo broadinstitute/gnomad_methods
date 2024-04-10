@@ -27,7 +27,7 @@ Path to chain file required to lift data from GRCh38 to GRCh37.
 
 
 def get_liftover_genome(
-    t: Union[hl.MatrixTable, hl.Table]
+    t: Union[hl.MatrixTable, hl.Table],
 ) -> Tuple[hl.genetics.ReferenceGenome, hl.genetics.ReferenceGenome]:
     """
     Infer reference genome build of input data and assume destination reference genome build.

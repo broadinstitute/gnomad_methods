@@ -1,4 +1,5 @@
 """Utils module containing generic functions that are useful for adding transcript expression-aware annotations."""
+
 import logging
 from typing import Callable, List, Optional, Tuple, Union
 

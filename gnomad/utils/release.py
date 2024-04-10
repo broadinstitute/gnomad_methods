@@ -73,7 +73,7 @@ def make_freq_index_dict(
     :param freq_meta: List containing the set of groupings for each element of the freq array
         (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS
-    :param pops: List of sample global population names for gnomAD genomes. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param pops: List of sample global population names for gnomAD data type. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param subsets: List of sample subsets in dataset. Default is SUBSETS[CURRENT_MAJOR_RELEASE]
     :param downsamplings: List of downsampling cohort sizes present in global frequency array

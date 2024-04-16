@@ -319,7 +319,7 @@ def summarize_variant_filters(
         add_agg_expr["allele_type"] = t.info.allele_type
         _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
 
-    if "in_problematic_region" in t.info:
+    if "in_problematic_region" in t.row:
         logger.info(
             "Checking distributions of variant type and region type amongst variant"
             " filters..."

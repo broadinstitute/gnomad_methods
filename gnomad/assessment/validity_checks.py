@@ -311,40 +311,29 @@ def summarize_variant_filters(
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-    _filter_agg_order(t, {"is_filtered": t.is_filtered})
+    _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
 
     add_agg_expr = {}
     if "allele_type" in t.info:
         logger.info("Checking distributions of variant type amongst variant filters...")
-        _filter_agg_order(t, {"allele_type": t.info.allele_type})
         add_agg_expr["allele_type"] = t.info.allele_type
+        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
 
-    logger.info(
-        "Checking distributions of variant type and region type amongst variant"
-        " filters..."
-    )
-    _filter_agg_order(
-        t,
-        {**add_agg_expr, "in_problematic_region": t.in_problematic_region},
-        n_rows,
-        n_cols,
-    )
+    if "in_problematic_region" in t.info:
+        logger.info(
+            "Checking distributions of variant type and region type amongst variant"
+            " filters..."
+        )
+        add_agg_expr["in_problematic_region"] = t.in_problematic_region
+        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
 
     if "n_alt_alleles" in t.info:
         logger.info(
             "Checking distributions of variant type, region type, and number of alt alleles"
             " amongst variant filters..."
         )
-        _filter_agg_order(
-            t,
-            {
-                **add_agg_expr,
-                "in_problematic_region": t.in_problematic_region,
-                "n_alt_alleles": t.info.n_alt_alleles,
-            },
-            n_rows,
-            n_cols,
-        )
+        add_agg_expr["n_alt_alleles"] = t.info.n_alt_alleles
+        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
 
 
 def generic_field_check_loop(

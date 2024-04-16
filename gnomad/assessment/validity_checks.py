@@ -590,15 +590,35 @@ def check_raw_and_adj_callstats(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
+
+    # Check raw and adj AC, AF, and nhomalt missing if AN is missing.
+    for group in ["raw", "adj"]:
+        for subfield in ["AC", "AF", "nhomalt"]:
+            check_field = f"{subfield}{delimiter}{group}"
+            an_field = f"AN{delimiter}{group}"
+            field_check_expr[
+                f"{check_field} defined when AN defined and missing when AN missing"
+            ] = {
+                "expr": hl.if_else(
+                    hl.is_missing(t.info[an_field]),
+                    hl.is_defined(t.info[check_field]),
+                    hl.is_missing(t.info[check_field]),
+                ),
+                "agg_func": hl.agg.count_where,
+                "display_fields": hl.struct(
+                    **{an_field: t.info[an_field], check_field: t.info[check_field]}
+                ),
+            }
+
     for subfield in ["AC", "AF"]:
         # Check raw AC, AF > 0
         check_field = f"{subfield}{delimiter}raw"
-
         field_check_expr[f"{check_field} > 0"] = {
             "expr": t.info[check_field] <= 0,
             "agg_func": hl.agg.count_where,
             "display_fields": hl.struct(**{check_field: t.info[check_field]}),
         }
+
         # Check adj AC, AF > 0
         check_field = f"{subfield}{delimiter}adj"
         field_check_expr[f"{check_field} >= 0"] = {

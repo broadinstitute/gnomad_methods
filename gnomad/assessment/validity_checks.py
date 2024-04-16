@@ -582,8 +582,7 @@ def check_raw_and_adj_callstats(
     field_check_expr = {}
 
     for group in ["raw", "adj"]:
-        # Check raw and adj AC and nhomalt missing if AN is missing and defined if AN
-        # is defined.
+        # Check AC and nhomalt missing if AN is missing and defined if AN is defined.
         for subfield in ["AC", "nhomalt"]:
             check_field = f"{subfield}{delimiter}{group}"
             an_field = f"AN{delimiter}{group}"
@@ -601,9 +600,7 @@ def check_raw_and_adj_callstats(
                 ),
             }
 
-    for group in ["raw", "adj"]:
-        # Check raw and adj AF missing if AN is missing and defined if AN is defined
-        # and > 0.
+        # Check AF missing if AN is missing and defined if AN is defined and > 0.
         check_field = f"AF{delimiter}{group}"
         an_field = f"AN{delimiter}{group}"
         field_check_expr[

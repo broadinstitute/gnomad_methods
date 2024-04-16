@@ -581,9 +581,10 @@ def check_raw_and_adj_callstats(
 
     field_check_expr = {}
 
-    # Check raw and adj AC, AF, and nhomalt missing if AN is missing.
     for group in ["raw", "adj"]:
-        for subfield in ["AC", "AF", "nhomalt"]:
+        # Check raw and adj AC and nhomalt missing if AN is missing and defined if AN
+        # is defined.
+        for subfield in ["AC", "nhomalt"]:
             check_field = f"{subfield}{delimiter}{group}"
             an_field = f"AN{delimiter}{group}"
             field_check_expr[
@@ -599,6 +600,36 @@ def check_raw_and_adj_callstats(
                     **{an_field: t.info[an_field], check_field: t.info[check_field]}
                 ),
             }
+
+    for group in ["raw", "adj"]:
+        # Check raw and adj AF missing if AN is missing and defined if AN is defined
+        # and > 0.
+        check_field = f"AF{delimiter}{group}"
+        an_field = f"AN{delimiter}{group}"
+        field_check_expr[
+            f"{check_field} defined when AN defined (and > 0) and missing when AN missing"
+        ] = {
+            "expr": hl.if_else(
+                hl.is_missing(t.info[an_field]),
+                hl.is_defined(t.info[check_field]),
+                (t.info[an_field] > 0) & hl.is_missing(t.info[check_field]),
+            ),
+            "agg_func": hl.agg.count_where,
+            "display_fields": hl.struct(
+                **{an_field: t.info[an_field], check_field: t.info[check_field]}
+            ),
+        }
+
+        # Check raw and adj AF missing if AN is 0.
+        check_field = f"AF{delimiter}{group}"
+        an_field = f"AN{delimiter}{group}"
+        field_check_expr[f"{check_field} missing when AN 0"] = {
+            "expr": (t.info[an_field] == 0) & hl.is_defined(t.info[check_field]),
+            "agg_func": hl.agg.count_where,
+            "display_fields": hl.struct(
+                **{an_field: t.info[an_field], check_field: t.info[check_field]}
+            ),
+        }
 
     for subfield in ["AC", "AF"]:
         # Check raw AC, AF > 0

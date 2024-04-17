@@ -385,7 +385,6 @@ def explode_downsamplings(
     :param downsampling_meta: Dictionary containing downsampling metadata. Keys are the genetic ancestry group names and values are the list of downsamplings for that genetic ancestry group.
     :return: Table with downsampling counts exploded.
     """
-    # TODO: Make compatible with different format of metric expression.
     ht = ht.annotate(
         data=[
             hl.struct(

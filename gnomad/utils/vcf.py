@@ -813,6 +813,7 @@ def make_info_dict(
     callstats: bool = False,
     freq_ctt: bool = False,
     freq_cmh: bool = False,
+    freq_stat_union: bool = False,
     description_text: str = "",
     age_hist_distribution: str = None,
     sort_order: List[str] = SORT_ORDER,
@@ -841,8 +842,9 @@ def make_info_dict(
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
     :param callstats: If True, use alternate logic to auto-populate dictionary values associated with callstats annotations.
-    :param freq_contingency: If True, use alternate logic to auto-populate dictionary values associated with frequency contingency table test (CTT) annotations.
+    :param freq_ctt: If True, use alternate logic to auto-populate dictionary values associated with frequency contingency table test (CTT) annotations.
     :param freq_cmh: If True, use alternate logic to auto-populate dictionary values associated with frequency Cochran-Mantel-Haenszel (CMH) annotations.
+    :param freq_stat_union: If True, use alternate logic to auto-populate dictionary values associated with the select results of from the contingency table and Cochran-Mantel-Haenszel tests comparing allele frequencies between exomes and genomes.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_distribution: Pipe-delimited string of overall age distribution.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -1139,6 +1141,28 @@ def make_info_dict(
             },
         }
         info_dict.update(cmh_dict)
+    if freq_stat_union:
+        freq_stat_union_dict = {
+            f"{prefix}stat_union_p_value{suffix}": {
+                "Number": "A",
+                "Description": (
+                    f"p-value from the contingency table or Cochran-Mantel-Haenszel tests{description_text}"
+                ),
+            },
+            f"{prefix}stat_union_test_name{suffix}": {
+                "Number": "A",
+                "Description": (
+                    f"Name of the test used to compare allele frequencies between exomes and genomes. Options are `contingency_table_test` and `cochran_mantel_haenszel_test`{description_text}"
+                ),
+            },
+            f"{prefix}stat_union_gen_ancs{suffix}": {
+                "Number": "A",
+                "Description": (
+                    f"List of genetic ancestry groups included in the test. If stat_union_test_name is contingency_table_test, the length of gen_ancs is one and if stat_union_test_name is 'cochran_mantel_haenszel_test', the length of 'gen_ancs' is greater than one{description_text}"
+                ),
+            },
+        }
+        info_dict.update(freq_stat_union_dict)
 
     return info_dict
 

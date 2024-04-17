@@ -372,6 +372,47 @@ def downsampling_counts_expr(
     return hl.agg.array_sum(hl.map(_get_criteria, sorted_indices))
 
 
+def explode_downsamplings(
+    ht: hl.Table,
+    downsampling_meta: Dict[str, List[str]],
+    metrics: List[str] = ["syn", "lof", "mis"],
+) -> hl.Table:
+    """
+    Explode downsampling counts for each genetic ancestry group and metric.
+
+    :param ht: Input Table.
+    :param metrics: List of metrics to explode. Default is '['syn', 'lof', 'mis']'.
+    :param downsampling_meta: Dictionary containing downsampling metadata. Keys are the genetic ancestry group names and values are the list of downsamplings for that genetic ancestry group.
+    :return: Table with downsampling counts exploded.
+    """
+    # TODO: Make compatible with different format of metric expression.
+    ht = ht.annotate(
+        data=[
+            hl.struct(
+                pop=pop,
+                downsampling=downsampling,
+                **{
+                    f"{metric}.exp": ht[metric]["pop_exp"][pop][i] for metric in metrics
+                },
+                **{
+                    f"{metric}.obs": hl.if_else(
+                        hl.is_missing(ht[metric]["pop_obs"][pop][i])
+                        & hl.is_defined(ht[metric]["pop_obs"][pop][i]),
+                        0,
+                        ht[metric]["pop_obs"][pop][i],
+                    )
+                    for metric in metrics
+                },
+            )
+            for pop, downsamplings in downsampling_meta.items()
+            for i, downsampling in enumerate(downsamplings)
+        ]
+    ).select(*fields)
+    ht = ht.explode("data")
+    ht = ht.transmute(**ht.data)
+    return ht
+
+
 def annotate_mutation_type(
     t: Union[hl.MatrixTable, hl.Table],
     context_length: Optional[int] = None,

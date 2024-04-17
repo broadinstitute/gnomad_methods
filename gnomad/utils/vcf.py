@@ -1152,7 +1152,7 @@ def make_info_dict(
             f"{prefix}stat_union_test_name{suffix}": {
                 "Number": "A",
                 "Description": (
-                    f"Name of the test used to compare allele frequencies between exomes and genomes. Options are `contingency_table_test` and `cochran_mantel_haenszel_test`{description_text}"
+                    f"Name of the test used to compare allele frequencies between exomes and genomes. Either contingency_table_test or cochran_mantel_haenszel_test{description_text}"
                 ),
             },
             f"{prefix}stat_union_gen_ancs{suffix}": {

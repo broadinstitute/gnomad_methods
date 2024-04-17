@@ -407,7 +407,7 @@ def explode_downsamplings(
             for pop, downsamplings in downsampling_meta.items()
             for i, downsampling in enumerate(downsamplings)
         ]
-    ).select(*fields)
+    ).select(*["data"])
     ht = ht.explode("data")
     ht = ht.transmute(**ht.data)
     return ht

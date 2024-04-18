@@ -391,14 +391,15 @@ def explode_downsamplings(
                 pop=pop,
                 downsampling=downsampling,
                 **{
-                    f"{metric}.exp": ht[metric]["pop_exp"][pop][i] for metric in metrics
+                    f"{metric}.exp": ht[metric]["gen_anc_exp"][pop][i]
+                    for metric in metrics
                 },
                 **{
                     f"{metric}.obs": hl.if_else(
-                        hl.is_missing(ht[metric]["pop_obs"][pop][i])
-                        & hl.is_defined(ht[metric]["pop_obs"][pop][i]),
+                        hl.is_missing(ht[metric]["gen_anc_obs"][pop][i])
+                        & hl.is_defined(ht[metric]["gen_anc_obs"][pop][i]),
                         0,
-                        ht[metric]["pop_obs"][pop][i],
+                        ht[metric]["gen_anc_obs"][pop][i],
                     )
                     for metric in metrics
                 },
@@ -1102,9 +1103,9 @@ def oe_aggregation_expr(
         - oe - observed:expected ratio of variants filtered to `filter_expr`.
 
         If `pops` is specified:
-            - pop_exp - Struct with the expected number of variants per population (for
+            - gen_anc_exp - Struct with the expected number of variants per population (for
               all pop in `pops`) filtered to `filter_expr`.
-            - pop_obs - Struct with the observed number of variants per population (for
+            - gen_anc_obs - Struct with the observed number of variants per population (for
               all pop in `pops`) filtered to `filter_expr`.
 
     .. note::
@@ -1140,10 +1141,10 @@ def oe_aggregation_expr(
     # Create aggregators that sum the number of observed variants
     # and expected variants for each population if pops is specified.
     if pops:
-        agg_expr["pop_exp"] = hl.struct(
+        agg_expr["gen_anc_exp"] = hl.struct(
             **{pop: hl.agg.array_sum(ht[f"expected_variants_{pop}"]) for pop in pops}
         )
-        agg_expr["pop_obs"] = hl.struct(
+        agg_expr["gen_anc_obs"] = hl.struct(
             **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
         )
 

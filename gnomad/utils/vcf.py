@@ -844,7 +844,7 @@ def make_info_dict(
     :param callstats: If True, use alternate logic to auto-populate dictionary values associated with callstats annotations.
     :param freq_ctt: If True, use alternate logic to auto-populate dictionary values associated with frequency contingency table test (CTT) annotations.
     :param freq_cmh: If True, use alternate logic to auto-populate dictionary values associated with frequency Cochran-Mantel-Haenszel (CMH) annotations.
-    :param freq_stat_union: If True, use alternate logic to auto-populate dictionary values associated with the select results of from the contingency table and Cochran-Mantel-Haenszel tests comparing allele frequencies between exomes and genomes.
+    :param freq_stat_union: If True, use alternate logic to auto-populate dictionary values associated with the union of the contingency table and Cochran-Mantel-Haenszel tests.
     :param description_text: Optional text to append to the end of descriptions. Needs to start with a space if specified.
     :param str age_hist_distribution: Pipe-delimited string of overall age distribution.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
@@ -1152,7 +1152,7 @@ def make_info_dict(
             f"{prefix}stat_union_test_name{suffix}": {
                 "Number": "A",
                 "Description": (
-                    f"Name of the test used to compare allele frequencies between exomes and genomes. Either contingency_table_test or cochran_mantel_haenszel_test{description_text}"
+                    f"Name of the test, either contingency_table_test or cochran_mantel_haenszel_test, used to compare allele frequencies between exomes and genomes{description_text}"
                 ),
             },
             f"{prefix}stat_union_gen_ancs{suffix}": {

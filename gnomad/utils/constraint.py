@@ -388,7 +388,7 @@ def explode_downsamplings(
     ht = ht.annotate(
         data=[
             hl.struct(
-                pop=pop,
+                gen_anc=pop,
                 downsampling=downsampling,
                 **{
                     f"{metric}.exp": ht[metric]["gen_anc_exp"][pop][i]

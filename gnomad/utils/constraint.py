@@ -380,10 +380,19 @@ def explode_downsamplings(
     """
     Explode downsampling counts for each genetic ancestry group and metric.
 
-    :param ht: Input Table. Should contain struct of downsampling information for genetic ancestry groups under each metric name. Example: 'lof': struct {gen_anc_exp: struct {global: array<float64>}.
+    The input `ht` must contain struct of downsampling information for genetic ancestry 
+    groups under each metric name. For example: 'lof': struct {gen_anc_exp: struct 
+    {global: array<float64>}.
+
+    :param ht: Input Table.
     :param metrics: List of metrics to explode. Default is '['syn', 'lof', 'mis']'.
-    :param downsampling_meta: Dictionary containing downsampling metadata. Keys are the genetic ancestry group names and values are the list of downsamplings for that genetic ancestry group. Example: {'global': ['5000', '10000'], 'afr': ['5000', '10000']}.
-    :return: Table with downsampling counts exploded so that observed and expected metric counts for each pair of genetic ancestry groups and downsamplings is a separate row.
+    :param downsampling_meta: Dictionary containing downsampling metadata. Keys are the 
+        genetic ancestry group names and values are the list of downsamplings for that 
+        genetic ancestry group. Example: {'global': ['5000', '10000'], 'afr': ['5000', 
+        '10000']}.
+    :return: Table with downsampling counts exploded so that observed and expected 
+        metric counts for each pair of genetic ancestry groups and downsamplings is a 
+        separate row.
     """
     ht = ht.select(
         _data=[

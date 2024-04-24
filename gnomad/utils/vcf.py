@@ -1211,6 +1211,7 @@ def make_vcf_filter_dict(
     indel_cutoff: float,
     inbreeding_cutoff: float,
     variant_qc_filter: str = "RF",
+    joint: bool = False,
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -1225,6 +1226,7 @@ def make_vcf_filter_dict(
     :param indel_cutoff: Minimum indel cutoff score from random forest model.
     :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
     :param variant_qc_filter: Method used for variant QC filter. One of 'RF' or 'AS_VQSR'. Default is 'RF'.
+    :param joint: Whether the filter dictionary is for the joint release. Default is False.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
     """
     variant_qc_filter_dict = {
@@ -1249,19 +1251,39 @@ def make_vcf_filter_dict(
             " be 'RF' or 'AS_VQSR'"
         )
 
-    filter_dict = {
-        "AC0": {
-            "Description": (
-                "Allele count is zero after filtering out low-confidence genotypes (GQ"
-                " < 20; DP < 10; and AB < 0.2 for het calls)"
-            )
-        },
-        "InbreedingCoeff": {
-            "Description": f"Inbreeding coefficient < {inbreeding_cutoff}"
-        },
-        "PASS": {"Description": "Passed all variant filters"},
-        variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
-    }
+    if joint:
+        filter_dict = {
+            "PASS": {
+                "Description": "Passed variant filters in exomes and genomes, "
+                "or Passed variant filters in one of the exomes "
+                "or genomes datasets but the variant was not present in the other dataset"
+            },
+            "EXOMES_FILTERED": {
+                "Description": "Failed variant filters in exomes "
+                "dataset, but either passed variant filters in genomes dataset or the variant was not present in the genomes dataset"
+            },
+            "GENOMES_FILTERED": {
+                "Description": "Failed variant filters in genomes "
+                "dataset, but either passed variant filters in exomes dataset or the variant was not present in the exomes dataset"
+            },
+            "BOTH_FILTERED": {
+                "Description": "Failed variant filters in both exomes and genomes datasets"
+            },
+        }
+    else:
+        filter_dict = {
+            "AC0": {
+                "Description": (
+                    "Allele count is zero after filtering out low-confidence genotypes (GQ"
+                    " < 20; DP < 10; and AB < 0.2 for het calls)"
+                )
+            },
+            "InbreedingCoeff": {
+                "Description": f"Inbreeding coefficient < {inbreeding_cutoff}"
+            },
+            "PASS": {"Description": "Passed all variant filters"},
+            variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
+        }
 
     return filter_dict
 

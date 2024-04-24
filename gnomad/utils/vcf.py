@@ -1207,9 +1207,9 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float,
-    indel_cutoff: float,
-    inbreeding_cutoff: float,
+    snp_cutoff: Optional[float] = None,
+    indel_cutoff: Optional[float] = None,
+    inbreeding_cutoff: Optional[float] = None,
     variant_qc_filter: str = "RF",
     joint: bool = False,
 ) -> Dict[str, str]:
@@ -1271,6 +1271,11 @@ def make_vcf_filter_dict(
             },
         }
     else:
+        # The cutoffs must be specified for the filter descriptions to be generated
+        if snp_cutoff is None or indel_cutoff is None or inbreeding_cutoff is None:
+            raise ValueError(
+                "snp_cutoff, indel_cutoff, and inbreeding_cutoff must be specified to generate filter descriptions."
+            )
         filter_dict = {
             "AC0": {
                 "Description": (

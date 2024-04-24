@@ -1263,22 +1263,16 @@ def make_vcf_filter_dict(
     if joint:
         filter_dict = {
             "PASS": {
-                "Description": "Either passed all variant filters in both exomes and "
-                "genomes, or passed all variant filters in either exomes or genomes "
-                "while being absent from the other dataset"
+                "Description": "Either passed all variant filters in both exomes and genomes, or passed all variant filters in either exomes or genomes while being absent from the other dataset"
             },
             "EXOMES_FILTERED": {
-                "Description": "Failed variant filters in the exomes dataset and either "
-                "passed all variant filters in the genomes dataset or the variant was "
-                "not present in the genomes dataset"
+                "Description": "Failed variant filters in the exomes dataset and either passed all variant filters in the genomes dataset or the variant was not present in the genomes dataset. Refer to 'exomes_filters' within INFO for more information"
             },
             "GENOMES_FILTERED": {
-                "Description": "Failed variant filters in the genomes dataset and either "
-                "passed all variant filters in the exomes dataset or the variant was "
-                "not present in the exomes dataset"
+                "Description": "Failed variant filters in the genomes dataset and either passed all variant filters in the exomes dataset or the variant was not present in the exomes dataset. Refer to 'genomes_filters' within INFO for more information"
             },
             "BOTH_FILTERED": {
-                "Description": "Failed variant filters in both exomes and genomes datasets"
+                "Description": "Failed variant filters in both exomes and genomes datasets. Refer to 'exomes_filters' and 'genomes_filters' within INFO for more information"
             },
         }
     else:

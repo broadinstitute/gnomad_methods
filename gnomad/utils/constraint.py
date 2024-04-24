@@ -386,7 +386,7 @@ def explode_downsamplings(
     :return: Table with downsampling counts exploded so that observed and expected metric counts for each pair of genetic ancestry groups and downsamplings is a separate row.
     """
     ht = ht.select(
-        data=[
+        _data=[
             hl.struct(
                 gen_anc=pop,
                 downsampling=downsampling,

@@ -400,11 +400,8 @@ def explode_downsamplings(
                 gen_anc=pop,
                 downsampling=downsampling,
                 **{
-                    f"{metric}.exp": ht[metric]["gen_anc_exp"][pop][i]
-                    for metric in metrics
-                },
-                **{
-                    f"{metric}.obs": ht[metric]["gen_anc_obs"][pop][i]
+                    f"{metric}.{oe}": ht[metric][f"gen_anc_{oe}"][pop][i]
+                    for oe in ["obs", "exp"]
                     for metric in metrics
                 },
             )

@@ -372,13 +372,13 @@ def downsampling_counts_expr(
     return hl.agg.array_sum(hl.map(_get_criteria, sorted_indices))
 
 
-def explode_downsamplings(
+def explode_downsamplings_oe(
     ht: hl.Table,
     downsampling_meta: Dict[str, List[str]],
     metrics: List[str] = ["syn", "lof", "mis"],
 ) -> hl.Table:
     """
-    Explode downsampling counts for each genetic ancestry group and metric.
+    Explode observed and expected downsampling counts for each genetic ancestry group and metric.
 
     The input `ht` must contain struct of downsampling information for genetic ancestry
     groups under each metric name. For example: 'lof': struct {gen_anc_exp: struct

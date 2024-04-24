@@ -579,6 +579,11 @@ FORMAT_DICT = {
 Dictionary used during VCF export to export MatrixTable entries.
 """
 
+JOINT_FILTERS_INFO_DICT = {
+    "exomes_filters": {"Description": "Filters annotation for exomes data type."},
+    "genomes_filters": {"Description": "Filters annotation for genomes data type."},
+}
+
 
 def adjust_vcf_incompatible_types(
     ht: hl.Table,

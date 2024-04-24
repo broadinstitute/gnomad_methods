@@ -1250,32 +1250,38 @@ def make_vcf_filter_dict(
             f"{variant_qc_filter} is not a valid value for 'variant_qc_filter'. It must"
             " be 'RF' or 'AS_VQSR'"
         )
+    if (
+        not joint
+        and snp_cutoff is None
+        or indel_cutoff is None
+        or inbreeding_cutoff is None
+    ):
+        raise ValueError(
+            "snp_cutoff, indel_cutoff, and inbreeding_cutoff must be specified to generate filter descriptions."
+        )
 
     if joint:
         filter_dict = {
             "PASS": {
-                "Description": "Passed variant filters in exomes and genomes, "
-                "or Passed variant filters in one of the exomes "
-                "or genomes datasets but the variant was not present in the other dataset"
+                "Description": "Either passed all variant filters in both exomes and "
+                "genomes, or passed all variant filters in either exomes or genomes "
+                "while being absent from the other dataset"
             },
             "EXOMES_FILTERED": {
-                "Description": "Failed variant filters in exomes "
-                "dataset, but either passed variant filters in genomes dataset or the variant was not present in the genomes dataset"
+                "Description": "Failed variant filters in the exomes dataset and either "
+                "passed all variant filters in the genomes dataset or the variant was "
+                "not present in the genomes dataset"
             },
             "GENOMES_FILTERED": {
-                "Description": "Failed variant filters in genomes "
-                "dataset, but either passed variant filters in exomes dataset or the variant was not present in the exomes dataset"
+                "Description": "Failed variant filters in the genomes dataset and either "
+                "passed all variant filters in the exomes dataset or the variant was "
+                "not present in the exomes dataset"
             },
             "BOTH_FILTERED": {
                 "Description": "Failed variant filters in both exomes and genomes datasets"
             },
         }
     else:
-        # The cutoffs must be specified for the filter descriptions to be generated
-        if snp_cutoff is None or indel_cutoff is None or inbreeding_cutoff is None:
-            raise ValueError(
-                "snp_cutoff, indel_cutoff, and inbreeding_cutoff must be specified to generate filter descriptions."
-            )
         filter_dict = {
             "AC0": {
                 "Description": (

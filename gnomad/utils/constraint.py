@@ -403,8 +403,8 @@ def explode_downsamplings(
             for i, downsampling in enumerate(downsamplings)
         ]
     )
-    ht = ht.explode("data")
-    ht = ht.transmute(**ht.data)
+    ht = ht.explode("_data")
+    ht = ht.transmute(**ht._data)
     return ht
 
 

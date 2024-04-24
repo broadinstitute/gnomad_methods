@@ -579,6 +579,11 @@ FORMAT_DICT = {
 Dictionary used during VCF export to export MatrixTable entries.
 """
 
+JOINT_FILTERS_INFO_DICT = {
+    "exomes_filters": {"Description": "Filters' values from the exomes dataset."},
+    "genomes_filters": {"Description": "Filters' values from the genomes dataset."},
+}
+
 
 def adjust_vcf_incompatible_types(
     ht: hl.Table,
@@ -1202,10 +1207,11 @@ def add_as_info_dict(
 
 
 def make_vcf_filter_dict(
-    snp_cutoff: float,
-    indel_cutoff: float,
-    inbreeding_cutoff: float,
+    snp_cutoff: Optional[float] = None,
+    indel_cutoff: Optional[float] = None,
+    inbreeding_cutoff: Optional[float] = None,
     variant_qc_filter: str = "RF",
+    joint: bool = False,
 ) -> Dict[str, str]:
     """
     Generate dictionary of Number and Description attributes to be used in the VCF header, specifically for FILTER annotations.
@@ -1220,6 +1226,7 @@ def make_vcf_filter_dict(
     :param indel_cutoff: Minimum indel cutoff score from random forest model.
     :param inbreeding_cutoff: Inbreeding coefficient hard cutoff.
     :param variant_qc_filter: Method used for variant QC filter. One of 'RF' or 'AS_VQSR'. Default is 'RF'.
+    :param joint: Whether the filter dictionary is for the joint release. Default is False.
     :return: Dictionary keyed by VCF FILTER annotations, where values are Dictionaries of Number and Description attributes.
     """
     variant_qc_filter_dict = {
@@ -1243,20 +1250,55 @@ def make_vcf_filter_dict(
             f"{variant_qc_filter} is not a valid value for 'variant_qc_filter'. It must"
             " be 'RF' or 'AS_VQSR'"
         )
+    if (
+        not joint
+        and snp_cutoff is None
+        or indel_cutoff is None
+        or inbreeding_cutoff is None
+    ):
+        raise ValueError(
+            "snp_cutoff, indel_cutoff, and inbreeding_cutoff must be specified to generate filter descriptions."
+        )
 
-    filter_dict = {
-        "AC0": {
-            "Description": (
-                "Allele count is zero after filtering out low-confidence genotypes (GQ"
-                " < 20; DP < 10; and AB < 0.2 for het calls)"
-            )
-        },
-        "InbreedingCoeff": {
-            "Description": f"Inbreeding coefficient < {inbreeding_cutoff}"
-        },
-        "PASS": {"Description": "Passed all variant filters"},
-        variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
-    }
+    if joint:
+        filter_dict = {
+            "PASS": {
+                "Description": "Either passed all variant filters in both exomes and "
+                "genomes, or passed all variant filters in either "
+                "exomes or genomes while being absent from the other "
+                "dataset"
+            },
+            "EXOMES_FILTERED": {
+                "Description": "Failed variant filters in the exomes dataset and either "
+                "passed all variant filters in the genomes dataset or the variant was "
+                "not present in the genomes dataset. Refer to 'exomes_filters' within "
+                "INFO for more information"
+            },
+            "GENOMES_FILTERED": {
+                "Description": "Failed variant filters in the genomes dataset and either "
+                "passed all variant filters in the exomes dataset or the variant was "
+                "not present in the exomes dataset. Refer to 'genomes_filters' within "
+                "INFO for more information"
+            },
+            "BOTH_FILTERED": {
+                "Description": "Failed variant filters in both exomes and genomes datasets."
+                "Refer to 'exomes_filters' and 'genomes_filters' within INFO for more information"
+            },
+        }
+    else:
+        filter_dict = {
+            "AC0": {
+                "Description": (
+                    "Allele count is zero after filtering out low-confidence genotypes (GQ"
+                    " < 20; DP < 10; and AB < 0.2 for het calls)"
+                )
+            },
+            "InbreedingCoeff": {
+                "Description": f"Inbreeding coefficient < {inbreeding_cutoff}"
+            },
+            "PASS": {"Description": "Passed all variant filters"},
+            variant_qc_filter: variant_qc_filter_dict[variant_qc_filter],
+        }
 
     return filter_dict
 

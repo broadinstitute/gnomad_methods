@@ -1250,11 +1250,8 @@ def make_vcf_filter_dict(
             f"{variant_qc_filter} is not a valid value for 'variant_qc_filter'. It must"
             " be 'RF' or 'AS_VQSR'"
         )
-    if (
-        not joint
-        and snp_cutoff is None
-        or indel_cutoff is None
-        or inbreeding_cutoff is None
+    if not joint and (
+        snp_cutoff is None or indel_cutoff is None or inbreeding_cutoff is None
     ):
         raise ValueError(
             "snp_cutoff, indel_cutoff, and inbreeding_cutoff must be specified to generate filter descriptions."

@@ -1278,7 +1278,7 @@ def make_vcf_filter_dict(
                 "INFO for more information"
             },
             "BOTH_FILTERED": {
-                "Description": "Failed variant filters in both exomes and genomes datasets."
+                "Description": "Failed variant filters in both exomes and genomes datasets. "
                 "Refer to 'exomes_filters' and 'genomes_filters' within INFO for more information"
             },
         }

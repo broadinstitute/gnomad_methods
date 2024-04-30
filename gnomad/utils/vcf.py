@@ -1161,7 +1161,7 @@ def make_info_dict(
                 ),
             },
             f"{prefix}stat_union_gen_ancs{suffix}": {
-                "Number": "A",
+                "Number": ".",
                 "Description": (
                     f"List of genetic ancestry groups included in the test. If stat_union_test_name is contingency_table_test, the length of gen_ancs is one and if stat_union_test_name is 'cochran_mantel_haenszel_test', the length of 'gen_ancs' is greater than one{description_text}"
                 ),

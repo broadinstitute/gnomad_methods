@@ -271,14 +271,22 @@ def vep_or_lookup_vep(
 
 def add_most_severe_consequence_to_consequence(
     tc: hl.expr.StructExpression,
+    csq_order: Optional[List[str]] = None,
 ) -> hl.expr.StructExpression:
     """
     Add most_severe_consequence annotation to transcript consequences.
 
-    This is for a given transcript, as there are often multiple annotations for a single transcript:
-    e.g. splice_region_variant&intron_variant -> splice_region_variant
+    This is for a given transcript, as there are often multiple annotations for a single
+    transcript: e.g. splice_region_variant&intron_variant -> splice_region_variant
+
+    :param tc: Transcript consequence struct to annotate.
+    :param csq_order: Optional list indicating the order of VEP consequences, sorted
+    from high to low impact. Default is None, which uses the value of the
+    `CSQ_ORDER` global.
     """
-    csqs = hl.literal(CSQ_ORDER)
+    if csq_order is None:
+        csq_order = CSQ_ORDER
+    csqs = hl.literal(csq_order)
 
     return tc.annotate(
         most_severe_consequence=csqs.find(lambda c: tc.consequence_terms.contains(c))
@@ -353,7 +361,7 @@ def process_consequences(
         sub_expr = tcl.map(
             lambda tc: (
                 hl.case(missing_false=True)
-                .when((tc.lof == "HC") & (tc.lof_flags == ""), no_flag)
+                .when((tc.lof == "HC") & hl.or_else(tc.lof_flags == "", True), no_flag)
                 .when((tc.lof == "HC") & (tc.lof_flags != ""), flag)
                 .when(tc.lof == "OS", 20)
                 .when(tc.lof == "LC", 10)
@@ -385,7 +393,7 @@ def process_consequences(
 
     # Annotate each transcript consequence with the 'most_severe_consequence'.
     transcript_csqs = t[vep_root].transcript_consequences.map(
-        add_most_severe_consequence_to_consequence
+        lambda tc: add_most_severe_consequence_to_consequence(tc, csq_order)
     )
 
     # Group transcript consequences by gene and find the worst consequence for each.

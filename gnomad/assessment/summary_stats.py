@@ -396,13 +396,13 @@ def get_summary_stats_variant_filter_expr(
             max_af = [max_af]
         for af in max_af:
             log_list.append(f"variants with (AF < {af:.2e})")
-            ss_filter_expr[f"max_{af}"] = freq_expr < af
+            ss_filter_expr[f"max_af_{af}"] = freq_expr < af
     if min_an_proportion is not None:
         log_list.append(
             "variants that meet a minimum call rate of %.2f (using AN as a call rate "
             "proxy)" % min_an_proportion,
         )
-        ss_filter_expr[f"max_{max_af}"] = get_an_criteria(
+        ss_filter_expr[f"min_an_{max_af}"] = get_an_criteria(
             t, an_proportion_cutoff=min_an_proportion
         )
 

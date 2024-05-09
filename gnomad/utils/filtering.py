@@ -128,19 +128,19 @@ def combine_functions(
     return cond
 
 
-def filter_low_conf_regions(
-    mt: Union[hl.MatrixTable, hl.Table],
+def low_conf_regions_expr(
+    locus_expr: hl.expr.LocusExpression,
     filter_lcr: bool = True,
     filter_decoy: bool = True,
     filter_segdup: bool = True,
     filter_exome_low_coverage_regions: bool = False,
     filter_telomeres_and_centromeres: bool = False,
     high_conf_regions: Optional[List[str]] = None,
-) -> Union[hl.MatrixTable, hl.Table]:
+) -> hl.expr.BooleanExpression:
     """
     Filter low-confidence regions.
 
-    :param mt: MatrixTable or Table to filter
+    :param locus_expr: Locus expression to use for filtering.
     :param filter_lcr: Whether to filter LCR regions
     :param filter_decoy: Whether to filter decoy regions
     :param filter_segdup: Whether to filter Segdup regions
@@ -149,28 +149,30 @@ def filter_low_conf_regions(
     :param high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
     :return: MatrixTable or Table with low confidence regions removed
     """
-    build = get_reference_genome(mt.locus).name
+    build = get_reference_genome(locus_expr).name
     if build == "GRCh37":
         import gnomad.resources.grch37.reference_data as resources
     elif build == "GRCh38":
         import gnomad.resources.grch38.reference_data as resources
+    else:
+        raise ValueError(f"Unsupported reference genome build: {build}")
 
     criteria = []
     if filter_lcr:
         lcr = resources.lcr_intervals.ht()
-        criteria.append(hl.is_missing(lcr[mt.locus]))
+        criteria.append(hl.is_missing(lcr[locus_expr]))
 
     if filter_decoy:
         decoy = resources.decoy_intervals.ht()
-        criteria.append(hl.is_missing(decoy[mt.locus]))
+        criteria.append(hl.is_missing(decoy[locus_expr]))
 
     if filter_segdup:
         segdup = resources.seg_dup_intervals.ht()
-        criteria.append(hl.is_missing(segdup[mt.locus]))
+        criteria.append(hl.is_missing(segdup[locus_expr]))
 
     if filter_exome_low_coverage_regions:
         high_cov = resources.high_coverage_intervals.ht()
-        criteria.append(hl.is_missing(high_cov[mt.locus]))
+        criteria.append(hl.is_missing(high_cov[locus_expr]))
 
     if filter_telomeres_and_centromeres:
         if build != "GRCh38":
@@ -179,19 +181,36 @@ def filter_low_conf_regions(
             )
 
         telomeres_and_centromeres = resources.telomeres_and_centromeres.ht()
-        criteria.append(hl.is_missing(telomeres_and_centromeres[mt.locus]))
+        criteria.append(hl.is_missing(telomeres_and_centromeres[locus_expr]))
 
     if high_conf_regions is not None:
         for region in high_conf_regions:
             region = hl.import_locus_intervals(region)
-            criteria.append(hl.is_defined(region[mt.locus]))
+            criteria.append(hl.is_defined(region[locus_expr]))
 
     if criteria:
         filter_criteria = functools.reduce(operator.iand, criteria)
-        if isinstance(mt, hl.MatrixTable):
-            mt = mt.filter_rows(filter_criteria)
-        else:
-            mt = mt.filter(filter_criteria)
+        return filter_criteria
+    else:
+        raise ValueError("No low confidence regions requested for filtering.")
+
+
+def filter_low_conf_regions(
+    mt: Union[hl.MatrixTable, hl.Table],
+    **kwargs,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Filter low-confidence regions.
+
+    :param mt: MatrixTable or Table to filter.
+    :param kwargs: Keyword arguments to pass to `low_conf_regions_expr`.
+    :return: MatrixTable or Table with low confidence regions removed.
+    """
+    filter_criteria = low_conf_regions_expr(mt.locus, **kwargs)
+    if isinstance(mt, hl.MatrixTable):
+        mt = mt.filter_rows(filter_criteria)
+    else:
+        mt = mt.filter(filter_criteria)
 
     return mt
 

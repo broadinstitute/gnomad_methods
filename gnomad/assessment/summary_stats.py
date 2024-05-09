@@ -2,7 +2,7 @@
 import functools
 import logging
 import operator
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Union
 
 import hail as hl
 

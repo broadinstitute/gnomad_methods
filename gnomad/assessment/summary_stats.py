@@ -1,11 +1,12 @@
 # noqa: D100
-
+import functools
 import logging
-from typing import Dict, Optional, Set
+import operator
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.filtering import filter_low_conf_regions
+from gnomad.utils.filtering import filter_low_conf_regions, low_conf_regions_expr
 from gnomad.utils.vep import (
     LOF_CSQ_SET,
     add_most_severe_consequence_to_consequence,
@@ -353,6 +354,263 @@ def get_tx_expression_expr(
         & (csq[csq_field] == csq_expr.most_severe_consequence),
         tx_ht[key_expr][tx_struct],
     )
+
+
+def expr_from_field(
+    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.Expression],
+    field: Optional[str] = None,
+) -> hl.expr.Expression:
+    """
+    Return expression from input MatrixTable/Table or Expression.
+
+    :param t_or_expr: Input MatrixTable/Table/Expression.
+    :param field: Field name to extract from input MT/HT. Default is None.
+    :return: Expression from input MT/HT or input Expression.
+    """
+    if isinstance(t_or_expr, hl.MatrixTable) or isinstance(t_or_expr, hl.Table):
+        if field is None:
+            raise ValueError("Field must be provided when input is MatrixTable/Table.")
+        t_or_expr = t_or_expr[field]
+
+    return t_or_expr
+
+
+def pass_filter_expr(
+    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.CollectionExpression],
+    filter_field: str = "filters",
+) -> hl.expr.BooleanExpression:
+    """
+    Filter to PASS variants.
+
+    :param t_or_expr: Input MatrixTable/Table/CollectionExpression to use for filtering.
+    :param filter_field: Name of field in MT/HT that contains variant filters. Default
+        is 'filters'.
+    :return: BooleanExpression for filtering to PASS variants.
+    """
+    return hl.len(expr_from_field(t_or_expr, filter_field)) == 0
+
+
+def min_af_filter_expr(
+    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.CollectionExpression],
+    min_af: float,
+    freq_field: str = "freq",
+    freq_index: int = 0,
+) -> hl.expr.BooleanExpression:
+    """
+    Filter to variants with minimum allele frequency.
+
+    :param t_or_expr: Input MatrixTable/Table/CollectionExpression to use for filtering.
+    :param min_af: Minimum allele frequency cutoff.
+    :param freq_field: Name of field in MT/HT that contains frequency information.
+        Default is 'freq'.
+    :param freq_index: Which index of frequency struct to use. Default is 0.
+    """
+    return expr_from_field(t_or_expr, freq_field)[freq_index].AF > min_af
+
+
+def max_af_filter_expr(
+    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.CollectionExpression],
+    max_af: float,
+    freq_field: str = "freq",
+    freq_index: int = 0,
+) -> hl.expr.BooleanExpression:
+    """
+    Filter to variants with minimum allele frequency.
+
+    :param t_or_expr: Input MatrixTable/Table/CollectionExpression to use for filtering.
+    :param max_af: Maximum allele frequency cutoff.
+    :param freq_field: Name of field in MT/HT that contains frequency information.
+        Default is 'freq'.
+    :param freq_index: Which index of frequency struct to use. Default is 0.
+    """
+    return expr_from_field(t_or_expr, freq_field)[freq_index].AF < max_af
+
+
+def get_summary_stats_variant_filter_expr(
+    t: Union[hl.Table, hl.MatrixTable],
+    filter_lcr: bool = False,
+    filter_expr: hl.expr.SetExpression = None,
+    freq_expr: hl.expr.SetExpression = None,
+    max_af: Optional[float] = None,
+    min_an_proportion: Optional[float] = None,
+    collapse_filters: bool = False,
+) -> Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]:
+    """
+    Generate variant filtering expression for summary stats.
+
+    :param t: Input Table/MatrixTable.
+    :param filter_lcr: Whether to filter out low confidence regions. Default is False.
+    :param filter_expr: SetExpression containing variant filters. Default is None.
+    :param freq_expr: SetExpression containing frequency information. Default is None.
+    :param max_af: Maximum allele frequency cutoff. Default is None.
+    :param min_an_proportion: Minimum allele number proportion (used as a proxy for
+        call rate). Default is None.
+    :param collapse_filters: Whether to collapse all filters into a single expression.
+        Default is False.
+    :return: BooleanExpression or Dict of BooleanExpressions for filtering variants.
+    """
+    if max_af is not None and freq_expr is None:
+        raise ValueError("")
+
+    ss_filter_expr = {"all_variants": True}
+    if filter_lcr:
+        logger.info("Filtering out low confidence regions...")
+        ss_filter_expr["no_lcr"] = low_conf_regions_expr(t.locus, filter_decoy=False)
+    if filter_expr is not None:
+        logger.info(
+            "Adding filter expression for variants that pass all variant QC filters..."
+        )
+        ss_filter_expr["pass_filters"] = pass_filter_expr(filter_expr)
+    if max_af is not None:
+        logger.info("Filtering to variants with (AF < %.2f)...", max_af)
+        ss_filter_expr[f"max_{max_af}"] = max_af_filter_expr(freq_expr, max_af)
+    if min_an_proportion is not None:
+        logger.info(
+            "Using AN (as a call rate proxy) to filter to variants that meet a minimum"
+            " call rate of %.2f...",
+            min_an_proportion,
+        )
+        ss_filter_expr[f"max_{max_af}"] = get_an_criteria(
+            t, an_proportion_cutoff=min_an_proportion
+        )
+
+    if collapse_filters:
+        if len(ss_filter_expr) == 1:
+            logger.warning("No filtering applied to variants for summary stats.")
+        ss_filter_expr = functools.reduce(operator.iand, ss_filter_expr.values())
+
+    return ss_filter_expr
+
+
+def get_summary_stats_csq_filter_expr(
+    t: Union[hl.Table, hl.MatrixTable, hl.StructExpression],
+    lof_csq_set: Optional[Set[str]] = None,
+    lof_label_set: Optional[Set[str]] = None,
+    lof_flag_set: Optional[Set[str]] = None,
+    lof_no_flags: bool = False,
+    lof_any_flags: bool = False,
+    lof_loftee_combinations: bool = False,
+    additional_csq_sets: Optional[Dict[str, Set[str]]] = None,
+    additional_csqs: Optional[Set[str]] = None,
+    collapse_filters: bool = False,
+) -> Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]:
+    """
+    Generate consequence filtering expression for summary stats.
+
+    :param t: Input Table/MatrixTable/StructExpression.
+    :param lof_csq_set: Set of LoF consequence strings. Default is None.
+    :param lof_label_set: Set of LoF consequence labels. Default is None.
+    :param lof_flag_set: Set of LoF consequence flags. Default is None.
+    :param lof_no_flags: Whether to filter to LoF variants with no flags. Default is
+        False.
+    :param lof_any_flags: Whether to filter to LoF variants with any flags. Default is
+        False.
+    :param lof_loftee_combinations: Whether to add combinations of LOFTEE and
+        consequence type filters. Default is False.
+    :param additional_csq_sets: Dictionary containing additional consequence sets.
+        Default is None.
+    :param additional_csqs: Set of additional consequences to keep. Default is None.
+    :param collapse_filters: Whether to collapse all filters into a single expression.
+        Default is False.
+    :return: BooleanExpression or Dict of BooleanExpressions for filtering consequences.
+    """
+    # Set up filters for specific consequences or sets of consequences.
+    csq_filters = {"lof": lof_csq_set}
+    if additional_csq_sets is not None:
+        csq_filters.update(additional_csq_sets)
+
+    if lof_loftee_combinations and lof_csq_set is not None:
+        additional_csqs = set(lof_csq_set) | set(additional_csqs or [])
+
+    if additional_csqs is not None:
+        csq_filters.update({c: {c} for c in additional_csqs})
+
+    def _create_filter_by_csq(
+        t: Union[hl.Table, hl.MatrixTable],
+        csq_set: Union[Set, List, hl.expr.CollectionExpression],
+    ) -> hl.expr.BooleanExpression:
+        """
+        Create filtering expression for a set of consequences.
+
+        :param t: Input Table/MatrixTable.
+        :param csq_set: Set of consequences to filter.
+        :return: BooleanExpression for filtering by consequence.
+        """
+        if not isinstance(csq_set, hl.expr.CollectionExpression):
+            csq_set = hl.set(csq_set)
+
+        return csq_set.contains(t.most_severe_csq)
+
+    # Create filtering expressions for each consequence set.
+    ss_filter_expr = {}
+    for filter_name, csq_set in csq_filters.items():
+        if csq_set is not None:
+            ss_filter_expr[filter_name] = _create_filter_by_csq(t, csq_set)
+
+    # Add filtering expressions for LoF consequence labels.
+    lof_labels = (
+        {
+            f"lof_{lof_label}": hl.or_else(t.lof == lof_label, False)
+            for lof_label in lof_label_set
+        }
+        if lof_label_set
+        else {}
+    )
+
+    # Add filtering expressions for LoF consequence flags.
+    lof_flags = (
+        {
+            f"lof_flag_{lof_flag}": hl.or_else(
+                t.lof_flags.split(",").contains(lof_flag), False
+            )
+            for lof_flag in lof_flag_set
+        }
+        if lof_flag_set
+        else {}
+    )
+
+    # Add filtering expressions for HC LoF variants with no flags or any flags.
+    lof_hc_flags = {}
+    if lof_no_flags or lof_any_flags:
+        hc_expr = hl.or_else(t.lof == "HC", False)
+        if "no_lof_flags" in t.row:
+            no_lof_flags_expr = t.no_lof_flags
+        elif "lof_flags" in t.row:
+            no_lof_flags_expr = hl.is_missing(t.lof_flags) | (t.lof_flags == "")
+        else:
+            raise ValueError(
+                "No LoF flag info found in input Table/MatrixTable/StructExpression."
+            )
+        if lof_no_flags:
+            lof_hc_flags["lof_HC_no_flags"] = hc_expr & no_lof_flags_expr
+        if lof_any_flags:
+            lof_flags["lof_HC_with_flags"] = hc_expr & ~no_lof_flags_expr
+
+    # Update summary stats filter expressions with LoF labels and flags.
+    ss_filter_expr.update({**lof_labels, **lof_flags, **lof_hc_flags})
+
+    # Add expressions for LOFTEE and consequence type combinations.
+    if lof_loftee_combinations:
+        lof_csq = {lof_var: ss_filter_expr[lof_var] for lof_var in lof_csq_set}
+        lof_combo = {
+            {
+                **{f"{v}_HC_{l}": v_e & l_e for l, l_e in lof_hc_flags.items()},
+                **{f"{v}_{l}": v_e & l_e for l, l_e in lof_labels if l != "HC"},
+                **{f"{v}_{l}": v_e & l_e for l, l_e in lof_flags.items()},
+            }
+            for v, v_e in lof_csq.items()
+        }
+        ss_filter_expr.update(lof_combo)
+
+    if not ss_filter_expr:
+        logger.warning("No filtering applied to consequences for summary stats.")
+        return True if collapse_filters else ss_filter_expr
+
+    # Collapse all filters into a single expression if requested.
+    if collapse_filters:
+        ss_filter_expr = functools.reduce(operator.iand, ss_filter_expr.values())
+
+    return ss_filter_expr
 
 
 def default_generate_gene_lof_matrix(

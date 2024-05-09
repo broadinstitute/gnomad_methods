@@ -356,82 +356,12 @@ def get_tx_expression_expr(
     )
 
 
-def expr_from_field(
-    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.Expression],
-    field: Optional[str] = None,
-) -> hl.expr.Expression:
-    """
-    Return expression from input MatrixTable/Table or Expression.
-
-    :param t_or_expr: Input MatrixTable/Table/Expression.
-    :param field: Field name to extract from input MT/HT. Default is None.
-    :return: Expression from input MT/HT or input Expression.
-    """
-    if isinstance(t_or_expr, hl.MatrixTable) or isinstance(t_or_expr, hl.Table):
-        if field is None:
-            raise ValueError("Field must be provided when input is MatrixTable/Table.")
-        t_or_expr = t_or_expr[field]
-
-    return t_or_expr
-
-
-def pass_filter_expr(
-    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.CollectionExpression],
-    filter_field: str = "filters",
-) -> hl.expr.BooleanExpression:
-    """
-    Filter to PASS variants.
-
-    :param t_or_expr: Input MatrixTable/Table/CollectionExpression to use for filtering.
-    :param filter_field: Name of field in MT/HT that contains variant filters. Default
-        is 'filters'.
-    :return: BooleanExpression for filtering to PASS variants.
-    """
-    return hl.len(expr_from_field(t_or_expr, filter_field)) == 0
-
-
-def min_af_filter_expr(
-    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.CollectionExpression],
-    min_af: float,
-    freq_field: str = "freq",
-    freq_index: int = 0,
-) -> hl.expr.BooleanExpression:
-    """
-    Filter to variants with minimum allele frequency.
-
-    :param t_or_expr: Input MatrixTable/Table/CollectionExpression to use for filtering.
-    :param min_af: Minimum allele frequency cutoff.
-    :param freq_field: Name of field in MT/HT that contains frequency information.
-        Default is 'freq'.
-    :param freq_index: Which index of frequency struct to use. Default is 0.
-    """
-    return expr_from_field(t_or_expr, freq_field)[freq_index].AF > min_af
-
-
-def max_af_filter_expr(
-    t_or_expr: Union[hl.MatrixTable, hl.Table, hl.expr.CollectionExpression],
-    max_af: float,
-    freq_field: str = "freq",
-    freq_index: int = 0,
-) -> hl.expr.BooleanExpression:
-    """
-    Filter to variants with minimum allele frequency.
-
-    :param t_or_expr: Input MatrixTable/Table/CollectionExpression to use for filtering.
-    :param max_af: Maximum allele frequency cutoff.
-    :param freq_field: Name of field in MT/HT that contains frequency information.
-        Default is 'freq'.
-    :param freq_index: Which index of frequency struct to use. Default is 0.
-    """
-    return expr_from_field(t_or_expr, freq_field)[freq_index].AF < max_af
-
-
 def get_summary_stats_variant_filter_expr(
     t: Union[hl.Table, hl.MatrixTable],
     filter_lcr: bool = False,
     filter_expr: hl.expr.SetExpression = None,
     freq_expr: hl.expr.SetExpression = None,
-    max_af: Optional[float] = None,
+    max_af: Optional[Union[float, List[float]]] = None,
     min_an_proportion: Optional[float] = None,
     collapse_filters: bool = False,
 ) -> Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]:
@@ -442,7 +372,8 @@ def get_summary_stats_variant_filter_expr(
     :param filter_lcr: Whether to filter out low confidence regions. Default is False.
     :param filter_expr: SetExpression containing variant filters. Default is None.
     :param freq_expr: SetExpression containing frequency information. Default is None.
-    :param max_af: Maximum allele frequency cutoff. Default is None.
+    :param max_af: Maximum allele frequency cutoff(s). Can be a single float or a list
+        of floats. Default is None.
     :param min_an_proportion: Minimum allele number proportion (used as a proxy for
         call rate). Default is None.
     :param collapse_filters: Whether to collapse all filters into a single expression.
@@ -450,29 +381,32 @@ def get_summary_stats_variant_filter_expr(
     :return: BooleanExpression or Dict of BooleanExpressions for filtering variants.
     """
     if max_af is not None and freq_expr is None:
-        raise ValueError("")
+        raise ValueError("Frequency expression must be provided when filtering by AF!")
 
+    log_list = []
     ss_filter_expr = {"all_variants": True}
     if filter_lcr:
-        logger.info("Filtering out low confidence regions...")
+        log_list.append("variants in low confidence regions")
         ss_filter_expr["no_lcr"] = low_conf_regions_expr(t.locus, filter_decoy=False)
     if filter_expr is not None:
-        logger.info(
-            "Adding filter expression for variants that pass all variant QC filters..."
-        )
-        ss_filter_expr["pass_filters"] = pass_filter_expr(filter_expr)
+        log_list.append("variants that pass all variant QC filters")
+        ss_filter_expr["pass_filters"] = hl.len(filter_expr) == 0
     if max_af is not None:
-        logger.info("Filtering to variants with (AF < %.2f)...", max_af)
-        ss_filter_expr[f"max_{max_af}"] = max_af_filter_expr(freq_expr, max_af)
+        if isinstance(max_af, float):
+            max_af = [max_af]
+        for af in max_af:
+            log_list.append(f"variants with (AF < {af:.2e})")
+            ss_filter_expr[f"max_{af}"] = freq_expr < af
     if min_an_proportion is not None:
-        logger.info(
-            "Using AN (as a call rate proxy) to filter to variants that meet a minimum"
-            " call rate of %.2f...",
-            min_an_proportion,
+        log_list.append(
+            "variants that meet a minimum call rate of %.2f (using AN as a call rate "
+            "proxy)" % min_an_proportion,
         )
         ss_filter_expr[f"max_{max_af}"] = get_an_criteria(
             t, an_proportion_cutoff=min_an_proportion
         )
+
+    logger.info("Adding filtering for:\n\t%s...", "\n\t".join(log_list))
 
     if collapse_filters:
         if len(ss_filter_expr) == 1:
@@ -548,26 +482,18 @@ def get_summary_stats_csq_filter_expr(
             ss_filter_expr[filter_name] = _create_filter_by_csq(t, csq_set)
 
     # Add filtering expressions for LoF consequence labels.
-    lof_labels = (
-        {
-            f"lof_{lof_label}": hl.or_else(t.lof == lof_label, False)
-            for lof_label in lof_label_set
-        }
-        if lof_label_set
-        else {}
-    )
+    lof_labels = {
+        f"lof_{lof_label}": hl.or_else(t.lof == lof_label, False)
+        for lof_label in lof_label_set or []
+    }
 
     # Add filtering expressions for LoF consequence flags.
-    lof_flags = (
-        {
-            f"lof_flag_{lof_flag}": hl.or_else(
-                t.lof_flags.split(",").contains(lof_flag), False
-            )
-            for lof_flag in lof_flag_set
-        }
-        if lof_flag_set
-        else {}
-    )
+    lof_flags = {
+        f"lof_flag_{lof_flag}": hl.or_else(
+            t.lof_flags.split(",").contains(lof_flag), False
+        )
+        for lof_flag in lof_flag_set or []
+    }
 
     # Add filtering expressions for HC LoF variants with no flags or any flags.
     lof_hc_flags = {}
@@ -592,15 +518,13 @@ def get_summary_stats_csq_filter_expr(
     # Add expressions for LOFTEE and consequence type combinations.
     if lof_loftee_combinations:
         lof_csq = {lof_var: ss_filter_expr[lof_var] for lof_var in lof_csq_set}
-        lof_combo = {
-            {
+        for v, v_e in lof_csq.items():
+            lof_combo = {
                 **{f"{v}_HC_{l}": v_e & l_e for l, l_e in lof_hc_flags.items()},
-                **{f"{v}_{l}": v_e & l_e for l, l_e in lof_labels if l != "HC"},
+                **{f"{v}_{l}": v_e & l_e for l, l_e in lof_labels.items() if l != "HC"},
                 **{f"{v}_{l}": v_e & l_e for l, l_e in lof_flags.items()},
             }
-            for v, v_e in lof_csq.items()
-        }
-        ss_filter_expr.update(lof_combo)
+            ss_filter_expr.update(lof_combo)
 
     if not ss_filter_expr:
         logger.warning("No filtering applied to consequences for summary stats.")

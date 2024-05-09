@@ -108,7 +108,9 @@ def annotate_with_ht(
         present in `annotation_ht`. Default is False.
     :return: Annotated MatrixTable.
     """
-    annotation_ht = annotation_ht.select(*fields)
+    if fields is not None:
+        annotation_ht = annotation_ht.select(*fields)
+
     if filter_missing:
         logger.info("Filtering input to variants in the supplied annotation HT...")
 

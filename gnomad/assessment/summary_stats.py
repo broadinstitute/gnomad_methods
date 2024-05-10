@@ -449,15 +449,12 @@ def get_summary_stats_csq_filter_expr(
     :return: BooleanExpression or Dict of BooleanExpressions for filtering consequences.
     """
     # Set up filters for specific consequences or sets of consequences.
-    csq_filters = {"lof": lof_csq_set}
-    if additional_csq_sets is not None:
-        csq_filters.update(additional_csq_sets)
-
-    if lof_loftee_combinations and lof_csq_set is not None:
-        additional_csqs = set(lof_csq_set) | set(additional_csqs or [])
-
-    if additional_csqs is not None:
-        csq_filters.update({c: {c} for c in additional_csqs})
+    csq_filters = {
+        **({"csq_set_lof": lof_csq_set or {}}),
+        **({f"csq_set_{l}": c for l, c in (additional_csq_sets or {}).items()}),
+        **({f"lof_csq_{c}": {c} for c in lof_csq_set or []}),
+        **({f"csq_{c}": {c} for c in additional_csqs or []}),
+    }
 
     def _create_filter_by_csq(
         t: Union[hl.Table, hl.MatrixTable],
@@ -518,7 +515,7 @@ def get_summary_stats_csq_filter_expr(
     # Add expressions for LOFTEE and consequence type combinations.
     if lof_loftee_combinations:
         lof_labels.pop("lof_HC")
-        lof_csq = {lof_var: ss_filter_expr[lof_var] for lof_var in lof_csq_set}
+        lof_csq = {v: ss_filter_expr[f"lof_csq_{v}"] for v in lof_csq_set}
         for v, v_e in lof_csq.items():
             lof_combo = {
                 **{f"{v}_{l}": v_e & l_e for l, l_e in lof_hc_flags.items()},

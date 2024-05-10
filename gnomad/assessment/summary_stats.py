@@ -384,13 +384,13 @@ def get_summary_stats_variant_filter_expr(
         raise ValueError("Frequency expression must be provided when filtering by AF!")
 
     log_list = []
-    ss_filter_expr = {"all_variants": True}
+    ss_filter_expr = {}
     if filter_lcr:
         log_list.append("variants in low confidence regions")
         ss_filter_expr["no_lcr"] = low_conf_regions_expr(t.locus, filter_decoy=False)
     if filter_expr is not None:
         log_list.append("variants that pass all variant QC filters")
-        ss_filter_expr["pass_filters"] = hl.len(filter_expr) == 0
+        ss_filter_expr["variant_qc_pass"] = hl.len(filter_expr) == 0
     if max_af is not None:
         if isinstance(max_af, float):
             max_af = [max_af]
@@ -409,7 +409,7 @@ def get_summary_stats_variant_filter_expr(
     logger.info("Adding filtering for:\n\t%s...", "\n\t".join(log_list))
 
     if collapse_filters:
-        if len(ss_filter_expr) == 1:
+        if len(ss_filter_expr) == 0:
             logger.warning("No filtering applied to variants for summary stats.")
         ss_filter_expr = functools.reduce(operator.iand, ss_filter_expr.values())
 

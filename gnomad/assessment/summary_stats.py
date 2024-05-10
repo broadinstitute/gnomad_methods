@@ -515,7 +515,7 @@ def get_summary_stats_csq_filter_expr(
     # Add expressions for LOFTEE and consequence type combinations.
     if lof_loftee_combinations:
         lof_labels.pop("lof_HC")
-        lof_csq = {v: ss_filter_expr[f"lof_csq_{v}"] for v in lof_csq_set}
+        lof_csq = {f"lof_csq_{v}": ss_filter_expr[f"lof_csq_{v}"] for v in lof_csq_set}
         for v, v_e in lof_csq.items():
             lof_combo = {
                 **{f"{v}_{l}": v_e & l_e for l, l_e in lof_hc_flags.items()},

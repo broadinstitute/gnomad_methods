@@ -476,10 +476,10 @@ def get_summary_stats_csq_filter_expr(
         return csq_set.contains(t.most_severe_csq)
 
     # Create filtering expressions for each consequence set.
-    ss_filter_expr = {}
-    for filter_name, csq_set in csq_filters.items():
-        if csq_set is not None:
-            ss_filter_expr[filter_name] = _create_filter_by_csq(t, csq_set)
+    ss_filter_expr = {
+        filter_name: _create_filter_by_csq(t, csq_set)
+        for filter_name, csq_set in csq_filters.items()
+    }
 
     # Add filtering expressions for LoF consequence labels.
     lof_labels = {

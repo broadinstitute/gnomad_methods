@@ -402,7 +402,7 @@ def get_summary_stats_variant_filter_expr(
             "variants that meet a minimum call rate of %.2f (using AN as a call rate "
             "proxy)" % min_an_proportion,
         )
-        ss_filter_expr[f"min_an_{max_af}"] = get_an_criteria(
+        ss_filter_expr[f"min_an_{min_an_proportion}"] = get_an_criteria(
             t, an_proportion_cutoff=min_an_proportion
         )
 

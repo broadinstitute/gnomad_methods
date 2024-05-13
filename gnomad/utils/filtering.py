@@ -147,7 +147,7 @@ def low_conf_regions_expr(
     :param filter_exome_low_coverage_regions: Whether to filter exome low confidence regions
     :param filter_telomeres_and_centromeres: Whether to filter telomeres and centromeres
     :param high_conf_regions: Paths to set of high confidence regions to restrict to (union of regions)
-    :return: MatrixTable or Table with low confidence regions removed
+    :return: Bool expression of whether loci are not low confidence (TRUE) or low confidence (FALSE)
     """
     build = get_reference_genome(locus_expr).name
     if build == "GRCh37":
@@ -196,23 +196,23 @@ def low_conf_regions_expr(
 
 
 def filter_low_conf_regions(
-    mt: Union[hl.MatrixTable, hl.Table],
+    t: Union[hl.MatrixTable, hl.Table],
     **kwargs,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Filter low-confidence regions.
 
-    :param mt: MatrixTable or Table to filter.
+    :param t: MatrixTable or Table to filter.
     :param kwargs: Keyword arguments to pass to `low_conf_regions_expr`.
     :return: MatrixTable or Table with low confidence regions removed.
     """
-    filter_criteria = low_conf_regions_expr(mt.locus, **kwargs)
-    if isinstance(mt, hl.MatrixTable):
-        mt = mt.filter_rows(filter_criteria)
+    filter_criteria = low_conf_regions_expr(t.locus, **kwargs)
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_rows(filter_criteria)
     else:
-        mt = mt.filter(filter_criteria)
+        t = t.filter(filter_criteria)
 
-    return mt
+    return t
 
 
 def filter_to_autosomes(

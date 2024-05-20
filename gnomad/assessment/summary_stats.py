@@ -448,16 +448,10 @@ def get_summary_stats_csq_filter_expr(
 
     # Set up filters for specific consequences or sets of consequences.
     csq_filters = {
-    csq_filters = {
         **({"lof": lof_csq_set or {}}),
         **({f"{l}": c for l, c in (additional_csq_sets or {}).items()}),
         **({f"{c}": {c} for c in lof_csq_set or []}),
         **({f"{c}": {c} for c in additional_csqs or []}),
-    }
-        **({f"csq_set_{l}": c for l, c in (additional_csq_sets or {}).items()}),
-        **({f"lof_csq_{c}": {c} for c in lof_csq_set or []}),
-        **({f"csq_{c}": {c} for c in additional_csqs or []}),
-        **({f"csq_{c}": {c} for c in additional_csqs or []}),
     }
 
     def _create_filter_by_csq(

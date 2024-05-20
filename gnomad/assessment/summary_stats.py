@@ -426,10 +426,10 @@ def get_summary_stats_csq_filter_expr(
     :param t: Input Table/MatrixTable/StructExpression.
     :param lof_csq_set: Set of LoF consequence strings. Default is None.
     :param lof_label_set: Set of LoF consequence labels. Default is None.
-    :param lof_no_flags: Whether to filter to LoF variants with no flags. Default is
+    :param lof_no_flags: Whether to filter to HC LoF variants with no flags. Default is
         False.
-    :param lof_any_flags: Whether to filter to LoF variants with any flags. Default is
-        False.
+    :param lof_any_flags: Whether to filter to HC LoF variants with any flags. Default
+        is False.
     :param lof_loftee_combinations: Whether to add combinations of LOFTEE and
         consequence type filters. Default is False.
     :param additional_csq_sets: Dictionary containing additional consequence sets.

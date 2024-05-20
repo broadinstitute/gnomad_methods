@@ -138,7 +138,7 @@ def low_conf_regions_expr(
     high_conf_regions: Optional[List[str]] = None,
 ) -> hl.expr.BooleanExpression:
     """
-    Filter low-confidence regions.
+    Create an expression to filter low confidence regions.
 
     :param locus_expr: Locus expression to use for filtering.
     :param filter_lcr: Whether to filter LCR regions

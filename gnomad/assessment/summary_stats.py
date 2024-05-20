@@ -363,8 +363,7 @@ def get_summary_stats_variant_filter_expr(
     freq_expr: hl.expr.SetExpression = None,
     max_af: Optional[Union[float, List[float]]] = None,
     min_an_proportion: Optional[float] = None,
-    collapse_filters: bool = False,
-) -> Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]:
+) -> Dict[str, hl.expr.BooleanExpression]:
     """
     Generate variant filtering expression for summary stats.
 
@@ -378,7 +377,7 @@ def get_summary_stats_variant_filter_expr(
         call rate). Default is None.
     :param collapse_filters: Whether to collapse all filters into a single expression.
         Default is False.
-    :return: BooleanExpression or Dict of BooleanExpressions for filtering variants.
+    :return: Dict of BooleanExpressions for filtering variants.
     """
     if max_af is not None and freq_expr is None:
         raise ValueError("Frequency expression must be provided when filtering by AF!")
@@ -408,11 +407,6 @@ def get_summary_stats_variant_filter_expr(
 
     logger.info("Adding filtering for:\n\t%s...", "\n\t".join(log_list))
 
-    if collapse_filters:
-        if len(ss_filter_expr) == 0:
-            logger.warning("No filtering applied to variants for summary stats.")
-        ss_filter_expr = functools.reduce(operator.iand, ss_filter_expr.values())
-
     return ss_filter_expr
 
 
@@ -420,21 +414,18 @@ def get_summary_stats_csq_filter_expr(
     t: Union[hl.Table, hl.MatrixTable, hl.StructExpression],
     lof_csq_set: Optional[Set[str]] = None,
     lof_label_set: Optional[Set[str]] = None,
-    lof_flag_set: Optional[Set[str]] = None,
     lof_no_flags: bool = False,
     lof_any_flags: bool = False,
     lof_loftee_combinations: bool = False,
     additional_csq_sets: Optional[Dict[str, Set[str]]] = None,
     additional_csqs: Optional[Set[str]] = None,
-    collapse_filters: bool = False,
-) -> Union[hl.expr.BooleanExpression, Dict[str, hl.expr.BooleanExpression]]:
+) -> Dict[str, hl.expr.BooleanExpression]:
     """
     Generate consequence filtering expression for summary stats.
 
     :param t: Input Table/MatrixTable/StructExpression.
     :param lof_csq_set: Set of LoF consequence strings. Default is None.
     :param lof_label_set: Set of LoF consequence labels. Default is None.
-    :param lof_flag_set: Set of LoF consequence flags. Default is None.
     :param lof_no_flags: Whether to filter to LoF variants with no flags. Default is
         False.
     :param lof_any_flags: Whether to filter to LoF variants with any flags. Default is
@@ -444,15 +435,25 @@ def get_summary_stats_csq_filter_expr(
     :param additional_csq_sets: Dictionary containing additional consequence sets.
         Default is None.
     :param additional_csqs: Set of additional consequences to keep. Default is None.
-    :param collapse_filters: Whether to collapse all filters into a single expression.
-        Default is False.
-    :return: BooleanExpression or Dict of BooleanExpressions for filtering consequences.
+    :return: Dict of BooleanExpressions for filtering consequences.
     """
+    if (lof_no_flags or lof_any_flags) and "no_lof_flags" not in t.row:
+        raise ValueError(
+            "The required 'no_lof_flags' annotation is not found in input "
+            "Table/MatrixTable/StructExpression."
+        )
+    if (lof_label_set or lof_no_flags or lof_any_flags) and "lof" not in t.row:
+        raise ValueError(
+            "The required 'lof' annotation is not found in input "
+            "Table/MatrixTable/StructExpression."
+        )
+
     # Set up filters for specific consequences or sets of consequences.
     csq_filters = {
         **({"csq_set_lof": lof_csq_set or {}}),
         **({f"csq_set_{l}": c for l, c in (additional_csq_sets or {}).items()}),
         **({f"lof_csq_{c}": {c} for c in lof_csq_set or []}),
+        **({f"csq_{c}": {c} for c in additional_csqs or []}),
         **({f"csq_{c}": {c} for c in additional_csqs or []}),
     }
 
@@ -484,33 +485,17 @@ def get_summary_stats_csq_filter_expr(
         for lof_label in lof_label_set or []
     }
 
-    # Add filtering expressions for LoF consequence flags.
-    lof_flags = {
-        f"lof_flag_{lof_flag}": hl.or_else(
-            t.lof_flags.split(",").contains(lof_flag), False
-        )
-        for lof_flag in lof_flag_set or []
-    }
-
     # Add filtering expressions for HC LoF variants with no flags or any flags.
     lof_hc_flags = {}
     if lof_no_flags or lof_any_flags:
         hc_expr = hl.or_else(t.lof == "HC", False)
-        if "no_lof_flags" in t.row:
-            no_lof_flags_expr = t.no_lof_flags
-        elif "lof_flags" in t.row:
-            no_lof_flags_expr = hl.is_missing(t.lof_flags) | (t.lof_flags == "")
-        else:
-            raise ValueError(
-                "No LoF flag info found in input Table/MatrixTable/StructExpression."
-            )
         if lof_no_flags:
-            lof_hc_flags["lof_HC_no_flags"] = hc_expr & no_lof_flags_expr
+            lof_hc_flags["lof_HC_no_flags"] = hc_expr & t.no_lof_flags
         if lof_any_flags:
-            lof_flags["lof_HC_with_flags"] = hc_expr & ~no_lof_flags_expr
+            lof_hc_flags["lof_HC_with_flags"] = hc_expr & ~t.no_lof_flags
 
     # Update summary stats filter expressions with LoF labels and flags.
-    ss_filter_expr.update({**lof_labels, **lof_flags, **lof_hc_flags})
+    ss_filter_expr.update({**lof_labels, **lof_hc_flags})
 
     # Add expressions for LOFTEE and consequence type combinations.
     if lof_loftee_combinations:
@@ -520,17 +505,8 @@ def get_summary_stats_csq_filter_expr(
             lof_combo = {
                 **{f"{v}_{l}": v_e & l_e for l, l_e in lof_hc_flags.items()},
                 **{f"{v}_{l}": v_e & l_e for l, l_e in lof_labels.items()},
-                **{f"{v}_{l}": v_e & l_e for l, l_e in lof_flags.items()},
             }
             ss_filter_expr.update(lof_combo)
-
-    if not ss_filter_expr:
-        logger.warning("No filtering applied to consequences for summary stats.")
-        return True if collapse_filters else ss_filter_expr
-
-    # Collapse all filters into a single expression if requested.
-    if collapse_filters:
-        ss_filter_expr = functools.reduce(operator.iand, ss_filter_expr.values())
 
     return ss_filter_expr
 

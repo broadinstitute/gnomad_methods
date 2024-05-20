@@ -385,7 +385,7 @@ def get_summary_stats_variant_filter_expr(
     log_list = []
     ss_filter_expr = {}
     if filter_lcr:
-        log_list.append("variants in low confidence regions")
+        log_list.append("variants not in low confidence regions")
         ss_filter_expr["no_lcr"] = low_conf_regions_expr(t.locus, filter_decoy=False)
     if filter_expr is not None:
         log_list.append("variants that pass all variant QC filters")

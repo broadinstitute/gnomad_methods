@@ -1,7 +1,5 @@
 # noqa: D100
-import functools
 import logging
-import operator
 from typing import Dict, List, Optional, Set, Union
 
 import hail as hl

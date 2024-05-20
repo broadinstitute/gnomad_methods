@@ -96,7 +96,7 @@ def annotate_with_ht(
     fields: Optional[List] = None,
     annotate_cols: bool = False,
     filter_missing: bool = False,
-) -> hl.MatrixTable:
+) -> Union[hl.MatrixTable, hl.Table]:
     """
     Annotate a MatrixTable/Table with additional annotations from another Table.
 
@@ -106,7 +106,7 @@ def annotate_with_ht(
     :param annotate_cols: If True, annotate columns instead of rows. Default is False.
     :param filter_missing: If True, filter out missing rows/cols in `t` that are not
         present in `annotation_ht`. Default is False.
-    :return: Annotated MatrixTable.
+    :return: Annotated MatrixTable/Table.
     """
     if fields is not None:
         annotation_ht = annotation_ht.select(*fields)

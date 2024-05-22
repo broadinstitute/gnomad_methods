@@ -432,9 +432,9 @@ def get_summary_stats_csq_filter_expr(
 
         - Assumes that input Table/MatrixTable/StructExpression contains the required
           annotations for the requested filtering groups.
+
             - 'lof' annotation for `lof_csq_set`.
             - 'no_lof_flags' annotation for `lof_no_flags` and `lof_any_flags`.
-
 
     The possible filtering groups are:
 

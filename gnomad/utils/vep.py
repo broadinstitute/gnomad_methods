@@ -788,10 +788,20 @@ def filter_vep_transcript_csqs(
             criteria.append(lambda csq: csqs.contains(csq.most_severe_consequence))
         else:
             criteria.append(lambda csq: ~csqs.contains(csq.most_severe_consequence))
-    if canonical:
+    if canonical and mane_select:
+        logger.info(
+            "Both MANE select and canonical transcripts selected. Filtering to MANE "
+            "Select transcripts for genes that have them, and canonical transcripts "
+            "for genes that do not."
+        )
+        criteria.append(
+            lambda csq: hl.is_defined(csq.mane_select)
+            | (hl.is_defined(csq.canonical) & (csq.canonical == 1))
+        )
+    elif canonical:
         logger.info("Filtering to canonical transcripts")
         criteria.append(lambda csq: csq.canonical == 1)
-    if mane_select:
+    elif mane_select:
         logger.info("Filtering to MANE Select transcripts...")
         criteria.append(lambda csq: hl.is_defined(csq.mane_select))
     if ensembl_only:
@@ -813,6 +823,15 @@ def filter_vep_transcript_csqs(
         criteria = criteria + additional_filtering_criteria
 
     transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
+    if canonical and mane_select:
+        transcript_csqs = (
+            transcript_csqs.group_by(lambda x: x.gene_symbol)
+            .map_values(
+                lambda x: hl.sorted(x, key=lambda y: hl.is_defined(x.mane_select))[0]
+            )
+            .values()
+        )
+
     is_mt = isinstance(t, hl.MatrixTable)
     vep_data = {vep_root: t[vep_root].annotate(transcript_consequences=transcript_csqs)}
     t = t.annotate_rows(**vep_data) if is_mt else t.annotate(**vep_data)

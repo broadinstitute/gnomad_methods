@@ -90,6 +90,43 @@ VRS_CHROM_IDS = {
 }
 
 
+def annotate_with_ht(
+    t: Union[hl.MatrixTable, hl.Table],
+    annotation_ht: hl.Table,
+    fields: Optional[List] = None,
+    annotate_cols: bool = False,
+    filter_missing: bool = False,
+) -> Union[hl.MatrixTable, hl.Table]:
+    """
+    Annotate a MatrixTable/Table with additional annotations from another Table.
+
+    :param t: MatrixTable/Table to be annotated.
+    :param annotation_ht: Table containing additional annotations to be joined on `t`.
+    :param fields: Optional list of fields to select from `annotation_ht` and add to `t`
+    :param annotate_cols: If True, annotate columns instead of rows. Default is False.
+    :param filter_missing: If True, filter out missing rows/cols in `t` that are not
+        present in `annotation_ht`. Default is False.
+    :return: Annotated MatrixTable/Table.
+    """
+    if fields is not None:
+        annotation_ht = annotation_ht.select(*fields)
+
+    if filter_missing:
+        logger.info("Filtering input to variants in the supplied annotation HT...")
+
+    if isinstance(t, hl.Table):
+        t = t.semi_join(annotation_ht)
+        t = t.annotate(**annotation_ht[t.key])
+    elif annotate_cols:
+        t = t.semi_join_cols(annotation_ht)
+        t = t.annotate_cols(**annotation_ht[t.col_key])
+    else:
+        t = t.semi_join_rows(annotation_ht)
+        t = t.annotate_rows(**annotation_ht[t.row_key])
+
+    return t
+
+
 def pop_max_expr(
     freq: hl.expr.ArrayExpression,
     freq_meta: hl.expr.ArrayExpression,

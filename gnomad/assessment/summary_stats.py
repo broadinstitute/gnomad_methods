@@ -446,7 +446,7 @@ def get_summary_stats_csq_filter_expr(
         - 'csq' as a struct with a field for each consequence in `additional_csqs` and
           `lof_csq_set` if provided.
         - 'csq_set' as a struct with a field for each consequence set in
-          `additional_csq_sets` if provided. This will also have and `lof` field if
+          `additional_csq_sets` if provided. This will also have an `lof` field if
           `lof_csq_set` is provided.
 
     :param t: Input Table/MatrixTable/StructExpression.

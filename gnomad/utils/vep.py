@@ -21,8 +21,9 @@ CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
 Versions of VEP used in gnomAD data, the latest version is 105.
 """
 
-# Note that this is the current as of v81 with some included for backwards
+# Note that this is the current as of v105 with some included for backwards
 # compatibility (VEP <= 75)
+# See: https://www.ensembl.org/info/genome/variation/prediction/predicted_data.html
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
     "splice_acceptor_variant",

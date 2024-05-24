@@ -741,6 +741,12 @@ def filter_vep_transcript_csqs(
     to variants where 'transcript_consequences' within the VEP annotation is not empty
     after the specified filtering criteria is applied.
 
+    .. note::
+
+        If both `canonical` and `mane_select` are set to True, the Table/MatrixTable is
+        filtered to MANE Select transcripts for genes that have them, and canonical
+        transcripts for genes that do not.
+
     :param t: Input Table or MatrixTable.
     :param vep_root: Name used for VEP annotation. Default is 'vep'.
     :param synonymous: Whether to filter to variants where the most severe consequence

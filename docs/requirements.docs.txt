@@ -44,7 +44,7 @@ pygments==2.16.1
     # via sphinx
 pyyaml==6.0.1
     # via myst-parser
-requests==2.31.0
+requests==2.32.2
     # via
     #   -r docs/requirements.docs.in
     #   sphinx

@@ -113,15 +113,18 @@ def annotate_with_ht(
 
     if filter_missing:
         logger.info("Filtering input to variants in the supplied annotation HT...")
+        if isinstance(t, hl.Table):
+            t = t.semi_join(annotation_ht)
+        elif annotate_cols:
+            t = t.semi_join_cols(annotation_ht)
+        else:
+            t = t.semi_join_rows(annotation_ht)
 
     if isinstance(t, hl.Table):
-        t = t.semi_join(annotation_ht)
         t = t.annotate(**annotation_ht[t.key])
     elif annotate_cols:
-        t = t.semi_join_cols(annotation_ht)
         t = t.annotate_cols(**annotation_ht[t.col_key])
     else:
-        t = t.semi_join_rows(annotation_ht)
         t = t.annotate_rows(**annotation_ht[t.row_key])
 
     return t

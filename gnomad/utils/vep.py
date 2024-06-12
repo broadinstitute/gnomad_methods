@@ -328,36 +328,6 @@ def add_most_severe_consequence_to_consequence(
         return tc.map(lambda x: x.annotate(**{most_severe_csq_field: csq(x)}))
 
 
-def prioritize_loftee_hc_no_flags(
-    most_severe_csq: Union[hl.Table, hl.expr.StructExpression],
-) -> hl.expr.StructExpression:
-    """
-    Prioritize LOFTEE HC LOF consequences with no LOF flags.
-
-    Given the result of `get_most_severe_csq_from_multiple_csq_lists`, this function
-    will filter the transcript consequences to only include those with no LOF flags if
-    the most severe consequence is a LOFTEE HC LOF and there are transcript consequences
-    with no LOF flags.
-
-    :param most_severe_csq: Table or StructExpression with most severe consequence
-        information. This should be the result of
-        `get_most_severe_csq_from_multiple_csq_lists`.
-    :return: StructExpression with HC LOF consequences with no LOF flags if they exist,
-        otherwise all transcript consequences.
-    """
-    tcl = most_severe_csq.transcript_consequences
-
-    # Filter transcript consequences to only consequences that have no LOF flags.
-    no_flags = tcl.filter(lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == ""))
-    # If the most severe consequence is a LOFTEE HC LOF and there are transcript
-    # consequences with no LOF flags, return only those transcripts.
-    return hl.if_else(
-        (most_severe_csq.lof == "HC") & (hl.len(no_flags) > 0),
-        no_flags,
-        tcl,
-    )
-
-
 def process_consequences(
     t: Union[hl.MatrixTable, hl.Table],
     vep_root: str = "vep",

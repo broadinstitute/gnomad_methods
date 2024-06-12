@@ -21,8 +21,9 @@ CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
 Versions of VEP used in gnomAD data, the latest version is 105.
 """
 
-# Note that this is the current as of v81 with some included for backwards
+# Note that this is the current as of v105 with some included for backwards
 # compatibility (VEP <= 75)
+# See: https://www.ensembl.org/info/genome/variation/prediction/predicted_data.html
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
     "splice_acceptor_variant",
@@ -30,20 +31,20 @@ CSQ_CODING_HIGH_IMPACT = [
     "stop_gained",
     "frameshift_variant",
     "stop_lost",
+    "start_lost",  # Considered high impact in v105, previously medium
 ]
 
 CSQ_CODING_MEDIUM_IMPACT = [
-    "start_lost",  # new in v81
     "initiator_codon_variant",  # deprecated
     "transcript_amplification",
     "inframe_insertion",
     "inframe_deletion",
     "missense_variant",
     "protein_altering_variant",  # new in v79
-    "splice_region_variant",
 ]
 
 CSQ_CODING_LOW_IMPACT = [
+    "splice_region_variant",  # Considered low impact in v105, previously medium
     "incomplete_terminal_codon_variant",
     "start_retained_variant",  # new in v92
     "stop_retained_variant",

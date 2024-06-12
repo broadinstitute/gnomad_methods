@@ -1,11 +1,12 @@
 # noqa: D100
-
+import itertools
 import logging
-from typing import Dict, Optional, Set
+from copy import deepcopy
+from typing import Dict, List, Optional, Set, Union
 
 import hail as hl
 
-from gnomad.utils.filtering import filter_low_conf_regions
+from gnomad.utils.filtering import filter_low_conf_regions, low_conf_regions_expr
 from gnomad.utils.vep import (
     LOF_CSQ_SET,
     add_most_severe_consequence_to_consequence,
@@ -353,6 +354,421 @@ def get_tx_expression_expr(
         & (csq[csq_field] == csq_expr.most_severe_consequence),
         tx_ht[key_expr][tx_struct],
     )
+
+
+def get_summary_stats_variant_filter_expr(
+    t: Union[hl.Table, hl.MatrixTable],
+    filter_lcr: bool = False,
+    filter_expr: hl.expr.SetExpression = None,
+    freq_expr: hl.expr.SetExpression = None,
+    max_af: Optional[Union[float, List[float]]] = None,
+    min_an_proportion: Optional[Union[float, List[float]]] = None,
+) -> Dict[str, Union[hl.expr.BooleanExpression, hl.expr.StructExpression]]:
+    """
+    Generate variant filtering expression for summary stats.
+
+    The possible filtering groups are:
+
+        - 'no_lcr' if `filter_lcr` is True.
+        - 'variant_qc_pass' if `filter_expr` is provided.
+        - 'max_af' as a struct with a field for each `af` in `max_af` if `max_af` is
+          provided.
+        - 'min_an' as a struct with a field for each `an_proportion` in
+          `min_an_proportion` if `min_an_proportion` is provided.
+
+    :param t: Input Table/MatrixTable.
+    :param filter_lcr: Whether to filter out low confidence regions. Default is False.
+    :param filter_expr: SetExpression containing variant filters. Default is None.
+    :param freq_expr: SetExpression containing frequency information. Default is None.
+    :param max_af: Maximum allele frequency cutoff(s). Can be a single float or a list
+        of floats. Default is None.
+    :param min_an_proportion: Minimum allele number proportion (used as a proxy for
+        call rate). Default is None.
+    :return: Dict of BooleanExpressions or StructExpressions for filtering variants.
+    """
+    if max_af is not None and freq_expr is None:
+        raise ValueError("Frequency expression must be provided when filtering by AF!")
+
+    log_list = []
+    ss_filter_expr = {}
+    if filter_lcr:
+        log_list.append("variants not in low confidence regions")
+        ss_filter_expr["no_lcr"] = low_conf_regions_expr(t.locus, filter_decoy=False)
+    if filter_expr is not None:
+        log_list.append("variants that pass all variant QC filters")
+        ss_filter_expr["variant_qc_pass"] = hl.len(filter_expr) == 0
+    if max_af is not None:
+        if isinstance(max_af, float):
+            max_af = [max_af]
+        log_list.extend([f"variants with (AF < {af:.2e})" for af in max_af])
+        ss_filter_expr["max_af"] = hl.struct(
+            **{f"{af}": freq_expr < af for af in max_af}
+        )
+    if min_an_proportion is not None:
+        log_list.append(
+            "variants that meet a minimum call rate of %.2f (using AN as a call rate "
+            "proxy)" % min_an_proportion,
+        )
+        ss_filter_expr[f"min_an_{min_an_proportion}"] = get_an_criteria(
+            t, an_proportion_cutoff=min_an_proportion
+        )
+
+    logger.info("Adding filtering for:\n\t%s...", "\n\t".join(log_list))
+
+    return ss_filter_expr
+
+
+def get_summary_stats_csq_filter_expr(
+    t: Union[hl.Table, hl.MatrixTable, hl.StructExpression],
+    lof_csq_set: Optional[Set[str]] = None,
+    lof_label_set: Optional[Set[str]] = None,
+    lof_no_flags: bool = False,
+    lof_any_flags: bool = False,
+    additional_csq_sets: Optional[Dict[str, Set[str]]] = None,
+    additional_csqs: Optional[Set[str]] = None,
+) -> Dict[str, Union[hl.expr.BooleanExpression, hl.expr.StructExpression]]:
+    """
+    Generate consequence filtering expression for summary stats.
+
+    .. note::
+
+        - Assumes that input Table/MatrixTable/StructExpression contains the required
+          annotations for the requested filtering groups.
+
+            - 'lof' annotation for `lof_csq_set`.
+            - 'no_lof_flags' annotation for `lof_no_flags` and `lof_any_flags`.
+
+    The possible filtering groups are:
+
+        - 'lof' if `lof_csq_set` is provided.
+        - 'loftee_no_flags' if `lof_no_flags` is True.
+        - 'loftee_with_flags' if `lof_any_flags` is True.
+        - 'loftee_label' as a struct with a field for each `lof_label` in
+          `lof_label_set` if provided.
+        - 'csq' as a struct with a field for each consequence in `additional_csqs` and
+          `lof_csq_set` if provided.
+        - 'csq_set' as a struct with a field for each consequence set in
+          `additional_csq_sets` if provided. This will also have an `lof` field if
+          `lof_csq_set` is provided.
+
+    :param t: Input Table/MatrixTable/StructExpression.
+    :param lof_csq_set: Set of LoF consequence strings. Default is None.
+    :param lof_label_set: Set of LoF consequence labels. Default is None.
+    :param lof_no_flags: Whether to filter to variants with no flags. Default is
+        False.
+    :param lof_any_flags: Whether to filter to variants with any flags. Default
+        is False.
+    :param additional_csq_sets: Dictionary containing additional consequence sets.
+        Default is None.
+    :param additional_csqs: Set of additional consequences to keep. Default is None.
+    :return: Dict of BooleanExpressions or StructExpressions for filtering by
+        consequence.
+    """
+    if (lof_no_flags or lof_any_flags) and "no_lof_flags" not in t.row:
+        raise ValueError(
+            "The required 'no_lof_flags' annotation is not found in input "
+            "Table/MatrixTable/StructExpression."
+        )
+    if lof_label_set and "lof" not in t.row:
+        raise ValueError(
+            "The required 'lof' annotation is not found in input "
+            "Table/MatrixTable/StructExpression."
+        )
+
+    def _create_filter_by_csq(
+        t: Union[hl.Table, hl.MatrixTable],
+        csq_set: Union[Set, List, hl.expr.CollectionExpression],
+    ) -> hl.expr.BooleanExpression:
+        """
+        Create filtering expression for a set of consequences.
+
+        :param t: Input Table/MatrixTable.
+        :param csq_set: Set of consequences to filter.
+        :return: BooleanExpression for filtering by consequence.
+        """
+        if not isinstance(csq_set, hl.expr.CollectionExpression):
+            csq_set = hl.set(csq_set)
+
+        return csq_set.contains(t.most_severe_csq)
+
+    # Set up filters for specific consequences or sets of consequences.
+    csq_filters = {
+        "csq": {
+            **({f"{c}": {c} for c in lof_csq_set or []}),
+            **({f"{c}": {c} for c in additional_csqs or []}),
+        },
+        "csq_set": {
+            **({"lof": lof_csq_set or {}}),
+            **({f"{l}": c for l, c in (additional_csq_sets or {}).items()}),
+        },
+    }
+
+    # Create filtering expressions for each consequence/ consequence set.
+    ss_filter_expr = {
+        group_name: hl.struct(
+            **{
+                filter_name: _create_filter_by_csq(t, csq_set)
+                for filter_name, csq_set in group.items()
+            }
+        )
+        for group_name, group in csq_filters.items()
+    }
+
+    # Add filtering expressions for LOFTEE labels.
+    ss_filter_expr["loftee_label"] = hl.struct(
+        **{
+            lof_label: hl.or_else(t.lof == lof_label, False)
+            for lof_label in lof_label_set or []
+        }
+    )
+
+    # Add filtering expressions variants with no flags or any flags.
+    if lof_no_flags:
+        ss_filter_expr["loftee_no_flags"] = t.no_lof_flags
+    if lof_any_flags:
+        ss_filter_expr["loftee_with_flags"] = ~t.no_lof_flags
+
+    return ss_filter_expr
+
+
+def generate_filter_combinations(
+    combos: List[Union[List[str], Dict[str, List[str]]]],
+    combo_options: Optional[Dict[str, List[str]]] = None,
+) -> List[Dict[str, str]]:
+    """
+    Generate list of all possible filter combinations from a list of filter options.
+
+    Example input:
+
+    .. code-block:: python
+
+        [
+            {'pass_filters': [False, True]},
+            {'pass_filters': [False, True], 'capture': ['ukb', 'broad']}
+        ]
+
+    Example output:
+
+    .. code-block:: python
+
+        [
+            {'pass_filters': False},
+            {'pass_filters': True},
+            {'pass_filters': False, 'capture': 'ukb'},
+            {'pass_filters': False, 'capture': 'broad'},
+            {'pass_filters': True, 'capture': 'ukb'},
+            {'pass_filters': True, 'capture': 'broad'},
+        ]
+
+    :param combos: List of filter groups and their options.
+    :param combo_options: Dictionary of filter groups and their options that can be
+        supplied if `combos` is a list of lists.
+    :return: List of all possible filter combinations for each filter group.
+    """
+    if isinstance(combos[0], list):
+        if combo_options is None:
+            raise ValueError(
+                "If `combos` is a list of lists, `combo_options` must be provided."
+            )
+        combos = [{k: combo_options[k] for k in combo} for combo in combos]
+
+    # Create combinations of filter options.
+
+    def _expand_combinations(filter_dict: Dict[str, List[str]]) -> List[Dict[str, str]]:
+        """
+        Expand filter combinations.
+
+        :param filter_dict: Dictionary of filter options.
+        :return: List of dicts of expanded filter options.
+        """
+        keys, values = zip(*filter_dict.items())
+        return [dict(zip(keys, combo)) for combo in itertools.product(*values)]
+
+    # Flatten list of combinations.
+    expanded_meta = sum([_expand_combinations(sublist) for sublist in combos], [])
+
+    return expanded_meta
+
+
+def get_summary_stats_filter_group_meta(
+    all_sum_stat_filters: Dict[str, List[str]],
+    common_filter_combos: List[List[str]] = None,
+    common_filter_override: Dict[str, List[str]] = None,
+    lof_filter_combos: Optional[List[List[str]]] = None,
+    lof_filter_override: Dict[str, List[str]] = None,
+    filter_key_rename: Dict[str, str] = None,
+) -> List[Dict[str, str]]:
+    """
+    Generate list of filter group combination metadata for summary stats.
+
+    This function combines various filter settings for summary statistics and generates
+    all possible filter combinations. It ensures that the generated combinations include
+    both common filters and specific loss-of-function (LOF) filters.
+
+    .. note::
+
+        - The "variant_qc" filter group is removed if the value is "none", which can
+          lead to a filter group of {} (no filters).
+        - The `filter_key_rename` parameter can be used to rename keys in the
+          `all_sum_stat_filters`, `common_filter_override`, or `lof_filter_override`
+          after creating all combinations.
+
+    Example:
+        Given the following input:
+
+        .. code-block:: python
+
+            all_sum_stat_filters = {
+                "variant_qc": ["none", "pass"],
+                "capture": ["1", "2"],
+                "max_af": [0.01],
+                "lof_csq": ["stop_gained"],
+                "lof_csq_set": ["lof"],
+            }
+            common_filter_combos = [["variant_qc"], ["variant_qc", "capture"]]
+            common_filter_override = {"variant_qc": ["pass"], "capture": ["1"]}
+            lof_filter_combos = [
+                ["lof_csq_set", "loftee_HC"],
+                ["lof_csq_set", "loftee_HC", "loftee_flags"],
+                ["lof_csq", "loftee_HC", "loftee_flags"],
+            ]
+            lof_filter_override = {"loftee_HC": ["HC"], "loftee_flags": ["with_flags"]}
+            filter_key_rename = {
+                "lof_csq": "csq",
+                "loftee_HC": "loftee_labels",
+                "lof_csq_set": "csq_set",
+            }
+
+        The function will generate the following filter combinations:
+
+        .. code-block:: python
+
+            [
+               # Combinations of all common filter keys and their possible values.
+                {},
+                {'capture': '1'},
+                {'capture': '2'},
+                {'variant_qc': 'pass'},
+                {'variant_qc': 'pass', 'capture': '1'},
+                {'variant_qc': 'pass', 'capture': '2'},
+
+                # Combinations of all requested common filter combinations with all
+                # possible other filter keys and values.
+                {'variant_qc': 'pass', 'max_af': '0.01'},
+                {'variant_qc': 'pass', 'csq': 'stop_gained'},
+                {'variant_qc': 'pass', 'csq_set': 'lof'},
+                {'variant_qc': 'pass', 'capture': '1', 'max_af': '0.01'},
+                {'variant_qc': 'pass', 'capture': '1', 'csq': 'stop_gained'},
+                {'variant_qc': 'pass', 'capture': '1', 'csq_set': 'lof'},
+
+                # Combinations of all requested common filter combinations with all
+                # requested LOF filter combination keys and their requested values.
+                {'variant_qc': 'pass', 'csq_set': 'lof', 'loftee_labels': 'HC'},
+                {
+                    'variant_qc': 'pass', 'csq_set': 'lof', 'loftee_labels': 'HC',
+                    'loftee_flags': 'with_flags'
+                },
+                {
+                    'variant_qc': 'pass', 'csq': 'stop_gained', 'loftee_labels': 'HC',
+                    'loftee_flags': 'with_flags'
+                },
+                {
+                    'variant_qc': 'pass', 'capture': '1', 'csq_set': 'lof',
+                    'loftee_labels': 'HC'
+                },
+                {
+                    'variant_qc': 'pass', 'capture': '1', 'csq_set': 'lof',
+                    'loftee_labels': 'HC', 'loftee_flags': 'with_flags'
+                },
+                {
+                    'variant_qc': 'pass', 'capture': '1', 'csq': 'stop_gained',
+                    'loftee_labels': 'HC', 'loftee_flags': 'with_flags'
+                }
+            ]
+
+    :param all_sum_stat_filters: Dictionary of all possible filter types.
+    :param common_filter_combos: Optional list of lists of common filter keys to use
+        for creating common filter combinations.
+    :param common_filter_override: Optional dictionary of filter groups and their
+        options to override the values in `all_sum_stat_filters` for use with values in
+        `common_filter_combos`. This is only used if `common_filter_combos` is not None.
+    :param lof_filter_combos: Optional List of loss-of-function keys in all_sum_stat_filters
+        to use for creating filter combinations.
+    :param lof_filter_override: Optional Dictionary of filter groups and their options
+        to override the values in `all_sum_stat_filters` for use with values in
+        `lof_combos`. This is only used if `lof_filter_combos` is not None.
+    :param filter_key_rename: Optional dictionary to rename keys in
+        `all_sum_stat_filters`, `common_filter_override`, or `lof_filter_override` to
+        final metadata keys.
+    :return: Dictionary of filter field to metadata.
+    """
+    if common_filter_override is not None and common_filter_combos is None:
+        raise ValueError(
+            "If `common_combo_override` is provided, `common_filter_combos` must be "
+            "provided."
+        )
+    if lof_filter_override is not None and lof_filter_combos is None:
+        raise ValueError(
+            "If `lof_filter_override` is provided, `lof_filter_combos` must be "
+            "provided."
+        )
+
+    # Initialize dictionaries and lists to handle cases where the optional parameters
+    # are not provided.
+    common_filter_override = common_filter_override or {}
+    lof_filter_override = lof_filter_override or {}
+    filter_key_rename = filter_key_rename or {}
+
+    # Generate all possible filter combinations for common filter combinations.
+    all_sum_stat_filters = deepcopy(all_sum_stat_filters)
+    filter_combinations = []
+    if common_filter_combos is not None:
+        filter_combinations.extend(
+            generate_filter_combinations(
+                [
+                    {f: all_sum_stat_filters[f] for f in combo}
+                    for combo in common_filter_combos
+                ]
+            )
+        )
+    common_filter_combos = common_filter_combos or [[]]
+
+    # Update the all_sum_stat_filters dictionary with common_filter_override values and
+    # remove all filters in common_filter_combos from all_sum_stat_filters and
+    # into a common_filters dictionary.
+    all_sum_stat_filters.update(common_filter_override)
+    common_filters = {
+        k: all_sum_stat_filters.pop(k) for k in set(sum(common_filter_combos, []))
+    }
+
+    # Add combinations of common filters with all other filters.
+    filter_combinations.extend(
+        generate_filter_combinations(
+            [c + [f] for c in common_filter_combos for f in all_sum_stat_filters],
+            {**all_sum_stat_filters, **common_filters},
+        )
+    )
+
+    if lof_filter_combos is not None:
+        # Add combinations of common filters with LOF specific filters.
+        all_sum_stat_filters.update(lof_filter_override)
+        filter_combinations.extend(
+            generate_filter_combinations(
+                [c + f for c in common_filter_combos for f in lof_filter_combos],
+                {**all_sum_stat_filters, **common_filters},
+            )
+        )
+
+    filter_combinations = [
+        {
+            filter_key_rename.get(str(k), str(k)): str(v)
+            for k, v in filter_group.items()
+            if not (k == "variant_qc" and v == "none")
+        }
+        for filter_group in filter_combinations
+    ]
+
+    return filter_combinations
 
 
 def default_generate_gene_lof_matrix(

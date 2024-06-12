@@ -138,6 +138,11 @@ LOF_CSQ_SET = {
 Set containing loss-of-function consequence strings.
 """
 
+POLYPHEN_ORDER = ["probably_damaging", "possibly_damaging", "benign"]
+"""
+Order of PolyPhen predictions from most to least severe.
+"""
+
 
 def get_vep_help(vep_config_path: Optional[str] = None):
     """
@@ -272,7 +277,7 @@ def vep_or_lookup_vep(
 
 
 def get_most_severe_consequence_expr(
-    csq_expr: hl.expr.CollectionExpression,
+    csq_expr: hl.expr.ArrayExpression,
     csq_order: Optional[List[str]] = None,
 ) -> hl.expr.StringExpression:
     """
@@ -281,7 +286,7 @@ def get_most_severe_consequence_expr(
     This is for a given transcript, as there are often multiple annotations for a single
     transcript: e.g. splice_region_variant&intron_variant -> splice_region_variant
 
-    :param csq_expr: CollectionExpression of consequences.
+    :param csq_expr: ArrayExpression of consequences.
     :param csq_order: Optional list indicating the order of VEP consequences, sorted
         from high to low impact. Default is None, which uses the value of the
         `CSQ_ORDER` global.
@@ -319,6 +324,36 @@ def add_most_severe_consequence_to_consequence(
         return tc.map(lambda x: x.annotate(most_severe_consequence=csq(x)))
 
 
+def prioritize_loftee_hc_no_flags(
+    most_severe_csq: Union[hl.Table, hl.expr.StructExpression],
+) -> hl.expr.StructExpression:
+    """
+    Prioritize LOFTEE HC LOF consequences with no LOF flags.
+
+    Given the result of `get_most_severe_csq_from_multiple_csq_lists`, this function
+    will filter the transcript consequences to only include those with no LOF flags if
+    the most severe consequence is a LOFTEE HC LOF and there are transcript consequences
+    with no LOF flags.
+
+    :param most_severe_csq: Table or StructExpression with most severe consequence
+        information. This should be the result of
+        `get_most_severe_csq_from_multiple_csq_lists`.
+    :return: StructExpression with HC LOF consequences with no LOF flags if they exist,
+        otherwise all transcript consequences.
+    """
+    tcl = most_severe_csq.transcript_consequences
+
+    # Filter transcript consequences to only consequences that have no LOF flags.
+    no_flags = tcl.filter(lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == ""))
+    # If the most severe consequence is a LOFTEE HC LOF and there are transcript
+    # consequences with no LOF flags, return only those transcripts.
+    return hl.if_else(
+        (most_severe_csq.lof == "HC") & (hl.len(no_flags) > 0),
+        no_flags,
+        tcl,
+    )
+
+
 def process_consequences(
     t: Union[hl.MatrixTable, hl.Table],
     vep_root: str = "vep",
@@ -333,6 +368,7 @@ def process_consequences(
     `most_severe_consequence` is the worst consequence for a transcript.
 
     .. note::
+
         From gnomAD v4.0 on, the PolyPhen annotation was removed from the VEP Struct
         in the release HTs. When using this function with gnomAD v4.0 or later,
         set `has_polyphen` to False.
@@ -351,9 +387,7 @@ def process_consequences(
     :return: HT/MT with better formatted consequences.
     """
     # If has_polyphen is True, set the order of PolyPhen consequences.
-    polyphen_order = None
-    if has_polyphen:
-        polyphen_order = ["probably_damaging", "possibly_damaging", "benign"]
+    polyphen_order = POLYPHEN_ORDER if has_polyphen else None
 
     def _find_worst_transcript_consequence(
         tcl: hl.expr.ArrayExpression,
@@ -375,17 +409,8 @@ def process_consequences(
         tcl = ms_csq.transcript_consequences
 
         # Penalize LOFTEE flagged variants.
-        if penalize_flags:
-            no_flags = tcl.filter(
-                lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == "")
-            )
-            tcl = hl.if_else(
-                (ms_csq.lof == "HC") & ~ms_csq.no_lof_flags & (hl.len(no_flags) > 0),
-                no_flags,
-                tcl,
-            )
+        tcl = prioritize_loftee_hc_no_flags(ms_csq) if penalize_flags else tcl
 
-        # Return the worst consequence based on the calculated score.
         return hl.or_missing(hl.len(tcl) > 0, tcl[0])
 
     # Annotate each transcript consequence with the 'most_severe_consequence'.

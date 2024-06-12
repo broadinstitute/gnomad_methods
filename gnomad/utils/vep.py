@@ -302,6 +302,7 @@ def get_most_severe_consequence_expr(
 def add_most_severe_consequence_to_consequence(
     tc: Union[hl.expr.StructExpression, hl.expr.ArrayExpression],
     csq_order: Optional[List[str]] = None,
+    most_severe_csq_field: str = "most_severe_consequence",
 ) -> Union[hl.expr.StructExpression, hl.expr.ArrayExpression]:
     """
     Add a `most_severe_consequence` field to a transcript consequence or array of transcript consequences.
@@ -314,14 +315,16 @@ def add_most_severe_consequence_to_consequence(
     :param csq_order: Optional list indicating the order of VEP consequences, sorted
         from high to low impact. Default is None, which uses the value of the
         `CSQ_ORDER` global.
+    :param most_severe_csq_field: Field name to use for most severe consequence. Default
+        is 'most_severe_consequence'.
     :return: Transcript consequence or array of transcript consequences annotated with
         the most severe consequence.
     """
     csq = lambda x: get_most_severe_consequence_expr(x.consequence_terms, csq_order)
     if isinstance(tc, hl.expr.StructExpression):
-        return tc.annotate(most_severe_consequence=csq(tc))
+        return tc.annotate(**{most_severe_csq_field: csq(tc)})
     else:
-        return tc.map(lambda x: x.annotate(most_severe_consequence=csq(x)))
+        return tc.map(lambda x: x.annotate(**{most_severe_csq_field: csq(x)}))
 
 
 def prioritize_loftee_hc_no_flags(
@@ -1102,24 +1105,41 @@ def filter_vep_transcript_csqs(
 
 
 def add_most_severe_csq_to_tc_within_vep_root(
-    t: Union[hl.Table, hl.MatrixTable], vep_root: str = "vep"
+    t: Union[hl.Table, hl.MatrixTable],
+    vep_root: str = "vep",
+    csq_field: str = "transcript_consequences",
+    most_severe_csq_field: str = "most_severe_consequence",
+    csq_order: Optional[List[str]] = None,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Add most_severe_consequence annotation to 'transcript_consequences' within the vep root annotation.
+    Add `most_severe_csq_field` annotation to `csq_field` within the `vep_root` annotation.
 
     :param t: Input Table or MatrixTable.
     :param vep_root: Root for vep annotation (probably vep).
+    :param csq_field: Field name of VEP consequences ArrayExpression within `vep_root`
+        to add most severe consequence to. Default is 'transcript_consequences'.
+    :param most_severe_csq_field: Field name to use for most severe consequence. Default
+        is 'most_severe_consequence'.
+    :param csq_order: Optional list indicating the order of VEP consequences, sorted
+        from high to low impact. Default is None, which uses the value of the
+        `CSQ_ORDER` global.
     :return: Table or MatrixTable with most_severe_consequence annotation added.
     """
-    annotation = t[vep_root].annotate(
-        transcript_consequences=t[vep_root].transcript_consequences.map(
-            add_most_severe_consequence_to_consequence
-        )
+    vep_expr = t[vep_root]
+    csq_expr = vep_expr[csq_field]
+    vep_expr = vep_expr.annotate(
+        **{
+            csq_field: add_most_severe_consequence_to_consequence(
+                csq_expr,
+                csq_order=csq_order,
+                most_severe_csq_field=most_severe_csq_field,
+            )
+        }
     )
     return (
-        t.annotate_rows(**{vep_root: annotation})
+        t.annotate_rows(**{vep_root: vep_expr})
         if isinstance(t, hl.MatrixTable)
-        else t.annotate(**{vep_root: annotation})
+        else t.annotate(**{vep_root: vep_expr})
     )
 
 

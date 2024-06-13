@@ -364,7 +364,7 @@ def process_consequences(
     polyphen_order = POLYPHEN_ORDER if has_polyphen else None
 
     def _find_worst_transcript_consequence(
-        tcl: hl.expr.ArrayExpression,
+        tc_expr: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
         """
         Find the worst transcript consequence in an array of transcript consequences.
@@ -372,25 +372,21 @@ def process_consequences(
         :param tcl: Array of transcript consequences.
         :return: Worst transcript consequence.
         """
-        ms_csq = get_most_severe_csq_from_multiple_csq_lists(
-            hl.struct(transcript_consequences=tcl),
+        tc_expr = get_most_severe_csq_from_multiple_csq_lists(
+            hl.struct(transcript_consequences=tc_expr),
             csq_order=csq_order,
             include_transcript_csqs=True,
             prioritize_protein_coding=prioritize_protein_coding,
+            prioritize_loftee_no_flags=penalize_flags,
             csq_list_order=["transcript_consequences"],
             add_order_by_csq_list={"transcript_consequences": polyphen_order},
-        )
-        tcl = ms_csq.transcript_consequences
+        ).transcript_consequences
 
-        # Penalize LOFTEE flagged variants.
-        tcl = _prioritize_loftee_hc_no_flags(ms_csq) if penalize_flags else tcl
-
-        return hl.or_missing(hl.len(tcl) > 0, tcl[0])
+        return hl.or_missing(hl.len(tc_expr) > 0, tc_expr[0])
 
     # Annotate each transcript consequence with the 'most_severe_consequence'.
-    csqs = t[vep_root].transcript_consequences.map(
-        lambda tc: add_most_severe_consequence_to_consequence(tc, csq_order)
-    )
+    csqs = t[vep_root].transcript_consequences
+    csqs = add_most_severe_consequence_to_consequence(csqs, csq_order)
 
     # Group transcript consequences by gene and find the worst consequence for each.
     gene_csqs = (
@@ -750,37 +746,6 @@ def filter_vep_consequences_by_loftee(
     return csq_expr.filter(lambda x: combine_functions(filter_criteria, x), keep=keep)
 
 
-def _prioritize_loftee_hc_no_flags(
-    most_severe_csq: Union[hl.Table, hl.expr.StructExpression],
-) -> hl.expr.StructExpression:
-    """
-    Prioritize LOFTEE HC LOF consequences with no LOF flags.
-
-    Given the result of `get_most_severe_csq_from_multiple_csq_lists`, this function
-    will filter the transcript consequences to only include those with no LOF flags if
-    the most severe consequence is a LOFTEE HC LOF and there are transcript consequences
-    with no LOF flags.
-
-    :param most_severe_csq: Table or StructExpression with most severe consequence
-        information. This should be the result of
-        `get_most_severe_csq_from_multiple_csq_lists`.
-    :return: StructExpression with HC LOF consequences with no LOF flags if they exist,
-        otherwise all transcript consequences.
-    """
-    tcl = most_severe_csq.transcript_consequences
-
-    # Filter transcript consequences to only consequences that have no LOF flags.
-    no_flags = filter_vep_consequences_by_loftee(tcl, no_lof_flags=True)
-
-    # If the most severe consequence is a LOFTEE HC LOF and there are transcript
-    # consequences with no LOF flags, return only those transcripts.
-    return hl.if_else(
-        (most_severe_csq.lof == "HC") & (hl.len(no_flags) > 0),
-        no_flags,
-        tcl,
-    )
-
-
 @deprecated(reason="Replaced by get_most_severe_csq_from_multiple_csq_lists")
 def get_most_severe_consequence_for_summary(
     ht: hl.Table,
@@ -822,6 +787,7 @@ def get_most_severe_csq_from_multiple_csq_lists(
     loftee_labels: List[str] = LOFTEE_LABELS,
     include_transcript_csqs: bool = False,
     prioritize_protein_coding: bool = True,
+    prioritize_loftee_no_flags: bool = False,
     csq_list_order: Union[List[str], Tuple[str]] = (
         "transcript_consequences",
         "regulatory_feature_consequences",
@@ -872,6 +838,8 @@ def get_most_severe_csq_from_multiple_csq_lists(
         the most severe consequence. Default is False.
     :param prioritize_protein_coding: Whether to prioritize protein-coding transcripts
         when determining the worst consequence. Default is True.
+    :param prioritize_loftee_no_flags: Whether to prioritize LOFTEE consequences with no
+        flags over those with flags. Default is False.
     :param csq_list_order: Order of VEP consequences lists to be processed. Default is
         ('transcript_consequences', 'regulatory_feature_consequences',
         'motif_feature_consequences', 'intergenic_consequences').
@@ -888,7 +856,7 @@ def get_most_severe_csq_from_multiple_csq_lists(
         protein_coding: bool = False,
         include_csqs: bool = False,
         prioritize_loftee: bool = False,
-        additional_order: Optional[List[str]] = None,
+        additional_order: Optional[Tuple[str, List[str]]] = None,
     ) -> hl.StructExpression:
         """
         Filter a list of consequences to those that have the most severe consequence.
@@ -913,36 +881,35 @@ def get_most_severe_csq_from_multiple_csq_lists(
         :return: StructExpression with the most severe consequence and the list of
             consequences that match the most severe consequence.
         """
+        lof = hl.missing(hl.tstr)
+        no_lof_flags = hl.missing(hl.tbool)
+
         if protein_coding:
             csq_list = csq_list.filter(lambda x: x.biotype == "protein_coding")
 
-        lof = hl.missing(hl.tstr)
-        no_lof_flags = hl.missing(hl.tbool)
         if prioritize_loftee:
             lof_csq = filter_to_most_severe_consequences(csq_list, loftee_labels, "lof")
-            lof = lof_csq[0].lof
-
-            # Check if any of the lof consequences have no lof_flags.
-            no_lof_flags = (
-                hl.len(filter_vep_consequences_by_loftee(lof_csq, no_lof_flags=True))
-                > 0
+            lof_csq_no_flag = filter_vep_consequences_by_loftee(
+                lof_csq, no_lof_flags=True
             )
 
-            # If there are no lof consequences, set the consequence list to the original
-            # list.
+            # Check if any of the lof consequences have no lof flags.
+            no_lof_flags = hl.len(lof_csq_no_flag) > 0
+
+            # If requested and there are lof consequences without flags, use those.
+            if prioritize_loftee_no_flags:
+                lof_csq = hl.if_else(no_lof_flags, lof_csq_no_flag, lof_csq)
+
+            lof = lof_csq[0].lof
+
+            # If there are no lof consequences, use the original consequences list.
             csq_list = hl.coalesce(lof_csq, csq_list)
 
-        # Add most_severe_consequence to each consequence.
-        csq_list = add_most_severe_consequence_to_consequence(csq_list, csq_order)
-
-        # Get the most severe consequence of all consequences in the list.
-        csq_list = filter_to_most_severe_consequences(csq_list, csq_order=csq_order)
-        ms_csq = csq_list[0].most_severe_consequence
-        result = hl.struct(
-            most_severe_consequence=ms_csq,
-            protein_coding=protein_coding,
-            lof=lof,
-            no_lof_flags=no_lof_flags,
+        # Add most_severe_consequence to each consequence and get the most severe
+        # consequence of all consequences in the list.
+        csq_list = filter_to_most_severe_consequences(
+            add_most_severe_consequence_to_consequence(csq_list, csq_order),
+            csq_order=csq_order,
         )
 
         if additional_order is not None:
@@ -957,14 +924,16 @@ def get_most_severe_csq_from_multiple_csq_lists(
             # list.
             csq_list = hl.coalesce(add_csq_expr, csq_list)
 
-        result = result.annotate(consequences=csq_list)
-        csq_list = hl.or_missing(hl.len(csq_list) > 0, result)
-
-        # Drop the consequences field if not requested.
-        if not include_csqs:
-            csq_list = csq_list.drop("consequences")
-
-        return csq_list
+        return hl.or_missing(
+            hl.len(csq_list) > 0,
+            hl.struct(
+                most_severe_consequence=csq_list[0].most_severe_consequence,
+                protein_coding=protein_coding,
+                lof=lof,
+                no_lof_flags=no_lof_flags,
+                **({"consequences": csq_list} if include_csqs else {}),
+            ),
+        )
 
     # Get type of transcript_consequences field for use with hl.missing for other
     # consequence lists.
@@ -1018,13 +987,10 @@ def get_most_severe_csq_from_multiple_csq_lists(
 
     ms_csqs = hl.coalesce(*ms_csqs_list)
 
-    # Rename most_severe_consequence to most_severe_csq for consistency with older
-    # version of code.
-    rename_map = {"most_severe_consequence": "most_severe_csq"}
     if tc_dtype is not None:
-        rename_map["consequences"] = "transcript_consequences"
+        ms_csqs = ms_csqs.rename({"consequences": "transcript_consequences"})
 
-    return ms_csqs.rename(rename_map)
+    return ms_csqs
 
 
 def filter_vep_transcript_csqs(

@@ -422,8 +422,8 @@ def process_consequences(
         return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 
     # Annotate each transcript consequence with the 'most_severe_consequence'.
-    transcript_csqs = t[vep_root].transcript_consequences.map(
-        lambda tc: add_most_severe_consequence_to_consequence(tc, csq_order)
+    transcript_csqs = add_most_severe_consequence_to_consequence(
+        t[vep_root].transcript_consequences, csq_order
     )
 
     # Group transcript consequences by gene and find the worst consequence for each.

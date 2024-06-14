@@ -44,7 +44,10 @@ CSQ_CODING_MEDIUM_IMPACT = [
 ]
 
 CSQ_CODING_LOW_IMPACT = [
+    "splice_donor_5th_base_variant",  # new in v105
     "splice_region_variant",  # Considered low impact in v105, previously medium
+    "splice_donor_region_variant",  # new in v105
+    "splice_polypyrimidine_tract_variant",  # new in v105
     "incomplete_terminal_codon_variant",
     "start_retained_variant",  # new in v92
     "stop_retained_variant",

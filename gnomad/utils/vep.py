@@ -336,8 +336,8 @@ def process_consequences(
 
     Each transcript consequence is annotated with a `csq_score` which is a combination
     of the index of the consequence's `most_severe_consequence` in `csq_order` and an
-    extra deduction for loss-of-function consequences, and polyphen predictions if 
-    `has_polyphen` is True. Lower scores translate to higher severity. 
+    extra deduction for loss-of-function consequences, and polyphen predictions if
+    `has_polyphen` is True. Lower scores translate to higher severity.
 
     The score adjustment is as follows:
         - lof == 'HC' & NO lof_flags (-1000 if penalize_flags, -500 if not)

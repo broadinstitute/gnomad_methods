@@ -32,11 +32,11 @@ CSQ_CODING_HIGH_IMPACT = [
     "frameshift_variant",
     "stop_lost",
     "start_lost",  # Considered high impact in v105, previously medium
+    "transcript_amplification",  # considered high impact in v105, previously medium
 ]
 
 CSQ_CODING_MEDIUM_IMPACT = [
     "initiator_codon_variant",  # deprecated
-    "transcript_amplification",
     "inframe_insertion",
     "inframe_deletion",
     "missense_variant",

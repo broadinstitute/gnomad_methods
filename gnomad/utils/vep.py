@@ -21,8 +21,9 @@ CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
 Versions of VEP used in gnomAD data, the latest version is 105.
 """
 
-# Note that this is the current as of v105 with some included for backwards
-# compatibility (VEP <= 75)
+# Note that these terms are current as of v105 with some included for backwards
+# compatibility (VEP <= 75). The impact groupings are loosely based on VEP's categories
+# but have been adjusted to better serve gnomAD's use cases.
 # See: https://www.ensembl.org/info/genome/variation/prediction/predicted_data.html
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
@@ -31,12 +32,12 @@ CSQ_CODING_HIGH_IMPACT = [
     "stop_gained",
     "frameshift_variant",
     "stop_lost",
-    "start_lost",  # Considered high impact in v105, previously medium
 ]
 
 CSQ_CODING_MEDIUM_IMPACT = [
+    "start_lost",  # considered high impact in v105, previously medium
     "initiator_codon_variant",  # deprecated
-    "transcript_amplification",
+    "transcript_amplification",  # considered high impact in v105, previously medium
     "inframe_insertion",
     "inframe_deletion",
     "missense_variant",
@@ -44,12 +45,16 @@ CSQ_CODING_MEDIUM_IMPACT = [
 ]
 
 CSQ_CODING_LOW_IMPACT = [
+    "splice_donor_5th_base_variant",  # new in v105
     "splice_region_variant",  # Considered low impact in v105, previously medium
+    "splice_donor_region_variant",  # new in v105
+    "splice_polypyrimidine_tract_variant",  # new in v105
     "incomplete_terminal_codon_variant",
     "start_retained_variant",  # new in v92
     "stop_retained_variant",
     "synonymous_variant",
     "coding_sequence_variant",
+    "coding_transcript_variant",
 ]
 
 CSQ_NON_CODING = [
@@ -73,6 +78,7 @@ CSQ_NON_CODING = [
     "regulatory_region_variant",
     "feature_truncation",
     "intergenic_variant",
+    "sequence_variant",
 ]
 
 CSQ_ORDER = (

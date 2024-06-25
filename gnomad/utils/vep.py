@@ -22,8 +22,9 @@ CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
 Versions of VEP used in gnomAD data, the latest version is 105.
 """
 
-# Note that this is the current as of v105 with some included for backwards
-# compatibility (VEP <= 75)
+# Note that these terms are current as of v105 with some included for backwards
+# compatibility (VEP <= 75). The impact groupings are loosely based on VEP's categories
+# but have been adjusted to better serve gnomAD's use cases.
 # See: https://www.ensembl.org/info/genome/variation/prediction/predicted_data.html
 CSQ_CODING_HIGH_IMPACT = [
     "transcript_ablation",
@@ -32,12 +33,12 @@ CSQ_CODING_HIGH_IMPACT = [
     "stop_gained",
     "frameshift_variant",
     "stop_lost",
-    "start_lost",  # Considered high impact in v105, previously medium
 ]
 
 CSQ_CODING_MEDIUM_IMPACT = [
+    "start_lost",  # considered high impact in v105, previously medium
     "initiator_codon_variant",  # deprecated
-    "transcript_amplification",
+    "transcript_amplification",  # considered high impact in v105, previously medium
     "inframe_insertion",
     "inframe_deletion",
     "missense_variant",
@@ -45,12 +46,16 @@ CSQ_CODING_MEDIUM_IMPACT = [
 ]
 
 CSQ_CODING_LOW_IMPACT = [
+    "splice_donor_5th_base_variant",  # new in v105
     "splice_region_variant",  # Considered low impact in v105, previously medium
+    "splice_donor_region_variant",  # new in v105
+    "splice_polypyrimidine_tract_variant",  # new in v105
     "incomplete_terminal_codon_variant",
     "start_retained_variant",  # new in v92
     "stop_retained_variant",
     "synonymous_variant",
     "coding_sequence_variant",
+    "coding_transcript_variant",
 ]
 
 CSQ_NON_CODING = [
@@ -74,6 +79,7 @@ CSQ_NON_CODING = [
     "regulatory_region_variant",
     "feature_truncation",
     "intergenic_variant",
+    "sequence_variant",
 ]
 
 CSQ_ORDER = (
@@ -1015,10 +1021,57 @@ def get_most_severe_csq_from_multiple_csq_lists(
 def filter_vep_transcript_csqs(
     t: Union[hl.Table, hl.MatrixTable],
     vep_root: str = "vep",
+    filter_empty_csq: bool = True,
+    **kwargs,
+) -> Union[hl.Table, hl.MatrixTable]:
+    """
+    Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
+
+    If `filter_empty_csq` parameter is set to True, the Table/MatrixTable is filtered
+    to variants where 'transcript_consequences' within the VEP annotation is not empty
+    after the specified filtering criteria is applied.
+
+    .. note::
+
+        By default, the Table/MatrixTable is filtered to variants where
+        'transcript_consequences' within the VEP annotation is not empty after filtering
+        to Ensembl canonical transcripts with a most severe consequence of
+        'synonymous_variant'.
+
+    :param t: Input Table or MatrixTable.
+    :param vep_root: Root for VEP annotation. Default is 'vep'.
+    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
+        is empty, after filtering 'transcript_consequences' to the specified criteria.
+        Default is True.
+    :param kwargs: Filtering criteria to apply to the VEP transcript consequences using
+        `filter_vep_transcript_csqs_expr`. See that function for more details.
+    :return: Table or MatrixTable with VEP transcript consequences filtered.
+    """
+    is_mt = isinstance(t, hl.MatrixTable)
+    vep_data = {
+        vep_root: t[vep_root].annotate(
+            transcript_consequences=filter_vep_transcript_csqs_expr(
+                t[vep_root].transcript_consequences, **kwargs
+            )
+        )
+    }
+    t = t.annotate_rows(**vep_data) if is_mt else t.annotate(**vep_data)
+
+    if filter_empty_csq:
+        transcript_csq_expr = t[vep_root].transcript_consequences
+        filter_expr = hl.is_defined(transcript_csq_expr) & (
+            hl.len(transcript_csq_expr) > 0
+        )
+        t = t.filter_rows(filter_expr) if is_mt else t.filter(filter_expr)
+
+    return t
+
+
+def filter_vep_transcript_csqs_expr(
+    csq_expr: hl.expr.ArrayExpression,
     synonymous: bool = True,
     canonical: bool = True,
     mane_select: bool = False,
-    filter_empty_csq: bool = True,
     ensembl_only: bool = True,
     protein_coding: bool = False,
     csqs: List[str] = None,
@@ -1035,20 +1088,18 @@ def filter_vep_transcript_csqs(
     'synonymous_variant' and/or the transcript is the canonical transcript, if the
     `synonymous` and `canonical` parameter are set to True, respectively.
 
-    If `filter_empty_csq` parameter is set to True, the Table/MatrixTable is filtered
-    to variants where 'transcript_consequences' within the VEP annotation is not empty
-    after the specified filtering criteria is applied.
+    .. note::
 
-    :param t: Input Table or MatrixTable.
-    :param vep_root: Name used for VEP annotation. Default is 'vep'.
+        If `csqs` is not None or `synonymous` is True, and 'most_severe_consequence'
+        is not already annotated on the `csq_expr` elements, the most severe
+        consequence will be added to the `csq_expr` for filtering.
+
+    :param csq_expr: ArrayExpression of VEP transcript consequences.
     :param synonymous: Whether to filter to variants where the most severe consequence
         is 'synonymous_variant'. Default is True.
     :param canonical: Whether to filter to only canonical transcripts. Default is True.
     :param mane_select: Whether to filter to only MANE Select transcripts. Default is
         False.
-    :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
-        is empty, after filtering 'transcript_consequences' to the specified criteria.
-        Default is True.
     :param ensembl_only: Whether to filter to only Ensembl transcripts. This option is
         useful for deduplicating transcripts that are the same between RefSeq and
         Emsembl. Default is True.
@@ -1069,18 +1120,17 @@ def filter_vep_transcript_csqs(
         consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
     :param additional_filtering_criteria: Optional list of additional filtering
         criteria to apply to the VEP transcript consequences.
-    :return: Table or MatrixTable filtered to specified criteria.
+    :return: ArrayExpression of filtered VEP transcript consequences.
     """
-    if not synonymous and not (canonical or mane_select) and not filter_empty_csq:
-        logger.warning("No changes have been made to input Table/MatrixTable!")
-        return t
-
-    transcript_csqs = t[vep_root].transcript_consequences
     criteria = [lambda csq: True]
     if synonymous:
         logger.info("Filtering to most severe consequence of synonymous_variant...")
         csqs = ["synonymous_variant"]
     if csqs is not None:
+        if "most_severe_consequence" not in csq_expr.dtype.element_type.fields:
+            logger.info("Adding most_severe_consequence annotation...")
+            csq_expr = add_most_severe_consequence_to_consequence(csq_expr)
+
         csqs = hl.literal(csqs)
         if keep_csqs:
             criteria.append(lambda csq: csqs.contains(csq.most_severe_consequence))
@@ -1110,19 +1160,10 @@ def filter_vep_transcript_csqs(
         logger.info("Filtering to variants with additional criteria...")
         criteria = criteria + additional_filtering_criteria
 
-    transcript_csqs = transcript_csqs.filter(lambda x: combine_functions(criteria, x))
-    is_mt = isinstance(t, hl.MatrixTable)
-    vep_data = {vep_root: t[vep_root].annotate(transcript_consequences=transcript_csqs)}
-    t = t.annotate_rows(**vep_data) if is_mt else t.annotate(**vep_data)
+    if len(criteria) == 1:
+        logger.warning("No changes have been made to input transcript consequences!")
 
-    if filter_empty_csq:
-        transcript_csq_expr = t[vep_root].transcript_consequences
-        filter_expr = hl.is_defined(transcript_csq_expr) & (
-            hl.len(transcript_csq_expr) > 0
-        )
-        t = t.filter_rows(filter_expr) if is_mt else t.filter(filter_expr)
-
-    return t
+    return csq_expr.filter(lambda x: combine_functions(criteria, x))
 
 
 def add_most_severe_csq_to_tc_within_vep_root(

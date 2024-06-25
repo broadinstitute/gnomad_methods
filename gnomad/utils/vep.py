@@ -144,11 +144,6 @@ LOF_CSQ_SET = {
 Set containing loss-of-function consequence strings.
 """
 
-POLYPHEN_ORDER = ["probably_damaging", "possibly_damaging", "benign"]
-"""
-Order of PolyPhen predictions from most to least severe.
-"""
-
 
 def get_vep_help(vep_config_path: Optional[str] = None):
     """

@@ -12,7 +12,7 @@ from gnomad.utils.vep import (
     add_most_severe_consequence_to_consequence,
     filter_vep_to_canonical_transcripts,
     filter_vep_to_mane_select_transcripts,
-    get_most_severe_consequence_for_summary,
+    get_most_severe_csq_from_multiple_csq_lists,
     process_consequences,
 )
 
@@ -231,11 +231,11 @@ def get_summary_counts(
         logger.info("Filtering to mane select transcripts...")
         ht = filter_vep_to_mane_select_transcripts(ht)
 
-    logger.info("Getting VEP summary annotations...")
-    ht = get_most_severe_consequence_for_summary(ht)
-
-    logger.info("Annotating with frequency bin information...")
-    ht = ht.annotate(freq_bin=freq_bin_expr(ht[freq_field], index))
+    logger.info("Annotating with VEP summary and frequency bin information...")
+    ht = ht.annotate(
+        freq_bin=freq_bin_expr(ht[freq_field], index),
+        **get_most_severe_csq_from_multiple_csq_lists(ht.vep),
+    )
 
     logger.info(
         "Annotating HT globals with total counts/total allele counts per variant"
@@ -248,7 +248,7 @@ def get_summary_counts(
                 ht.alleles,
                 ht.lof,
                 ht.no_lof_flags,
-                ht.most_severe_csq,
+                ht.most_severe_consequence,
                 prefix_str="total_",
             )
         )
@@ -259,7 +259,7 @@ def get_summary_counts(
                 ht[freq_field][index].AC,
                 ht.lof,
                 ht.no_lof_flags,
-                ht.most_severe_csq,
+                ht.most_severe_consequence,
             )
         )
     )
@@ -272,7 +272,7 @@ def get_summary_counts(
             ht.alleles,
             ht.lof,
             ht.no_lof_flags,
-            ht.most_severe_csq,
+            ht.most_severe_consequence,
         )
     )
 
@@ -489,7 +489,7 @@ def get_summary_stats_csq_filter_expr(
         if not isinstance(csq_set, hl.expr.CollectionExpression):
             csq_set = hl.set(csq_set)
 
-        return csq_set.contains(t.most_severe_csq)
+        return csq_set.contains(t.most_severe_consequence)
 
     # Set up filters for specific consequences or sets of consequences.
     csq_filters = {
@@ -1033,11 +1033,11 @@ def default_generate_gene_lof_summary(
         )
 
     if filter_loftee:
-        lof_ht = get_most_severe_consequence_for_summary(mt.rows())
+        lof_expr = get_most_severe_csq_from_multiple_csq_lists(mt.vep)
         mt = mt.filter_rows(
-            hl.is_defined(lof_ht[mt.row_key].lof)
-            & (lof_ht[mt.row_key].lof == "HC")
-            & (lof_ht[mt.row_key].no_lof_flags)
+            hl.is_defined(lof_expr.lof)
+            & (lof_expr.lof == "HC")
+            & (lof_expr.no_lof_flags)
         )
 
     ht = mt.annotate_rows(

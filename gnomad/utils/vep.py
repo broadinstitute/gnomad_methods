@@ -784,7 +784,7 @@ def filter_to_most_severe_consequences(
     # there are any LOFTEE consequences without flags.
     if prioritize_loftee:
         lof, lof_csq = _filter_to_most_severe(csq_expr, "lof", loftee_labels)
-        lof_csq_no_flag = filter_vep_consequences_by_loftee(lof_csq, no_lof_flags=True)
+        lof_csq_no_flag = filter_vep_transcript_csqs_expr(lof_csq, no_lof_flags=True)
         no_lof_flags = hl.len(lof_csq_no_flag) > 0
 
         # If requested and there are lof consequences without flags, use those.
@@ -813,44 +813,6 @@ def filter_to_most_severe_consequences(
         csq_expr = hl.coalesce(add_csq_expr, csq_expr)
 
     return hl.struct(most_severe_consequence=ms_csq, **lof_expr, consequences=csq_expr)
-
-
-# TODO: Can add this to `filter_vep_transcript_csqs`, but need to also make that
-#  function work with just an array of transcript consequences.
-def filter_vep_consequences_by_loftee(
-    csq_expr: hl.expr.ArrayExpression,
-    loftee_labels: Optional[List[str]] = None,
-    no_lof_flags: bool = False,
-    keep: bool = True,
-) -> hl.expr.StructExpression:
-    """
-    Filter VEP transcript consequences by LOFTEE.
-
-    :param csq_expr: ArrayExpression of VEP consequences with LOFTEE annotations.
-    :param loftee_labels: List of LOFTEE labels to filter to. Default is None, which
-        filters to all LOFTEE labels.
-    :param no_lof_flags: Whether to filter to consequences with no LOFTEE flags.
-        Default is False.
-    :param keep: Whether to keep the consequences that match the filter criteria.
-        Default is True.
-    :return: StructExpression with the filtered consequences.
-    """
-    filter_criteria = [lambda csq: True]
-
-    if loftee_labels:
-        logger.info("Filtering to LOFTEE labels: %s...", loftee_labels)
-        filter_criteria.append(lambda x: hl.set(loftee_labels).contains(x.lof))
-
-    if no_lof_flags:
-        logger.info("Filtering to consequences with no LOFTEE flags...")
-        filter_criteria.append(
-            lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == "")
-        )
-
-    if keep:
-        return csq_expr.filter(lambda x: combine_functions(filter_criteria, x))
-    else:
-        return csq_expr.filter(lambda x: ~combine_functions(filter_criteria, x))
 
 
 @deprecated(reason="Replaced by get_most_severe_csq_from_multiple_csq_lists")
@@ -1074,6 +1036,8 @@ def filter_vep_transcript_csqs_expr(
     mane_select: bool = False,
     ensembl_only: bool = True,
     protein_coding: bool = False,
+    loftee_labels: Optional[List[str]] = None,
+    no_lof_flags: bool = False,
     csqs: List[str] = None,
     keep_csqs: bool = True,
     genes: Optional[List[str]] = None,
@@ -1104,6 +1068,10 @@ def filter_vep_transcript_csqs_expr(
         useful for deduplicating transcripts that are the same between RefSeq and
         Emsembl. Default is True.
     :param protein_coding: Whether to filter to only protein-coding transcripts.
+        Default is False.
+    :param loftee_labels: List of LOFTEE labels to filter to. Default is None, which
+        filters to all LOFTEE labels.
+    :param no_lof_flags: Whether to filter to consequences with no LOFTEE flags.
         Default is False.
     :param csqs: Optional list of consequence terms to filter to. Transcript
         consequences are filtered to those where 'most_severe_consequence' is in the
@@ -1148,6 +1116,14 @@ def filter_vep_transcript_csqs_expr(
     if protein_coding:
         logger.info("Filtering to protein coding transcripts...")
         criteria.append(lambda csq: csq.biotype == "protein_coding")
+    if loftee_labels:
+        logger.info(
+            "Filtering to consequences with LOFTEE labels: %s...", loftee_labels
+        )
+        criteria.append(lambda x: hl.set(loftee_labels).contains(x.lof))
+    if no_lof_flags:
+        logger.info("Filtering to consequences with no LOFTEE flags...")
+        criteria.append(lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == ""))
     if genes is not None:
         logger.info("Filtering to genes of interest...")
         genes = hl.literal(genes)

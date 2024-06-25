@@ -800,6 +800,9 @@ def get_most_severe_consequence_for_summary(
 def filter_vep_transcript_csqs(
     t: Union[hl.Table, hl.MatrixTable],
     vep_root: str = "vep",
+    synonymous: bool = True,
+    canonical: bool = True,
+    ensembl_only: bool = True,
     filter_empty_csq: bool = True,
     **kwargs,
 ) -> Union[hl.Table, hl.MatrixTable]:
@@ -819,6 +822,12 @@ def filter_vep_transcript_csqs(
 
     :param t: Input Table or MatrixTable.
     :param vep_root: Root for VEP annotation. Default is 'vep'.
+    :param synonymous: Whether to filter to variants where the most severe consequence
+        is 'synonymous_variant'. Default is True.
+    :param canonical: Whether to filter to only canonical transcripts. Default is True.
+    :param ensembl_only: Whether to filter to only Ensembl transcripts. This option is
+        useful for deduplicating transcripts that are the same between RefSeq and
+        Emsembl. Default is True.
     :param filter_empty_csq: Whether to filter out rows where 'transcript_consequences'
         is empty, after filtering 'transcript_consequences' to the specified criteria.
         Default is True.
@@ -830,7 +839,11 @@ def filter_vep_transcript_csqs(
     vep_data = {
         vep_root: t[vep_root].annotate(
             transcript_consequences=filter_vep_transcript_csqs_expr(
-                t[vep_root].transcript_consequences, **kwargs
+                t[vep_root].transcript_consequences,
+                synonymous=synonymous,
+                canonical=canonical,
+                ensembl_only=ensembl_only,
+                **kwargs,
             )
         )
     }
@@ -848,10 +861,10 @@ def filter_vep_transcript_csqs(
 
 def filter_vep_transcript_csqs_expr(
     csq_expr: hl.expr.ArrayExpression,
-    synonymous: bool = True,
-    canonical: bool = True,
+    synonymous: bool = False,
+    canonical: bool = False,
     mane_select: bool = False,
-    ensembl_only: bool = True,
+    ensembl_only: bool = False,
     protein_coding: bool = False,
     csqs: List[str] = None,
     keep_csqs: bool = True,
@@ -863,10 +876,6 @@ def filter_vep_transcript_csqs_expr(
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
 
-    Transcript consequences can be filtered to those where 'most_severe_consequence' is
-    'synonymous_variant' and/or the transcript is the canonical transcript, if the
-    `synonymous` and `canonical` parameter are set to True, respectively.
-
     .. note::
 
         If `csqs` is not None or `synonymous` is True, and 'most_severe_consequence'
@@ -875,13 +884,13 @@ def filter_vep_transcript_csqs_expr(
 
     :param csq_expr: ArrayExpression of VEP transcript consequences.
     :param synonymous: Whether to filter to variants where the most severe consequence
-        is 'synonymous_variant'. Default is True.
-    :param canonical: Whether to filter to only canonical transcripts. Default is True.
+        is 'synonymous_variant'. Default is False.
+    :param canonical: Whether to filter to only canonical transcripts. Default is False.
     :param mane_select: Whether to filter to only MANE Select transcripts. Default is
         False.
     :param ensembl_only: Whether to filter to only Ensembl transcripts. This option is
         useful for deduplicating transcripts that are the same between RefSeq and
-        Emsembl. Default is True.
+        Emsembl. Default is False.
     :param protein_coding: Whether to filter to only protein-coding transcripts.
         Default is False.
     :param csqs: Optional list of consequence terms to filter to. Transcript

@@ -292,11 +292,8 @@ def get_most_severe_consequence_expr(
         `CSQ_ORDER` global.
     :return: Most severe consequence in `csq_expr`.
     """
-    if csq_order is None:
-        csq_order = CSQ_ORDER
-    csqs = hl.literal(csq_order)
-
-    return csqs.find(lambda c: csq_expr.contains(c))
+    csq_order = csq_order or CSQ_ORDER
+    return hl.literal(csq_order).find(lambda c: csq_expr.contains(c))
 
 
 def add_most_severe_consequence_to_consequence(
@@ -385,8 +382,9 @@ def process_consequences(
         return hl.or_missing(hl.len(tc_expr) > 0, tc_expr[0])
 
     # Annotate each transcript consequence with the 'most_severe_consequence'.
-    csqs = t[vep_root].transcript_consequences
-    csqs = add_most_severe_consequence_to_consequence(csqs, csq_order)
+    csqs = add_most_severe_consequence_to_consequence(
+        t[vep_root].transcript_consequences, csq_order
+    )
 
     # Group transcript consequences by gene and find the worst consequence for each.
     gene_csqs = (

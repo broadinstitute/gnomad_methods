@@ -841,7 +841,10 @@ def filter_vep_consequences_by_loftee(
             lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == "")
         )
 
-    return csq_expr.filter(lambda x: combine_functions(filter_criteria, x), keep=keep)
+    if keep:
+        return csq_expr.filter(lambda x: combine_functions(filter_criteria, x))
+    else:
+        return csq_expr.filter(lambda x: ~combine_functions(filter_criteria, x))
 
 
 @deprecated(reason="Replaced by get_most_severe_csq_from_multiple_csq_lists")

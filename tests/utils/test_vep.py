@@ -1,4 +1,5 @@
 """Tests for the gnomAD VEP utility functions."""
+
 import hail as hl
 
 from gnomad.utils.vep import (

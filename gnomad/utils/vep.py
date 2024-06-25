@@ -788,7 +788,6 @@ def filter_to_most_severe_consequences(
     if filter_to_protein_coding:
         logger.info("Filtering to protein-coding transcripts...")
         csq_expr = filter_vep_transcript_csqs_expr(csq_expr, protein_coding=True)
-        csq_expr = hl.or_missing(hl.len(csq_expr) > 0, csq_expr)
 
     def _filter_to_most_severe(
         expr: hl.expr.ArrayExpression,
@@ -1113,6 +1112,8 @@ def filter_vep_transcript_csqs_expr(
         is not already annotated on the `csq_expr` elements, the most severe
         consequence will be added to the `csq_expr` for filtering.
 
+        If `csq_expr` is empty after filtering, the expression will be set to missing.
+
     :param csq_expr: ArrayExpression of VEP transcript consequences.
     :param synonymous: Whether to filter to variants where the most severe consequence
         is 'synonymous_variant'. Default is False.
@@ -1194,7 +1195,9 @@ def filter_vep_transcript_csqs_expr(
     if len(criteria) == 1:
         logger.warning("No changes have been made to input transcript consequences!")
 
-    return csq_expr.filter(lambda x: combine_functions(criteria, x))
+    csq_expr = csq_expr.filter(lambda x: combine_functions(criteria, x))
+
+    return hl.or_missing(hl.len(csq_expr) > 0, csq_expr)
 
 
 def add_most_severe_csq_to_tc_within_vep_root(

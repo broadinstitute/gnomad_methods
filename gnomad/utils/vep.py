@@ -742,7 +742,7 @@ def filter_to_most_severe_consequences(
 
     if filter_to_protein_coding:
         logger.info("Filtering to protein-coding transcripts...")
-        csq_expr = csq_expr.filter(lambda x: x.biotype == "protein_coding")
+        csq_expr = filter_vep_transcript_csqs_expr(csq_expr, protein_coding=True)
         csq_expr = hl.or_missing(hl.len(csq_expr) > 0, csq_expr)
 
     def _filter_to_most_severe(

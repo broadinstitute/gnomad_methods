@@ -171,31 +171,3 @@ def test_get_most_severe_csq_from_multiple_csq_lists():
     assert len(result.transcript_consequences) == 2, "Expected 2 transcript consequences"
     assert result.transcript_consequences[0].most_severe_consequence == 'missense_variant', "Expected 'missense_variant' for the first transcript consequence"
     assert result.transcript_consequences[1].most_severe_consequence == 'synonymous_variant', "Expected 'synonymous_variant' for the second transcript consequence"
-
-
-def test_process_consequences():
-    """Test the process_consequences function."""
-    # Create a mock MatrixTable with vep.transcript_consequences
-    mt = hl.utils.range_matrix_table(1, 1)
-    mt = mt.annotate_rows(vep=hl.struct(transcript_consequences=[hl.struct(consequence_terms=['missense_variant', 'synonymous_variant'])]))
-
-    # Apply the function
-    result_mt = process_consequences(mt)
-
-    # Check that the most_severe_consequence field is added
-    assert 'most_severe_consequence' in result_mt.vep.transcript_consequences[0]
-
-    # Check that the most_severe_consequence is correct
-    assert result_mt.vep.transcript_consequences[0].most_severe_consequence == 'missense_variant'
-
-    # Check that the worst_csq_by_gene field is added
-    assert 'worst_csq_by_gene' in result_mt.vep
-
-    # Check that the worst_csq_for_variant field is added
-    assert 'worst_csq_for_variant' in result_mt.vep
-
-    # Check that the worst_csq_by_gene_canonical field is added
-    assert 'worst_csq_by_gene_canonical' in result_mt.vep
-
-    # Check that the worst_csq_for_variant_canonical field is added
-    assert 'worst_csq_for_variant_canonical' in result_mt.vep

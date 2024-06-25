@@ -337,12 +337,23 @@ def process_consequences(
     penalize_flags: bool = True,
     csq_order: Optional[List[str]] = None,
     has_polyphen: bool = True,
-    prioritize_protein_coding: bool = False,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Add most_severe_consequence into [vep_root].transcript_consequences, and worst_csq_by_gene, any_lof into [vep_root].
 
     `most_severe_consequence` is the worst consequence for a transcript.
+
+    Each transcript consequence is annotated with a `csq_score` which is a combination
+    of the index of the consequence's `most_severe_consequence` in `csq_order` and an
+    extra deduction for loss-of-function consequences, and polyphen predictions if
+    `has_polyphen` is True. Lower scores translate to higher severity.
+
+    The score adjustment is as follows:
+        - lof == 'HC' & NO lof_flags (-1000 if penalize_flags, -500 if not)
+        - lof == 'HC' & lof_flags (-500)
+        - lof == 'OS' (-20)
+        - lof == 'LC' (-10)
+        - everything else (0)
 
     .. note::
 
@@ -359,64 +370,103 @@ def process_consequences(
         `CSQ_ORDER` global.
     :param has_polyphen: Whether the input VEP Struct has a PolyPhen annotation which
         will be used to modify the consequence score. Default is True.
-    :param prioritize_protein_coding: Whether to prioritize protein-coding transcripts
-        when determining the worst consequence. Default is False.
-    :return: HT/MT with better formatted consequences.
+    :return: MT with better formatted consequences.
     """
-    # If has_polyphen is True, set the order of PolyPhen consequences.
-    polyphen_order = POLYPHEN_ORDER if has_polyphen else None
+    if csq_order is None:
+        csq_order = CSQ_ORDER
+    csqs = hl.literal(csq_order)
+
+    # Assign a score to each consequence based on the order in csq_order.
+    csq_dict = hl.literal(dict(zip(csq_order, range(len(csq_order)))))
 
     def _find_worst_transcript_consequence(
-        tc_expr: hl.expr.ArrayExpression,
+        tcl: hl.expr.ArrayExpression,
     ) -> hl.expr.StructExpression:
         """
         Find the worst transcript consequence in an array of transcript consequences.
 
-        :param tc_expr: Array of transcript consequences.
+        :param tcl: Array of transcript consequences.
         :return: Worst transcript consequence.
         """
-        tc_expr = get_most_severe_csq_from_multiple_csq_lists(
-            hl.struct(transcript_consequences=tc_expr),
-            csq_order=csq_order,
-            include_csqs=True,
-            prioritize_protein_coding=prioritize_protein_coding,
-            prioritize_loftee_no_flags=penalize_flags,
-            csq_list_order=["transcript_consequences"],
-            add_order_by_csq_list={"transcript_consequences": polyphen_order},
-        ).transcript_consequences
+        flag = 500
+        no_flag = flag * (1 + penalize_flags)
 
-        return hl.or_missing(hl.len(tc_expr) > 0, tc_expr[0])
+        # Score each consequence based on the order in csq_order.
+        score_expr = tcl.map(
+            lambda tc: csq_dict[csqs.find(lambda x: x == tc.most_severe_consequence)]
+        )
+
+        # Determine the score adjustment based on the consequence's LOF and LOF flags.
+        sub_expr = tcl.map(
+            lambda tc: (
+                hl.case(missing_false=True)
+                .when((tc.lof == "HC") & hl.or_else(tc.lof_flags == "", True), no_flag)
+                .when((tc.lof == "HC") & (tc.lof_flags != ""), flag)
+                .when(tc.lof == "OS", 20)
+                .when(tc.lof == "LC", 10)
+                .default(0)
+            )
+        )
+
+        # If requested, determine the score adjustment based on the consequence's
+        # PolyPhen prediction.
+        if has_polyphen:
+            polyphen_sub_expr = tcl.map(
+                lambda tc: (
+                    hl.case(missing_false=True)
+                    .when(tc.polyphen_prediction == "probably_damaging", 0.5)
+                    .when(tc.polyphen_prediction == "possibly_damaging", 0.25)
+                    .when(tc.polyphen_prediction == "benign", 0.1)
+                    .default(0)
+                )
+            )
+            sub_expr = hl.map(lambda s, ps: s + ps, sub_expr, polyphen_sub_expr)
+
+        # Calculate the final consequence score.
+        tcl = hl.map(
+            lambda tc, s, ss: tc.annotate(csq_score=s - ss), tcl, score_expr, sub_expr
+        )
+
+        # Return the worst consequence based on the calculated score.
+        return hl.or_missing(hl.len(tcl) > 0, hl.sorted(tcl, lambda x: x.csq_score)[0])
 
     # Annotate each transcript consequence with the 'most_severe_consequence'.
-    csqs = add_most_severe_consequence_to_consequence(
+    transcript_csqs = add_most_severe_consequence_to_consequence(
         t[vep_root].transcript_consequences, csq_order
     )
 
     # Group transcript consequences by gene and find the worst consequence for each.
-    gene_csqs = (
-        csqs.group_by(lambda tc: tc.gene_symbol)
-        .map_values(_find_worst_transcript_consequence)
-        .values()
-    )
+    gene_dict = transcript_csqs.group_by(lambda tc: tc.gene_symbol)
+    worst_csq_gene = gene_dict.map_values(_find_worst_transcript_consequence).values()
+    sorted_scores = hl.sorted(worst_csq_gene, key=lambda tc: tc.csq_score)
 
-    # Filter transcript consequences to only include canonical transcripts.
-    canonical = csqs.filter(lambda csq: csq.canonical == 1)
-    gene_canonical = (
-        canonical.group_by(lambda tc: tc.gene_symbol)
-        .map_values(_find_worst_transcript_consequence)
-        .values()
+    # Filter transcript consequences to only include canonical transcripts and find the
+    # worst consequence for each gene.
+    canonical = transcript_csqs.filter(lambda csq: csq.canonical == 1)
+    gene_canonical_dict = canonical.group_by(lambda tc: tc.gene_symbol)
+    worst_csq_gene_canonical = gene_canonical_dict.map_values(
+        _find_worst_transcript_consequence
+    ).values()
+    sorted_canonical_scores = hl.sorted(
+        worst_csq_gene_canonical, key=lambda tc: tc.csq_score
     )
 
     # Annotate the HT/MT with the worst consequence for each gene and variant.
     vep_data = t[vep_root].annotate(
-        transcript_consequences=csqs,
-        worst_consequence_term=get_most_severe_consequence_expr(
-            csqs.map(lambda csq: csq.most_severe_consequence), csq_order
+        transcript_consequences=transcript_csqs,
+        worst_consequence_term=csqs.find(
+            lambda c: transcript_csqs.map(
+                lambda csq: csq.most_severe_consequence
+            ).contains(c)
         ),
-        worst_csq_by_gene=gene_csqs,
-        worst_csq_for_variant=_find_worst_transcript_consequence(csqs),
-        worst_csq_by_gene_canonical=gene_canonical,
-        worst_csq_for_variant_canonical=_find_worst_transcript_consequence(canonical),
+        worst_csq_by_gene=sorted_scores,
+        worst_csq_for_variant=hl.or_missing(
+            hl.len(sorted_scores) > 0, sorted_scores[0]
+        ),
+        worst_csq_by_gene_canonical=sorted_canonical_scores,
+        worst_csq_for_variant_canonical=hl.or_missing(
+            hl.len(sorted_canonical_scores) > 0, sorted_canonical_scores[0]
+        ),
     )
 
     return (

@@ -980,7 +980,7 @@ def get_most_severe_csq_from_multiple_csq_lists(
     ms_csq_expr = hl.case(missing_false=True)
     for csq_list in csq_list_order:
         if csq_list not in vep_expr:
-            logger.warning(f"VEP consequences list %s not found in input!", csq_list)
+            logger.warning("VEP consequences list %s not found in input!", csq_list)
             continue
 
         is_tc = csq_list == "transcript_consequences"

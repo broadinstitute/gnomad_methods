@@ -222,3 +222,52 @@ def repartition_for_join(
             " partitions than the original HT!"
         )
     return ht._calculate_new_partitions(ht.n_partitions() * new_partition_percent)
+
+
+def create_vds(
+    gvcfs: str,
+    output_path: str,
+    temp_path: Optional[str] = None,
+    save_path: Optional[str] = None,
+    use_genome_default_intervals: bool = False,
+    use_exome_default_intervals: bool = False,
+    intervals: Optional[List[str]] = None,
+    gvcf_batch_size: Optional[int] = None,
+) -> hl.vds.VariantDataset:
+    """
+    Combine gVCFs into a single VDS.
+
+    :param gvcfs: Path to file containing gVCF paths with no header.
+    :param str output_path: Path to write output VDS.
+    :param str temp_path: Path to write temporary files.
+    :param str save_path: Path to write combiner to on failure. Can be used to restart
+        combiner from a failed state. If not specified, defaults to temp_path +
+        combiner_plan.json.
+    :param bool use_genome_default_intervals: Use the default genome intervals.
+    :param bool use_exome_default_intervals: Use the default exome intervals.
+    :param List[str] intervals: List of intervals to use.
+    :param gvcf_batch_size: Number of GVCFs to combine into a Variant Dataset at once.
+    :return: Combined VDS.
+    """
+    if not save_path and temp_path:
+        save_path = temp_path + "combiner_plan.json"
+
+    gvcfs = read_list_data(gvcfs)
+
+    if not len(gvcfs) > 0:
+        raise DataException("No gVCFs provided in file")
+
+    logger.info("Combining %s gVCFs into a single VDS", len(gvcfs))
+    combiner = hl.vds.new_combiner(
+        output_path=output_path,
+        temp_path=temp_path,
+        save_path=save_path,
+        gvcf_paths=gvcfs,
+        use_genome_default_intervals=use_genome_default_intervals,
+        use_exome_default_intervals=use_exome_default_intervals,
+        intervals=intervals,
+        gvcf_batch_size=gvcf_batch_size,
+    )
+    combiner.run()
+    vds = hl.vds.read_vds(output_path)
+    return vds

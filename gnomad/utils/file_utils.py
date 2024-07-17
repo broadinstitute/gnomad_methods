@@ -259,7 +259,7 @@ def create_vds(
     intervals = (
         hl.import_locus_intervals(
             intervals, reference_genome=reference_genome
-        ).collect()
+        ).interval.collect()
         if intervals
         else None
     )

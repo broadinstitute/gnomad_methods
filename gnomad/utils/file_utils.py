@@ -246,7 +246,7 @@ def create_vds(
         combiner_plan.json.
     :param use_genome_default_intervals: Use the default genome intervals.
     :param use_exome_default_intervals: Use the default exome intervals.
-    :param intervals: List of intervals to use.
+    :param intervals: Path to text file with intervals to use for VDS creation.
     :param gvcf_batch_size: Number of GVCFs to combine into a Variant Dataset at once.
     :return: Combined VDS.
     """
@@ -254,6 +254,7 @@ def create_vds(
         save_path = temp_path + "combiner_plan.json"
 
     gvcfs = read_list_data(gvcfs)
+    intervals = read_list_data(intervals) if intervals else None
 
     if not len(gvcfs) > 0:
         raise DataException("No GVCFs provided in file")

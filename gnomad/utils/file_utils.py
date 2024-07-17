@@ -259,6 +259,9 @@ def create_vds(
     if not len(gvcfs) > 0:
         raise DataException("No GVCFs provided in file")
 
+    if intervals and not len(intervals) > 0:
+        raise DataException("No intervals provided in passed intervals file")
+
     logger.info("Combining %s GVCFs into a single VDS", len(gvcfs))
     combiner = hl.vds.new_combiner(
         output_path=output_path,

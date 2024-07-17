@@ -239,7 +239,7 @@ def create_vds(
 
     :param gvcfs: Path to file containing GVCF paths with no header.
     :param output_path: Path to write output VDS.
-    :param temp_path: Path to write temporary files. A bucket with a life-cycle
+    :param temp_path: Directory path to write temporary files. A bucket with a life-cycle
         policy is recommended.
     :param save_path: Path to write combiner to on failure. Can be used to restart
         combiner from a failed state. If not specified, defaults to temp_path +

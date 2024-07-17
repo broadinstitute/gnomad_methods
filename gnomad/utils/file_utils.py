@@ -227,7 +227,7 @@ def repartition_for_join(
 def create_vds(
     gvcfs: str,
     output_path: str,
-    temp_path: Optional[str] = None,
+    temp_path: str,
     save_path: Optional[str] = None,
     use_genome_default_intervals: bool = False,
     use_exome_default_intervals: bool = False,
@@ -235,17 +235,18 @@ def create_vds(
     gvcf_batch_size: Optional[int] = None,
 ) -> hl.vds.VariantDataset:
     """
-    Combine gVCFs into a single VDS.
+    Combine GVCFs into a single VDS.
 
     :param gvcfs: Path to file containing gVCF paths with no header.
-    :param str output_path: Path to write output VDS.
-    :param str temp_path: Path to write temporary files.
-    :param str save_path: Path to write combiner to on failure. Can be used to restart
+    :param output_path: Path to write output VDS.
+    :param temp_path: Path to write temporary files. A bucket with a life-cycle
+        policy is recommended.
+    :param save_path: Path to write combiner to on failure. Can be used to restart
         combiner from a failed state. If not specified, defaults to temp_path +
         combiner_plan.json.
-    :param bool use_genome_default_intervals: Use the default genome intervals.
-    :param bool use_exome_default_intervals: Use the default exome intervals.
-    :param List[str] intervals: List of intervals to use.
+    :param use_genome_default_intervals: Use the default genome intervals.
+    :param use_exome_default_intervals: Use the default exome intervals.
+    :param intervals: List of intervals to use.
     :param gvcf_batch_size: Number of GVCFs to combine into a Variant Dataset at once.
     :return: Combined VDS.
     """
@@ -255,9 +256,9 @@ def create_vds(
     gvcfs = read_list_data(gvcfs)
 
     if not len(gvcfs) > 0:
-        raise DataException("No gVCFs provided in file")
+        raise DataException("No GVCFs provided in file")
 
-    logger.info("Combining %s gVCFs into a single VDS", len(gvcfs))
+    logger.info("Combining %s GVCFs into a single VDS", len(gvcfs))
     combiner = hl.vds.new_combiner(
         output_path=output_path,
         temp_path=temp_path,

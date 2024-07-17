@@ -1,0 +1,22 @@
+#  - Disables non-security update PRs (by setting pull requests limit to 0)
+#  - Schedules security update PRs weekly
+#  - Auto assigns PRs to the gnomAD production team
+
+version: 2
+updates:
+  - package-ecosystem: 'pip'
+    directories:
+      - '/'
+      - '/docs'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 0
+    reviewers:
+      - 'broadinstitute/gnomad-production'
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    open-pull-requests-limit: 0
+    reviewers:
+      - 'broadinstitute/gnomad-production'

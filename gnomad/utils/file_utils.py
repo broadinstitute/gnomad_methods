@@ -237,7 +237,7 @@ def create_vds(
     """
     Combine GVCFs into a single VDS.
 
-    :param gvcfs: Path to file containing gVCF paths with no header.
+    :param gvcfs: Path to file containing GVCF paths with no header.
     :param output_path: Path to write output VDS.
     :param temp_path: Path to write temporary files. A bucket with a life-cycle
         policy is recommended.

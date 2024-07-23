@@ -222,3 +222,65 @@ def repartition_for_join(
             " partitions than the original HT!"
         )
     return ht._calculate_new_partitions(ht.n_partitions() * new_partition_percent)
+
+
+def create_vds(
+    gvcfs: str,
+    output_path: str,
+    temp_path: str,
+    save_path: Optional[str] = None,
+    use_genome_default_intervals: bool = False,
+    use_exome_default_intervals: bool = False,
+    intervals: Optional[str] = None,
+    gvcf_batch_size: Optional[int] = None,
+    reference_genome: str = "GRCh38",
+) -> hl.vds.VariantDataset:
+    """
+    Combine GVCFs into a single VDS.
+
+    :param gvcfs: Path to file containing GVCF paths with no header.
+    :param output_path: Path to write output VDS.
+    :param temp_path: Directory path to write temporary files. A bucket with a life-cycle
+        policy is recommended.
+    :param save_path: Path to write combiner to on failure. Can be used to restart
+        combiner from a failed state. If not specified, defaults to temp_path +
+        combiner_plan.json.
+    :param use_genome_default_intervals: Use the default genome intervals.
+    :param use_exome_default_intervals: Use the default exome intervals.
+    :param intervals: Path to text file with intervals to use for VDS creation.
+    :param gvcf_batch_size: Number of GVCFs to combine into a Variant Dataset at once.
+    :param reference_genome: Reference genome to use. Default is GRCh38.
+    :return: Combined VDS.
+    """
+    if not save_path and temp_path:
+        save_path = temp_path + "combiner_plan.json"
+
+    gvcfs = read_list_data(gvcfs)
+    intervals = (
+        hl.import_locus_intervals(
+            intervals, reference_genome=reference_genome
+        ).interval.collect()
+        if intervals
+        else None
+    )
+
+    if not len(gvcfs) > 0:
+        raise DataException("No GVCFs provided in file")
+
+    if intervals and not len(intervals) > 0:
+        raise DataException("No intervals provided in passed intervals file")
+
+    logger.info("Combining %s GVCFs into a single VDS", len(gvcfs))
+    combiner = hl.vds.new_combiner(
+        output_path=output_path,
+        temp_path=temp_path,
+        save_path=save_path,
+        gvcf_paths=gvcfs,
+        use_genome_default_intervals=use_genome_default_intervals,
+        use_exome_default_intervals=use_exome_default_intervals,
+        intervals=intervals,
+        gvcf_batch_size=gvcf_batch_size,
+    )
+    combiner.run()
+    vds = hl.vds.read_vds(output_path)
+    return vds

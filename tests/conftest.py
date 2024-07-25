@@ -1,4 +1,5 @@
 """Pytest configuration file for Hail tests."""
+
 import pytest
 import hail as hl
 
@@ -12,7 +13,7 @@ def setup_hail():
     session and will be stopped after all tests are completed.
     """
     if not hl.utils.java.Env.is_fully_initialized():
-        hl.init(log='/dev/null')
+        hl.init(log="/dev/null")
 
     yield
     hl.stop()

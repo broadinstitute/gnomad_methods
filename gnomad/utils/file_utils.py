@@ -225,6 +225,7 @@ def repartition_for_join(
 
 
 def create_vds(
+    vdses: str,
     gvcfs: str,
     output_path: str,
     temp_path: str,
@@ -238,6 +239,7 @@ def create_vds(
     """
     Combine GVCFs into a single VDS.
 
+    :param vdses: Path to file containing VDS paths with no header.
     :param gvcfs: Path to file containing GVCF paths with no header.
     :param output_path: Path to write output VDS.
     :param temp_path: Directory path to write temporary files. A bucket with a life-cycle
@@ -255,7 +257,11 @@ def create_vds(
     if not save_path and temp_path:
         save_path = temp_path + "combiner_plan.json"
 
-    gvcfs = read_list_data(gvcfs)
+    if not vdses and not gvcfs:
+        raise ValueError("No VDSes or gVCFs provided to combine into a VDS.")
+
+    vdses = read_list_data(vdses) if vdses else None
+    gvcfs = read_list_data(gvcfs) if gvcfs else None
     intervals = (
         hl.import_locus_intervals(
             intervals, reference_genome=reference_genome
@@ -263,10 +269,10 @@ def create_vds(
         if intervals
         else None
     )
-
-    if not len(gvcfs) > 0:
+    if vdses and not len(vdses) > 0:
+        raise DataException("No VDSes provided in file")
+    if gvcfs and not len(gvcfs) > 0:
         raise DataException("No GVCFs provided in file")
-
     if intervals and not len(intervals) > 0:
         raise DataException("No intervals provided in passed intervals file")
 
@@ -275,6 +281,7 @@ def create_vds(
         output_path=output_path,
         temp_path=temp_path,
         save_path=save_path,
+        vds_paths=vdses,
         gvcf_paths=gvcfs,
         use_genome_default_intervals=use_genome_default_intervals,
         use_exome_default_intervals=use_exome_default_intervals,

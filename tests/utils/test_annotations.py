@@ -1,8 +1,10 @@
 """Tests for the annotations utility module."""
 
 from typing import Dict, List
-import pytest
+
 import hail as hl
+import pytest
+
 from gnomad.utils.annotations import fill_missing_key_combinations, missing_struct_expr
 
 

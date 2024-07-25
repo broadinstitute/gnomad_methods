@@ -1,7 +1,7 @@
 """Pytest configuration file for Hail tests."""
 
-import pytest
 import hail as hl
+import pytest
 
 
 @pytest.fixture(scope="session", autouse=True)

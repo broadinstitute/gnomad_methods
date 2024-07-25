@@ -2388,6 +2388,70 @@ def update_structured_annotations(
     return ht.annotate(**updated_rows)
 
 
+def fill_missing_key_combinations(
+    ht: hl.Table,
+    fill_values: Dict[str, hl.expr.Expression],
+    key_values: Optional[Dict[str, List]] = None,
+) -> hl.Table:
+    """
+    Fill missing key combinations with requested fill values.
+
+    This function fills missing key combinations in the input Table with requested fill
+    values. The fill values are specified in the `fill_values` dictionary. The unique
+    values for each key field are collected from the input Table unless specified in
+    the `key_values` dictionary.
+
+    This is useful when you want to ensure that all possible key combinations are
+    present in a Table, even if they are missing from the input Table. This can
+    happen when you are aggregating data and want to ensure that all possible key
+    combinations are present in the output Table, not only the ones that are present.
+
+    :param ht: Input Table containing key fields.
+    :param fill_values: Dictionary of fill values to use for missing key combinations.
+    :param key_values: Optional dictionary of unique values to use for each key field.
+        Default is None. If None, the unique values for each key field are collected
+        from the input Table.
+    :return: Table with missing key combinations filled with requested fill values.
+    """
+    key_fields = list(ht.key.keys())
+
+    # Extract unique values for each annotation.
+    key_values = key_values or {}
+    key_values = [
+        key_values.get(f, ht.aggregate(hl.agg.collect_as_set(ht[f])))
+        for f in key_fields
+    ]
+
+    # Create all combinations of the unique values for each key.
+    all_combinations = list(itertools.product(*key_values))
+
+    # Convert the list of combinations to a Hail Table.
+    all_combinations_ht = hl.Table.parallelize(
+        [{f: c for f, c in zip(key_fields, combo)} for combo in all_combinations],
+        hl.tstruct(**{f: ht[f].dtype for f in key_fields}),
+    ).key_by(*key_fields)
+
+    # Left join original table with all_combinations to include all possible
+    # combinations.
+    ht = all_combinations_ht.join(ht, how="left")
+
+    # Fill missing row annotations with requested fill values.
+    ht = ht.annotate(**{f: hl.coalesce(ht[f], v) for f, v in fill_values.items()})
+
+    return ht
+
+
+def missing_struct_expr(
+    dtypes: hl.expr.types.tstruct,
+) -> hl.expr.StructExpression:
+    """
+    Create a struct of missing values for each field and type in the input struct.
+
+    :param dtypes: StructExpression containing the field names and missing values.
+    """
+    return hl.struct(**{f: hl.missing(t) for f, t in dtypes.items()})
+
+
 def add_gks_vrs(
     input_locus: hl.locus,
     input_vrs: hl.struct,

@@ -254,11 +254,11 @@ def create_vds(
     :param reference_genome: Reference genome to use. Default is GRCh38.
     :return: Combined VDS.
     """
-    if not save_path and temp_path:
-        save_path = temp_path + "combiner_plan.json"
-
     if not vdses and not gvcfs:
         raise ValueError("No VDSes or gVCFs provided to combine into a VDS.")
+
+    if not save_path and temp_path:
+        save_path = temp_path + "combiner_plan.json"
 
     vdses = read_list_data(vdses) if vdses else None
     gvcfs = read_list_data(gvcfs) if gvcfs else None
@@ -276,7 +276,6 @@ def create_vds(
     if intervals and not len(intervals) > 0:
         raise DataException("No intervals provided in passed intervals file")
 
-    logger.info("Combining %s GVCFs into a single VDS", len(gvcfs))
     combiner = hl.vds.new_combiner(
         output_path=output_path,
         temp_path=temp_path,

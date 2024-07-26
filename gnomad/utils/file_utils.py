@@ -255,7 +255,7 @@ def create_vds(
     :return: Combined VDS.
     """
     if not vdses and not gvcfs:
-        raise ValueError("No VDSes or gVCFs provided to combine into a VDS.")
+        raise ValueError("No VDSes or GVCFs provided to combine into a VDS.")
 
     if not save_path and temp_path:
         save_path = temp_path + "combiner_plan.json"

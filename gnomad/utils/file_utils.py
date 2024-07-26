@@ -225,10 +225,10 @@ def repartition_for_join(
 
 
 def create_vds(
-    vdses: str,
-    gvcfs: str,
     output_path: str,
     temp_path: str,
+    vdses: Optional[str] = None,
+    gvcfs: Optional[str] = None,
     save_path: Optional[str] = None,
     use_genome_default_intervals: bool = False,
     use_exome_default_intervals: bool = False,
@@ -239,11 +239,11 @@ def create_vds(
     """
     Combine GVCFs into a single VDS.
 
-    :param vdses: Path to file containing VDS paths with no header.
-    :param gvcfs: Path to file containing GVCF paths with no header.
     :param output_path: Path to write output VDS.
     :param temp_path: Directory path to write temporary files. A bucket with a life-cycle
         policy is recommended.
+    :param vdses: Path to file containing VDS paths with no header.
+    :param gvcfs: Path to file containing GVCF paths with no header.
     :param save_path: Path to write combiner to on failure. Can be used to restart
         combiner from a failed state. If not specified, defaults to temp_path +
         combiner_plan.json.

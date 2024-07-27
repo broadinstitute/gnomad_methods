@@ -2406,6 +2406,34 @@ def fill_missing_key_combinations(
     happen when you are aggregating data and want to ensure that all possible key
     combinations are present in the output Table, not only the ones that are present.
 
+    Example:
+
+    .. code-block:: python
+
+        ht = hl.Table.parallelize(
+                [{'key1': 'A', 'key2': 1, 'value': 10},
+                {'key1': 'A', 'key2': 2, 'value': 20},
+                {'key1': 'B', 'key2': 1, 'value': 30}],
+                hl.tstruct(key1=hl.tstr, key2=hl.tint32, value=hl.tint32),
+                key=['key1', 'key2']
+            )
+        fill_values = {'value': hl.missing(hl.tint32)}
+        filled_ht = fill_missing_key_combinations(ht, fill_values)
+        filled_ht.show()
+
+        +------+------+
+        | key1 | key2 | value |
+        +------+------+
+        |  A   |  1   |  10   |
+        |  A   |  2   |  20   |
+        |  B   |  1   |  30   |
+        |  B   |  2   | null  |
+        +------+------+
+
+    In this example, the input table is missing the combination (B, 2).
+    After applying `fill_missing_key_combinations`, the missing key combination
+    (B, 2) is filled with the specified fill value for 'value' (null in this case).
+
     :param ht: Input Table containing key fields.
     :param fill_values: Dictionary of fill values to use for missing key combinations.
     :param key_values: Optional dictionary of unique values to use for each key field.
@@ -2445,7 +2473,7 @@ def missing_struct_expr(
     dtypes: hl.expr.types.tstruct,
 ) -> hl.expr.StructExpression:
     """
-    Create a struct of missing values for each field and type in the input struct.
+    Create a struct of missing values corresponding to each field and type in the input struct.
 
     :param dtypes: StructExpression containing the field names and missing values.
     """

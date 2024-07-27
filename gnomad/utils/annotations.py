@@ -2408,18 +2408,20 @@ def fill_missing_key_combinations(
 
     Example::
 
-    .. code-block:: python
+        .. code-block:: python
 
-        ht = hl.Table.parallelize(
-                [{'key1': 'A', 'key2': 1, 'value': 10},
-                {'key1': 'A', 'key2': 2, 'value': 20},
-                {'key1': 'B', 'key2': 1, 'value': 30}],
+            ht = hl.Table.parallelize(
+                [
+                    {'key1': 'A', 'key2': 1, 'value': 10},
+                    {'key1': 'A', 'key2': 2, 'value': 20},
+                    {'key1': 'B', 'key2': 1, 'value': 30},
+                ],
                 hl.tstruct(key1=hl.tstr, key2=hl.tint32, value=hl.tint32),
-                key=['key1', 'key2']
+                key=['key1', 'key2'],
             )
-        fill_values = {'value': hl.missing(hl.tint32)}
-        filled_ht = fill_missing_key_combinations(ht, fill_values)
-        filled_ht.show()
+            fill_values = {'value': hl.missing(hl.tint32)}
+            filled_ht = fill_missing_key_combinations(ht, fill_values)
+            filled_ht.show()
 
         +------+------+
         | key1 | key2 | value |

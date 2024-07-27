@@ -2406,7 +2406,8 @@ def fill_missing_key_combinations(
     happen when you are aggregating data and want to ensure that all possible key
     combinations are present in the output Table, not only the ones that are present.
 
-    Example:
+    Example::
+
     .. code-block:: python
 
         ht = hl.Table.parallelize(

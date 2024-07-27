@@ -2407,7 +2407,6 @@ def fill_missing_key_combinations(
     combinations are present in the output Table, not only the ones that are present.
 
     Example:
-
     .. code-block:: python
 
         ht = hl.Table.parallelize(

@@ -169,8 +169,7 @@ def get_expression_proportion(ht: hl.Table) -> hl.expr.StructExpression:
     gene = gene_ht[ht.gene_id]
     return hl.struct(
         **{
-            # tissue: hl.utils.misc.divide_null(ht[tissue], gene[tissue])
-            tissue: ht[tissue] / gene[tissue]
+            tissue: hl.utils.misc.divide_null(ht[tissue], gene[tissue])
             for tissue in tissues
         }
     )
@@ -348,6 +347,7 @@ def tx_filter_variants_by_csqs(
 def tx_annotate_variants(
     ht: hl.Table,
     tx_ht: hl.Table,
+    tissues_to_filter: Optional[List[str]] = None,
     tissues_to_exclude_from_mean: Optional[List[str]] = None,
     vep_root: str = "vep",
     vep_annotation: str = "transcript_consequences",
@@ -358,6 +358,8 @@ def tx_annotate_variants(
     :param ht: Table of variants to annotate, it should contain the nested fields:
         `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
+    :param tissues_to_filter: Optional list of tissues to exclude from the output.
+        Default is None.
     :param tissues_to_exclude_from_mean: Optional list of tissues to exclude when
         calculating the mean expression proportion across all tissues. Default is None.
     :param vep_root: Name used for root VEP annotation. Default is 'vep'.
@@ -370,20 +372,21 @@ def tx_annotate_variants(
         "transcript_consequences".
     :return: Input Table with transcript expression information annotated.
     """
+    # Filter to tissues of interest.
+    if tissues_to_filter is not None:
+        tx_ht = filter_expression_ht_by_tissues(
+            tx_ht, tissues_to_filter=tissues_to_filter
+        )
     tissues_to_exclude_from_mean = tissues_to_exclude_from_mean or []
     tissues = list(tx_ht.row_value)
     exp_prop_mean_tissues = [
         t for t in tissues if t not in tissues_to_exclude_from_mean
     ]
-    print(exp_prop_mean_tissues)
 
     # Calculate the mean expression proportion across all desired tissues.
     tx_ht = tx_ht.annotate(
         exp_prop_mean=hl.mean(
-            hl.filter(
-                lambda e: ~hl.is_nan(e),
-                [tx_ht[t].expression_proportion for t in exp_prop_mean_tissues],
-            ),
+            [tx_ht[t].expression_proportion for t in exp_prop_mean_tissues],
             filter_missing=True,
         )
     )
@@ -448,6 +451,7 @@ def tx_aggregate_variants(
 def perform_tx_annotation_pipeline(
     ht: hl.Table,
     tx_ht: hl.Table,
+    tissues_to_filter: Optional[List[str]] = None,
     tissues_to_exclude_from_mean: Optional[List[str]] = None,
     vep_root: str = "vep",
     vep_annotation: str = "transcript_consequences",
@@ -468,7 +472,9 @@ def perform_tx_annotation_pipeline(
         `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
     :param tissues_to_filter: Optional list of tissues to exclude from the output.
-    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
+        Default is None.
+    :param tissues_to_exclude_from_mean: Optional list of tissues to exclude when
+        calculating the mean expression proportion across all tissues. Default is None.    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
     :param vep_annotation: Name of annotation under vep_root. Default is
         'transcript_consequences'.
     :param filter_to_csqs: Optional list of consequences to filter to. Default is None.
@@ -482,6 +488,7 @@ def perform_tx_annotation_pipeline(
             ht, vep_root=vep_root, filter_to_csqs=filter_to_csqs, **kwargs
         ),
         tx_ht,
+        tissues_to_filter=tissues_to_filter,
         tissues_to_exclude_from_mean=tissues_to_exclude_from_mean,
         vep_root=vep_root,
         vep_annotation=vep_annotation,

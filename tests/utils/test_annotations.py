@@ -69,9 +69,6 @@ class TestFillMissingKeyCombinations:
         # Collect results.
         result = result_ht.collect()
 
-        print(result)
-        print(expected)
-
         # Verify the result.
         assert result == expected
 

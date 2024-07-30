@@ -553,8 +553,8 @@ def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
 
     This function processes a Hail Table to create transcript annotations by region.
     It calculates the mean expression proportion, handles missing values, and organizes
-    the data by genomic regions. The key fields are `gene_id`, `exp_prop_mean`, and
-    `tissues`, ensuring regions split correctly based on changes in these fields.
+    the data by genomic regions. The key fields are 'gene_id', 'exp_prop_mean', and
+    'tissues', ensuring regions split correctly based on changes in these fields.
 
     .. table:: Input Hail Table
         :widths: auto

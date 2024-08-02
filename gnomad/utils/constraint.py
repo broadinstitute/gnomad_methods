@@ -653,11 +653,11 @@ def build_models(
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage equal to or above `high_cov_definition`.
-    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= high_cov_definition)
+    high_cov_ht = coverage_ht.filter(coverage_ht.exomes_AN_percent_raw >= high_cov_definition)
 
     # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.
     if upper_cov_cutoff is not None:
-        high_cov_ht = high_cov_ht.filter(high_cov_ht.exome_coverage <= upper_cov_cutoff)
+        high_cov_ht = high_cov_ht.filter(high_cov_ht.exomes_AN_percent_raw <= upper_cov_cutoff)
 
     agg_expr = {
         "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
@@ -1012,7 +1012,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     # Collect the annotations used for groupings.
     groupings = get_constraint_grouping_expr(
         ht[vep_annotation],
-        coverage_expr=ht.exome_coverage,
+        coverage_expr=ht.exomes_AN_percent_raw,
         include_transcript_group=include_transcript_group,
         include_canonical_group=include_canonical_group,
         include_mane_select_group=include_mane_select_group,

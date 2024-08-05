@@ -302,7 +302,8 @@ def get_pop_freq_indices(
 
     indices = hl.enumerate(freq_meta_expr).filter(lambda f: _get_filter_expr(f[1]))
 
-    # Get an array of indices and meta dictionaries sorted by "downsampling" key if present.
+    # Get an array of indices and meta dictionaries sorted by "downsampling"
+    # key if present.
     return hl.sorted(indices, key=lambda f: hl.int(f[1].get("downsampling", "0")))
 
 

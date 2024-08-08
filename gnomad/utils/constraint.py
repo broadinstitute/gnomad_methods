@@ -718,7 +718,7 @@ def build_models(
         # Generate a Table with all necessary annotations (x and y listed above)
         # for the coverage model.
         low_cov_group_ht = low_cov_ht.group_by(
-            log_coverage=hl.log10(low_cov_ht.exomes_AN_percent)
+            log_coverage=(low_cov_ht.exomes_AN_percent)
         ).aggregate(
             low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
             / (

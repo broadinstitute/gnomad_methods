@@ -72,7 +72,9 @@ TISSUES_TO_EXCLUDE = {
 """
 List of tissues to exclude from pext analyses and mean pext across tissues. Includes
 reproductive tissues, cell lines, and any tissue with less than 100 samples in the
-specified GTEx version.
+specified GTEx version. Tissues in v7 were excluded from gnomAD v2 pext calculations,
+and tissues in v10 were excluded from gnomAD v4 pext. Expression across these tissues
+is still displayed in the gnomAD browser.
 """
 
 
@@ -468,13 +470,20 @@ def perform_tx_annotation_pipeline(
     """
     One-stop usage of `tx_filter_variants_by_csqs`, `tx_annotate_variants` and `tx_aggregate_variants`.
 
+    .. note::
+
+        The default `additional_group_by` is used to create the gnomAD annotation-level
+        pext release, and only `additional_group_by=["gene_symbol"]` is used to create
+        the gnomAD base-level pext release.
+
     :param ht: Table of variants to annotate, it should contain the nested fields:
         `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
     :param tissues_to_filter: Optional list of tissues to exclude from the output.
         Default is None.
     :param tissues_to_exclude_from_mean: Optional list of tissues to exclude when
-        calculating the mean expression proportion across all tissues. Default is None.    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
+        calculating the mean expression proportion across all tissues. Default is None.
+    :param vep_root: Name used for root VEP annotation. Default is 'vep'.
     :param vep_annotation: Name of annotation under vep_root. Default is
         'transcript_consequences'.
     :param filter_to_csqs: Optional list of consequences to filter to. Default is None.
@@ -526,6 +535,8 @@ def clean_tissue_name_for_browser(tissue_name: str) -> str:
         else:
             formatted_name += char
 
+    # Dictionary of tissue names that need to be reformatted that will not be formatted
+    # correctly with for loop above.
     replacements = {
         "basalganglia": "basal_ganglia",
         "nucleusaccumbens": "nucleus_accumbens",
@@ -553,8 +564,8 @@ def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
 
     This function processes a Hail Table to create transcript annotations by region.
     It calculates the mean expression proportion, handles missing values, and organizes
-    the data by genomic regions. The key fields are 'gene_id', 'exp_prop_mean', and
-    'tissues', ensuring regions split correctly based on changes in these fields.
+    the data by genomic regions. Regions are split based on changes in the following
+    fields: 'gene_id', 'exp_prop_mean', and 'tissues'.
 
     .. table:: Input Hail Table
         :widths: auto
@@ -597,7 +608,7 @@ def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
     """
     # Get a list of tissues and drop the 'tissues' field from the Table.
     tissues = hl.eval(ht.tissues)
-    ht = ht.drop("tissues")
+    ht = ht.select_globals()
 
     # Slightly restructure fields and replace NaNs and missing values with 0s.
     set_nan_to_zero = lambda x: hl.if_else(hl.is_missing(x) | hl.is_nan(x), 0.0, x)

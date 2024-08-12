@@ -15,6 +15,7 @@ class TestCleanTissueNameForBrowser:
     @pytest.mark.parametrize(
         "input_name,expected_output",
         [
+            ("basalganglia", "basal_ganglia"),
             ("BasalGanglia", "basal_ganglia"),
             ("NucleusAccumbens", "nucleus_accumbens"),
             ("SpinalCord", "spinal_cord"),
@@ -25,6 +26,7 @@ class TestCleanTissueNameForBrowser:
             ("TransformedLymphocytes", "transformed_lymphocytes"),
             ("AnteriorCingulateCortex", "anterior_cingulate_cortex"),
             ("BA24", "ba24"),
+            ("b_a24", "ba24"),
             ("BA9", "ba9"),
             ("EBV", "ebv"),
             ("Heart", "heart"),
@@ -91,6 +93,34 @@ class TestCreateTxAnnotationByRegion:
                         "tissue1": 0.6,
                         "tissue2": 0.7,
                     },
+                    {
+                        "locus": hl.Locus("chr1", 7),
+                        "gene_id": "gene2",
+                        "exp_prop_mean": 0.8,
+                        "tissue1": 0.6,
+                        "tissue2": 0.7,
+                    },
+                    {
+                        "locus": hl.Locus("chr1", 8),
+                        "gene_id": "gene2",
+                        "exp_prop_mean": 0.8,
+                        "tissue1": 0.6,
+                        "tissue2": 0.7,
+                    },
+                    {
+                        "locus": hl.Locus("chr1", 10),
+                        "gene_id": "gene2",
+                        "exp_prop_mean": 0.8,
+                        "tissue1": 0.6,
+                        "tissue2": 0.7,
+                    },
+                    {
+                        "locus": hl.Locus("chr1", 11),
+                        "gene_id": "gene2",
+                        "exp_prop_mean": 0.8,
+                        "tissue1": 0.6,
+                        "tissue2": 0.7,
+                    },
                 ],
                 hl.tstruct(
                     locus=hl.tlocus(),
@@ -142,7 +172,14 @@ class TestCreateTxAnnotationByRegion:
                     hl.Struct(
                         chrom="chr1",
                         start=6,
-                        stop=6,
+                        stop=8,
+                        mean=0.8,
+                        tissues=hl.Struct(tissue1=0.6, tissue2=0.7),
+                    ),
+                    hl.Struct(
+                        chrom="chr1",
+                        start=10,
+                        stop=11,
                         mean=0.8,
                         tissues=hl.Struct(tissue1=0.6, tissue2=0.7),
                     ),

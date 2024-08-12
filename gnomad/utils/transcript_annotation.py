@@ -433,6 +433,18 @@ def tx_aggregate_variants(
     if additional_group_by is not None:
         grouping = grouping + list(additional_group_by)
 
+    # Previous steps of the transcript annotation pipeline require that the input ht is
+    # keyed by locus and alleles so that the correct transcripts are retained when
+    # filtering variants by transcript (with `tx_filter_variants_by_csqs`) and exploding
+    # the VEP annotation (in `tx_annotate_variants`). However, if "alleles" is not
+    # present in the additional_group_by, a transcript can be counted multiple times if
+    # it is associated with multiple alleles since the transcript expression is keyed
+    # by transcript_id and gene_id. To avoid this, we re-key the tx_ht by locus,
+    # gene_id, transcript_id, and any additional_group_by fields, followed by a distinct
+    # operation to ensure that each transcript is only counted once per locus.
+    if "alleles" not in additional_group_by:
+        ht = ht.key_by(*grouping, "transcript_id").distinct()
+
     # Aggregate the transcript expression information by locus, gene_id and
     # annotations in additional_group_by.
     ht = ht.group_by(*grouping).aggregate(
@@ -502,9 +514,6 @@ def perform_tx_annotation_pipeline(
         vep_root=vep_root,
         vep_annotation=vep_annotation,
     )
-
-    if "alleles" not in additional_group_by:
-        tx_ht = tx_ht.key_by("locus", "transcript_id").distinct()
 
     tx_ht = tx_aggregate_variants(tx_ht, additional_group_by=additional_group_by)
 

@@ -577,6 +577,7 @@ def build_models(
     high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
+    coverage_metric: str = "exomes_AN_percent",
 ) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
@@ -650,17 +651,18 @@ def build_models(
         are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
         None is returned instead of the coverage model. Default is False.
+    :param coverage_metric: Name for metric to use for coverage. Default is "exomes_AN_percent".
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage equal to or above `high_cov_definition`.
+    # Filter to sites with coverage_metric equal to or above `high_cov_definition`.
     high_cov_ht = coverage_ht.filter(
-        coverage_ht.exomes_AN_percent >= high_cov_definition
+        coverage_ht[coverage_metric] >= high_cov_definition
     )
 
-    # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.
+    # Filter to sites with coverage_metric equal to or below `upper_cov_cutoff` if specified.
     if upper_cov_cutoff is not None:
         high_cov_ht = high_cov_ht.filter(
-            high_cov_ht.exomes_AN_percent <= upper_cov_cutoff
+            high_cov_ht[coverage_metric] <= upper_cov_cutoff
         )
 
     agg_expr = {
@@ -707,8 +709,8 @@ def build_models(
     if not skip_coverage_model:
         # Filter to sites with coverage below `high_cov_definition` and larger than 0.
         low_cov_ht = coverage_ht.filter(
-            (coverage_ht.exomes_AN_percent < high_cov_definition)
-            & (coverage_ht.exomes_AN_percent > 0)
+            (coverage_ht[coverage_metric] < high_cov_definition)
+            & (coverage_ht[coverage_metric] > 0)
         )
 
         # Create a metric that represents the relative mutability of the exome calculated
@@ -722,7 +724,7 @@ def build_models(
         # Generate a Table with all necessary annotations (x and y listed above)
         # for the coverage model.
         low_cov_group_ht = low_cov_ht.group_by(
-            log_coverage=(low_cov_ht.exomes_AN_percent)
+            log_coverage=(low_cov_ht[coverage_metric])
         ).aggregate(
             low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
             / (
@@ -732,7 +734,7 @@ def build_models(
         )
 
         # Build the coverage model.
-        # TODO: consider weighting here as well
+        # TODO: consider weighting here as well.
         coverage_model_expr = build_coverage_model(
             low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
             log_coverage_expr=low_cov_group_ht.log_coverage,

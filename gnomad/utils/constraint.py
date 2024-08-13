@@ -578,6 +578,7 @@ def build_models(
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
     coverage_metric: str = "exomes_AN_percent",
+    cov_model_type: str = "linear",
 ) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
@@ -652,6 +653,7 @@ def build_models(
     :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
         None is returned instead of the coverage model. Default is False.
     :param coverage_metric: Name for metric to use for coverage. Default is "exomes_AN_percent".
+    :param cov_model_type: Type of model to use for low coverage sites when building the coverage model, either 'linear' or 'logrithmic'. Default is 'linear'.
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage_metric equal to or above `high_cov_definition`.
@@ -723,9 +725,14 @@ def build_models(
 
         # Generate a Table with all necessary annotations (x and y listed above)
         # for the coverage model.
-        low_cov_group_ht = low_cov_ht.group_by(
-            log_coverage=(low_cov_ht[coverage_metric])
-        ).aggregate(
+        if cov_model_type == "logrithmic":
+            cov_value = hl.log10(low_cov_ht[coverage_metric])
+        elif cov_model_type == "linear":
+            cov_value = low_cov_ht[coverage_metric]
+        else:
+            raise ValueError("cov_model_type must be one of 'logrithmic' or 'linear'!")
+
+        low_cov_group_ht = low_cov_ht.group_by(cov_value=cov_value).aggregate(
             low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
             / (
                 high_coverage_scale_factor
@@ -737,7 +744,7 @@ def build_models(
         # TODO: consider weighting here as well.
         coverage_model_expr = build_coverage_model(
             low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
-            log_coverage_expr=low_cov_group_ht.log_coverage,
+            coverage_expr=low_cov_group_ht.cov_value,
         )
         coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
     else:
@@ -813,21 +820,21 @@ def build_plateau_models(
 
 def build_coverage_model(
     low_coverage_oe_expr: hl.expr.Float64Expression,
-    log_coverage_expr: hl.expr.Float64Expression,
+    coverage_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
     Build coverage model.
 
-    This function uses linear regression to build a model of log10(coverage) to correct
+    This function uses linear regression to build a model of coverage to correct
     proportion of expected variation at low coverage sites.
 
     The x and y of the coverage model:
-    - x: `log_coverage_expr`
+    - x: `coverage_expr`
     - y: `low_coverage_oe_expr`
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.
-    :param log_coverage_expr: The Float64Expression of log10 coverage.
+    :param coverage_expr: The Float64Expression of the coverage expression.
     :return: StructExpression with intercept and slope of the model.
     """
     return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])

@@ -837,7 +837,7 @@ def build_coverage_model(
     :param coverage_expr: The Float64Expression of the coverage expression.
     :return: StructExpression with intercept and slope of the model.
     """
-    return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
+    return hl.agg.linreg(low_coverage_oe_expr, [1, coverage_expr])
 
 
 def get_all_pop_lengths(

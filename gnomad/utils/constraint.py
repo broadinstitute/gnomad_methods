@@ -653,11 +653,15 @@ def build_models(
     :return: Coverage model and plateau models.
     """
     # Filter to sites with coverage equal to or above `high_cov_definition`.
-    high_cov_ht = coverage_ht.filter(coverage_ht.exomes_AN_percent >= high_cov_definition)
+    high_cov_ht = coverage_ht.filter(
+        coverage_ht.exomes_AN_percent >= high_cov_definition
+    )
 
     # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.
     if upper_cov_cutoff is not None:
-        high_cov_ht = high_cov_ht.filter(high_cov_ht.exomes_AN_percent <= upper_cov_cutoff)
+        high_cov_ht = high_cov_ht.filter(
+            high_cov_ht.exomes_AN_percent <= upper_cov_cutoff
+        )
 
     agg_expr = {
         "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
@@ -950,6 +954,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     vep_annotation: str = "transcript_consequences",
     include_canonical_group: bool = True,
     include_mane_select_group: bool = False,
+    coverage_metric: str = "exomes_AN_percent",
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
     Annotate Table with annotations used for constraint groupings.
@@ -982,6 +987,7 @@ def annotate_exploded_vep_for_constraint_groupings(
         groupings. Default is True. Ignored unless `vep_annotation` is  "transcript_consequences".
     :param include_mane_select_group: Whether to include 'mane_select' annotation in the
         groupings. Default is False. Ignored unless `vep_annotation` is  "transcript_consequences".
+    :param coverage_metric: Name for metric to use for coverage. Default is "exomes_AN_percent".
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
@@ -1012,7 +1018,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     # Collect the annotations used for groupings.
     groupings = get_constraint_grouping_expr(
         ht[vep_annotation],
-        coverage_expr=ht.exomes_AN_percent,
+        coverage_expr=ht[coverage_metric],
         include_transcript_group=include_transcript_group,
         include_canonical_group=include_canonical_group,
         include_mane_select_group=include_mane_select_group,

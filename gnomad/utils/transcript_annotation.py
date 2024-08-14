@@ -437,11 +437,12 @@ def tx_aggregate_variants(
     # keyed by locus and alleles so that the correct transcripts are retained when
     # filtering variants by transcript (with `tx_filter_variants_by_csqs`) and exploding
     # the VEP annotation (in `tx_annotate_variants`). However, if "alleles" is not
-    # present in the additional_group_by, a transcript can be counted multiple times if
-    # it is associated with multiple alleles since the transcript expression is keyed
-    # by transcript_id and gene_id. To avoid this, we re-key the tx_ht by locus,
-    # gene_id, transcript_id, and any additional_group_by fields, followed by a distinct
-    # operation to ensure that each transcript is only counted once per locus.
+    # present in the additional_group_by, a transcript that is associated with multiple
+    # alleles at a locus may not be represented correctly after deduplicating locus and
+    # transcript combinations with a distinct operation, since this operation
+    # deduplicates by selecting a random row. To ensure the desired values are selected
+    # during `distinct()` filter, we re-key the tx_ht by locus, gene_id, transcript_id,
+    # and any additional_group_by fields prior to running `distinct()'.
     if "alleles" not in additional_group_by:
         ht = ht.key_by(*grouping, "transcript_id").distinct()
 

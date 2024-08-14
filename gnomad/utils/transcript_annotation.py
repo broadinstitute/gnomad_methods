@@ -402,6 +402,8 @@ def tx_annotate_variants(
     )
     ht = ht.annotate_globals(
         tissues=tissues,
+        # NOTE: `exp_prop_mean_tissues` global will be the same as `tissues`
+        # if no tissues were specified in `tissues_to_exclude_from_mean` argument
         exp_prop_mean_tissues=exp_prop_mean_tissues,
     )
 

@@ -330,7 +330,7 @@ def tx_filter_variants_by_csqs(
 
     if filter_to_csqs is not None:
         logger.info("Adding most severe consequence to VEP transcript consequences...")
-        ht = process_consequences(ht, vep_root=vep_root)
+        ht = process_consequences(ht, vep_root=vep_root, has_polyphen=False)
 
     return filter_vep_transcript_csqs(
         ht,

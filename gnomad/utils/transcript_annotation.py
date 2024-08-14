@@ -283,6 +283,7 @@ def tx_filter_variants_by_csqs(
     ignore_splicing: bool = True,
     filter_to_protein_coding: bool = True,
     vep_root: str = "vep",
+    include_polyphen_prioritization: bool = False,
 ) -> hl.Table:
     """
     Prepare a Table of variants with VEP transcript consequences for annotation.
@@ -309,6 +310,8 @@ def tx_filter_variants_by_csqs(
     :param filter_to_protein_coding: Whether to filter to protein coding transcripts.
         Default is True.
     :param vep_root: Name used for root VEP annotation. Default is 'vep'.
+    :param include_polyphen_prioritization: Whether to include PolyPhen prioritization
+        when processing VEP consequences. Default is False.
     :return: Table of variants with preprocessed/filtered transcript consequences
         prepared for annotation.
     """
@@ -330,7 +333,9 @@ def tx_filter_variants_by_csqs(
 
     if filter_to_csqs is not None:
         logger.info("Adding most severe consequence to VEP transcript consequences...")
-        ht = process_consequences(ht, vep_root=vep_root, has_polyphen=False)
+        ht = process_consequences(
+            ht, vep_root=vep_root, has_polyphen=include_polyphen_prioritization
+        )
 
     return filter_vep_transcript_csqs(
         ht,

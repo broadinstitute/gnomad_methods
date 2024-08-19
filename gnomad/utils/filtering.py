@@ -782,9 +782,11 @@ def filter_arrays_by_meta(
         # to dictionaries with the key "values" and the value being the list of values
         # to filter by.
         items_to_filter = {
-            k: v
-            if v is None or isinstance(v, dict)
-            else {"values": v if isinstance(v, list) else [v]}
+            k: (
+                v
+                if v is None or isinstance(v, dict)
+                else {"values": v if isinstance(v, list) else [v]}
+            )
             for k, v in items_to_filter.items()
         }
     else:

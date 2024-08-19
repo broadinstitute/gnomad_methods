@@ -713,16 +713,19 @@ def filter_arrays_by_meta(
     The `items_to_filter` can be used to filter in the following ways based on
     `meta_expr` items:
 
-        - By a list of keys, e.g. ["sex", "downsampling"].
+        - By a list of keys, e.g. ``["sex", "downsampling"]``.
         - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
-          {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
-          {"pop": ["afr"], "sex": ["XX"]}.
-        - By specific key: value pairs with differing keep values, e.g.
-          {
-            "gen_anc": {"values": ["global", "afr"], "keep": True},
-            "downsampling": {"keep": True},
-            "subset": {"keep": False},
-          }
+          ``{"pop": ["han", "papuan"]}``, or where 'pop' is 'afr' and/or 'sex' is 'XX'
+          ``{"pop": ["afr"], "sex": ["XX"]}``.
+        - By specific key: value pairs with differing keep values, e.g.:
+
+            .. code-block:: python
+
+                {
+                    "gen_anc": {"values": ["global", "afr"], "keep": True},
+                    "downsampling": {"keep": True},
+                    "subset": {"keep": False},
+                }
 
     The items can be kept or removed from `meta_indexed_expr` and `meta_expr` based on
     the value of `keep`. For example if `meta_indexed_exprs` is {'freq': ht.freq,

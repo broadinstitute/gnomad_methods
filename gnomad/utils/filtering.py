@@ -815,16 +815,17 @@ def filter_arrays_by_meta(
         key_value_pairs_to_keep=key_value_pairs_to_keep,
         key_value_pairs_to_exclude=key_value_pairs_to_exclude,
         combine_operator=combine_operator,
-        exact_match=exact_match
+        exact_match=exact_match,
     )
 
     # Filter the meta_indexed_exprs to only keep the items that match the metadata
     # dictionaries in the filtered meta expression.
     filtered_meta_idx_expr = hl.enumerate(meta_expr).filter(
-        lambda x: filtered_meta_expr.contains(x[1]))
+        lambda x: filtered_meta_expr.contains(x[1])
+    )
     meta_indexed_exprs = {
-        k: filtered_meta_idx_expr.map(lambda x: v[x[0]]) for k, v in
-        meta_indexed_exprs.items()
+        k: filtered_meta_idx_expr.map(lambda x: v[x[0]])
+        for k, v in meta_indexed_exprs.items()
     }
 
     # If the original meta_indexed_exprs was a single array expression, return the

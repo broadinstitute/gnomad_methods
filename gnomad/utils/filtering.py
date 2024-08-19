@@ -778,15 +778,15 @@ def filter_arrays_by_meta(
     if isinstance(items_to_filter, list):
         items_to_filter = {k: None for k in items_to_filter}
     elif isinstance(items_to_filter, dict):
-        # If items_to_filter is a dictionary with lists as values, convert it to a
-        # dictionary with dictionaries as values, so it can be filtered in the same way.
-        v_type_list = all(
-            [isinstance(v, list) for v in items_to_filter.values() if v is not None]
-        )
-        if v_type_list:
-            items_to_filter = {
-                k: v if v is None else {"values": v} for k, v in items_to_filter.items()
-            }
+        # If items_to_filter is a dictionary with lists as values, convert the lists
+        # to dictionaries with the key "values" and the value being the list of values
+        # to filter by.
+        items_to_filter = {
+            k: v
+            if v is None or isinstance(v, dict)
+            else {"values": v if isinstance(v, list) else [v]}
+            for k, v in items_to_filter.items()
+        }
     else:
         raise TypeError("items_to_filter must be a list or a dictionary!")
 

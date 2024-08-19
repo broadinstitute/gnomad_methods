@@ -656,7 +656,7 @@ def build_models(
     :param cov_model_type: Type of model to use for low coverage sites when building the coverage model, either 'linear' or 'logrithmic'. Default is 'linear'.
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage_metric equal to or above `high_cov_definition`.
+    # Filter to sites with `coverage_metric` equal to or above `high_cov_definition`.
     high_cov_ht = coverage_ht.filter(
         coverage_ht[coverage_metric] >= high_cov_definition
     )

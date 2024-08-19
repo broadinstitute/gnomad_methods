@@ -697,7 +697,9 @@ def filter_arrays_by_meta(
     meta_indexed_exprs: Union[
         Dict[str, hl.expr.ArrayExpression], hl.expr.ArrayExpression
     ],
-    items_to_filter: Union[List[str], Dict[str, Union[List[str], Dict[str, Union[List[str], bool]]]]],
+    items_to_filter: Union[
+        List[str], Dict[str, Union[List[str], Dict[str, Union[List[str], bool]]]]
+    ],
     keep: bool = True,
     combine_operator: str = "and",
     exact_match: bool = False,

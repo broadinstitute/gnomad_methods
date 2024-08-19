@@ -132,7 +132,7 @@ na12878_giab_hc_intervals = GnomadPublicTableResource(
 
 # Versioned resources: versions should be listed from most recent to oldest
 vep_context = VersionedTableResource(
-    default_version="95",
+    default_version="105",
     versions={
         "95": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.ht",

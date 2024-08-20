@@ -626,6 +626,8 @@ def filter_meta_array(
     keys_to_exclude: List[str] = None,
     key_value_pairs_to_keep: Dict[str, List[str]] = None,
     key_value_pairs_to_exclude: Dict[str, List[str]] = None,
+    keep_combine_operator: str = "and",
+    exclude_combine_operator: str = "and",
     combine_operator: str = "and",
     exact_match: bool = False,
 ) -> hl.expr.ArrayExpression:
@@ -644,52 +646,78 @@ def filter_meta_array(
     :param keys_to_exclude: List of keys to exclude.
     :param key_value_pairs_to_keep: Dictionary of key-value pairs to keep.
     :param key_value_pairs_to_exclude: Dictionary of key-value pairs to exclude.
-    :param combine_operator: Whether to use "and" or "or" to combine the filtering criteria.
-    :param exact_match: Whether to apply the filtering only to items with exactly the specified keys.
+    :param keep_combine_operator: Whether to use "and" or "or" to combine the filtering
+        criteria for keys/key-value pairs to keep.
+    :param exclude_combine_operator: Whether to use "and" or "or" to combine the
+        filtering criteria for keys/key-value pairs to exclude.
+    :param combine_operator: Whether to use "and" or "or" to combine the keep and
+        exclude filtering criteria.
+    :param exact_match: Whether to apply the filtering only to items with exactly the
+        specified keys.
     :return: The filtered metadata array expression.
     """
-    if combine_operator == "and":
-        operator_func = hl.all
-    elif combine_operator == "or":
-        operator_func = hl.any
-    else:
-        raise ValueError(
-            "combine_operator must be one of 'and' or 'or', but found"
-            f" {combine_operator}!"
+    keys_to_keep = keys_to_keep or {}
+    key_value_pairs_to_keep = key_value_pairs_to_keep or {}
+    keys_to_exclude = keys_to_exclude or {}
+    key_value_pairs_to_exclude = key_value_pairs_to_exclude or {}
+
+    combine_operator_map = {"and": hl.all, "or": hl.any}
+    for o in [keep_combine_operator, exclude_combine_operator, combine_operator]:
+        if o not in combine_operator_map:
+            raise ValueError(
+                "The combine operators must be one of 'and' or 'or', but found"
+                f" {o}!"
+            )
+
+    keep_combine_operator = combine_operator_map[keep_combine_operator]
+    exclude_combine_operator = combine_operator_map[exclude_combine_operator]
+    combine_operator = combine_operator_map[combine_operator]
+
+    def _get_filter(m: hl.DictExpression) -> hl.expr.BooleanExpression:
+        """
+        Get the filter to apply to the metadata item.
+
+        :param m: Metadata item.
+        :return: Filter to apply to the metadata item.
+        """
+        # If keys_to_keep is provided, filter to only metadata items with the specified
+        # keys. If exact_match is True, filter to only metadata items with the exact
+        # keys specified in keys_to_keep, where any keys in key_value_pairs_to_keep
+        # are also present.
+        if exact_match:
+            keep_filter = [
+                hl.set(set(keys_to_keep) | set(key_value_pairs_to_keep.keys())) == hl.set(m.keys())
+            ]
+        else:
+            keep_filter = [m.contains(k) for k in keys_to_keep]
+
+        # If key_value_pairs_to_keep is provided, filter to only metadata items with the
+        # specified key-value pairs.
+        keep_filter += [
+            hl.literal(values).contains(m.get(k, ""))
+            for k, values in key_value_pairs_to_keep.items()
+        ]
+
+        # If keys_to_exclude is provided, filter to only metadata items without the
+        # specified keys and if key_value_pairs_to_exclude is provided, filter to only
+        # metadata items without the specified key-value pairs.
+        exclude_filter = (
+            [~m.contains(k) for k in keys_to_exclude]
+            + [
+                hl.literal(values).contains(m.get(k, ""))
+                for k, values in key_value_pairs_to_exclude.items()
+            ]
         )
 
-    # Create filters based on the provided keys and key-value pairs to keep/exclude.
-    filters = []
+        filters = []
+        if keep_filter:
+            filters.append(keep_combine_operator(keep_filter))
+        if exclude_filter:
+            filters.append(exclude_combine_operator(exclude_filter))
 
-    # If keys_to_keep is provided, filter to only metadata items with the specified
-    # keys. If exact_match is True, filter to only metadata items with the exact
-    # keys specified in keys_to_keep, where any keys in key_value_pairs_to_keep
-    # are also present.
-    if keys_to_keep:
-        if exact_match:
-            keys_to_keep = set(keys_to_keep) | set(key_value_pairs_to_keep.keys())
-            filters.append(lambda m: hl.set(keys_to_keep) == hl.set(m.keys()))
-        else:
-            filters.append(lambda m: hl.set(keys_to_keep).is_subset(hl.set(m.keys())))
+        return combine_operator(filters)
 
-    # If keys_to_exclude is provided, filter to only metadata items without the
-    # specified keys.
-    if keys_to_exclude:
-        filters.append(lambda m: ~hl.set(keys_to_exclude).is_subset(hl.set(m.keys())))
-
-    # If key_value_pairs_to_keep is provided, filter to only metadata items with the
-    # specified key-value pairs.
-    if key_value_pairs_to_keep:
-        for k, values in key_value_pairs_to_keep.items():
-            filters.append(lambda m: hl.literal(values).contains(m.get(k, "")))
-
-    # If key_value_pairs_to_exclude is provided, filter to only metadata items without
-    # the specified key-value pairs.
-    if key_value_pairs_to_exclude:
-        for k, values in key_value_pairs_to_exclude.items():
-            filters.append(lambda m: ~hl.literal(values).contains(m.get(k, "")))
-
-    return meta_expr.filter(lambda m: operator_func([f(m) for f in filters]))
+    return meta_expr.filter(lambda m: _get_filter(m))
 
 
 def filter_arrays_by_meta(

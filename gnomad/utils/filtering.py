@@ -665,8 +665,7 @@ def filter_meta_array(
     for o in [keep_combine_operator, exclude_combine_operator, combine_operator]:
         if o not in combine_operator_map:
             raise ValueError(
-                "The combine operators must be one of 'and' or 'or', but found"
-                f" {o}!"
+                "The combine operators must be one of 'and' or 'or', but found" f" {o}!"
             )
 
     keep_combine_operator = combine_operator_map[keep_combine_operator]
@@ -686,7 +685,8 @@ def filter_meta_array(
         # are also present.
         if exact_match:
             keep_filter = [
-                hl.set(set(keys_to_keep) | set(key_value_pairs_to_keep.keys())) == hl.set(m.keys())
+                hl.set(set(keys_to_keep) | set(key_value_pairs_to_keep.keys()))
+                == hl.set(m.keys())
             ]
         else:
             keep_filter = [m.contains(k) for k in keys_to_keep]
@@ -701,13 +701,10 @@ def filter_meta_array(
         # If keys_to_exclude is provided, filter to only metadata items without the
         # specified keys and if key_value_pairs_to_exclude is provided, filter to only
         # metadata items without the specified key-value pairs.
-        exclude_filter = (
-            [~m.contains(k) for k in keys_to_exclude]
-            + [
-                hl.literal(values).contains(m.get(k, ""))
-                for k, values in key_value_pairs_to_exclude.items()
-            ]
-        )
+        exclude_filter = [~m.contains(k) for k in keys_to_exclude] + [
+            hl.literal(values).contains(m.get(k, ""))
+            for k, values in key_value_pairs_to_exclude.items()
+        ]
 
         filters = []
         if keep_filter:

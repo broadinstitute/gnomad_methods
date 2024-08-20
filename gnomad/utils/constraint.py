@@ -577,8 +577,8 @@ def build_models(
     high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
-    coverage_metric: str = "exomes_AN_percent",
-    cov_model_type: str = "linear",
+    coverage_metric: str = "exome_coverage",
+    cov_model_type: str = "logarithmic",
 ) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
@@ -652,10 +652,14 @@ def build_models(
         are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
         None is returned instead of the coverage model. Default is False.
-    :param coverage_metric: Name for metric to use for coverage. Default is "exomes_AN_percent".
-    :param cov_model_type: Type of model to use for low coverage sites when building the coverage model, either 'linear' or 'logrithmic'. Default is 'linear'.
+    :param coverage_metric: Name for metric to use for coverage. Default is "exome_coverage".
+    :param cov_model_type: Type of model to use for low coverage sites when building the coverage model, either 'linear' or 'logarithmic'. Default is 'logarithmic'.
     :return: Coverage model and plateau models.
     """
+    # Check value of cov_model_type.
+    if not skip_coverage_model and cov_model_type not in ["logarithmic", "linear"]:
+        raise ValueError("cov_model_type must be one of 'logarithmic' or 'linear'!")
+
     # Filter to sites with `coverage_metric` equal to or above `high_cov_definition`.
     high_cov_ht = coverage_ht.filter(
         coverage_ht[coverage_metric] >= high_cov_definition
@@ -725,12 +729,10 @@ def build_models(
 
         # Generate a Table with all necessary annotations (x and y listed above)
         # for the coverage model.
-        if cov_model_type == "logrithmic":
+        if cov_model_type == "logarithmic":
             cov_value = hl.log10(low_cov_ht[coverage_metric])
         elif cov_model_type == "linear":
             cov_value = low_cov_ht[coverage_metric]
-        else:
-            raise ValueError("cov_model_type must be one of 'logrithmic' or 'linear'!")
 
         low_cov_group_ht = low_cov_ht.group_by(cov_value=cov_value).aggregate(
             low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
@@ -963,7 +965,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     vep_annotation: str = "transcript_consequences",
     include_canonical_group: bool = True,
     include_mane_select_group: bool = False,
-    coverage_metric: str = "exomes_AN_percent",
+    coverage_metric: str = "exome_coverage",
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
     """
     Annotate Table with annotations used for constraint groupings.
@@ -996,7 +998,7 @@ def annotate_exploded_vep_for_constraint_groupings(
         groupings. Default is True. Ignored unless `vep_annotation` is  "transcript_consequences".
     :param include_mane_select_group: Whether to include 'mane_select' annotation in the
         groupings. Default is False. Ignored unless `vep_annotation` is  "transcript_consequences".
-    :param coverage_metric: Name for metric to use for coverage. Default is "exomes_AN_percent".
+    :param coverage_metric: Name for metric to use for coverage. Default is "exome_coverage".
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """

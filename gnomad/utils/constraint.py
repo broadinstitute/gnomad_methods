@@ -5,9 +5,9 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
+from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 from hail.utils.misc import divide_null, new_temp_file
 
-from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

@@ -665,7 +665,8 @@ def build_models(
         coverage_ht[coverage_metric] >= high_cov_definition
     )
 
-    # Filter to sites with `coverage_metric` equal to or below `upper_cov_cutoff` if specified.
+    # Filter to sites with `coverage_metric` equal to or below
+    # `upper_cov_cutoff` if specified.
     if upper_cov_cutoff is not None:
         high_cov_ht = high_cov_ht.filter(
             high_cov_ht[coverage_metric] <= upper_cov_cutoff

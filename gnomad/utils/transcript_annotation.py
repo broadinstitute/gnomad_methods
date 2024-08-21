@@ -343,7 +343,7 @@ def tx_filter_variants_by_csqs(
             ht,
             vep_root=vep_root,
             csq_order=csq_order,
-            has_polyphen=include_polyphen_prioritization
+            has_polyphen=include_polyphen_prioritization,
         )
 
     return filter_vep_transcript_csqs(

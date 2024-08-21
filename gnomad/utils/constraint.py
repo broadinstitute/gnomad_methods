@@ -629,7 +629,6 @@ def build_models(
         - alt - the alternate allele
         - methylation_level - methylation level
         - cpg - whether the site is CpG site
-        - exome_coverage - median exome coverage at integer values between 1-100
         - observed_variants - the number of observed variants in the dataset for each
         variant. Note that the term "variant" here refers to a specific substitution,
         context, methylation level, and coverage combination
@@ -653,11 +652,11 @@ def build_models(
         are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
         None is returned instead of the coverage model. Default is False.
-    :param log10_coverage: Whether to convert coverage sites with log10 when building 
+    :param log10_coverage: Whether to convert coverage sites with log10 when building
         the coverage model. Default is True.
     :return: Coverage model and plateau models.
     """
-    # Annotate coverage_ht with coverage_expr set as a temporary annotation 
+    # Annotate coverage_ht with coverage_expr set as a temporary annotation
     # '_coverage_metric' before modifying the coverage_ht.
     coverage_ht = coverage_ht.annotate(_coverage_metric=coverage_expr)
 
@@ -666,7 +665,7 @@ def build_models(
         coverage_ht._coverage_metric >= high_cov_definition
     )
 
-    # Filter to sites with coverage_expr equal to or below `upper_cov_cutoff` if 
+    # Filter to sites with coverage_expr equal to or below `upper_cov_cutoff` if
     # specified.
     if upper_cov_cutoff is not None:
         high_cov_ht = high_cov_ht.filter(
@@ -979,7 +978,6 @@ def annotate_exploded_vep_for_constraint_groupings(
             `vep_annotation`, PolyPhen annotation from 'polyphen_prediction' in
             `vep_annotation`, or "None" if neither is defined
         - gene - 'gene_symbol' annotation inside `vep_annotation`
-        - coverage - exome coverage in `ht`
         - transcript - id from 'transcript_id' in `vep_annotation` (added when
             `include_transcript_group` is True)
         - canonical from `vep_annotation` (added when `include_canonical_group` is
@@ -1004,7 +1002,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
-    # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric' 
+    # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric'
     # before modifying ht.
     ht = ht.annotate(_coverage_metric=coverage_expr)
 

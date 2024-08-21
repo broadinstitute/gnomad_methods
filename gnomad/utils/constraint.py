@@ -657,7 +657,8 @@ def build_models(
         the coverage model. Default is True.
     :return: Coverage model and plateau models.
     """
-    # Annotate _coverage metric with covearge_exopr.
+    # Annotate coverage_ht with coverage_expr set as a temporary annotation 
+    # '_coverage_metric' before modifying the coverage_ht.
     coverage_ht = coverage_ht.annotate(_coverage_metric=coverage_expr)
 
     # Filter to sites with coverage_expr equal to or above `high_cov_definition`.

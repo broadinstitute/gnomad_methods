@@ -340,25 +340,27 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites.ht"
 
 
-def _public_coverage_ht_path(
-    data_type: str, version: str, coverage_type="coverage"
-) -> str:
+def _public_coverage_ht_path(data_type: str, version: str) -> str:
     """
     Get public coverage hail table.
 
     :param data_type: One of "exomes" or "genomes"
     :param version: One of the release versions of gnomAD on GRCh38
-    :param coverage_type: One of "coverage" or "allele_number"
-    :return: path to coverage Table
+    :return: Path to coverage Table
     """
-    if coverage_type not in ["coverage", "allele_number"]:
-        raise ValueError(
-            "coverage_type must be one of 'coverage' or 'allele_number', not"
-            f" {coverage_type}!"
-        )
-
     version_prefix = "r" if version.startswith("3.0") else "v"
-    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.{coverage_type}.ht"
+    return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.{version_prefix}{version}.coverage.ht"
+
+
+def _public_an_ht_path(data_type: str, version: str) -> str:
+    """
+    Get public allele number hail table.
+
+    :param data_type: One of "exomes" or "genomes"
+    :param version: One of the release versions of gnomAD on GRCh38
+    :return: Path to allle number Table
+    """
+    return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.v{version}.allele_number_all_sites.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -447,7 +449,7 @@ def all_sites_an(data_type: str) -> VersionedTableResource:
         current_release,
         {
             release: GnomadPublicTableResource(
-                path=_public_coverage_ht_path(data_type, release, "allele_number")
+                path=_public_an_ht_path(data_type, release)
             )
             for release in releases
         },

@@ -731,6 +731,7 @@ def build_models(
         # Generate a Table with all necessary annotations (x and y listed above)
         # for the coverage model.
         if log10_coverage:
+            logger.info("Converting coverage sites by log10.")
             cov_value = hl.log10(low_cov_ht._coverage_metric)
         else:
             cov_value = low_cov_ht._coverage_metric

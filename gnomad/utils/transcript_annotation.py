@@ -9,6 +9,7 @@ from gnomad.utils.filtering import filter_to_gencode_cds
 from gnomad.utils.vep import (
     CSQ_CODING,
     CSQ_SPLICE,
+    CSQ_ORDER,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,
     process_consequences,
@@ -333,8 +334,16 @@ def tx_filter_variants_by_csqs(
 
     if filter_to_csqs is not None:
         logger.info("Adding most severe consequence to VEP transcript consequences...")
+        # Filter the consequence order to only include the consequences of interest.
+        if keep_csqs:
+            csq_order = [csq for csq in CSQ_ORDER if csq in filter_to_csqs]
+        else:
+            csq_order = [csq for csq in CSQ_ORDER if csq not in filter_to_csqs]
         ht = process_consequences(
-            ht, vep_root=vep_root, has_polyphen=include_polyphen_prioritization
+            ht,
+            vep_root=vep_root,
+            csq_order=csq_order,
+            has_polyphen=include_polyphen_prioritization
         )
 
     return filter_vep_transcript_csqs(

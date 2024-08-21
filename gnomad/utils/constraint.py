@@ -653,7 +653,8 @@ def build_models(
         are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
         None is returned instead of the coverage model. Default is False.
-    :param log10_coverage: Whether to convert coverage sites with log10 when building the coverage model. Default is True.
+    :param log10_coverage: Whether to convert coverage sites with log10 when building 
+        the coverage model. Default is True.
     :return: Coverage model and plateau models.
     """
     # Annotate _coverage metric with covearge_exopr.

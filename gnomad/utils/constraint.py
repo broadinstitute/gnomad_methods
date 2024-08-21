@@ -1004,7 +1004,8 @@ def annotate_exploded_vep_for_constraint_groupings(
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
-    # Annotate coverage expressiongs
+    # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric' 
+    # before modifying ht.
     ht = ht.annotate(_coverage_metric=coverage_expr)
 
     if vep_annotation == "transcript_consequences":

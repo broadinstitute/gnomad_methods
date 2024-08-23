@@ -324,27 +324,28 @@ def tx_filter_variants_by_csqs(
             lambda csq: hl.is_defined(csq.amino_acids) & (csq.amino_acids != "*")
         ]
 
-    keep_csqs = True
     if ignore_splicing:
-        if filter_to_csqs is not None:
-            filter_to_csqs = [csq for csq in filter_to_csqs if csq not in CSQ_SPLICE]
-        else:
-            filter_to_csqs = CSQ_SPLICE
-            keep_csqs = False
-
-    if filter_to_csqs is not None:
-        logger.info("Adding most severe consequence to VEP transcript consequences...")
-        # Filter the consequence order to only include the consequences of interest.
-        if keep_csqs:
-            csq_order = [csq for csq in CSQ_ORDER if csq in filter_to_csqs]
-        else:
-            csq_order = [csq for csq in CSQ_ORDER if csq not in filter_to_csqs]
-        ht = process_consequences(
-            ht,
-            vep_root=vep_root,
-            csq_order=csq_order,
-            has_polyphen=include_polyphen_prioritization,
+        logger.info("Filtering VEP consequences to exclude splice consequences...")
+        ht = ht.annotate(
+            **{
+                vep_root: ht[vep_root].annotate(
+                    transcript_consequences=ht[vep_root].transcript_consequences.map(
+                        lambda csq: csq.annotate(
+                            consequence_terms=csq.consequence_terms.filter(
+                                lambda x: ~hl.literal(CSQ_SPLICE).contains(x)
+                            )
+                        )
+                     ).filter(lambda csq: hl.len(csq.consequence_terms) > 0)
+                )
+            }
         )
+
+    logger.info("Processing VEP consequences...")
+    ht = process_consequences(
+        ht,
+        vep_root=vep_root,
+        has_polyphen=include_polyphen_prioritization,
+    )
 
     return filter_vep_transcript_csqs(
         ht,
@@ -353,7 +354,6 @@ def tx_filter_variants_by_csqs(
         canonical=False,
         protein_coding=filter_to_protein_coding,
         csqs=filter_to_csqs,
-        keep_csqs=keep_csqs,
         genes=filter_to_genes,
         match_by_gene_symbol=match_by_gene_symbol,
         additional_filtering_criteria=additional_filtering_criteria,

@@ -211,7 +211,7 @@ def mock_vep_annotated_ht():
                             "transcript_id": "ENST00000342066",
                             "consequence_terms": [
                                 "splice_region_variant",
-                                "synonymous_variant"
+                                "synonymous_variant",
                             ],
                             "amino_acids": "V",
                             "biotype": "protein_coding",
@@ -263,7 +263,7 @@ def mock_vep_annotated_ht():
                             "transcript_id": "ENST00000420190",
                             "consequence_terms": [
                                 "splice_region_variant",
-                                "synonymous_variant"
+                                "synonymous_variant",
                             ],
                             "amino_acids": "A",
                             "biotype": "protein_coding",

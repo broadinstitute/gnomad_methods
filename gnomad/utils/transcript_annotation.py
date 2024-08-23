@@ -328,13 +328,15 @@ def tx_filter_variants_by_csqs(
         ht = ht.annotate(
             **{
                 vep_root: ht[vep_root].annotate(
-                    transcript_consequences=ht[vep_root].transcript_consequences.map(
+                    transcript_consequences=ht[vep_root]
+                    .transcript_consequences.map(
                         lambda csq: csq.annotate(
                             consequence_terms=csq.consequence_terms.filter(
                                 lambda x: ~hl.literal(CSQ_SPLICE).contains(x)
                             )
                         )
-                     ).filter(lambda csq: hl.len(csq.consequence_terms) > 0)
+                    )
+                    .filter(lambda csq: hl.len(csq.consequence_terms) > 0)
                 )
             }
         )

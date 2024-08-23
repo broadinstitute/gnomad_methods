@@ -9,7 +9,6 @@ from gnomad.utils.filtering import filter_to_gencode_cds
 from gnomad.utils.vep import (
     CSQ_CODING,
     CSQ_SPLICE,
-    CSQ_ORDER,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,
     process_consequences,

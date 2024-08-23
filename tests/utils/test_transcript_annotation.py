@@ -6,6 +6,7 @@ import pytest
 from gnomad.utils.transcript_annotation import (
     clean_tissue_name_for_browser,
     create_tx_annotation_by_region,
+    tx_filter_variants_by_csqs,
 )
 
 
@@ -192,3 +193,188 @@ class TestCreateTxAnnotationByRegion:
 
         # Verify the result
         assert result == expected_result
+
+
+@pytest.fixture
+def mock_vep_annotated_ht():
+    """Create a mock Hail Table with VEP annotations."""
+    return hl.Table.parallelize(
+        [
+            {
+                "locus": hl.Locus("1", 861393, reference_genome="GRCh37"),
+                "alleles": ["G", "A"],
+                "vep": {
+                    "transcript_consequences": [
+                        {
+                            "gene_id": "ENSG00000187634",
+                            "gene_symbol": "SAMD11",
+                            "transcript_id": "ENST00000342066",
+                            "consequence_terms": [
+                                "splice_region_variant",
+                                "synonymous_variant",
+                            ],
+                            "amino_acids": "V",
+                            "biotype": "protein_coding",
+                            "lof": None,
+                            "lof_flags": None,
+                            "canonical": 0,
+                        },
+                        {
+                            "gene_id": "ENSG00000268179",
+                            "gene_symbol": "AL645608.1",
+                            "transcript_id": "ENST00000598827",
+                            "consequence_terms": ["synonymous_variant"],
+                            "amino_acids": "T",
+                            "biotype": "protein_coding",
+                            "lof": None,
+                            "lof_flags": None,
+                            "canonical": 1,
+                        },
+                    ],
+                },
+            },
+            {
+                "locus": hl.Locus("1", 871274, reference_genome="GRCh37"),
+                "alleles": ["C", "A"],
+                "vep": {
+                    "transcript_consequences": [
+                        {
+                            "gene_id": "ENSG00000187634",
+                            "gene_symbol": "SAMD11",
+                            "transcript_id": "ENST00000420190",
+                            "consequence_terms": ["splice_region_variant"],
+                            "amino_acids": None,
+                            "biotype": "protein_coding",
+                            "lof": None,
+                            "lof_flags": None,
+                            "canonical": 0,
+                        }
+                    ]
+                },
+            },
+            {
+                "locus": hl.Locus("1", 871275, reference_genome="GRCh37"),
+                "alleles": ["C", "A"],
+                "vep": {
+                    "transcript_consequences": [
+                        {
+                            "gene_id": "ENSG00000187634",
+                            "gene_symbol": "SAMD11",
+                            "transcript_id": "ENST00000420190",
+                            "consequence_terms": [
+                                "splice_region_variant",
+                                "synonymous_variant",
+                            ],
+                            "amino_acids": "A",
+                            "biotype": "protein_coding",
+                            "lof": None,
+                            "lof_flags": None,
+                            "canonical": 1,
+                        }
+                    ]
+                },
+            },
+            {
+                "locus": hl.Locus("1", 1000, reference_genome="GRCh37"),
+                "alleles": ["T", "G"],
+                "vep": {
+                    "transcript_consequences": [
+                        {
+                            "gene_id": "ENSG1",
+                            "gene_symbol": "gene1",
+                            "transcript_id": "ENST1",
+                            "consequence_terms": ["stop_gained"],
+                            "amino_acids": "Q/*",
+                            "biotype": "protein_coding",
+                            "lof": None,
+                            "lof_flags": None,
+                            "canonical": 1,
+                        }
+                    ]
+                },
+            },
+            {
+                "locus": hl.Locus("1", 2000, reference_genome="GRCh37"),
+                "alleles": ["A", "T"],
+                "vep": {
+                    "transcript_consequences": [
+                        {
+                            "gene_id": "ENSG2",
+                            "gene_symbol": "gene2",
+                            "transcript_id": "ENST2",
+                            "consequence_terms": ["missense_variant"],
+                            "amino_acids": "K/R",
+                            "biotype": "nonsense_mediated_decay",
+                            "lof": None,
+                            "lof_flags": None,
+                            "canonical": 1,
+                        }
+                    ]
+                },
+            },
+        ],
+        hl.tstruct(
+            locus=hl.tlocus(),
+            alleles=hl.tarray(hl.tstr),
+            vep=hl.tstruct(
+                transcript_consequences=hl.tarray(
+                    hl.tstruct(
+                        gene_id=hl.tstr,
+                        gene_symbol=hl.tstr,
+                        transcript_id=hl.tstr,
+                        consequence_terms=hl.tarray(hl.tstr),
+                        amino_acids=hl.tstr,
+                        biotype=hl.tstr,
+                        lof=hl.tstr,
+                        lof_flags=hl.tstr,
+                        canonical=hl.tint,
+                    )
+                )
+            ),
+        ),
+    )
+
+
+class TestTxFilterVariantsByCsqs:
+    """Tests for the tx_filter_variants_by_csqs function."""
+
+    def test_filter_to_cds(self, mock_vep_annotated_ht):
+        """Test filtering to CDS variants."""
+        result_ht = tx_filter_variants_by_csqs(
+            mock_vep_annotated_ht,
+            filter_to_cds=True,
+            ignore_splicing=False,
+            filter_to_protein_coding=False,
+        )
+        assert result_ht.count() == 2
+
+    def test_filter_to_genes(self, mock_vep_annotated_ht):
+        """Test filtering to specific genes."""
+        result_ht = tx_filter_variants_by_csqs(
+            mock_vep_annotated_ht,
+            filter_to_genes=["ENSG1", "ENSG2"],
+            filter_to_cds=False,
+            ignore_splicing=False,
+            filter_to_protein_coding=False,
+        )
+        assert result_ht.count() == 2
+
+    def test_ignore_splicing(self, mock_vep_annotated_ht):
+        """Test ignoring splicing variants."""
+        result_ht = tx_filter_variants_by_csqs(
+            mock_vep_annotated_ht,
+            filter_to_cds=False,
+            ignore_splicing=True,
+            filter_to_protein_coding=False,
+        )
+        assert result_ht.count() == 4
+
+    def test_filter_to_protein_coding(self, mock_vep_annotated_ht):
+        """Test filtering to protein coding transcripts."""
+        result_ht = tx_filter_variants_by_csqs(
+            mock_vep_annotated_ht,
+            filter_to_cds=False,
+            ignore_splicing=False,
+            filter_to_protein_coding=True,
+        )
+        assert result_ht.count() == 4

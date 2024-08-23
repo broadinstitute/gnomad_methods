@@ -370,7 +370,7 @@ class TestTxFilterVariantsByCsqs:
         assert result_ht.count() == 4
 
     def test_filter_to_protein_coding(self, mock_vep_annotated_ht):
-        """Test filtering to protein coding variants."""
+        """Test filtering to protein coding transcripts."""
         result_ht = tx_filter_variants_by_csqs(
             mock_vep_annotated_ht,
             filter_to_cds=False,

@@ -1,4 +1,5 @@
 """Tests for the filtering module."""
+
 from typing import Any, Dict, List, Union
 
 import hail as hl

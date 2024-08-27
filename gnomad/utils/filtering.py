@@ -727,6 +727,8 @@ def filter_arrays_by_meta(
         List[str], Dict[str, Union[List[str], Dict[str, Union[List[str], bool]]]]
     ],
     keep: bool = True,
+    keep_combine_operator: str = "and",
+    exclude_combine_operator: str = "and",
     combine_operator: str = "and",
     exact_match: bool = False,
 ) -> Tuple[
@@ -781,8 +783,12 @@ def filter_arrays_by_meta(
         array or just a single expression indexed by the `meta_expr`.
     :param items_to_filter: Items to filter by, either a list or a dictionary.
     :param keep: Whether to keep or remove the items specified by `items_to_filter`.
-    :param combine_operator: Whether to use "and" or "or" to combine the items
-        specified by `items_to_filter`.
+    :param keep_combine_operator: Whether to use "and" or "or" to combine the filtering
+        criteria for keys/key-value pairs to keep.
+    :param exclude_combine_operator: Whether to use "and" or "or" to combine the
+        filtering criteria for keys/key-value pairs to exclude.
+    :param combine_operator: Whether to use "and" or "or" to combine the keep and
+        exclude filtering criteria.
     :param exact_match: Whether to apply the `keep` parameter to only the items
         specified in the `items_to_filter` parameter or to all items in `meta_expr`.
         See the example above for more details. Default is False.
@@ -798,18 +804,11 @@ def filter_arrays_by_meta(
     if isinstance(meta_indexed_exprs, hl.expr.ArrayExpression):
         meta_indexed_exprs = {"_tmp": meta_indexed_exprs}
 
-    keep_combine_operator = "and"
-    exclude_combine_operator = "and"
-
     # If items_to_filter is a list, convert it to a dictionary with the key being the
     # item to filter and the value being None, so it can be filtered in the same way as
     # a dictionary of items to filter.
     if isinstance(items_to_filter, list):
         items_to_filter = {k: None for k in items_to_filter}
-        if keep:
-            keep_combine_operator = combine_operator
-        else:
-            exclude_combine_operator = combine_operator
     elif isinstance(items_to_filter, dict):
         # If items_to_filter is a dictionary with lists as values, convert the lists
         # to dictionaries with the key "values" and the value being the list of values
@@ -848,10 +847,6 @@ def filter_arrays_by_meta(
                 key_value_pairs_to_exclude[k] = v["values"]
             else:
                 keys_to_exclude.append(k)
-    if not keys_to_exclude and not key_value_pairs_to_exclude and keep:
-        keep_combine_operator = combine_operator
-    if not keys_to_keep and not key_value_pairs_to_keep and not keep:
-        exclude_combine_operator = combine_operator
 
     filtered_meta_expr = filter_meta_array(
         meta_expr,

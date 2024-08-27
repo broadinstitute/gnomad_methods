@@ -353,7 +353,8 @@ class TestFilterArraysByMeta:
         assert hl.eval(filtered_meta_indexed_exprs["expr1"]) == expected_expr1
         assert hl.eval(filtered_meta_indexed_exprs["expr2"]) == expected_expr2
 
-    # Additional cases reusing complex cases from the metadata_combinations fixture
+    # Additional cases reusing complex cases from the metadata_combinations fixture.
+    all_and = ["and", "and", "and"]
     s_ga_list = ["sex", "gen_anc"]
     ss_d_list = ["subset", "downsampling"]
     s_ga_dict = {"sex": None, "gen_anc": None}
@@ -370,37 +371,37 @@ class TestFilterArraysByMeta:
     s_keep_ss_ex = {"sex": {"keep": True}, "subset": {"keep": False}}
 
     @pytest.mark.parametrize(
-        "items_to_filter, keep, combine_operator, exact_match, expected_meta",
+        "items_to_filter, keep, keep_combine_operator, exclude_combine_operator, combine_operator, exact_match, expected_meta",
         [
-            (["sex"], True, "and", False, "sex"),
-            ({"sex": None}, True, "and", False, "sex"),
-            ({"sex": {"keep": True}}, True, "and", False, "sex"),
-            ({"sex": {"keep": True}}, False, "and", False, "sex"),
-            (["sex"], True, "or", False, "sex"),
-            (["sex"], False, "and", False, "no_sex"),
-            ({"sex": None}, False, "and", False, "no_sex"),
-            ({"sex": {"keep": False}}, True, "and", False, "no_sex"),
-            (s_ga_list, True, "and", False, "sex_and_gen_anc"),
-            (s_ga_dict, True, "and", False, "sex_and_gen_anc"),
-            (s_ga_keep, True, "and", False, "sex_and_gen_anc"),
-            (s_ga_list, False, "and", False, "no_sex_and_no_gen_anc"),
-            (s_ga_ex, True, "and", False, "no_sex_and_no_gen_anc"),
-            (["sex", "subset"], True, "or", False, "sex_or_subset"),
-            (ss_d_list, False, "and", False, "no_subset_and_no_downsampling"),
-            (ss_d_list, False, "or", False, "no_subset_or_no_downsampling"),
-            (["group", "sex"], True, "and", True, "group_sex"),
-            (["group"], True, "and", True, "only_group"),
-            (s_ga_a, True, "and", False, "sex_and_gen_anc_a"),
-            (s_ga_a_2, True, "and", False, "sex_and_gen_anc_a"),
-            (s_ga_a_3, True, "and", False, "sex_and_gen_anc_a"),
-            (s_ga_a_4, True, "and", False, "sex_and_gen_anc_a"),
-            (s_ga_a_4_keep, True, "and", False, "sex_and_gen_anc_a"),
-            (s_ga_a, True, "or", False, "sex_or_gen_anc_a"),
-            (g_s_ga_a, True, "and", True, "group_gen_anc_a_sex"),
-            (s_ga_a_b, True, "and", False, "sex_and_gen_anc_a_or_b"),
-            (d_ga_c, False, "or", False, "no_downsampling_or_no_gen_anc_c"),
-            (s_keep_ss_ex, True, "and", False, "sex_and_no_subset"),
-            (s_keep_ss_ex, True, "or", False, "sex_or_no_subset"),
+            (["sex"], True, *all_and, False, "sex"),
+            ({"sex": None}, True, *all_and, False, "sex"),
+            ({"sex": {"keep": True}}, True, *all_and, False, "sex"),
+            ({"sex": {"keep": True}}, False, *all_and, False, "sex"),
+            (["sex"], True, "or", "or", "or", False, "sex"),
+            (["sex"], False, *all_and, False, "no_sex"),
+            ({"sex": None}, False, *all_and, False, "no_sex"),
+            ({"sex": {"keep": False}}, True, *all_and, False, "no_sex"),
+            (s_ga_list, True, *all_and, False, "sex_and_gen_anc"),
+            (s_ga_dict, True, *all_and, False, "sex_and_gen_anc"),
+            (s_ga_keep, True, *all_and, False, "sex_and_gen_anc"),
+            (s_ga_list, False, *all_and, False, "no_sex_and_no_gen_anc"),
+            (s_ga_ex, True, *all_and, False, "no_sex_and_no_gen_anc"),
+            (["sex", "subset"], True, "or", "and", "and", False, "sex_or_subset"),
+            (ss_d_list, False, *all_and, False, "no_subset_and_no_downsampling"),
+            (ss_d_list, False, "and", "or", "and", False, "no_subset_or_no_downsampling"),
+            (["group", "sex"], True, *all_and, True, "group_sex"),
+            (["group"], True, *all_and, True, "only_group"),
+            (s_ga_a, True, *all_and, False, "sex_and_gen_anc_a"),
+            (s_ga_a_2, True, *all_and, False, "sex_and_gen_anc_a"),
+            (s_ga_a_3, True, *all_and, False, "sex_and_gen_anc_a"),
+            (s_ga_a_4, True, *all_and, False, "sex_and_gen_anc_a"),
+            (s_ga_a_4_keep, True, *all_and, False, "sex_and_gen_anc_a"),
+            (s_ga_a, True, "or", "and", "and", False, "sex_or_gen_anc_a"),
+            (g_s_ga_a, True, *all_and, True, "group_gen_anc_a_sex"),
+            (s_ga_a_b, True, *all_and, False, "sex_and_gen_anc_a_or_b"),
+            (d_ga_c, False, "and", "or", "and", False, "no_downsampling_or_no_gen_anc_c"),
+            (s_keep_ss_ex, True, *all_and, False, "sex_and_no_subset"),
+            (s_keep_ss_ex, True, "and", "and", "or", False, "sex_or_no_subset"),
         ],
     )
     def test_filter_arrays_by_meta_with_reuse(
@@ -408,6 +409,8 @@ class TestFilterArraysByMeta:
         mock_meta_expr: hl.expr.ArrayExpression,
         items_to_filter: Union[List[str], Dict[str, Dict[str, Any]]],
         keep: bool,
+        keep_combine_operator,
+        exclude_combine_operator,
         combine_operator: str,
         exact_match: bool,
         expected_meta: str,
@@ -419,6 +422,8 @@ class TestFilterArraysByMeta:
             meta_indexed_exprs={"meta_array": mock_meta_expr},
             items_to_filter=items_to_filter,
             keep=keep,
+            keep_combine_operator=keep_combine_operator,
+            exclude_combine_operator=exclude_combine_operator,
             combine_operator=combine_operator,
             exact_match=exact_match,
         )

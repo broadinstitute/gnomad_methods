@@ -694,16 +694,16 @@ def filter_meta_array(
         # If key_value_pairs_to_keep is provided, filter to only metadata items with the
         # specified key-value pairs.
         keep_filter += [
-            hl.literal(values).contains(m.get(k, ""))
-            for k, values in key_value_pairs_to_keep.items()
+            hl.literal(v if isinstance(v, list) else [v]).contains(m.get(k, ""))
+            for k, v in key_value_pairs_to_keep.items()
         ]
 
         # If keys_to_exclude is provided, filter to only metadata items without the
         # specified keys and if key_value_pairs_to_exclude is provided, filter to only
         # metadata items without the specified key-value pairs.
         exclude_filter = [~m.contains(k) for k in keys_to_exclude] + [
-            hl.literal(values).contains(m.get(k, ""))
-            for k, values in key_value_pairs_to_exclude.items()
+            hl.literal(v if isinstance(v, list) else [v]).contains(m.get(k, ""))
+            for k, v in key_value_pairs_to_exclude.items()
         ]
 
         filters = []
@@ -797,11 +797,18 @@ def filter_arrays_by_meta(
     if isinstance(meta_indexed_exprs, hl.expr.ArrayExpression):
         meta_indexed_exprs = {"_tmp": meta_indexed_exprs}
 
+    keep_combine_operator = "and"
+    exclude_combine_operator = "and"
+
     # If items_to_filter is a list, convert it to a dictionary with the key being the
     # item to filter and the value being None, so it can be filtered in the same way as
     # a dictionary of items to filter.
     if isinstance(items_to_filter, list):
         items_to_filter = {k: None for k in items_to_filter}
+        if keep:
+            keep_combine_operator = combine_operator
+        else:
+            exclude_combine_operator = combine_operator
     elif isinstance(items_to_filter, dict):
         # If items_to_filter is a dictionary with lists as values, convert the lists
         # to dictionaries with the key "values" and the value being the list of values
@@ -837,6 +844,10 @@ def filter_arrays_by_meta(
                 key_value_pairs_to_exclude[k] = v["values"]
             else:
                 keys_to_exclude.append(k)
+    if not keys_to_exclude and not key_value_pairs_to_exclude and keep:
+        keep_combine_operator = combine_operator
+    if not keys_to_keep and not key_value_pairs_to_keep and not keep:
+        exclude_combine_operator = combine_operator
 
     filtered_meta_expr = filter_meta_array(
         meta_expr,
@@ -844,6 +855,8 @@ def filter_arrays_by_meta(
         keys_to_exclude=keys_to_exclude,
         key_value_pairs_to_keep=key_value_pairs_to_keep,
         key_value_pairs_to_exclude=key_value_pairs_to_exclude,
+        keep_combine_operator=keep_combine_operator,
+        exclude_combine_operator=exclude_combine_operator,
         combine_operator=combine_operator,
         exact_match=exact_match,
     )

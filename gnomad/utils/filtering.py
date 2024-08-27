@@ -833,8 +833,9 @@ def filter_arrays_by_meta(
     key_value_pairs_to_exclude = {}
 
     for k, v in items_to_filter.items():
-        # Set item_keep to 'keep' parameter if value if None or if 'keep' value is not defined in that items dictionary.
-        # Otherwise (if already defined in the item's dictionary), use the 'keep' value defined in the dictionary.
+        # Set item_keep to 'keep' parameter if value is None or if 'keep' value is not
+        # defined in that items' dictionary. Otherwise, (if already defined in the
+        # item's dictionary), use the 'keep' value defined in the dictionary.
         item_keep = keep if v is None or "keep" not in v else v["keep"]
 
         if item_keep:

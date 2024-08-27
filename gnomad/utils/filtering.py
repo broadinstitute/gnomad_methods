@@ -668,7 +668,7 @@ def filter_meta_array(
                 "The combine operators must be one of 'and' or 'or', but found" f" {o}!"
             )
 
-    # Assign operators to their respective values in the combine_operator_map  dictionary.
+    # Assign operators to their respective values in the combine_operator_map dict.
     keep_combine_operator = combine_operator_map[keep_combine_operator]
     exclude_combine_operator = combine_operator_map[exclude_combine_operator]
     combine_operator = combine_operator_map[combine_operator]

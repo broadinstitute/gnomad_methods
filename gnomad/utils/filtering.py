@@ -702,7 +702,7 @@ def filter_meta_array(
         # specified keys and if key_value_pairs_to_exclude is provided, filter to only
         # metadata items without the specified key-value pairs.
         exclude_filter = [~m.contains(k) for k in keys_to_exclude] + [
-            hl.literal(v if isinstance(v, list) else [v]).contains(m.get(k, ""))
+            ~hl.literal(v if isinstance(v, list) else [v]).contains(m.get(k, ""))
             for k, v in key_value_pairs_to_exclude.items()
         ]
 

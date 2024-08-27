@@ -632,7 +632,7 @@ def filter_meta_array(
     exact_match: bool = False,
 ) -> hl.expr.ArrayExpression:
     """
-    Filter a metadata array expression based onkeys and key-value pairs to keep/exclude.
+    Filter a metadata array expression based on keys and key-value pairs to keep/exclude.
 
     If `exact_match` is True, the filtering will only be applied to items with exactly
     the specified keys in `keys_to_keep` (and the keys in `key_value_pairs_to_keep`
@@ -668,6 +668,7 @@ def filter_meta_array(
                 "The combine operators must be one of 'and' or 'or', but found" f" {o}!"
             )
 
+    # Assign operators to their respective values in the combine_operator_map  dictionary.
     keep_combine_operator = combine_operator_map[keep_combine_operator]
     exclude_combine_operator = combine_operator_map[exclude_combine_operator]
     combine_operator = combine_operator_map[combine_operator]
@@ -832,6 +833,8 @@ def filter_arrays_by_meta(
     key_value_pairs_to_exclude = {}
 
     for k, v in items_to_filter.items():
+        # Set item_keep to 'keep' parameter if value if None or if 'keep' value is not defined in that items dictionary.
+        # Otherwise (if already defined in the item's dictionary), use the 'keep' value defined in the dictionary.
         item_keep = keep if v is None or "keep" not in v else v["keep"]
 
         if item_keep:
@@ -861,11 +864,14 @@ def filter_arrays_by_meta(
         exact_match=exact_match,
     )
 
-    # Filter the meta_indexed_exprs to only keep the items that match the metadata
+    # Filter the enumerated meta_exprs to only keep the items that match the metadata
     # dictionaries in the filtered meta expression.
     filtered_meta_idx_expr = hl.enumerate(meta_expr).filter(
         lambda x: filtered_meta_expr.contains(x[1])
     )
+
+    # Filter each of the array expressions in meta_indexed_exprs to only keep the items
+    # that match the metadata dictionaries in the filtered meta expression.
     meta_indexed_exprs = {
         k: filtered_meta_idx_expr.map(lambda x: v[x[0]])
         for k, v in meta_indexed_exprs.items()

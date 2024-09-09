@@ -21,61 +21,59 @@ logging.basicConfig(
 logger = logging.getLogger("transcript_annotation_utils")
 logger.setLevel(logging.INFO)
 
-TISSUES_TO_EXCLUDE = {
-    "v7": [
-        "Bladder",
-        "Brain_Spinalcord_cervicalc_1",
-        "Brain_Substantianigra",
-        "Cells_EBV_transformedlymphocytes",
-        "Cells_Transformedfibroblasts",
-        "Cervix_Ectocervix",
-        "Cervix_Endocervix",
-        "FallopianTube",
-        "Kidney_Cortex",
-        "MinorSalivaryGland",
-        "Ovary",
-        "Prostate",
-        "Testis",
-        "Uterus",
-        "Vagina",
-    ],
-    "v10": [
-        "Bladder",
-        "Cells_EBV_transformedlymphocytes",
-        "Cells_Culturedfibroblasts",
-        "Cervix_Ectocervix",
-        "Cervix_Endocervix",
-        "Colon_Transverse_MixedCell",
-        "Colon_Transverse_Mucosa",
-        "Colon_Transverse_Muscularis",
-        "FallopianTube",
-        "Kidney_Cortex",
-        "Kidney_Medulla",
-        "Liver_Hepatocyte",
-        "Liver_MixedCell",
-        "Liver_PortalTract",
-        "Ovary",
-        "Pancreas_Acini",
-        "Pancreas_Islets",
-        "Pancreas_MixedCell",
-        "Prostate",
-        "SmallIntestine_TerminalIleum_LymphoidAggregate",
-        "SmallIntestine_TerminalIleum_MixedCell",
-        "Stomach_MixedCell",
-        "Stomach_Mucosa",
-        "Stomach_Muscularis",
-        "Testis",
-        "Uterus",
-        "Vagina",
-    ],
-}
-"""
-List of tissues to exclude from pext analyses and mean pext across tissues. Includes
-reproductive tissues, cell lines, and any tissue with less than 100 samples in the
-specified GTEx version. Tissues in v7 were excluded from gnomAD v2 pext calculations,
-and tissues in v10 were excluded from gnomAD v4 pext. Expression across these tissues
-is still displayed in the gnomAD browser.
-"""
+REPRODUCTIVE_TISSUES = [
+    "FallopianTube",
+    "Ovary",
+    "Prostate",
+    "Testis",
+    "Uterus",
+    "Vagina",
+]
+"""List of reproductive tissues in GTEx."""
+
+CELL_LINES = [
+    "Cells_EBV_transformedlymphocytes",
+    "Cells_Transformedfibroblasts",  # Only in v7.
+    "Cells_Culturedfibroblasts",  # Only in v10.
+]
+"""List of cell lines in GTEx."""
+
+
+def get_tissues_to_exclude(
+    t: Union[hl.Table, hl.MatrixTable],
+    reproductive: bool = True,
+    cell_lines: bool = True,
+    min_samples: Optional[int] = 100,
+) -> List[str]:
+    """
+    Get list of tissues to exclude from pext analyses and mean pext across tissues.
+
+    :param t: Table/MatrixTable with 'tissue' annotation for each sample. If a
+        MatrixTable is input, samples are expected as columns.
+    :param reproductive: Whether to exclude reproductive tissues. Default is True.
+    :param cell_lines: Whether to exclude cell lines. Default is True.
+    :param min_samples: Optional minimum number of samples required for a tissue to be
+        included. If None, tissues will not be excluded based on sample size. Default
+        is False.
+    :return: List of tissues to exclude from pext analyses and mean pext across tissues.
+    """
+    under_min_samples = []
+    if min_samples is not None:
+        if isinstance(t, hl.MatrixTable):
+            num_s_per_tissue = t.aggregate_cols(hl.agg.counter(t.tissue)).items()
+        else:
+            num_s_per_tissue = t.aggregate(hl.agg.counter(t.tissue)).items()
+        under_min_samples = [t for t, n in num_s_per_tissue if n < min_samples]
+
+    tissues_to_exclude = (
+        (REPRODUCTIVE_TISSUES if reproductive else [])
+        + (CELL_LINES if cell_lines else [])
+        + under_min_samples
+    )
+
+    logger.info("Excluding tissues: %s", tissues_to_exclude)
+
+    return tissues_to_exclude
 
 
 def summarize_transcript_expression(
@@ -180,7 +178,7 @@ def get_expression_proportion(ht: hl.Table) -> hl.expr.StructExpression:
 def filter_expression_ht_by_tissues(
     ht: hl.Table,
     tissues_to_keep: Optional[List[str]] = None,
-    tissues_to_filter: Optional[List[str]] = None,
+    tissues_to_exclude: Optional[List[str]] = None,
 ) -> hl.Table:
     """
     Filter a Table with a row annotation for each tissue to only include specified tissues.
@@ -188,21 +186,21 @@ def filter_expression_ht_by_tissues(
     :param ht: Table with a row annotation for each tissue.
     :param tissues_to_keep: Optional list of tissues to keep in the Table. Default is
         all non-key rows in the Table.
-    :param tissues_to_filter: Optional list of tissues to exclude from the Table.
+    :param tissues_to_exclude: Optional list of tissues to exclude from the Table.
     :return: Table with only specified tissues.
     """
-    if tissues_to_keep is None and tissues_to_filter is None:
+    if tissues_to_keep is None and tissues_to_exclude is None:
         logger.info(
-            "No tissues_to_keep or tissues_to_filter specified. Returning input Table."
+            "No tissues_to_keep or tissues_to_exclude specified. Returning input Table."
         )
         return ht
 
     if tissues_to_keep is None:
         tissues = list(ht.row_value)
 
-    if tissues_to_filter is not None:
-        logger.info("Filtering tissues: %s", tissues_to_filter)
-        tissues = [t for t in tissues if t not in tissues_to_filter]
+    if tissues_to_exclude is not None:
+        logger.info("Filtering tissues: %s", tissues_to_exclude)
+        tissues = [t for t in tissues if t not in tissues_to_exclude]
 
     ht = ht.select(*tissues)
 
@@ -212,7 +210,7 @@ def filter_expression_ht_by_tissues(
 def tissue_expression_ht_to_array(
     ht: hl.Table,
     tissues_to_keep: Optional[List[str]] = None,
-    tissues_to_filter: Optional[List[str]] = None,
+    tissues_to_exclude: Optional[List[str]] = None,
     annotations_to_extract: Optional[Union[Tuple[str], List[str]]] = (
         "transcript_expression",
         "expression_proportion",
@@ -246,7 +244,7 @@ def tissue_expression_ht_to_array(
     :param ht: Table with a row annotation for each tissue.
     :param tissues_to_keep: Optional list of tissues to keep in the tissue expression
         array. Default is all non-key rows in the Table.
-    :param tissues_to_filter: Optional list of tissues to exclude from the
+    :param tissues_to_exclude: Optional list of tissues to exclude from the
         tissue expression array.
     :param annotations_to_extract: Optional list of tissue struct fields to extract
         into top level array annotations. If None, the returned Table will contain a
@@ -256,7 +254,7 @@ def tissue_expression_ht_to_array(
         tissue values and a 'tissues' global annotation indicating the order of tissues
         in the arrays.
     """
-    ht = filter_expression_ht_by_tissues(ht, tissues_to_keep, tissues_to_filter)
+    ht = filter_expression_ht_by_tissues(ht, tissues_to_keep, tissues_to_exclude)
 
     tissues = list(ht.row_value)
     ht = ht.select_globals(tissues=tissues)
@@ -364,7 +362,7 @@ def tx_filter_variants_by_csqs(
 def tx_annotate_variants(
     ht: hl.Table,
     tx_ht: hl.Table,
-    tissues_to_filter: Optional[List[str]] = None,
+    tissues_to_exclude: Optional[List[str]] = None,
     tissues_to_exclude_from_mean: Optional[List[str]] = None,
     vep_root: str = "vep",
     vep_annotation: str = "transcript_consequences",
@@ -375,7 +373,7 @@ def tx_annotate_variants(
     :param ht: Table of variants to annotate, it should contain the nested fields:
         `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
-    :param tissues_to_filter: Optional list of tissues to exclude from the output.
+    :param tissues_to_exclude: Optional list of tissues to exclude from the output.
         Default is None.
     :param tissues_to_exclude_from_mean: Optional list of tissues to exclude when
         calculating the mean expression proportion across all tissues. Default is None.
@@ -390,9 +388,9 @@ def tx_annotate_variants(
     :return: Input Table with transcript expression information annotated.
     """
     # Filter to tissues of interest.
-    if tissues_to_filter is not None:
+    if tissues_to_exclude is not None:
         tx_ht = filter_expression_ht_by_tissues(
-            tx_ht, tissues_to_filter=tissues_to_filter
+            tx_ht, tissues_to_exclude=tissues_to_exclude
         )
     tissues_to_exclude_from_mean = tissues_to_exclude_from_mean or []
     tissues = list(tx_ht.row_value)
@@ -483,7 +481,7 @@ def tx_aggregate_variants(
 def perform_tx_annotation_pipeline(
     ht: hl.Table,
     tx_ht: hl.Table,
-    tissues_to_filter: Optional[List[str]] = None,
+    tissues_to_exclude: Optional[List[str]] = None,
     tissues_to_exclude_from_mean: Optional[List[str]] = None,
     vep_root: str = "vep",
     vep_annotation: str = "transcript_consequences",
@@ -509,7 +507,7 @@ def perform_tx_annotation_pipeline(
     :param ht: Table of variants to annotate, it should contain the nested fields:
         `{vep_root}.{vep_annotation}`.
     :param tx_ht: Table of transcript expression information.
-    :param tissues_to_filter: Optional list of tissues to exclude from the output.
+    :param tissues_to_exclude: Optional list of tissues to exclude from the output.
         Default is None.
     :param tissues_to_exclude_from_mean: Optional list of tissues to exclude when
         calculating the mean expression proportion across all tissues. Default is None.
@@ -527,7 +525,7 @@ def perform_tx_annotation_pipeline(
             ht, vep_root=vep_root, filter_to_csqs=filter_to_csqs, **kwargs
         ),
         tx_ht,
-        tissues_to_filter=tissues_to_filter,
+        tissues_to_exclude=tissues_to_exclude,
         tissues_to_exclude_from_mean=tissues_to_exclude_from_mean,
         vep_root=vep_root,
         vep_annotation=vep_annotation,

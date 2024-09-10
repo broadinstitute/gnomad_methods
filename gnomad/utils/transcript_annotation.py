@@ -48,6 +48,15 @@ def get_tissues_to_exclude(
     """
     Get list of tissues to exclude from pext analyses and mean pext across tissues.
 
+    .. note::
+
+        The default value of 100 for the `min_samples` parameter is used because for
+        small sample sizes, the variation in the number of expressed genes is higher.
+        For sample sizes over 100, the number of expressed genes reaches saturation,
+        leading to more stable estimates. See the following study for more
+        details:
+        https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-021-08125-9.
+
     :param t: Table/MatrixTable with 'tissue' annotation for each sample. If a
         MatrixTable is input, samples are expected as columns.
     :param reproductive: Whether to exclude reproductive tissues. Default is True.

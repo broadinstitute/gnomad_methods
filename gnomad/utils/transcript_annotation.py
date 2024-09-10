@@ -22,6 +22,8 @@ logger = logging.getLogger("transcript_annotation_utils")
 logger.setLevel(logging.INFO)
 
 REPRODUCTIVE_TISSUES = [
+    "Cervix_Ectocervix",
+    "Cervix_Endocervix",
     "FallopianTube",
     "Ovary",
     "Prostate",

@@ -4,10 +4,55 @@ import hail as hl
 import pytest
 
 from gnomad.utils.transcript_annotation import (
+    CELL_LINES,
+    REPRODUCTIVE_TISSUES,
     clean_tissue_name_for_browser,
     create_tx_annotation_by_region,
+    get_tissues_to_exclude,
     tx_filter_variants_by_csqs,
 )
+
+
+class TestGetTissuesToExclude:
+    """Tests for the get_tissues_to_exclude function."""
+
+    @pytest.fixture
+    def mock_table(self):
+        """Create a mock Hail Table."""
+        return hl.Table.parallelize(
+            [
+                {"tissue": "t1", "sample": "s1"},
+                {"tissue": "t2", "sample": "s2"},
+                {"tissue": "t2", "sample": "s3"},
+                {"tissue": "t3", "sample": "s4"},
+                {"tissue": "t3", "sample": "s5"},
+                {"tissue": "t3", "sample": "s6"},
+            ],
+            hl.tstruct(tissue=hl.tstr, sample=hl.tstr),
+        )
+
+    @pytest.mark.parametrize(
+        "reproductive, cell_lines, min_samples, expected",
+        [
+            (True, True, 3, REPRODUCTIVE_TISSUES + CELL_LINES + ["t1", "t2"]),
+            (True, False, 3, REPRODUCTIVE_TISSUES + ["t1", "t2"]),
+            (False, True, 3, CELL_LINES + ["t1", "t2"]),
+            (False, False, None, []),
+            (False, False, 1, []),
+            (False, False, 2, ["t1"]),
+            (False, False, 3, ["t1", "t2"]),
+            (False, False, 4, ["t1", "t2", "t3"]),
+            (True, True, None, REPRODUCTIVE_TISSUES + CELL_LINES),
+        ],
+    )
+    def test_get_tissues_to_exclude(
+        self, mock_table, reproductive, cell_lines, min_samples, expected
+    ):
+        """Test the get_tissues_to_exclude function."""
+        result = get_tissues_to_exclude(
+            mock_table, reproductive, cell_lines, min_samples
+        )
+        assert set(result) == set(expected)
 
 
 class TestCleanTissueNameForBrowser:

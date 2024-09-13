@@ -1,6 +1,9 @@
 Getting Started
 ===============
 
+This short guide will help you get started with hail and the gnomaD Python package. Please note this guide was created in 2022 and the arguments for creating hail clusters may be dated. For example, if you are using hail version 0.2.131 or later and dataproc version 2.2 or later, the command in step 2 below requires the flag `--public-ip-address` at the time this guide was updated, September 2024. Please refer to the `Hail documentation <https://hail.is/docs/0.2/getting_started.html>`_ for the most up-to-date information.
+
+
 1. `Install Hail <https://hail.is/docs/0.2/getting_started.html#installation>`_::
 
     pip install hail

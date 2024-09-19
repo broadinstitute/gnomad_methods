@@ -259,7 +259,7 @@ def _get_info_agg_expr(
 
     if retain_cdfs:
         cdf_median_agg_fields = {}
-        # Store values for each median agg fields in a new dictionary with "_cdf" appended to the annotaion name.
+        # Store values for each median agg fields in a new dictionary with "_cdf" appended to the annotation name.
         for k, v in median_agg_fields.items():
             cdf_median_agg_fields[f"{k}_cdf"] = v
         # Append the cdf annotations to the aggs list.

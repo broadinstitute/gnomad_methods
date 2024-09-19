@@ -360,8 +360,10 @@ def get_summary_stats_variant_filter_expr(
     t: Union[hl.Table, hl.MatrixTable],
     filter_lcr: bool = False,
     filter_expr: hl.expr.SetExpression = None,
-    freq_expr: hl.expr.SetExpression = None,
+    freq_expr: hl.expr.Float64Expression = None,
+    grpmax_expr: hl.expr.Float64Expression = None,
     max_af: Optional[Union[float, List[float]]] = None,
+    max_grpmax: Optional[Union[float, List[float]]] = None,
     min_an_proportion: Optional[Union[float, List[float]]] = None,
 ) -> Dict[str, Union[hl.expr.BooleanExpression, hl.expr.StructExpression]]:
     """
@@ -373,15 +375,22 @@ def get_summary_stats_variant_filter_expr(
         - 'variant_qc_pass' if `filter_expr` is provided.
         - 'max_af' as a struct with a field for each `af` in `max_af` if `max_af` is
           provided.
+        - 'max_grpmax' as a struct with a field for each `grpmax` in `max_grpmax` if
+          `max_grpmax` is provided.
         - 'min_an' as a struct with a field for each `an_proportion` in
           `min_an_proportion` if `min_an_proportion` is provided.
 
     :param t: Input Table/MatrixTable.
     :param filter_lcr: Whether to filter out low confidence regions. Default is False.
     :param filter_expr: SetExpression containing variant filters. Default is None.
-    :param freq_expr: SetExpression containing frequency information. Default is None.
+    :param freq_expr: Float64Expression containing frequency information. Default is
+        None.
+    :param grpmax_expr: Float64Expression containing population max frequency
+        information. Default is None.
     :param max_af: Maximum allele frequency cutoff(s). Can be a single float or a list
         of floats. Default is None.
+    :param max_grpmax: Maximum genetic ancestry group max frequency cutoff(s). Can be a
+        single float or a list of floats. Default is None.
     :param min_an_proportion: Minimum allele number proportion (used as a proxy for
         call rate). Default is None.
     :return: Dict of BooleanExpressions or StructExpressions for filtering variants.
@@ -397,13 +406,33 @@ def get_summary_stats_variant_filter_expr(
     if filter_expr is not None:
         log_list.append("variants that pass all variant QC filters")
         ss_filter_expr["variant_qc_pass"] = hl.len(filter_expr) == 0
-    if max_af is not None:
-        if isinstance(max_af, float):
-            max_af = [max_af]
-        log_list.extend([f"variants with (AF < {af:.2e})" for af in max_af])
-        ss_filter_expr["max_af"] = hl.struct(
-            **{f"{af}": freq_expr < af for af in max_af}
-        )
+
+    def get_max_filter(
+        max_expr: hl.expr.Float64Expression,
+        max_cutoff: Union[float, List[float], None],
+        name: str = "",
+    ) -> Dict[str, hl.expr.StructExpression]:
+        """
+        Generate filtering expression for maximum frequency cutoffs.
+
+        :param max_expr: Float64Expression containing frequency information.
+        :param max_cutoff: Maximum frequency cutoff(s). Can be a single float or a
+            list of floats.
+        :param name: Name of frequency field. Default is empty str.
+        :return: StructExpression containing filtering expression for maximum frequency
+            cutoffs.
+        """
+        if max_cutoff is None:
+            return {}
+        if isinstance(max_cutoff, float):
+            max_cutoff = [max_cutoff]
+        log_list.extend([f"variants with ({name} < {c:.2e})" for c in max_cutoff])
+
+        return {f"max_{name}": hl.struct(**{f"{c}": max_expr < c for c in max_cutoff})}
+
+    ss_filter_expr.update(get_max_filter(freq_expr, max_af, "af"))
+    ss_filter_expr.update(get_max_filter(grpmax_expr, max_grpmax, "grpmax"))
+
     if min_an_proportion is not None:
         log_list.append(
             "variants that meet a minimum call rate of %.2f (using AN as a call rate "

@@ -279,7 +279,7 @@ def _get_info_agg_expr(
                 # that value, so we want to sum the rank sum value (first element).
                 # Rename annotation in the form 'AS_RAW_*_RankSum' to 'AS_*_RankSum'.
                 if k.startswith("AS_RAW_") and (
-                    k.endswith("RankSum") or k.endswith("cdf")
+                    k.endswith("RankSum") or k.endswith("RankSum_cdf")
                 ):
                     agg_expr[f"{prefix}{k.replace('_RAW', '')}"] = hl.agg.array_agg(
                         lambda x: agg_func(hl.or_missing(hl.is_defined(x), x[0])), expr

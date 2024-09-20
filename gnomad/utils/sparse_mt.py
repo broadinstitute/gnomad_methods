@@ -197,7 +197,7 @@ def _get_info_agg_expr(
     :param prefix: Optional prefix for the fields. Used for adding 'AS_' in the AS case.
     :param treat_fields_as_allele_specific: Treat info fields as allele-specific. Defaults to False.
     :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
-        for median_agg_fields. Keeping the CDFs is useful for annotations that require calculating the median
+        for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
         across combined datasets at a later stage. Default is False.
     :return: Dictionary of expression names and their corresponding aggregation
         Expression.

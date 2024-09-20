@@ -445,6 +445,7 @@ def get_as_info_expr(
         prefix="" if treat_fields_as_allele_specific else "AS_",
         treat_fields_as_allele_specific=treat_fields_as_allele_specific,
         retain_cdfs=retain_cdfs,
+        cdf_k=cdf_k,
     )
 
     if alt_alleles_range_array_field not in mt.row or mt[
@@ -562,6 +563,7 @@ def get_site_info_expr(
         median_agg_fields=median_agg_fields,
         array_sum_agg_fields=array_sum_agg_fields,
         retain_cdfs=retain_cdfs,
+        cdf_k=cdf_k,
     )
 
     # Add FS and SOR if SB is present
@@ -653,7 +655,7 @@ def default_compute_info(
 
     # Compute quasi-AS info expr.
     if quasi_as_annotations:
-        info_expr = get_as_info_expr(mt, retain_cdfs=retain_cdfs)
+        info_expr = get_as_info_expr(mt, retain_cdfs=retain_cdfs, cdf_k=cdf_k)
 
     # Compute AS info expr using gvcf_info allele specific annotations.
     if as_annotations:
@@ -664,6 +666,7 @@ def default_compute_info(
             **AS_INFO_AGG_FIELDS,
             treat_fields_as_allele_specific=True,
             retain_cdfs=retain_cdfs,
+            cdf_k=cdf_k,
         )
 
     if info_expr is not None:
@@ -673,7 +676,7 @@ def default_compute_info(
         )
 
     if site_annotations:
-        site_expr = get_site_info_expr(mt, retain_cdfs=retain_cdfs)
+        site_expr = get_site_info_expr(mt, retain_cdfs=retain_cdfs, cdf_k=cdf_k)
         if info_expr is None:
             info_expr = site_expr
         else:

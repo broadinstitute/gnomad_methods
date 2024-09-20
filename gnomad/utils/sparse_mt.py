@@ -170,6 +170,7 @@ def _get_info_agg_expr(
     prefix: str = "",
     treat_fields_as_allele_specific: bool = False,
     retain_cdfs: bool = False,
+    cdf_k: int = 200,
 ) -> Dict[str, hl.expr.Aggregation]:
     """
     Create Aggregators for both site or AS info expression aggregations.
@@ -199,6 +200,9 @@ def _get_info_agg_expr(
     :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
         for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
         across combined datasets at a later stage. Default is False.
+    :param cdf_k: Parameter controlling the accuracy vs. memory usage tradeoff when retaining CDFs. A higher
+        value of `cdf_k` results in a more accurate CDF approximation but increases memory usage and computation
+        time. Default is 200.
     :return: Dictionary of expression names and their corresponding aggregation
         Expression.
     """
@@ -258,14 +262,18 @@ def _get_info_agg_expr(
     ]
 
     if retain_cdfs:
+        # Note: hl.agg.approx_cdf is a non-deterministic method and cannot be seeded.
+        # Results may vary with each rerun.
         cdf_median_agg_fields = {}
         # Store values for each median agg fields in a new dictionary with "_cdf"
         # appended to the annotation name.
         for k, v in median_agg_fields.items():
             cdf_median_agg_fields[f"{k}_cdf"] = v
-        # Append the cdf annotations to the aggs list.
+        # Append the cdf annotations to the aggs list. Set '_raw' to True to return
+        # a representation of the internal state of the CDF, which allows for mergining
+        # with other CDFs downstream.
         aggs.append(
-            (cdf_median_agg_fields, lambda x: hl.agg.approx_cdf(x, k=200, _raw=True))
+            (cdf_median_agg_fields, lambda x: hl.agg.approx_cdf(x, k=cdf_k, _raw=True))
         )
 
     # Create aggregators.
@@ -378,6 +386,7 @@ def get_as_info_expr(
     alt_alleles_range_array_field: str = "alt_alleles_range_array",
     treat_fields_as_allele_specific: bool = False,
     retain_cdfs: bool = False,
+    cdf_k: int = 200,
 ) -> hl.expr.StructExpression:
     """
     Return an allele-specific annotation Struct containing typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
@@ -415,6 +424,9 @@ def get_as_info_expr(
     :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
         for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
         across combined datasets at a later stage. Default is False.
+    :param cdf_k: Parameter controlling the accuracy vs. memory usage tradeoff when retaining CDFs. A higher
+        value of `cdf_k` results in a more accurate CDF approximation but increases memory usage and computation
+        time. Default is 200.
     :return: Expression containing the AS info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -508,6 +520,7 @@ def get_site_info_expr(
         List[str], Dict[str, hl.expr.ArrayNumericExpression]
     ] = INFO_AGG_FIELDS["array_sum_agg_fields"],
     retain_cdfs: bool = False,
+    cdf_k: int = 200,
 ) -> hl.expr.StructExpression:
     """
     Create a site-level annotation Struct aggregating typical VCF INFO fields from GVCF INFO fields stored in the MT entries.
@@ -531,6 +544,9 @@ def get_site_info_expr(
     :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
         for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
         across combined datasets at a later stage. Default is False.
+    :param cdf_k: Parameter controlling the accuracy vs. memory usage tradeoff when retaining CDFs. A higher
+        value of `cdf_k` results in a more accurate CDF approximation but increases memory usage and computation
+        time. Default is 200.
     :return: Expression containing the site-level info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):
@@ -578,6 +594,7 @@ def default_compute_info(
     lowqual_indel_phred_het_prior: int = 40,
     ac_filter_groups: Optional[Dict[str, hl.Expression]] = None,
     retain_cdfs: bool = False,
+    cdf_k: int = 200,
 ) -> hl.Table:
     """
     Compute a HT with the typical GATK allele-specific (AS) info fields as well as ACs and lowqual fields.
@@ -608,6 +625,9 @@ def default_compute_info(
     :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
         for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
         across combined datasets at a later stage. Default is False.
+    :param cdf_k: Parameter controlling the accuracy vs. memory usage tradeoff when retaining CDFs. A higher
+        value of `cdf_k` results in a more accurate CDF approximation but increases memory usage and computation
+        time. Default is 200.
     :return: Table with info fields
     :rtype: Table
     """

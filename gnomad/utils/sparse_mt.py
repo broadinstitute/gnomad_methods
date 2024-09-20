@@ -606,7 +606,7 @@ def default_compute_info(
     :param ac_filter_groups: Optional dictionary of sample filter expressions to compute
         additional groupings of ACs. Default is None.
     :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
-        for median_agg_fields. Keeping the CDFs is useful for annotations that require calculating the median
+        for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
         across combined datasets at a later stage. Default is False.
     :return: Table with info fields
     :rtype: Table

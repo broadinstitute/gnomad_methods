@@ -544,12 +544,13 @@ def get_site_info_expr(
     :param sum_agg_fields: Fields to aggregate using sum.
     :param int32_sum_agg_fields: Fields to aggregate using sum using int32.
     :param median_agg_fields: Fields to aggregate using (approximate) median.
-    :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) as an annotation
-        for `median_agg_fields`. Keeping the CDFs is useful for annotations that require calculating the median
-        across combined datasets at a later stage. Default is False.
-    :param cdf_k: Parameter controlling the accuracy vs. memory usage tradeoff when retaining CDFs. A higher
-        value of `cdf_k` results in a more accurate CDF approximation but increases memory usage and computation
-        time. Default is 200.
+    :param retain_cdfs: If True, retains the cumulative distribution functions (CDFs) 
+        as an annotation for `median_agg_fields`. Keeping the CDFs is useful for 
+        annotations that require calculating the median across combined datasets at a 
+        later stage. Default is False.
+    :param cdf_k: Parameter controlling the accuracy vs. memory usage tradeoff when 
+        retaining CDFs. A higher value of `cdf_k` results in a more accurate CDF 
+        approximation but increases memory usage and computation time. Default is 200.
     :return: Expression containing the site-level info fields
     """
     if "DP" in list(sum_agg_fields) + list(int32_sum_agg_fields):

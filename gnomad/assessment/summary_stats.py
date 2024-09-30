@@ -385,7 +385,7 @@ def get_summary_stats_variant_filter_expr(
     :param filter_expr: SetExpression containing variant filters. Default is None.
     :param freq_expr: Float64Expression containing frequency information. Default is
         None.
-    :param grpmax_expr: Float64Expression containing population max frequency
+    :param grpmax_expr: Float64Expression containing group max frequency
         information. Default is None.
     :param max_af: Maximum allele frequency cutoff(s). Can be a single float or a list
         of floats. Default is None.

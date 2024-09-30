@@ -410,7 +410,7 @@ def get_summary_stats_variant_filter_expr(
     def get_max_filter(
         max_expr: hl.expr.Float64Expression,
         max_cutoff: Union[float, List[float], None],
-        name: str = "",
+        name: str = "af",
     ) -> Dict[str, hl.expr.StructExpression]:
         """
         Generate filtering expression for maximum frequency cutoffs.
@@ -418,7 +418,7 @@ def get_summary_stats_variant_filter_expr(
         :param max_expr: Float64Expression containing frequency information.
         :param max_cutoff: Maximum frequency cutoff(s). Can be a single float or a
             list of floats.
-        :param name: Name of frequency field. Default is empty str.
+        :param name: Name of frequency field. Default is empty str. Default is 'af'.
         :return: StructExpression containing filtering expression for maximum frequency
             cutoffs.
         """

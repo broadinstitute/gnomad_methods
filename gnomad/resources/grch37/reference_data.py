@@ -377,7 +377,7 @@ gencode = VersionedTableResource(
 
 def transform_grch37_methylation(
     ht: Optional[hl.Table] = None,
-    methylation_expr: Optional[hl.expr.NumericExpression] = None
+    methylation_expr: Optional[hl.expr.NumericExpression] = None,
 ) -> Union[hl.Table, hl.expr.NumericExpression]:
     """
     Transform methylation level from the GRCh37 methylation resource to a 0-2 scale.

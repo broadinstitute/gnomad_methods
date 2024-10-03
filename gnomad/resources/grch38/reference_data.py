@@ -408,7 +408,7 @@ gencode = VersionedTableResource(
 
 def transform_grch38_methylation(
     ht: Optional[hl.Table] = None,
-    methylation_expr: Optional[hl.expr.NumericExpression] = None
+    methylation_expr: Optional[hl.expr.NumericExpression] = None,
 ) -> Union[hl.Table, hl.expr.NumericExpression]:
     """
     Transform methylation level from the GRCh38 methylation resource to a 0-2 scale.
@@ -443,7 +443,7 @@ def transform_grch38_methylation(
 
     methylation_expr = hl.if_else(
         locus_expr.contig != "chrX",
-        transform_methylation_level(methylation_expr,(0, 5)),
+        transform_methylation_level(methylation_expr, (0, 5)),
         transform_methylation_level(methylation_expr, (0, 3)),
     )
 

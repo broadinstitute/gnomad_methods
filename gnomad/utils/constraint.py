@@ -682,7 +682,7 @@ def assemble_constraint_context_ht(
     :return: Table with sites split and necessary annotations.
     """
     ref = get_reference_genome(ht.locus)
-    if ref == hl.get_reference('GRCh37'):
+    if ref == hl.get_reference("GRCh37"):
         from gnomad.resources.grch37 import transform_grch37_methylation as trans_methyl
     else:
         from gnomad.resources.grch38 import transform_grch38_methylation as trans_methyl
@@ -734,47 +734,47 @@ def assemble_constraint_context_ht(
             "most_severe_consequence",
             transcript_consequences=ht.vep.transcript_consequences.map(
                 lambda x: x.select(*vep_csq_fields)
-            )
+            ),
         )
     )
 
     # Add 'methylation_level', 'coverage', and 'gerp' annotations if specified.
     transformation_funcs = transformation_funcs or {}
 
-    if 'methylation_level' not in transformation_funcs:
-        transformation_funcs['methylation_level'] = (
-            lambda x, t: hl.if_else(ht.cpg, trans_methyl(x)[t.locus].methylation_level, 0)
+    if "methylation_level" not in transformation_funcs:
+        transformation_funcs["methylation_level"] = lambda x, t: hl.if_else(
+            ht.cpg, trans_methyl(x)[t.locus].methylation_level, 0
         )
 
-    if 'gerp' not in transformation_funcs:
-        transformation_funcs['gerp'] = (
-            lambda x, t: hl.if_else(hl.is_missing(x[t.locus].S), 0, x[t.locus].S)
+    if "gerp" not in transformation_funcs:
+        transformation_funcs["gerp"] = lambda x, t: hl.if_else(
+            hl.is_missing(x[t.locus].S), 0, x[t.locus].S
         )
 
     # If necessary, pull out first element of coverage statistics (which includes all
     # samples). Relevant to v4, where coverage stats include additional elements to
     # stratify by ukb subset and platforms.
-    if 'coverage' not in transformation_funcs:
-        transformation_funcs['coverage'] = (
-            lambda x, t: x[t.locus].coverage_stats[0] if "coverage_stats" in x.row else x[t.locus]
+    if "coverage" not in transformation_funcs:
+        transformation_funcs["coverage"] = lambda x, t: (
+            x[t.locus].coverage_stats[0] if "coverage_stats" in x.row else x[t.locus]
         )
 
-    if 'AN' not in transformation_funcs:
-        transformation_funcs['AN'] = lambda x, t: x[t.locus].AN
+    if "AN" not in transformation_funcs:
+        transformation_funcs["AN"] = lambda x, t: x[t.locus].AN
 
-    if 'freq' not in transformation_funcs:
-        transformation_funcs['freq'] = lambda x, t: x[t.key].freq
+    if "freq" not in transformation_funcs:
+        transformation_funcs["freq"] = lambda x, t: x[t.key].freq
 
-    if 'filters' not in transformation_funcs:
-        transformation_funcs['filters'] = lambda x, t: x[t.key].filters
+    if "filters" not in transformation_funcs:
+        transformation_funcs["filters"] = lambda x, t: x[t.key].filters
 
     hts = {
-        'methylation_level': methylation_ht,
-        'gerp': gerp_ht,
-        'coverage': coverage_hts,
-        'AN': an_hts,
-        'freq': freq_hts,
-        'filters': filter_hts,
+        "methylation_level": methylation_ht,
+        "gerp": gerp_ht,
+        "coverage": coverage_hts,
+        "AN": an_hts,
+        "freq": freq_hts,
+        "filters": filter_hts,
     }
     hts = {k: v for k, v in hts.items() if v is not None}
     exprs = {}
@@ -793,7 +793,7 @@ def assemble_constraint_context_ht(
     # Add global annotations for 'AN' and 'freq' if HTs are provided.
     global_anns = {
         "an_globals": (an_hts, ["strata_sample_count", "strata_meta"]),
-        "freq_globals": (freq_hts, ["freq_meta_sample_count", "freq_meta"])
+        "freq_globals": (freq_hts, ["freq_meta_sample_count", "freq_meta"]),
     }
     global_anns = {k: v for k, v in global_anns.items() if v[0] is not None}
     ht = ht.annotate_globals(
@@ -801,7 +801,8 @@ def assemble_constraint_context_ht(
             k: hl.struct(
                 **{
                     data_type: ann_ht.select_globals(
-                        *[x for x in g if x in ann_ht.globals]).index_globals()
+                        *[x for x in g if x in ann_ht.globals]
+                    ).index_globals()
                     for data_type, ann_ht in hts.items()
                 }
             )

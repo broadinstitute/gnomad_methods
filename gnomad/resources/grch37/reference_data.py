@@ -1,5 +1,7 @@
 # noqa: D100
 
+from typing import Union, Optional
+
 import hail as hl
 
 from gnomad.resources.resource_utils import (
@@ -10,6 +12,7 @@ from gnomad.resources.resource_utils import (
     import_gencode,
     import_sites_vcf,
 )
+from gnomad.utils.constraint import transform_methylation_level
 
 
 def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
@@ -370,3 +373,30 @@ gencode = VersionedTableResource(
         ),
     },
 )
+
+
+def transform_grch37_methylation(
+    ht: Optional[hl.Table] = None,
+    methylation_expr: Optional[hl.expr.NumericExpression] = None
+) -> Union[hl.Table, hl.expr.NumericExpression]:
+    """
+    Transform methylation level from the GRCh37 methylation resource to a 0-2 scale.
+
+    .. note::
+
+        One of ht or methylation_expr must be provided.
+
+    The GRCh37 methylation resource provides a MEAN score ranging from 0-1. We transform
+    this to a 0-2 scale by converting any value greater than 0.6 to 2, any value less
+    than or equal to 0.2 to 0, and any value in between to 1.
+
+
+    :param ht: Optional Hail Table with methylation data. Default is None.
+    :param methylation_expr: Optional methylation level expression. Default is None.
+    :return: Transformed methylation level expression or annotated Hail Table.
+    """
+    return transform_methylation_level(
+        methylation_expr="MEAN" if methylation_expr is None else methylation_expr,
+        methylation_cutoffs=(0.2, 0.6),
+        ht=ht,
+    )

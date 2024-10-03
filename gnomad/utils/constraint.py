@@ -2,12 +2,17 @@
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
-from gnomad.utils.vep import explode_by_vep_annotation, process_consequences
+from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.utils.vep import (
+    add_most_severe_csq_to_tc_within_vep_root,
+    explode_by_vep_annotation,
+    process_consequences,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -561,6 +566,250 @@ def collapse_strand(
         if isinstance(t, hl.Table)
         else t.annotate_rows(**collapse_expr)
     )
+
+
+def transform_methylation_level(
+    methylation_expr: Union[str, hl.expr.NumericExpression] = "methylation_level",
+    methylation_cutoffs: Tuple[Union[int, float], Union[int, float]] = (0, 5),
+    ht: Optional[hl.Table] = None,
+) -> Union[hl.Table, hl.expr.NumericExpression]:
+    """
+    Transform methylation level from to a 0-2 scale.
+
+    The methylation level is transformed to a 0-2 scale based on the provided cutoffs.
+    The methylation level is assigned a value of 2 if it is greater than the second
+    cutoff, 1 if it is greater than the first cutoff (but less than or equal to the
+    second), and 0 otherwise.
+
+    :param methylation_expr: Methylation level expression or annotation name in `ht`. If
+        `methylation_expr` is a string, `ht` must be provided.
+    :param methylation_cutoffs: Tuple of two integers/floats representing the cutoffs
+        for the methylation level transformation. Default is (0, 5).
+    :param ht: Input Table. Default is None.
+    :return: Table with methylation level annotation added or methylation level
+        expression.
+    """
+    if isinstance(methylation_expr, str) and ht is None:
+        raise ValueError("ht must be provided if methylation_expr is a string.")
+
+    if isinstance(methylation_expr, str):
+        methylation_expr = ht[methylation_expr]
+
+    methylation_expr = (
+        hl.case()
+        .when(methylation_expr > methylation_cutoffs[1], 2)
+        .when(methylation_expr > methylation_cutoffs[0], 1)
+        .default(0)
+    )
+
+    if ht is not None:
+        return ht.annotate(methylation_level=methylation_expr)
+
+    return methylation_expr
+
+
+def assemble_constraint_context_ht(
+    ht: hl.Table,
+    methylation_ht: hl.Table = None,
+    gerp_ht: hl.Table = None,
+    coverage_hts: Dict[str, hl.Table] = None,
+    an_hts: Dict[str, hl.Table] = None,
+    freq_hts: Dict[str, hl.Table] = None,
+    filter_hts: Dict[str, hl.Table] = None,
+    transformation_funcs: Optional[Dict[str, Callable]] = None,
+) -> hl.Table:
+    """
+    Assemble context Table with necessary annotations for constraint calculations.
+
+    .. note::
+
+        Checks for 'was_split' annotation in Table. If not present, splits
+        multiallelic sites.
+
+    The following annotations are added to the output Table:
+
+        - ref: Reference allele.
+        - alt: Alternate allele.
+        - context: Trimer context.
+        - annotations added by `annotate_mutation_type()`, `collapse_strand()`, and
+          `add_most_severe_csq_to_tc_within_vep_root()`.
+
+    Depending on the annotations provided, the following annotations may also be added:
+
+        - 'methylation_level': Methylation level annotation will be added if
+          `methylation_ht` is provided.
+        - 'gerp': GERP annotation will be added if `gerp_ht` is provided.
+        - 'coverage': Coverage annotations will be added if `coverage_hts` is provided.
+        - 'AN': Allele number annotations will be added if `an_hts` is provided.
+        - 'freq': Frequency annotations will be added if `freq_hts` is provided.
+        - 'filter': Filter annotations will be added if `filter_hts` is provided.
+
+    The `transformation_funcs` parameter can be used to transform the HTs before adding
+    annotations. The keys should be the annotation names ('coverage', 'gerp', etc.) and
+    the values should be functions that take the annotation Table and the ht that is
+    being annotated as input and return the transformed and keyed annotation. If not
+    provided, the following default transformations are used:
+
+        - 'methylation_level': Uses the 'methylation_level' annotation in the
+          Methylation Table after transforming the methylation level to a 0-2 scale
+          using `transform_grch37_methylation()` or `transform_grch38_methylation()`.
+        - 'gerp': Uses the 'S' annotation in the GERP Table. If 'S' is missing, it
+          defaults to 0.
+        - 'coverage': If necessary, pulls out the first element of coverage statistics
+          (which includes all samples). Relevant to v4, where coverage stats include
+          additional elements to stratify by UK Biobank subset and platforms.
+        - 'AN': Uses the 'AN' annotation in the allele number Table.
+        - 'freq': Uses the 'freq' annotation in the frequency Table.
+        - 'filters': Uses the 'filters' annotation in the filter Table.
+
+    The following global annotations may also be added to the output Table:
+
+        - 'an_globals': Global allele number annotations 'strata_sample_count' and
+          'strata_meta' will be added if `an_hts` is provided.
+        - 'freq_globals': Global frequency annotations 'freq_meta_sample_count' and
+          'freq_meta' will be added if `freq_hts` is provided.
+
+    :param ht: Input context Table with VEP annotation.
+    :param methylation_ht: Optional Table with methylation annotation. Default is None.
+    :param gerp_ht: Optional Table with GERP annotation. Default is None.
+    :param coverage_hts: An optional Dictionary with key as one of 'exomes' or
+        'genomes' and values as corresponding coverage Tables. Default is None.
+    :param an_hts: A Dictionary with key as one of 'exomes' or 'genomes' and
+        values as corresponding allele number Tables. Default is None.
+    :param transformation_funcs: An optional Dictionary to transform the HTs before
+        adding annotations. Default is None, which will use some default transformations
+        as described above.
+    :return: Table with sites split and necessary annotations.
+    """
+    ref = get_reference_genome(ht.locus)
+    if ref == hl.get_reference('GRCh37'):
+        from gnomad.resources.grch37 import transform_grch37_methylation as trans_methyl
+    else:
+        from gnomad.resources.grch38 import transform_grch38_methylation as trans_methyl
+
+    # Check if context Table is split, and if not, split multiallelic sites.
+    if "was_split" not in list(ht.row):
+        ht = hl.split_multi_hts(ht)
+
+    # Only need to keep the keys (locus, alleles) and the context and vep annotations.
+    ht = ht.select("context", "vep")
+
+    # Filter Table to only contigs 1-22, X, Y.
+    ht = hl.filter_intervals(
+        ht, [hl.parse_locus_interval(c, ref.name) for c in ref.contigs[:24]]
+    )
+
+    # Add annotations for 'ref' and 'alt'.
+    ht = ht.annotate(ref=ht.alleles[0], alt=ht.alleles[1])
+
+    # Trim heptamer context to create trimer context and filter to where the bases are either A, T, C, or G.
+    ht = trimer_from_heptamer(ht)
+    ht = ht.filter(ht.context.matches(f"[ATCG]{{{3}}}"))
+
+    # Annotate mutation type (such as "CpG", "non-CpG transition", "transversion") and
+    # collapse strands to deduplicate the context.
+    ht = annotate_mutation_type(collapse_strand(ht))
+
+    # Add most_severe_consequence annotation to 'transcript_consequences' within the
+    # vep root annotation.
+    ht = add_most_severe_csq_to_tc_within_vep_root(ht)
+    vep_csq_fields = [
+        "transcript_id",
+        "gene_id",
+        "gene_symbol",
+        "biotype",
+        "most_severe_consequence",
+        "mane_select",
+        "canonical",
+        "lof",
+        "lof_flags",
+    ]
+    vep_csq_fields = [
+        x
+        for x in vep_csq_fields
+        if x in ht.vep.transcript_consequences.dtype.element_type
+    ]
+    ht = ht.annotate(
+        vep=ht.vep.select(
+            "most_severe_consequence",
+            transcript_consequences=ht.vep.transcript_consequences.map(
+                lambda x: x.select(*vep_csq_fields)
+            )
+        )
+    )
+
+    # Add 'methylation_level', 'coverage', and 'gerp' annotations if specified.
+    transformation_funcs = transformation_funcs or {}
+
+    if 'methylation_level' not in transformation_funcs:
+        transformation_funcs['methylation_level'] = (
+            lambda x, t: hl.if_else(ht.cpg, trans_methyl(x)[t.locus].methylation_level, 0)
+        )
+
+    if 'gerp' not in transformation_funcs:
+        transformation_funcs['gerp'] = (
+            lambda x, t: hl.if_else(hl.is_missing(x[t.locus].S), 0, x[t.locus].S)
+        )
+
+    # If necessary, pull out first element of coverage statistics (which includes all
+    # samples). Relevant to v4, where coverage stats include additional elements to
+    # stratify by ukb subset and platforms.
+    if 'coverage' not in transformation_funcs:
+        transformation_funcs['coverage'] = (
+            lambda x, t: x[t.locus].coverage_stats[0] if "coverage_stats" in x.row else x[t.locus]
+        )
+
+    if 'AN' not in transformation_funcs:
+        transformation_funcs['AN'] = lambda x, t: x[t.locus].AN
+
+    if 'freq' not in transformation_funcs:
+        transformation_funcs['freq'] = lambda x, t: x[t.key].freq
+
+    if 'filters' not in transformation_funcs:
+        transformation_funcs['filters'] = lambda x, t: x[t.key].filters
+
+    hts = {
+        'methylation_level': methylation_ht,
+        'gerp': gerp_ht,
+        'coverage': coverage_hts,
+        'AN': an_hts,
+        'freq': freq_hts,
+        'filters': filter_hts,
+    }
+    hts = {k: v for k, v in hts.items() if v is not None}
+    exprs = {}
+    for ann, ann_ht in hts.items():
+        if isinstance(ann_ht, dict):
+            ann_expr = hl.struct(
+                **{k: transformation_funcs[ann](v, ht) for k, v in ann_ht.items()}
+            )
+        else:
+            ann_expr = transformation_funcs[ann](ann_ht, ht)
+
+        exprs[ann] = ann_expr
+
+    ht = ht.annotate(**exprs)
+
+    # Add global annotations for 'AN' and 'freq' if HTs are provided.
+    global_anns = {
+        "an_globals": (an_hts, ["strata_sample_count", "strata_meta"]),
+        "freq_globals": (freq_hts, ["freq_meta_sample_count", "freq_meta"])
+    }
+    global_anns = {k: v for k, v in global_anns.items() if v[0] is not None}
+    ht = ht.annotate_globals(
+        **{
+            k: hl.struct(
+                **{
+                    data_type: ann_ht.select_globals(
+                        *[x for x in g if x in ann_ht.globals]).index_globals()
+                    for data_type, ann_ht in hts.items()
+                }
+            )
+            for k, (hts, g) in global_anns.items()
+        }
+    )
+
+    return ht
 
 
 def build_models(

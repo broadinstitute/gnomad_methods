@@ -740,7 +740,8 @@ def assemble_constraint_context_ht(
     # Add annotations for 'ref' and 'alt'.
     ht = ht.annotate(ref=ht.alleles[0], alt=ht.alleles[1])
 
-    # Trim heptamer context to create trimer context and filter to where the bases are either A, T, C, or G.
+    # Trim heptamer context to create trimer context and filter to where the bases are
+    # either A, T, C, or G.
     ht = trimer_from_heptamer(ht)
     ht = ht.filter(ht.context.matches(f"[ATCG]{{{3}}}"))
 

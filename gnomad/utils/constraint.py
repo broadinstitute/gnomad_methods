@@ -9,7 +9,7 @@ from hail.utils.misc import divide_null, new_temp_file
 
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.vep import (
-    add_most_severe_csq_to_tc_within_vep_root,
+    add_most_severe_consequence_to_consequence,
     explode_by_vep_annotation,
     process_consequences,
 )
@@ -712,7 +712,8 @@ def assemble_constraint_context_ht(
 
     # Add most_severe_consequence annotation to 'transcript_consequences' within the
     # vep root annotation.
-    ht = add_most_severe_csq_to_tc_within_vep_root(ht)
+    csqs = ht.vep.transcript_consequences
+    csqs = add_most_severe_consequence_to_consequence(csqs)
     vep_csq_fields = [
         "transcript_id",
         "gene_id",
@@ -724,17 +725,11 @@ def assemble_constraint_context_ht(
         "lof",
         "lof_flags",
     ]
-    vep_csq_fields = [
-        x
-        for x in vep_csq_fields
-        if x in ht.vep.transcript_consequences.dtype.element_type
-    ]
+    vep_csq_fields = [x for x in vep_csq_fields if x in csqs.dtype.element_type]
     ht = ht.annotate(
         vep=ht.vep.select(
             "most_severe_consequence",
-            transcript_consequences=ht.vep.transcript_consequences.map(
-                lambda x: x.select(*vep_csq_fields)
-            ),
+            transcript_consequences=csqs.map(lambda x: x.select(*vep_csq_fields)),
         )
     )
 

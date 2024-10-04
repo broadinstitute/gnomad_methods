@@ -1,6 +1,6 @@
 # noqa: D100
 
-from typing import Union, Optional
+from typing import Optional, Union
 
 import hail as hl
 

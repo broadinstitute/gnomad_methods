@@ -1,6 +1,6 @@
 # noqa: D100
 
-from typing import Union, Optional
+from typing import Optional, Union
 
 import hail as hl
 from hail import Table
@@ -15,8 +15,8 @@ from gnomad.resources.resource_utils import (
     import_gencode,
     import_sites_vcf,
 )
-from gnomad.utils.vep import vep_or_lookup_vep
 from gnomad.utils.constraint import transform_methylation_level
+from gnomad.utils.vep import vep_or_lookup_vep
 
 
 def _import_purcell_5k(path) -> hl.Table:

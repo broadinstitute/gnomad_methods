@@ -525,15 +525,23 @@ def sum_group_callstats(
     generic_field_check_loop(t, field_check_expr, verbose)
 
 
+import logging
+from pprint import pprint
+from typing import Any, Dict, List, Optional, Union
+
+
 def summarize_variants(
     t: Union[hl.MatrixTable, hl.Table],
+    expected_contigs: List[str] = None,
 ) -> hl.Struct:
     """
     Get summary of variants in a MatrixTable or Table.
 
-    Print the number of variants to stdout and check that each chromosome has variant calls.
+    Print the number of variants to stdout and check that each chromosome has variant calls. If requested,
+    check that all expected contigs are found in the variant summary and that no unexpected contigs are found.
 
     :param t: Input MatrixTable or Table to be checked.
+    :param expected_contigs: List of contigs expected to be found in the input.
     :return: Struct of variant summary
     """
     if isinstance(t, hl.MatrixTable):
@@ -546,9 +554,23 @@ def summarize_variants(
         var_summary.contigs,
     )
 
+    # Check that all contigs have variant calls.
     for contig in var_summary.contigs:
         if var_summary.contigs[contig] == 0:
             logger.warning("%s has no variants called", var_summary.contigs)
+
+    # Check that all expected contigs are found in the variant summary and that no unexpected contigs are found.
+    if expected_contigs:
+        var_summary_contigs = var_summary["contigs"].keys()
+        missing_contigs = expected_contigs - var_summary_contigs
+        unexpected_contigs = var_summary_contigs - expected_contigs
+
+        if missing_contigs or unexpected_contigs:
+            logger.warning(
+                "FAILED contig check. Expected contigs and found contigs do not match! Expected: %s, Found: %s",
+                expected_contigs,
+                var_summary_contigs,
+            )
 
     return var_summary
 

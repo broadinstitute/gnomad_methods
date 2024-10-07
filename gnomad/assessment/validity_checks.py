@@ -525,11 +525,6 @@ def sum_group_callstats(
     generic_field_check_loop(t, field_check_expr, verbose)
 
 
-import logging
-from pprint import pprint
-from typing import Any, Dict, List, Optional, Union
-
-
 def summarize_variants(
     t: Union[hl.MatrixTable, hl.Table],
     expected_contigs: List[str] = None,

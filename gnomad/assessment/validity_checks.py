@@ -559,7 +559,8 @@ def summarize_variants(
         if var_summary.contigs[contig] == 0:
             logger.warning("%s has no variants called", var_summary.contigs)
 
-    # Check that all expected contigs are found in the variant summary and that no unexpected contigs are found.
+    # Check that all expected contigs are found in the variant summary
+    # and that no unexpected contigs are found.
     if expected_contigs:
         var_summary_contigs = var_summary["contigs"].keys()
         missing_contigs = expected_contigs - var_summary_contigs

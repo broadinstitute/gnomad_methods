@@ -566,12 +566,12 @@ def summarize_variants(
 
         if missing_contigs:
             logger.info(
-                f"FAILED contig check, the following contigs are missing: %s",
+                "FAILED contig check, the following contigs are missing: %s",
                 missing_contigs,
             )
         if unexpected_contigs:
             logger.info(
-                f"FAILED contig check, the following contigs are unexpected: %s",
+                "FAILED contig check, the following contigs are unexpected: %s",
                 unexpected_contigs,
             )
 

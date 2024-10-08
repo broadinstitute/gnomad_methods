@@ -561,11 +561,18 @@ def summarize_variants(
         missing_contigs = expected_contigs - var_summary_contigs
         unexpected_contigs = var_summary_contigs - expected_contigs
 
-        if missing_contigs or unexpected_contigs:
-            logger.warning(
-                "FAILED contig check. Expected contigs and found contigs do not match! Expected: %s, Found: %s",
-                expected_contigs,
-                var_summary_contigs,
+        logger.info("Expected contigs: %s", expected_contigs)
+        logger.info("Found contigs: %s", list(var_summary_contigs))
+
+        if missing_contigs:
+            logger.info(
+                f"FAILED contig check, the following contigs are missing: %s",
+                missing_contigs,
+            )
+        if unexpected_contigs:
+            logger.info(
+                f"FAILED contig check, the following contigs are unexpected: %s",
+                unexpected_contigs,
             )
 
     return var_summary

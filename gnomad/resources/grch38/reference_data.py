@@ -1,5 +1,7 @@
 # noqa: D100
 
+from typing import Optional, Union
+
 import hail as hl
 from hail import Table
 
@@ -13,6 +15,7 @@ from gnomad.resources.resource_utils import (
     import_gencode,
     import_sites_vcf,
 )
+from gnomad.utils.constraint import transform_methylation_level
 from gnomad.utils.vep import vep_or_lookup_vep
 
 
@@ -401,3 +404,50 @@ gencode = VersionedTableResource(
         ),
     },
 )
+
+
+def transform_grch38_methylation(
+    ht: Optional[hl.Table] = None,
+    methylation_expr: Optional[hl.expr.NumericExpression] = None,
+) -> Union[hl.Table, hl.expr.NumericExpression]:
+    """
+    Transform methylation level from the GRCh38 methylation resource to a 0-2 scale.
+
+    .. note::
+
+        One of ht or methylation_expr must be provided.
+
+    The GRCh38 methylation resource provides a score ranging from 0-15 for autosomes. The
+    determination of this score is described in Chen et al:
+    https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full
+    For chrX, methylation scores range from 0-12, but these scores are not directly
+    comparable to the autosome scores (chrX and autosomes were analyzed separately and
+    levels are relative). Cutoffs to translate these scores to the 0-2 methylation
+    level were determined by correlating these scores with the GRCh37 liftover scores.
+    Proposed cutoffs are: 0, 1-5, 6+ for autosomes, and 0, 1-3, 4+ for chrX.
+
+    :param ht: Optional Hail Table with methylation data. Default is None.
+    :param methylation_expr: Optional methylation level expression. Default is None.
+    :return: Transformed methylation level expression or annotated Hail Table.
+    """
+    if ht is None and methylation_expr is None:
+        raise ValueError("Either ht or methyl_expr must be provided.")
+
+    if methylation_expr is None:
+        methylation_expr = ht.methylation_level
+
+    if ht is None:
+        locus_expr = methylation_expr._indices.source.locus
+    else:
+        locus_expr = ht.locus
+
+    methylation_expr = hl.if_else(
+        locus_expr.contig != "chrX",
+        transform_methylation_level(methylation_expr, (0, 5)),
+        transform_methylation_level(methylation_expr, (0, 3)),
+    )
+
+    if ht is not None:
+        return ht.annotate(methylation_level=methylation_expr)
+
+    return methylation_expr

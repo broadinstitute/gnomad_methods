@@ -14,6 +14,13 @@ from gnomad.resources.config import (
 )
 
 
+@pytest.fixture(autouse=True)
+def reset_gnomad_public_resource_configuration():
+    """Reset gnomAD public resource configuration after each test."""
+    yield
+    gnomad_public_resource_configuration.source = None
+
+
 class TestTableResource:
     """Tests for TableResource."""
 

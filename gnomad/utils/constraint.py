@@ -565,6 +565,7 @@ def collapse_strand(
 
 def build_models(
     coverage_ht: hl.Table,
+    coverage_expr: hl.expr.Int32Expression,
     weighted: bool = False,
     pops: Tuple[str] = (),
     keys: Tuple[str] = (
@@ -577,6 +578,7 @@ def build_models(
     high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
+    log10_coverage: bool = True,
 ) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
@@ -627,7 +629,6 @@ def build_models(
         - alt - the alternate allele
         - methylation_level - methylation level
         - cpg - whether the site is CpG site
-        - exome_coverage - median exome coverage at integer values between 1-100
         - observed_variants - the number of observed variants in the dataset for each
         variant. Note that the term "variant" here refers to a specific substitution,
         context, methylation level, and coverage combination
@@ -638,6 +639,7 @@ def build_models(
         variant
 
     :param coverage_ht: Input coverage Table.
+    :param coverage_expr: Expression that defines the coverage metric.
     :param weighted: Whether to weight the plateau models (a linear regression
         model) by 'possible_variants'. Default is False.
     :param pops: List of populations used to build plateau models.
@@ -650,14 +652,25 @@ def build_models(
         are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
         None is returned instead of the coverage model. Default is False.
+    :param log10_coverage: Whether to convert coverage sites with log10 when building
+        the coverage model. Default is True.
     :return: Coverage model and plateau models.
     """
-    # Filter to sites with coverage equal to or above `high_cov_definition`.
-    high_cov_ht = coverage_ht.filter(coverage_ht.exome_coverage >= high_cov_definition)
+    # Annotate coverage_ht with coverage_expr set as a temporary annotation
+    # '_coverage_metric' before modifying the coverage_ht.
+    coverage_ht = coverage_ht.annotate(_coverage_metric=coverage_expr)
 
-    # Filter to sites with coverage equal to or below `upper_cov_cutoff` if specified.
+    # Filter to sites with coverage_expr equal to or above `high_cov_definition`.
+    high_cov_ht = coverage_ht.filter(
+        coverage_ht._coverage_metric >= high_cov_definition
+    )
+
+    # Filter to sites with coverage_expr equal to or below `upper_cov_cutoff` if
+    # specified.
     if upper_cov_cutoff is not None:
-        high_cov_ht = high_cov_ht.filter(high_cov_ht.exome_coverage <= upper_cov_cutoff)
+        high_cov_ht = high_cov_ht.filter(
+            high_cov_ht._coverage_metric <= upper_cov_cutoff
+        )
 
     agg_expr = {
         "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
@@ -703,8 +716,8 @@ def build_models(
     if not skip_coverage_model:
         # Filter to sites with coverage below `high_cov_definition` and larger than 0.
         low_cov_ht = coverage_ht.filter(
-            (coverage_ht.exome_coverage < high_cov_definition)
-            & (coverage_ht.exome_coverage > 0)
+            (coverage_ht._coverage_metric < high_cov_definition)
+            & (coverage_ht._coverage_metric > 0)
         )
 
         # Create a metric that represents the relative mutability of the exome calculated
@@ -717,9 +730,13 @@ def build_models(
 
         # Generate a Table with all necessary annotations (x and y listed above)
         # for the coverage model.
-        low_cov_group_ht = low_cov_ht.group_by(
-            log_coverage=hl.log10(low_cov_ht.exome_coverage)
-        ).aggregate(
+        if log10_coverage:
+            logger.info("Converting coverage sites by log10.")
+            cov_value = hl.log10(low_cov_ht._coverage_metric)
+        else:
+            cov_value = low_cov_ht._coverage_metric
+
+        low_cov_group_ht = low_cov_ht.group_by(cov_value=cov_value).aggregate(
             low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
             / (
                 high_coverage_scale_factor
@@ -728,10 +745,10 @@ def build_models(
         )
 
         # Build the coverage model.
-        # TODO: consider weighting here as well
+        # TODO: consider weighting here as well.
         coverage_model_expr = build_coverage_model(
             low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
-            log_coverage_expr=low_cov_group_ht.log_coverage,
+            coverage_expr=low_cov_group_ht.cov_value,
         )
         coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
     else:
@@ -807,24 +824,24 @@ def build_plateau_models(
 
 def build_coverage_model(
     low_coverage_oe_expr: hl.expr.Float64Expression,
-    log_coverage_expr: hl.expr.Float64Expression,
+    coverage_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
     Build coverage model.
 
-    This function uses linear regression to build a model of log10(coverage) to correct
+    This function uses linear regression to build a model of coverage to correct
     proportion of expected variation at low coverage sites.
 
     The x and y of the coverage model:
-    - x: `log_coverage_expr`
+    - x: `coverage_expr`
     - y: `low_coverage_oe_expr`
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.
-    :param log_coverage_expr: The Float64Expression of log10 coverage.
+    :param coverage_expr: The Float64Expression of the coverage expression.
     :return: StructExpression with intercept and slope of the model.
     """
-    return hl.agg.linreg(low_coverage_oe_expr, [1, log_coverage_expr])
+    return hl.agg.linreg(low_coverage_oe_expr, [1, coverage_expr])
 
 
 def get_all_pop_lengths(
@@ -947,6 +964,7 @@ def get_constraint_grouping_expr(
 
 def annotate_exploded_vep_for_constraint_groupings(
     ht: hl.Table,
+    coverage_expr: hl.expr.Int32Expression,
     vep_annotation: str = "transcript_consequences",
     include_canonical_group: bool = True,
     include_mane_select_group: bool = False,
@@ -961,7 +979,6 @@ def annotate_exploded_vep_for_constraint_groupings(
             `vep_annotation`, PolyPhen annotation from 'polyphen_prediction' in
             `vep_annotation`, or "None" if neither is defined
         - gene - 'gene_symbol' annotation inside `vep_annotation`
-        - coverage - exome coverage in `ht`
         - transcript - id from 'transcript_id' in `vep_annotation` (added when
             `include_transcript_group` is True)
         - canonical from `vep_annotation` (added when `include_canonical_group` is
@@ -974,7 +991,8 @@ def annotate_exploded_vep_for_constraint_groupings(
         - vep
         - exome_coverage
 
-    :param t: Input Table or MatrixTable.
+    :param ht: Input Table or MatrixTable.
+    :param coverage_expr: Expression that defines the coverage metric.
     :param vep_annotation: Name of annotation in 'vep' annotation (one of
         "transcript_consequences" and "worst_csq_by_gene") that will be used for
         obtaining constraint annotations. Default is "transcript_consequences".
@@ -985,6 +1003,10 @@ def annotate_exploded_vep_for_constraint_groupings(
     :return: A tuple of input Table or MatrixTable with grouping annotations added and
         the names of added annotations.
     """
+    # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric'
+    # before modifying ht.
+    ht = ht.annotate(_coverage_metric=coverage_expr)
+
     if vep_annotation == "transcript_consequences":
         if not include_canonical_group and not include_mane_select_group:
             raise ValueError(
@@ -1012,7 +1034,7 @@ def annotate_exploded_vep_for_constraint_groupings(
     # Collect the annotations used for groupings.
     groupings = get_constraint_grouping_expr(
         ht[vep_annotation],
-        coverage_expr=ht.exome_coverage,
+        coverage_expr=ht._coverage_metric,
         include_transcript_group=include_transcript_group,
         include_canonical_group=include_canonical_group,
         include_mane_select_group=include_mane_select_group,

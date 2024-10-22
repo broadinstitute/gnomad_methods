@@ -844,7 +844,7 @@ def filter_to_most_severe_consequences(
             # consequence is missing.
             curr_expr = hl.or_missing(
                 hl.is_defined(ms_csq_expr),
-                csq_expr.filter(lambda x: f_func(x[f], ms_csq_expr))
+                csq_expr.filter(lambda x: f_func(x[f], ms_csq_expr)),
             )
 
             # Add the most severe consequence to the result if the field is in the order
@@ -983,7 +983,11 @@ def get_most_severe_csq_from_multiple_csq_lists(
     result = {
         **({"protein_coding": hl.tbool} if prioritize_protein_coding else {}),
         **({"lof": hl.tstr} if prioritize_loftee else {}),
-        **({"no_lof_flags": hl.tbool} if prioritize_loftee or prioritize_protein_coding else {}),
+        **(
+            {"no_lof_flags": hl.tbool}
+            if prioritize_loftee or prioritize_protein_coding
+            else {}
+        ),
         "most_severe_consequence": hl.tstr,
     }
     result = hl.struct(**{k: hl.missing(v) for k, v in result.items()})
@@ -1009,7 +1013,9 @@ def get_most_severe_csq_from_multiple_csq_lists(
         base_args = {
             "csq_order": csq_order,
             "loftee_labels": loftee_labels,
-            "prioritize_protein_coding": True if (prioritize_protein_coding and is_tc) else False,
+            "prioritize_protein_coding": (
+                True if (prioritize_protein_coding and is_tc) else False
+            ),
             "prioritize_loftee": True if (prioritize_loftee and is_tc) else False,
             "prioritize_loftee_no_flags": prioritize_loftee_no_flags,
             "additional_order_field": add_order[0] if add_order else None,
@@ -1189,7 +1195,9 @@ def filter_vep_transcript_csqs_expr(
         if "lof_flags" in csq_fields:
             criteria.append(lambda x: hl.is_missing(x.lof_flags) | (x.lof_flags == ""))
         else:
-            logger.warning("'lof_flags' not present in consequence struct, no consequences are filtered based on  LOFTEE flags")
+            logger.warning(
+                "'lof_flags' not present in consequence struct, no consequences are filtered based on  LOFTEE flags"
+            )
     if genes is not None:
         logger.info("Filtering to genes of interest...")
         genes = hl.literal(genes)

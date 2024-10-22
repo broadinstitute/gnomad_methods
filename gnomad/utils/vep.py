@@ -966,7 +966,7 @@ def get_most_severe_csq_from_multiple_csq_lists(
     :param prioritize_protein_coding: Whether to prioritize protein-coding transcripts
         when determining the worst consequence. Default is True.
     :param prioritize_loftee: Whether to prioritize consequences with LOFTEE annotations
-        over those without. Default is False.
+        over those without. Default is True.
     :param prioritize_loftee_no_flags: Whether to prioritize LOFTEE annotated
         consequences with no flags over those with flags. Default is False.
     :param csq_list_order: Order of VEP consequences lists to be processed. Default is

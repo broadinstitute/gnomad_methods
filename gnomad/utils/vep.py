@@ -1017,7 +1017,9 @@ def get_most_severe_csq_from_multiple_csq_lists(
                 True if (prioritize_protein_coding and is_tc) else False
             ),
             "prioritize_loftee": True if (prioritize_loftee and is_tc) else False,
-            "prioritize_loftee_no_flags": prioritize_loftee_no_flags,
+            "prioritize_loftee_no_flags": (
+                True if (prioritize_loftee_no_flags and is_tc) else False
+            ),
             "additional_order_field": add_order[0] if add_order else None,
             "additional_order": add_order[1] if add_order else None,
         }

@@ -818,11 +818,14 @@ def filter_to_most_severe_consequences(
 
     for curr_field in priority_order:
         order = term_order.get(curr_field)
-        if order is None and curr_field != "most_severe_consequence":
+        # Added the below line to get around the pylint error: Unexpected keyword
+        # argument 'most_severe_consequence' in function call.
+        f_param = curr_field if curr_field not in order_result_fields else None
+        if f_param is not None and order is None:
             # If there is no order specified for the current field, then the field is
             # used as a parameter to filter_vep_transcript_csqs_expr and if there are
             # any consequences remaining, the result is set to True.
-            curr_expr = filter_vep_transcript_csqs_expr(curr_expr, **{curr_field: True})
+            curr_expr = filter_vep_transcript_csqs_expr(curr_expr, **{f_param: True})
             result[curr_field] = hl.len(curr_expr) > 0
         else:
             # Handle the case where the current field is a collection of consequences

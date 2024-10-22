@@ -932,7 +932,7 @@ def get_most_severe_csq_from_multiple_csq_lists(
     .. note::
 
         Assumes input Table is annotated with VEP and that VEP annotations have been
-        filtered to canonical transcripts if wanted.
+        filtered to canonical or MANE Select transcripts if wanted.
 
     If `include_csqs` is True, additional annotations are added for each VEP
     consequences list in `csq_list_order`, with the consequences that match the most

@@ -922,11 +922,11 @@ def get_most_severe_csq_from_multiple_csq_lists(
         "intergenic_consequences",
     ),
     add_order_by_csq_list: Dict[str, Tuple[str, List[str]]] = None,
-) -> hl.Table:
+) -> hl.expr.StructExpression:
     """
     Process multiple VEP consequences lists to determine the most severe consequence.
 
-    Adds the following annotations:
+    Returns a struct expression with the following annotations:
         - most_severe_consequence: Most severe consequence for variant.
         - protein_coding: Whether the variant is present on a protein-coding transcript.
         - lof: Whether the variant is a loss-of-function variant.
@@ -978,7 +978,7 @@ def get_most_severe_csq_from_multiple_csq_lists(
     :param add_order_by_csq_list: Dictionary of additional ordering for VEP consequences
         lists. The key is the name of the consequences list and the value is the order
         of consequences, sorted from high to low impact. Default is None.
-    :return: Table annotated with VEP summary annotations.
+    :return: StructExpression with the most severe consequence and additional annotations.
     """
     add_order_by_csq_list = add_order_by_csq_list or {}
     loftee_labels = loftee_labels or LOFTEE_LABELS
@@ -1121,7 +1121,7 @@ def filter_vep_transcript_csqs_expr(
     keep_genes: bool = True,
     match_by_gene_symbol: bool = False,
     additional_filtering_criteria: Optional[List[Callable]] = None,
-) -> Union[hl.Table, hl.MatrixTable]:
+) -> hl.expr.ArrayExpression:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
 

@@ -24,6 +24,7 @@ logger.setLevel(logging.INFO)
 
 CURRENT_EXOME_RELEASE = "4.1"
 CURRENT_GENOME_RELEASE = "4.1"
+CURRENT_JOINT_RELEASE = "4.1"
 
 CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
@@ -33,6 +34,7 @@ CURRENT_GENOME_AN_RELEASE = "4.1"
 
 EXOME_RELEASES = ["4.0", "4.1"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2", "4.0", "4.1"]
+JOINT_RELEASES = ["4.1"]
 
 EXOME_COVERAGE_RELEASES = ["4.0"]
 GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
@@ -40,7 +42,7 @@ GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
 EXOME_AN_RELEASES = ["4.1"]
 GENOME_AN_RELEASES = ["4.1"]
 
-DATA_TYPES = ["exomes", "genomes"]
+DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
@@ -332,7 +334,7 @@ def _public_release_ht_path(data_type: str, version: str) -> str:
     """
     Get public release table path.
 
-    :param data_type: One of "exomes" or "genomes"
+    :param data_type: One of "exomes", "genomes" or "joint".
     :param version: One of the release versions of gnomAD on GRCh38
     :return: Path to release Table
     """
@@ -367,7 +369,7 @@ def public_release(data_type: str) -> VersionedTableResource:
     """
     Retrieve publicly released versioned table resource.
 
-    :param data_type: One of "exomes" or "genomes"
+    :param data_type: One of "exomes", "genomes" or "joint".
     :return: Release Table
     """
     if data_type not in DATA_TYPES:
@@ -379,9 +381,12 @@ def public_release(data_type: str) -> VersionedTableResource:
     if data_type == "exomes":
         current_release = CURRENT_EXOME_RELEASE
         releases = EXOME_RELEASES
-    else:
+    elif data_type == "genomes":
         current_release = CURRENT_GENOME_RELEASE
         releases = GENOME_RELEASES
+    else:
+        current_release = CURRENT_JOINT_RELEASE
+        releases = JOINT_RELEASES
 
     return VersionedTableResource(
         current_release,

@@ -85,6 +85,285 @@ def annotate_with_mu(
     )
 
 
+def get_annotation(
+    t: Optional[Union[hl.Table, hl.MatrixTable]] = None,
+    annotation_name: Optional[str] = None,
+    expr: Optional[hl.expr.Expression] = None,
+    expr_param_name: Optional[str] = None,
+) -> hl.expr.Expression:
+    """
+    Get an annotation from a Table or MatrixTable.
+
+    Either `t` and `annotation_name` or `expr` must be provided. If `expr` is not None,
+    it will be returned. Otherwise, the annotation with the name `annotation_name` will
+    be returned from the input Table or MatrixTable.
+
+    `expr_param_name` is an optional parameter that is only used in a logger message or
+    error message if `expr` is None.
+
+    :param t: Optional Input Table or MatrixTable.
+    :param annotation_name: Optional Name of the annotation to get.
+    :param expr: Optional expression to return. Default is None.
+    :param expr_param_name: Optional name of the parameter that `expr` is associated
+        with. Default is None.
+    :return: Expression of the annotation.
+    """
+    if (t is None or annotation_name) and expr is None:
+        raise ValueError("Either `t` and `annotation_name` or `expr` must be provided.")
+
+    expr_param_name = expr_param_name or "expr"
+    if expr is None and hasattr(t, annotation_name):
+        logger.warning(
+            f"{expr_param_name} was not provided, using '{annotation_name}'."
+        )
+        expr = t[annotation_name]
+    elif expr is None:
+        raise ValueError(
+            f"{expr_param_name} was not provided and '{annotation_name}' annotation is "
+            f"not present in the input Table."
+        )
+
+    return expr
+
+
+def get_single_variant_count_expr(
+    freq_expr: Optional[hl.expr.StructExpression] = None,
+    ht: Optional[hl.Table] = None,
+    singleton: bool = False,
+    max_af: Optional[float] = None,
+    count_missing: bool = False,
+) -> Union[hl.Table, Any]:
+    """
+    Get the expression for a single variant count based on specified criteria.
+
+    One of `ht` or `freq_expr` must be provided. If `freq_expr` is not provided, the
+    function will use `ht.freq` if it exists.
+
+    A single variant count can be 1 (variant meets criteria) or 0 (variant does not meet
+    criteria). The criteria are specified by `singleton` and `max_af`.
+
+    The variant count will be 1 if:
+        - `singleton` is True and the variant is a singleton (`freq_expr.AC == 1`).
+        - `max_af` is not None and the variant has an allele frequency less than or
+          equal to `max_af` and has an allele count greater than 0 (`freq_expr.AF <=
+          max_af` and `freq_expr.AC > 0`).
+        - If `max_af` is None and `singleton` is False, and `freq_expr` is not None, the
+          variant count will be 1 if the variant has an allele count greater than 0
+          (`freq_expr.AC > 0`).
+        - If `max_af` is None and `singleton` is False, and `freq_expr` is None, the
+          variant count will be 1.
+
+    :param freq_expr: Optional StructExpression with 'AC' and 'AF' annotations. Default
+        is None.
+    :param ht: Optional Input Table. Default is None.
+    :param singleton: Whether to count singletons. Default is False.
+    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
+        applied.
+    :param count_missing: Whether to count missing frequency values. Default is False.
+    :return: Expression for a single variant count.
+    """
+    if ht is None and freq_expr is None:
+        raise ValueError("Either `ht` or `freq_expr` must be provided.")
+
+    if max_af or singleton:
+        freq_expr = get_annotation(ht, "freq", freq_expr, "freq_expr")
+        if isinstance(freq_expr, hl.expr.ArrayExpression):
+            freq_expr = freq_expr[0]
+
+    if singleton:
+        count_var = freq_expr.AC == 1, count_missing
+    elif max_af:
+        count_var = (freq_expr.AC > 0) & (freq_expr.AF <= max_af)
+    elif freq_expr is not None:
+        count_var = freq_expr.AC > 0
+    else:
+        count_var = True
+
+    return hl.int(hl.or_else(count_var, count_missing))
+
+
+def get_counts_agg_expr(
+    freq_expr: Optional[Union[hl.expr.ArrayExpression, hl.expr.StructExpression]],
+    ht: Optional[hl.Table] = None,
+    count_singletons: bool = False,
+    max_af: Optional[float] = None,
+    count_missing: bool = False,
+) -> hl.expr.StructExpression:
+    """
+    Get aggregation expression for counting variants based on specified criteria.
+
+    One of `ht` or `freq_expr` must be provided. If `freq_expr` is not provided, the
+    function will use `ht.freq` if it exists.
+
+    The aggregation expression will return a StructExpression with 'variant_count' and
+    'singleton_count' annotations. 'variant_count' will be the count of variants that
+    meet the specified criteria. 'singleton_count' will be the count of singleton
+    variants if `count_singletons` is True.
+
+    The criteria for counting variants are specified by `count_singletons` and `max_af`.
+
+    The variant count will be 1 if:
+
+        - `count_singletons` is True and the variant is a singleton
+          (`freq_expr.AC == 1`).
+        - `max_af` is not None and the variant has an allele frequency less than or
+          equal to `max_af` and has an allele count greater than 0
+          (`freq_expr.AF <= max_af` and `freq_expr.AC > 0`).
+        - If `max_af` is None and `count_singletons` is False, and `freq_expr` is not
+          None, the variant count will be 1 if the variant has an allele count greater
+          than 0 (`freq_expr.AC > 0`).
+        - If `max_af` is None and `count_singletons` is False, and `freq_expr` is None,
+          the variant count will be 1.
+
+    :param freq_expr: Optional ArrayExpression or StructExpression with 'AC' and 'AF'
+        annotations. Default is None.
+    :param ht: Optional Input Table. Default is None.
+    :param count_singletons: Whether to count singletons. Default is False.
+    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
+        applied.
+    :param count_missing: Whether to count missing frequency values. Default is False.
+    :return: StructExpression with 'variant_count' and 'singleton_count' annotations.
+    """
+    if max_af:
+        logger.info(
+            "The maximum variant allele frequency to be included in "
+            "`variant_count` is %.3f.",
+            max_af,
+        )
+
+    if count_singletons:
+        logger.info(
+            "Counting singleton variants and adding as 'singleton_count' annotation."
+        )
+
+    params = {"variant_count": {"singleton": False, "max_af": max_af}}
+    if count_singletons:
+        params["singleton_count"] = {"singleton": True}
+
+    agg_expr = {}
+    for k, v in params.items():
+        if isinstance(freq_expr, hl.expr.ArrayExpression):
+            agg_expr[k] = hl.agg.array_sum(
+                freq_expr.map(
+                    lambda x: get_single_variant_count_expr(
+                        x, **v, count_missing=count_missing
+                    )
+                )
+            )
+        else:
+            agg_expr[k] = hl.agg.sum(
+                get_single_variant_count_expr(
+                    freq_expr, ht, **v, count_missing=count_missing
+                )
+            )
+
+    return hl.struct(**agg_expr)
+
+
+def count_observed_and_possible_by_group(
+    ht: hl.Table,
+    freq_expr: Optional[
+        Union[hl.expr.ArrayExpression, hl.expr.StructExpression]
+    ] = None,
+    count_singletons: bool = False,
+    additional_grouping: Tuple[str] = ("methylation_level",),
+    partition_hint: int = 100,
+    use_table_group_by: bool = False,
+    max_af: Optional[float] = None,
+) -> Union[hl.Table, Any]:
+    """
+    Count number of observed and possible variants by context, ref, alt, and optionally methylation_level.
+
+    Performs variant count aggregations based on specified criteria
+    (`count_singletons` and `max_af`), and grouped by: 'context', 'ref', 'alt',
+    'methylation_level' (optional), and all annotations provided in
+    `additional_grouping`.
+
+    If variant allele frequency information is required based on other parameter
+    selections (described in detail below) and `freq_expr` is not supplied, `freq_expr`
+    defaults to `ht.freq` if it exists.
+
+    `freq_expr` should be an ArrayExpression of Structs with 'AC' and 'AF' annotations.
+    This is the same format as the `freq` annotation that is created using
+    `annotate_freq()`.
+
+    Variant allele frequency information is needed when:
+        - `max_af` is not None - `freq_expr.AF` (if `freq_expr` is a StructExpression)
+          or `freq_expr.map(lambda x: x.AF)` is used to filter to only variants
+          with a maximum allele frequency of `max_af` prior to counting variants. In
+          the standard `freq` ArrayExpression annotated by `annotate_freq()`, this
+          first element corresponds to the allele frequency information for high quality
+          genotypes (adj).
+        - `count_singletons` is True and `singleton_expr` is None - If singleton counts
+          are requested and no expression is specified to determine whether a variant
+          is a singleton, `freq_expr[0].AC == 1`. In the
+          standard `freq` ArrayExpression annotated by `annotate_freq()`, this
+          corresponds to allele count of only 1 in the callset after filtering to high
+          quality genotypes.
+
+    This function will return a Table with annotations used for grouping ('context',
+    'ref', 'alt', `additional_grouping`) and 'variant_count' annotation.
+
+    .. note::
+
+        The following annotations should be present in `ht`:
+            - ref - the reference allele
+            - alt - the alternate base
+            - context - trinucleotide genomic context
+            - freq - allele frequency information (AC, AN, AF, homozygote count; not
+              required if `freq_expr` is given)
+
+    :param ht: Input Hail Table.
+    :param freq_expr: ArrayExpression of Structs or a StructExpression with 'AC' and
+        'AF' annotations. If `freq_expr` is None and `max_af` or `count_singletons` is
+        True, `freq_expr` would be `ht.freq`.
+    :param count_singletons: Whether to count singletons. Default is False.
+    :param additional_grouping: Additional features to group by. e.g. 'exome_coverage'.
+        Default is ("methylation_level", ).
+    :param partition_hint: Target number of partitions for aggregation. Default is 100.
+    :param use_table_group_by: Whether to group `ht` before aggregating the variant
+        counts. If `use_table_group_by` is False, function will return a hl.
+        StructExpression. Default is False.
+    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
+        applied.
+    :return: Table including 'variant_count' annotation and if requested,
+        `singleton_count`.
+    """
+    grouping = hl.struct(context=ht.context, ref=ht.ref, alt=ht.alt)
+    grouping = grouping.annotate(
+        **{g: ht[g] for g in additional_grouping if g not in grouping}
+    )
+
+    logger.info(
+        "The following annotations will be used to group the input Table rows when"
+        " counting variants: %s.",
+        ", ".join(grouping.keys()),
+    )
+
+    params = [freq_expr, ht, count_singletons, max_af]
+    agg_expr = {
+        "observed_variants": get_counts_agg_expr(*params).variant_count,
+        "possible_variants": get_counts_agg_expr(
+            *params, count_missing=True
+        ).variant_count,
+    }
+
+    # Apply each variant count aggregation in `agg_expr` to get counts for all
+    # combinations of `grouping`.
+    if use_table_group_by:
+        return (
+            ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg_expr)
+        )
+    else:
+        return ht.aggregate(
+            hl.struct(
+                **{
+                    k: hl.struct(**{f: hl.agg.group_by(grouping, v[f]) for f in v})
+                    for k, v in agg_expr.items()
+                }
+            )
+        )
+
 def count_variants_by_group(
     ht: hl.Table,
     freq_expr: Optional[hl.expr.ArrayExpression] = None,
@@ -274,13 +553,14 @@ def count_variants_by_group(
         )
 
 
-def get_downsampling_freq_indices(
+def get_pop_freq_indices(
     freq_meta_expr: hl.expr.ArrayExpression,
     pop: str = "global",
     variant_quality: str = "adj",
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = None,
     downsamplings: Optional[List[int]] = None,
+    skip_downsamplings: bool = False,
 ) -> hl.expr.ArrayExpression:
     """
     Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified `genetic_ancestry_label` and "variant_quality" values.
@@ -313,12 +593,17 @@ def get_downsampling_freq_indices(
         filter_expr = (
             (m.get("group") == variant_quality)
             & (hl.any([m.get(l, "") == pop for l in gen_anc]))
-            & m.contains("downsampling")
+            & ~m.contains("sex")
         )
-        if downsamplings is not None:
-            filter_expr &= hl.literal(downsamplings).contains(
-                hl.int(m.get("downsampling", "0"))
-            )
+
+        if skip_downsamplings:
+            filter_expr &= ~m.contains("downsampling")
+        else:
+            if downsamplings is not None:
+                filter_expr &= hl.literal(downsamplings).contains(
+                    hl.int(m.get("downsampling", "0"))
+                )
+
         if subset is None:
             filter_expr &= ~m.contains("subset")
         else:
@@ -331,7 +616,7 @@ def get_downsampling_freq_indices(
     return hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"]))
 
 
-def downsampling_counts_expr(
+def pop_counts_expr(
     freq_expr: hl.expr.ArrayExpression,
     freq_meta_expr: hl.expr.ArrayExpression,
     pop: str = "global",
@@ -341,6 +626,7 @@ def downsampling_counts_expr(
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = None,
     downsamplings: Optional[List[int]] = None,
+    skip_downsamplings: bool = False,
 ) -> hl.expr.ArrayExpression:
     """
     Return an aggregation expression to compute an array of counts of all downsamplings found in `freq_expr` where specified criteria is met.
@@ -371,17 +657,19 @@ def downsampling_counts_expr(
         subset will be included.
     :param downsamplings: Optional List of integers specifying what downsampling
         indices to obtain. Default is None, which will return all downsampling counts.
+    :param skip_downsamplings: Whether of not to skip pulling the downsampling data.
     :return: Aggregation Expression for an array of the variant counts in downsamplings
         for specified population.
     """
     # Get an array of indices sorted by "downsampling" key.
-    sorted_indices = get_downsampling_freq_indices(
+    sorted_indices = get_pop_freq_indices(
         freq_meta_expr,
         pop,
         variant_quality,
         genetic_ancestry_label,
         subset,
         downsamplings,
+        skip_downsamplings,
     ).map(lambda x: x[0])
 
     def _get_criteria(i: hl.expr.Int32Expression) -> hl.expr.Int32Expression:
@@ -856,6 +1144,7 @@ def build_models(
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
     log10_coverage: bool = True,
+    additional_grouping=(),
 ) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
@@ -960,8 +1249,15 @@ def build_models(
 
     # Generate a Table with all necessary annotations (x and y listed above)
     # for the plateau models.
-    high_cov_group_ht = high_cov_ht.group_by(*keys).aggregate(**agg_expr)
-    high_cov_group_ht = annotate_mutation_type(high_cov_group_ht)
+    mutation_type_annotations =  ("cpg", "mutation_type")
+    has_mt = all([x in high_cov_ht.row for x in mutation_type_annotations])
+    grouping = (keys + mutation_type_annotations) if has_mt else keys
+    grouping = grouping + additional_grouping
+    high_cov_group_ht = high_cov_ht.group_by(*grouping).aggregate(**agg_expr)
+    if has_mt:
+        high_cov_group_ht = high_cov_group_ht.key_by(*keys)
+    else:
+        high_cov_group_ht = annotate_mutation_type(high_cov_group_ht)
 
     # Build plateau models.
     plateau_models_agg_expr = build_plateau_models(
@@ -973,6 +1269,7 @@ def build_models(
             high_cov_group_ht[f"observed_{pop}"] for pop in pops
         ],
         weighted=weighted,
+        additional_grouping={g: high_cov_group_ht[g] for g in additional_grouping}
     )
     if pops:
         # Map the models to their corresponding populations if pops is specified.
@@ -1041,6 +1338,7 @@ def build_plateau_models(
     possible_variants_expr: hl.expr.Int64Expression,
     pops_observed_variants_array_expr: List[hl.expr.ArrayExpression] = [],
     weighted: bool = False,
+    additional_grouping: Dict[str, hl.expr.StringExpression] = {},
 ) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
     """
     Build plateau models to calibrate mutation rate to compute predicted proportion observed value.
@@ -1068,10 +1366,12 @@ def build_plateau_models(
         key of the dictionary in the nested list is CpG status (BooleanExpression), and
         the value is an ArrayExpression containing intercept and slope values.
     """
+    grouping = hl.struct(cpg=cpg_expr, **additional_grouping)
+
     # Build plateau models for all sites
     plateau_models_agg_expr = {
         "total": hl.agg.group_by(
-            cpg_expr,
+            grouping,
             hl.agg.linreg(
                 observed_variants_expr / possible_variants_expr,
                 [1, mu_snp_expr],
@@ -1209,12 +1509,14 @@ def get_constraint_grouping_expr(
         groupings. Default is True.
     :param include_mane_select_group: Whether to include mane_select annotation in the
         groupings. Default is False.
-
     :return: A dictionary with keys as annotation names and values as actual
         annotations.
     """
     lof_expr = vep_annotation_expr.lof
-    polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
+    if "polyphen_prediction" in vep_annotation_expr:
+        polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
+    else:
+        polyphen_prediction_expr = hl.missing(hl.tstr)
 
     # Create constraint annotations to be used for groupings.
     groupings = {
@@ -1346,17 +1648,19 @@ def compute_expected_variants(
     :return: A dictionary with predicted proportion observed ratio and expected variant
         counts.
     """
+    #model_key = hl.struct(cpg=cpg_expr)
+    model_key = cpg_expr
     if pop is None:
         pop = ""
-        plateau_model = hl.literal(plateau_models_expr.total)[cpg_expr]
+        plateau_model = hl.literal(plateau_models_expr.total)[model_key]
         slope = plateau_model[1]
         intercept = plateau_model[0]
         agg_func = hl.agg.sum
         ann_to_sum = ["observed_variants", "possible_variants"]
     else:
         plateau_model = hl.literal(plateau_models_expr[pop])
-        slope = hl.map(lambda f: f[cpg_expr][1], plateau_model)
-        intercept = hl.map(lambda f: f[cpg_expr][0], plateau_model)
+        slope = hl.map(lambda f: f[model_key][1], plateau_model)
+        intercept = hl.map(lambda f: f[model_key][0], plateau_model)
         agg_func = hl.agg.array_sum
         pop = f"_{pop}"
         ann_to_sum = [f"downsampling_counts{pop}"]

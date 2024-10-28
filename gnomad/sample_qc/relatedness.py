@@ -987,7 +987,7 @@ def compute_related_samples_to_drop(
     return related_samples_to_drop_ht
 
 
-def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
+def filter_vds_to_trios(vds: hl.vds, fam_ht: hl.Table) -> hl.MatrixTable:
     """
     Filter a MatrixTable to a set of trios in `fam_ht` and annotates with adj.
 
@@ -1000,11 +1000,9 @@ def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
     fam_ht = fam_ht.explode("fam_members", name="s")
     fam_ht = fam_ht.key_by("s").select().distinct()
 
-    mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
-    if "adj" not in mt.entry:
-        mt = annotate_adj(mt)
+    vds = hl.vds.filter_samples(vds, fam_ht)
 
-    return mt
+    return vds
 
 
 def generate_trio_stats_expr(

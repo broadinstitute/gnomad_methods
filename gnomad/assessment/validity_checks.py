@@ -1221,7 +1221,6 @@ def check_missingness_of_struct(
 
     Either a standalone or nested Struct can be provided
 
-
     :param struct_expr: A StructExpression to check for missing values.
     :param prefix: A prefix to append to names of struct fields within the struct_expr.
     :return: A dictionary mapping field names to their missingness fraction expressions, with nested dictioanries represented any nested structs.
@@ -1264,13 +1263,10 @@ def check_array_struct_missingness(
     """
     Check the missingness of all fields in an array of structs.
 
-
     Iterates over arrays of structs and calculates the percentage of missing values for each element of the array and each struct.
 
     :param ht: Input Table.
-    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries,
-                                      which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
-
+    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
     :return: A Struct where each field represents a struct field's missingness percentage across the Table for each element of the specified arrays.
     """
     expr_dict = {}

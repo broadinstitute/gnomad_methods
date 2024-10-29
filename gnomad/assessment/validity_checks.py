@@ -1271,7 +1271,8 @@ def check_array_struct_missingness(
     """
     expr_dict = {}
 
-    # For each specified array, unfurl the array elements and their structs into expr_dict.
+    # For each specified array, unfurl the array elements and their structs
+    # into expr_dict.
     for array, array_index_dict in indexed_array_annotations.items():
         array_index_dict = hl.eval(ht[array_index_dict])
         for k, i in array_index_dict.items():

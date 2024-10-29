@@ -1211,3 +1211,83 @@ def count_vep_annotated_variants_per_interval(
     )
 
     return interval_ht
+
+
+def check_missingness_of_struct(
+    struct_expr: hl.expr.StructExpression, prefix: str = ""
+) -> dict:
+    """
+    Recursively check the fraction of missing values of all fields within a StructExpression.
+
+    Either a standalone or nested Struct can be provided
+
+
+    :param struct_expr: A StructExpression to check for missing values.
+    :param prefix: A prefix to append to names of struct fields within the struct_expr.
+    :return: A dictionary mapping field names to their missingness fraction expressions, with nested dictioanries represented any nested structs.
+    """
+    if isinstance(struct_expr, hl.expr.StructExpression):
+        return {
+            f"{prefix}.{key}": check_missingness_of_struct(
+                struct_expr[key], f"{prefix}.{key}"
+            )
+            for key in struct_expr.keys()
+        }
+    else:
+        return hl.agg.fraction(hl.is_missing(struct_expr))
+
+
+def flatten_missingness_struct(missingness_struct: hl.expr.StructExpression) -> dict:
+    """
+    Recursively flatten and evaluates nested dictionaries of missingness within a Struct.
+
+    :param missingness_struct: Struct containing dictionaries of missingness values.
+    :return: Dictionary with field names as keys and their evaluated missingness fractions as values.
+    """
+    missingness_dict = {}
+    for key, value in missingness_struct.items():
+        # Recursively check nested missingness dictionaries and flatten if needed.
+        if isinstance(value, dict):
+            missingness_dict.update(flatten_missingness_struct(value))
+        else:
+            missingness_dict[key] = hl.eval(value)
+    return missingness_dict
+
+
+def check_array_struct_missingness(
+    ht,
+    indexed_array_annotations: Dict[str, str] = {
+        "faf": "faf_index_dict",
+        "freq": "freq_index_dict",
+    },
+) -> hl.expr.StructExpression:
+    """
+    Check the missingness of all fields in an array of structs.
+
+
+    Iterates over arrays of structs and calculates the percentage of missing values for each element of the array and each struct.
+
+    :param ht: Input Table.
+    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries,
+                                      which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
+
+    :return: A Struct where each field represents a struct field's missingness percentage across the Table for each element of the specified arrays.
+    """
+    expr_dict = {}
+
+    # For each specified array, unfurl the array elements and their structs into expr_dict.
+    for array, array_index_dict in indexed_array_annotations.items():
+        array_index_dict = hl.eval(ht[array_index_dict])
+        for k, i in array_index_dict.items():
+            for f in ht[array][0].keys():
+                expr_dict[f"{f}_{k}"] = ht[array][i][f]
+
+    # Create row annotations for each element of the arrays and their structs.
+    ht = ht.annotate(**expr_dict)
+
+    # Compute missingness for each of the newly created row annotations.
+    missingness_dict = {
+        field_name: hl.agg.fraction(hl.is_missing(ht[field_name]))
+        for field_name in expr_dict.keys()
+    }
+    return ht.aggregate(hl.struct(**missingness_dict))

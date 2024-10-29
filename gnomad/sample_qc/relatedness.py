@@ -987,24 +987,22 @@ def compute_related_samples_to_drop(
     return related_samples_to_drop_ht
 
 
-def filter_mt_to_trios(mt: hl.MatrixTable, fam_ht: hl.Table) -> hl.MatrixTable:
+def filter_vds_to_trios(vds: hl.vds, fam_ht: hl.Table) -> hl.vds:
     """
     Filter a MatrixTable to a set of trios in `fam_ht` and annotates with adj.
 
-    :param mt: A Matrix Table to filter to only trios
+    :param vds: A Variant Dataset to filter to only trios
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
-    :return: A MT filtered to trios and adj annotated
+    :return: A Variant Dataset with only the trios in `fam_ht`
     """
     # Filter MT to samples present in any of the trios
     fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
     fam_ht = fam_ht.explode("fam_members", name="s")
     fam_ht = fam_ht.key_by("s").select().distinct()
 
-    mt = mt.filter_cols(hl.is_defined(fam_ht[mt.col_key]))
-    if "adj" not in mt.entry:
-        mt = annotate_adj(mt)
+    vds = hl.vds.filter_samples(vds, fam_ht)
 
-    return mt
+    return vds
 
 
 def generate_trio_stats_expr(

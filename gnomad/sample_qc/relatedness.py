@@ -989,7 +989,7 @@ def compute_related_samples_to_drop(
 
 def filter_vds_to_trios(vds: hl.vds, fam_ht: hl.Table) -> hl.vds:
     """
-    Filter a MatrixTable to a set of trios in `fam_ht` and annotates with adj.
+    Filter a Variant Dataset to a set of trios in `fam_ht`.
 
     :param vds: A Variant Dataset to filter to only trios
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`

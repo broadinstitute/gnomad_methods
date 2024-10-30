@@ -985,22 +985,27 @@ def compute_related_samples_to_drop(
     return related_samples_to_drop_ht
 
 
-def filter_vds_to_trios(vds: hl.vds, fam_ht: hl.Table) -> hl.vds:
+def filter_mt_to_trios(t: Union[hl.vds, hl.matrixtable], fam_ht: hl.Table) -> Union[hl.vds, hl.matrixtable]:
     """
-    Filter a Variant Dataset to a set of trios in `fam_ht`.
+    Filter a Matrix Table or a Variant Dataset to a set of trios in `fam_ht`.
 
-    :param vds: A Variant Dataset to filter to only trios
+    :param t: A Variant Dataset to filter to only trios
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
-    :return: A Variant Dataset with only the trios in `fam_ht`
+    :return: A Matrix Table or a Variant Dataset with only the trios in `fam_ht`
     """
     # Filter VDS to samples present in any of the trios
     fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
     fam_ht = fam_ht.explode("fam_members", name="s")
     fam_ht = fam_ht.key_by("s").select().distinct()
 
-    vds = hl.vds.filter_samples(vds, fam_ht)
+    if isinstance(t, hl.MatrixTable):
+        t = t.filter_cols(hl.is_defined(fam_ht[t.col_key]))
+    elif isinstance(t, hl.vds.VariantDataset):
+        t = hl.vds.filter_samples(t, fam_ht)
+    else:
+        raise ValueError("t must be a MatrixTable or VariantDataset")
 
-    return vds
+    return t
 
 
 def generate_trio_stats_expr(

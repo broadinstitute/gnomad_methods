@@ -985,7 +985,9 @@ def compute_related_samples_to_drop(
     return related_samples_to_drop_ht
 
 
-def filter_mt_to_trios(t: Union[hl.vds, hl.matrixtable], fam_ht: hl.Table) -> Union[hl.vds, hl.matrixtable]:
+def filter_mt_to_trios(
+    t: Union[hl.vds, hl.matrixtable], fam_ht: hl.Table
+) -> Union[hl.vds, hl.matrixtable]:
     """
     Filter a Matrix Table or a Variant Dataset to a set of trios in `fam_ht`.
 

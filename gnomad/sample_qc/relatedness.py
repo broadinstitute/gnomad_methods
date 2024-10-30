@@ -8,8 +8,6 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 import hail as hl
 import networkx as nx
 
-from gnomad.utils.annotations import annotate_adj
-
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -995,7 +993,7 @@ def filter_vds_to_trios(vds: hl.vds, fam_ht: hl.Table) -> hl.vds:
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
     :return: A Variant Dataset with only the trios in `fam_ht`
     """
-    # Filter MT to samples present in any of the trios
+    # Filter VDS to samples present in any of the trios
     fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
     fam_ht = fam_ht.explode("fam_members", name="s")
     fam_ht = fam_ht.key_by("s").select().distinct()

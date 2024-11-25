@@ -4,6 +4,7 @@ import logging
 from typing import Callable, List, Optional, Tuple, Union
 
 import hail as hl
+import numpy as np
 
 from gnomad.utils.filtering import filter_to_gencode_cds
 from gnomad.utils.vep import (
@@ -594,7 +595,10 @@ def clean_tissue_name_for_browser(tissue_name: str) -> str:
     return formatted_name
 
 
-def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
+def create_tx_annotation_by_region(
+    ht: hl.Table,
+    tolerance: float = 1e-06,
+) -> hl.Table:
     """
     Create transcript annotation by region for loading into the gnomAD browser.
 
@@ -640,8 +644,12 @@ def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
         +---------+--------------------------------------------------------------+
 
     :param ht: Input Hail Table with transcript expression information.
+    :param tolerance: Tolerance for comparing floating point numbers. Default is 1e-06.
     :return: Hail Table with transcript annotations by region.
     """
+    # Format the tolerance for string formatting.
+    tolerance_str = f"%.{int(abs(np.log10(tolerance)))}f"
+
     # Get a list of tissues and drop the 'tissues' field from the Table.
     tissues = hl.eval(ht.tissues)
     ht = ht.select_globals()
@@ -652,15 +660,19 @@ def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
         "gene_id",
         chrom=ht.locus.contig,
         pos=ht.locus.position,
-        mean=set_nan_to_zero(ht.exp_prop_mean),
-        tissues=hl.struct(**{t: set_nan_to_zero(ht[t]) for t in tissues}),
+        mean=hl.format(tolerance_str, set_nan_to_zero(ht.exp_prop_mean)),
+        tissues=hl.struct(
+            **{t: hl.format(tolerance_str, set_nan_to_zero(ht[t])) for t in tissues}),
     )
 
-    # Order by gene_id and position, then drop the locus field.
-    ht = ht.order_by(ht.gene_id, hl.asc(ht.pos)).drop("locus")
+    # Remove the key, then drop the locus field.
+    ht = ht.key_by().drop("locus")
 
     # Key by all fields except 'pos' and collect by key into a field named 'pos'.
     ht = ht.key_by(*[r for r in ht.row_value if r != "pos"]).collect_by_key("pos")
+
+    # Sort the 'pos' field in ascending order.
+    ht = ht.annotate(pos=hl.sorted(ht.pos))
 
     # Annotate with 'start' and 'stop' positions for regions by merging adjacent
     # positions.
@@ -674,11 +686,17 @@ def create_tx_annotation_by_region(ht: hl.Table) -> hl.Table:
             [(ht.pos[0].pos, ht.pos[0].pos)],
             ht.pos[1:],
         )
-    ).explode("pos")
+    )
+    ht = ht.explode("pos")
 
     # Key by 'gene_id' and transform 'pos' into 'start' and 'stop' fields.
     ht = ht.key_by("gene_id")
-    ht = ht.transmute(start=ht.pos[0], stop=ht.pos[1])
+    ht = ht.transmute(
+        start=ht.pos[0],
+        stop=ht.pos[1],
+        mean=hl.float64(ht.mean),
+        tissues=hl.struct(**{t: hl.float64(m) for t, m in ht.tissues.items()}),
+    )
 
     # Select fields in preferred order and collect by key into a field named 'regions'.
     ht = ht.select("chrom", "start", "stop", "mean", "tissues")

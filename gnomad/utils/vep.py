@@ -1058,6 +1058,7 @@ def update_loftee_end_trunc_filter(
     :return: Struct or Array of Structs with updated LOFTEE end truncation filter
         annotation.
     """
+
     def _update_csq_struct(csq_expr: hl.expr.StructExpression):
         """
         Update the LOFTEE end truncation filter in the input Struct.
@@ -1077,7 +1078,8 @@ def update_loftee_end_trunc_filter(
         filter_expr = hl.or_missing(filter_expr.length() > 0, hl.delimit(filter_expr))
 
         lof_expr = hl.or_missing(
-            hl.is_defined(csq_expr.lof), hl.if_else(hl.is_missing(filter_expr), "HC", "LC")
+            hl.is_defined(csq_expr.lof),
+            hl.if_else(hl.is_missing(filter_expr), "HC", "LC"),
         )
 
         return hl.struct(lof_filter=filter_expr, lof=lof_expr)

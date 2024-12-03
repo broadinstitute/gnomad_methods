@@ -417,10 +417,10 @@ def transform_grch38_methylation(
 
         One of ht or methylation_expr must be provided.
 
-    The GRCh38 methylation resource provides a score ranging from 0-15 for autosomes. The
+    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes. The
     determination of this score is described in Chen et al:
     https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full
-    For chrX, methylation scores range from 0-12, but these scores are not directly
+    For chrX, methylation scores range from 0 to 12, but these scores are not directly
     comparable to the autosome scores (chrX and autosomes were analyzed separately and
     levels are relative). Cutoffs to translate these scores to the 0-2 methylation
     level were determined by correlating these scores with the GRCh37 liftover scores.

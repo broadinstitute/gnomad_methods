@@ -386,7 +386,7 @@ def transform_grch37_methylation(
 
         One of ht or methylation_expr must be provided.
 
-    The GRCh37 methylation resource provides a MEAN score ranging from 0-1. We transform
+    The GRCh37 methylation resource provides a MEAN score ranging from 0 to 1. We transform
     this to a 0-2 scale by converting any value greater than 0.6 to 2, any value less
     than or equal to 0.2 to 0, and any value in between to 1.
 

@@ -431,7 +431,7 @@ def transform_grch38_methylation(
     :return: Transformed methylation level expression or annotated Hail Table.
     """
     if ht is None and methylation_expr is None:
-        raise ValueError("Either ht or methyl_expr must be provided.")
+        raise ValueError("One of 'ht' or 'methylation_expr' must be provided")
 
     if methylation_expr is None:
         methylation_expr = ht.methylation_level

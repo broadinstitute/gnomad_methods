@@ -734,7 +734,7 @@ def assemble_constraint_context_ht(
         )
     )
 
-    # Add 'methylation_level', 'coverage', and 'gerp' annotations if specified.
+    # Add 'methylation_level' and 'gerp' annotations if specified.
     transformation_funcs = transformation_funcs or {}
 
     if "methylation_level" not in transformation_funcs:

@@ -574,7 +574,7 @@ def transform_methylation_level(
     ht: Optional[hl.Table] = None,
 ) -> Union[hl.Table, hl.expr.NumericExpression]:
     """
-    Transform methylation level from to a 0-2 scale.
+    Transform methylation level into a 0 to 2 scale.
 
     The methylation level is transformed to a 0-2 scale based on the provided cutoffs.
     The methylation level is assigned a value of 2 if it is greater than the second
@@ -702,10 +702,8 @@ def assemble_constraint_context_ht(
     # Add annotations for 'ref' and 'alt'.
     ht = ht.annotate(ref=ht.alleles[0], alt=ht.alleles[1])
 
-    # Trim heptamer context to create trimer context and filter to where the bases are
-    # either A, T, C, or G.
+    # Trim heptamer context to create trimer context.
     ht = trimer_from_heptamer(ht)
-    ht = ht.filter(ht.context.matches(f"[ATCG]{{{3}}}"))
 
     # Annotate mutation type (such as "CpG", "non-CpG transition", "transversion") and
     # collapse strands to deduplicate the context.

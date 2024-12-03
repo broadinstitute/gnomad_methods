@@ -390,11 +390,13 @@ def transform_grch37_methylation(
     this to a 0-2 scale by converting any value greater than 0.6 to 2, any value less
     than or equal to 0.2 to 0, and any value in between to 1.
 
-
     :param ht: Optional Hail Table with methylation data. Default is None.
     :param methylation_expr: Optional methylation level expression. Default is None.
     :return: Transformed methylation level expression or annotated Hail Table.
     """
+    if ht is None and methylation_expr is None:
+        raise ValueError("One of 'ht' or 'methylation_expr' must be provided")
+
     return transform_methylation_level(
         methylation_expr="MEAN" if methylation_expr is None else methylation_expr,
         methylation_cutoffs=(0.2, 0.6),

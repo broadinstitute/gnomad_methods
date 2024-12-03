@@ -24,6 +24,43 @@ Low coverage sites require an extra calibration when computing the proportion of
 """
 
 
+def get_mu_annotation_expr(
+    ht: hl.Table,
+    mutation_ht: hl.Table,
+    mu_expr: Union[str, hl.expr.Float64Expression] = "mu_snp",
+) -> hl.expr.Float64Expression:
+    """
+    Get mutation rate annotation expression from the mutation rate Table.
+
+    .. note::
+
+        Function expects that `ht` includes `mutation_ht`'s key fields. Note that these
+        annotations don't need to be the keys of `ht`. The standard keys used are:
+        'context', 'ref', 'alt', and 'methylation_level'.
+
+    This function converts the mutation rate Table into a dictionary and uses the
+    mutation rate HT key fields in the input Table to get the mutation rate annotation
+    expression. The dictionary is used instead of joining the mutation rate Table to
+    the input Table to avoid unnecessary shuffling given the small size of the
+    mutation rate Table.
+
+    :param ht: Input Table that will be annotated with the returned mutation rate
+        expression.
+    :param mutation_ht: Mutation rate Table.
+    :param mu_expr: Mutation rate expression or annotation name in `mutation_ht`.
+        Default is 'mu_snp'.
+    :return: Mutation rate annotation expression.
+    """
+    if isinstance(mu_expr, str):
+        mu_expr = mutation_ht[mu_expr]
+
+    mutation_dict = mutation_ht.aggregate(
+        hl.agg.group_by(mutation_ht.key, hl.agg.collect(mu_expr)), _localize=False
+    ).map_values(lambda x: x[0])
+
+    return mutation_dict.get(hl.struct(**{k: ht[k] for k in mutation_ht.key}))
+
+
 def annotate_with_mu(
     ht: hl.Table,
     mutation_ht: hl.Table,
@@ -34,8 +71,9 @@ def annotate_with_mu(
 
     .. note::
 
-        Function expects that`ht` includes`mutation_ht`'s key fields. Note that these
-        annotations don't need to be the keys of `ht`.
+        Function expects that `ht` includes `mutation_ht`'s key fields. Note that these
+        annotations don't need to be the keys of `ht`. The standard keys used are:
+        'context', 'ref', 'alt', and 'methylation_level'.
 
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.
@@ -43,7 +81,7 @@ def annotate_with_mu(
         Default is 'mu_snp'.
     :return: Table with mutational rate annotation added.
     """
-    mu = mutation_ht.index(*[ht[k] for k in mutation_ht.key])[mu_annotation]
+    mu = get_mu_annotation_expr(ht, mutation_ht, mutation_ht[mu_annotation])
     return ht.annotate(
         **{mu_annotation: hl.case().when(hl.is_defined(mu), mu).or_error("Missing mu")}
     )

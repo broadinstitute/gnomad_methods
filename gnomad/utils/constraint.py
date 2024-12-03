@@ -32,6 +32,12 @@ def get_mu_annotation_expr(
     """
     Get mutation rate annotation expression from the mutation rate Table.
 
+    .. note::
+
+        Function expects that `ht` includes `mutation_ht`'s key fields. Note that these
+        annotations don't need to be the keys of `ht`. The standard keys used are:
+        'context', 'ref', 'alt', and 'methylation_level'.
+
     This function converts the mutation rate Table into a dictionary and uses the
     mutation rate HT key fields in the input Table to get the mutation rate annotation
     expression. The dictionary is used instead of joining the mutation rate Table to
@@ -65,8 +71,9 @@ def annotate_with_mu(
 
     .. note::
 
-        Function expects that`ht` includes`mutation_ht`'s key fields. Note that these
-        annotations don't need to be the keys of `ht`.
+        Function expects that `ht` includes `mutation_ht`'s key fields. Note that these
+        annotations don't need to be the keys of `ht`. The standard keys used are:
+        'context', 'ref', 'alt', and 'methylation_level'.
 
     :param ht: Input Table to annotate.
     :param mutation_ht: Mutation rate Table.

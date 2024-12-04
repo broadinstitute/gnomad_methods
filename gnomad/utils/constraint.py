@@ -642,7 +642,7 @@ def assemble_constraint_context_ht(
         - 'coverage': Coverage annotations will be added if `coverage_hts` is provided.
         - 'AN': Allele number annotations will be added if `an_hts` is provided.
         - 'freq': Frequency annotations will be added if `freq_hts` is provided.
-        - 'filter': Filter annotations will be added if `filter_hts` is provided.
+        - 'filters': Filter annotations will be added if `filter_hts` is provided.
 
     The `transformation_funcs` parameter can be used to transform the HTs before adding
     annotations. The keys should be the annotation names ('coverage', 'gerp', etc.) and

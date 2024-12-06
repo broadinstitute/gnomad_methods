@@ -986,31 +986,34 @@ def compute_related_samples_to_drop(
 
 
 def filter_to_trios(
-    mtds: Union[hl.MatrixTable, hl.vds.VariantDataset], fam_ht: hl.Table
-) -> Union[hl.MatrixTable, hl.vds.VariantDataset]:
+    mtds: Union[hl.Table, hl.MatrixTable, hl.vds.VariantDataset], fam_ht: hl.Table
+) -> Union[hl.Table, hl.MatrixTable, hl.vds.VariantDataset]:
     """
-    Filter a Matrix Table or a Variant Dataset to a set of trios in `fam_ht`.
+    Filter a Table, MatrixTable or VariantDataset to a set of trios in `fam_ht`.
 
     .. note::
-           Using `filter_cols` in MatrixTable will not affect the number of rows (
-           variants), however, using `filter_samples` in VariantDataset will remove
-           the variants that are not present in any of the trios.
 
-    :param mtds: A Variant Dataset or a Matrix Table to filter to only trios
-    :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`
-    :return: A Matrix Table or a Variant Dataset with only the trios in `fam_ht`
+        Using `filter_cols` in MatrixTable will not affect the number of rows
+        (variants), however, using `filter_samples` in VariantDataset will remove the
+        variants that are not present in any of the trios.
+
+    :param mtds: A Variant Dataset or a Matrix Table or a Table to filter to only trios.
+    :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`.
+    :return: A Table, MatrixTable or VariantDataset with only the trios in `fam_ht`.
     """
     # Filter to samples present in any of the trios.
     fam_ht = fam_ht.annotate(fam_members=[fam_ht.id, fam_ht.pat_id, fam_ht.mat_id])
     fam_ht = fam_ht.explode("fam_members", name="s")
     fam_ht = fam_ht.key_by("s").select().distinct()
 
-    if isinstance(mtds, hl.MatrixTable):
+    if isinstance(mtds, hl.Table):
+        mtds = mtds.semi_join(fam_ht)
+    elif isinstance(mtds, hl.MatrixTable):
         mtds = mtds.filter_cols(hl.is_defined(fam_ht[mtds.col_key]))
     elif isinstance(mtds, hl.vds.VariantDataset):
         mtds = hl.vds.filter_samples(mtds, fam_ht)
     else:
-        raise ValueError("mtds must be a MatrixTable or VariantDataset")
+        raise ValueError("mtds must be a Table, MatrixTable, or VariantDataset")
 
     return mtds
 

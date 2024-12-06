@@ -997,7 +997,7 @@ def filter_to_trios(
         (variants), however, using `filter_samples` in VariantDataset will remove the
         variants that are not present in any of the trios.
 
-    :param mtds: A Variant Dataset or a Matrix Table to filter to only trios.
+    :param mtds: A Variant Dataset or a Matrix Table or a Table to filter to only trios.
     :param fam_ht: A Table of trios to filter to, loaded using `hl.import_fam`.
     :return: A Table, MatrixTable or VariantDataset with only the trios in `fam_ht`.
     """

@@ -403,8 +403,9 @@ def filter_to_clinvar_pathogenic(
 
 
 def filter_to_gencode_cds(
-    t: Union[hl.MatrixTable, hl.Table], gencode_ht: Optional[hl.Table] = None,
-        padding: Optional[int] = 0,
+    t: Union[hl.MatrixTable, hl.Table],
+    gencode_ht: Optional[hl.Table] = None,
+    padding: Optional[int] = 0,
 ) -> hl.Table:
     """
     Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.
@@ -464,15 +465,15 @@ def filter_to_gencode_cds(
     )
     if padding:
         gencode_ht = gencode_ht.key_by(
-        interval=hl.locus_interval(
-            gencode_ht.interval.start.contig,
-            gencode_ht.interval.start.position - padding,
-            gencode_ht.interval.end.position + padding,
-            # Include the end of the intervals to capture all variants.
-            reference_genome=gencode_ht.interval.start.dtype.reference_genome,
-            includes_end=True,
+            interval=hl.locus_interval(
+                gencode_ht.interval.start.contig,
+                gencode_ht.interval.start.position - padding,
+                gencode_ht.interval.end.position + padding,
+                # Include the end of the intervals to capture all variants.
+                reference_genome=gencode_ht.interval.start.dtype.reference_genome,
+                includes_end=True,
+            )
         )
-    )
     filter_expr = hl.is_defined(gencode_ht[t.locus])
 
     if isinstance(t, hl.MatrixTable):

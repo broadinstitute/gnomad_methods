@@ -437,6 +437,7 @@ def get_truth_ht() -> Table:
         .persist()
     )
 
+
 gtex_rsem = VersionedMatrixTableResource(
     default_version="v10",
     versions={

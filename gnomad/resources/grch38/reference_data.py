@@ -19,6 +19,55 @@ from gnomad.utils.constraint import transform_methylation_level
 from gnomad.utils.vep import vep_or_lookup_vep
 
 
+def _import_gtex_rsem(gtex_path: str, meta_path: str, **kwargs) -> hl.MatrixTable:
+    """
+    Import GTEx RSEM data from expression data and sample attributes file.
+
+    .. note::
+
+        Files are downloaded from https://www.gtexportal.org/home/downloads/adult-gtex.
+        We get the transcript TPM under Bulk tissue expression and sample attributes
+        under Metadata. The transcript TPM file is expected to have transcript
+        expression data, with transcript IDs as the first column and gene IDs as the
+        second column.
+
+    :param gtex_path: Path to the GTEx RSEM file.
+    :param meta_path: Path to the GTEx sample attributes file.
+    :param kwargs: Any additional parameters to be passed to Hail's `import_matrix_table`.
+    :return: Matrix Table with GTEx RSEM data with tissue information.
+    """
+    meta_ht = hl.import_table(meta_path, force_bgz=True, impute=True)
+    meta_ht = meta_ht.key_by("SAMPID")
+
+    mt = hl.import_matrix_table(
+        gtex_path,
+        row_fields={"transcript_id": hl.tstr, "gene_id": hl.tstr},
+        entry_type=hl.tfloat64,
+        force_bgz=True,
+        **kwargs,
+    )
+
+    mt = mt.rename({"x": "transcript_tpm", "col_id": "s"})
+
+    # GTEx data has gene IDs and transcript IDs with version numbers, we need
+    # to remove the version numbers so that it can later be joined with VEP
+    # transcript consequences transcript_id.
+    mt = mt.annotate_cols(
+        tissue=meta_ht[mt.s]
+        .SMTSD.replace(" ", "")
+        .replace("-", "_")
+        .replace("\\(", "_")
+        .replace("\\)", "")
+    )
+    mt = mt.annotate_rows(
+        transcript_id=mt.transcript_id.split("\\.")[0],
+        gene_id=mt.gene_id.split("\\.")[0],
+    )
+    mt = mt.key_rows_by("transcript_id").drop("row_id")
+
+    return mt
+
+
 def _import_purcell_5k(path) -> hl.Table:
     p5k = hl.import_locus_intervals(path, reference_genome="GRCh37")
     rg37 = hl.get_reference("GRCh37")
@@ -388,6 +437,20 @@ def get_truth_ht() -> Table:
         .persist()
     )
 
+gtex_rsem = VersionedMatrixTableResource(
+    default_version="v10",
+    versions={
+        "v10": GnomadPublicMatrixTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gtex/v10/gtex_rsem.v10.mt",
+            import_func=_import_gtex_rsem,
+            import_args={
+                "gtex_path": "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_2022-06-06_v10_RSEMv1.3.3_transcripts_tpm.txt.bgz",
+                "meta_path": "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_v10_Open_Access_Reduced_Annotations_SampleAttributesDS.txt.bgz",
+                "min_partitions": 1000,
+            },
+        ),
+    },
+)
 
 gencode = VersionedTableResource(
     default_version="v39",

@@ -1255,6 +1255,33 @@ def flatten_missingness_struct(
     return missingness_dict
 
 
+def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
+    """
+    Unfurl specified arrays into a dictionary of flattened expressions.
+
+    Array annotations must have a corresponding dictionary to define the indices for each array field.
+    Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.
+
+    :param ht: Input Table.
+    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
+    :return: A flattened dictionary of unfurled array annotations.
+    """
+    expr_dict = {}
+
+    # For each specified array, unfurl the array elements and their structs
+    # into expr_dict.
+    for array, array_index_dict in indexed_array_annotations.items():
+        # Evaluate the index dictionary for the specified array.
+        array_index_dict = hl.eval(ht[array_index_dict])
+
+        # Unfurl the array elements and structs into the expression dictionary.
+        for k, i in array_index_dict.items():
+            for f in ht[array][0].keys():
+                expr_dict[f"{f}_{k}"] = ht[array][i][f]
+
+    return expr_dict
+
+
 def check_array_struct_missingness(
     ht,
     indexed_array_annotations: Dict[str, str] = {
@@ -1272,22 +1299,14 @@ def check_array_struct_missingness(
     :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
     :return: A Struct where each field represents a struct field's missingness percentage across the Table for each element of the specified arrays.
     """
-    expr_dict = {}
-
-    # For each specified array, unfurl the array elements and their structs
-    # into expr_dict.
-    for array, array_index_dict in indexed_array_annotations.items():
-        array_index_dict = hl.eval(ht[array_index_dict])
-        for k, i in array_index_dict.items():
-            for f in ht[array][0].keys():
-                expr_dict[f"{f}_{k}"] = ht[array][i][f]
+    annotations = unfurl_array_annotations(ht, indexed_array_annotations)
 
     # Create row annotations for each element of the arrays and their structs.
-    ht = ht.annotate(**expr_dict)
+    ht = ht.annotate(**annotations)
 
     # Compute missingness for each of the newly created row annotations.
     missingness_dict = {
         field_name: hl.agg.fraction(hl.is_missing(ht[field_name]))
-        for field_name in expr_dict.keys()
+        for field_name in annotations.keys()
     }
     return ht.aggregate(hl.struct(**missingness_dict))

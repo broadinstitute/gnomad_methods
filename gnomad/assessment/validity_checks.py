@@ -1215,7 +1215,7 @@ def count_vep_annotated_variants_per_interval(
 
 def check_missingness_of_struct(
     struct_expr: hl.expr.StructExpression, prefix: str = ""
-) -> dict:
+) -> Dict[str, Any]:
     """
     Recursively check the fraction of missing values of all fields within a StructExpression.
 
@@ -1236,7 +1236,9 @@ def check_missingness_of_struct(
         return hl.agg.fraction(hl.is_missing(struct_expr))
 
 
-def flatten_missingness_struct(missingness_struct: hl.expr.StructExpression) -> dict:
+def flatten_missingness_struct(
+    missingness_struct: hl.expr.StructExpression,
+) -> Dict[str, float]:
     """
     Recursively flatten and evaluates nested dictionaries of missingness within a Struct.
 
@@ -1263,7 +1265,8 @@ def check_array_struct_missingness(
     """
     Check the missingness of all fields in an array of structs.
 
-    Iterates over arrays of structs and calculates the percentage of missing values for each element of the array and each struct.
+    Iterates over arrays of structs and calculates the percentage of missing values for each element of the array and each struct. Array annotations must have a corresponding dictionary to define the indices for each array field.
+    Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.
 
     :param ht: Input Table.
     :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.

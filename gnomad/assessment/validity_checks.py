@@ -1219,11 +1219,11 @@ def check_missingness_of_struct(
     """
     Recursively check the fraction of missing values of all fields within a StructExpression.
 
-    Either a standalone or nested Struct can be provided
+    Either a standalone or nested Struct can be provided.
 
     :param struct_expr: A StructExpression to check for missing values.
     :param prefix: A prefix to append to names of struct fields within the struct_expr.
-    :return: A dictionary mapping field names to their missingness fraction expressions, with nested dictioanries represented any nested structs.
+    :return: A dictionary mapping field names to their missingness fraction expressions, with nested dictionaries representing any nested structs.
     """
     if isinstance(struct_expr, hl.expr.StructExpression):
         return {

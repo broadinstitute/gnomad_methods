@@ -1299,9 +1299,8 @@ def check_array_struct_missingness(
     :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
     :return: A Struct where each field represents a struct field's missingness percentage across the Table for each element of the specified arrays.
     """
-    annotations = unfurl_array_annotations(ht, indexed_array_annotations)
-
     # Create row annotations for each element of the arrays and their structs.
+    annotations = unfurl_array_annotations(ht, indexed_array_annotations)
     ht = ht.annotate(**annotations)
 
     # Compute missingness for each of the newly created row annotations.

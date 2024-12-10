@@ -1221,7 +1221,7 @@ def check_missingness_of_struct(
 
     Either a standalone or nested Struct can be provided.
 
-    :param struct_expr: A StructExpression to check for missing values.
+    :param struct_expr: StructExpression for which to check for missing values.
     :param prefix: A prefix to append to names of struct fields within the struct_expr.
     :return: A dictionary mapping field names to their missingness fraction expressions, with nested dictionaries representing any nested structs.
     """
@@ -1261,6 +1261,7 @@ def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
 
     Array annotations must have a corresponding dictionary to define the indices for each array field.
     Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.
+    The keys of indexed_array_annotations should be present in the Table as row annotations, whereas the values should be present as global annotations.
 
     :param ht: Input Table.
     :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.

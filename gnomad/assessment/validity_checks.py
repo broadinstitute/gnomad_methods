@@ -1257,7 +1257,7 @@ def flatten_missingness_struct(
 
 def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
     """
-    Unfurl specified arrays into a dictionary of flattened expressions.
+    Unfurl specified arrays of structs into a dictionary of flattened expressions.
 
     Array annotations must have a corresponding dictionary to define the indices for each array field.
     Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.

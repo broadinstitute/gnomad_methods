@@ -365,6 +365,7 @@ def _public_an_ht_path(data_type: str, version: str) -> str:
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.v{version}.allele_number_all_sites.ht"
 
+
 def _public_pext_ht_path(type: str, version: str, gtex_versioin: str) -> str:
     """
     Get public pext hail table.
@@ -374,7 +375,7 @@ def _public_pext_ht_path(type: str, version: str, gtex_versioin: str) -> str:
     :param gtex_version: The GTEx version used to generate pext
     :return: Path to pext Table
     """
-    return (f"gs://gnomad-public-requester-pays/release/{version}/pext/gnomad.pext.gtex_{gtex_versioin}.{type}.ht")
+    return f"gs://gnomad-public-requester-pays/release/{version}/pext/gnomad.pext.gtex_{gtex_versioin}.{type}.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -713,6 +714,7 @@ def gnomad_gks(
         outputs.append(out)
 
     return outputs
+
 
 def pext(type: str, gtex_version: str = CURRENT_GTEX_RELEASE) -> VersionedTableResource:
     """

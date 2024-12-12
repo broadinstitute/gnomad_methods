@@ -1236,7 +1236,7 @@ def check_missingness_of_struct(
     elif isinstance(struct_expr, hl.expr.ArrayExpression):
         # Count array as missing if it is NA, an empty array, or only has missing elements.
         return hl.agg.fraction(
-            hl.or_else(ht_combined.s.c.d.all(lambda x: hl.is_missing(x)), True)
+            hl.or_else(struct_expr.all(lambda x: hl.is_missing(x)), True)
         )
     else:
         return hl.agg.fraction(hl.is_missing(struct_expr))

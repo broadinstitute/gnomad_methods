@@ -103,6 +103,7 @@ def _liftover_data_path(data_type: str, version: str) -> str:
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
 
+
 def _public_constraint_ht_path(version: str) -> str:
     """
     Get public constraint table path.
@@ -110,7 +111,8 @@ def _public_constraint_ht_path(version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh38
     :return: Path to constraint Table
     """
-    return (f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.lof_metrics.by_transcript.ht")
+    return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.lof_metrics.by_transcript.ht"
+
 
 def public_release(data_type: str) -> VersionedTableResource:
     """
@@ -228,6 +230,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     contig = f".{contig}" if contig else ""
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
 
+
 def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     """
     Retrieve constraint table.
@@ -241,9 +244,7 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: GnomadPublicTableResource(
-                path=_public_constraint_ht_path(release)
-            )
+            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
             for release in releases
         },
     )

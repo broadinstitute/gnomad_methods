@@ -754,7 +754,7 @@ def pext(type: str, gtex_version: str = CURRENT_GTEX_RELEASE) -> VersionedTableR
     )
 
 
-def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
+def constraint() -> VersionedTableResource:
     """
     Retrieve constraint table.
 
@@ -767,7 +767,7 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: GnomadPublicTableResource(path=_public_constraint_ht_path(version))
+            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
             for release in releases
         },
     )

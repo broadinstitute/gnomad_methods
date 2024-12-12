@@ -377,6 +377,7 @@ def _public_pext_ht_path(type: str, version: str, gtex_versioin: str) -> str:
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/pext/gnomad.pext.gtex_{gtex_versioin}.{type}.ht"
 
+
 def _public_constraint_ht_path(version: str) -> str:
     """
     Get public constraint table path.
@@ -384,7 +385,7 @@ def _public_constraint_ht_path(version: str) -> str:
     :param version: One of the release versions of gnomAD on GRCh38
     :return: Path to constraint Table
     """
-    return (f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht")
+    return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -752,6 +753,7 @@ def pext(type: str, gtex_version: str = CURRENT_GTEX_RELEASE) -> VersionedTableR
         },
     )
 
+
 def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     """
     Retrieve constraint table.
@@ -765,9 +767,7 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: GnomadPublicTableResource(
-                path=_public_constraint_ht_path(release)
-            )
+            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
             for release in releases
         },
     )

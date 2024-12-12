@@ -113,6 +113,7 @@ def _public_constraint_ht_path(version: str) -> str:
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.lof_metrics.by_transcript.ht"
 
+
 def _public_pext_path(data_format: str) -> str:
     """
     Get public pext data.
@@ -123,7 +124,7 @@ def _public_pext_path(data_format: str) -> str:
     # TODO: Could you confirm if this is correct path?
     if data_format not in ["tsv.gz", "ht"]:
         raise DataException(f"{data_format} not in ['tsv.gz', 'ht']")
-    return (f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.{data_format}")
+    return f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.{data_format}"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -242,13 +243,15 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     contig = f".{contig}" if contig else ""
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
 
+
 def pext() -> GnomadPublicTableResource:
     """
     Retrieve pext data.
 
     :return: Pext Table
     """
-    return GnomadPublicTableResource(path=_public_pext_path('ht'))
+    return GnomadPublicTableResource(path=_public_pext_path("ht"))
+
 
 def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     """

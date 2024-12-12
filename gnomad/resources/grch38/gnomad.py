@@ -767,7 +767,7 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     return VersionedTableResource(
         current_release,
         {
-            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
+            release: GnomadPublicTableResource(path=_public_constraint_ht_path(version))
             for release in releases
         },
     )

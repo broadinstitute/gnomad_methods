@@ -1234,7 +1234,7 @@ def check_missingness_of_struct(
             for key in struct_expr.keys()
         }
     elif isinstance(struct_expr, hl.expr.ArrayExpression):
-        # Count array as missing if it is NA, an empty array, or only has missing 
+        # Count array as missing if it is NA, an empty array, or only has missing
         # elements.
         return hl.agg.fraction(
             hl.or_else(struct_expr.all(lambda x: hl.is_missing(x)), True)

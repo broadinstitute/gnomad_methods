@@ -230,4 +230,3 @@ def test_check_array_struct_missingness(ht_for_check_array_struct_missingness):
             f"Mismatch in missingness for field '{field}': "
             f"expected {expected_value}, got {missingness[field]}"
         )
-

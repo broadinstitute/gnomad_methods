@@ -13,9 +13,7 @@ from gnomad.assessment.validity_checks import (
 
 @pytest.fixture
 def ht_for_check_missingness_of_struct():
-    """
-    Fixture to set up a Hail Table with the desired nested structure and data.
-    """
+    """Fixture to set up a Hail Table with the desired nested structure and data."""
     # Create test data with nested structs.
     data = [
         hl.struct(
@@ -97,7 +95,6 @@ def test_check_missingness_of_struct(ht_for_check_missingness_of_struct):
 @pytest.fixture()
 def ht_for_check_array_struct_missingness():
     """Fixture to set up a sample Hail Table with array<struct> fields and global index dictionary ."""
-
     # Define rows of the Table.
     data = [
         {

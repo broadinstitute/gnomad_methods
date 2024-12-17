@@ -1220,8 +1220,7 @@ def check_missingness_of_struct(
     Recursively check the fraction of missing values of all fields within a StructExpression.
 
     Either a standalone or nested Struct can be provided. If the struct contains on array of values, the array
-    will be considered missing if it is NA, an empty array, or only has missing
-    elements.
+    will be considered missing if it is NA, an empty array, or only has missing elements.
 
     :param struct_expr: StructExpression for which to check for missing values.
     :param prefix: A prefix to append to names of struct fields within the struct_expr.
@@ -1235,7 +1234,8 @@ def check_missingness_of_struct(
             for key in struct_expr.keys()
         }
     elif isinstance(struct_expr, hl.expr.ArrayExpression):
-        # Count array as missing if it is NA, an empty array, or only has missing elements.
+        # Count array as missing if it is NA, an empty array, or only has missing 
+        # elements.
         return hl.agg.fraction(
             hl.or_else(struct_expr.all(lambda x: hl.is_missing(x)), True)
         )

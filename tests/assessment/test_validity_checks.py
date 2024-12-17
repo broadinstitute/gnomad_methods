@@ -1,7 +1,8 @@
 """Tests for the validity_checks module."""
 
-import pytest
 import hail as hl
+import pytest
+
 from gnomad.assessment.validity_checks import (
     check_array_struct_missingness,
     check_missingness_of_struct,

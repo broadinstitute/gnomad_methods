@@ -405,7 +405,6 @@ def filter_to_clinvar_pathogenic(
 def filter_to_gencode_cds(
     t: Union[hl.MatrixTable, hl.Table],
     gencode_ht: Optional[hl.Table] = None,
-    padding: Optional[int] = 0,
 ) -> hl.Table:
     """
     Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.
@@ -438,7 +437,6 @@ def filter_to_gencode_cds(
     :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable
         to CDS regions. Default is None, which will use the default version of the
         Gencode Table resource.
-    :param padding: Number of bases to pad the CDS intervals by. Default is 0.
     :return: Table/MatrixTable filtered to loci in Gencode CDS intervals.
     """
     if gencode_ht is None:
@@ -463,17 +461,6 @@ def filter_to_gencode_cds(
         "This Gencode CDS interval filter does not filter by transcript! Please see the"
         " documentation for more details to confirm it's being used as intended."
     )
-    if padding:
-        gencode_ht = gencode_ht.key_by(
-            interval=hl.locus_interval(
-                gencode_ht.interval.start.contig,
-                gencode_ht.interval.start.position - padding,
-                gencode_ht.interval.end.position + padding,
-                # Include the end of the intervals to capture all variants.
-                reference_genome=gencode_ht.interval.start.dtype.reference_genome,
-                includes_end=True,
-            )
-        )
     filter_expr = hl.is_defined(gencode_ht[t.locus])
 
     if isinstance(t, hl.MatrixTable):

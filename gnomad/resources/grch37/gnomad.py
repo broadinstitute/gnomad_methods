@@ -113,13 +113,26 @@ def _public_constraint_ht_path() -> str:
     return f"gs://gnomad-public-requester-pays/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
 
 
-def _public_pext_path() -> str:
+def _public_pext_path(pext_type: str = "base_level") -> str:
     """
     Get public proportion expressed across transcripts (pext) data.
 
+    :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
     :return: Path to pext data.
+    :raises DataException: If the provided pext_type is invalid.
     """
-    return f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht"
+    pext_paths = {
+        "annotation_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht",
+        "base_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht",
+    }
+
+    if pext_type not in pext_paths:
+        valid_types = list(pext_paths.keys())
+        raise DataException(
+            f"Invalid pext_type: '{pext_type}'. Valid options are {valid_types}."
+        )
+
+    return pext_paths[pext_type]
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -239,20 +252,20 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
 
 
-def pext() -> GnomadPublicTableResource:
+def pext(pext_type: str='base_level') -> GnomadPublicTableResource:
     """
     Retrieve proportion expressed across transcripts (pext) data.
 
+    :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
     :return: Pext Table.
     """
-    return GnomadPublicTableResource(path=_public_pext_path())
+    return GnomadPublicTableResource(path=_public_pext_path(pext_type))
 
 
 def constraint() -> GnomadPublicTableResource:
     """
     Retrieve gene constraint table.
 
-    :param version: One of the release versions of gnomAD on GRCh37.
     :return: Gene constraint Table.
     """
     return GnomadPublicTableResource(path=_public_constraint_ht_path())

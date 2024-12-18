@@ -119,7 +119,7 @@ def _public_pext_path() -> str:
 
     :return: Path to pext data.
     """
-    return (f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht")
+    return f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

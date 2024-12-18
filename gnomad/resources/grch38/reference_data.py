@@ -18,6 +18,8 @@ from gnomad.resources.resource_utils import (
 from gnomad.utils.constraint import transform_methylation_level
 from gnomad.utils.vep import vep_or_lookup_vep
 from gnomad.resources.grch37.reference_data import _import_gtex_rsem
+
+
 def _import_purcell_5k(path) -> hl.Table:
     p5k = hl.import_locus_intervals(path, reference_genome="GRCh37")
     rg37 = hl.get_reference("GRCh37")

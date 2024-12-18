@@ -46,8 +46,6 @@ DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
-CURRENT_GTEX_RELEASE = "v10"
-
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 SUBSETS = {
     "v3": [
@@ -746,7 +744,7 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     Retrieve gene constraint Table.
 
     :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
-    :return: constraint Table.
+    :return: Gene constraint Table.
     :raises ValueError: If the version is not a valid release.
     """
     if version not in EXOME_RELEASES:
@@ -754,13 +752,10 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
             f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
         )
 
-    current_release = CURRENT_EXOME_RELEASE
-    releases = EXOME_RELEASES
-
     return VersionedTableResource(
-        current_release,
+        CURRENT_EXOME_RELEASE,
         {
             release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
-            for release in releases
+            for release in EXOME_RELEASES
         },
     )

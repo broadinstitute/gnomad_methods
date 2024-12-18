@@ -403,8 +403,7 @@ def filter_to_clinvar_pathogenic(
 
 
 def filter_to_gencode_cds(
-    t: Union[hl.MatrixTable, hl.Table],
-    gencode_ht: Optional[hl.Table] = None,
+    t: Union[hl.MatrixTable, hl.Table], gencode_ht: Optional[hl.Table] = None
 ) -> hl.Table:
     """
     Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.

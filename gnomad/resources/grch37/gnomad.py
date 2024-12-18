@@ -252,7 +252,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
 
 
-def pext(pext_type: str='base_level') -> GnomadPublicTableResource:
+def pext(pext_type: str = "base_level") -> GnomadPublicTableResource:
     """
     Retrieve proportion expressed across transcripts (pext) data.
 

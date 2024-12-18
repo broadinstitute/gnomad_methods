@@ -366,7 +366,7 @@ def _public_an_ht_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.v{version}.allele_number_all_sites.ht"
 
 
-def _public_pext_ht_path(pext_type: str='base_level') -> str:
+def _public_pext_ht_path(pext_type: str = "base_level") -> str:
     """
     Get public pext hail table.
 
@@ -731,7 +731,7 @@ def gnomad_gks(
     return outputs
 
 
-def pext(pext_type: str='base_level') -> GnomadPublicTableResource:
+def pext(pext_type: str = "base_level") -> GnomadPublicTableResource:
     """
     Retrieve pext table by type.
 
@@ -751,15 +751,17 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     """
     # Validate the version
     if version not in EXOME_RELEASES:
-        raise ValueError(f"Invalid version: {version}. Must be one of {EXOME_RELEASES}.")
+        raise ValueError(
+            f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
+        )
 
     current_release = CURRENT_EXOME_RELEASE
     releases = EXOME_RELEASES
 
     return VersionedTableResource(
-            current_release,
-            {
-                release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
-                for release in releases
-            },
-        )
+        current_release,
+        {
+            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
+            for release in releases
+        },
+    )

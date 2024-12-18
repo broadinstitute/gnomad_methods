@@ -5,6 +5,7 @@ from typing import Optional, Union
 import hail as hl
 from hail import Table
 
+from gnomad.resources.grch37.reference_data import _import_gtex_rsem
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
     NO_CHR_TO_CHR_CONTIG_RECODING,
@@ -17,7 +18,6 @@ from gnomad.resources.resource_utils import (
 )
 from gnomad.utils.constraint import transform_methylation_level
 from gnomad.utils.vep import vep_or_lookup_vep
-from gnomad.resources.grch37.reference_data import _import_gtex_rsem
 
 
 def _import_purcell_5k(path) -> hl.Table:

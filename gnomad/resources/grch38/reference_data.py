@@ -5,6 +5,7 @@ from typing import Optional, Union
 import hail as hl
 from hail import Table
 
+from gnomad.resources.grch37.reference_data import _import_gtex_rsem
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
     NO_CHR_TO_CHR_CONTIG_RECODING,
@@ -388,6 +389,21 @@ def get_truth_ht() -> Table:
         .persist()
     )
 
+
+gtex_rsem = VersionedMatrixTableResource(
+    default_version="v10",
+    versions={
+        "v10": GnomadPublicMatrixTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gtex/v10/gtex_rsem.v10.mt",
+            import_func=_import_gtex_rsem,
+            import_args={
+                "gtex_path": "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_2022-06-06_v10_RSEMv1.3.3_transcripts_tpm.txt.bgz",
+                "meta_path": "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_v10_Open_Access_Reduced_Annotations_SampleAttributesDS.txt.bgz",
+                "min_partitions": 1000,
+            },
+        ),
+    },
+)
 
 gencode = VersionedTableResource(
     default_version="v39",

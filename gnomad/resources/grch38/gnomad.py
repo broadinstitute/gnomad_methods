@@ -366,24 +366,29 @@ def _public_an_ht_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.v{version}.allele_number_all_sites.ht"
 
 
-def _public_pext_ht_path(type: str, version: str, gtex_versioin: str) -> str:
+def _public_pext_ht_path(pext_type: str='base_level') -> str:
     """
     Get public pext hail table.
 
-    :param type: One of "base_level" or "annotation_level"
-    :param version: The gnomAD version used to generate pext.
-    :param gtex_version: The GTEx version used to generate pext
-    :return: Path to pext Table
+    :param pext_type: One of "base_level" or "annotation_level". Default is "base_level".
+    :return: Path to pext Table.
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/pext/gnomad.pext.gtex_{gtex_versioin}.{type}.ht"
+    valid_types = ["base_level", "annotation_level"]
+
+    if pext_type not in valid_types:
+        raise DataException(
+            f"Invalid pext_type: '{pext_type}'. Valid options are {valid_types}."
+        )
+
+    return f"gs://gnomad-public-requester-pays/release/4.1/pext/gnomad.pext.gtex_v10.{pext_type}.ht"
 
 
 def _public_constraint_ht_path(version: str) -> str:
     """
     Get public constraint table path.
 
-    :param version: One of the release versions of gnomAD on GRCh38
-    :return: Path to constraint Table
+    :param version: One of the release versions of gnomAD on GRCh38.
+    :return: Path to gene constraint Table.
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
 
@@ -726,48 +731,35 @@ def gnomad_gks(
     return outputs
 
 
-def pext(type: str, gtex_version: str = CURRENT_GTEX_RELEASE) -> VersionedTableResource:
+def pext(pext_type: str='base_level') -> GnomadPublicTableResource:
     """
     Retrieve pext table by type.
 
-    :param type: One of "base_level" or "annotation_level".
-    :param gtex_version: The GTEx version used to generate P
+    :param pext_type: One of "base_level" or "annotation_level". Default is "base_level".
     :return: Pext Table.
     """
-    if type not in ["base_level", "annotation_level"]:
-        raise DataException(
-            f"{type} not in ['base_level', 'annotation_level'], please select a type from"
-            f" ['base_level', 'annotation_level']"
+    return GnomadPublicTableResource(path=_public_pext_ht_path(pext_type))
+
+
+def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
+    """
+    Retrieve gene constraint Table.
+
+    :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
+    :return: constraint Table.
+    :raises ValueError: If the version is not a valid release.
+    """
+    # Validate the version
+    if version not in EXOME_RELEASES:
+        raise ValueError(f"Invalid version: {version}. Must be one of {EXOME_RELEASES}.")
+
+    current_release = CURRENT_EXOME_RELEASE
+    releases = EXOME_RELEASES
+
+    return VersionedTableResource(
+            current_release,
+            {
+                release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
+                for release in releases
+            },
         )
-
-    current_release = CURRENT_EXOME_RELEASE
-    releases = EXOME_RELEASES
-
-    return VersionedTableResource(
-        current_release,
-        {
-            release: GnomadPublicTableResource(
-                path=_public_pext_ht_path(type, release, gtex_version)
-            )
-            for release in releases
-        },
-    )
-
-
-def constraint() -> VersionedTableResource:
-    """
-    Retrieve constraint table.
-
-    :param version: One of the release versions of gnomAD on GRCh38
-    :return: Constraint Table
-    """
-    current_release = CURRENT_EXOME_RELEASE
-    releases = EXOME_RELEASES
-
-    return VersionedTableResource(
-        current_release,
-        {
-            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
-            for release in releases
-        },
-    )

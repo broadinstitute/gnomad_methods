@@ -368,7 +368,7 @@ def _public_an_ht_path(data_type: str, version: str) -> str:
 
 def _public_pext_ht_path(pext_type: str = "base_level") -> str:
     """
-    Get public pext hail table.
+    Get public proportion expressed across transcripts (pext) data.
 
     :param pext_type: One of "base_level" or "annotation_level". Default is "base_level".
     :return: Path to pext Table.
@@ -749,7 +749,6 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     :return: constraint Table.
     :raises ValueError: If the version is not a valid release.
     """
-    # Validate the version
     if version not in EXOME_RELEASES:
         raise ValueError(
             f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."

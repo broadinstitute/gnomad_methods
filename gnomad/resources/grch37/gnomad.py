@@ -110,7 +110,7 @@ def _public_constraint_ht_path() -> str:
 
     :return: Path to constraint Table.
     """
-    return f"gs://gnomad-public-requester-pays/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
+    return "gs://gnomad-public-requester-pays/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
 
 
 def _public_pext_path(pext_type: str = "base_level") -> str:

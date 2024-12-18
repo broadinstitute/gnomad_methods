@@ -104,27 +104,22 @@ def _liftover_data_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
 
 
-def _public_constraint_ht_path(version: str) -> str:
+def _public_constraint_ht_path() -> str:
     """
-    Get public constraint table path.
+    Get public gene constraint Table path.
 
-    :param version: One of the release versions of gnomAD on GRCh38
-    :return: Path to constraint Table
+    :return: Path to constraint Table.
     """
-    return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.lof_metrics.by_transcript.ht"
+    return f"gs://gnomad-public-requester-pays/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
 
 
-def _public_pext_path(data_format: str) -> str:
+def _public_pext_path() -> str:
     """
-    Get public pext data.
+    Get public proportion expressed across transcripts (pext) data.
 
-    :param data_format: Either "tsv" or "ht".
     :return: Path to pext data.
     """
-    # TODO: Could you confirm if this is correct path?
-    if data_format not in ["tsv.gz", "ht"]:
-        raise DataException(f"{data_format} not in ['tsv.gz', 'ht']")
-    return f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.{data_format}"
+    return (f"gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht")
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -246,27 +241,18 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
 
 def pext() -> GnomadPublicTableResource:
     """
-    Retrieve pext data.
+    Retrieve proportion expressed across transcripts (pext) data.
 
-    :return: Pext Table
+    :return: Pext Table.
     """
-    return GnomadPublicTableResource(path=_public_pext_path("ht"))
+    return GnomadPublicTableResource(path=_public_pext_path())
 
 
-def constraint() -> VersionedTableResource:
+def constraint() -> GnomadPublicTableResource:
     """
-    Retrieve constraint table.
+    Retrieve gene constraint table.
 
-    :param version: One of the release versions of gnomAD on GRCh38
-    :return: Constraint Table
+    :param version: One of the release versions of gnomAD on GRCh37.
+    :return: Gene constraint Table.
     """
-    current_release = CURRENT_EXOME_RELEASE
-    releases = EXOME_RELEASES
-
-    return VersionedTableResource(
-        current_release,
-        {
-            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
-            for release in releases
-        },
-    )
+    return GnomadPublicTableResource(path=_public_constraint_ht_path())

@@ -4,18 +4,22 @@ import pytest
 import hail as hl
 from gnomad.utils.parse import parse_variant
 
+
 class TestParseVariant:
     """Test the parse_variant function."""
+
+    grch37_out = hl.Struct(locus=hl.Locus("1", 1000, "GRCh37"), alleles=["A", "T"])
+    grch38_out = hl.Struct(locus=hl.Locus("chr1", 1000, "GRCh38"), alleles=["A", "T"])
 
     @pytest.mark.parametrize(
         "variant_str, contig, position, ref, alt, build, expected",
         [
-            ("1-1000-A-T", None, None, None, None, None, hl.Struct(locus=hl.Locus("1", 1000, "GRCh37"), alleles=["A", "T"])),
-            ("chr1-1000-A-T", None, None, None, None, None, hl.Struct(locus=hl.Locus("chr1", 1000, "GRCh38"), alleles=["A", "T"])),
-            (None, "1", 1000, "A", "T", None, hl.Struct(locus=hl.Locus("1", 1000, "GRCh37"), alleles=["A", "T"])),
-            (None, "chr1", 1000, "A", "T", None, hl.Struct(locus=hl.Locus("chr1", 1000, "GRCh38"), alleles=["A", "T"])),
-            (None, "1", 1000, "A", "T", "GRCh37", hl.Struct(locus=hl.Locus("1", 1000, "GRCh37"), alleles=["A", "T"])),
-            ("1:1000:A:T", None, None, None, None, None, hl.Struct(locus=hl.Locus("1", 1000, "GRCh37"), alleles=["A", "T"])),
+            ("1-1000-A-T", None, None, None, None, None, grch37_out),
+            ("chr1-1000-A-T", None, None, None, None, None, grch38_out),
+            (None, "1", 1000, "A", "T", None, grch37_out),
+            (None, "chr1", 1000, "A", "T", None, grch38_out),
+            (None, "1", 1000, "A", "T", "GRCh37", grch37_out),
+            ("1:1000:A:T", None, None, None, None, None, grch37_out),
         ],
     )
     def test_parse_variant(

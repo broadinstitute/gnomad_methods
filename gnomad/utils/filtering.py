@@ -488,7 +488,8 @@ def filter_to_gencode_cds(
         gencode_ht = gencode_ht.key_by("padded_interval")
 
     if genes or padding:
-        # Only collect intervals if filtering by genes or padding, to avoid memory issues
+        # Only collect intervals if filtering by genes or padding, to avoid memory
+        # issues
         intervals_expr = gencode_ht.padded_interval if padding else gencode_ht.interval
         cds_intervals = intervals_expr.collect()
         t = hl.filter_intervals(t, cds_intervals)

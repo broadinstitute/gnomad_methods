@@ -1,4 +1,5 @@
 """This module contains utility functions for general parsing."""
+
 import logging
 from typing import Optional
 
@@ -42,7 +43,9 @@ def parse_variant(
 
     if not build:
         build = "GRCh37"
-        if (variant_str and variant_str.startswith("chr")) or (contig and contig.startswith("chr")):
+        if (variant_str and variant_str.startswith("chr")) or (
+            contig and contig.startswith("chr")
+        ):
             build = "GRCh38"
 
         logger.info("No build provided. Assuming build: %s", build)

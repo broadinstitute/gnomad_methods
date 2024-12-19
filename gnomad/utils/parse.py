@@ -58,7 +58,7 @@ def parse_variant(
 
         return hl.parse_variant(variant_str, reference_genome=build)
 
-    except:
+    except BaseException:
         raise ValueError(
             f"Invalid variant format: {variant_str}. Valid formats: \n"
             f"  contig-position-ref-alt \n"

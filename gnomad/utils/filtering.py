@@ -467,10 +467,12 @@ def filter_to_gencode_cds(
         " documentation for more details to confirm it's being used as intended."
     )
     if genes:
-        genes_upper = [genes.upper()] if isinstance(genes, str) else [g.upper() for g
-                                                                      in genes]
+        genes_upper = (
+            [genes.upper()] if isinstance(genes, str) else [g.upper() for g in genes]
+        )
         gencode_ht = gencode_ht.filter(
-            hl.literal(genes_upper).contains(gencode_ht.gene_name))
+            hl.literal(genes_upper).contains(gencode_ht.gene_name)
+        )
 
     if padding:
         gencode_ht = gencode_ht.annotate(
@@ -489,9 +491,13 @@ def filter_to_gencode_cds(
         # Only collect intervals if filtering by genes or padding
         intervals_expr = gencode_ht.padded_interval if padding else gencode_ht.interval
         cds_intervals = intervals_expr.collect()
-        t = hl.filter_intervals(t, cds_intervals )
+        t = hl.filter_intervals(t, cds_intervals)
     else:
-        t = t.filter_rows(hl.is_defined(gencode_ht[t.locus])) if isinstance(t, hl.MatrixTable) else t.filter(hl.is_defined(gencode_ht[t.locus]))
+        t = (
+            t.filter_rows(hl.is_defined(gencode_ht[t.locus]))
+            if isinstance(t, hl.MatrixTable)
+            else t.filter(hl.is_defined(gencode_ht[t.locus]))
+        )
 
     return t
 

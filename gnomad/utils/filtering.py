@@ -6,7 +6,6 @@ import operator
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import hail as hl
-from sympy import intervals
 
 import gnomad.utils.annotations as annotate_utils
 from gnomad.resources.resource_utils import DataException

@@ -2,7 +2,7 @@
 
 
 # Copy VEP
-mkdir -p /vep/homo_sapiens 
+mkdir -p /vep/homo_sapiens
 gsutil -m cp -r gs://hail-common/vep/vep/loftee /vep
 gsutil -m cp -r gs://hail-common/vep/vep/ensembl-tools-release-81 /vep
 gsutil -m cp -r gs://hail-common/vep/vep/loftee_data /vep
@@ -36,5 +36,3 @@ gsutil cp gs://hail-common/vep/vep/run_hail_vep_vcf.sh /vep
 chmod a+rx /vep/run_hail_vep_vcf.sh
 
 /vep/run_hail_vep_vcf.sh /vep/1var.vcf
-
-

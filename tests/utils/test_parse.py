@@ -1,7 +1,8 @@
 """Tests for the parse utility module."""
 
-import pytest
 import hail as hl
+import pytest
+
 from gnomad.utils.parse import parse_variant
 
 

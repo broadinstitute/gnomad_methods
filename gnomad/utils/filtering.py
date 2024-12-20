@@ -447,7 +447,7 @@ def filter_to_gencode_cds(
     :param max_collect_intervals: Maximum number of intervals for the use of
          `hl.filter_intervals` for filtering. When the number of intervals to filter is
          greater than this number, `filter`/`filter_rows` will be used instead. The
-         reason for this is that`hl.filter_intervals` is faster, but when the
+         reason for this is that `hl.filter_intervals` is faster, but when the
          number of intervals is too large, this can cause memory errors. Default is
          3000.
     :return: Table/MatrixTable filtered to loci in Gencode CDS intervals.
@@ -494,7 +494,7 @@ def filter_to_gencode_cds(
         )
 
     # Only collect intervals if there are less than or equal to
-    # `max_intervals` to avoid memory issues.
+    # `max_collect_intervals` to avoid memory issues.
     num_intervals = gencode_ht.count()
     if num_intervals <= max_collect_intervals:
         logger.info(

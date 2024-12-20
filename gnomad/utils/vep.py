@@ -1,7 +1,9 @@
 # noqa: D100
 
+import functools
 import json
 import logging
+import operator
 import os
 import subprocess
 from typing import Callable, List, Optional, Union
@@ -9,7 +11,6 @@ from typing import Callable, List, Optional, Union
 import hail as hl
 
 from gnomad.resources.resource_utils import VersionedTableResource
-from gnomad.utils.filtering import combine_functions
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -860,19 +861,19 @@ def filter_vep_transcript_csqs(
 
 
 def filter_vep_transcript_csqs_expr(
-    csq_expr: hl.expr.ArrayExpression,
+    csq_expr: Union[hl.expr.StructExpression, hl.expr.ArrayExpression],
     synonymous: bool = False,
     canonical: bool = False,
     mane_select: bool = False,
     ensembl_only: bool = False,
     protein_coding: bool = False,
-    csqs: List[str] = None,
+    csqs: Optional[List[str]] = None,
     keep_csqs: bool = True,
     genes: Optional[List[str]] = None,
     keep_genes: bool = True,
     match_by_gene_symbol: bool = False,
-    additional_filtering_criteria: Optional[List[Callable]] = None,
-) -> Union[hl.Table, hl.MatrixTable]:
+    additional_filtering_criteria: Optional[List[Union[hl.expr.BooleanExpression, Callable]]] = None,
+) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.
 
@@ -910,48 +911,69 @@ def filter_vep_transcript_csqs_expr(
         criteria to apply to the VEP transcript consequences.
     :return: ArrayExpression of filtered VEP transcript consequences.
     """
-    criteria = [lambda csq: True]
+    is_struct = isinstance(csq_expr, hl.expr.StructExpression)
     if synonymous:
         logger.info("Filtering to most severe consequence of synonymous_variant...")
         csqs = ["synonymous_variant"]
+
     if csqs is not None:
-        if "most_severe_consequence" not in csq_expr.dtype.element_type.fields:
+        fields = csq_expr if is_struct else csq_expr.dtype.element_type.fields
+        if "most_severe_consequence" not in fields:
             logger.info("Adding most_severe_consequence annotation...")
             csq_expr = add_most_severe_consequence_to_consequence(csq_expr)
 
-        csqs = hl.literal(csqs)
-        if keep_csqs:
-            criteria.append(lambda csq: csqs.contains(csq.most_severe_consequence))
-        else:
-            criteria.append(lambda csq: ~csqs.contains(csq.most_severe_consequence))
-    if canonical:
-        logger.info("Filtering to canonical transcripts")
-        criteria.append(lambda csq: csq.canonical == 1)
-    if mane_select:
-        logger.info("Filtering to MANE Select transcripts...")
-        criteria.append(lambda csq: hl.is_defined(csq.mane_select))
-    if ensembl_only:
-        logger.info("Filtering to Ensembl transcripts...")
-        criteria.append(lambda csq: csq.transcript_id.startswith("ENST"))
-    if protein_coding:
-        logger.info("Filtering to protein coding transcripts...")
-        criteria.append(lambda csq: csq.biotype == "protein_coding")
-    if genes is not None:
-        logger.info("Filtering to genes of interest...")
-        genes = hl.literal(genes)
-        gene_field = "gene_symbol" if match_by_gene_symbol else "gene_id"
-        if keep_genes:
-            criteria.append(lambda csq: genes.contains(csq[gene_field]))
-        else:
-            criteria.append(lambda csq: ~genes.contains(csq[gene_field]))
-    if additional_filtering_criteria is not None:
-        logger.info("Filtering to variants with additional criteria...")
-        criteria = criteria + additional_filtering_criteria
+    def _filter_vep_csq_expr(
+        csq: hl.expr.StructExpression,
+        additional_filtering_criteria: Optional[List[hl.expr.BooleanExpression]] = None,
+    ) -> hl.expr.BooleanExpression:
+        """
+        Filter VEP consequence StructExpression based on specified criteria.
 
-    if len(criteria) == 1:
-        logger.warning("No changes have been made to input transcript consequences!")
+        :param csq: VEP consequence StructExpression.
+        :param additional_filtering_criteria: Optional list of additional filtering.
+        :return: BooleanExpression for filtering VEP consequence StructExpression.
+        """
+        criteria = hl.bool(True)
+        if csqs is not None:
+            found = hl.literal(csqs).contains(csq.most_severe_consequence)
+            if keep_csqs:
+                criteria &= found
+            else:
+                criteria &= ~found
+        if canonical:
+            logger.info("Filtering to canonical transcripts")
+            criteria &= csq.canonical == 1
+        if mane_select:
+            logger.info("Filtering to MANE Select transcripts...")
+            criteria &= hl.is_defined(csq.mane_select)
+        if ensembl_only:
+            logger.info("Filtering to Ensembl transcripts...")
+            criteria &= csq.transcript_id.startswith("ENST")
+        if protein_coding:
+            logger.info("Filtering to protein coding transcripts...")
+            criteria &= csq.biotype == "protein_coding"
+        if genes is not None:
+            logger.info("Filtering to genes of interest...")
+            gene_field = "gene_symbol" if match_by_gene_symbol else "gene_id"
+            found = hl.literal(genes).contains(csq[gene_field])
+            if keep_genes:
+                criteria &= found
+            else:
+                criteria &= ~found
+        if additional_filtering_criteria is not None:
+            logger.info("Filtering to variants with additional criteria...")
+            criteria &= functools.reduce(operator.iand, additional_filtering_criteria)
 
-    return csq_expr.filter(lambda x: combine_functions(criteria, x))
+        return criteria
+
+    if is_struct:
+        return _filter_vep_csq_expr(csq_expr, additional_filtering_criteria)
+    else:
+        return csq_expr.filter(
+            lambda x: _filter_vep_csq_expr(
+                x, [f(x) for f in additional_filtering_criteria]
+            )
+        )
 
 
 def add_most_severe_csq_to_tc_within_vep_root(

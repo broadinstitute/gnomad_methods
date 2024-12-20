@@ -872,7 +872,9 @@ def filter_vep_transcript_csqs_expr(
     genes: Optional[List[str]] = None,
     keep_genes: bool = True,
     match_by_gene_symbol: bool = False,
-    additional_filtering_criteria: Optional[List[Union[hl.expr.BooleanExpression, Callable]]] = None,
+    additional_filtering_criteria: Optional[
+        List[Union[hl.expr.BooleanExpression, Callable]]
+    ] = None,
 ) -> Union[hl.expr.BooleanExpression, hl.expr.ArrayExpression]:
     """
     Filter VEP transcript consequences based on specified criteria, and optionally filter to variants where transcript consequences is not empty after filtering.

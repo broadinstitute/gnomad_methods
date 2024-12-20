@@ -406,7 +406,9 @@ def filter_to_gencode_cds(
     t: Union[hl.MatrixTable, hl.Table],
     gencode_ht: Optional[hl.Table] = None,
     genes: Optional[Union[str, List[str]]] = None,
-    padding: Optional[int] = 0,
+    by_gene_symbol: bool = True,
+    padding_bp: Optional[int] = 0,
+    max_intervals: Optional[int] = 3000,
 ) -> hl.Table:
     """
     Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.
@@ -439,8 +441,10 @@ def filter_to_gencode_cds(
     :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable
         to CDS regions. Default is None, which will use the default version of the
         Gencode Table resource.
-    :param genes: Gene(s) to filter to. Default is None, which will filter to all genes.
-    :param padding: Number of bases to pad the CDS intervals by. Default is 0.
+    :param genes: Optional gene(s) to filter to. Can be a single gene string or list of genes. Default is None.
+    :param by_gene_symbol: Whether to filter by gene symbol. Default is True. If False, will filter by gene ID.
+    :param padding_bp: Number of bases to pad the CDS intervals by. Default is 0.
+    :param max_intervals: Maximum number of intervals to collect before filtering. Default is 1000.
     :return: Table/MatrixTable filtered to loci in Gencode CDS intervals.
     """
     if gencode_ht is None:
@@ -469,30 +473,35 @@ def filter_to_gencode_cds(
         genes_upper = (
             [genes.upper()] if isinstance(genes, str) else [g.upper() for g in genes]
         )
-        gencode_ht = gencode_ht.filter(
-            hl.literal(genes_upper).contains(gencode_ht.gene_name)
-        )
+        if by_gene_symbol:
+            gencode_ht = gencode_ht.filter(
+                hl.literal(genes_upper).contains(gencode_ht.gene_name)
+            )
+        else:
+            gencode_ht = gencode_ht.filter(
+                hl.literal(genes_upper).contains(gencode_ht.gene_id)
+            )
 
-    if padding:
+    if padding_bp:
         gencode_ht = gencode_ht.annotate(
             padded_interval=hl.locus_interval(
                 gencode_ht.interval.start.contig,
-                gencode_ht.interval.start.position - padding,
-                gencode_ht.interval.end.position + padding,
+                gencode_ht.interval.start.position - padding_bp,
+                gencode_ht.interval.end.position + padding_bp,
                 includes_start=gencode_ht.interval.includes_start,
                 includes_end=gencode_ht.interval.includes_end,
                 reference_genome=gencode_ht.interval.start.dtype.reference_genome,
             )
         )
-        gencode_ht = gencode_ht.key_by("padded_interval")
 
-    if genes or padding:
-        # Only collect intervals if filtering by genes or padding, to avoid memory
-        # issues
-        intervals_expr = gencode_ht.padded_interval if padding else gencode_ht.interval
-        cds_intervals = intervals_expr.collect()
+    # Collect intervals if there are more than `max_intervals` to avoid memory issues
+    if gencode_ht.count() <= max_intervals:
+        logger.info("Since %d is smaller than the max intervals that can be collected, collecting all intervals", gencode_ht.count())
+        cds_intervals = gencode_ht.padded_interval if padding_bp else gencode_ht.interval
+        cds_intervals = cds_intervals.collect()
         t = hl.filter_intervals(t, cds_intervals)
     else:
+        logger.info("Filter to Gencode CDS intervals ")
         t = (
             t.filter_rows(hl.is_defined(gencode_ht[t.locus]))
             if isinstance(t, hl.MatrixTable)

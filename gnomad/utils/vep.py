@@ -885,7 +885,7 @@ def filter_vep_transcript_csqs_expr(
         is not already annotated on the `csq_expr` elements, the most severe
         consequence will be added to the `csq_expr` for filtering.
 
-    :param csq_expr: ArrayExpression of VEP transcript consequences.
+    :param csq_expr: VEP transcript consequences StructExpression or ArrayExpression.
     :param synonymous: Whether to filter to variants where the most severe consequence
         is 'synonymous_variant'. Default is False.
     :param canonical: Whether to filter to only canonical transcripts. Default is False.
@@ -911,7 +911,8 @@ def filter_vep_transcript_csqs_expr(
         consequences by 'gene_symbol' instead of 'gene_id'. Default is False.
     :param additional_filtering_criteria: Optional list of additional filtering
         criteria to apply to the VEP transcript consequences.
-    :return: ArrayExpression of filtered VEP transcript consequences.
+    :return: BooleanExpression indicating whether the consequence should be filtered
+        or an ArrayExpression of the filtered VEP transcript consequences.
     """
     is_struct = isinstance(csq_expr, hl.expr.StructExpression)
     if synonymous:

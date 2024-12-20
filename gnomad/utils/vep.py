@@ -973,7 +973,12 @@ def filter_vep_transcript_csqs_expr(
     else:
         return csq_expr.filter(
             lambda x: _filter_vep_csq_expr(
-                x, [f(x) for f in additional_filtering_criteria]
+                x,
+                (
+                    [f(x) for f in additional_filtering_criteria]
+                    if additional_filtering_criteria is not None
+                    else None
+                ),
             )
         )
 

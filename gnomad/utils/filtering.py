@@ -493,7 +493,8 @@ def filter_to_gencode_cds(
             reference_genome=interval_expr.start.dtype.reference_genome,
         )
 
-    # Only collect intervals if there are less than or equal to `max_intervals` to avoid memory issues.
+    # Only collect intervals if there are less than or equal to
+    # `max_intervals` to avoid memory issues.
     num_intervals = gencode_ht.count()
     if num_intervals <= max_collect_intervals:
         logger.info(

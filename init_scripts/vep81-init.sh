@@ -35,4 +35,4 @@ gsutil cp gs://hail-common/vep/vep/1var.vcf /vep
 gsutil cp gs://hail-common/vep/vep/run_hail_vep_vcf.sh /vep
 chmod a+rx /vep/run_hail_vep_vcf.sh
 
- /vep/run_hail_vep_vcf.sh /vep/1var.vcf
+/vep/run_hail_vep_vcf.sh /vep/1var.vcf

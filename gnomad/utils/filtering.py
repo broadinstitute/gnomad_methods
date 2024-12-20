@@ -445,7 +445,7 @@ def filter_to_gencode_cds(
     :param by_gene_symbol: Whether to filter by gene symbol. Default is True. If False, will filter by gene ID.
     :param padding_bp: Number of bases to pad the CDS intervals by. Default is 0.
     :param max_collect_intervals: Maximum number of intervals for the use of
-        `hl.filter_intervals` for filtering. When the number of intervals to filter is
+         `hl.filter_intervals` for filtering. When the number of intervals to filter is
          greater than this number, `filter`/`filter_rows` will be used instead. The
          reason for this is that`hl.filter_intervals` is faster, but when the
          number of intervals is too large, this can cause memory errors. Default is

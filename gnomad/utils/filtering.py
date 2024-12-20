@@ -407,8 +407,8 @@ def filter_to_gencode_cds(
     gencode_ht: Optional[hl.Table] = None,
     genes: Optional[Union[str, List[str]]] = None,
     by_gene_symbol: bool = True,
-    padding_bp: Optional[int] = 0,
-    max_intervals: Optional[int] = 3000,
+    padding_bp: int = 0,
+    max_collect_intervals: int = 3000,
 ) -> hl.Table:
     """
     Filter a Table/MatrixTable to only Gencode CDS regions in protein coding transcripts.
@@ -494,20 +494,18 @@ def filter_to_gencode_cds(
             )
         )
 
-    # Collect intervals if there are more than `max_intervals` to avoid memory issues
-    if gencode_ht.count() < max_intervals:
+    # Only collect intervals if there are less than or equal to `max_intervals` to avoid memory issues.
+    num_intervals = gencode_ht.count()
+    if num_intervals <= max_collect_intervals:
         logger.info(
-            "Since %d is smaller than the max intervals that can be collected, collecting all intervals...",
-            gencode_ht.count(),
+            "Since %d is less than or equal to 'max_collect_intervals', collecting all intervals...",
+            num_intervals,
         )
-        cds_intervals = (
-            gencode_ht.padded_interval if padding_bp else gencode_ht.interval
-        )
-        cds_intervals = cds_intervals.collect()
+        cds_intervals = interval_expr.collect()
         t = hl.filter_intervals(t, cds_intervals)
     else:
         if padding_bp:
-            gencode_ht = gencode_ht.key_by("padded_interval")
+            gencode_ht = gencode_ht.key_by(padded_interval=interval_expr)
 
         t = (
             t.filter_rows(hl.is_defined(gencode_ht[t.locus]))

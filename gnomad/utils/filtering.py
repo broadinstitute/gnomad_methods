@@ -495,13 +495,20 @@ def filter_to_gencode_cds(
         )
 
     # Collect intervals if there are more than `max_intervals` to avoid memory issues
-    if gencode_ht.count() <= max_intervals:
-        logger.info("Since %d is smaller than the max intervals that can be collected, collecting all intervals", gencode_ht.count())
-        cds_intervals = gencode_ht.padded_interval if padding_bp else gencode_ht.interval
+    if gencode_ht.count() < max_intervals:
+        logger.info(
+            "Since %d is smaller than the max intervals that can be collected, collecting all intervals...",
+            gencode_ht.count(),
+        )
+        cds_intervals = (
+            gencode_ht.padded_interval if padding_bp else gencode_ht.interval
+        )
         cds_intervals = cds_intervals.collect()
         t = hl.filter_intervals(t, cds_intervals)
     else:
-        logger.info("Filter to Gencode CDS intervals ")
+        if padding_bp:
+            gencode_ht = gencode_ht.key_by("padded_interval")
+
         t = (
             t.filter_rows(hl.is_defined(gencode_ht[t.locus]))
             if isinstance(t, hl.MatrixTable)

@@ -17,6 +17,9 @@ GENOME_RELEASES = ["2.1", "2.1.1"]
 EXOME_COVERAGE_RELEASES = ["2.1"]
 GENOME_COVERAGE_RELEASES = ["2.1"]
 
+CURRENT_EXOME_COVERAGE_RELEASE = "2.1"
+CURRENT_GENOME_COVERAGE_RELEASE = "2.1"
+
 SUBPOPS = {
     "NFE": ["BGR", "EST", "NWE", "SEU", "SWE", "ONF"],
     "EAS": ["KOR", "JPN", "OEA"],
@@ -177,11 +180,11 @@ def coverage(data_type: str) -> VersionedTableResource:
         raise DataException(f"{data_type} not in {DATA_TYPES}")
 
     if data_type == "exomes":
-        current_release = "2.1"
-        releases = [r for r in EXOME_RELEASES if r != "2.1.1"]
+        current_release = CURRENT_EXOME_COVERAGE_RELEASE
+        releases = EXOME_COVERAGE_RELEASES
     else:
-        current_release = "2.1"
-        releases = [r for r in GENOME_RELEASES if r != "2.1.1"]
+        current_release = CURRENT_GENOME_COVERAGE_RELEASE
+        releases = GENOME_COVERAGE_RELEASES
 
     return VersionedTableResource(
         current_release,

@@ -391,6 +391,25 @@ def _public_constraint_ht_path(version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
 
 
+def _public_browser_variant_ht_path(version: str) -> str:
+    """
+    Get public browser variant table path.
+
+    :param version: One of the release versions of gnomAD on GRCh38.
+    :return: Path to browser variant Table.
+    """
+    return f"gs://gnomad-public-requester-pays/release/{version}/ht/browser/gnomad.browser.v{version}.sites.ht"
+
+
+def _public_browser_gene_ht_path() -> str:
+    """
+    Get public browser gene table path.
+
+    :return: Path to browser gene Table.
+    """
+    return "gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.ht"
+
+
 def public_release(data_type: str) -> VersionedTableResource:
     """
     Retrieve publicly released versioned table resource.
@@ -759,3 +778,28 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
             for release in EXOME_RELEASES
         },
     )
+
+
+def browser_variant(version: str = CURRENT_EXOME_RELEASE) -> GnomadPublicTableResource:
+    """
+    Retrieve browser variant table.
+
+    :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
+    :return: Browser variant Table.
+    :raises ValueError: If the version is not a valid release.
+    """
+    if version not in EXOME_RELEASES:
+        raise ValueError(
+            f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
+        )
+
+    return GnomadPublicTableResource(path=_public_browser_variant_ht_path(version))
+
+
+def browser_gene() -> GnomadPublicTableResource:
+    """
+    Retrieve browser gene table.
+
+    :return: Browser gene Table.
+    """
+    return GnomadPublicTableResource(path=_public_browser_gene_ht_path())

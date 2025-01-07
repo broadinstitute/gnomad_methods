@@ -1279,6 +1279,14 @@ def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
     # For each specified array, unfurl the array elements and their structs
     # into expr_dict.
     for array, array_index_dict in indexed_array_annotations.items():
+        # Check for presence of array in the Table rows and the array index in the globals.
+        if array not in ht.row:
+            raise ValueError(f"Annotation '{array}' not found in the Table rows.")
+        if array_index_dict not in ht.globals:
+            raise ValueError(
+                f"Annotation '{array_index_dict}' not found in the Table globals."
+            )
+
         # Evaluate the index dictionary for the specified array.
         array_index_dict = hl.eval(ht[array_index_dict])
 

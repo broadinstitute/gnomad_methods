@@ -2,7 +2,7 @@
 import itertools
 import logging
 from copy import deepcopy
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
 
@@ -22,33 +22,71 @@ logger.setLevel(logging.INFO)
 
 
 def freq_bin_expr(
-    freq_expr: hl.expr.ArrayExpression, index: int = 0
+    freq_expr: Union[hl.expr.StructExpression, hl.expr.ArrayExpression],
+    index: int = 0,
+    ac_cutoffs: Optional[List[Union[int, Tuple[int, str]]]] = [
+        (0, "AC0"),
+        (1, "singleton"),
+        (2, "doubleton"),
+    ],
+    af_cutoffs: Optional[List[Union[float, Tuple[float, str]]]] = [
+        (1e-4, "0.01%"),
+        (1e-3, "0.1%"),
+        (1e-2, "1%"),
+        (1e-1, "10%"),
+    ],
+    upper_af: Optional[Union[float, Tuple[float, str]]] = (0.95, "95%"),
 ) -> hl.expr.StringExpression:
     """
     Return frequency string annotations based on input AC or AF.
 
     .. note::
 
-        - Default index is 0 because function assumes freq_expr was calculated with `annotate_freq`.
-        - Frequency index 0 from `annotate_freq` is frequency for all pops calculated on adj genotypes only.
+        - Default index is 0 because function assumes freq_expr was calculated with
+          `annotate_freq`.
+        - Frequency index 0 from `annotate_freq` is frequency for all pops calculated
+          on adj genotypes only.
 
     :param freq_expr: Array of structs containing frequency information.
     :param index: Which index of freq_expr to use for annotation. Default is 0.
+    :param ac_cutoffs: List of AC cutoffs to use for binning.
+    :param af_cutoffs: List of AF cutoffs to use for binning.
+    :param upper_af: Upper AF cutoff to use for binning.
     :return: StringExpression containing bin name based on input AC or AF.
     """
-    return (
-        hl.case(missing_false=True)
-        .when(freq_expr[index].AC == 0, "Not found")
-        .when(freq_expr[index].AC == 1, "Singleton")
-        .when(freq_expr[index].AC == 2, "Doubleton")
-        .when(freq_expr[index].AC <= 5, "AC 3 - 5")
-        .when(freq_expr[index].AF < 1e-4, "AC 6 - 0.01%")
-        .when(freq_expr[index].AF < 1e-3, "0.01% - 0.1%")
-        .when(freq_expr[index].AF < 1e-2, "0.1% - 1%")
-        .when(freq_expr[index].AF < 1e-1, "1% - 10%")
-        .when(freq_expr[index].AF > 0.95, ">95%")
-        .default("10% - 95%")
-    )
+    if isinstance(freq_expr, hl.expr.ArrayExpression):
+        freq_expr = freq_expr[index]
+
+    if ac_cutoffs and isinstance(ac_cutoffs[0], int):
+        ac_cutoffs = [(c, f"AC{c}") for c in ac_cutoffs]
+
+    if af_cutoffs and isinstance(af_cutoffs[0], float):
+        af_cutoffs = [(f, f"{f*100}%") for f in af_cutoffs]
+
+    if isinstance(upper_af, float):
+        upper_af = (upper_af, f"{upper_af*100}%")
+
+    freq_bin_expr = hl.case().when(hl.is_missing(freq_expr.AC), "Missing")
+    prev_af = None
+    for ac, name in sorted(ac_cutoffs):
+        freq_bin_expr = freq_bin_expr.when(freq_expr.AC == ac, name)
+        prev_af = name
+
+    for af, name in sorted(af_cutoffs):
+        prev_af = "<" if prev_af is None else f"{prev_af} - "
+        freq_bin_expr = freq_bin_expr.when(freq_expr.AF < af, f"{prev_af}{name}")
+        prev_af = name
+
+    if upper_af:
+        freq_bin_expr = freq_bin_expr.when(
+            freq_expr.AF > upper_af[0], f">{upper_af[1]}"
+        )
+        default_af = "<" if prev_af is None else f"{prev_af} - "
+        default_af = f"{default_af}{upper_af[1]}"
+    else:
+        default_af = f">{prev_af}"
+
+    return freq_bin_expr.default(default_af)
 
 
 def get_summary_counts_dict(

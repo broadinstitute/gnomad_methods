@@ -14,6 +14,12 @@ CURRENT_GENOME_RELEASE = "2.1.1"
 EXOME_RELEASES = ["2.1", "2.1.1"]
 GENOME_RELEASES = ["2.1", "2.1.1"]
 
+EXOME_COVERAGE_RELEASES = ["2.1"]
+GENOME_COVERAGE_RELEASES = ["2.1"]
+
+CURRENT_EXOME_COVERAGE_RELEASE = "2.1"
+CURRENT_GENOME_COVERAGE_RELEASE = "2.1"
+
 SUBPOPS = {
     "NFE": ["BGR", "EST", "NWE", "SEU", "SWE", "ONF"],
     "EAS": ["KOR", "JPN", "OEA"],
@@ -104,6 +110,37 @@ def _liftover_data_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/liftover_grch38/ht/{data_type}/gnomad.{data_type}.r{version}.sites.liftover_grch38.ht"
 
 
+def _public_constraint_ht_path() -> str:
+    """
+    Get public gene constraint Table path.
+
+    :return: Path to constraint Table.
+    """
+    return "gs://gnomad-public-requester-pays/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
+
+
+def _public_pext_path(pext_type: str = "base_level") -> str:
+    """
+    Get public proportion expressed across transcripts (pext) data.
+
+    :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
+    :return: Path to pext data.
+    :raises DataException: If the provided pext_type is invalid.
+    """
+    pext_paths = {
+        "annotation_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht",
+        "base_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht",
+    }
+
+    if pext_type not in pext_paths:
+        valid_types = list(pext_paths.keys())
+        raise DataException(
+            f"Invalid pext_type: '{pext_type}'. Valid options are {valid_types}."
+        )
+
+    return pext_paths[pext_type]
+
+
 def public_release(data_type: str) -> VersionedTableResource:
     """
     Retrieve publicly released versioned table resource.
@@ -143,11 +180,11 @@ def coverage(data_type: str) -> VersionedTableResource:
         raise DataException(f"{data_type} not in {DATA_TYPES}")
 
     if data_type == "exomes":
-        current_release = "2.1"
-        releases = [r for r in EXOME_RELEASES if r != "2.1.1"]
+        current_release = CURRENT_EXOME_COVERAGE_RELEASE
+        releases = EXOME_COVERAGE_RELEASES
     else:
-        current_release = "2.1"
-        releases = [r for r in GENOME_RELEASES if r != "2.1.1"]
+        current_release = CURRENT_GENOME_COVERAGE_RELEASE
+        releases = GENOME_COVERAGE_RELEASES
 
     return VersionedTableResource(
         current_release,
@@ -219,3 +256,22 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
 
     contig = f".{contig}" if contig else ""
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.r{version}.sites{contig}.vcf.bgz"
+
+
+def pext(pext_type: str = "base_level") -> GnomadPublicTableResource:
+    """
+    Retrieve proportion expressed across transcripts (pext) data.
+
+    :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
+    :return: Pext Table.
+    """
+    return GnomadPublicTableResource(path=_public_pext_path(pext_type))
+
+
+def constraint() -> GnomadPublicTableResource:
+    """
+    Retrieve gene constraint table.
+
+    :return: Gene constraint Table.
+    """
+    return GnomadPublicTableResource(path=_public_constraint_ht_path())

@@ -46,7 +46,6 @@ DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
-
 GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 SUBSETS = {
     "v3": [
@@ -363,6 +362,33 @@ def _public_an_ht_path(data_type: str, version: str) -> str:
     :return: Path to allle number Table
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/ht/{data_type}/gnomad.{data_type}.v{version}.allele_number_all_sites.ht"
+
+
+def _public_pext_ht_path(pext_type: str = "base_level") -> str:
+    """
+    Get public proportion expressed across transcripts (pext) data.
+
+    :param pext_type: One of "base_level" or "annotation_level". Default is "base_level".
+    :return: Path to pext Table.
+    """
+    valid_types = ["base_level", "annotation_level"]
+
+    if pext_type not in valid_types:
+        raise DataException(
+            f"Invalid pext_type: '{pext_type}'. Valid options are {valid_types}."
+        )
+
+    return f"gs://gnomad-public-requester-pays/release/4.1/pext/gnomad.pext.gtex_v10.{pext_type}.ht"
+
+
+def _public_constraint_ht_path(version: str) -> str:
+    """
+    Get public constraint table path.
+
+    :param version: One of the release versions of gnomAD on GRCh38.
+    :return: Path to gene constraint Table.
+    """
+    return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -701,3 +727,35 @@ def gnomad_gks(
         outputs.append(out)
 
     return outputs
+
+
+def pext(pext_type: str = "base_level") -> GnomadPublicTableResource:
+    """
+    Retrieve pext table by type.
+
+    :param pext_type: One of "base_level" or "annotation_level". Default is "base_level".
+    :return: Pext Table.
+    """
+    return GnomadPublicTableResource(path=_public_pext_ht_path(pext_type))
+
+
+def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
+    """
+    Retrieve gene constraint Table.
+
+    :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
+    :return: Gene constraint Table.
+    :raises ValueError: If the version is not a valid release.
+    """
+    if version not in EXOME_RELEASES:
+        raise ValueError(
+            f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
+        )
+
+    return VersionedTableResource(
+        CURRENT_EXOME_RELEASE,
+        {
+            release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
+            for release in EXOME_RELEASES
+        },
+    )

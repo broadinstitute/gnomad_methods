@@ -21,7 +21,11 @@ def ht_for_check_missingness_of_struct() -> hl.Table:
             "s": hl.struct(
                 a=1,
                 b="value1",
-                c=hl.struct(d=[hl.missing(hl.tstr), hl.missing(hl.tstr)], e="test1"),
+                c=hl.struct(
+                    d=[hl.missing(hl.tstr), hl.missing(hl.tstr)],
+                    e="test1",
+                    f={"v1", "v2"},
+                ),
             ),
         },
         {
@@ -30,7 +34,9 @@ def ht_for_check_missingness_of_struct() -> hl.Table:
                 a=2,
                 b="value2",
                 c=hl.struct(
-                    d=["not missing", hl.missing(hl.tstr)], e=hl.missing(hl.tstr)
+                    d=["not missing", hl.missing(hl.tstr)],
+                    e=hl.missing(hl.tstr),
+                    f={"v3", hl.missing(hl.tstr)},
                 ),
             ),
         },
@@ -39,17 +45,29 @@ def ht_for_check_missingness_of_struct() -> hl.Table:
             "s": hl.struct(
                 a=3,
                 b=hl.missing(hl.tstr),
-                c=hl.struct(d=hl.missing(hl.tarray(hl.tstr)), e=hl.missing(hl.tstr)),
+                c=hl.struct(
+                    d=hl.missing(hl.tarray(hl.tstr)),
+                    e=hl.missing(hl.tstr),
+                    f=hl.empty_set(hl.tstr),
+                ),
             ),
         },
         {
             "idx": 3,
-            "s": hl.struct(a=4, b="value3", c=hl.struct(d=["foo", "bar"], e="test2")),
+            "s": hl.struct(
+                a=4,
+                b="value3",
+                c=hl.struct(d=["foo", "bar"], e="test2", f=hl.empty_set(hl.tstr)),
+            ),
         },
         {
             "idx": 4,
             "s": hl.struct(
-                a=5, b="value4", c=hl.struct(d=hl.empty_array(hl.tstr), e="test3")
+                a=5,
+                b="value4",
+                c=hl.struct(
+                    d=hl.empty_array(hl.tstr), e="test3", f=hl.empty_set(hl.tstr)
+                ),
             ),
         },
     ]
@@ -85,6 +103,7 @@ def test_check_missingness_of_struct(ht_for_check_missingness_of_struct) -> None
         "s.b": 0.2,
         "s.c.d": 0.6,
         "s.c.e": 0.4,
+        "s.c.f": 0.6,
     }
 
     # Compare the results with the expected values.

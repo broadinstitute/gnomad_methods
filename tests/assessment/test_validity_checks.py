@@ -78,7 +78,9 @@ def ht_for_check_missingness_of_struct() -> hl.Table:
         hl.tstruct(
             idx=hl.tint32,
             s=hl.tstruct(
-                a=hl.tint32, b=hl.tstr, c=hl.tstruct(d=hl.tarray(hl.tstr), e=hl.tstr)
+                a=hl.tint32,
+                b=hl.tstr,
+                c=hl.tstruct(d=hl.tarray(hl.tstr), e=hl.tstr, f=hl.tset(hl.tstr)),
             ),
         ),
     )

@@ -412,29 +412,23 @@ def filter_gencode_ht(
     feature: Union[str, List[str]] = None,
     genes: Optional[Union[str, List[str]]] = None,
     by_gene_symbol: bool = True,
-    # transcript_types: Optional[List[str]] = None
-    # keep_transcript_types: bool = True,
 ) -> hl.Table:
     """
-    Filter a Table/MatrixTable based on Gencode Table annotations.
-
-    Example use:
-
-    .. code-block:: python
-
-        from gnomad.resources.grch37.reference_data import gencode
-        gencode_ht = gencode.ht()
-        gencode_ht = filter_gencode_to_cds(gencode_ht)
+    Filter a Gencode Table to specified criteria.
 
     .. note::
 
-        If no Gencode Table is provided, the default version of the Gencode Table
-        resource for the genome build of the input Table/MatrixTable will be used.
+        If no Gencode Table is provided, a `reference_genome` Gencode Table resource
+        will be used. If `version` is not provided, the default version of the Gencode
+        Table resource will be used.
 
-    :param t: Input Table/MatrixTable to filter.
     :param gencode_ht: Gencode Table to use for filtering the input Table/MatrixTable
         to CDS regions. Default is None, which will use the default version of the
         Gencode Table resource.
+    :param reference_genome: Reference genome build of Gencode Table to use if none is
+        provided. Default is "GRCh38".
+    :param version: Version of the Gencode Table to use if none is provided. Default is
+        None.
     :param protein_coding: Whether to filter to only intervals where "transcript_type"
         is "protein_coding". Default is False.
     :param feature: Optional feature(s) to filter to. Can be a single feature string or
@@ -443,14 +437,7 @@ def filter_gencode_ht(
         genes. Default is None.
     :param by_gene_symbol: Whether to filter by gene symbol. Default is True. If False,
         will filter by gene ID.
-    :param padding_bp: Number of bases to pad the CDS intervals by. Default is 0.
-    :param max_collect_intervals: Maximum number of intervals for the use of
-         `hl.filter_intervals` for filtering. When the number of intervals to filter is
-         greater than this number, `filter`/`filter_rows` will be used instead. The
-         reason for this is that `hl.filter_intervals` is faster, but when the
-         number of intervals is too large, this can cause memory errors. Default is
-         3000.
-    :return: Table/MatrixTable filtered to loci in Gencode CDS intervals.
+    :return: Gencode Table filtered to specified criteria.
     """
     if gencode_ht is None and reference_genome is None:
         raise ValueError("Must provide a Gencode Table or reference genome build.")

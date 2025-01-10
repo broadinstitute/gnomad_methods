@@ -1,6 +1,6 @@
 # noqa: D100
 
-from typing import List
+from typing import List, Union
 
 import hail as hl
 
@@ -71,3 +71,44 @@ def interval_length(interval: hl.Interval) -> int:
         )
     else:
         return interval.end.position - interval.start.position
+
+
+def pad_intervals(
+    intervals: Union[
+        hl.expr.IntervalExpression,
+        hl.tinterval(hl.tlocus()),
+        List[hl.tinterval(hl.tlocus())],
+    ],
+    padding_bp: int,
+) -> Union[hl.expr.IntervalExpression, List[hl.expr.IntervalExpression]]:
+    """
+    Add padding to interval(s).
+
+    :param intervals: Interval(s) to add padding to. This can be a single Interval,
+        a list of Intervals, or an IntervalExpression.
+    :param padding_bp: Number of base pairs to add to each side of the interval.
+    :return: Interval(s) with padding added.
+    """
+
+    def _add_padding(
+        interval: Union[hl.expr.IntervalExpression, hl.tinterval(hl.tlocus())],
+    ) -> hl.expr.IntervalExpression:
+        """
+        Add padding to an interval.
+
+        :param interval: Interval to add padding to.
+        :return: Interval with padding added.
+        """
+        return hl.locus_interval(
+            interval.start.contig,
+            interval.start.position - padding_bp,
+            interval.end.position + padding_bp,
+            includes_start=interval.includes_start,
+            includes_end=interval.includes_end,
+            reference_genome=interval.start.dtype.reference_genome,
+        )
+
+    if isinstance(intervals, List):
+        return [_add_padding(i) for i in intervals]
+    else:
+        return _add_padding(intervals)

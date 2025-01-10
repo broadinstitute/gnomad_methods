@@ -76,8 +76,8 @@ def interval_length(interval: hl.Interval) -> int:
 def pad_intervals(
     intervals: Union[
         hl.expr.IntervalExpression,
-        hl.tinterval(hl.tlocus()),
-        List[hl.tinterval(hl.tlocus())],
+        hl.Interval,
+        List[hl.Interval],
     ],
     padding_bp: int,
 ) -> Union[hl.expr.IntervalExpression, List[hl.expr.IntervalExpression]]:
@@ -91,7 +91,7 @@ def pad_intervals(
     """
 
     def _add_padding(
-        interval: Union[hl.expr.IntervalExpression, hl.tinterval(hl.tlocus())],
+        interval: Union[hl.expr.IntervalExpression, hl.Interval],
     ) -> hl.expr.IntervalExpression:
         """
         Add padding to an interval.

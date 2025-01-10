@@ -867,6 +867,8 @@ def filter_vep_transcript_csqs_expr(
     mane_select: bool = False,
     ensembl_only: bool = False,
     protein_coding: bool = False,
+    loftee_labels: Optional[List[str]] = None,
+    no_lof_flags: bool = False,
     csqs: Optional[List[str]] = None,
     keep_csqs: bool = True,
     genes: Optional[List[str]] = None,
@@ -896,6 +898,10 @@ def filter_vep_transcript_csqs_expr(
         Emsembl. Default is False.
     :param protein_coding: Whether to filter to only protein-coding transcripts.
         Default is False.
+    :param loftee_labels: List of LOFTEE labels to filter to. Default is None, which
+        filters to all LOFTEE labels.
+    :param no_lof_flags: Whether to filter to consequences with no LOFTEE flags.
+        Default is False.
     :param csqs: Optional list of consequence terms to filter to. Transcript
         consequences are filtered to those where 'most_severe_consequence' is in the
         list of consequence terms `csqs`. Default is None.
@@ -919,9 +925,9 @@ def filter_vep_transcript_csqs_expr(
         logger.info("Filtering to most severe consequence of synonymous_variant...")
         csqs = ["synonymous_variant"]
 
+    csq_fields = csq_expr if is_struct else csq_expr.dtype.element_type.fields
     if csqs is not None:
-        fields = csq_expr if is_struct else csq_expr.dtype.element_type.fields
-        if "most_severe_consequence" not in fields:
+        if "most_severe_consequence" not in csq_fields:
             logger.info("Adding most_severe_consequence annotation...")
             csq_expr = add_most_severe_consequence_to_consequence(csq_expr)
 
@@ -955,6 +961,20 @@ def filter_vep_transcript_csqs_expr(
         if protein_coding:
             logger.info("Filtering to protein coding transcripts...")
             criteria &= csq.biotype == "protein_coding"
+        if loftee_labels:
+            logger.info(
+                "Filtering to consequences with LOFTEE labels: %s...", loftee_labels
+            )
+            criteria &= hl.set(loftee_labels).contains(csq.lof)
+        if no_lof_flags:
+            logger.info("Filtering to consequences with no LOFTEE flags...")
+            if "lof_flags" in csq_fields:
+                criteria &= hl.is_missing(csq.lof_flags) | (csq.lof_flags == "")
+            else:
+                logger.warning(
+                    "'lof_flags' not present in consequence struct, no consequences "
+                    "are filtered based on LOFTEE flags"
+                )
         if genes is not None:
             logger.info("Filtering to genes of interest...")
             gene_field = "gene_symbol" if match_by_gene_symbol else "gene_id"

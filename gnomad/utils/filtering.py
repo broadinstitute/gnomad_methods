@@ -507,10 +507,7 @@ def filter_by_intervals(
         number of intervals is too large, this can cause memory errors. Default is
         3000.
     :param reference_genome: Reference genome build to use for parsing the intervals
-        if the intervals are strings. If no reference genome is provided, the function
-        will infer the reference genome build from the interval string. If the interval
-        string does not start with 'chr', it will assume GRCh37, otherwise GRCh38.
-        Default is None.
+        if the intervals are strings. Default is None.
     :return: Table/MatrixTable filtered by interval(s).
     """
     is_expr = isinstance(intervals, hl.expr.IntervalExpression)

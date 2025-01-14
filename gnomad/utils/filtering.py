@@ -547,7 +547,7 @@ def filter_by_intervals(
     return hl.filter_intervals(t, intervals)
 
 
-def filter_by_gencode(
+def filter_by_gencode_intervals(
     t: Union[hl.MatrixTable, hl.Table],
     gencode_ht: Optional[hl.Table] = None,
     protein_coding: bool = False,
@@ -640,7 +640,7 @@ def filter_to_gencode_cds(
         "This Gencode CDS interval filter does not filter by transcript! Please see the"
         " documentation for more details to confirm it's being used as intended."
     )
-    return filter_by_gencode(t, protein_coding=True, feature="CDS", **kwargs)
+    return filter_by_gencode_intervals(t, protein_coding=True, feature="CDS", **kwargs)
 
 
 def remove_fields_from_constant(

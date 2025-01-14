@@ -26,6 +26,8 @@ CURRENT_EXOME_RELEASE = "4.1"
 CURRENT_GENOME_RELEASE = "4.1"
 CURRENT_JOINT_RELEASE = "4.1"
 
+CURRENT_BROWSER_RELEASE = "4.1"
+
 CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 
@@ -35,6 +37,7 @@ CURRENT_GENOME_AN_RELEASE = "4.1"
 EXOME_RELEASES = ["4.0", "4.1"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2", "4.0", "4.1"]
 JOINT_RELEASES = ["4.1"]
+BROWSER_RELEASES = ["4.1"]
 
 EXOME_COVERAGE_RELEASES = ["4.0"]
 GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
@@ -405,9 +408,14 @@ def _public_browser_gene_ht_path() -> str:
     """
     Get public browser gene table path.
 
+    .. note::
+       This table has smaller number of partitions (n=50) for faster computation and
+       contains pext data compared to gnomad.genes.GRCh38.GENCODEv39.ht (which was
+       used by the browser for ES export) under the same path.
+
     :return: Path to browser gene Table.
     """
-    return "gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.ht"
+    return ("gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.pext.ht")
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -780,7 +788,7 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     )
 
 
-def browser_variant(version: str = CURRENT_EXOME_RELEASE) -> GnomadPublicTableResource:
+def browser_variant(version: str = CURRENT_BROWSER_RELEASE) -> GnomadPublicTableResource:
     """
     Retrieve browser variant table.
 
@@ -788,9 +796,9 @@ def browser_variant(version: str = CURRENT_EXOME_RELEASE) -> GnomadPublicTableRe
     :return: Browser variant Table.
     :raises ValueError: If the version is not a valid release.
     """
-    if version not in EXOME_RELEASES:
+    if version not in BROWSER_RELEASES:
         raise ValueError(
-            f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
+            f"Invalid version: {version}. Must be one of {BROWSER_RELEASES}."
         )
 
     return GnomadPublicTableResource(path=_public_browser_variant_ht_path(version))

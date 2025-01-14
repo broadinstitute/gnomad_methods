@@ -141,6 +141,21 @@ def _public_pext_path(pext_type: str = "base_level") -> str:
     return pext_paths[pext_type]
 
 
+def _public_browser_gene_ht_path() -> str:
+    """
+    Get public browser gene table path.
+
+    .. note::
+
+       This table has smaller number of partitions (n=100) for faster computation and
+       contains pext data compared to gnomad.genes.GRCh37.GENCODEv19.ht (which was
+       used by the browser for ES export) under the same path.
+
+    :return: Path to browser gene Table.
+    """
+    return "gs://gnomad-public-requester-pays/resources/grch37/browser/gnomad.genes.GRCh37.GENCODEv19.pext.ht"
+
+
 def public_release(data_type: str) -> VersionedTableResource:
     """
     Retrieve publicly released versioned table resource.
@@ -275,3 +290,12 @@ def constraint() -> GnomadPublicTableResource:
     :return: Gene constraint Table.
     """
     return GnomadPublicTableResource(path=_public_constraint_ht_path())
+
+
+def browser_gene() -> GnomadPublicTableResource:
+    """
+    Retrieve browser gene table.
+
+    :return: Browser gene Table.
+    """
+    return GnomadPublicTableResource(path=_public_browser_gene_ht_path())

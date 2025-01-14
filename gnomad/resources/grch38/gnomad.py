@@ -26,6 +26,8 @@ CURRENT_EXOME_RELEASE = "4.1"
 CURRENT_GENOME_RELEASE = "4.1"
 CURRENT_JOINT_RELEASE = "4.1"
 
+CURRENT_BROWSER_RELEASE = "4.1"
+
 CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 
@@ -35,6 +37,7 @@ CURRENT_GENOME_AN_RELEASE = "4.1"
 EXOME_RELEASES = ["4.0", "4.1"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2", "4.0", "4.1"]
 JOINT_RELEASES = ["4.1"]
+BROWSER_RELEASES = ["4.1"]
 
 EXOME_COVERAGE_RELEASES = ["4.0"]
 GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
@@ -389,6 +392,31 @@ def _public_constraint_ht_path(version: str) -> str:
     :return: Path to gene constraint Table.
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
+
+
+def _public_browser_variant_ht_path(version: str) -> str:
+    """
+    Get public browser variant table path.
+
+    :param version: One of the release versions of gnomAD on GRCh38.
+    :return: Path to browser variant Table.
+    """
+    return f"gs://gnomad-public-requester-pays/release/{version}/ht/browser/gnomad.browser.v{version}.sites.ht"
+
+
+def _public_browser_gene_ht_path() -> str:
+    """
+    Get public browser gene table path.
+
+    .. note::
+
+       This table has smaller number of partitions (n=100) for faster computation and
+       contains pext data compared to gnomad.genes.GRCh38.GENCODEv39.ht (which was
+       used by the browser for ES export) under the same path.
+
+    :return: Path to browser gene Table.
+    """
+    return "gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.pext.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -759,3 +787,29 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
             for release in EXOME_RELEASES
         },
     )
+
+
+def browser_variant() -> VersionedTableResource:
+    """
+    Retrieve browser variant table.
+
+    :return: Browser variant Table.
+    """
+    return VersionedTableResource(
+        CURRENT_BROWSER_RELEASE,
+        {
+            release: GnomadPublicTableResource(
+                path=_public_browser_variant_ht_path(release)
+            )
+            for release in BROWSER_RELEASES
+        },
+    )
+
+
+def browser_gene() -> GnomadPublicTableResource:
+    """
+    Retrieve browser gene table.
+
+    :return: Browser gene Table.
+    """
+    return GnomadPublicTableResource(path=_public_browser_gene_ht_path())

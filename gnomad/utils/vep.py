@@ -968,13 +968,7 @@ def filter_vep_transcript_csqs_expr(
             criteria &= hl.set(loftee_labels).contains(csq.lof)
         if no_lof_flags:
             logger.info("Filtering to consequences with no LOFTEE flags...")
-            if "lof_flags" in csq_fields:
-                criteria &= hl.is_missing(csq.lof_flags) | (csq.lof_flags == "")
-            else:
-                logger.warning(
-                    "'lof_flags' not present in consequence struct, no consequences "
-                    "are filtered based on LOFTEE flags"
-                )
+            criteria &= hl.is_missing(csq.lof_flags) | (csq.lof_flags == "")
         if genes is not None:
             logger.info("Filtering to genes of interest...")
             gene_field = "gene_symbol" if match_by_gene_symbol else "gene_id"

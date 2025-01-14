@@ -789,22 +789,21 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
     )
 
 
-def browser_variant(
-    version: str = CURRENT_BROWSER_RELEASE,
-) -> GnomadPublicTableResource:
+def browser_variant() -> VersionedTableResource:
     """
     Retrieve browser variant table.
 
-    :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
     :return: Browser variant Table.
-    :raises ValueError: If the version is not a valid release.
     """
-    if version not in BROWSER_RELEASES:
-        raise ValueError(
-            f"Invalid version: {version}. Must be one of {BROWSER_RELEASES}."
-        )
-
-    return GnomadPublicTableResource(path=_public_browser_variant_ht_path(version))
+    return VersionedTableResource(
+        CURRENT_BROWSER_RELEASE,
+        {
+            release: GnomadPublicTableResource(
+                path=_public_browser_variant_ht_path(release)
+            )
+            for release in BROWSER_RELEASES
+        },
+    )
 
 
 def browser_gene() -> GnomadPublicTableResource:

@@ -767,19 +767,12 @@ def pext(pext_type: str = "base_level") -> GnomadPublicTableResource:
     return GnomadPublicTableResource(path=_public_pext_ht_path(pext_type))
 
 
-def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
+def constraint() -> VersionedTableResource:
     """
     Retrieve gene constraint Table.
 
-    :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
     :return: Gene constraint Table.
-    :raises ValueError: If the version is not a valid release.
     """
-    if version not in EXOME_RELEASES:
-        raise ValueError(
-            f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
-        )
-
     return VersionedTableResource(
         CURRENT_EXOME_RELEASE,
         {

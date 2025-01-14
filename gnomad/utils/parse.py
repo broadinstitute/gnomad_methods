@@ -78,7 +78,7 @@ def parse_locus_intervals(
         If no reference genome is provided, the function will infer the reference genome
         build from the interval string. If the interval string starts with 'chr', it will
         assume GRCh38, otherwise GRCh37.
-    
+
     :param intervals: Interval string or list of interval strings. The interval string
         format has to be "contig:start-end", e.g.,"1:1000-2000" (GRCh37) or
         "chr1:1000-2000" (GRCh38).

@@ -63,7 +63,7 @@ snowballstemmer==2.2.0
     # via pydocstyle
 tomlkit==0.12.1
     # via pylint
-virtualenv==20.24.6
+virtualenv==20.26.6
     # via pre-commit
 
 # The following packages are considered to be unsafe in a requirements file:

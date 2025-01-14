@@ -42,13 +42,6 @@ GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
 EXOME_AN_RELEASES = ["4.1"]
 GENOME_AN_RELEASES = ["4.1"]
 
-GENCODE_VERSION_BY_RELEASE = {
-    "3.0": "v29",
-    "3.1": "v35",
-    "4.0": "v39",
-    "4.1": "v39",
-}
-
 DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]

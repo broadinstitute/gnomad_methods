@@ -7,6 +7,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import hail as hl
 import networkx as nx
+from gnomad.utils.filtering import add_filters_expr
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -1298,3 +1299,150 @@ def generate_sib_stats_expr(
     )
 
     return sib_stats
+
+
+def get_freq_prior(freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100 / 3e7):
+    """
+    Get the population frequency prior for a de novo mutation.
+
+    :param freq_prior_expr: The population frequency prior for the variant.
+    :param min_pop_prior: The minimum population frequency prior.
+    """
+    return hl.max(
+        hl.or_else(
+            hl.case()
+            .when((freq_prior_expr >= 0) & (freq_prior_expr <= 1), freq_prior_expr)
+            .or_error(
+                hl.format(
+                    "de_novo: expect 0 <= freq_prior_expr <= 1, found %.3e",
+                    freq_prior_expr,
+                )
+            ),
+            0.0,
+        ),
+        min_pop_prior,
+    )
+
+
+def transform_pl_to_pp(pl_expr: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
+    """
+    Transform the PLs into the probability of observing genotype.
+
+    :param pl_expr: ArrayExpression of PL.
+    :return: ArrayExpression of the probability of observing each genotype.
+    """
+    return hl.bind(lambda x: x / hl.sum(x), 10 ** (-pl_expr / 10))
+
+
+def calculate_dn_post_prob(
+    pl_proband: hl.expr.ArrayExpression,
+    pl_father: hl.expr.ArrayExpression,
+    pl_mother: hl.expr.ArrayExpression,
+    freq_prior_expr: hl.expr.Float64Expression,
+    dn_prior: float = 1 / 3e7,
+    hemi_x: bool = False,
+    hemi_y: bool = False,
+) -> hl.expr.Float64Expression:
+    """
+    Calculate the posterior probability of a de novo mutation.
+
+    This function computes the posterior probability of a de novo mutation (P_dn)
+    using the likelihoods of the proband and parents' genotypes and the population
+    frequency prior for the variant.
+
+    Based on [Samocha et al. 2014](https://github.com/ksamocha/de_novo_scripts),
+    the posterior probability of a de novo mutation (P_dn) is computed as:
+
+        P_dn = P(DN | data) / (P(DN | data) + P(missed het in parent(s) | data))
+
+    The terms are defined as:
+    - P(DN | data): The probability of a de novo mutation given the data. This is computed as:
+        P(DN | data) = P(data | DN) * P(DN)
+
+    - P(data | DN): The probability of observing the data under the assumption of a de novo mutation:
+        * Autosomes and PAR regions:
+            P(data | DN) = P(hom_ref in father) * P(hom_ref in mother) * P(het in proband)
+        * X non-PAR regions (males only):
+            P(data | DN) = P(hom_ref in mother) * P(het in proband)
+        * Y non-PAR regions (males only):
+            P(data | DN) = P(hom_ref in father) * P(het in proband)
+
+    - P(DN): The prior probability of a de novo mutation, fixed at:
+        P(DN) = 1 / 3e7
+
+    - P(missed het in parent(s) | data): The probability of observing missed het in
+    parent(s) given the data. This is computed as:
+
+        P(missed het in parent(s) | data) = P(data | missed het in parent(s)) * P(missed het in parent(s))
+
+    - P(data | missed het in parent(s)): The probability of observing the data under
+    the assumption of a missed het in parent(s):
+        * Autosomes and PAR regions:
+            P(data | missed het in parents) = (P(het in father) * P(hom_ref in
+            mother) + P(hom_ref in father) * P(het in mother)) * P(het in proband) *
+            P(het in one parent)
+        * X non-PAR regions:
+            P(data | missed het in mother) = (P(het in mother) * P(hom_var in
+            mother)) * P(hom_var in proband) * P(het in one parent)
+        * Y non-PAR regions:
+            P(data | missed het in father) = (P(het in father) * P(hom_var in
+            father)) * P(hom_var in proband) * P(het in one parent)
+    - P(het in one parent): The prior probability of a het in one parent, fixed at:
+        1 - (1 - freq_prior)**4, where freq_prior is the population frequency prior for the variant.
+
+    Parameters
+    ----------
+    pl_proband : hl.expr.ArrayExpression
+        Phred-scaled genotype likelihoods for the proband.
+    pl_father : hl.expr.ArrayExpression
+        Phred-scaled genotype likelihoods for the father.
+    pl_mother : hl.expr.ArrayExpression
+        Phred-scaled genotype likelihoods for the mother.
+    freq_prior_expr : hl.expr.Float64Expression
+        The population frequency prior for the variant.
+    dn_prior : float, optional
+        The prior probability of a de novo mutation, by default 1 / 3e7.
+    hemi_x : bool, optional
+        Whether the variant is in the non-PAR region of the X chromosome (males only).
+    hemi_y : bool, optional
+        Whether the variant is in the non-PAR region of the Y chromosome (males only).
+
+    Returns
+    -------
+    hl.expr.Float64Expression
+        Posterior probability of a de novo mutation (P_dn).
+    """
+    if hemi_x and hemi_y:
+        raise ValueError("Both hemi_x and hemi_y cannot be True simultaneously.")
+
+    # Prior probability of a het in one parent
+    prior_one_het = 1 - (1 - freq_prior_expr) ** 4
+
+    # Convert PL to probabilities
+    pp_proband = transform_pl_to_pp(pl_proband)
+    pp_father = transform_pl_to_pp(pl_father)
+    pp_mother = transform_pl_to_pp(pl_mother)
+
+    # Compute P(data | DN) and P(data | missed het in parent(s))
+    if hemi_x:
+        prob_data_given_dn = pp_mother[0] * pp_proband[1]
+        prob_data_missed_het = (
+            (pp_mother[1] + pp_mother[2]) * pp_proband[2] * prior_one_het
+        )
+    elif hemi_y:
+        prob_data_given_dn = pp_father[0] * pp_proband[1]
+        prob_data_missed_het = (
+            (pp_father[1] + pp_father[2]) * pp_proband[2] * prior_one_het
+        )
+    else:
+        prob_data_given_dn = pp_father[0] * pp_mother[0] * pp_proband[1]
+        prob_data_missed_het = (
+            (pp_father[1] * pp_mother[0] + pp_father[0] * pp_mother[1])
+            * pp_proband[1]
+            * prior_one_het
+        )
+
+    # Compute P(DN | data) and normalize
+    prob_dn_given_data = prob_data_given_dn * dn_prior
+    p_dn = prob_dn_given_data / (prob_dn_given_data + prob_data_missed_het)
+    return p_dn

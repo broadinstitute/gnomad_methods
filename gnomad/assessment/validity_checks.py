@@ -1262,7 +1262,9 @@ def flatten_missingness_struct(
     return missingness_dict
 
 
-def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
+def unfurl_array_annotations(
+    ht: hl.Table, indexed_array_annotations: Dict[str, str]
+) -> Dict[str, Any]:
     """
     Unfurl specified arrays of structs into a dictionary of flattened expressions.
 
@@ -1271,8 +1273,8 @@ def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
     The keys of indexed_array_annotations should be present in the Table as row annotations, whereas the values should be present as global annotations.
 
     :param ht: Input Table.
-    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
-    :return: A flattened dictionary of unfurled array annotations.
+    :param indexed_array_annotations: Dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
+    :return: Flattened dictionary of unfurled array annotations.
     """
     expr_dict = {}
 
@@ -1300,7 +1302,7 @@ def unfurl_array_annotations(ht, indexed_array_annotations) -> Dict[str, Any]:
 
 
 def check_array_struct_missingness(
-    ht,
+    ht: hl.Table,
     indexed_array_annotations: Dict[str, str] = {
         "faf": "faf_index_dict",
         "freq": "freq_index_dict",

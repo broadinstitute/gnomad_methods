@@ -1318,7 +1318,6 @@ def check_array_struct_missingness(
     """
     # Create row annotations for each element of the arrays and their structs.
     annotations = unfurl_array_annotations(ht, indexed_array_annotations)
-    ht = ht.annotate(**annotations)
 
     # Compute missingness for each of the newly created row annotations.
     missingness_dict = {

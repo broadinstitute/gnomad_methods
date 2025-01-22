@@ -89,7 +89,9 @@ def ht_for_check_missingness_of_struct() -> hl.Table:
     return ht
 
 
-def test_check_missingness_of_struct(ht_for_check_missingness_of_struct) -> None:
+def test_check_missingness_of_struct(
+    ht_for_check_missingness_of_struct: hl.Table,
+) -> None:
     """Test check_missingness_of_struct and flatten results."""
     ht = ht_for_check_missingness_of_struct
 
@@ -166,7 +168,9 @@ def ht_for_check_array_struct_missingness() -> hl.Table:
     return ht
 
 
-def test_unfurl_array_annotations(ht_for_check_array_struct_missingness) -> None:
+def test_unfurl_array_annotations(
+    ht_for_check_array_struct_missingness: hl.Table,
+) -> None:
     """Test the unfurl_array_annotations function for all rows."""
     ht = ht_for_check_array_struct_missingness
     indexed_array_annotations = {"freq": "freq_index_dict"}
@@ -246,7 +250,9 @@ def test_unfurl_array_annotations(ht_for_check_array_struct_missingness) -> None
             )
 
 
-def test_check_array_struct_missingness(ht_for_check_array_struct_missingness) -> None:
+def test_check_array_struct_missingness(
+    ht_for_check_array_struct_missingness: hl.Table,
+) -> None:
     """Test the check_array_struct_missingness function for all fields."""
     ht = ht_for_check_array_struct_missingness
     indexed_array_annotations = {"freq": "freq_index_dict"}

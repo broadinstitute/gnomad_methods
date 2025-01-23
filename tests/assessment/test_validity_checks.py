@@ -6,6 +6,7 @@ import pytest
 from gnomad.assessment.validity_checks import (
     check_array_struct_missingness,
     check_missingness_of_struct,
+    compute_and_check_summations,
     flatten_missingness_struct,
     unfurl_array_annotations,
 )
@@ -275,3 +276,87 @@ def test_check_array_struct_missingness(ht_for_check_array_struct_missingness) -
             f"Mismatch in missingness for field '{field}': "
             f"expected {expected_value}, got {missingness[field]}"
         )
+
+
+@pytest.fixture
+def ht_for_compute_and_check_summations() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for testing compute_and_check_summations."""
+    data = [
+        {
+            "idx": 0,
+            "AC_afr_adj": 5,
+            "AC_amr_adj": 10,
+            "AC_adj": 15,
+            "AN_afr_XX_adj": 20,
+            "AN_afr_XY_adj": 30,
+            "AN_adj": 50,
+        },
+        {
+            "idx": 1,
+            "AC_afr_adj": 3,
+            "AC_amr_adj": 7,
+            "AC_adj": 10,
+            "AN_afr_XX_adj": 15,
+            "AN_afr_XY_adj": 25,
+            "AN_adj": 40,
+        },
+        {
+            "idx": 2,
+            "AC_afr_adj": 2,
+            "AC_amr_adj": 3,
+            "AC_adj": 6,  # This should cause a mismatch
+            "AN_afr_XX_adj": 10,
+            "AN_afr_XY_adj": 20,
+            "AN_adj": 35,  # This should cause a mismatch
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            AC_afr_adj=hl.tint32,
+            AC_amr_adj=hl.tint32,
+            AC_adj=hl.tint32,
+            AN_afr_XX_adj=hl.tint32,
+            AN_afr_XY_adj=hl.tint32,
+            AN_adj=hl.tint32,
+        ),
+    )
+
+    return ht
+
+
+def test_compute_and_check_summations(
+    ht_for_compute_and_check_summations: hl.Table,
+) -> None:
+    """Test compute_and_check_summations function."""
+    ht = ht_for_compute_and_check_summations
+
+    comparison_groups = {
+        "AC_group_adj_gen_anc": {
+            "values_to_sum": ["AC_afr_adj", "AC_amr_adj"],
+            "expected_total": "AC_adj",
+        },
+        "AN_group_adj_gen_anc_sex": {
+            "values_to_sum": ["AN_afr_XX_adj", "AN_afr_XY_adj"],
+            "expected_total": "AN_adj",
+        },
+    }
+
+    result = compute_and_check_summations(ht, comparison_groups)
+
+    expected_result = {
+        "AC_group_adj_gen_anc": 1,  # One mismatch in row 2
+        "AN_group_adj_gen_anc_sex": 1,  # One mismatch in row 2
+    }
+
+    mismatches = {
+        key: (result[key], expected_result[key])
+        for key in expected_result
+        if result.get(key) != expected_result[key]
+    }
+
+    assert (
+        not mismatches
+    ), f"Mismatches found: {', '.join(f'{key} (expected {exp}, got {result})' for key, (result, exp) in mismatches.items())}"

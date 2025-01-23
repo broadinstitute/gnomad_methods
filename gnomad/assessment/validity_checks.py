@@ -1381,7 +1381,8 @@ def compute_and_check_summations(
     # Annotate the computed sums onto the Table.
     ht = ht.annotate(**summations)
 
-    # Create aggregation expressions to check where the summed values do not equal the expected counts.
+    # Create aggregation expressions to check where the summed values do
+    # not equal the expected counts.
     agg_exprs = {
         group_name: hl.agg.count_where(
             ht[group_name] != ht[group_info["expected_total"]]

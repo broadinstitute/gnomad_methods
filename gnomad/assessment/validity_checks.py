@@ -1325,7 +1325,7 @@ def check_array_struct_missingness(
     # Create row annotations for each element of the arrays and their structs.
     annotations = unfurl_array_annotations(ht, indexed_array_annotations)
 
-    # Check that the unfurled annotations are present in the Table
+    # Check that the unfurled annotations are present in the Table.
     missing_annotations = [
         annotation for annotation in annotations if annotation not in ht.row
     ]

@@ -1349,8 +1349,8 @@ def compute_and_check_summations(
     """
     Compute the number of rows for each specified group where the sum of the specified fields does not match the expected total.
 
-    Example format of comparison_groups:
-
+    .. note::
+        Example format of comparison_groups
         {
             'AC_group_adj_gen_anc': {
                 'values_to_sum': [

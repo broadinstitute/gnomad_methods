@@ -1349,36 +1349,47 @@ def compute_and_check_summations(
     """
     Compute the number of rows for each specified group where the sum of the specified fields does not match the expected total.
 
-    Example format of comparision_groups:
-        {'AC_group_adj_gen_anc': {'values_to_sum': ['AC_afr_adj',
-               'AC_amr_adj',
-               'AC_asj_adj',
-               'AC_eas_adj',
-               'AC_fin_adj',
-               'AC_mid_adj',
-               'AC_nfe_adj',
-               'AC_remaining_adj',
-               'AC_sas_adj'],
-              'expected_total': 'AC_adj'},
-              AN_group_adj_gen_anc_sex': {'values_to_sum': ['AN_afr_XX_adj',
-               'AN_afr_XY_adj',
-               'AN_amr_XX_adj',
-               'AN_amr_XY_adj',
-               'AN_asj_XX_adj',
-               'AN_asj_XY_adj',
-               'AN_eas_XX_adj',
-               'AN_eas_XY_adj',
-               'AN_fin_XX_adj',
-               'AN_fin_XY_adj',
-               'AN_mid_XX_adj',
-               'AN_mid_XY_adj',
-               'AN_nfe_XX_adj',
-               'AN_nfe_XY_adj',
-               'AN_remaining_XX_adj',
-               'AN_remaining_XY_adj',
-               'AN_sas_XX_adj',
-               'AN_sas_XY_adj'],
-              'expected_total': 'AN_adj'}}
+    Example format of comparison_groups:
+
+        {
+            'AC_group_adj_gen_anc': {
+                'values_to_sum': [
+                    'AC_afr_adj',
+                    'AC_amr_adj',
+                    'AC_asj_adj',
+                    'AC_eas_adj',
+                    'AC_fin_adj',
+                    'AC_mid_adj',
+                    'AC_nfe_adj',
+                    'AC_remaining_adj',
+                    'AC_sas_adj'
+                ],
+                'expected_total': 'AC_adj'
+            },
+            'AN_group_adj_gen_anc_sex': {
+                'values_to_sum': [
+                    'AN_afr_XX_adj',
+                    'AN_afr_XY_adj',
+                    'AN_amr_XX_adj',
+                    'AN_amr_XY_adj',
+                    'AN_asj_XX_adj',
+                    'AN_asj_XY_adj',
+                    'AN_eas_XX_adj',
+                    'AN_eas_XY_adj',
+                    'AN_fin_XX_adj',
+                    'AN_fin_XY_adj',
+                    'AN_mid_XX_adj',
+                    'AN_mid_XY_adj',
+                    'AN_nfe_XX_adj',
+                    'AN_nfe_XY_adj',
+                    'AN_remaining_XX_adj',
+                    'AN_remaining_XY_adj',
+                    'AN_sas_XX_adj',
+                    'AN_sas_XY_adj'
+                ],
+                'expected_total': 'AN_adj'
+            }
+        }
 
     :param ht: Table with fields to sum and compare.
     :param comparison_groups: Dictionary describing the groups to sum. Keys are the annotation names to use for the summed totals.

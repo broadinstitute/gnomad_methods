@@ -1334,12 +1334,13 @@ def transform_pl_to_pp(pl_expr: hl.expr.ArrayExpression) -> hl.expr.ArrayExpress
     return hl.bind(lambda x: x / hl.sum(x), 10 ** (-pl_expr / 10))
 
 
-def calculate_dn_post_prob(
+def calculate_de_novo_post_prob(
     pl_proband: hl.expr.ArrayExpression,
     pl_father: hl.expr.ArrayExpression,
     pl_mother: hl.expr.ArrayExpression,
     freq_prior_expr: hl.expr.Float64Expression,
-    dn_prior: float = 1 / 3e7,
+    min_pop_prior: float,
+    de_novo_prior: float,
     hemi_x: bool = False,
     hemi_y: bool = False,
 ) -> hl.expr.Float64Expression:
@@ -1400,7 +1401,8 @@ def calculate_dn_post_prob(
         Phred-scaled genotype likelihoods for the mother.
     freq_prior_expr : hl.expr.Float64Expression
         The population frequency prior for the variant.
-    dn_prior : float, optional
+    min_pop_prior : float, optional.
+    de_novo_prior : float, optional.
         The prior probability of a de novo mutation, by default 1 / 3e7.
     hemi_x : bool, optional
         Whether the variant is in the non-PAR region of the X chromosome (males only).
@@ -1414,6 +1416,8 @@ def calculate_dn_post_prob(
     """
     if hemi_x and hemi_y:
         raise ValueError("Both hemi_x and hemi_y cannot be True simultaneously.")
+
+    freq_prior_expr = get_freq_prior(freq_prior_expr, min_pop_prior)
 
     # Prior probability of a het in one parent
     prior_one_het = 1 - (1 - freq_prior_expr) ** 4
@@ -1443,6 +1447,201 @@ def calculate_dn_post_prob(
         )
 
     # Compute P(DN | data) and normalize
-    prob_dn_given_data = prob_data_given_dn * dn_prior
+    prob_dn_given_data = prob_data_given_dn * de_novo_prior
     p_dn = prob_dn_given_data / (prob_dn_given_data + prob_data_missed_het)
     return p_dn
+
+
+def get_de_novo_expr(
+    locus_expr: hl.expr.LocusExpression,
+    proband_expr: hl.expr.StructExpression,
+    father_expr: hl.expr.StructExpression,
+    mother_expr: hl.expr.StructExpression,
+    allele_expr: hl.expr.ArrayExpression,
+    is_female_expr: hl.expr.BooleanExpression,
+    freq_prior_expr: hl.expr.Float64Expression,
+    min_pop_prior: float = 100 / 3e7,
+    de_novo_prior: float = 1 / 3e7,
+    min_dp_ratio: float = 0.1,
+    min_gq: int = 20,
+    min_proband_ab: float = 0.2,
+    max_parent_ab: float = 0.05,
+    min_de_novo_p: float = 0.05,
+    high_conf_dp_ratio: float = 0.2,
+    dp_threshold_snp: int = 10,
+    high_med_conf_ab: float = 0.3,
+    low_conf_ab: float = 0.2,
+    high_conf_p: float = 0.99,
+    med_conf_p: float = 0.5,
+    low_conf_p: float = 0.2,
+) -> hl.expr.StructExpression:
+    """
+    Get the de novo status of a variant, based on the proband and parent genotypes.
+
+        Thresholds:
+        ------------
+        +----------------------+----------------------------+----------------+------------------+----------------+----------+-------+
+        |       Metric         |           FAIL             | HIGH (Indel)   | HIGH (SNV) 1     | HIGH (SNV 2)   | MEDIUM   | LOW   |
+        +----------------------+----------------------------+----------------+------------------+----------------+----------+-------+
+        | P (de novo)          | < 0.05                     | > 0.99         | > 0.99           | > 0.5          | > 0.5    |       |
+        | AB                   | AB(proband) < 0.2          | AB > 0.3       | AB > 0.3         | AB > 0.3       | > 0.3    | > 0.2 |
+        |                      | OR AB(parent(s)) > 0.05    |                |                  |                |          | 0.2   |
+        | AD                   | 0 in either parent         |                |                  |                |          |       |
+        | DP                   |                            |                | DP(proband) > 10 |                |          |       |
+        | DR (DP ratio)        | DP(proband/parent(s)) < 0.1|                |                  | DR > 0.2       |          |       |
+        | GQ                   | GQ(proband) < 20           |                |                  |                |          |       |
+        | AC                   |                            | AC = 1         |                  | AC < 10        |          |       |
+        +----------------------+----------------------------+----------------+------------------+----------------+----------+-------+
+
+    locus_expr : hl.expr.LocusExpression
+        Variant's genomic locus.
+    proband_expr : hl.expr.StructExpression
+        Proband genotype details (e.g., DP, GQ, AD, GT).
+    father_expr : hl.expr.StructExpression
+        Father's genotype details (e.g., DP, AD).
+    mother_expr : hl.expr.StructExpression
+        Mother's genotype details (e.g., DP, AD).
+    allele_expr : hl.expr.ArrayExpression
+        Variant alleles.
+    is_female_expr : hl.expr.BooleanExpression
+        Whether the proband is female.
+    freq_prior_expr : hl.expr.Float64Expression
+        Population frequency prior for the variant.
+    min_pop_prior : float, optional
+        Minimum population frequency prior (default: 100 / 3e7).
+    de_novo_prior : float, optional
+        Prior probability of a de novo mutation (default: 1 / 3e7).
+    min_dp_ratio : float, optional
+        Minimum depth ratio for proband to parents (default: 0.1).
+    min_gq : int, optional
+        Minimum genotype quality for the proband (default: 20).
+    min_proband_ab : float, optional
+        Minimum allele balance for the proband (default: 0.2).
+    max_parent_ab : float, optional
+        Maximum allele balance for parents (default: 0.05).
+    min_de_novo_p : float, optional
+        Minimum de novo probability to pass (default: 0.05).
+    high_conf_dp_ratio : float, optional
+        DP ratio threshold for high confidence (default: 0.2).
+    dp_threshold_snp : int, optional
+        Minimum depth for high-confidence SNPs (default: 10).
+    high_med_conf_ab : float, optional
+        AB threshold for high/medium confidence (default: 0.3).
+    low_conf_ab : float, optional
+        AB threshold for low confidence (default: 0.2).
+    high_conf_p : float, optional
+        P(de novo) threshold for high confidence (default: 0.99).
+    med_conf_p : float, optional
+        P(de novo) threshold for medium confidence (default: 0.5).
+    low_conf_p : float, optional
+        P(de novo) threshold for low confidence (default: 0.2).
+
+    Returns
+    -------
+    hl.expr.StructExpression
+        A struct containing:
+        - `confidence`: Confidence level ("HIGH", "MEDIUM", "LOW", or missing).
+        - `fail`: Boolean indicating if the variant fails any checks.
+        - `fail_reason`: Set of strings with reasons for failure.
+    """
+    # Determine genomic context
+    not_hemi_expr = locus_expr.in_autosome_or_par() | (
+        locus_expr.in_x_nonpar() & is_female_expr
+    )
+    hemi_x_expr = locus_expr.in_x_nonpar() & ~is_female_expr
+    hemi_y_expr = locus_expr.in_y_nonpar() & ~is_female_expr
+
+    p_de_novo = calculate_de_novo_post_prob(
+        proband_expr.PL,
+        father_expr.PL,
+        mother_expr.PL,
+        freq_prior_expr,
+        min_pop_prior=min_pop_prior,
+        de_novo_prior=de_novo_prior,
+        hemi_x=hemi_x_expr,
+        hemi_y=hemi_y_expr,
+    )
+
+    # Calculate DP ratio
+    parent_dp = (
+        hl.case()
+        .when(not_hemi_expr, father_expr.DP + mother_expr.DP)
+        .when(hemi_x_expr, mother_expr.DP)
+        .when(hemi_y_expr, father_expr.DP)
+        .or_missing()
+    )
+    dp_ratio = proband_expr.DP / parent_dp
+
+    # Key metrics
+    proband_ab = proband_expr.AD[1] / hl.sum(proband_expr.AD)
+    is_snp = hl.is_snp(allele_expr[0], allele_expr[1])
+
+    # Confidence assignment
+    confidence = (
+        hl.case()
+        .when(
+            (
+                is_snp
+                & (p_de_novo > 0.99)
+                & (proband_ab > high_med_conf_ab)
+                & (
+                    (proband_expr.DP > dp_threshold_snp)
+                    | (dp_ratio > high_conf_dp_ratio)
+                )
+            )
+            | (~is_snp & (p_de_novo > high_conf_p) & (proband_ab > high_med_conf_ab)),
+            "HIGH",
+        )
+        .when((p_de_novo > med_conf_p) & (proband_ab > high_med_conf_ab), "MEDIUM")
+        .when((p_de_novo > low_conf_p) & (proband_ab > low_conf_ab), "LOW")
+        .or_missing()
+    )
+
+    # Fail checks
+    fail_checks = {
+        "min_dp_ratio": dp_ratio < min_dp_ratio,
+        "parent_sum_ad_0": (
+            hl.case()
+            .when(not_hemi_expr, (father_expr.AD[0] == 0) | (mother_expr.AD[0] == 0))
+            .when(hemi_x_expr, mother_expr.AD[0] == 0)
+            .when(hemi_y_expr, father_expr.AD[0] == 0)
+            .or_missing()
+        ),
+        "max_parent_ab": (
+            hl.case()
+            .when(
+                not_hemi_expr,
+                (father_expr.AD[1] / hl.sum(father_expr.AD) > max_parent_ab)
+                | (mother_expr.AD[1] / hl.sum(mother_expr.AD) > max_parent_ab),
+            )
+            .when(
+                hemi_x_expr, mother_expr.AD[1] / hl.sum(mother_expr.AD) > max_parent_ab
+            )
+            .when(
+                hemi_y_expr, father_expr.AD[1] / hl.sum(father_expr.AD) > max_parent_ab
+            )
+            .or_missing()
+        ),
+        "min_proband_ab": proband_ab < min_proband_ab,
+        "min_proband_gq": proband_expr.GQ < min_gq,
+        "min_de_novo_p": p_de_novo < min_de_novo_p,
+        "not_de_novo": (
+            not_hemi_expr
+            & ~(
+                proband_expr.GT.is_het()
+                & father_expr.GT.is_hom_ref()
+                & mother_expr.GT.is_hom_ref()
+            )
+            | hemi_x_expr
+            & ~(proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
+            | hemi_y_expr
+            & ~(proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
+        ),
+    }
+
+    # Combine fail reasons
+    fail_reason = hl.set([key for key, value in fail_checks.items() if value])
+    fail_expr = hl.any(list(fail_checks.values()))
+
+    return hl.struct(p_de_novo=p_de_novo, confidence=confidence, fail=fail_expr,
+                                                            fail_reason=fail_reason)

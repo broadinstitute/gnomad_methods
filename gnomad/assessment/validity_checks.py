@@ -1263,7 +1263,11 @@ def flatten_missingness_struct(
 
 
 def unfurl_array_annotations(
-    ht: hl.Table, indexed_array_annotations: Dict[str, str]
+    ht: hl.Table,
+    indexed_array_annotations: Dict[str, str] = {
+        "faf": "faf_index_dict",
+        "freq": "freq_index_dict",
+    },
 ) -> Dict[str, Any]:
     """
     Unfurl specified arrays of structs into a dictionary of flattened expressions.

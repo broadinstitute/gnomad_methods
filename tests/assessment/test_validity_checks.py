@@ -165,6 +165,10 @@ def ht_for_check_array_struct_missingness() -> hl.Table:
     freq_index_dict = {"adj": 0, "raw": 1}
     ht = ht.annotate_globals(freq_index_dict=freq_index_dict)
 
+    # Unfurl indexed array annotations.
+    annotations = unfurl_array_annotations(ht, {"freq": "freq_index_dict"})
+    ht = ht.annotate(**annotations)
+
     return ht
 
 

@@ -459,6 +459,7 @@ def sum_group_callstats(
     delimiter: str = "-",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
+    gen_anc_label_name: str = "pop,",
 ) -> None:
     """
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
@@ -471,12 +472,13 @@ def sum_group_callstats(
     :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
     :param pops: List of pops contained within the subsets. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
+    :param additional_subsets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
+    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, usch as "pop" or "gen_anc". Default is "pop".
     :return: None
     """
     # TODO: Add support for subpop sums
@@ -491,37 +493,24 @@ def sum_group_callstats(
     )
     for subset, pops in sample_sum_sets_and_pops.items():
         for group in groups:
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], pop=pops),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], sex=sexes),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], pop=pops, sex=sexes),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-
+            for grouping in [
+                {gen_anc_label_name: pops},
+                {"sex": sexes},
+                {gen_anc_label_name: pops, "sex": sexes},
+            ]:
+                logger.info(
+                    "Making group sum expression dictionary for grouping: %s", grouping
+                )
+                field_check_expr_s = make_group_sum_expr_dict(
+                    t,
+                    subset,
+                    dict(group=[group], **grouping),
+                    sort_order,
+                    delimiter,
+                    metric_first_field,
+                    metrics,
+                )
+                field_check_expr.update(field_check_expr_s)
     generic_field_check_loop(t, field_check_expr, verbose)
 
 
@@ -1303,119 +1292,3 @@ def unfurl_array_annotations(
                 expr_dict[f"{f}_{k}"] = ht[array][i][f]
 
     return expr_dict
-
-
-def check_array_struct_missingness(
-    ht: hl.Table,
-    indexed_array_annotations: Dict[str, str] = {
-        "faf": "faf_index_dict",
-        "freq": "freq_index_dict",
-    },
-) -> hl.expr.StructExpression:
-    """
-    Check the missingness of all fields in an array of structs.
-
-    Iterates over arrays of structs and calculates the percentage of missing values for each element of the array and each struct. Array annotations must have a corresponding dictionary to define the indices for each array field.
-    Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.
-
-    :param ht: Input Table.
-    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
-    :return: A Struct where each field represents a struct field's missingness percentage across the Table for each element of the specified arrays.
-    """
-    # Create row annotations for each element of the arrays and their structs.
-    annotations = unfurl_array_annotations(ht, indexed_array_annotations)
-
-    # Check that the unfurled annotations are present in the Table.
-    missing_annotations = [
-        annotation for annotation in annotations if annotation not in ht.row
-    ]
-
-    if missing_annotations:
-        raise ValueError(
-            f"The following annotations are missing from the table: {missing_annotations}\n\n please run 'unfurl_array_annotations' before proceeding"
-        )
-
-    # Compute missingness for each of the newly created row annotations.
-    missingness_dict = {
-        field_name: hl.agg.fraction(hl.is_missing(ht[field_name]))
-        for field_name in annotations.keys()
-    }
-    return ht.aggregate(hl.struct(**missingness_dict))
-
-
-def compute_and_check_summations(
-    ht: hl.Table, comparison_groups: Dict[str, Dict[str, Union[List[str], str]]]
-) -> Dict[str, int]:
-    """
-    Compute the number of rows for each specified group where the sum of the specified fields does not match the expected total.
-
-    .. note::
-        Example format of comparison_groups
-        {
-            'AC_group_adj_gen_anc': {
-                'values_to_sum': [
-                    'AC_afr_adj',
-                    'AC_amr_adj',
-                    'AC_asj_adj',
-                    'AC_eas_adj',
-                    'AC_fin_adj',
-                    'AC_mid_adj',
-                    'AC_nfe_adj',
-                    'AC_remaining_adj',
-                    'AC_sas_adj'
-                ],
-                'expected_total': 'AC_adj'
-            },
-            'AN_group_adj_gen_anc_sex': {
-                'values_to_sum': [
-                    'AN_afr_XX_adj',
-                    'AN_afr_XY_adj',
-                    'AN_amr_XX_adj',
-                    'AN_amr_XY_adj',
-                    'AN_asj_XX_adj',
-                    'AN_asj_XY_adj',
-                    'AN_eas_XX_adj',
-                    'AN_eas_XY_adj',
-                    'AN_fin_XX_adj',
-                    'AN_fin_XY_adj',
-                    'AN_mid_XX_adj',
-                    'AN_mid_XY_adj',
-                    'AN_nfe_XX_adj',
-                    'AN_nfe_XY_adj',
-                    'AN_remaining_XX_adj',
-                    'AN_remaining_XY_adj',
-                    'AN_sas_XX_adj',
-                    'AN_sas_XY_adj'
-                ],
-                'expected_total': 'AN_adj'
-            }
-        }
-
-    :param ht: Table with fields to sum and compare.
-    :param comparison_groups: Dictionary describing the groups to sum. Keys are the annotation names to use for the summed totals.
-        Values are a dictionary with the 'values_to_sum' key containing a list of fields to sum as values and the 'expected_total'
-        key containing the annotation in the Table to which the specified sums should equal.
-    :return: Dictionary where keys are group names, and values are the number of rows where the computed sum does not match the expected total.
-    """
-    # For each group, compute the sum of the fields within 'values_to_sum.'
-    summations = {
-        group_name: sum(
-            ht[field] for field in group_info["values_to_sum"] if field in ht.row
-        )
-        for group_name, group_info in comparison_groups.items()
-    }
-
-    # Annotate the computed sums onto the Table.
-    ht = ht.annotate(**summations)
-
-    # Create aggregation expressions to check where the summed values do
-    # not equal the expected counts.
-    agg_exprs = {
-        group_name: hl.agg.count_where(
-            ht[group_name] != ht[group_info["expected_total"]]
-        )
-        for group_name, group_info in comparison_groups.items()
-    }
-
-    mismatched_counts = ht.aggregate(hl.struct(**agg_exprs))
-    return mismatched_counts

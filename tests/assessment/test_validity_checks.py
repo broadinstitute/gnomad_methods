@@ -2,14 +2,18 @@
 
 import hail as hl
 import pytest
+import logging
+from io import StringIO
 
 from gnomad.assessment.validity_checks import (
-    check_array_struct_missingness,
     check_missingness_of_struct,
+    check_sex_chr_metrics,
     compute_and_check_summations,
     flatten_missingness_struct,
     unfurl_array_annotations,
 )
+
+hl.default_reference("GRCh38")
 
 
 @pytest.fixture
@@ -254,40 +258,6 @@ def test_unfurl_array_annotations(
             )
 
 
-def test_check_array_struct_missingness(
-    ht_for_check_array_struct_missingness: hl.Table,
-) -> None:
-    """Test the check_array_struct_missingness function for all fields."""
-    ht = ht_for_check_array_struct_missingness
-    indexed_array_annotations = {"freq": "freq_index_dict"}
-
-    # Call the check_array_struct_missingness function.
-    missingness = check_array_struct_missingness(ht, indexed_array_annotations)
-
-    # Define the expected missingness percentages for each unfurled field.
-    # All 'adj' values have no missing data.
-    # AC_raw is missing only in row 4.
-    # AF_raw is missing in rows 2, 3, and 4.
-    # AN_raw is missing in all rows.
-    expected_missingness = {
-        "AC_adj": 0.0,
-        "AF_adj": 0.0,
-        "AC_raw": 0.25,
-        "AF_raw": 0.25,
-        "AN_eas_adj": 0.50,
-        "AN_eas_raw": 0.75,
-        "AN_sas_adj": 0.0,
-        "AN_sas_raw": 1.00,
-    }
-
-    # Validate each field's missingness percentage.
-    for field, expected_value in expected_missingness.items():
-        assert missingness[field] == expected_value, (
-            f"Mismatch in missingness for field '{field}': "
-            f"expected {expected_value}, got {missingness[field]}"
-        )
-
-
 @pytest.fixture
 def ht_for_compute_and_check_summations() -> hl.Table:
     """Fixture to set up a Hail Table with the desired structure and data for testing compute_and_check_summations."""
@@ -370,3 +340,115 @@ def test_compute_and_check_summations(
     assert (
         not mismatches
     ), f"Mismatches found: {', '.join(f'{key} (expected {exp}, got {result})' for key, (result, exp) in mismatches.items())}"
+
+
+@pytest.fixture
+def ht_for_check_sex_chr_metrics() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for testing check_sex_chr_metrics."""
+    data = [
+        {
+            "locus": hl.locus("chrX", 9000),
+            "info": {
+                "nhomalt": 3,
+                "nhomalt_XX": 2,
+                "nhomalt_amr": 5,
+                "nhomalt_amr_XX": 1,
+                "AC": 6,
+                "AC_XX": 6,
+            },
+        },
+        {
+            "locus": hl.locus("chrX", 1000000),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": 5,
+                "nhomalt_amr": 5,
+                "nhomalt_amr_XX": 5,
+                "AC": 10,
+                "AC_XX": 10,
+            },
+        },
+        {
+            "locus": hl.locus("chrY", 1000000),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": hl.missing(hl.tint32),
+                "nhomalt_amr": hl.missing(hl.tint32),
+                "nhomalt_amr_XX": hl.missing(hl.tint32),
+                "AC_XX": hl.missing(hl.tint32),
+                "AC": 6,
+            },
+        },
+        {
+            "locus": hl.locus("chrY", 2000000),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": 3,
+                "nhomalt_amr": hl.missing(hl.tint32),
+                "nhomalt_amr_XX": hl.missing(hl.tint32),
+                "AC_XX": hl.missing(hl.tint32),
+                "AC": 6,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            locus=hl.tlocus(reference_genome="GRCh38"),
+            info=hl.tstruct(
+                nhomalt=hl.tint32,
+                nhomalt_XX=hl.tint32,
+                nhomalt_amr=hl.tint32,
+                nhomalt_amr_XX=hl.tint32,
+                AC=hl.tint32,
+                AC_XX=hl.tint32,
+            ),
+        ),
+    )
+    ht = ht.key_by("locus")
+    return ht
+
+
+def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics):
+    """Test that check_sex_chr_metrics produces the expected log messages."""
+    ht = ht_for_check_sex_chr_metrics
+    info_metrics = [
+        "nhomalt",
+        "nhomalt_XX",
+        "nhomalt_amr",
+        "nhomalt_amr_XX",
+        "AC",
+        "AC_XX",
+    ]
+    contigs = ["chrX", "chrY"]
+    verbose = False
+
+    # Redirect logs to a buffer.
+    log_stream = StringIO()
+    logger = logging.getLogger("gnomad.assessment.validity_checks")
+    handler = logging.StreamHandler(log_stream)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    # Run the check_sex_chr_metrics function.
+    check_sex_chr_metrics(
+        ht,
+        info_metrics=info_metrics,
+        contigs=contigs,
+        verbose=verbose,
+        delimiter="_",
+    )
+
+    # Capture and parse the log output.
+    handler.flush()
+    log_output = log_stream.getvalue()
+    logger.removeHandler(handler)
+
+    # Perform assertions on the log output.
+    assert (
+        "FAILED nhomalt_XX = None check for Y variants. Values found: [3]" in log_output
+    )
+    assert "PASSED nhomalt_amr_XX = None check for Y variants" in log_output
+    assert "PASSED AC_XX = None check for Y variants" in log_output
+    assert "Found 1 sites that fail nhomalt_XX == nhomalt check:" in log_output

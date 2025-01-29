@@ -709,6 +709,7 @@ def check_sex_chr_metrics(
     contigs: List[str],
     verbose: bool,
     delimiter: str = "-",
+    nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
     Perform validity checks for annotations on the sex chromosomes.
@@ -722,11 +723,17 @@ def check_sex_chr_metrics(
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
+    :param nhomalt_metric: Name of metric denoting homozygous counts. Default is "nhomalt".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
+
+    if len(xx_metrics) == 0:
+        raise ValueError(f"No XX metrics found!")
+    else:
+        logger.info("Checking the following XX metrics: %s", xx_metrics)
 
     if "chrY" in contigs:
         logger.info("Check values of XX metrics for Y variants are NA:")
@@ -758,7 +765,12 @@ def check_sex_chr_metrics(
     logger.info("Found %d X nonpar sites", n)
 
     logger.info("Check (nhomalt == nhomalt_xx) for X nonpar variants:")
-    xx_metrics = [x for x in xx_metrics if "nhomalt" in x]
+    xx_metrics = [x for x in xx_metrics if nhomalt_metric in x]
+
+    if len(xx_metrics) == 0:
+        raise ValueError(f"No XX nhomalt metrics found!")
+    else:
+        logger.info("Checking the following XX nhomalt metrics: %s", xx_metrics)
 
     field_check_expr = {}
     for metric in xx_metrics:

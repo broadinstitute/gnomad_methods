@@ -1,9 +1,10 @@
 """Tests for the validity_checks module."""
 
-import hail as hl
-import pytest
 import logging
 from io import StringIO
+
+import hail as hl
+import pytest
 
 from gnomad.assessment.validity_checks import (
     check_missingness_of_struct,

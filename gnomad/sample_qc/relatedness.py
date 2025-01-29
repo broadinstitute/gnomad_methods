@@ -7,7 +7,6 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import hail as hl
 import networkx as nx
-from hail.utils.tutorial import resources
 
 from gnomad.utils.filtering import add_filters_expr
 
@@ -1384,37 +1383,45 @@ def calculate_de_novo_post_prob(
         P_dn = P(DN | data) / (P(DN | data) + P(missed het in parent(s) | data))
 
     The terms are defined as:
-    - P(DN | data): The probability of a de novo mutation given the data. This is computed as:
+    P(DN | data): The probability of a de novo mutation given the data. This is
+    computed as:
+
         P(DN | data) = P(data | DN) * P(DN)
 
-    - P(data | DN): The probability of observing the data under the assumption of a de novo mutation:
-        * Autosomes and PAR regions:
-            P(data | DN) = P(hom_ref in father) * P(hom_ref in mother) * P(het in proband)
-        * X non-PAR regions (males only):
-            P(data | DN) = P(hom_ref in mother) * P(het in proband)
-        * Y non-PAR regions (males only):
-            P(data | DN) = P(hom_ref in father) * P(het in proband)
+    P(data | DN): The probability of observing the data under the assumption of a de novo mutation:
+       * Autosomes and PAR regions:
 
-    - P(DN): The prior probability of a de novo mutation, fixed at:
+          P(data | DN) = P(hom_ref in father) * P(hom_ref in mother) * P(het in proband)
+
+       * X non-PAR regions (males only):
+
+          P(data | DN) = P(hom_ref in mother) * P(het in proband)
+
+       * Y non-PAR regions (males only):
+
+          P(data | DN) = P(hom_ref in father) * P(het in proband)
+
+    P(DN): The prior probability of a de novo mutation, fixed at:
         P(DN) = 1 / 3e7
 
-    - P(missed het in parent(s) | data): The probability of observing missed het in
+    P(missed het in parent(s) | data): The probability of observing missed het in
     parent(s) given the data. This is computed as:
 
         P(missed het in parent(s) | data) = P(data | missed het in parent(s)) * P(missed het in parent(s))
 
-    - P(data | missed het in parent(s)): The probability of observing the data under
-    the assumption of a missed het in parent(s):
-        * Autosomes and PAR regions:
-            P(data | missed het in parents) = (P(het in father) * P(hom_ref in
-            mother) + P(hom_ref in father) * P(het in mother)) * P(het in proband) *
-            P(het in one parent)
-        * X non-PAR regions:
-            P(data | missed het in mother) = (P(het in mother) + P(hom_var in
-            mother)) * P(hom_var in proband) * P(het in one parent)
-        * Y non-PAR regions:
-            P(data | missed het in father) = (P(het in father) + P(hom_var in
-            father)) * P(hom_var in proband) * P(het in one parent)
+    P(data | missed het in parent(s)): The probability of observing the data under the assumption of a missed het in parent(s):
+       * Autosomes and PAR regions:
+
+          P(data | missed het in parents) = (P(het in father) * P(hom_ref in mother) + P(hom_ref in father) * P(het in mother)) * P(het in proband) * P(het in one parent)
+
+       * X non-PAR regions:
+
+          P(data | missed het in mother) = (P(het in mother) + P(hom_var in mother)) * P(hom_var in proband) * P(het in one parent)
+
+       * Y non-PAR regions:
+
+          P(data | missed het in father) = (P(het in father) + P(hom_var in father)) * P(hom_var in proband) * P(het in one parent)
+
     - P(het in one parent): The prior probability of a het in one parent, fixed at:
         1 - (1 - freq_prior)**4, where freq_prior is the population frequency prior for the variant.
 
@@ -1497,7 +1504,6 @@ def get_de_novo_expr(
     Get the de novo status of a variant, based on the proband and parent genotypes.
 
         Thresholds:
-        ------------
         +----------------------+----------------------------+----------------+------------------+----------------+----------+-------+-----------+
         |       Metric         |           FAIL             | HIGH (Indel)   | HIGH (SNV) 1     | HIGH (SNV) 2   | MEDIUM   | LOW   | VERY LOW  |
         +----------------------+----------------------------+----------------+------------------+----------------+----------+-------+-----------+

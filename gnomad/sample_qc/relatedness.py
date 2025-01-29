@@ -1377,7 +1377,8 @@ def calculate_de_novo_post_prob(
     using the likelihoods of the proband and parents' genotypes and the population
     frequency prior for the variant.
 
-    Based on [Samocha et al. 2014](https://github.com/ksamocha/de_novo_scripts),
+    Based on Kaitlin Samocha's de novo caller (
+    https://github.com/ksamocha/de_novo_scripts),
     the posterior probability of a de novo mutation (P_dn) is computed as:
 
         P_dn = P(DN | data) / (P(DN | data) + P(missed het in parent(s) | data))

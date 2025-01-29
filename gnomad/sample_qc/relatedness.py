@@ -1583,16 +1583,14 @@ def get_de_novo_expr(
     )
 
     is_de_novo = (
-            not_hemi_expr
-            & (
+        not_hemi_expr
+        & (
             proband_expr.GT.is_het()
             & father_expr.GT.is_hom_ref()
             & mother_expr.GT.is_hom_ref()
-    )
-            | hemi_x_expr
-            & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
-            | hemi_y_expr
-            & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
+        )
+        | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
+        | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
     )
 
     # Calculate DP ratio
@@ -1614,13 +1612,13 @@ def get_de_novo_expr(
         hl.case()
         .when(
             (
-                    is_snp
-                    & (p_de_novo > 0.99)
-                    & (proband_ab > high_med_conf_ab)
-                    & (
-                            (proband_expr.DP > dp_threshold_snp)
-                            | (dp_ratio > high_conf_dp_ratio)
-                    )
+                is_snp
+                & (p_de_novo > 0.99)
+                & (proband_ab > high_med_conf_ab)
+                & (
+                    (proband_expr.DP > dp_threshold_snp)
+                    | (dp_ratio > high_conf_dp_ratio)
+                )
             )
             | (~is_snp & (p_de_novo > high_conf_p) & (proband_ab > high_med_conf_ab)),
             "HIGH",
@@ -1649,12 +1647,8 @@ def get_de_novo_expr(
             (father_expr.AD[1] / hl.sum(father_expr.AD) > max_parent_ab)
             | (mother_expr.AD[1] / hl.sum(mother_expr.AD) > max_parent_ab),
         )
-        .when(
-            hemi_x_expr, mother_expr.AD[1] / hl.sum(mother_expr.AD) > max_parent_ab
-        )
-        .when(
-            hemi_y_expr, father_expr.AD[1] / hl.sum(father_expr.AD) > max_parent_ab
-        )
+        .when(hemi_x_expr, mother_expr.AD[1] / hl.sum(mother_expr.AD) > max_parent_ab)
+        .when(hemi_y_expr, father_expr.AD[1] / hl.sum(father_expr.AD) > max_parent_ab)
         .or_missing()
     )
 

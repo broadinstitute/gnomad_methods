@@ -374,9 +374,7 @@ def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics) -> None:
 
 @pytest.fixture
 def ht_for_group_sums() -> hl.Table:
-    """
-    Fixture to set up a Hail Table with the desired structure and data for make_group_sum_expr_dict.
-    """
+    """Fixture to set up a Hail Table with the desired structure and data for make_group_sum_expr_dict."""
     data = [
         {
             "idx": 0,
@@ -432,9 +430,7 @@ def ht_for_group_sums() -> hl.Table:
 
 
 def test_make_group_sum_expr_dict_logs(ht_for_group_sums) -> None:
-    """
-    Test that make_group_sum_expr_dict produces the expected log messages.
-    """
+    """Test that make_group_sum_expr_dict produces the expected log messages."""
     ht = ht_for_group_sums
 
     subset = ""
@@ -484,9 +480,7 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums) -> None:
 
 
 def test_sum_group_callstats(ht_for_group_sums) -> None:
-    """
-    Test that sum_group_callstats produces the expected log messages.
-    """
+    """Test that sum_group_callstats produces the expected log messages."""
     ht = ht_for_group_sums
 
     sexes = ["XX", "XY"]

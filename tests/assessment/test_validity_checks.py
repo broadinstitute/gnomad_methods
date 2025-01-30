@@ -260,51 +260,70 @@ def test_unfurl_array_annotations(
 
 
 @pytest.fixture
-def ht_for_compute_and_check_summations() -> hl.Table:
-    """Fixture to set up a Hail Table with the desired structure and data for testing compute_and_check_summations."""
+def ht_for_check_sex_chr_metrics() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for testing check_sex_chr_metrics."""
     data = [
         {
-            "idx": 0,
-            "AC_afr_adj": 5,
-            "AC_amr_adj": 10,
-            "AC_adj": 15,
-            "AN_afr_XX_adj": 20,
-            "AN_afr_XY_adj": 30,
-            "AN_adj": 50,
+            "locus": hl.locus("chrX", 9000),
+            "info": {
+                "nhomalt": 3,
+                "nhomalt_XX": 2,
+                "nhomalt_amr": 5,
+                "nhomalt_amr_XX": 1,
+                "AC": 6,
+                "AC_XX": 6,
+            },
         },
         {
-            "idx": 1,
-            "AC_afr_adj": 3,
-            "AC_amr_adj": 7,
-            "AC_adj": 10,
-            "AN_afr_XX_adj": 15,
-            "AN_afr_XY_adj": 25,
-            "AN_adj": 40,
+            "locus": hl.locus("chrX", 1000000),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": 5,
+                "nhomalt_amr": 5,
+                "nhomalt_amr_XX": 5,
+                "AC": 10,
+                "AC_XX": 10,
+            },
         },
         {
-            "idx": 2,
-            "AC_afr_adj": 2,
-            "AC_amr_adj": 3,
-            "AC_adj": 6,  # This should cause a mismatch
-            "AN_afr_XX_adj": 10,
-            "AN_afr_XY_adj": 20,
-            "AN_adj": 35,  # This should cause a mismatch
+            "locus": hl.locus("chrY", 1000000),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": hl.missing(hl.tint32),
+                "nhomalt_amr": hl.missing(hl.tint32),
+                "nhomalt_amr_XX": hl.missing(hl.tint32),
+                "AC_XX": hl.missing(hl.tint32),
+                "AC": 6,
+            },
+        },
+        {
+            "locus": hl.locus("chrY", 2000000),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": 3,
+                "nhomalt_amr": hl.missing(hl.tint32),
+                "nhomalt_amr_XX": hl.missing(hl.tint32),
+                "AC_XX": hl.missing(hl.tint32),
+                "AC": 6,
+            },
         },
     ]
 
     ht = hl.Table.parallelize(
         data,
         hl.tstruct(
-            idx=hl.tint32,
-            AC_afr_adj=hl.tint32,
-            AC_amr_adj=hl.tint32,
-            AC_adj=hl.tint32,
-            AN_afr_XX_adj=hl.tint32,
-            AN_afr_XY_adj=hl.tint32,
-            AN_adj=hl.tint32,
+            locus=hl.tlocus(reference_genome="GRCh38"),
+            info=hl.tstruct(
+                nhomalt=hl.tint32,
+                nhomalt_XX=hl.tint32,
+                nhomalt_amr=hl.tint32,
+                nhomalt_amr_XX=hl.tint32,
+                AC=hl.tint32,
+                AC_XX=hl.tint32,
+            ),
         ),
     )
-
+    ht = ht.key_by("locus")
     return ht
 
 

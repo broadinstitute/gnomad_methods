@@ -11,6 +11,7 @@ from gnomad.assessment.validity_checks import (
     check_sex_chr_metrics,
     flatten_missingness_struct,
     make_group_sum_expr_dict,
+    sum_group_callstats,
     unfurl_array_annotations,
 )
 
@@ -327,7 +328,7 @@ def ht_for_check_sex_chr_metrics() -> hl.Table:
     return ht
 
 
-def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics):
+def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics) -> None:
     """Test that check_sex_chr_metrics produces the expected log messages."""
     ht = ht_for_check_sex_chr_metrics
     info_metrics = [
@@ -372,7 +373,7 @@ def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics):
 
 
 @pytest.fixture
-def ht_for_make_group_sum_expr_dict() -> hl.Table:
+def ht_for_group_sums() -> hl.Table:
     """
     Fixture to set up a Hail Table with the desired structure and data for make_group_sum_expr_dict.
     """
@@ -430,11 +431,11 @@ def ht_for_make_group_sum_expr_dict() -> hl.Table:
     return ht
 
 
-def test_make_group_sum_expr_dict_logs(ht_for_make_group_sum_expr_dict):
+def test_make_group_sum_expr_dict_logs(ht_for_group_sums) -> None:
     """
     Test that make_group_sum_expr_dict produces the expected log messages.
     """
-    ht = ht_for_make_group_sum_expr_dict
+    ht = ht_for_group_sums
 
     subset = ""
     label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
@@ -480,3 +481,54 @@ def test_make_group_sum_expr_dict_logs(ht_for_make_group_sum_expr_dict):
     assert (
         "No valid fields found for sum_AN_adj_pop" in log_output
     ), "Expected 'no valid field warning' for sum_AN_adj_pop"
+
+
+def test_sum_group_callstats(ht_for_group_sums) -> None:
+    """
+    Test that sum_group_callstats produces the expected log messages.
+    """
+    ht = ht_for_group_sums
+
+    sexes = ["XX", "XY"]
+    subsets = [""]
+    pops = ["afr", "amr"]
+    groups = ["adj"]
+    metrics = ["AC", "AN"]
+
+    # Capture logs.
+    log_stream = StringIO()
+    logger = logging.getLogger("gnomad.assessment.validity_checks")
+    handler = logging.StreamHandler(log_stream)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    # Run sum_group_callstats function.
+    sum_group_callstats(
+        ht,
+        sexes=sexes,
+        subsets=subsets,
+        pops=pops,
+        groups=groups,
+        metrics=metrics,
+        verbose=True,
+        delimiter="_",
+        gen_anc_label_name="gen_anc",
+    )
+
+    # Capture log output.
+    handler.flush()
+    log_output = log_stream.getvalue()
+    logger.removeHandler(handler)
+
+    # Perform assertions on log output.
+    expected_logs = [
+        "PASSED AC_adj = sum_AC_adj_gen_anc check",
+        "PASSED AN_adj = sum_AN_adj_gen_anc check",
+        "PASSED AC_adj = sum_AC_adj_sex check",
+        "PASSED AN_adj = sum_AN_adj_sex check",
+        "PASSED AC_adj = sum_AC_adj_gen_anc_sex check",
+        "Found 1 sites that fail AN_adj = sum_AN_adj_gen_anc_sex check:",
+    ]
+
+    for msg in expected_logs:
+        assert msg in log_output, f"Expected log message missing: {msg}"

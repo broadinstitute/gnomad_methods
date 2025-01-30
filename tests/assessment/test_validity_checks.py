@@ -9,8 +9,8 @@ import pytest
 from gnomad.assessment.validity_checks import (
     check_missingness_of_struct,
     check_sex_chr_metrics,
-    compute_and_check_summations,
     flatten_missingness_struct,
+    make_group_sum_expr_dict,
     unfurl_array_annotations,
 )
 
@@ -308,109 +308,6 @@ def ht_for_compute_and_check_summations() -> hl.Table:
     return ht
 
 
-def test_compute_and_check_summations(
-    ht_for_compute_and_check_summations: hl.Table,
-) -> None:
-    """Test compute_and_check_summations function."""
-    ht = ht_for_compute_and_check_summations
-
-    comparison_groups = {
-        "AC_group_adj_gen_anc": {
-            "values_to_sum": ["AC_afr_adj", "AC_amr_adj"],
-            "expected_total": "AC_adj",
-        },
-        "AN_group_adj_gen_anc_sex": {
-            "values_to_sum": ["AN_afr_XX_adj", "AN_afr_XY_adj"],
-            "expected_total": "AN_adj",
-        },
-    }
-
-    result = compute_and_check_summations(ht, comparison_groups)
-
-    expected_result = {
-        "AC_group_adj_gen_anc": 1,  # One mismatch in row 2
-        "AN_group_adj_gen_anc_sex": 1,  # One mismatch in row 2
-    }
-
-    mismatches = {
-        key: (result[key], expected_result[key])
-        for key in expected_result
-        if result.get(key) != expected_result[key]
-    }
-
-    assert (
-        not mismatches
-    ), f"Mismatches found: {', '.join(f'{key} (expected {exp}, got {result})' for key, (result, exp) in mismatches.items())}"
-
-
-@pytest.fixture
-def ht_for_check_sex_chr_metrics() -> hl.Table:
-    """Fixture to set up a Hail Table with the desired structure and data for testing check_sex_chr_metrics."""
-    data = [
-        {
-            "locus": hl.locus("chrX", 9000),
-            "info": {
-                "nhomalt": 3,
-                "nhomalt_XX": 2,
-                "nhomalt_amr": 5,
-                "nhomalt_amr_XX": 1,
-                "AC": 6,
-                "AC_XX": 6,
-            },
-        },
-        {
-            "locus": hl.locus("chrX", 1000000),
-            "info": {
-                "nhomalt": 5,
-                "nhomalt_XX": 5,
-                "nhomalt_amr": 5,
-                "nhomalt_amr_XX": 5,
-                "AC": 10,
-                "AC_XX": 10,
-            },
-        },
-        {
-            "locus": hl.locus("chrY", 1000000),
-            "info": {
-                "nhomalt": 5,
-                "nhomalt_XX": hl.missing(hl.tint32),
-                "nhomalt_amr": hl.missing(hl.tint32),
-                "nhomalt_amr_XX": hl.missing(hl.tint32),
-                "AC_XX": hl.missing(hl.tint32),
-                "AC": 6,
-            },
-        },
-        {
-            "locus": hl.locus("chrY", 2000000),
-            "info": {
-                "nhomalt": 5,
-                "nhomalt_XX": 3,
-                "nhomalt_amr": hl.missing(hl.tint32),
-                "nhomalt_amr_XX": hl.missing(hl.tint32),
-                "AC_XX": hl.missing(hl.tint32),
-                "AC": 6,
-            },
-        },
-    ]
-
-    ht = hl.Table.parallelize(
-        data,
-        hl.tstruct(
-            locus=hl.tlocus(reference_genome="GRCh38"),
-            info=hl.tstruct(
-                nhomalt=hl.tint32,
-                nhomalt_XX=hl.tint32,
-                nhomalt_amr=hl.tint32,
-                nhomalt_amr_XX=hl.tint32,
-                AC=hl.tint32,
-                AC_XX=hl.tint32,
-            ),
-        ),
-    )
-    ht = ht.key_by("locus")
-    return ht
-
-
 def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics):
     """Test that check_sex_chr_metrics produces the expected log messages."""
     ht = ht_for_check_sex_chr_metrics
@@ -453,3 +350,114 @@ def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics):
     assert "PASSED nhomalt_amr_XX = None check for Y variants" in log_output
     assert "PASSED AC_XX = None check for Y variants" in log_output
     assert "Found 1 sites that fail nhomalt_XX == nhomalt check:" in log_output
+
+
+@pytest.fixture
+def ht_for_make_group_sum_expr_dict() -> hl.Table:
+    """
+    Fixture to set up a Hail Table with the desired structure and data for make_group_sum_expr_dict.
+    """
+    data = [
+        {
+            "idx": 0,
+            "info": {
+                "AC_afr_adj": 5,
+                "AC_amr_adj": 10,
+                "AC_adj": 15,
+                "AN_afr_XX_adj": 20,
+                "AN_afr_XY_adj": 30,
+                "AN_adj": 50,
+            },
+        },
+        {
+            "idx": 1,
+            "info": {
+                "AC_afr_adj": 3,
+                "AC_amr_adj": 7,
+                "AC_adj": 10,
+                "AN_afr_XX_adj": 15,
+                "AN_afr_XY_adj": 25,
+                "AN_adj": 40,
+            },
+        },
+        {
+            "idx": 2,
+            "info": {
+                "AC_afr_adj": 2,
+                "AC_amr_adj": 3,
+                "AC_adj": 5,
+                "AN_afr_XX_adj": 10,
+                "AN_afr_XY_adj": 20,
+                "AN_adj": 35,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            info=hl.tstruct(
+                AC_afr_adj=hl.tint32,
+                AC_amr_adj=hl.tint32,
+                AC_adj=hl.tint32,
+                AN_afr_XX_adj=hl.tint32,
+                AN_afr_XY_adj=hl.tint32,
+                AN_adj=hl.tint32,
+            ),
+        ),
+    )
+
+    return ht
+
+
+def test_make_group_sum_expr_dict_logs(ht_for_make_group_sum_expr_dict):
+    """
+    Test that make_group_sum_expr_dict produces the expected log messages.
+    """
+    ht = ht_for_make_group_sum_expr_dict
+
+    subset = ""
+    label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
+    sort_order = ["pop", "sex"]
+    delimiter = "_"
+    metric_first_field = True
+    metrics = ["AC", "AN"]
+
+    log_stream = StringIO()
+    logger = logging.getLogger("gnomad.assessment.validity_checks")
+    handler = logging.StreamHandler(log_stream)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    # Run the make_group_sum_expr_dict function.
+    make_group_sum_expr_dict(
+        ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
+    )
+
+    # Capture log output.
+    handler.flush()
+    log_output = log_stream.getvalue()
+    logger.removeHandler(handler)
+
+    # Perform assertions on log output.
+    assert (
+        "Including field: AC_afr_adj" in log_output
+    ), "Expected AC_afr_adj to be included"
+    assert (
+        "Including field: AC_amr_adj" in log_output
+    ), "Expected AC_amr_adj to be included"
+    assert (
+        "AN_afr_adj is not in table's info field, it will be skipped for make_group_sum_expr_dict"
+        in log_output
+    ), "Expected absence of AN_afr_adj"
+    assert (
+        "AN_amr_adj is not in table's info field, it will be skipped for make_group_sum_expr_dict"
+        in log_output
+    ), "Expected absence of AN_afr_adj"
+    assert (
+        "Generated annot_dict keys: ['sum_AC_adj_pop', 'sum_AN_adj_pop']" in log_output
+    ), "Expected annot_dict keys should include sum_AC_adj_pop and sum_AN_adj_pop"
+    assert (
+        "No valid fields found for sum_AN_adj_pop" in log_output
+    ), "Expected 'no valid field warning' for sum_AN_adj_pop"

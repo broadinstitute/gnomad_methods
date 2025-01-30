@@ -154,6 +154,10 @@ def make_group_sum_expr_dict(
     # Grab the first group for check and remove if from the label_group
     # dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric
     # counts for all sample groups so we do not check raw sample sums.
+    if "group" not in label_groups or not label_groups["group"]:
+        raise ValueError(
+            "Expected 'group' key in label_groups but it's missing or empty."
+        )
     group = label_groups.pop("group")[0]
     # sum_group is a the type of high level annotation that you want to sum
     # e.g. 'pop', 'pop-sex', 'sex'.
@@ -171,21 +175,37 @@ def make_group_sum_expr_dict(
     annot_dict = {}
     for metric in metrics:
         if metric_first_field:
-            field_prefix = f"{metric}{delimiter}{subset}"
-        else:
-            field_prefix = f"{subset}{metric}{delimiter}"
+            field_prefix = (
+                f"{metric}{delimiter}{subset}"
+                if metric_first_field
+                else f"{subset}{metric}{delimiter}"
+            )
 
         sum_group_exprs = []
         for label in label_combos:
             field = f"{field_prefix}{label}"
             if field in info_fields:
+                logger.info(f"Including field: %s for make_group_sum_expr_dict.", field)
                 sum_group_exprs.append(t.info[field])
             else:
-                logger.warning("%s is not in table's info field", field)
+                logger.warning(
+                    "%s is not in table's info field, it will be skipped for make_group_sum_expr_dict.",
+                    field,
+                )
 
-        annot_dict[f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"] = (
-            hl.sum(sum_group_exprs)
-        )
+        sum_field_name = f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"
+
+        if not sum_group_exprs:
+            logger.warning(
+                f"No valid fields found for %s. Assigning hl.missing()", sum_field_name
+            )
+            annot_dict[sum_field_name] = hl.missing(hl.tint64)
+        else:
+            annot_dict[sum_field_name] = hl.sum(
+                hl.array(sum_group_exprs).filter(hl.is_defined)
+            )
+
+    logger.info(f"Generated annot_dict keys: %s", list(annot_dict.keys()))
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"

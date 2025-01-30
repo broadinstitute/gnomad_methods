@@ -1337,7 +1337,7 @@ def transform_pl_to_pp(pl_expr: hl.expr.ArrayExpression) -> hl.expr.ArrayExpress
 
 def get_genomic_context(
     locus_expr: hl.expr.LocusExpression,
-    is_female_expr: hl.expr.BooleanExpression,
+    is_XX_expr: hl.expr.BooleanExpression,
 ) -> Tuple[
     hl.expr.BooleanExpression, hl.expr.BooleanExpression, hl.expr.BooleanExpression
 ]:
@@ -1345,18 +1345,17 @@ def get_genomic_context(
     Determine the genomic context of a variant.
 
     :param locus_expr: LocusExpression of the variant.
-    :param is_female_expr: BooleanExpression indicating whether the proband is female.
+    :param is_XX_expr: BooleanExpression indicating whether the proband has an XX sex karyotype.
     :return: A tuple of BooleanExpressions:
         - not_hemi_expr: True if the variant is in autosomes or PAR regions.
-        - hemi_x_expr: True if the variant is in the X non-PAR region for males.
-        - hemi_y_expr: True if the variant is in the Y non-PAR region for males.
+        - hemi_x_expr: True if the variant is in the X non-PAR region for XY individuals.
+        - hemi_y_expr: True if the variant is in the Y non-PAR region for XY individuals.
     """
     not_hemi_expr = locus_expr.in_autosome_or_par() | (
-        locus_expr.in_x_nonpar() & is_female_expr
+        locus_expr.in_x_nonpar() & is_XX_expr
     )
-    hemi_x_expr = locus_expr.in_x_nonpar() & ~is_female_expr
-    hemi_y_expr = locus_expr.in_y_nonpar() & ~is_female_expr
-
+    hemi_x_expr = locus_expr.in_x_nonpar() & ~is_XX_expr
+    hemi_y_expr = locus_expr.in_y_nonpar() & ~is_XX_expr
     return not_hemi_expr, hemi_x_expr, hemi_y_expr
 
 
@@ -1365,7 +1364,7 @@ def calculate_de_novo_post_prob(
     pl_father: hl.expr.ArrayExpression,
     pl_mother: hl.expr.ArrayExpression,
     locus_expr: hl.expr.LocusExpression,
-    is_female_expr: hl.expr.BooleanExpression,
+    is_XX_expr: hl.expr.BooleanExpression,
     freq_prior_expr: hl.expr.Float64Expression,
     min_pop_prior: Optional[float] = 100 / 3e7,
     de_novo_prior: Optional[float] = 1 / 3e7,
@@ -1374,12 +1373,12 @@ def calculate_de_novo_post_prob(
     Calculate the posterior probability of a de novo mutation.
 
     This function computes the posterior probability of a de novo mutation (P_dn)
-    using the likelihoods of the proband and parents' genotypes and the population
+    using the likelihoods of the proband's and parents' genotypes and the population
     frequency prior for the variant.
 
-    Based on Kaitlin Samocha's de novo caller (
+    Based on Kaitlin Samocha's [de novo caller](
     https://github.com/ksamocha/de_novo_scripts),
-    the posterior probability of a de novo mutation (P_dn) is computed as:
+    the posterior probability of a de novo mutation (`P_dn`) is computed as:
 
         P_dn = P(DN | data) / (P(DN | data) + P(missed het in parent(s) | data))
 
@@ -1394,21 +1393,21 @@ def calculate_de_novo_post_prob(
 
           P(data | DN) = P(hom_ref in father) * P(hom_ref in mother) * P(het in proband)
 
-       * X non-PAR regions (males only):
+       * X non-PAR regions (XY only):
 
           P(data | DN) = P(hom_ref in mother) * P(het in proband)
 
-       * Y non-PAR regions (males only):
+       * Y non-PAR regions (XY only):
 
-          P(data | DN) = P(hom_ref in father) * P(het in proband)
+          P(data | DN) = P(hemi_ref in father) * P(hemi_alt in proband)
 
-    P(DN): The prior probability of a de novo mutation, fixed at:
+    P(DN): The prior probability of a de novo mutation from the literature,
         P(DN) = 1 / 3e7
 
     P(missed het in parent(s) | data): The probability of observing missed het in
     parent(s) given the data. This is computed as:
 
-        P(missed het in parent(s) | data) = P(data | missed het in parent(s)) * P(missed het in parent(s))
+        P(missed het in parent(s) | data) = P(data | at least one parent is het) * P(one parent is het)
 
     P(data | missed het in parent(s)): The probability of observing the data under the assumption of a missed het in parent(s):
        * Autosomes and PAR regions:
@@ -1423,14 +1422,14 @@ def calculate_de_novo_post_prob(
 
           P(data | missed het in father) = (P(het in father) + P(hom_var in father)) * P(hom_var in proband) * P(het in one parent)
 
-    - P(het in one parent): The prior probability of a het in one parent, fixed at:
+    - P(het in one parent): The prior probability for at least one alternate allele between the parents depends on the alternate allele frequency:
         1 - (1 - freq_prior)**4, where freq_prior is the population frequency prior for the variant.
 
     :param pl_proband: Phred-scaled genotype likelihoods for the proband.
     :param pl_father: Phred-scaled genotype likelihoods for the father.
     :param pl_mother: Phred-scaled genotype likelihoods for the mother.
     :param locus_expr: LocusExpression of the variant.
-    :param is_female_expr: BooleanExpression indicating the proband's sex.
+    :param is_XX_expr: BooleanExpression indicating whether the proband has XX sex karyotype.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior (default: 1e-8).
     :param de_novo_prior: Prior probability of a de novo mutation (default: 1/3e7).
@@ -1474,7 +1473,6 @@ def calculate_de_novo_post_prob(
     # Calculate posterior probability of de novo mutation
     prob_dn_given_data = prob_data_given_dn * de_novo_prior
     p_dn = prob_dn_given_data / (prob_dn_given_data + prob_data_missed_het)
-
     return p_dn
 
 
@@ -1484,7 +1482,7 @@ def get_de_novo_expr(
     proband_expr: hl.expr.StructExpression,
     father_expr: hl.expr.StructExpression,
     mother_expr: hl.expr.StructExpression,
-    is_female_expr: hl.expr.BooleanExpression,
+    is_XX_expr: hl.expr.BooleanExpression,
     freq_prior_expr: hl.expr.Float64Expression,
     min_pop_prior: float = 100 / 3e7,
     de_novo_prior: float = 1 / 3e7,
@@ -1502,7 +1500,7 @@ def get_de_novo_expr(
     low_conf_p: float = 0.2,
 ) -> hl.expr.StructExpression:
     """
-    Get the de novo status of a variant, based on the proband and parent genotypes.
+    Get the de novo status of a variant based on the proband and parent genotypes.
 
         Thresholds:
         +----------------------+----------------------------+----------------+------------------+----------------+----------+-------+-----------+
@@ -1549,9 +1547,9 @@ def get_de_novo_expr(
     max_parent_ab : float, optional
         Maximum allele balance for parents (default: 0.05).
     min_de_novo_p : float, optional
-        Minimum de novo probability to pass (default: 0.05).
+        Minimum probability for variant to be called de novo (default: 0.05).
     high_conf_dp_ratio : float, optional
-        DP ratio threshold for high confidence (default: 0.2).
+        DP ratio threshold of proband DP to combined DP in parents for high confidence (default: 0.2).
     dp_threshold_snp : int, optional
         Minimum depth for high-confidence SNPs (default: 10).
     high_med_conf_ab : float, optional

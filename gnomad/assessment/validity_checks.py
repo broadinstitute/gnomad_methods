@@ -185,7 +185,7 @@ def make_group_sum_expr_dict(
         for label in label_combos:
             field = f"{field_prefix}{label}"
             if field in info_fields:
-                logger.info(f"Including field: %s for make_group_sum_expr_dict.", field)
+                logger.info("Including field: %s for make_group_sum_expr_dict.", field)
                 sum_group_exprs.append(t.info[field])
             else:
                 logger.warning(
@@ -197,7 +197,7 @@ def make_group_sum_expr_dict(
 
         if not sum_group_exprs:
             logger.warning(
-                f"No valid fields found for %s. Assigning hl.missing()", sum_field_name
+                "No valid fields found for %s. Assigning hl.missing()", sum_field_name
             )
             annot_dict[sum_field_name] = hl.missing(hl.tint64)
         else:
@@ -205,7 +205,7 @@ def make_group_sum_expr_dict(
                 hl.array(sum_group_exprs).filter(hl.is_defined)
             )
 
-    logger.info(f"Generated annot_dict keys: %s", list(annot_dict.keys()))
+    logger.info("Generated annot_dict keys: %s", list(annot_dict.keys()))
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
@@ -751,7 +751,7 @@ def check_sex_chr_metrics(
     xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
 
     if len(xx_metrics) == 0:
-        raise ValueError(f"No XX metrics found!")
+        raise ValueError("No XX metrics found!")
     else:
         logger.info("Checking the following XX metrics: %s", xx_metrics)
 
@@ -788,7 +788,7 @@ def check_sex_chr_metrics(
     xx_metrics = [x for x in xx_metrics if nhomalt_metric in x]
 
     if len(xx_metrics) == 0:
-        raise ValueError(f"No XX nhomalt metrics found!")
+        raise ValueError("No XX nhomalt metrics found!")
     else:
         logger.info("Checking the following XX nhomalt metrics: %s", xx_metrics)
 

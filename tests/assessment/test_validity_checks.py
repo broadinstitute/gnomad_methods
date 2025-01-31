@@ -263,7 +263,7 @@ def ht_for_check_sex_chr_metrics() -> hl.Table:
     """Fixture to set up a Hail Table with the desired structure and data for testing check_sex_chr_metrics."""
     data = [
         {
-            "locus": hl.locus("chrX", 9000),
+            "locus": hl.locus("chrX", 9000, reference_genome="GRCh38"),
             "info": {
                 "nhomalt": 3,
                 "nhomalt_XX": 2,
@@ -274,7 +274,7 @@ def ht_for_check_sex_chr_metrics() -> hl.Table:
             },
         },
         {
-            "locus": hl.locus("chrX", 1000000),
+            "locus": hl.locus("chrX", 1000000, reference_genome="GRCh38"),
             "info": {
                 "nhomalt": 5,
                 "nhomalt_XX": 5,
@@ -285,7 +285,7 @@ def ht_for_check_sex_chr_metrics() -> hl.Table:
             },
         },
         {
-            "locus": hl.locus("chrY", 1000000),
+            "locus": hl.locus("chrY", 1000000, reference_genome="GRCh38"),
             "info": {
                 "nhomalt": 5,
                 "nhomalt_XX": hl.missing(hl.tint32),
@@ -296,7 +296,7 @@ def ht_for_check_sex_chr_metrics() -> hl.Table:
             },
         },
         {
-            "locus": hl.locus("chrY", 2000000),
+            "locus": hl.locus("chrY", 2000000, reference_genome="GRCh38"),
             "info": {
                 "nhomalt": 5,
                 "nhomalt_XX": 3,

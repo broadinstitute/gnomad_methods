@@ -15,8 +15,6 @@ from gnomad.assessment.validity_checks import (
     unfurl_array_annotations,
 )
 
-hl.default_reference("GRCh38")
-
 
 @pytest.fixture
 def ht_for_check_missingness_of_struct() -> hl.Table:

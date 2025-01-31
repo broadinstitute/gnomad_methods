@@ -169,7 +169,7 @@ def _public_mnv_path(distance: str = "1") -> str:
         raise DataException(
             f"Invalid distance: '{distance}'. Valid options are {distances}."
         )
-    return "gs://gnomad-public-requester-pays/release/2.1/mnv/gnomad_mnv_genome_d{distance}.ht"
+    return f"gs://gnomad-public-requester-pays/release/2.1/mnv/gnomad_mnv_genome_d{distance}.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

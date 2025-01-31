@@ -164,8 +164,8 @@ def _public_mnv_path(distance: int = 1) -> str:
     :return: Path to MNV data.
     :raises DataException: If the provided distance is invalid (outside 1-10).
     """
-    distances = set(map(str, range(1, 11)))
-    if str(distance) not in distances:
+    distances = set(range(1, 11))
+    if distance not in distances:
         raise DataException(
             f"Invalid distance: '{distance}'. Valid options are {distances}."
         )

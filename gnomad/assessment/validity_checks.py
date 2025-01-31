@@ -498,7 +498,7 @@ def sum_group_callstats(
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
-    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, usch as "pop" or "gen_anc". Default is "pop".
+    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "pop" or "gen_anc". Default is "pop".
     :return: None
     """
     # TODO: Add support for subpop sums

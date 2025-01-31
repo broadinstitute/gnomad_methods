@@ -189,7 +189,7 @@ def make_group_sum_expr_dict(
                 sum_group_exprs.append(t.info[field])
             else:
                 logger.warning(
-                    "%s is not in table's info field, it will be skipped for make_group_sum_expr_dict.",
+                    "%s is NOT in table's info field, it will NOT be included in make_group_sum_expr_dict.",
                     field,
                 )
 

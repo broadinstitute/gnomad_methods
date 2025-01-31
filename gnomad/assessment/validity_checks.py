@@ -757,7 +757,14 @@ def check_sex_chr_metrics(
 
     if "chrY" in contigs:
         logger.info("Check values of XX metrics for Y variants are NA:")
-        t_y = hl.filter_intervals(t, [hl.parse_locus_interval("chrY")])
+        t_y = hl.filter_intervals(
+            t,
+            [
+                hl.parse_locus_interval(
+                    "chrY", reference_genome=t.locus.dtype.reference_genome
+                )
+            ],
+        )
         metrics_values = {}
         for metric in xx_metrics:
             metrics_values[metric] = hl.agg.any(hl.is_defined(t_y.info[metric]))
@@ -779,7 +786,14 @@ def check_sex_chr_metrics(
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
 
-    t_x = hl.filter_intervals(t, [hl.parse_locus_interval("chrX")])
+    t_x = hl.filter_intervals(
+        t,
+        [
+            hl.parse_locus_interval(
+                "chrX", reference_genome=t.locus.dtype.reference_genome
+            )
+        ],
+    )
     t_xnonpar = t_x.filter(t_x.locus.in_x_nonpar())
     n = t_xnonpar.count()
     logger.info("Found %d X nonpar sites", n)

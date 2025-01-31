@@ -156,11 +156,11 @@ def _public_browser_gene_ht_path() -> str:
     return "gs://gnomad-public-requester-pays/resources/grch37/browser/gnomad.genes.GRCh37.GENCODEv19.pext.ht"
 
 
-def _public_mnv_path(distance: str) -> str:
+def _public_mnv_path(distance: str = "1") -> str:
     """
     Get public multinucleotide variant (MNV) data.
 
-    :param distance: Distance between two SNVs in MNV.
+    :param distance: Distance between two SNVs in MNV. Default is '1'.
     :return: Path to MNV data.
     :raises DataException: If the provided distance is invalid (outside 1-10).
     """
@@ -308,11 +308,11 @@ def constraint() -> GnomadPublicTableResource:
     return GnomadPublicTableResource(path=_public_constraint_ht_path())
 
 
-def mnv(distance: str) -> GnomadPublicTableResource:
+def mnv(distance: str = "1") -> GnomadPublicTableResource:
     """
     Retrieve multinucleotide variant table.
 
-    :param distance: Distance between two SNVs in MNV.
+    :param distance: Distance between two SNVs in MNV. Default is '1'.
     :return: MNV Table.
     """
     return GnomadPublicTableResource(path=_public_mnv_path())

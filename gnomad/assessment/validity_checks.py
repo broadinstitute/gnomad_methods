@@ -174,12 +174,11 @@ def make_group_sum_expr_dict(
     # "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])}
     annot_dict = {}
     for metric in metrics:
-        if metric_first_field:
-            field_prefix = (
-                f"{metric}{delimiter}{subset}"
-                if metric_first_field
-                else f"{subset}{metric}{delimiter}"
-            )
+        field_prefix = (
+            f"{metric}{delimiter}{subset}"
+            if metric_first_field
+            else f"{subset}{metric}{delimiter}"
+        )
 
         sum_group_exprs = []
         for label in label_combos:

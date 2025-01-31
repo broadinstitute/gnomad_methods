@@ -185,7 +185,7 @@ def make_group_sum_expr_dict(
         for label in label_combos:
             field = f"{field_prefix}{label}"
             if field in info_fields:
-                logger.info("Including field: %s for make_group_sum_expr_dict.", field)
+                logger.info("Including field %s in make_group_sum_expr_dict.", field)
                 sum_group_exprs.append(t.info[field])
             else:
                 logger.warning(

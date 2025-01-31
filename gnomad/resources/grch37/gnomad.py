@@ -315,7 +315,7 @@ def mnv(distance: str = "1") -> GnomadPublicTableResource:
     :param distance: Distance between two SNVs in MNV. Default is '1'.
     :return: MNV Table.
     """
-    return GnomadPublicTableResource(path=_public_mnv_path())
+    return GnomadPublicTableResource(path=_public_mnv_path(distance))
 
 
 def browser_gene() -> GnomadPublicTableResource:

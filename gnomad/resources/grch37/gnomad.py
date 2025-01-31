@@ -158,7 +158,7 @@ def _public_browser_gene_ht_path() -> str:
 
 def _public_mnv_path(distance: str = "1") -> str:
     """
-    Get public multinucleotide variant (MNV) data.
+    Get path to public multinucleotide variant (MNV) data.
 
     :param distance: Distance between two SNVs in MNV. Default is '1'.
     :return: Path to MNV data.

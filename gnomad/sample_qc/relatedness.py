@@ -1310,16 +1310,18 @@ def get_freq_prior(freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100
     :param freq_prior_expr: The population frequency prior for the variant.
     :param min_pop_prior: The minimum population frequency prior.
     """
-    return hl.max(hl.or_else(
-        hl.case()
-        .when((freq_prior_expr >= 0) & (freq_prior_expr <= 1), freq_prior_expr)
-        .or_error(
-            hl.format(
-                "de_novo: expect 0 <= freq_prior_expr <= 1, found %.3e",
-                freq_prior_expr,
-            )
+    return hl.max(
+        hl.or_else(
+            hl.case()
+            .when((freq_prior_expr >= 0) & (freq_prior_expr <= 1), freq_prior_expr)
+            .or_error(
+                hl.format(
+                    "de_novo: expect 0 <= freq_prior_expr <= 1, found %.3e",
+                    freq_prior_expr,
+                )
+            ),
+            0.0,
         ),
-        0.0),
         min_pop_prior,
     )
 
@@ -1434,8 +1436,12 @@ def calculate_de_novo_post_prob(
     # Compute P(data | missed het in parent(s))
     prob_data_missed_het = (
         hl.case()
-        .when(hemi_x, (pp_mother[1] + pp_mother[2]) * pp_proband[2] * prior_one_parent_het)
-        .when(hemi_y, (pp_father[1] + pp_father[2]) * pp_proband[2] * prior_one_parent_het)
+        .when(
+            hemi_x, (pp_mother[1] + pp_mother[2]) * pp_proband[2] * prior_one_parent_het
+        )
+        .when(
+            hemi_y, (pp_father[1] + pp_father[2]) * pp_proband[2] * prior_one_parent_het
+        )
         .when(
             diploid_expr,
             (pp_father[1] * pp_mother[0] + pp_father[0] * pp_mother[1])
@@ -1450,12 +1456,13 @@ def calculate_de_novo_post_prob(
     p_dn = prob_dn_given_data / (prob_dn_given_data + prob_data_missed_het)
     return p_dn
 
+
 def call_de_novo(
-        locus_expr: hl.expr.LocusExpression,
-        proband_expr: hl.expr.StructExpression,
-        father_expr: hl.expr.StructExpression,
-        mother_expr: hl.expr.StructExpression,
-        is_xx_expr: hl.expr.BooleanExpression,
+    locus_expr: hl.expr.LocusExpression,
+    proband_expr: hl.expr.StructExpression,
+    father_expr: hl.expr.StructExpression,
+    mother_expr: hl.expr.StructExpression,
+    is_xx_expr: hl.expr.BooleanExpression,
 ) -> hl.expr.BooleanExpression:
     """
     Call a de novo mutation based on the proband and parent genotypes.
@@ -1468,18 +1475,19 @@ def call_de_novo(
     :return: BooleanExpression indicating whether the variant is a de novo mutation.
     """
     # Ensure valid genomic context
-    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(locus_expr,
-                                                                  is_xx_expr)
+    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(
+        locus_expr, is_xx_expr
+    )
 
     is_de_novo = (
-            diploid_expr
-            & (
-                    proband_expr.GT.is_het()
-                    & father_expr.GT.is_hom_ref()
-                    & mother_expr.GT.is_hom_ref()
-            )
-            | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
-            | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
+        diploid_expr
+        & (
+            proband_expr.GT.is_het()
+            & father_expr.GT.is_hom_ref()
+            & mother_expr.GT.is_hom_ref()
+        )
+        | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
+        | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
     )
 
     return is_de_novo
@@ -1618,8 +1626,9 @@ def get_de_novo_expr(
 
     parent_sum_ad_0 = (
         hl.case()
-        .when(diploid_expr, (hl.sum(father_expr.AD) == 0) | (hl.sum(mother_expr.AD)
-                                                              == 0))
+        .when(
+            diploid_expr, (hl.sum(father_expr.AD) == 0) | (hl.sum(mother_expr.AD) == 0)
+        )
         .when(hemi_x_expr, hl.sum(mother_expr.AD) == 0)
         .when(hemi_y_expr, hl.sum(father_expr.AD) == 0)
         .or_missing()

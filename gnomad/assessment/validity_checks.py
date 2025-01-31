@@ -743,7 +743,7 @@ def check_sex_chr_metrics(
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
-    :param nhomalt_metric: Name of metric denoting homozygous counts. Default is "nhomalt".
+    :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t

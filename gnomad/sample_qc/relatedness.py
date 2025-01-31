@@ -8,8 +8,8 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 import hail as hl
 import networkx as nx
 
-from gnomad.utils.filtering import add_filters_expr
 from gnomad.utils.annotations import get_copy_state_by_sex
+from gnomad.utils.filtering import add_filters_expr
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

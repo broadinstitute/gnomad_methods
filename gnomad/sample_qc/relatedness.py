@@ -1308,7 +1308,7 @@ def get_freq_prior(freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100
     Get the population frequency prior for a de novo mutation.
 
     :param freq_prior_expr: The population frequency prior for the variant.
-    :param min_pop_prior: The minimum population frequency prior.
+    :param min_pop_prior: The minimum population frequency prior. default is 100/3e7, same format as Samocha's original code.
     """
     return hl.max(
         hl.or_else(
@@ -1327,11 +1327,18 @@ def get_freq_prior(freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100
 
 
 def transform_pl_to_pp(pl_expr: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
-    """
-    Transform the PLs into the probability of observing genotype.
+    r"""
+    Transform the Phred-scaled likelihoods (PL) into the probability of observing each genotype (PP).
 
-    :param pl_expr: ArrayExpression of PL.
-    :return: ArrayExpression of the probability of observing each genotype.
+    .. note::
+       The Phred-scaled likelihoods (PL) are transformed back into probabilities (PP)
+       using the relationship:
+
+       .. math::
+          PL = -10 \\times \\log_{10}{P(\\text{Genotype} | \\text{Data})}
+
+    :param pl_expr: ArrayExpression of PL values.
+    :return: ArrayExpression of the probability of observing each genotype (PP).
     """
     return hl.bind(lambda x: x / hl.sum(x), 10 ** (-pl_expr / 10))
 
@@ -1346,61 +1353,83 @@ def calculate_de_novo_post_prob(
     min_pop_prior: Optional[float] = 100 / 3e7,
     de_novo_prior: Optional[float] = 1 / 3e7,
 ) -> hl.expr.Float64Expression:
-    """
+    r"""
     Calculate the posterior probability of a de novo mutation.
 
     This function computes the posterior probability of a de novo mutation (P_dn)
     using the likelihoods of the proband's and parents' genotypes and the population
-    frequency prior for the variant.
+    frequency prior for the variant. It's based on Kaitlin Samocha's [de novo caller](
+    https://github.com/ksamocha/de_novo_scripts) and Hail's [de_novo](
+    https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo)
+    method, however, the original docstring didn't provide a clear explanation on how
+    to calculate for hemizygous regions of the XY individuals.
 
-    Based on Kaitlin Samocha's [de novo caller](
-    https://github.com/ksamocha/de_novo_scripts),
-    the posterior probability of a de novo mutation (`P_dn`) is computed as:
+    The posterior probability of a de novo mutation (:math:`P_{dn}`) is computed as:
 
-        P_dn = P(DN | data) / (P(DN | data) + P(missed het in parent(s) | data))
+    .. math::
+        P_{dn} = \\frac{P(DN | \\text{data})}{P(DN | \\text{data}) + P(\\text{missed het in parent(s)} | \\text{data})}
 
-    The terms are defined as:
-    P(DN | data): The probability of a de novo mutation given the data. This is
-    computed as:
+    The terms are defined as follows:
 
-        P(DN | data) = P(data | DN) * P(DN)
+    **Probability of a de novo mutation given the data** (:math:`P(DN | \text{data})`):
 
-    P(data | DN): The probability of observing the data under the assumption of a de novo mutation:
-       * Autosomes and PAR regions:
+    .. math::
+        P(DN | \\text{data}) = P(\\text{data} | DN) \\times P(DN)
 
-          P(data | DN) = P(hom_ref in father) * P(hom_ref in mother) * P(het in proband)
+    where:
 
-       * X non-PAR regions (XY only):
+    - :math:`P(\\text{data} | DN)`: Probability of observing the data under the assumption of a de novo mutation.
 
-          P(data | DN) = P(hom_ref in mother) * P(hom_alt in proband)
+      - **Autosomes and PAR regions**:
 
-       * Y non-PAR regions (XY only):
+        .. math::
+            P(\\text{data} | DN) = P(\\text{hom\\_ref in father}) \\times P(\\text{hom\\_ref in mother}) \\times P(\\text{het in proband})
 
-          P(data | DN) = P(hom_ref in father) * P(hom_alt in proband)
+      - **X non-PAR regions (XY only)**:
 
-    P(DN): The prior probability of a de novo mutation from the literature,
-        P(DN) = 1 / 3e7
+        .. math::
+            P(\\text{data} | DN) = P(\\text{hom\\_ref in mother}) \\times P(\\text{hom\\_alt in proband})
 
-    P(missed het in parent(s) | data): The probability of observing missed het in
-    parent(s) given the data. This is computed as:
+      - **Y non-PAR regions (XY only)**:
 
-        P(missed het in parent(s) | data) = P(data | at least one parent is het) * P(one parent is het)
+        .. math::
+            P(\\text{data} | DN) = P(\\text{hom\\_ref in father}) \\times P(\\text{hom\\_alt in proband})
 
-    P(data | missed het in parent(s)): The probability of observing the data under the assumption of a missed het in parent(s):
-       * Autosomes and PAR regions:
+    - :math:`P(DN)`: The prior probability of a de novo mutation from literature, defined as:
 
-          P(data | missed het in parents) = (P(het in father) * P(hom_ref in mother) + P(hom_ref in father) * P(het in mother)) * P(het in proband)
+      .. math::
+          P(DN) = \\frac{1}{3 \\times 10^7}
 
-       * X non-PAR regions:
+    **Probability of missed heterozygous parent(s) given the data** (:math:`P(\text{missed het in parent(s)} | \text{data})`):
 
-          P(data | missed het in mother) = (P(het in mother) + P(hom_var in mother)) * P(hom_var in proband)
+    .. math::
+        P(\\text{missed het in parent(s)} | \\text{data}) = P(\\text{data} | \\text{at least one parent is het}) \\times P(\\text{one parent is het})
 
-       * Y non-PAR regions:
+    where:
 
-          P(data | missed het in father) = (P(het in father) + P(hom_var in father)) * P(hom_var in proband)
+    - :math:`P(\\text{data} | \\text{missed het in parent(s)})`: Probability of observing the data under the assumption of a missed het in a parent.
 
-    - P(het in one parent): The prior probability for at least one alternate allele between the parents depends on the alternate allele frequency:
-        1 - (1 - freq_prior)**4, where freq_prior is the population frequency prior for the variant.
+      - **Autosomes and PAR regions**:
+
+        .. math::
+            P(\\text{data} | \\text{missed het in parents}) = \\left( P(\\text{het in father}) \\times P(\\text{hom\\_ref in mother}) + P(\\text{hom\\_ref in father}) \\times P(\\text{het in mother}) \\right) \\times P(\\text{het in proband})
+
+      - **X non-PAR regions**:
+
+        .. math::
+            P(\\text{data} | \\text{missed het in mother}) = (P(\\text{het in mother}) + P(\\text{hom\\_var in mother})) \\times P(\\text{hom\\_var in proband})
+
+      - **Y non-PAR regions**:
+
+        .. math::
+            P(\\text{data} | \\text{missed het in father}) = (P(\\text{het in father}) + P(\\text{hom\\_var in father})) \\times P(\\text{hom\\_var in proband})
+
+    **Prior probability for at least one heterozygous parent**:
+
+    .. math::
+        P(\\text{het in one parent}) = 1 - (1 - \\text{freq\\_prior})^4
+
+    where :math:`\\text{freq\\_prior}` is the population frequency prior for the variant.
 
     :param proband_pl: Phred-scaled genotype likelihoods for the proband.
     :param father_pl: Phred-scaled genotype likelihoods for the father.
@@ -1530,7 +1559,7 @@ def get_de_novo_expr(
     | HIGH (SNV) 1   | > 0.99     | > 0.3                |      | >10  |      |      |      |
     | HIGH (SNV) 2   | > 0.5      | > 0.3                |      |      | >0.2 |      | <10  |
     | MEDIUM         | > 0.5      | > 0.3                |      |      |      |      |      |
-    | LOW            | > 0.2      | > 0.2                |      |      |      |      |      |
+    | LOW            | > 0.2      | >= 0.2               |      |      |      |      |      |
     | VERY LOW       | >= 0.05    |                      |      |      |      |      |      |
     +----------------+------------+----------------------+------+------+------+------+------+
 
@@ -1619,7 +1648,9 @@ def get_de_novo_expr(
         .when((p_de_novo > low_conf_p) & (proband_ab >= low_conf_ab), "LOW")
         .when(
             (p_de_novo >= min_de_novo_p),
-            "VERY LOW",
+            "VERY LOW",  # This is added to give a confidence level for variants that
+            # don't fail but don't meet the other thresholds for high, medium,
+            # or low confidence, and it's not in Samocha's original code.
         )
         .or_missing()
     )

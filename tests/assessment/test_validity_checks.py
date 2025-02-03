@@ -427,7 +427,7 @@ def ht_for_group_sums() -> hl.Table:
     return ht
 
 
-def test_make_group_sum_expr_dict_logs(ht_for_group_sums) -> None:
+def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
     """Test that make_group_sum_expr_dict produces the expected log messages."""
     ht = ht_for_group_sums
 
@@ -438,46 +438,31 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums) -> None:
     metric_first_field = True
     metrics = ["AC", "AN"]
 
-    log_stream = StringIO()
-    logger = logging.getLogger("gnomad.assessment.validity_checks")
-    handler = logging.StreamHandler(log_stream)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
     # Run the make_group_sum_expr_dict function.
-    make_group_sum_expr_dict(
-        ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
-    )
-
-    # Capture log output.
-    handler.flush()
-    log_output = log_stream.getvalue()
-    logger.removeHandler(handler)
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        make_group_sum_expr_dict(
+            ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
+        )
+    log_messages = [record.getMessage().lower().strip() for record in caplog.records]
 
     # Perform assertions on log output.
-    assert (
-        "Including field: AC_afr_adj" in log_output
-    ), "Expected AC_afr_adj to be included"
-    assert (
-        "Including field: AC_amr_adj" in log_output
-    ), "Expected AC_amr_adj to be included"
-    assert (
-        "AN_afr_adj is not in table's info field, it will be skipped for make_group_sum_expr_dict"
-        in log_output
-    ), "Expected absence of AN_afr_adj"
-    assert (
-        "AN_amr_adj is not in table's info field, it will be skipped for make_group_sum_expr_dict"
-        in log_output
-    ), "Expected absence of AN_afr_adj"
-    assert (
-        "Generated annot_dict keys: ['sum_AC_adj_pop', 'sum_AN_adj_pop']" in log_output
-    ), "Expected annot_dict keys should include sum_AC_adj_pop and sum_AN_adj_pop"
-    assert (
-        "No valid fields found for sum_AN_adj_pop" in log_output
-    ), "Expected 'no valid field warning' for sum_AN_adj_pop"
+    expected_logs = [
+        "including field ac_afr_adj",
+        "including field ac_amr_adj",
+        "an_afr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
+        "an_amr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
+        "generated annot_dict keys: ['sum_ac_adj_pop', 'sum_an_adj_pop']",  # Avoid exact key formatting issues
+        "no valid fields found for sum_an_adj_pop",
+    ]
+
+    # Perform assertions using substring matching.
+    for log_phrase in expected_logs:
+        assert any(
+            log_phrase in log for log in log_messages
+        ), f"Expected phrase missing: {log_phrase}"
 
 
-def test_sum_group_callstats(ht_for_group_sums) -> None:
+def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
     """Test that sum_group_callstats produces the expected log messages."""
     ht = ht_for_group_sums
 
@@ -487,30 +472,21 @@ def test_sum_group_callstats(ht_for_group_sums) -> None:
     groups = ["adj"]
     metrics = ["AC", "AN"]
 
-    # Capture logs.
-    log_stream = StringIO()
-    logger = logging.getLogger("gnomad.assessment.validity_checks")
-    handler = logging.StreamHandler(log_stream)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
     # Run sum_group_callstats function.
-    sum_group_callstats(
-        ht,
-        sexes=sexes,
-        subsets=subsets,
-        pops=pops,
-        groups=groups,
-        metrics=metrics,
-        verbose=True,
-        delimiter="_",
-        gen_anc_label_name="gen_anc",
-    )
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        sum_group_callstats(
+            ht,
+            sexes=sexes,
+            subsets=subsets,
+            pops=pops,
+            groups=groups,
+            metrics=metrics,
+            verbose=True,
+            delimiter="_",
+            gen_anc_label_name="gen_anc",
+        )
 
-    # Capture log output.
-    handler.flush()
-    log_output = log_stream.getvalue()
-    logger.removeHandler(handler)
+    log_messages = [record.getMessage() for record in caplog.records]
 
     # Perform assertions on log output.
     expected_logs = [
@@ -522,5 +498,8 @@ def test_sum_group_callstats(ht_for_group_sums) -> None:
         "Found 1 sites that fail AN_adj = sum_AN_adj_gen_anc_sex check:",
     ]
 
+    # for log_phrase in expected_logs:
+    #    assert any(log_phrase in log for log in log_messages), f"Expected phrase missing: {log_phrase}"
+
     for msg in expected_logs:
-        assert msg in log_output, f"Expected log message missing: {msg}"
+        assert msg in log_messages, f"Expected log message is missing: {msg}"

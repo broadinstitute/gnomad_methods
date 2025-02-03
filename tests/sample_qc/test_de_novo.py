@@ -13,6 +13,7 @@ from gnomad.sample_qc.relatedness import (
 
 from gnomad.utils.annotations import get_copy_state_by_sex
 
+
 class TestDeNovoMutation:
     """Test suite for de novo mutation functions."""
 

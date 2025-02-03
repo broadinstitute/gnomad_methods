@@ -1,5 +1,6 @@
 """Test suite for de novo mutation functions."""
 
+import hail as hl
 import pytest
 
 from gnomad.sample_qc.relatedness import (
@@ -11,7 +12,6 @@ from gnomad.sample_qc.relatedness import (
 )
 
 from gnomad.utils.annotations import get_copy_state_by_sex
-
 
 class TestDeNovoMutation:
     """Test suite for de novo mutation functions."""
@@ -149,8 +149,10 @@ class TestDeNovoMutation:
             expected_diploid,
             expected_hemi_x,
             expected_hemi_y,
-        ], (f"Failed for locus={locus}, is_xx={is_xx}. Expected"
-            f" {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}")
+        ], (
+            f"Failed for locus={locus}, is_xx={is_xx}. Expected"
+            f" {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}"
+        )
 
     @pytest.mark.parametrize(
         "locus_key, proband_gt, father_gt, mother_gt, is_xx, expected",

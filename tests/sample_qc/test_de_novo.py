@@ -1,7 +1,6 @@
 """Test suite for de novo mutation functions."""
 
 import pytest
-import hail as hl
 
 from gnomad.sample_qc.relatedness import (
     get_freq_prior,
@@ -150,7 +149,8 @@ class TestDeNovoMutation:
             expected_diploid,
             expected_hemi_x,
             expected_hemi_y,
-        ], f"Failed for locus={locus}, is_xx={is_xx}. Expected {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}"
+        ], (f"Failed for locus={locus}, is_xx={is_xx}. Expected"
+            f" {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}")
 
     @pytest.mark.parametrize(
         "locus_key, proband_gt, father_gt, mother_gt, is_xx, expected",

@@ -1308,7 +1308,8 @@ def get_freq_prior(freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100
     Get the population frequency prior for a de novo mutation.
 
     :param freq_prior_expr: The population frequency prior for the variant.
-    :param min_pop_prior: The minimum population frequency prior. default is 100/3e7, same format as Samocha's original code.
+    :param min_pop_prior: The minimum population frequency prior, default is
+       100/3e7, same format as Samocha's original code.
     """
     return hl.max(
         hl.or_else(

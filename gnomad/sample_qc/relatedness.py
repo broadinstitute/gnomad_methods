@@ -1468,9 +1468,9 @@ def call_de_novo(
     Call a de novo mutation based on the proband and parent genotypes.
 
     :param locus_expr: Variant locus.
-    :param proband_expr: Proband genotype info, required fields: GT.
-    :param father_expr: Father genotype info, required fields: GT.
-    :param mother_expr: Mother genotype info, required fields: GT.
+    :param proband_expr: Proband genotype info, required field: GT.
+    :param father_expr: Father genotype info, required field: GT.
+    :param mother_expr: Mother genotype info, required field: GT.
     :param is_xx_expr: Whether the proband is XX.
     :return: BooleanExpression indicating whether the variant is a de novo mutation.
     """

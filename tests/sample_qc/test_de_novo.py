@@ -4,13 +4,12 @@ import hail as hl
 import pytest
 
 from gnomad.sample_qc.relatedness import (
-    get_freq_prior,
-    transform_pl_to_pp,
     calculate_de_novo_post_prob,
     call_de_novo,
     get_de_novo_expr,
+    get_freq_prior,
+    transform_pl_to_pp,
 )
-
 from gnomad.utils.annotations import get_copy_state_by_sex
 
 

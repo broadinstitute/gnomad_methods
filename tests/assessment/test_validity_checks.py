@@ -471,7 +471,6 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
     groups = ["adj"]
     metrics = ["AC", "AN"]
 
-    # Run sum_group_callstats function.
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         sum_group_callstats(
             ht,

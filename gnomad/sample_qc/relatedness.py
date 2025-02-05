@@ -1303,47 +1303,6 @@ def generate_sib_stats_expr(
     return sib_stats
 
 
-def get_freq_prior(freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100 / 3e7):
-    """
-    Get the population frequency prior for a de novo mutation.
-
-    :param freq_prior_expr: The population frequency prior for the variant.
-    :param min_pop_prior: The minimum population frequency prior. Default is
-       100/3e7, taken from Kaitlin Samocha's [de novo caller](https://github.com/ksamocha/de_novo_scripts).
-    """
-    return hl.max(
-        hl.or_else(
-            hl.case()
-            .when((freq_prior_expr >= 0) & (freq_prior_expr <= 1), freq_prior_expr)
-            .or_error(
-                hl.format(
-                    "de_novo: expect 0 <= freq_prior_expr <= 1, found %.3e",
-                    freq_prior_expr,
-                )
-            ),
-            0.0,
-        ),
-        min_pop_prior,
-    )
-
-
-def transform_pl_to_pp(pl_expr: hl.expr.ArrayExpression) -> hl.expr.ArrayExpression:
-    r"""
-    Transform the Phred-scaled likelihoods (PL) into the probability of observing each genotype (PP).
-
-    .. note::
-       The Phred-scaled likelihoods (PL) are transformed back into probabilities (PP)
-       using the relationship:
-
-       .. math::
-          PL = -10 \\times \\log_{10}{P(\\text{Genotype} | \\text{Data})}
-
-    :param pl_expr: ArrayExpression of PL values.
-    :return: ArrayExpression of the probability of observing each genotype (PP).
-    """
-    return hl.bind(lambda x: x / hl.sum(x), 10 ** (-pl_expr / 10))
-
-
 def calculate_de_novo_post_prob(
     proband_pl: hl.expr.ArrayExpression,
     father_pl: hl.expr.ArrayExpression,
@@ -1362,77 +1321,83 @@ def calculate_de_novo_post_prob(
     frequency prior for the variant. It's based on Kaitlin Samocha's [de novo caller](
     https://github.com/ksamocha/de_novo_scripts) and Hail's [de_novo](
     https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo)
-    method. Please refer to these sources for more information on the de novo model. 
-    
-    Neither Kaitlin's de novo caller nor Hail's de novo method provide a clear description on how
-    to calculate for de novo calls for hemizygous genotypes in XY individuals. These equations are included below.
+    method. Please refer to these sources for more information on the de novo model.
 
+    Neither Kaitlin's de novo caller nor Hail's de novo method provide a clear
+    description on how to calculate for de novo calls for hemizygous genotypes in XY
+    individuals. These equations are included below:
 
     .. math::
-        P_{dn} = \\frac{P(DN | \\text{data})}{P(DN | \\text{data}) + P(\\text{missed het in parent(s)} | \\text{data})}
+
+        P_{dn} = \frac{P(DN \mid \text{data})}{P(DN \mid \text{data}) + P(\text{missed het in parent(s)} \mid \text{data})}
 
     The terms are defined as follows:
 
-    **Probability of a de novo mutation given the data** (:math:`P(DN | \text{data})`):
+    - :math:`P(DN \mid \text{data})` is the probability that the variant is **de novo**, given the observed genotype data.
+
+    - :math:`P(\text{missed het in parent(s)} \mid \text{data})` is the probability that the heterozygous variant was **missed in the parent(s)**.
+
+    Applying Bayesian Theorem to the numerator and denominator yields:
 
     .. math::
-        P(DN | \\text{data}) = P(\\text{data} | DN) \\times P(DN)
+
+        P_{dn} = \frac{P(\text{data} \mid DN) \, P(DN)}{P(\text{data} \mid DN) \, P(DN) + P(\text{data} \mid \text{missed het in parent(s)}) \, P(\text{missed het in parent(s)})}
 
     where:
 
-    - :math:`P(\\text{data} | DN)`: Probability of observing the data under the assumption of a de novo mutation.
+    - :math:`P(\text{data} \mid DN)`: Probability of observing the data under the assumption of a de novo mutation.
 
       - **Autosomes and PAR regions**:
 
         .. math::
-            P(\\text{data} | DN) = P(\\text{hom\\_ref in father}) \\times P(\\text{hom\\_ref in mother}) \\times P(\\text{het in proband})
 
-    **Probability of a de novo mutation given the data for hemizygous calls in XY individuals** 
-    - **X non-PAR regions (XY only)**:
+            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_ref in mother}) \, P(\text{het in proband})
+
+      - **X non-PAR regions (XY only)**:
 
         .. math::
-            P(\\text{data} | DN) = P(\\text{hom\\_ref in mother}) \\times P(\\text{hom\\_alt in proband})
+
+            P(\text{data} \mid DN) = P(\text{hom_ref in mother}) \, P(\text{hom_alt in proband})
 
       - **Y non-PAR regions (XY only)**:
 
         .. math::
-            P(\\text{data} | DN) = P(\\text{hom\\_ref in father}) \\times P(\\text{hom\\_alt in proband})
+
+            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_alt in proband})
 
     - :math:`P(DN)`: The prior probability of a de novo mutation from literature, defined as:
 
       .. math::
-          P(DN) = \\frac{1}{3 \\times 10^7}
 
-    **Probability of missed heterozygous parent(s) given the data** (:math:`P(\text{missed het in parent(s)} | \text{data})`):
+          P(DN) = \frac{1}{3 \times 10^7}
 
-    .. math::
-        P(\\text{missed het in parent(s)} | \\text{data}) = P(\\text{data} | \\text{at least one parent is het}) \\times P(\\text{one parent is het})
-
-    where:
-
-    - :math:`P(\\text{data} | \\text{missed het in parent(s)})`: Probability of observing the data under the assumption of a missed het in a parent.
+    - :math:`P(\text{data} \mid \text{missed het in parent(s)})`: Probability of observing the data under the assumption of a missed het in a parent.
 
       - **Autosomes and PAR regions**:
 
         .. math::
-            P(\\text{data} | \\text{missed het in parents}) = \\left( P(\\text{het in father}) \\times P(\\text{hom\\_ref in mother}) + P(\\text{hom\\_ref in father}) \\times P(\\text{het in mother}) \\right) \\times P(\\text{het in proband})
+
+            P(\text{data} \mid \text{missed het in parents}) = ( P(\text{het in father}) \times P(\text{hom_ref in mother}) + P(\text{hom_ref in father}) \times P(\text{het in mother})) \times P(\text{het in proband})
 
       - **X non-PAR regions**:
 
         .. math::
-            P(\\text{data} | \\text{missed het in mother}) = (P(\\text{het in mother}) + P(\\text{hom\\_var in mother})) \\times P(\\text{hom\\_var in proband})
+
+            P(\text{data} \mid \text{missed het in mother}) = (P(\text{het in mother}) + P(\text{hom_alt in mother})) \times P(\text{hom_alt in proband})
 
       - **Y non-PAR regions**:
 
         .. math::
-            P(\\text{data} | \\text{missed het in father}) = (P(\\text{het in father}) + P(\\text{hom\\_var in father})) \\times P(\\text{hom\\_var in proband})
 
-    **Prior probability for at least one heterozygous parent**:
+            P(\text{data} \mid \text{missed het in father}) = (P(\text{het in father}) + P(\text{hom_alt in father})) \times P(\text{hom_alt in proband})
+
+    - :math:`P(\text{missed het in parent(s)` equals the **probability for at least one heterozygous parent**:
 
     .. math::
-        P(\\text{het in one parent}) = 1 - (1 - \\text{freq\\_prior})^4
 
-    where :math:`\\text{freq\\_prior}` is the population frequency prior for the variant.
+        P(\text{het in one parent}) = 1 - (1 - \text{freq_prior})^4
+
+    where :math:`\text{freq_prior}` is the population frequency prior for the variant.
 
     :param proband_pl: Phred-scaled genotype likelihoods for the proband.
     :param father_pl: Phred-scaled genotype likelihoods for the father.
@@ -1444,17 +1409,63 @@ def calculate_de_novo_post_prob(
     :param de_novo_prior: Prior probability of a de novo mutation (default: 1/3e7).
     :return: Posterior probability of a de novo mutation (`P_dn`).
     """
+
+    def _get_freq_prior(
+        freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100 / 3e7
+    ):
+        """
+        Get the population frequency prior for a de novo mutation.
+
+        :param freq_prior_expr: The population frequency prior for the variant.
+        :param min_pop_prior: The minimum population frequency prior. Default is
+           100/3e7, taken from Kaitlin Samocha's [de novo caller](https://github.com/ksamocha/de_novo_scripts).
+        """
+        return hl.max(
+            hl.or_else(
+                hl.case()
+                .when((freq_prior_expr >= 0) & (freq_prior_expr <= 1), freq_prior_expr)
+                .or_error(
+                    hl.format(
+                        "de_novo: expect 0 <= freq_prior_expr <= 1, found %.3e",
+                        freq_prior_expr,
+                    )
+                ),
+                0.0,
+            ),
+            min_pop_prior,
+        )
+
+    def _transform_pl_to_pp(
+        pl_expr: hl.expr.ArrayExpression,
+    ) -> hl.expr.ArrayExpression:
+        r"""
+        Transform the Phred-scaled likelihoods (PL) into the probability of observing each genotype (PP).
+
+        .. note::
+           The Phred-scaled likelihoods (PL) are converted back into conditional genotype
+           probabilities (PP) given the data, as computed by HaplotypeCaller, using the
+           following relationship:
+
+           .. math::
+
+             {PL} = -10 \times \log_{10}{P(\text{Genotype} \mid \text{Data})}
+
+        :param pl_expr: ArrayExpression of PL values.
+        :return: ArrayExpression of the probability of observing each genotype (PP).
+        """
+        return hl.bind(lambda x: x / hl.sum(x), 10 ** (-pl_expr / 10))
+
     # Ensure valid genomic context
     diploid_expr, hemi_x, hemi_y = get_copy_state_by_sex(locus_expr, is_xx_expr)
 
     # Adjust frequency prior
-    freq_prior_expr = get_freq_prior(freq_prior_expr, min_pop_prior)
+    freq_prior_expr = _get_freq_prior(freq_prior_expr, min_pop_prior)
     prior_one_parent_het = 1 - (1 - freq_prior_expr) ** 4
 
     # Convert PL to probabilities
-    pp_proband = transform_pl_to_pp(proband_pl)
-    pp_father = transform_pl_to_pp(father_pl)
-    pp_mother = transform_pl_to_pp(mother_pl)
+    pp_proband = _transform_pl_to_pp(proband_pl)
+    pp_father = _transform_pl_to_pp(father_pl)
+    pp_mother = _transform_pl_to_pp(mother_pl)
 
     # Compute `P(data | DN)`
     prob_data_given_dn_expr = (
@@ -1485,7 +1496,9 @@ def calculate_de_novo_post_prob(
 
     # Calculate posterior probability of de novo mutation
     prob_dn_given_data_expr = prob_data_given_dn_expr * de_novo_prior
-    p_dn_expr = prob_dn_given_data_expr / (prob_dn_given_data_expr + prob_data_missed_het_expr)
+    p_dn_expr = prob_dn_given_data_expr / (
+        prob_dn_given_data_expr + prob_data_missed_het_expr
+    )
     return p_dn_expr
 
 

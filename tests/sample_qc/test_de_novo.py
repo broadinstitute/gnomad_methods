@@ -84,9 +84,7 @@ class TestDeNovoMutation:
         else:
             expr = get_freq_prior(hl.literal(freq_prior), min_pop_prior)
             result = hl.eval(expr)
-            assert result == pytest.approx(
-                expected, rel=1e-6
-            )
+            assert result == pytest.approx(expected, rel=1e-6)
 
     @pytest.mark.parametrize(
         "pl_input, expected",

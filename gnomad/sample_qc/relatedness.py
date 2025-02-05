@@ -1304,9 +1304,9 @@ def generate_sib_stats_expr(
 
 
 def calculate_de_novo_post_prob(
-    proband_pl: hl.expr.ArrayExpression,
-    father_pl: hl.expr.ArrayExpression,
-    mother_pl: hl.expr.ArrayExpression,
+    proband_pl_expr: hl.expr.ArrayExpression,
+    father_pl_expr: hl.expr.ArrayExpression,
+    mother_pl_expr: hl.expr.ArrayExpression,
     locus_expr: hl.expr.LocusExpression,
     is_xx_expr: hl.expr.BooleanExpression,
     freq_prior_expr: hl.expr.Float64Expression,
@@ -1353,6 +1353,7 @@ def calculate_de_novo_post_prob(
 
             P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_ref in mother}) \, P(\text{het in proband})
 
+      **Probability of a de novo mutation given the data for hemizygous calls in XY individuals**
       - **X non-PAR regions (XY only)**:
 
         .. math::
@@ -1399,9 +1400,9 @@ def calculate_de_novo_post_prob(
 
     where :math:`\text{freq_prior}` is the population frequency prior for the variant.
 
-    :param proband_pl: Phred-scaled genotype likelihoods for the proband.
-    :param father_pl: Phred-scaled genotype likelihoods for the father.
-    :param mother_pl: Phred-scaled genotype likelihoods for the mother.
+    :param proband_pl_expr: Phred-scaled genotype likelihoods for the proband.
+    :param father_pl_expr: Phred-scaled genotype likelihoods for the father.
+    :param mother_pl_expr: Phred-scaled genotype likelihoods for the mother.
     :param locus_expr: LocusExpression of the variant.
     :param is_xx_expr: BooleanExpression indicating whether the proband has XX sex karyotype.
     :param freq_prior_expr: Population frequency prior for the variant.
@@ -1463,9 +1464,9 @@ def calculate_de_novo_post_prob(
     prior_one_parent_het = 1 - (1 - freq_prior_expr) ** 4
 
     # Convert PL to probabilities
-    pp_proband = _transform_pl_to_pp(proband_pl)
-    pp_father = _transform_pl_to_pp(father_pl)
-    pp_mother = _transform_pl_to_pp(mother_pl)
+    pp_proband = _transform_pl_to_pp(proband_pl_expr)
+    pp_father = _transform_pl_to_pp(father_pl_expr)
+    pp_mother = _transform_pl_to_pp(mother_pl_expr)
 
     # Compute `P(data | DN)`
     prob_data_given_dn_expr = (
@@ -1558,25 +1559,23 @@ def get_de_novo_expr(
     low_conf_ab: float = 0.2,
     high_conf_p: float = 0.99,
     med_conf_p: float = 0.5,
-    low_conf_p: float = 0.2,
 ) -> hl.expr.StructExpression:
     """
     Get the de novo status of a variant based on the proband and parent genotypes.
 
     Thresholds:
 
-    +----------------+------------+----------------------+------+------+------+------+------+
-    |   Category     | P(de novo) | AB*                  | AD*  | DP*  | DR*  | GQ*  | AC*  |
-    +----------------+------------+----------------------+------+------+------+------+------+
-    | FAIL           | < 0.05     | AB(parents) > 0.05   |  0   |      | <0.1 | <20  |      |
-    |                |            | OR AB(proband) < 0.2 |      |      |      |      |      |
-    | HIGH (Indel)   | > 0.99     | > 0.3                |      |      |      |      |  =1  |
-    | HIGH (SNV) 1   | > 0.99     | > 0.3                |      | >10  |      |      |      |
-    | HIGH (SNV) 2   | > 0.5      | > 0.3                |      |      | >0.2 |      | <10  |
-    | MEDIUM         | > 0.5      | > 0.3                |      |      |      |      |      |
-    | LOW            | > 0.2      | >= 0.2               |      |      |      |      |      |
-    | VERY LOW       | >= 0.05    |                      |      |      |      |      |      |
-    +----------------+------------+----------------------+------+------+------+------+------+
+    +----------------+------------+----------------------+------+------+------+------+
+    |   Category     | P(de novo) | AB                   | AD   | DP   | DR   | GQ   |
+    +----------------+------------+----------------------+------+------+------+------+
+    | FAIL           | < 0.05     | AB(parents) > 0.05   |  0   |      | <0.1 | <20  |
+    |                |            | OR AB(proband) < 0.2 |      |      |      |      |
+    | HIGH (Indel)   | > 0.99     | > 0.3                |      |      |      |      |
+    | HIGH (SNV) 1   | > 0.99     | > 0.3                |      |      | >0.2 |      |
+    | HIGH (SNV) 2   | > 0.5      | > 0.3                |      | >10  |      |      |
+    | MEDIUM         | > 0.5      | > 0.3                |      |      |      |      |
+    | LOW            | >= 0.05    | >= 0.2               |      |      |      |      |
+    +----------------+------------+----------------------+------+------+------+------+
 
     * AB: Proband AB. FAIL criteria also includes threshold for parent(s).
 
@@ -1586,6 +1585,18 @@ def get_de_novo_expr(
 
     * GQ: Proband GQ.
 
+    .. note::
+
+        The simplified version is the same as Hail's methods when using the
+        `ignore_in_sample_allele_frequency` parameter. The main difference is that
+        this mode should be used when families larger than a single trio are in the
+        dataset, in which an allele might be de novo in a parent and transmitted to a
+        child in the dataset. This mode will not consider the allele count (AC) in
+        the dataset, and will only consider the Phred-scaled likelihoods (PL) of the
+        child and parents, allele balance (AB) of the child and parents,
+        the genotype quality (GQ) of the child, the depth (DP) of the child and
+        parents, and the population frequency prior.
+
     :param locus_expr: Variant locus.
     :param alleles_expr: Variant alleles. It assumes bi-allelic variants, meaning
        that the matrix table or table should be already split to bi-allelics.
@@ -1594,20 +1605,19 @@ def get_de_novo_expr(
     :param mother_expr: Mother genotype info; required fields: GT, DP, GQ, AD, PL.
     :param is_xx_expr: Whether the proband is XX.
     :param freq_prior_expr: Population frequency prior for the variant.
-    :param min_pop_prior: Minimum population frequency prior, default to 100 / 3e7.
-    :param de_novo_prior: Prior probability of a de novo mutation, default to 1 / 3e7.
-    :param min_dp_ratio: Minimum depth ratio for proband to parents, default to 0.1.
-    :param min_gq: Minimum genotype quality for the proband, default to 20.
-    :param min_proband_ab: Minimum allele balance for the proband, default to 0.2.
-    :param max_parent_ab: Maximum allele balance for parents, default to 0.05.
-    :param min_de_novo_p: Minimum probability for variant to be called de novo, default to 0.05.
-    :param high_conf_dp_ratio: DP ratio threshold of proband DP to combined DP in parents for high confidence, default to 0.2.
-    :param dp_threshold_snp: Minimum depth for high-confidence SNPs, default to 10.
-    :param high_med_conf_ab: AB threshold for high/medium confidence, default to 0.3.
-    :param low_conf_ab: AB threshold for low confidence, default to 0.2.
-    :param high_conf_p: P(de novo) threshold for high confidence, default to 0.99.
-    :param med_conf_p: P(de novo) threshold for medium confidence, default to 0.5.
-    :param low_conf_p: P(de novo) threshold for low confidence, default to 0.2.
+    :param min_pop_prior: Minimum population frequency prior. Default is 100 / 3e7.
+    :param de_novo_prior: Prior probability of a de novo mutation. Default is 1 / 3e7.
+    :param min_dp_ratio: Minimum depth ratio for proband to parents. Default is 0.1.
+    :param min_gq: Minimum genotype quality for the proband. Default is 20.
+    :param min_proband_ab: Minimum allele balance for the proband. Default is 0.2.
+    :param max_parent_ab: Maximum allele balance for parents. Default is 0.05.
+    :param min_de_novo_p: Minimum probability for variant to be called de novo. Default is 0.05.
+    :param high_conf_dp_ratio: DP ratio threshold of proband DP to combined DP in parents for high confidence. Default is 0.2.
+    :param dp_threshold_snp: Minimum depth for high-confidence SNPs. Default is  10.
+    :param high_med_conf_ab: AB threshold for high/medium confidence. Default is  0.3.
+    :param low_conf_ab: AB threshold for low confidence. Default is  0.2.
+    :param high_conf_p: P(de novo) threshold for high confidence. Default is 0.99.
+    :param med_conf_p: P(de novo) threshold for medium confidence. Default is 0.5.
     :return: A StructExpression with variant de novo status and confidence of de novo call.
     """
     # Determine genomic context
@@ -1645,26 +1655,28 @@ def get_de_novo_expr(
         hl.case()
         .when(
             (
-                is_snp
-                & (p_de_novo > high_conf_p)
-                & (proband_ab > high_med_conf_ab)
-                & (
-                    (proband_expr.DP > dp_threshold_snp)
-                    | (dp_ratio > high_conf_dp_ratio)
+                (
+                    is_snp
+                    & (p_de_novo > high_conf_p)
+                    & (proband_ab > high_med_conf_ab)
+                    & (dp_ratio > high_conf_dp_ratio)
                 )
-            )
-            | (~is_snp & (p_de_novo > high_conf_p) & (proband_ab > high_med_conf_ab)),
+                | (
+                    is_snp
+                    & (p_de_novo > med_conf_p)
+                    & (proband_ab > high_med_conf_ab)
+                    & (proband_expr.DP > dp_threshold_snp)
+                )
+                | (
+                    ~is_snp
+                    & (p_de_novo > high_conf_p)
+                    & (proband_ab > high_med_conf_ab)
+                )
+            ),
             "HIGH",
         )
         .when((p_de_novo > med_conf_p) & (proband_ab > high_med_conf_ab), "MEDIUM")
-        .when((p_de_novo > low_conf_p) & (proband_ab >= low_conf_ab), "LOW")
-        # This level (`VERY LOW`) is added to give a confidence level for variants that
-        # don't fail but don't meet the other thresholds.
-        # This was not present in Kaitlin's original de novo caller or Hail's de novo method
-        .when(
-            (p_de_novo >= min_de_novo_p),
-            "VERY LOW",
-        )
+        .when((p_de_novo >= min_de_novo_p) & (proband_ab >= low_conf_ab), "LOW")
         .or_missing()
     )
 
@@ -1693,18 +1705,18 @@ def get_de_novo_expr(
     # Fail checks
     fail_checks_expr = {
         "min_dp_ratio": dp_ratio < min_dp_ratio,
-        "parent_sum_ad_0": parent_sum_ad_0,
-        "max_parent_ab": fail_max_parent_ab,
+        "parent_sum_ad_0": parent_sum_ad_0_expr,
+        "max_parent_ab": fail_max_parent_ab_expr,
         "min_proband_ab": proband_ab < min_proband_ab,
         "min_proband_gq": proband_expr.GQ < min_gq,
         "min_de_novo_p": p_de_novo <= min_de_novo_p,
     }
 
-    fail = hl.any(list(fail_checks.values()))
+    fail = hl.any(list(fail_checks_expr.values()))
     result_expr = hl.struct(
         p_de_novo=hl.if_else(fail, hl.missing(hl.tfloat64), p_de_novo),
-        confidence=hl.if_else(fail, hl.missing(hl.tstr), confidence),
-        fail_reason=add_filters_expr(filters=fail_checks),
+        confidence=hl.if_else(fail, hl.missing(hl.tstr), confidence_expr),
+        fail_reason=add_filters_expr(filters=fail_checks_expr),
     )
 
     return result_expr

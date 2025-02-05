@@ -1307,8 +1307,9 @@ def calculate_de_novo_post_prob(
     proband_pl_expr: hl.expr.ArrayExpression,
     father_pl_expr: hl.expr.ArrayExpression,
     mother_pl_expr: hl.expr.ArrayExpression,
-    locus_expr: hl.expr.LocusExpression,
-    is_xx_expr: hl.expr.BooleanExpression,
+    diploid_expr: hl.expr.BooleanExpression,
+    hemi_x_expr: hl.expr.BooleanExpression,
+    hemi_y_expr: hl.expr.BooleanExpression,
     freq_prior_expr: hl.expr.Float64Expression,
     min_pop_prior: Optional[float] = 100 / 3e7,
     de_novo_prior: Optional[float] = 1 / 3e7,
@@ -1403,8 +1404,9 @@ def calculate_de_novo_post_prob(
     :param proband_pl_expr: Phred-scaled genotype likelihoods for the proband.
     :param father_pl_expr: Phred-scaled genotype likelihoods for the father.
     :param mother_pl_expr: Phred-scaled genotype likelihoods for the mother.
-    :param locus_expr: LocusExpression of the variant.
-    :param is_xx_expr: BooleanExpression indicating whether the proband has XX sex karyotype.
+    :param diploid_expr: Boolean expression indicating a diploid genotype.
+    :param hemi_x_expr: Boolean expression indicating a hemizygous genotype on the X chromosome.
+    :param hemi_y_expr: Boolean expression indicating a hemizygous genotype on the Y chromosome.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior (default: 100/3e7).
     :param de_novo_prior: Prior probability of a de novo mutation (default: 1/3e7).
@@ -1412,7 +1414,7 @@ def calculate_de_novo_post_prob(
     """
 
     def _get_freq_prior(
-        freq_prior_expr: hl.expr.Float64Expression, min_pop_prior=100 / 3e7
+        freq_prior: hl.expr.Float64Expression, min_prior=100 / 3e7
     ):
         """
         Get the population frequency prior for a de novo mutation.
@@ -1424,16 +1426,16 @@ def calculate_de_novo_post_prob(
         return hl.max(
             hl.or_else(
                 hl.case()
-                .when((freq_prior_expr >= 0) & (freq_prior_expr <= 1), freq_prior_expr)
+                .when((freq_prior >= 0) & (freq_prior <= 1), freq_prior)
                 .or_error(
                     hl.format(
                         "de_novo: expect 0 <= freq_prior_expr <= 1, found %.3e",
-                        freq_prior_expr,
+                        freq_prior,
                     )
                 ),
                 0.0,
             ),
-            min_pop_prior,
+            min_prior,
         )
 
     def _transform_pl_to_pp(
@@ -1456,9 +1458,6 @@ def calculate_de_novo_post_prob(
         """
         return hl.bind(lambda x: x / hl.sum(x), 10 ** (-pl_expr / 10))
 
-    # Ensure valid genomic context
-    diploid_expr, hemi_x, hemi_y = get_copy_state_by_sex(locus_expr, is_xx_expr)
-
     # Adjust frequency prior
     freq_prior_expr = _get_freq_prior(freq_prior_expr, min_pop_prior)
     prior_one_parent_het = 1 - (1 - freq_prior_expr) ** 4
@@ -1471,8 +1470,8 @@ def calculate_de_novo_post_prob(
     # Compute `P(data | DN)`
     prob_data_given_dn_expr = (
         hl.case()
-        .when(hemi_x, pp_mother[0] * pp_proband[2])
-        .when(hemi_y, pp_father[0] * pp_proband[2])
+        .when(hemi_x_expr, pp_mother[0] * pp_proband[2])
+        .when(hemi_y_expr, pp_father[0] * pp_proband[2])
         .when(diploid_expr, pp_father[0] * pp_mother[0] * pp_proband[1])
         .or_missing()
     )
@@ -1481,10 +1480,12 @@ def calculate_de_novo_post_prob(
     prob_data_missed_het_expr = (
         hl.case()
         .when(
-            hemi_x, (pp_mother[1] + pp_mother[2]) * pp_proband[2] * prior_one_parent_het
+            hemi_x_expr, (pp_mother[1] + pp_mother[2]) * pp_proband[2] *
+                     prior_one_parent_het
         )
         .when(
-            hemi_y, (pp_father[1] + pp_father[2]) * pp_proband[2] * prior_one_parent_het
+            hemi_y_expr, (pp_father[1] + pp_father[2]) * pp_proband[2] *
+                     prior_one_parent_het
         )
         .when(
             diploid_expr,
@@ -1503,39 +1504,6 @@ def calculate_de_novo_post_prob(
     return p_dn_expr
 
 
-def call_de_novo(
-    locus_expr: hl.expr.LocusExpression,
-    proband_expr: hl.expr.StructExpression,
-    father_expr: hl.expr.StructExpression,
-    mother_expr: hl.expr.StructExpression,
-    is_xx_expr: hl.expr.BooleanExpression,
-) -> hl.expr.BooleanExpression:
-    """
-    Call a de novo mutation based on the proband and parent genotypes.
-
-    :param locus_expr: Variant locus.
-    :param proband_expr: Proband genotype info, required field: GT.
-    :param father_expr: Father genotype info, required field: GT.
-    :param mother_expr: Mother genotype info, required field: GT.
-    :param is_xx_expr: Whether the proband is XX.
-    :return: BooleanExpression indicating whether the variant is a de novo mutation.
-    """
-    # Ensure valid genomic context
-    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(
-        locus_expr, is_xx_expr
-    )
-
-    is_de_novo = (
-        diploid_expr
-        & (
-            proband_expr.GT.is_het()
-            & father_expr.GT.is_hom_ref()
-            & mother_expr.GT.is_hom_ref()
-        )
-        | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
-        | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
-    )
-    return is_de_novo
 
 
 def get_de_novo_expr(
@@ -1621,16 +1589,19 @@ def get_de_novo_expr(
     :return: A StructExpression with variant de novo status and confidence of de novo call.
     """
     # Determine genomic context
-    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(
-        locus_expr, is_xx_expr
+    diploid_expr = locus_expr.in_autosome_or_par() | (
+            locus_expr.in_x_nonpar() & is_xx_expr
     )
+    hemi_x_expr = locus_expr.in_x_nonpar() & ~is_xx_expr
+    hemi_y_expr = locus_expr.in_y_nonpar() & ~is_xx_expr
 
     p_de_novo = calculate_de_novo_post_prob(
         proband_expr.PL,
         father_expr.PL,
         mother_expr.PL,
-        locus_expr,
-        is_xx_expr,
+        diploid_expr,
+        hemi_x_expr,
+        hemi_y_expr,
         freq_prior_expr,
         min_pop_prior=min_pop_prior,
         de_novo_prior=de_novo_prior,
@@ -1649,6 +1620,17 @@ def get_de_novo_expr(
     # Calculate proband AB and assign variant type
     proband_ab = proband_expr.AD[1] / hl.sum(proband_expr.AD)
     is_snp = hl.is_snp(alleles_expr[0], alleles_expr[1])
+
+    is_de_novo = (
+            diploid_expr
+            & (
+                    proband_expr.GT.is_het()
+                    & father_expr.GT.is_hom_ref()
+                    & mother_expr.GT.is_hom_ref()
+            )
+            | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
+            | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
+    )
 
     # Confidence assignment
     confidence_expr = (
@@ -1714,6 +1696,7 @@ def get_de_novo_expr(
 
     fail = hl.any(list(fail_checks_expr.values()))
     result_expr = hl.struct(
+        is_de_novo=is_de_novo,
         p_de_novo=hl.if_else(fail, hl.missing(hl.tfloat64), p_de_novo),
         confidence=hl.if_else(fail, hl.missing(hl.tstr), confidence_expr),
         fail_reason=add_filters_expr(filters=fail_checks_expr),

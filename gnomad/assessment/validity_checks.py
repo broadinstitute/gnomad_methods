@@ -662,7 +662,7 @@ def check_raw_and_adj_callstats(
         }
 
     for subfield in ["AC", "AF"]:
-        # Check raw AC, AF > 0
+        # If defined, check that raw AC, AF > 0.
         check_field = f"{subfield}{delimiter}raw"
         field_check_expr[f"{check_field} > 0"] = {
             "expr": t.info[check_field] <= 0,
@@ -670,7 +670,7 @@ def check_raw_and_adj_callstats(
             "display_fields": hl.struct(**{check_field: t.info[check_field]}),
         }
 
-        # Check adj AC, AF > 0
+        # If defined, check adj AC, AF >= 0.
         check_field = f"{subfield}{delimiter}adj"
         field_check_expr[f"{check_field} >= 0"] = {
             "expr": t.info[check_field] < 0,
@@ -697,7 +697,7 @@ def check_raw_and_adj_callstats(
         }
 
         for subset in subsets:
-            # Add delimiter for subsets but not "" representing entire callset
+            # Add delimiter for subsets but not "" representing entire callset.
             if subset:
                 subset += delimiter
             field_check_label = (

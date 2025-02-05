@@ -495,8 +495,5 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
         "Found 1 sites that fail AN_adj = sum_AN_adj_gen_anc_sex check:",
     ]
 
-    # for log_phrase in expected_logs:
-    #    assert any(log_phrase in log for log in log_messages), f"Expected phrase missing: {log_phrase}"
-
     for msg in expected_logs:
         assert msg in log_messages, f"Expected log message is missing: {msg}"

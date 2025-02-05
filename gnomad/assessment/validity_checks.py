@@ -154,6 +154,10 @@ def make_group_sum_expr_dict(
     # Grab the first group for check and remove if from the label_group
     # dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric
     # counts for all sample groups so we do not check raw sample sums.
+    if "group" not in label_groups or not label_groups["group"]:
+        raise ValueError(
+            "Expected 'group' key in label_groups but it's missing or empty."
+        )
     group = label_groups.pop("group")[0]
     # sum_group is a the type of high level annotation that you want to sum
     # e.g. 'pop', 'pop-sex', 'sex'.
@@ -170,22 +174,37 @@ def make_group_sum_expr_dict(
     # "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])}
     annot_dict = {}
     for metric in metrics:
-        if metric_first_field:
-            field_prefix = f"{metric}{delimiter}{subset}"
-        else:
-            field_prefix = f"{subset}{metric}{delimiter}"
+        field_prefix = (
+            f"{metric}{delimiter}{subset}"
+            if metric_first_field
+            else f"{subset}{metric}{delimiter}"
+        )
 
         sum_group_exprs = []
         for label in label_combos:
             field = f"{field_prefix}{label}"
             if field in info_fields:
+                logger.info("Including field %s in make_group_sum_expr_dict.", field)
                 sum_group_exprs.append(t.info[field])
             else:
-                logger.warning("%s is not in table's info field", field)
+                logger.warning(
+                    "%s is NOT in table's info field, it will NOT be included in make_group_sum_expr_dict.",
+                    field,
+                )
 
-        annot_dict[f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"] = (
-            hl.sum(sum_group_exprs)
-        )
+        sum_field_name = f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"
+
+        if not sum_group_exprs:
+            logger.warning(
+                "No valid fields found for %s. Assigning hl.missing()", sum_field_name
+            )
+            annot_dict[sum_field_name] = hl.missing(hl.tint64)
+        else:
+            annot_dict[sum_field_name] = hl.sum(
+                hl.array(sum_group_exprs).filter(hl.is_defined)
+            )
+
+    logger.info("Generated annot_dict keys: %s", list(annot_dict.keys()))
 
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
@@ -459,6 +478,7 @@ def sum_group_callstats(
     delimiter: str = "-",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
+    gen_anc_label_name: str = "pop,",
 ) -> None:
     """
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
@@ -471,12 +491,13 @@ def sum_group_callstats(
     :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
     :param pops: List of pops contained within the subsets. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
+    :param additional_subsets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
+    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "pop" or "gen_anc". Default is "pop".
     :return: None
     """
     # TODO: Add support for subpop sums
@@ -491,37 +512,24 @@ def sum_group_callstats(
     )
     for subset, pops in sample_sum_sets_and_pops.items():
         for group in groups:
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], pop=pops),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], sex=sexes),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], pop=pops, sex=sexes),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-
+            for grouping in [
+                {gen_anc_label_name: pops},
+                {"sex": sexes},
+                {gen_anc_label_name: pops, "sex": sexes},
+            ]:
+                logger.info(
+                    "Making group sum expression dictionary for grouping: %s", grouping
+                )
+                field_check_expr_s = make_group_sum_expr_dict(
+                    t,
+                    subset,
+                    dict(group=[group], **grouping),
+                    sort_order,
+                    delimiter,
+                    metric_first_field,
+                    metrics,
+                )
+                field_check_expr.update(field_check_expr_s)
     generic_field_check_loop(t, field_check_expr, verbose)
 
 
@@ -720,6 +728,7 @@ def check_sex_chr_metrics(
     contigs: List[str],
     verbose: bool,
     delimiter: str = "-",
+    nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
     Perform validity checks for annotations on the sex chromosomes.
@@ -733,15 +742,28 @@ def check_sex_chr_metrics(
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
+    :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
 
+    if len(xx_metrics) == 0:
+        raise ValueError("No XX metrics found!")
+    else:
+        logger.info("Checking the following XX metrics: %s", xx_metrics)
+
     if "chrY" in contigs:
         logger.info("Check values of XX metrics for Y variants are NA:")
-        t_y = hl.filter_intervals(t, [hl.parse_locus_interval("chrY")])
+        t_y = hl.filter_intervals(
+            t,
+            [
+                hl.parse_locus_interval(
+                    "chrY", reference_genome=t.locus.dtype.reference_genome
+                )
+            ],
+        )
         metrics_values = {}
         for metric in xx_metrics:
             metrics_values[metric] = hl.agg.any(hl.is_defined(t_y.info[metric]))
@@ -763,13 +785,25 @@ def check_sex_chr_metrics(
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
 
-    t_x = hl.filter_intervals(t, [hl.parse_locus_interval("chrX")])
+    t_x = hl.filter_intervals(
+        t,
+        [
+            hl.parse_locus_interval(
+                "chrX", reference_genome=t.locus.dtype.reference_genome
+            )
+        ],
+    )
     t_xnonpar = t_x.filter(t_x.locus.in_x_nonpar())
     n = t_xnonpar.count()
     logger.info("Found %d X nonpar sites", n)
 
     logger.info("Check (nhomalt == nhomalt_xx) for X nonpar variants:")
-    xx_metrics = [x for x in xx_metrics if "nhomalt" in x]
+    xx_metrics = [x for x in xx_metrics if nhomalt_metric in x]
+
+    if len(xx_metrics) == 0:
+        raise ValueError("No XX nhomalt metrics found!")
+    else:
+        logger.info("Checking the following XX nhomalt metrics: %s", xx_metrics)
 
     field_check_expr = {}
     for metric in xx_metrics:
@@ -1263,7 +1297,11 @@ def flatten_missingness_struct(
 
 
 def unfurl_array_annotations(
-    ht: hl.Table, indexed_array_annotations: Dict[str, str]
+    ht: hl.Table,
+    indexed_array_annotations: Dict[str, str] = {
+        "faf": "faf_index_dict",
+        "freq": "freq_index_dict",
+    },
 ) -> Dict[str, Any]:
     """
     Unfurl specified arrays of structs into a dictionary of flattened expressions.
@@ -1299,32 +1337,3 @@ def unfurl_array_annotations(
                 expr_dict[f"{f}_{k}"] = ht[array][i][f]
 
     return expr_dict
-
-
-def check_array_struct_missingness(
-    ht: hl.Table,
-    indexed_array_annotations: Dict[str, str] = {
-        "faf": "faf_index_dict",
-        "freq": "freq_index_dict",
-    },
-) -> hl.expr.StructExpression:
-    """
-    Check the missingness of all fields in an array of structs.
-
-    Iterates over arrays of structs and calculates the percentage of missing values for each element of the array and each struct. Array annotations must have a corresponding dictionary to define the indices for each array field.
-    Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.
-
-    :param ht: Input Table.
-    :param indexed_array_annotations: A dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
-    :return: A Struct where each field represents a struct field's missingness percentage across the Table for each element of the specified arrays.
-    """
-    # Create row annotations for each element of the arrays and their structs.
-    annotations = unfurl_array_annotations(ht, indexed_array_annotations)
-    ht = ht.annotate(**annotations)
-
-    # Compute missingness for each of the newly created row annotations.
-    missingness_dict = {
-        field_name: hl.agg.fraction(hl.is_missing(ht[field_name]))
-        for field_name in annotations.keys()
-    }
-    return ht.aggregate(hl.struct(**missingness_dict))

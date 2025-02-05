@@ -1,12 +1,17 @@
 """Tests for the validity_checks module."""
 
+import logging
+from io import StringIO
+
 import hail as hl
 import pytest
 
 from gnomad.assessment.validity_checks import (
-    check_array_struct_missingness,
     check_missingness_of_struct,
+    check_sex_chr_metrics,
     flatten_missingness_struct,
+    make_group_sum_expr_dict,
+    sum_group_callstats,
     unfurl_array_annotations,
 )
 
@@ -164,6 +169,10 @@ def ht_for_check_array_struct_missingness() -> hl.Table:
     freq_index_dict = {"adj": 0, "raw": 1}
     ht = ht.annotate_globals(freq_index_dict=freq_index_dict)
 
+    # Unfurl indexed array annotations.
+    annotations = unfurl_array_annotations(ht, {"freq": "freq_index_dict"})
+    ht = ht.annotate(**annotations)
+
     return ht
 
 
@@ -249,35 +258,242 @@ def test_unfurl_array_annotations(
             )
 
 
-def test_check_array_struct_missingness(
-    ht_for_check_array_struct_missingness: hl.Table,
-) -> None:
-    """Test the check_array_struct_missingness function for all fields."""
-    ht = ht_for_check_array_struct_missingness
-    indexed_array_annotations = {"freq": "freq_index_dict"}
+@pytest.fixture
+def ht_for_check_sex_chr_metrics() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for testing check_sex_chr_metrics."""
+    data = [
+        {
+            "locus": hl.locus("chrX", 9000, reference_genome="GRCh38"),
+            "info": {
+                "nhomalt": 3,
+                "nhomalt_XX": 2,
+                "nhomalt_amr": 5,
+                "nhomalt_amr_XX": 1,
+                "AC": 6,
+                "AC_XX": 6,
+            },
+        },
+        {
+            "locus": hl.locus("chrX", 1000000, reference_genome="GRCh38"),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": 5,
+                "nhomalt_amr": 5,
+                "nhomalt_amr_XX": 5,
+                "AC": 10,
+                "AC_XX": 10,
+            },
+        },
+        {
+            "locus": hl.locus("chrY", 1000000, reference_genome="GRCh38"),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": hl.missing(hl.tint32),
+                "nhomalt_amr": hl.missing(hl.tint32),
+                "nhomalt_amr_XX": hl.missing(hl.tint32),
+                "AC_XX": hl.missing(hl.tint32),
+                "AC": 6,
+            },
+        },
+        {
+            "locus": hl.locus("chrY", 2000000, reference_genome="GRCh38"),
+            "info": {
+                "nhomalt": 5,
+                "nhomalt_XX": 3,
+                "nhomalt_amr": hl.missing(hl.tint32),
+                "nhomalt_amr_XX": hl.missing(hl.tint32),
+                "AC_XX": hl.missing(hl.tint32),
+                "AC": 6,
+            },
+        },
+    ]
 
-    # Call the check_array_struct_missingness function.
-    missingness = check_array_struct_missingness(ht, indexed_array_annotations)
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            locus=hl.tlocus(reference_genome="GRCh38"),
+            info=hl.tstruct(
+                nhomalt=hl.tint32,
+                nhomalt_XX=hl.tint32,
+                nhomalt_amr=hl.tint32,
+                nhomalt_amr_XX=hl.tint32,
+                AC=hl.tint32,
+                AC_XX=hl.tint32,
+            ),
+        ),
+    )
+    ht = ht.key_by("locus")
+    return ht
 
-    # Define the expected missingness percentages for each unfurled field.
-    # All 'adj' values have no missing data.
-    # AC_raw is missing only in row 4.
-    # AF_raw is missing in rows 2, 3, and 4.
-    # AN_raw is missing in all rows.
-    expected_missingness = {
-        "AC_adj": 0.0,
-        "AF_adj": 0.0,
-        "AC_raw": 0.25,
-        "AF_raw": 0.25,
-        "AN_eas_adj": 0.50,
-        "AN_eas_raw": 0.75,
-        "AN_sas_adj": 0.0,
-        "AN_sas_raw": 1.00,
-    }
 
-    # Validate each field's missingness percentage.
-    for field, expected_value in expected_missingness.items():
-        assert missingness[field] == expected_value, (
-            f"Mismatch in missingness for field '{field}': "
-            f"expected {expected_value}, got {missingness[field]}"
+def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics) -> None:
+    """Test that check_sex_chr_metrics produces the expected log messages."""
+    ht = ht_for_check_sex_chr_metrics
+    info_metrics = [
+        "nhomalt",
+        "nhomalt_XX",
+        "nhomalt_amr",
+        "nhomalt_amr_XX",
+        "AC",
+        "AC_XX",
+    ]
+    contigs = ["chrX", "chrY"]
+    verbose = False
+
+    # Redirect logs to a buffer.
+    log_stream = StringIO()
+    logger = logging.getLogger("gnomad.assessment.validity_checks")
+    handler = logging.StreamHandler(log_stream)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
+    # Run the check_sex_chr_metrics function.
+    check_sex_chr_metrics(
+        ht,
+        info_metrics=info_metrics,
+        contigs=contigs,
+        verbose=verbose,
+        delimiter="_",
+    )
+
+    # Capture and parse the log output.
+    handler.flush()
+    log_output = log_stream.getvalue()
+    logger.removeHandler(handler)
+
+    # Perform assertions on the log output.
+    assert (
+        "FAILED nhomalt_XX = None check for Y variants. Values found: [3]" in log_output
+    )
+    assert "PASSED nhomalt_amr_XX = None check for Y variants" in log_output
+    assert "PASSED AC_XX = None check for Y variants" in log_output
+    assert "Found 1 sites that fail nhomalt_XX == nhomalt check:" in log_output
+
+
+@pytest.fixture
+def ht_for_group_sums() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for make_group_sum_expr_dict."""
+    data = [
+        {
+            "idx": 0,
+            "info": {
+                "AC_afr_adj": 5,
+                "AC_amr_adj": 10,
+                "AC_adj": 15,
+                "AN_afr_XX_adj": 20,
+                "AN_afr_XY_adj": 30,
+                "AN_adj": 50,
+            },
+        },
+        {
+            "idx": 1,
+            "info": {
+                "AC_afr_adj": 3,
+                "AC_amr_adj": 7,
+                "AC_adj": 10,
+                "AN_afr_XX_adj": 15,
+                "AN_afr_XY_adj": 25,
+                "AN_adj": 40,
+            },
+        },
+        {
+            "idx": 2,
+            "info": {
+                "AC_afr_adj": 2,
+                "AC_amr_adj": 3,
+                "AC_adj": 5,
+                "AN_afr_XX_adj": 10,
+                "AN_afr_XY_adj": 20,
+                "AN_adj": 35,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            info=hl.tstruct(
+                AC_afr_adj=hl.tint32,
+                AC_amr_adj=hl.tint32,
+                AC_adj=hl.tint32,
+                AN_afr_XX_adj=hl.tint32,
+                AN_afr_XY_adj=hl.tint32,
+                AN_adj=hl.tint32,
+            ),
+        ),
+    )
+
+    return ht
+
+
+def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
+    """Test that make_group_sum_expr_dict produces the expected log messages."""
+    ht = ht_for_group_sums
+
+    subset = ""
+    label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
+    sort_order = ["pop", "sex"]
+    delimiter = "_"
+    metric_first_field = True
+    metrics = ["AC", "AN"]
+
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        make_group_sum_expr_dict(
+            ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
         )
+    log_messages = [record.getMessage().lower().strip() for record in caplog.records]
+
+    # Perform assertions on log output.
+    expected_logs = [
+        "including field ac_afr_adj",
+        "including field ac_amr_adj",
+        "an_afr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
+        "an_amr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
+        "generated annot_dict keys: ['sum_ac_adj_pop', 'sum_an_adj_pop']",  # Avoid exact key formatting issues
+        "no valid fields found for sum_an_adj_pop",
+    ]
+
+    for log_phrase in expected_logs:
+        assert any(
+            log_phrase in log for log in log_messages
+        ), f"Expected phrase missing: {log_phrase}"
+
+
+def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
+    """Test that sum_group_callstats produces the expected log messages."""
+    ht = ht_for_group_sums
+
+    sexes = ["XX", "XY"]
+    subsets = [""]
+    pops = ["afr", "amr"]
+    groups = ["adj"]
+    metrics = ["AC", "AN"]
+
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        sum_group_callstats(
+            ht,
+            sexes=sexes,
+            subsets=subsets,
+            pops=pops,
+            groups=groups,
+            metrics=metrics,
+            verbose=True,
+            delimiter="_",
+            gen_anc_label_name="gen_anc",
+        )
+
+    log_messages = [record.getMessage() for record in caplog.records]
+
+    # Perform assertions on log output.
+    expected_logs = [
+        "PASSED AC_adj = sum_AC_adj_gen_anc check",
+        "PASSED AN_adj = sum_AN_adj_gen_anc check",
+        "PASSED AC_adj = sum_AC_adj_sex check",
+        "PASSED AN_adj = sum_AN_adj_sex check",
+        "PASSED AC_adj = sum_AC_adj_gen_anc_sex check",
+        "Found 1 sites that fail AN_adj = sum_AN_adj_gen_anc_sex check:",
+    ]
+
+    for msg in expected_logs:
+        assert msg in log_messages, f"Expected log message is missing: {msg}"

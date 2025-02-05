@@ -1319,9 +1319,8 @@ def calculate_de_novo_post_prob(
 
     This function computes the posterior probability of a de novo mutation (P_dn)
     using the likelihoods of the proband's and parents' genotypes and the population
-    frequency prior for the variant. It's based on Kaitlin Samocha's [de novo caller](
-    https://github.com/ksamocha/de_novo_scripts) and Hail's [de_novo](
-    https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo)
+    frequency prior for the variant. It's based on Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
+    and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_
     method. Please refer to these sources for more information on the de novo model.
 
     Neither Kaitlin's de novo caller nor Hail's de novo method provide a clear
@@ -1355,6 +1354,7 @@ def calculate_de_novo_post_prob(
             P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_ref in mother}) \, P(\text{het in proband})
 
       **Probability of a de novo mutation given the data for hemizygous calls in XY individuals**
+
       - **X non-PAR regions (XY only)**:
 
         .. math::
@@ -1413,14 +1413,12 @@ def calculate_de_novo_post_prob(
     :return: Posterior probability of a de novo mutation (`P_dn`).
     """
 
-    def _get_freq_prior(
-        freq_prior: hl.expr.Float64Expression, min_prior=100 / 3e7
-    ):
+    def _get_freq_prior(freq_prior: hl.expr.Float64Expression, min_prior=100 / 3e7):
         """
         Get the population frequency prior for a de novo mutation.
 
-        :param freq_prior_expr: The population frequency prior for the variant.
-        :param min_pop_prior: The minimum population frequency prior. Default is
+        :param freq_prior: The population frequency prior for the variant.
+        :param min_prior: The minimum population frequency prior. Default is
            100/3e7, taken from Kaitlin Samocha's [de novo caller](https://github.com/ksamocha/de_novo_scripts).
         """
         return hl.max(
@@ -1480,12 +1478,12 @@ def calculate_de_novo_post_prob(
     prob_data_missed_het_expr = (
         hl.case()
         .when(
-            hemi_x_expr, (pp_mother[1] + pp_mother[2]) * pp_proband[2] *
-                     prior_one_parent_het
+            hemi_x_expr,
+            (pp_mother[1] + pp_mother[2]) * pp_proband[2] * prior_one_parent_het,
         )
         .when(
-            hemi_y_expr, (pp_father[1] + pp_father[2]) * pp_proband[2] *
-                     prior_one_parent_het
+            hemi_y_expr,
+            (pp_father[1] + pp_father[2]) * pp_proband[2] * prior_one_parent_het,
         )
         .when(
             diploid_expr,
@@ -1504,9 +1502,7 @@ def calculate_de_novo_post_prob(
     return p_dn_expr
 
 
-
-
-def get_de_novo_expr(
+def default_get_de_novo_expr(
     locus_expr: hl.expr.LocusExpression,
     alleles_expr: hl.expr.ArrayExpression,
     proband_expr: hl.expr.StructExpression,
@@ -1533,19 +1529,26 @@ def get_de_novo_expr(
 
     Thresholds:
 
-    +----------------+------------+----------------------+------+------+------+------+
-    |   Category     | P(de novo) | AB                   | AD   | DP   | DR   | GQ   |
-    +----------------+------------+----------------------+------+------+------+------+
-    | FAIL           | < 0.05     | AB(parents) > 0.05   |  0   |      | <0.1 | <20  |
-    |                |            | OR AB(proband) < 0.2 |      |      |      |      |
-    | HIGH (Indel)   | > 0.99     | > 0.3                |      |      |      |      |
-    | HIGH (SNV) 1   | > 0.99     | > 0.3                |      |      | >0.2 |      |
-    | HIGH (SNV) 2   | > 0.5      | > 0.3                |      | >10  |      |      |
-    | MEDIUM         | > 0.5      | > 0.3                |      |      |      |      |
-    | LOW            | >= 0.05    | >= 0.2               |      |      |      |      |
-    +----------------+------------+----------------------+------+------+------+------+
+    +----------------+------------+-----------------------+------+-----+------+-----+
+    |   Category     | P(de novo) | AB                    | AD   | DP  | DR   | GQ  |
+    +================+============+=======================+======+=====+======+=====+
+    | FAIL           | < 0.05     | AB(parents) > 0.05 OR |  0   |     | <0.1 | <20 |
+    |                |            | AB(proband) < 0.2     |      |     |      |     |
+    +----------------+------------+-----------------------+------+-----+------+-----+
+    | HIGH (Indel)   | > 0.99     | > 0.3                 |      |     |      |     |
+    +----------------+------------+-----------------------+------+-----+------+-----+
+    | HIGH (SNV) 1   | > 0.99     | > 0.3                 |      |     | >0.2 |     |
+    +----------------+------------+-----------------------+------+-----+------+-----+
+    | HIGH (SNV) 2   | > 0.5      | > 0.3                 |      | >10 |      |     |
+    +----------------+------------+-----------------------+------+-----+------+-----+
+    | MEDIUM         | > 0.5      | > 0.3                 |      |     |      |     |
+    +----------------+------------+-----------------------+------+-----+------+-----+
+    | LOW            | >= 0.05    | >= 0.2                |      |     |      |     |
+    +----------------+------------+-----------------------+------+-----+------+-----+
 
     * AB: Proband AB. FAIL criteria also includes threshold for parent(s).
+
+    * AD: Parent(s) AD sum.
 
     * DP: Proband DP.
 
@@ -1588,9 +1591,13 @@ def get_de_novo_expr(
     :param med_conf_p: P(de novo) threshold for medium confidence. Default is 0.5.
     :return: A StructExpression with variant de novo status and confidence of de novo call.
     """
+    # Check if the alleles are bi-allelic
+    if hl.len(alleles_expr) != 2:
+        raise ValueError("Alleles must be bi-allelic, please split multi if it's not.")
+
     # Determine genomic context
     diploid_expr = locus_expr.in_autosome_or_par() | (
-            locus_expr.in_x_nonpar() & is_xx_expr
+        locus_expr.in_x_nonpar() & is_xx_expr
     )
     hemi_x_expr = locus_expr.in_x_nonpar() & ~is_xx_expr
     hemi_y_expr = locus_expr.in_y_nonpar() & ~is_xx_expr
@@ -1622,14 +1629,14 @@ def get_de_novo_expr(
     is_snp = hl.is_snp(alleles_expr[0], alleles_expr[1])
 
     is_de_novo = (
-            diploid_expr
-            & (
-                    proband_expr.GT.is_het()
-                    & father_expr.GT.is_hom_ref()
-                    & mother_expr.GT.is_hom_ref()
-            )
-            | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
-            | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
+        diploid_expr
+        & (
+            proband_expr.GT.is_het()
+            & father_expr.GT.is_hom_ref()
+            & mother_expr.GT.is_hom_ref()
+        )
+        | hemi_x_expr & (proband_expr.GT.is_hom_var() & mother_expr.GT.is_hom_ref())
+        | hemi_y_expr & (proband_expr.GT.is_hom_var() & father_expr.GT.is_hom_ref())
     )
 
     # Confidence assignment

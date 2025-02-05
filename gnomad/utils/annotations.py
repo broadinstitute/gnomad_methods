@@ -2789,7 +2789,7 @@ def get_copy_state_by_sex(
     hl.expr.BooleanExpression, hl.expr.BooleanExpression, hl.expr.BooleanExpression
 ]:
     """
-    Determine the copy state of a variant by its locus and the sex karotype of a sample.
+    Determine the copy state of a variant by its locus and sample sex karyotype.
 
     :param locus_expr: LocusExpression of the variant.
     :param is_xx_expr: BooleanExpression indicating whether the sample has an XX sex

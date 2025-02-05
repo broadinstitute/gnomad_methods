@@ -83,10 +83,10 @@ class TestDeNovoMutation:
                 hl.eval(expr)  # Hail will throw an error here
         else:
             expr = get_freq_prior(hl.literal(freq_prior), min_pop_prior)
-            result = hl.eval(expr)  # Evaluate the expression
+            result = hl.eval(expr)
             assert result == pytest.approx(
                 expected, rel=1e-6
-            )  # Compare floating point values safely
+            )
 
     @pytest.mark.parametrize(
         "pl_input, expected",

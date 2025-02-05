@@ -454,7 +454,6 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
         "no valid fields found for sum_an_adj_pop",
     ]
 
-    # Perform assertions using substring matching.
     for log_phrase in expected_logs:
         assert any(
             log_phrase in log for log in log_messages

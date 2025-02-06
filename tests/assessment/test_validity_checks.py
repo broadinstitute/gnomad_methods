@@ -502,9 +502,7 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
 
 @pytest.fixture
 def ht_for_check_raw_and_adj_callstats() -> hl.Table:
-    """
-    Fixture to create a Hail Table with the expected structure and test values for check_raw_and_adj_callstats, using underscore as the delimiter.
-    """
+    """Fixture to create a Hail Table with the expected structure and test values for check_raw_and_adj_callstats, using underscore as the delimiter."""
     data = [
         {
             "idx": 0,
@@ -602,8 +600,7 @@ def ht_for_check_raw_and_adj_callstats() -> hl.Table:
 def test_check_raw_and_adj_callstats(
     ht_for_check_raw_and_adj_callstats, caplog
 ) -> None:
-    """Test check_raw_and_adj_callstats function and it's expected log output"""
-
+    """Test check_raw_and_adj_callstats function and it's expected log output."""
     ht = ht_for_check_raw_and_adj_callstats
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         check_raw_and_adj_callstats(
@@ -613,12 +610,12 @@ def test_check_raw_and_adj_callstats(
     log_messages = [record.getMessage() for record in caplog.records]
 
     expected_logs = [
-        # Expected PASSES
+        # Expected PASSES.
         "PASSED AC_raw defined when AN defined and missing when AN missing check",
         "PASSED AC_adj defined when AN defined and missing when AN missing check",
         "PASSED AF_adj defined when AN defined (and > 0) and missing when AN missing check",
         "PASSED AC_raw >= AC_adj check",
-        # Expected FAILURES
+        # Expected FAILURES.
         "Found 1 sites that fail nhomalt_raw defined when AN defined and missing when AN missing check:",
         "Found 1 sites that fail AF_raw defined when AN defined (and > 0) and missing when AN missing check:",
         "Found 1 sites that fail AF_raw missing when AN 0 check:",

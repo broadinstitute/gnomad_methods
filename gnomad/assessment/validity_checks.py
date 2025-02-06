@@ -10,7 +10,9 @@ from hail.utils.misc import new_temp_file
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
-logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+logging.basicConfig(
+    format="%(levelname)s (%(name)s %(module)s.%(funcName)s %(lineno)d): %(message)s"
+)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

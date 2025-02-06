@@ -592,6 +592,7 @@ def check_raw_and_adj_callstats(
     verbose: bool,
     delimiter: str = "-",
     metric_first_field: bool = True,
+    nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
     Perform validity checks on raw and adj data in input Table/MatrixTable.
@@ -608,6 +609,7 @@ def check_raw_and_adj_callstats(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -616,7 +618,7 @@ def check_raw_and_adj_callstats(
 
     for group in ["raw", "adj"]:
         # Check AC and nhomalt missing if AN is missing and defined if AN is defined.
-        for subfield in ["AC", "nhomalt"]:
+        for subfield in ["AC", nhomalt_metric]:
             check_field = f"{subfield}{delimiter}{group}"
             an_field = f"AN{delimiter}{group}"
             field_check_expr[
@@ -681,7 +683,7 @@ def check_raw_and_adj_callstats(
         }
 
     # Check overall gnomad's raw subfields >= adj
-    for subfield in ["AC", "AN", "nhomalt"]:
+    for subfield in ["AC", "AN", nhomalt_metric]:
         check_field_left = f"{subfield}{delimiter}raw"
         check_field_right = f"{subfield}{delimiter}adj"
 

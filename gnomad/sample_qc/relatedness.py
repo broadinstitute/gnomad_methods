@@ -8,7 +8,6 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 import hail as hl
 import networkx as nx
 
-from gnomad.utils.annotations import get_copy_state_by_sex
 from gnomad.utils.filtering import add_filters_expr
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -1592,8 +1591,11 @@ def default_get_de_novo_expr(
     :return: A StructExpression with variant de novo status and confidence of de novo call.
     """
     # Check if the alleles are bi-allelic
-    if hl.len(alleles_expr) != 2:
-        raise ValueError("Alleles must be bi-allelic, please split multi if it's not.")
+    alleles_expr = (
+        hl.case()
+        .when(hl.len(alleles_expr) == 2, alleles_expr)
+        .or_error("Alleles must be bi-allelic, please split multi if it's not.")
+    )
 
     # Determine genomic context
     diploid_expr = locus_expr.in_autosome_or_par() | (
@@ -1704,8 +1706,8 @@ def default_get_de_novo_expr(
     fail = hl.any(list(fail_checks_expr.values()))
     result_expr = hl.struct(
         is_de_novo=is_de_novo,
-        p_de_novo=hl.if_else(fail, hl.missing(hl.tfloat64), p_de_novo),
-        confidence=hl.if_else(fail, hl.missing(hl.tstr), confidence_expr),
+        p_de_novo=hl.if_else(~is_de_novo | fail, hl.missing(hl.tfloat64), p_de_novo),
+        confidence=hl.if_else(~is_de_novo | fail, hl.missing(hl.tstr), confidence_expr),
         fail_reason=add_filters_expr(filters=fail_checks_expr),
     )
 

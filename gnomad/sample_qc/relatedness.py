@@ -1392,7 +1392,7 @@ def calculate_de_novo_post_prob(
 
             P(\text{data} \mid \text{missed het in father}) = (P(\text{het in father}) + P(\text{hom_alt in father})) \times P(\text{hom_alt in proband})
 
-    - :math:`P(\text{missed het in parent(s)` equals the **probability for at least one heterozygous parent**:
+    - :math:`P(\text{missed het in parent(s)}` equals the **probability for at least one heterozygous parent**:
 
     .. math::
 

@@ -541,7 +541,7 @@ def ht_for_check_raw_and_adj_callstats() -> hl.Table:
                 "AF_adj": -0.01,
                 "AN_raw": 1000,
                 "AN_adj": 1100,
-                "nhomalt_raw": 1,
+                "nhomalt_raw": -3,
                 "nhomalt_adj": 2,
             },
             "filters": {"LowQual"},
@@ -615,6 +615,7 @@ def test_check_raw_and_adj_callstats(
         "PASSED AC_adj defined when AN defined and missing when AN missing check",
         "PASSED AF_adj defined when AN defined (and > 0) and missing when AN missing check",
         "PASSED AC_raw >= AC_adj check",
+        "PASSED nhomalt_raw <= AC_raw / 2 check",
         # Expected FAILURES.
         "Found 1 sites that fail nhomalt_raw defined when AN defined and missing when AN missing check:",
         "Found 1 sites that fail AF_raw defined when AN defined (and > 0) and missing when AN missing check:",
@@ -627,6 +628,7 @@ def test_check_raw_and_adj_callstats(
         "Found 1 sites that fail AF_adj >= 0 check:",
         "Found 1 sites that fail AN_raw >= AN_adj check:",
         "Found 1 sites that fail nhomalt_raw >= nhomalt_adj check:",
+        "Found 1 sites that fail nhomalt_adj <= AC_adj / 2 check:",
     ]
 
     for msg in expected_logs:

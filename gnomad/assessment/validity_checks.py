@@ -635,6 +635,21 @@ def check_raw_and_adj_callstats(
                 ),
             }
 
+        # Check that nhomalt <= AC / 2.
+        check_field_nhomalt = f"{nhomalt_metric}{delimiter}{group}"
+        check_field_AC = f"AC{delimiter}{group}"
+
+        field_check_expr[f"{check_field_nhomalt} <= {check_field_AC} / 2"] = {
+            "expr": t.info[check_field_nhomalt] > (t.info[check_field_AC] / 2),
+            "agg_func": hl.agg.count_where,
+            "display_fields": hl.struct(
+                **{
+                    check_field_nhomalt: t.info[check_field_nhomalt],
+                    check_field_AC: t.info[check_field_AC],
+                }
+            ),
+        }
+
         # Check AF missing if AN is missing and defined if AN is defined and > 0.
         check_field = f"AF{delimiter}{group}"
         an_field = f"AN{delimiter}{group}"
@@ -682,7 +697,7 @@ def check_raw_and_adj_callstats(
             ),
         }
 
-    # Check overall gnomad's raw subfields >= adj
+    # Check overall gnomad's raw subfields >= adj.
     for subfield in ["AC", "AN", nhomalt_metric]:
         check_field_left = f"{subfield}{delimiter}raw"
         check_field_right = f"{subfield}{delimiter}adj"

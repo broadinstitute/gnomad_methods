@@ -8,16 +8,6 @@ from gnomad.sample_qc.relatedness import (
     default_get_de_novo_expr,
 )
 
-"""Test suite for de novo mutation functions."""
-
-import hail as hl
-import pytest
-
-from gnomad.sample_qc.relatedness import (
-    calculate_de_novo_post_prob,
-    default_get_de_novo_expr,
-)
-
 
 class TestDeNovoMutation:
     """Test suite for de novo mutation functions."""

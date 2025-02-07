@@ -1314,17 +1314,18 @@ def calculate_de_novo_post_prob(
     de_novo_prior: Optional[float] = 1 / 3e7,
 ) -> hl.expr.Float64Expression:
     r"""
-    Calculate the posterior probability of a de novo mutation.
+    Calculate the posterior probability of a *de novo* mutation.
 
-    This function computes the posterior probability of a de novo mutation (P_dn)
-    using the likelihoods of the proband's and parents' genotypes and the population
-    frequency prior for the variant. It's based on Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
-    and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_
-    method. Please refer to these sources for more information on the de novo model.
+    This function computes the posterior probability of a *de novo* mutation (*P_dn*)
+    based on the genotype likelihoods of the proband and parents, along with the
+    population frequency prior for the variant.
 
-    Neither Kaitlin's de novo caller nor Hail's de novo method provide a clear
-    description on how to calculate for de novo calls for hemizygous genotypes in XY
-    individuals. These equations are included below:
+    The method is adapted from Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
+    and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_ function.
+
+    However, neither approach explicitly defines how to compute *de novo*
+    probabilities for hemizygous genotypes in XY individuals. To address this,
+    we provide the full set of equations in this docstring.
 
     .. math::
 
@@ -1340,33 +1341,37 @@ def calculate_de_novo_post_prob(
 
     .. math::
 
-        P_{dn} = \frac{P(\text{data} \mid DN) \, P(DN)}{P(\text{data} \mid DN) \, P(DN) + P(\text{data} \mid \text{missed het in parent(s)}) \, P(\text{missed het in parent(s)})}
+        P_{dn} = \frac{P(\text{data} \mid DN) \cdot P(DN)}{P(\text{data} \mid DN) \cdot P(DN) + P(\text{data} \mid \text{missed het in parent(s)}) \cdot P(\text{missed het in parent(s)})}
 
     where:
 
-    - :math:`P(\text{data} \mid DN)`: Probability of observing the data under the assumption of a de novo mutation.
+    - :math:`P(\text{data} \mid DN)`: Probability of observing the data under the assumption of a *de novo* mutation.
 
       - **Autosomes and PAR regions**:
 
         .. math::
 
-            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_ref in mother}) \, P(\text{het in proband})
+            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \cdot P(\text{hom_ref in mother}) \cdot P(\text{het in proband})
 
-      **Probability of a de novo mutation given the data for hemizygous calls in XY individuals**
+      **Probability of a *de novo* mutation given the data for hemizygous calls in XY individuals**
+
+      Neither Kaitlin's *de novo* caller nor Hail's *de novo* method provide a clear
+      description on how to calculate for *de novo* calls for hemizygous genotypes
+      in XY individuals. These equations are included below:
 
       - **X non-PAR regions (XY only)**:
 
         .. math::
 
-            P(\text{data} \mid DN) = P(\text{hom_ref in mother}) \, P(\text{hom_alt in proband})
+            P(\text{data} \mid DN) = P(\text{hom_ref in mother}) \cdot P(\text{hom_alt in proband})
 
       - **Y non-PAR regions (XY only)**:
 
         .. math::
 
-            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_alt in proband})
+            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \cdot P(\text{hom_alt in proband})
 
-    - :math:`P(DN)`: The prior probability of a de novo mutation from literature, defined as:
+    - :math:`P(DN)`: The prior probability of a *de novo* mutation from literature, defined as:
 
       .. math::
 
@@ -1378,21 +1383,21 @@ def calculate_de_novo_post_prob(
 
         .. math::
 
-            P(\text{data} \mid \text{missed het in parents}) = ( P(\text{het in father}) \times P(\text{hom_ref in mother}) + P(\text{hom_ref in father}) \times P(\text{het in mother})) \times P(\text{het in proband})
+            P(\text{data} \mid \text{missed het in parents}) = ( P(\text{het in father}) \cdot P(\text{hom_ref in mother}) + P(\text{hom_ref in father}) \cdot P(\text{het in mother})) \cdot P(\text{het in proband})
 
       - **X non-PAR regions**:
 
         .. math::
 
-            P(\text{data} \mid \text{missed het in mother}) = (P(\text{het in mother}) + P(\text{hom_alt in mother})) \times P(\text{hom_alt in proband})
+            P(\text{data} \mid \text{missed het in mother}) = (P(\text{het in mother}) + P(\text{hom_alt in mother})) \cdot P(\text{hom_alt in proband})
 
       - **Y non-PAR regions**:
 
         .. math::
 
-            P(\text{data} \mid \text{missed het in father}) = (P(\text{het in father}) + P(\text{hom_alt in father})) \times P(\text{hom_alt in proband})
+            P(\text{data} \mid \text{missed het in father}) = (P(\text{het in father}) + P(\text{hom_alt in father})) \cdot P(\text{hom_alt in proband})
 
-    - :math:`P(\text{missed het in parent(s)}` equals the **probability for at least one heterozygous parent**:
+    - :math:`P(\text{missed het in parent(s)}`: Prior that at least one parent is heterozygous. Depends on alternate allele frequency:
 
     .. math::
 
@@ -1408,17 +1413,17 @@ def calculate_de_novo_post_prob(
     :param hemi_y_expr: Boolean expression indicating a hemizygous genotype on the Y chromosome.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior (default: 100/3e7).
-    :param de_novo_prior: Prior probability of a de novo mutation (default: 1/3e7).
-    :return: Posterior probability of a de novo mutation (`P_dn`).
+    :param de_novo_prior: Prior probability of a *de novo* mutation (default: 1/3e7).
+    :return: Posterior probability of a *de novo* mutation (`P_dn`).
     """
 
     def _get_freq_prior(freq_prior: hl.expr.Float64Expression, min_prior=100 / 3e7):
         """
-        Get the population frequency prior for a de novo mutation.
+        Get the population frequency prior for a *de novo* mutation.
 
         :param freq_prior: The population frequency prior for the variant.
         :param min_prior: The minimum population frequency prior. Default is
-           100/3e7, taken from Kaitlin Samocha's [de novo caller](https://github.com/ksamocha/de_novo_scripts).
+           100/3e7, taken from Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts).
         """
         return hl.max(
             hl.or_else(
@@ -1448,7 +1453,7 @@ def calculate_de_novo_post_prob(
 
            .. math::
 
-             {PL} = -10 \times \log_{10}{P(\text{Genotype} \mid \text{Data})}
+             {PL} = -10 \cdot \log_{10}{P(\text{Genotype} \mid \text{Data})}
 
         :param pl_expr: ArrayExpression of PL values.
         :return: ArrayExpression of the probability of observing each genotype (PP).
@@ -1493,7 +1498,7 @@ def calculate_de_novo_post_prob(
         .or_missing()
     )
 
-    # Calculate posterior probability of de novo mutation
+    # Calculate posterior probability of *de novo* mutation
     prob_dn_given_data_expr = prob_data_given_dn_expr * de_novo_prior
     p_dn_expr = prob_dn_given_data_expr / (
         prob_dn_given_data_expr + prob_data_missed_het_expr
@@ -1524,26 +1529,26 @@ def default_get_de_novo_expr(
     med_conf_p: float = 0.5,
 ) -> hl.expr.StructExpression:
     """
-    Get the de novo status of a variant based on the proband and parent genotypes.
+    Get the *de novo* status of a variant based on the proband and parent genotypes.
 
     Thresholds:
 
-    +----------------+------------+-----------------------+------+-----+------+-----+
-    |   Category     | P(de novo) | AB                    | AD   | DP  | DR   | GQ  |
-    +================+============+=======================+======+=====+======+=====+
-    | FAIL           | < 0.05     | AB(parents) > 0.05 OR |  0   |     | <0.1 | <20 |
-    |                |            | AB(proband) < 0.2     |      |     |      |     |
-    +----------------+------------+-----------------------+------+-----+------+-----+
-    | HIGH (Indel)   | > 0.99     | > 0.3                 |      |     |      |     |
-    +----------------+------------+-----------------------+------+-----+------+-----+
-    | HIGH (SNV) 1   | > 0.99     | > 0.3                 |      |     | >0.2 |     |
-    +----------------+------------+-----------------------+------+-----+------+-----+
-    | HIGH (SNV) 2   | > 0.5      | > 0.3                 |      | >10 |      |     |
-    +----------------+------------+-----------------------+------+-----+------+-----+
-    | MEDIUM         | > 0.5      | > 0.3                 |      |     |      |     |
-    +----------------+------------+-----------------------+------+-----+------+-----+
-    | LOW            | >= 0.05    | >= 0.2                |      |     |      |     |
-    +----------------+------------+-----------------------+------+-----+------+-----+
+    +----------------+--------------+-----------------------+------+-----+------+-----+
+    |   Category     | P(*de novo*) | AB                    | AD   | DP  | DR   | GQ  |
+    +================+==============+=======================+======+=====+======+=====+
+    | FAIL           | < 0.05       | AB(parents) > 0.05 OR |  0   |     | <0.1 | <20 |
+    |                |              | AB(proband) < 0.2     |      |     |      |     |
+    +----------------+--------------+-----------------------+------+-----+------+-----+
+    | HIGH (Indel)   | > 0.99       | > 0.3                 |      |     |      |     |
+    +----------------+--------------+-----------------------+------+-----+------+-----+
+    | HIGH (SNV) 1   | > 0.99       | > 0.3                 |      |     | >0.2 |     |
+    +----------------+--------------+-----------------------+------+-----+------+-----+
+    | HIGH (SNV) 2   | > 0.5        | > 0.3                 |      | >10 |      |     |
+    +----------------+--------------+-----------------------+------+-----+------+-----+
+    | MEDIUM         | > 0.5        | > 0.3                 |      |     |      |     |
+    +----------------+--------------+-----------------------+------+-----+------+-----+
+    | LOW            | >= 0.05      | >= 0.2                |      |     |      |     |
+    +----------------+--------------+-----------------------+------+-----+------+-----+
 
     * AB: Proband AB. FAIL criteria also includes threshold for parent(s).
 
@@ -1560,7 +1565,7 @@ def default_get_de_novo_expr(
         The simplified version is the same as Hail's methods when using the
         `ignore_in_sample_allele_frequency` parameter. The main difference is that
         this mode should be used when families larger than a single trio are in the
-        dataset, in which an allele might be de novo in a parent and transmitted to a
+        dataset, in which an allele might be *de novo* in a parent and transmitted to a
         child in the dataset. This mode will not consider the allele count (AC) in
         the dataset, and will only consider the Phred-scaled likelihoods (PL) of the
         child and parents, allele balance (AB) of the child and parents,
@@ -1568,27 +1573,28 @@ def default_get_de_novo_expr(
         parents, and the population frequency prior.
 
     :param locus_expr: Variant locus.
-    :param alleles_expr: Variant alleles. It assumes bi-allelic variants, meaning
-       that the matrix table or table should be already split to bi-allelics.
+    :param alleles_expr: Variant alleles. Function assumes all variants are
+       biallelic, meaning that multiallelic variants in the input dataset should be
+       split prior to running this function.
     :param proband_expr: Proband genotype info; required fields: GT, DP, GQ, AD, PL.
     :param father_expr: Father genotype info; required fields: GT, DP, GQ, AD, PL.
     :param mother_expr: Mother genotype info; required fields: GT, DP, GQ, AD, PL.
     :param is_xx_expr: Whether the proband is XX.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior. Default is 100 / 3e7.
-    :param de_novo_prior: Prior probability of a de novo mutation. Default is 1 / 3e7.
+    :param de_novo_prior: Prior probability of a *de novo* mutation. Default is 1 / 3e7.
     :param min_dp_ratio: Minimum depth ratio for proband to parents. Default is 0.1.
     :param min_gq: Minimum genotype quality for the proband. Default is 20.
     :param min_proband_ab: Minimum allele balance for the proband. Default is 0.2.
     :param max_parent_ab: Maximum allele balance for parents. Default is 0.05.
-    :param min_de_novo_p: Minimum probability for variant to be called de novo. Default is 0.05.
+    :param min_de_novo_p: Minimum probability for variant to be called *de novo*. Default is 0.05.
     :param high_conf_dp_ratio: DP ratio threshold of proband DP to combined DP in parents for high confidence. Default is 0.2.
     :param dp_threshold_snp: Minimum depth for high-confidence SNPs. Default is  10.
     :param high_med_conf_ab: AB threshold for high/medium confidence. Default is  0.3.
     :param low_conf_ab: AB threshold for low confidence. Default is  0.2.
-    :param high_conf_p: P(de novo) threshold for high confidence. Default is 0.99.
-    :param med_conf_p: P(de novo) threshold for medium confidence. Default is 0.5.
-    :return: A StructExpression with variant de novo status and confidence of de novo call.
+    :param high_conf_p: P(*de novo*) threshold for high confidence. Default is 0.99.
+    :param med_conf_p: P(*de novo*) threshold for medium confidence. Default is 0.5.
+    :return: A StructExpression with variant *de novo* status and confidence of *de novo* call.
     """
     # Check if the alleles are bi-allelic
     alleles_expr = (

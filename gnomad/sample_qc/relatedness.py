@@ -1323,7 +1323,7 @@ def calculate_de_novo_post_prob(
     The method is adapted from Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
     and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_ function.
 
-    However, neither approach explicitly defines how to compute *de novo*
+    However, neither approach explicitly documented how to compute *de novo*
     probabilities for hemizygous genotypes in XY individuals. To address this,
     we provide the full set of equations in this docstring.
 

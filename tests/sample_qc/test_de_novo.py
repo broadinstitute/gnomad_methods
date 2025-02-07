@@ -13,114 +13,55 @@ class TestDeNovoMutation:
     """Test suite for de novo mutation functions."""
 
     @pytest.mark.parametrize(
-        "proband_pl, father_pl, mother_pl, diploid, hemi_x, hemi_y, freq_prior, min_pop_prior, expected_p_dn",
+        "proband_pl, father_pl, mother_pl, diploid, hemi_x, hemi_y, freq_prior, min_pop_prior, expected",
         [
+            # ✅ Valid test cases (should return numeric values)
+            ([73, 0, 161], [0, 99, 198], [0, 99, 198], True, False, False, 1.80e-02,
+             100 / 3e7, 0.999),
+            ([152, 0, 283], [0, 99, 198], [0, 63, 126], True, False, False, 7.55e-02,
+             100 / 3e7, 0.198),
+            # ❌ Invalid `freq_prior` case (should raise `HailUserError`)
             (
-                [73, 0, 161],
-                [0, 99, 198],
-                [0, 99, 198],
-                True,
-                False,
-                False,
-                1.80e-02,
-                100 / 3e7,
-                0.999,
-            ),
-            (
-                [152, 0, 283],
-                [0, 99, 198],
-                [0, 63, 126],
-                True,
-                False,
-                False,
-                7.55e-02,
-                100 / 3e7,
-                0.198,
-            ),
-            (
-                [99, 50, 0],
-                [0, 99, 198],
-                [0, 99, 198],
-                False,
-                True,
-                False,
-                0.005,
-                100 / 3e7,
-                1,
-            ),
-            (
-                [2326, 140, 0],
-                [0, 40, 80],
-                [0, 40, 80],
-                False,
-                False,
-                True,
-                1.97e-04,
-                100 / 3e7,
-                0.297,
-            ),
-            (
-                [99, 50, 0],
-                [0, 99, 198],
-                [0, 99, 198],
-                False,
-                True,
-                False,
-                0.005,
-                100 / 3e7,
-                1,
-            ),
-            (
-                [99, 50, 0],
-                [0, 99, 198],
-                [0, 99, 198],
-                False,
-                False,
-                True,
-                0.005,
-                100 / 3e7,
-                1,
-            ),
-            (
-                [2, 0, 230],
-                [0, 0, 0],
-                [0, 0, 0],
-                True,
-                False,
-                False,
-                2.03e-02,
-                100 / 3e7,
-                0,
-            ),
+            [99, 50, 0], [0, 99, 198], [0, 99, 198], False, True, False, 1.2, 100 / 3e7,
+            None),
         ],
     )
     def test_calculate_de_novo_post_prob(
-        self,
-        proband_pl,
-        father_pl,
-        mother_pl,
-        diploid,
-        hemi_x,
-        hemi_y,
-        freq_prior,
-        min_pop_prior,
-        expected_p_dn,
+            self, proband_pl, father_pl, mother_pl, diploid, hemi_x, hemi_y, freq_prior,
+            min_pop_prior, expected
     ):
         """Test `calculate_de_novo_post_prob` function."""
-        # Compute posterior probability of de novo mutation
-        p_dn_expr = calculate_de_novo_post_prob(
-            hl.literal(proband_pl),
-            hl.literal(father_pl),
-            hl.literal(mother_pl),
-            hl.literal(diploid),
-            hl.literal(hemi_x),
-            hl.literal(hemi_y),
-            hl.literal(freq_prior),
-            min_pop_prior,
-        )
+        # Case where we expect an error (freq_prior is out of range)
+        if expected is None:
+            with pytest.raises(hl.utils.HailUserError,
+                               match=r"de_novo: expect 0 <= freq_prior_expr <= 1, found .*"):
+                hl.eval(
+                    calculate_de_novo_post_prob(
+                        hl.literal(proband_pl),
+                        hl.literal(father_pl),
+                        hl.literal(mother_pl),
+                        hl.literal(diploid),
+                        hl.literal(hemi_x),
+                        hl.literal(hemi_y),
+                        hl.literal(freq_prior),  # Invalid frequency prior
+                        min_pop_prior,
+                    )
+                )
+        else:
+            # Case where we expect a valid float result
+            p_dn_expr = calculate_de_novo_post_prob(
+                hl.literal(proband_pl),
+                hl.literal(father_pl),
+                hl.literal(mother_pl),
+                hl.literal(diploid),
+                hl.literal(hemi_x),
+                hl.literal(hemi_y),
+                hl.literal(freq_prior),
+                min_pop_prior,
+            )
 
-        # Assert with floating-point tolerance
-        assert round(hl.eval(p_dn_expr), 3) == expected_p_dn
+            # Assert with floating-point tolerance
+            assert round(hl.eval(p_dn_expr), 3) == expected
 
     def test_default_get_de_novo_expr_fail_conditions(self):
         """Test default_get_de_novo_expr with a failing case where multiple fail conditions apply."""

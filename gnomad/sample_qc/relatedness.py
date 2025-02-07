@@ -1463,8 +1463,7 @@ def calculate_de_novo_post_prob(
     prior_one_parent_het = 1 - (1 - freq_prior_expr) ** 4
 
     # Convert PL to probabilities
-    pl_expr = {"proband": proband_pl_expr, "father": father_pl_expr, "mother": mother_pl_expr}
-    pp_expr = {k: _transform_pl_to_pp(v.PL) for k, v in entry_expr.items()}
+    pp_proband, pp_father, pp_mother = [_transform_pl_to_pp(pl) for pl in [proband_pl_expr, father_pl_expr, mother_pl_expr]]
 
     # Compute `P(data | DN)`
     prob_data_given_dn_expr = (

@@ -1316,7 +1316,7 @@ def calculate_de_novo_post_prob(
     r"""
     Calculate the posterior probability of a de novo mutation.
 
-    This function computes the posterior probability of a de novo mutation (P_dn)
+    This function computes the posterior probability of a de novo mutation (`P_dn`)
     using the likelihoods of the proband's and parents' genotypes and the population
     frequency prior for the variant. It's based on Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
     and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_
@@ -1334,7 +1334,7 @@ def calculate_de_novo_post_prob(
 
     - :math:`P(DN \mid \text{data})` is the probability that the variant is **de novo**, given the observed genotype data.
 
-    - :math:`P(\text{missed het in parent(s)} \mid \text{data})` is the probability that the heterozygous variant was **missed in the parent(s)**.
+    - :math:`P(\text{missed het in parent(s)} \mid \text{data})` is the probability that the heterozygous variant was **missed in at least one parent**.
 
     Applying Bayesian Theorem to the numerator and denominator yields:
 
@@ -1353,6 +1353,7 @@ def calculate_de_novo_post_prob(
             P(\text{data} \mid DN) = P(\text{hom_ref in father}) \, P(\text{hom_ref in mother}) \, P(\text{het in proband})
 
       **Probability of a de novo mutation given the data for hemizygous calls in XY individuals**
+      Note that hemizygous calls in XY individuals will be reported as homozygous alternate without any sex ploidy adjustments, which is why the formulas below use `P(hom_alt in proband)`
 
       - **X non-PAR regions (XY only)**:
 
@@ -1407,8 +1408,8 @@ def calculate_de_novo_post_prob(
     :param hemi_x_expr: Boolean expression indicating a hemizygous genotype on the X chromosome.
     :param hemi_y_expr: Boolean expression indicating a hemizygous genotype on the Y chromosome.
     :param freq_prior_expr: Population frequency prior for the variant.
-    :param min_pop_prior: Minimum population frequency prior (default: 100/3e7).
-    :param de_novo_prior: Prior probability of a de novo mutation (default: 1/3e7).
+    :param min_pop_prior: Minimum population frequency prior (default: :math:`\text{100/3e7}`).
+    :param de_novo_prior: Prior probability of a de novo mutation (default: :math:`text{1/3e7}`).
     :return: Posterior probability of a de novo mutation (`P_dn`).
     """
 
@@ -1460,9 +1461,8 @@ def calculate_de_novo_post_prob(
     prior_one_parent_het = 1 - (1 - freq_prior_expr) ** 4
 
     # Convert PL to probabilities
-    pp_proband = _transform_pl_to_pp(proband_pl_expr)
-    pp_father = _transform_pl_to_pp(father_pl_expr)
-    pp_mother = _transform_pl_to_pp(mother_pl_expr)
+    pl_expr = {"proband": proband_pl_expr, "father": father_pl_expr, "mother": mother_pl_expr}
+    pp_expr = {k: _transform_pl_to_pp(v.PL) for k, v in entry_expr.items()}
 
     # Compute `P(data | DN)`
     prob_data_given_dn_expr = (
@@ -1547,7 +1547,7 @@ def default_get_de_novo_expr(
 
     * AB: Proband AB. FAIL criteria also includes threshold for parent(s).
 
-    * AD: Parent(s) AD sum.
+    * AD: Sum of parent(s) AD.
 
     * DP: Proband DP.
 
@@ -1573,7 +1573,7 @@ def default_get_de_novo_expr(
     :param proband_expr: Proband genotype info; required fields: GT, DP, GQ, AD, PL.
     :param father_expr: Father genotype info; required fields: GT, DP, GQ, AD, PL.
     :param mother_expr: Mother genotype info; required fields: GT, DP, GQ, AD, PL.
-    :param is_xx_expr: Whether the proband is XX.
+    :param is_xx_expr: Whether the proband has XX sex karyotype.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior. Default is 100 / 3e7.
     :param de_novo_prior: Prior probability of a de novo mutation. Default is 1 / 3e7.
@@ -1583,18 +1583,18 @@ def default_get_de_novo_expr(
     :param max_parent_ab: Maximum allele balance for parents. Default is 0.05.
     :param min_de_novo_p: Minimum probability for variant to be called de novo. Default is 0.05.
     :param high_conf_dp_ratio: DP ratio threshold of proband DP to combined DP in parents for high confidence. Default is 0.2.
-    :param dp_threshold_snp: Minimum depth for high-confidence SNPs. Default is  10.
-    :param high_med_conf_ab: AB threshold for high/medium confidence. Default is  0.3.
-    :param low_conf_ab: AB threshold for low confidence. Default is  0.2.
+    :param dp_threshold_snp: Minimum depth for high-confidence SNPs. Default is 10.
+    :param high_med_conf_ab: AB threshold for high/medium confidence. Default is 0.3.
+    :param low_conf_ab: AB threshold for low confidence. Default is 0.2.
     :param high_conf_p: P(de novo) threshold for high confidence. Default is 0.99.
     :param med_conf_p: P(de novo) threshold for medium confidence. Default is 0.5.
-    :return: A StructExpression with variant de novo status and confidence of de novo call.
+    :return: StructExpression with variant de novo status and confidence of de novo call.
     """
-    # Check if the alleles are bi-allelic
+    # Check whether multiallelics have been split
     alleles_expr = (
         hl.case()
         .when(hl.len(alleles_expr) == 2, alleles_expr)
-        .or_error("Alleles must be bi-allelic, please split multi if it's not.")
+        .or_error("Must split multiallelic variants prior to running this function.")
     )
 
     # Determine genomic context
@@ -1671,7 +1671,7 @@ def default_get_de_novo_expr(
         .or_missing()
     )
 
-    parent_sum_ad_0_expr = (
+    fail_parent_sum_ad_0_expr = (
         hl.case()
         .when(
             diploid_expr, (hl.sum(father_expr.AD) == 0) | (hl.sum(mother_expr.AD) == 0)
@@ -1696,7 +1696,7 @@ def default_get_de_novo_expr(
     # Fail checks
     fail_checks_expr = {
         "min_dp_ratio": dp_ratio < min_dp_ratio,
-        "parent_sum_ad_0": parent_sum_ad_0_expr,
+        "parent_sum_ad_0": fail_parent_sum_ad_0_expr,
         "max_parent_ab": fail_max_parent_ab_expr,
         "min_proband_ab": proband_ab < min_proband_ab,
         "min_proband_gq": proband_expr.GQ < min_gq,
@@ -1710,5 +1710,4 @@ def default_get_de_novo_expr(
         confidence=hl.if_else(~is_de_novo | fail, hl.missing(hl.tstr), confidence_expr),
         fail_reason=add_filters_expr(filters=fail_checks_expr),
     )
-
     return result_expr

@@ -1590,7 +1590,7 @@ def default_get_de_novo_expr(
     :param high_conf_dp_ratio: DP ratio threshold of proband DP to combined DP in parents for high confidence. Default is 0.2.
     :param dp_threshold_snp: Minimum depth for high-confidence SNPs. Default is 10.
     :param high_med_conf_ab: AB threshold for high/medium confidence. Default is 0.3.
-    :param low_conf_ab: AB threshold for low confidence. Default is  0.2.
+    :param low_conf_ab: AB threshold for low confidence. Default is 0.2.
     :param high_conf_p: P(*de novo*) threshold for high confidence. Default is 0.99.
     :param med_conf_p: P(*de novo*) threshold for medium confidence. Default is 0.5.
     :return: StructExpression with variant *de novo* status and confidence of *de novo* call.

@@ -1571,6 +1571,20 @@ def default_get_de_novo_expr(
         the genotype quality (GQ) of the child, the depth (DP) of the child and
         parents, and the population frequency prior.
 
+    .. warning::
+
+        This method assumes that the PL and AD fields are present in the genotype fields
+        of the child and parents. If they are missing, this method will not work.
+        gnomAD v3 and v4 VDS have the PL and AD fields intentionally removed to
+        save storage space. If this is the reason that the PL and AD fields are
+        missing, the only way to use this method is to set them to their approximate
+        values:
+
+        .. code-block:: python
+
+                PL=hl.or_else(PL, [0, GQ, 2 * GQ])
+                AD=hl.or_else(AD, [DP, 0])
+
     :param locus_expr: Variant locus.
     :param alleles_expr: Variant alleles. Function assumes all variants are
        biallelic, meaning that multiallelic variants in the input dataset should be

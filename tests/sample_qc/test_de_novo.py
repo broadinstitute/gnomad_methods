@@ -8,6 +8,7 @@ from gnomad.sample_qc.relatedness import (
     default_get_de_novo_expr,
 )
 
+
 class TestDeNovoMutation:
     """Test suite for de novo mutation functions."""
 

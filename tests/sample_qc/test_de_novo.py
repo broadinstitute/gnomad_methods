@@ -154,7 +154,7 @@ class TestDeNovoMutation:
                     is_de_novo=False,
                     p_de_novo=hl.missing(hl.tfloat64),
                     confidence=hl.missing(hl.tstr),
-                    fail_reason=hl.empty_set(hl.tstr),
+                    fail_reason=hl.missing(hl.tset(hl.tstr)),
                 ),
             ),
             # Case 4: A passing case (high confidence de novo)
@@ -170,7 +170,7 @@ class TestDeNovoMutation:
                     is_de_novo=True,
                     p_de_novo=0.999,  # High confidence P(de novo)
                     confidence="HIGH",
-                    fail_reason=hl.empty_set(hl.tstr),
+                    fail_reason=hl.missing(hl.tset(hl.tstr)),
                 ),
             ),
         ],

@@ -1318,17 +1318,17 @@ def calculate_de_novo_post_prob(
 
     This function computes the posterior probability of a *de novo* mutation (`P_dn`)
     based on the genotype likelihoods of the proband and parents, along with the
-    population frequency prior for the variant.
-
-    The method is adapted from Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
+    population frequency prior for the variant. The method is adapted from Kaitlin
+    Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
     and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_ function.
-
     However, neither approach explicitly documented how to compute *de novo*
     probabilities for hemizygous genotypes in XY individuals. To address this,
     we provide the full set of equations in this docstring.
 
-    .. math::
     The posterior probability of an even being truly *de novo* vs. the probability it was a missed heterozygote call in one of the two parents is:
+
+    .. math::
+
         P_{dn} = \frac{P(DN \mid \text{data})}{P(DN \mid \text{data}) + P(\text{missed het in parent(s)} \mid \text{data})}
 
     The terms are defined as follows:
@@ -1373,7 +1373,7 @@ def calculate_de_novo_post_prob(
 
       .. math::
 
-          P(DN) = \frac{1}{3 \times 10^7}
+          P(DN) = \frac{1}{3 \times 10^7} (1 mutation per 30 million base pairs)
 
     - :math:`P(\text{data} \mid \text{missed het in parent(s)})`: Probability of observing the data under the assumption of a missed het in a parent.
 
@@ -1471,9 +1471,9 @@ def calculate_de_novo_post_prob(
     # Compute `P(data | DN)`
     prob_data_given_dn_expr = (
         hl.case()
-        .when(hemi_x_expr, pp_mother[0] * pp_proband[2])
-        .when(hemi_y_expr, pp_father[0] * pp_proband[2])
-        .when(diploid_expr, pp_father[0] * pp_mother[0] * pp_proband[1])
+        .when(hemi_x_expr, mother_pp_expr[0] * proband_pp_expr[2])
+        .when(hemi_y_expr, father_pp_expr[0] * proband_pp_expr[2])
+        .when(diploid_expr, father_pp_expr[0] * mother_pp_expr[0] * proband_pp_expr[1])
         .or_missing()
     )
 
@@ -1482,16 +1482,16 @@ def calculate_de_novo_post_prob(
         hl.case()
         .when(
             hemi_x_expr,
-            (pp_mother[1] + pp_mother[2]) * pp_proband[2] * prior_one_parent_het,
+            (mother_pp_expr[1] + mother_pp_expr[2]) * proband_pp_expr[2] * prior_one_parent_het,
         )
         .when(
             hemi_y_expr,
-            (pp_father[1] + pp_father[2]) * pp_proband[2] * prior_one_parent_het,
+            (father_pp_expr[1] + father_pp_expr[2]) * proband_pp_expr[2] * prior_one_parent_het,
         )
         .when(
             diploid_expr,
-            (pp_father[1] * pp_mother[0] + pp_father[0] * pp_mother[1])
-            * pp_proband[1]
+            (father_pp_expr[1] * mother_pp_expr[0] + father_pp_expr[0] * mother_pp_expr[1])
+            * proband_pp_expr[1]
             * prior_one_parent_het,
         )
         .or_missing()
@@ -1532,22 +1532,22 @@ def default_get_de_novo_expr(
 
     Confidence thresholds (from Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts)):
 
-    +----------------+--------------+-----------------------+------+-----+------+-----+
-    |   Category     | P(*de novo*) | AB                    | AD   | DP  | DR   | GQ  |
-    +================+==============+=======================+======+=====+======+=====+
-    | FAIL           | < 0.05       | AB(parents) > 0.05 OR |  0   |     | <0.1 | <20 |
-    |                |              | AB(proband) < 0.2     |      |     |      |     |
-    +----------------+--------------+-----------------------+------+-----+------+-----+
-    | HIGH (Indel)   | > 0.99       | > 0.3                 |      |     |      |     |
-    +----------------+--------------+-----------------------+------+-----+------+-----+
-    | HIGH (SNV) 1   | > 0.99       | > 0.3                 |      |     | >0.2 |     |
-    +----------------+--------------+-----------------------+------+-----+------+-----+
-    | HIGH (SNV) 2   | > 0.5        | > 0.3                 |      | >10 |      |     |
-    +----------------+--------------+-----------------------+------+-----+------+-----+
-    | MEDIUM         | > 0.5        | > 0.3                 |      |     |      |     |
-    +----------------+--------------+-----------------------+------+-----+------+-----+
-    | LOW            | >= 0.05      | >= 0.2                |      |     |      |     |
-    +----------------+--------------+-----------------------+------+-----+------+-----+
+    +----------------+--------------+-----------------------+------+------+-------+-----+
+    |   Category     | P(*de novo*) | AB                    | AD   | DP   | DR    | GQ  |
+    +================+==============+=======================+======+======+=======+=====+
+    | FAIL           | < 0.05       | AB(parents) > 0.05 OR |  0   |      | < 0.1 | <20 |
+    |                |              | AB(proband) < 0.2     |      |      |       |     |
+    +----------------+--------------+-----------------------+------+------+-------+-----+
+    | HIGH (Indel)   | > 0.99       | > 0.3                 |      |      | > 0.2 |     |
+    +----------------+--------------+-----------------------+------+------+-------+-----+
+    | HIGH (SNV) 1   | > 0.99       | > 0.3                 |      |      | > 0.2 |     |
+    +----------------+--------------+-----------------------+------+------+-------+-----+
+    | HIGH (SNV) 2   | > 0.5        | > 0.3                 |      | > 10 |       |     |
+    +----------------+--------------+-----------------------+------+------+-------+-----+
+    | MEDIUM         | > 0.5        | > 0.3                 |      |      |       |     |
+    +----------------+--------------+-----------------------+------+------+-------+-----+
+    | LOW            | >= 0.05      | >= 0.2                |      |      |       |     |
+    +----------------+--------------+-----------------------+------+------+-------+-----+
 
     * AB: Proband AB. FAIL criteria also includes threshold for parent(s).
 
@@ -1560,6 +1560,11 @@ def default_get_de_novo_expr(
     * GQ: Proband GQ.
 
     .. note::
+
+        The “LOW” confidence category differs slightly from the criteria in the
+        original code (P(*de novo) > 0.05  and  AB > 0.2 ), as it is designed to fill
+        the gap for variants that do not meet the FAIL criteria but would otherwise
+        remain unclassified.
 
         The simplified version is the same as Hail's methods when using the
         `ignore_in_sample_allele_frequency` parameter. The main difference is that
@@ -1727,10 +1732,9 @@ def default_get_de_novo_expr(
         is_de_novo=is_de_novo,
         p_de_novo=hl.if_else(~is_de_novo | fail, hl.missing(hl.tfloat64), p_de_novo),
         confidence=hl.if_else(~is_de_novo | fail, hl.missing(hl.tstr), confidence_expr),
-        fail_reason=hl.if_else(
+        fail_reason=hl.or_missing(
             is_de_novo & fail,
             add_filters_expr(filters=fail_checks_expr),
-            hl.empty_set(hl.tstr),
         ),
     )
     return result_expr

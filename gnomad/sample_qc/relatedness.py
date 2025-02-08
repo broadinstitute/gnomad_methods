@@ -1678,8 +1678,7 @@ def default_get_de_novo_expr(
         .when(
             (
                 (
-                    is_snp
-                    & (p_de_novo > high_conf_p)
+                    (p_de_novo > high_conf_p)
                     & (proband_ab > high_med_conf_ab)
                     & (dp_ratio > high_conf_dp_ratio)
                 )
@@ -1688,11 +1687,6 @@ def default_get_de_novo_expr(
                     & (p_de_novo > med_conf_p)
                     & (proband_ab > high_med_conf_ab)
                     & (proband_expr.DP > dp_threshold_snp)
-                )
-                | (
-                    ~is_snp
-                    & (p_de_novo > high_conf_p)
-                    & (proband_ab > high_med_conf_ab)
                 )
             ),
             "HIGH",

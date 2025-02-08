@@ -1328,7 +1328,7 @@ def calculate_de_novo_post_prob(
     we provide the full set of equations in this docstring.
 
     .. math::
-
+    The posterior probability of an even being truly *de novo* vs. the probability it was a missed heterozygote call in one of the two parents is:
         P_{dn} = \frac{P(DN \mid \text{data})}{P(DN \mid \text{data}) + P(\text{missed het in parent(s)} \mid \text{data})}
 
     The terms are defined as follows:
@@ -1353,7 +1353,7 @@ def calculate_de_novo_post_prob(
 
             P(\text{data} \mid DN) = P(\text{hom_ref in father}) \cdot P(\text{hom_ref in mother}) \cdot P(\text{het in proband})
 
-      **Probability of a de novo mutation given the data for hemizygous calls in XY individuals**
+      Probability of a observing a *de novo* mutation given the data specifically for hemizygous calls in XY individuals
 
       Note that hemizygous calls in XY individuals will be reported as homozygous alternate without any sex ploidy adjustments, which is why the formulas below use `P(hom_alt in proband)`
 
@@ -1411,7 +1411,7 @@ def calculate_de_novo_post_prob(
     :param hemi_y_expr: Boolean expression indicating a hemizygous genotype on the Y chromosome.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior (default: :math:`\text{100/3e7}`).
-    :param de_novo_prior: Prior probability of a *de novo* mutation (default: :math:`text{1/3e7}`).
+    :param de_novo_prior: Prior probability of a *de novo* mutation (default: :math:`\text{1/3e7}`).
     :return: Posterior probability of a de novo mutation (`P_dn`).
     """
 
@@ -1463,7 +1463,7 @@ def calculate_de_novo_post_prob(
     prior_one_parent_het = 1 - (1 - freq_prior_expr) ** 4
 
     # Convert PL to probabilities
-    pp_proband, pp_father, pp_mother = [
+    proband_pp_expr, father_pp_expr, mother_pp_expr = [
         _transform_pl_to_pp(pl)
         for pl in [proband_pl_expr, father_pl_expr, mother_pl_expr]
     ]
@@ -1530,7 +1530,7 @@ def default_get_de_novo_expr(
     """
     Get the *de novo* status of a variant based on the proband and parent genotypes.
 
-    Thresholds:
+    Confidence thresholds (from Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts)):
 
     +----------------+--------------+-----------------------+------+-----+------+-----+
     |   Category     | P(*de novo*) | AB                    | AD   | DP  | DR   | GQ  |

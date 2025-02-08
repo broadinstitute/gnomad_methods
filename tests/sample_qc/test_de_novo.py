@@ -15,7 +15,7 @@ class TestDeNovoMutation:
     @pytest.mark.parametrize(
         "proband_pl, father_pl, mother_pl, diploid, hemi_x, hemi_y, freq_prior, min_pop_prior, expected",
         [
-            # ✅ Valid test cases (should return numeric values)
+            # Valid test cases (should return expected numeric values)
             (
                 [73, 0, 161],
                 [0, 99, 198],
@@ -38,7 +38,7 @@ class TestDeNovoMutation:
                 100 / 3e7,
                 0.198,
             ),
-            # ❌ Invalid `freq_prior` case (should raise `HailUserError`)
+            # Invalid `freq_prior` case (should raise `HailUserError`)
             (
                 [99, 50, 0],
                 [0, 99, 198],
@@ -65,7 +65,7 @@ class TestDeNovoMutation:
         expected,
     ):
         """Test `calculate_de_novo_post_prob` function."""
-        # Case where we expect an error (freq_prior is out of range)
+        # Case where we expect an error (`freq_prior` is out of range)
         if expected is None:
             with pytest.raises(
                 hl.utils.HailUserError,
@@ -79,7 +79,7 @@ class TestDeNovoMutation:
                         hl.literal(diploid),
                         hl.literal(hemi_x),
                         hl.literal(hemi_y),
-                        hl.literal(freq_prior),  # Invalid frequency prior
+                        hl.literal(freq_prior),
                         min_pop_prior,
                     )
                 )

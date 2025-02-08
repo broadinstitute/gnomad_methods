@@ -1537,7 +1537,7 @@ def default_get_de_novo_expr(
     """
     Get the *de novo* status of a variant based on the proband and parent genotypes.
 
-    Confidence thresholds (from Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts)):
+    Confidence thresholds (from Kaitlin Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_):
 
     +----------------+--------------+-----------------------+------+------+-------+-----+
     |   Category     | P(*de novo*) | AB                    | AD   | DP   | DR    | GQ  |
@@ -1569,7 +1569,7 @@ def default_get_de_novo_expr(
     .. note::
 
         The “LOW” confidence category differs slightly from the criteria in the
-        original code (P(*de novo) > 0.05  and  AB > 0.2 ), as it is designed to fill
+        original code (P(*de novo*) > 0.05  and  AB > 0.2 ), as it is designed to fill
         the gap for variants that do not meet the FAIL criteria but would otherwise
         remain unclassified.
 

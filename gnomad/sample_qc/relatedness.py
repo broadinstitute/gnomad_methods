@@ -1482,15 +1482,22 @@ def calculate_de_novo_post_prob(
         hl.case()
         .when(
             hemi_x_expr,
-            (mother_pp_expr[1] + mother_pp_expr[2]) * proband_pp_expr[2] * prior_one_parent_het,
+            (mother_pp_expr[1] + mother_pp_expr[2])
+            * proband_pp_expr[2]
+            * prior_one_parent_het,
         )
         .when(
             hemi_y_expr,
-            (father_pp_expr[1] + father_pp_expr[2]) * proband_pp_expr[2] * prior_one_parent_het,
+            (father_pp_expr[1] + father_pp_expr[2])
+            * proband_pp_expr[2]
+            * prior_one_parent_het,
         )
         .when(
             diploid_expr,
-            (father_pp_expr[1] * mother_pp_expr[0] + father_pp_expr[0] * mother_pp_expr[1])
+            (
+                father_pp_expr[1] * mother_pp_expr[0]
+                + father_pp_expr[0] * mother_pp_expr[1]
+            )
             * proband_pp_expr[1]
             * prior_one_parent_het,
         )

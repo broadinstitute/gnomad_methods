@@ -1373,7 +1373,7 @@ def calculate_de_novo_post_prob(
 
       .. math::
 
-          P(DN) = \frac{1}{3 \times 10^7} (1 mutation per 30 million base pairs)
+          P(DN) = \frac{1}{3 \times 10^7}
 
     - :math:`P(\text{data} \mid \text{missed het in parent(s)})`: Probability of observing the data under the assumption of a missed het in a parent.
 

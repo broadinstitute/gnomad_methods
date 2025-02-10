@@ -2794,7 +2794,7 @@ def get_copy_state_by_sex(
     :param locus_expr: LocusExpression of the variant.
     :param is_xx_expr: BooleanExpression indicating whether the sample has an XX sex
        karyotype.
-    :return: A tuple of BooleanExpressions:
+    :return: Tuple of BooleanExpressions:
         - diploid_expr: True if the variant is in autosomes or PAR regions, or in the X non-PAR region for XX individuals.
         - hemi_x_expr: True if the variant is in the X non-PAR region for XY individuals.
         - hemi_y_expr: True if the variant is in the Y non-PAR region for XY individuals.

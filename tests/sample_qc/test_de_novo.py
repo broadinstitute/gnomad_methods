@@ -172,7 +172,7 @@ class TestDeNovoMutation:
                 False,
                 hl.struct(
                     is_de_novo=True,
-                    p_de_novo=0.999,  # High confidence P(de novo)
+                    p_de_novo=0.999,
                     confidence="HIGH",
                     fail_reason=hl.missing(hl.tset(hl.tstr)),
                 ),

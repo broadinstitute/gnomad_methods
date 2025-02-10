@@ -8,6 +8,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
 import hail as hl
 import networkx as nx
 
+from gnomad.utils.annotations import get_copy_state_by_sex
 from gnomad.utils.filtering import add_filters_expr
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -1629,11 +1630,7 @@ def default_get_de_novo_expr(
     )
 
     # Determine genomic context
-    diploid_expr = locus_expr.in_autosome_or_par() | (
-        locus_expr.in_x_nonpar() & is_xx_expr
-    )
-    hemi_x_expr = locus_expr.in_x_nonpar() & ~is_xx_expr
-    hemi_y_expr = locus_expr.in_y_nonpar() & ~is_xx_expr
+    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(locus_expr, is_xx_expr)
 
     p_de_novo = calculate_de_novo_post_prob(
         proband_expr.PL,

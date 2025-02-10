@@ -1326,7 +1326,7 @@ def calculate_de_novo_post_prob(
     probabilities for hemizygous genotypes in XY individuals. To address this,
     we provide the full set of equations in this docstring.
 
-    The posterior probability of an even being truly *de novo* vs. the probability it was a missed heterozygote call in one of the two parents is:
+    The posterior probability of an event being truly *de novo* vs. the probability it was a missed heterozygote call in one of the two parents is:
 
     .. math::
 
@@ -1334,7 +1334,7 @@ def calculate_de_novo_post_prob(
 
     The terms are defined as follows:
 
-    - :math:`P(DN \mid \text{data})` is the probability that the variant is **de novo**, given the observed genotype data.
+    - :math:`P(DN \mid \text{data})` is the probability that the variant is *de novo*, given the observed genotype data.
 
     - :math:`P(\text{missed het in parent(s)} \mid \text{data})` is the probability that the heterozygous variant was **missed in at least one parent**.
 
@@ -1356,7 +1356,7 @@ def calculate_de_novo_post_prob(
 
       Probability of a observing a *de novo* mutation given the data specifically for hemizygous calls in XY individuals
 
-      Note that hemizygous calls in XY individuals will be reported as homozygous alternate without any sex ploidy adjustments, which is why the formulas below use `P(hom_alt in proband)`
+          Note that hemizygous calls in XY individuals will be reported as homozygous alternate without any sex ploidy adjustments, which is why the formulas below use `P(hom_alt in proband)`
 
       - **X non-PAR regions (XY only)**:
 
@@ -1413,7 +1413,7 @@ def calculate_de_novo_post_prob(
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior (default: :math:`\text{100/3e7}`).
     :param de_novo_prior: Prior probability of a *de novo* mutation (default: :math:`\text{1/3e7}`).
-    :return: Posterior probability of a de novo mutation (`P_dn`).
+    :return: Posterior probability of a *de novo* mutation (`P_dn`).
     """
 
     def _get_freq_prior(freq_prior: hl.expr.Float64Expression, min_prior=100 / 3e7):
@@ -1570,11 +1570,14 @@ def default_get_de_novo_expr(
     .. note::
 
         The “LOW” confidence category differs slightly from the criteria in the
-        original code (P(*de novo*) > 0.05  and  AB(proband > 0.2 ), as it is
+        original code (P(*de novo*) > 0.05  and  AB(proband > 0.2), as it is
         designed to fill the gap for variants that do not meet the FAIL criteria but
         would otherwise remain unclassified.
 
-        The simplified version is the same as Hail's methods when using the
+    The *de novo* confidence is calculated as a simplified version of the one previously
+    described in Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts) and
+    Hail's [*de_novo*](https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo)
+    method. This simplified version is the same as Hail's methods when using the
         `ignore_in_sample_allele_frequency` parameter. The main difference is that
         this mode should be used when families larger than a single trio are in the
         dataset, in which an allele might be *de novo* in a parent and transmitted to a
@@ -1588,7 +1591,7 @@ def default_get_de_novo_expr(
 
         This method assumes that the PL and AD fields are present in the genotype fields
         of the child and parents. If they are missing, this method will not work.
-        gnomAD v3 and v4 VDS have the PL and AD fields intentionally removed to
+        Many of our larger datasets have the PL and AD fields intentionally removed to
         save storage space. If this is the reason that the PL and AD fields are
         missing, the only way to use this method is to set them to their approximate
         values:

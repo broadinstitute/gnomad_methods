@@ -100,7 +100,7 @@ class TestDeNovoMutation:
             assert round(hl.eval(p_dn_expr), 3) == expected
 
     @pytest.mark.parametrize(
-        "locus, alleles, proband_expr, father_expr, mother_expr, is_xx_expr, freq_prior_expr, expected",
+        "locus, alleles, proband_expr, father_expr, mother_expr, is_xx_expr, freq_prior_expr, expected_exception, expected_result",
         [
             # Case 1: Multiple fail conditions
             (
@@ -111,6 +111,7 @@ class TestDeNovoMutation:
                 hl.struct(GT=hl.call(0, 0), AD=[0, 0], DP=0, GQ=0, PL=[0, 0, 0]),
                 hl.literal(True),
                 hl.literal(1e-5),
+                False,
                 hl.struct(
                     is_de_novo=True,
                     p_de_novo=hl.missing(hl.tfloat64),
@@ -134,6 +135,7 @@ class TestDeNovoMutation:
                 hl.struct(GT=hl.call(0, 0), AD=[10, 0], DP=100, GQ=99, PL=[0, 99, 198]),
                 hl.literal(False),
                 hl.literal(1e-5),
+                False,
                 hl.struct(
                     is_de_novo=True,
                     p_de_novo=hl.missing(hl.tfloat64),
@@ -150,6 +152,7 @@ class TestDeNovoMutation:
                 hl.struct(GT=hl.call(0, 0), AD=[20, 0], DP=20, GQ=50, PL=[0, 99, 198]),
                 hl.literal(True),
                 hl.literal(1e-5),
+                False,
                 hl.struct(
                     is_de_novo=False,
                     p_de_novo=hl.missing(hl.tfloat64),
@@ -166,12 +169,25 @@ class TestDeNovoMutation:
                 hl.struct(GT=hl.call(0, 0), AD=[25, 0], DP=25, GQ=80, PL=[0, 80, 150]),
                 hl.literal(True),
                 hl.literal(1e-5),
+                False,
                 hl.struct(
                     is_de_novo=True,
                     p_de_novo=0.999,  # High confidence P(de novo)
                     confidence="HIGH",
                     fail_reason=hl.missing(hl.tset(hl.tstr)),
                 ),
+            ),
+            # Case 5: Multi-allelic variant (should raise an error)
+            (
+                hl.locus("chr1", 40000, reference_genome="GRCh38"),
+                hl.literal(["C", "G", "A"]),
+                hl.struct(GT=hl.call(0, 1), AD=[5, 30, 5], DP=40, GQ=99, PL=[99, 0, 1]),
+                hl.struct(GT=hl.call(0, 0), AD=[20, 0], DP=20, GQ=60, PL=[0, 60, 120]),
+                hl.struct(GT=hl.call(0, 0), AD=[25, 0], DP=25, GQ=80, PL=[0, 80, 150]),
+                hl.literal(True),
+                hl.literal(1e-5),
+                True,
+                None,
             ),
         ],
     )
@@ -184,25 +200,41 @@ class TestDeNovoMutation:
         mother_expr,
         is_xx_expr,
         freq_prior_expr,
-        expected,
+        expected_exception,
+        expected_result,
     ):
-        """Test different scenarios of `default_get_de_novo_expr` in one function."""
-        result_expr = default_get_de_novo_expr(
-            locus,
-            alleles,
-            proband_expr,
-            father_expr,
-            mother_expr,
-            is_xx_expr,
-            freq_prior_expr,
-        )
+        """Test different scenarios of `default_get_de_novo_expr`."""
+        if expected_exception:
+            with pytest.raises(
+                hl.utils.HailUserError,
+                match="Must split multiallelic variants prior to running this function.",
+            ):
+                result_expr = default_get_de_novo_expr(
+                    locus,
+                    alleles,
+                    proband_expr,
+                    father_expr,
+                    mother_expr,
+                    is_xx_expr,
+                    freq_prior_expr,
+                )
+                hl.eval(result_expr)
+        else:
+            result_expr = default_get_de_novo_expr(
+                locus,
+                alleles,
+                proband_expr,
+                father_expr,
+                mother_expr,
+                is_xx_expr,
+                freq_prior_expr,
+            )
+            result = hl.eval(result_expr)
+            expected_result = hl.eval(expected_result)
 
-        result = hl.eval(result_expr)
-        expected_result = hl.eval(expected)
-
-        assert result.is_de_novo == expected_result.is_de_novo
-        assert (
-            None if result.p_de_novo is None else round(result.p_de_novo, 3)
-        ) == expected_result.p_de_novo
-        assert result.confidence == expected_result.confidence
-        assert result.fail_reason == expected_result.fail_reason
+            assert result.is_de_novo == expected_result.is_de_novo
+            assert (
+                None if result.p_de_novo is None else round(result.p_de_novo, 3)
+            ) == expected_result.p_de_novo
+            assert result.confidence == expected_result.confidence
+            assert result.fail_reason == expected_result.fail_reason

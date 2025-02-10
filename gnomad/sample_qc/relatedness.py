@@ -1630,7 +1630,9 @@ def default_get_de_novo_expr(
     )
 
     # Determine genomic context
-    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(locus_expr, is_xx_expr)
+    diploid_expr, hemi_x_expr, hemi_y_expr = get_copy_state_by_sex(
+        locus_expr, is_xx_expr
+    )
 
     p_de_novo = calculate_de_novo_post_prob(
         proband_expr.PL,

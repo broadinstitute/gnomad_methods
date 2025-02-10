@@ -182,8 +182,12 @@ class TestDeNovoMutation:
                 hl.locus("chr1", 40000, reference_genome="GRCh38"),
                 hl.literal(["C", "G", "A"]),
                 hl.struct(GT=hl.call(0, 1), AD=[5, 30, 5], DP=40, GQ=99, PL=[99, 0, 1]),
-                hl.struct(GT=hl.call(0, 0), AD=[20, 0], DP=20, GQ=60, PL=[0, 60, 120]),
-                hl.struct(GT=hl.call(0, 0), AD=[25, 0], DP=25, GQ=80, PL=[0, 80, 150]),
+                hl.struct(
+                    GT=hl.call(0, 0), AD=[20, 0, 5], DP=25, GQ=60, PL=[0, 60, 120]
+                ),
+                hl.struct(
+                    GT=hl.call(0, 0), AD=[25, 0, 5], DP=30, GQ=80, PL=[0, 80, 150]
+                ),
                 hl.literal(True),
                 hl.literal(1e-5),
                 True,

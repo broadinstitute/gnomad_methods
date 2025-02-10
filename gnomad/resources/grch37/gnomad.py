@@ -125,7 +125,6 @@ def _public_pext_path(pext_type: str = "base_level") -> str:
 
     :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
     :return: Path to pext data.
-    :raises DataException: If the provided pext_type is invalid.
     """
     pext_paths = {
         "annotation_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht",
@@ -162,7 +161,6 @@ def _public_mnv_path(distance: int = 1) -> str:
 
     :param distance: Distance between two SNVs in MNV. Default is 1.
     :return: Path to MNV data.
-    :raises DataException: If the provided distance is invalid (outside 1-10).
     """
     distances = set(range(1, 11))
     if distance not in distances:

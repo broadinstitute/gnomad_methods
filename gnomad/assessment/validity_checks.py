@@ -51,15 +51,19 @@ def generic_field_check(
     :return: None
     """
     if n_fail is None and cond_expr is None:
+        print(111111)
         raise ValueError("At least one of n_fail or cond_expr must be defined!")
 
     if n_fail is None and cond_expr is not None:
+        print(222222)
         n_fail = ht.filter(cond_expr).count()
 
     if show_percent_sites and (ht_count is None):
+        print(3333333)
         ht_count = ht.count()
 
     if n_fail > 0:
+        print(44444444)
         logger.info("Found %d sites that fail %s check:", n_fail, check_description)
         if show_percent_sites:
             logger.info(
@@ -69,6 +73,7 @@ def generic_field_check(
             ht = ht.select(_fail=cond_expr, **display_fields)
             ht.filter(ht._fail).drop("_fail").show()
     else:
+        print("5555555")
         logger.info("PASSED %s check", check_description)
         if verbose:
             ht.select(**display_fields).show()
@@ -220,7 +225,21 @@ def make_group_sum_expr_dict(
             check_field_left = f"{subset}{metric}{delimiter}{group}"
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
-            "expr": t.info[check_field_left] != annot_dict[check_field_right],
+            "expr": hl.case()
+            .when(
+                hl.is_missing(t.info[check_field_left])
+                & hl.is_missing(annot_dict[check_field_right]),
+                False,
+            )  # Pass if both fields are missing.
+            .when(
+                hl.is_missing(t.info[check_field_left])
+                | hl.is_missing(annot_dict[check_field_right]),
+                True,
+            )  # Fail if only one field is missing.
+            .when(
+                t.info[check_field_left] != annot_dict[check_field_right], True
+            )  # Fail if the fields are not equal.
+            .default(True),
             "agg_func": hl.agg.count_where,
             "display_fields": hl.struct(
                 **{
@@ -281,7 +300,7 @@ def summarize_variant_filters(
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
-
+    print("FFFFFFFF")
     filters = t.aggregate(hl.agg.counter(t.filters))
     logger.info("Variant filter counts: %s", filters)
 
@@ -379,6 +398,8 @@ def generic_field_check_loop(
     ht_field_check_counts = ht.aggregate(
         hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
     )
+    print("RUNNING LOOP")
+    print(field_check_expr)
     for check_description, n_fail in ht_field_check_counts.items():
         generic_field_check(
             ht,

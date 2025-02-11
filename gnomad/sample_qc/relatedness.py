@@ -1732,8 +1732,7 @@ def default_get_de_novo_expr(
     fail = hl.any(list(fail_checks_expr.values()))
     result_expr = hl.struct(
         is_de_novo=is_de_novo,
-        p_de_novo=hl.or_missing(is_de_novo & ~fail,
-                                p_de_novo),
+        p_de_novo=hl.or_missing(is_de_novo & ~fail, p_de_novo),
         confidence=hl.or_missing(is_de_novo & ~fail, confidence_expr),
         fail_reason=hl.or_missing(
             is_de_novo & fail,

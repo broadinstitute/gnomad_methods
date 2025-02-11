@@ -125,7 +125,6 @@ def _public_pext_path(pext_type: str = "base_level") -> str:
 
     :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
     :return: Path to pext data.
-    :raises DataException: If the provided pext_type is invalid.
     """
     pext_paths = {
         "annotation_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht",
@@ -154,6 +153,21 @@ def _public_browser_gene_ht_path() -> str:
     :return: Path to browser gene Table.
     """
     return "gs://gnomad-public-requester-pays/resources/grch37/browser/gnomad.genes.GRCh37.GENCODEv19.pext.ht"
+
+
+def _public_mnv_path(distance: int = 1) -> str:
+    """
+    Get path to public multinucleotide variant (MNV) data.
+
+    :param distance: Distance between two SNVs in MNV. Default is 1.
+    :return: Path to MNV data.
+    """
+    distances = set(range(1, 11))
+    if distance not in distances:
+        raise DataException(
+            f"Invalid distance: '{distance}'. Valid options are {distances}."
+        )
+    return f"gs://gnomad-public-requester-pays/release/2.1/mnv/genome/gnomad_mnv_genome_d{distance}.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -290,6 +304,16 @@ def constraint() -> GnomadPublicTableResource:
     :return: Gene constraint Table.
     """
     return GnomadPublicTableResource(path=_public_constraint_ht_path())
+
+
+def mnv(distance: int = 1) -> GnomadPublicTableResource:
+    """
+    Retrieve multinucleotide variant table.
+
+    :param distance: Distance between two SNVs in MNV. Default is 1.
+    :return: MNV Table.
+    """
+    return GnomadPublicTableResource(path=_public_mnv_path(distance))
 
 
 def browser_gene() -> GnomadPublicTableResource:

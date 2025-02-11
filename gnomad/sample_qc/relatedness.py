@@ -1574,10 +1574,10 @@ def default_get_de_novo_expr(
         designed to fill the gap for variants that do not meet the FAIL criteria but
         would otherwise remain unclassified.
 
-    The *de novo* confidence is calculated as a simplified version of the one previously
-    described in Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts) and
-    Hail's [*de_novo*](https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo)
-    method. This simplified version is the same as Hail's methods when using the
+        The *de novo* confidence is calculated as a simplified version of the one
+        previously described in Kaitlin Samocha's [*de novo* caller](https://github.com/ksamocha/de_novo_scripts)
+        and Hail's [*de_novo*](https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo)
+        method. This simplified version is the same as Hail's methods when using the
         `ignore_in_sample_allele_frequency` parameter. The main difference is that
         this mode should be used when families larger than a single trio are in the
         dataset, in which an allele might be *de novo* in a parent and transmitted to a

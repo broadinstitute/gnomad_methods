@@ -1,6 +1,7 @@
 # noqa: D100
 
 import logging
+from contextlib import contextmanager
 from pprint import pprint
 from typing import Any, Dict, List, Optional, Union
 
@@ -10,9 +11,38 @@ from hail.utils.misc import new_temp_file
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
+# Save  original LogRecord factory.
+old_factory = logging.getLogRecordFactory()
+
+
+# 2Define the custom factory that appends function names.
+def custom_record_factory(suffix):
+    """Returns a custom LogRecord factory that appends a given suffix to function names."""
+
+    def factory(*args, **kwargs):
+        # Create original log record.
+        record = old_factory(*args, **kwargs)
+        # Append suffix tooriginal log record.
+        record.funcName = f"{record.funcName}.{suffix}"
+        return record
+
+    return factory
+
+
+# Define a context manager to temporarily enable the custom factory.
+@contextmanager
+def temp_logger(function_name):
+    """Temporarily modifies logging factory to append `function_name` to function names."""
+    logging.setLogRecordFactory(custom_record_factory(function_name))
+    yield
+    # Restore original factory.
+    logging.setLogRecordFactory(old_factory)
+
+
 logging.basicConfig(
     format="%(levelname)s (%(name)s %(module)s.%(funcName)s %(lineno)d): %(message)s"
 )
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -26,6 +56,7 @@ def generic_field_check(
     show_percent_sites: bool = False,
     n_fail: Optional[int] = None,
     ht_count: Optional[int] = None,
+    function_name: Optional[str] = None,
 ) -> None:
     """
     Check generic logical condition `cond_expr` involving annotations in a Hail Table when `n_fail` is absent and print the results to stdout.
@@ -48,30 +79,72 @@ def generic_field_check(
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param n_fail: Optional number of sites that fail the conditional checks (previously computed). If not supplied, `cond_expr` is used to filter the Table and obtain the count of sites that fail the checks.
     :param ht_count: Optional number of sites within hail Table (previously computed). If not supplied, a count of sites in the Table is performed.
+    :param function_name: Name of the function that initiated this check. The name will be appended to the logger output.
     :return: None
     """
-    if n_fail is None and cond_expr is None:
-        raise ValueError("At least one of n_fail or cond_expr must be defined!")
+    with temp_logger(function_name):
+        if n_fail is None and cond_expr is None:
+            raise ValueError("At least one of n_fail or cond_expr must be defined!")
 
-    if n_fail is None and cond_expr is not None:
-        n_fail = ht.filter(cond_expr).count()
+        if n_fail is None and cond_expr is not None:
+            n_fail = ht.filter(cond_expr).count()
 
-    if show_percent_sites and (ht_count is None):
-        ht_count = ht.count()
+        if show_percent_sites and (ht_count is None):
+            ht_count = ht.count()
 
-    if n_fail > 0:
-        logger.info("Found %d sites that fail %s check:", n_fail, check_description)
-        if show_percent_sites:
-            logger.info(
-                "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
-            )
-        if cond_expr is not None:
-            ht = ht.select(_fail=cond_expr, **display_fields)
-            ht.filter(ht._fail).drop("_fail").show()
-    else:
-        logger.info("PASSED %s check", check_description)
-        if verbose:
-            ht.select(**display_fields).show()
+        if n_fail > 0:
+            logger.info("Found %d sites that fail %s check:", n_fail, check_description)
+            if show_percent_sites:
+                logger.info(
+                    "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
+                )
+            if cond_expr is not None:
+                ht = ht.select(_fail=cond_expr, **display_fields)
+                ht.filter(ht._fail).drop("_fail").show()
+        else:
+            logger.info("PASSED %s check", check_description)
+            if verbose:
+                ht.select(**display_fields).show()
+
+
+def generic_field_check_loop(
+    ht: hl.Table,
+    field_check_expr: Dict[str, Dict[str, Any]],
+    verbose: bool,
+    show_percent_sites: bool = False,
+    ht_count: int = None,
+    function_name: Optional[str] = None,
+) -> None:
+    """
+    Loop through all conditional checks for a given hail Table.
+
+    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check.
+
+    :param ht: Table containing annotations to be checked.
+    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param ht_count: Previously computed sum of sites within hail Table. Default is None.
+    :param function_name: Name of the function that initiated this check. The name will be appended to the logger output.
+    :return: None
+    """
+    # logger.info(f"First function in stack: {first_function}")  # Log the first caller
+
+    ht_field_check_counts = ht.aggregate(
+        hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
+    )
+    for check_description, n_fail in ht_field_check_counts.items():
+        generic_field_check(
+            ht,
+            check_description=check_description,
+            n_fail=n_fail,
+            display_fields=field_check_expr[check_description]["display_fields"],
+            cond_expr=field_check_expr[check_description]["expr"],
+            verbose=verbose,
+            show_percent_sites=show_percent_sites,
+            ht_count=ht_count,
+            function_name=function_name,
+        )
 
 
 def make_filters_expr_dict(
@@ -370,41 +443,6 @@ def summarize_variant_filters(
         _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
 
 
-def generic_field_check_loop(
-    ht: hl.Table,
-    field_check_expr: Dict[str, Dict[str, Any]],
-    verbose: bool,
-    show_percent_sites: bool = False,
-    ht_count: int = None,
-) -> None:
-    """
-    Loop through all conditional checks for a given hail Table.
-
-    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check.
-
-    :param ht: Table containing annotations to be checked.
-    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param ht_count: Previously computed sum of sites within hail Table. Default is None.
-    :return: None
-    """
-    ht_field_check_counts = ht.aggregate(
-        hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
-    )
-    for check_description, n_fail in ht_field_check_counts.items():
-        generic_field_check(
-            ht,
-            check_description=check_description,
-            n_fail=n_fail,
-            display_fields=field_check_expr[check_description]["display_fields"],
-            cond_expr=field_check_expr[check_description]["expr"],
-            verbose=verbose,
-            show_percent_sites=show_percent_sites,
-            ht_count=ht_count,
-        )
-
-
 def compare_subset_freqs(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
@@ -472,6 +510,7 @@ def compare_subset_freqs(
         field_check_expr,
         verbose,
         show_percent_sites=show_percent_sites,
+        function_name="compare_subset_freqs",
     )
 
     # Spot check the raw AC counts
@@ -516,6 +555,7 @@ def sum_group_callstats(
     :return: None
     """
     # TODO: Add support for subpop sums
+    # set_first_function()
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
@@ -545,7 +585,9 @@ def sum_group_callstats(
                     metrics,
                 )
                 field_check_expr.update(field_check_expr_s)
-    generic_field_check_loop(t, field_check_expr, verbose)
+    generic_field_check_loop(
+        t, field_check_expr, verbose, function_name="sum_group_callstats"
+    )
 
 
 def summarize_variants(
@@ -734,7 +776,9 @@ def check_raw_and_adj_callstats(
                 ),
             }
 
-    generic_field_check_loop(t, field_check_expr, verbose)
+    generic_field_check_loop(
+        t, field_check_expr, verbose, function_name="check_raw_and_adj_callstats"
+    )
 
 
 def check_sex_chr_metrics(
@@ -823,7 +867,6 @@ def check_sex_chr_metrics(
     xx_metrics = [x for x in xx_metrics if nhomalt_metric in x]
 
     if len(xx_metrics) == 0:
-        # raise ValueError("No XX nhomalt metrics found!")
         logger.info("FAILED check for XX nhomalt metrics: no XX nhomalt metrics found!")
     else:
         logger.info("Checking the following XX nhomalt metrics: %s", xx_metrics)
@@ -845,7 +888,9 @@ def check_sex_chr_metrics(
             ),
         }
 
-    generic_field_check_loop(t_xnonpar, field_check_expr, verbose)
+    generic_field_check_loop(
+        t_xnonpar, field_check_expr, verbose, function_name="check_sex_chr_metrics"
+    )
 
 
 def compute_missingness(

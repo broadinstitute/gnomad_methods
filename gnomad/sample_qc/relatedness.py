@@ -1659,9 +1659,8 @@ def default_get_de_novo_expr(
     )
     dp_ratio = proband_expr.DP / parent_dp
 
-    # Calculate proband AB and assign variant type
+    # Calculate proband AB
     proband_ab = proband_expr.AD[1] / hl.sum(proband_expr.AD)
-    is_snp = hl.is_snp(alleles_expr[0], alleles_expr[1])
 
     is_de_novo = (
         diploid_expr
@@ -1685,7 +1684,7 @@ def default_get_de_novo_expr(
                     & (dp_ratio > high_conf_dp_ratio)
                 )
                 | (
-                    is_snp
+                    hl.is_snp(alleles_expr[0], alleles_expr[1])
                     & (p_de_novo > med_conf_p)
                     & (proband_ab > high_med_conf_ab)
                     & (proband_expr.DP > dp_threshold_snp)
@@ -1733,8 +1732,9 @@ def default_get_de_novo_expr(
     fail = hl.any(list(fail_checks_expr.values()))
     result_expr = hl.struct(
         is_de_novo=is_de_novo,
-        p_de_novo=hl.if_else(~is_de_novo | fail, hl.missing(hl.tfloat64), p_de_novo),
-        confidence=hl.if_else(~is_de_novo | fail, hl.missing(hl.tstr), confidence_expr),
+        p_de_novo=hl.or_missing(is_de_novo & ~fail,
+                                p_de_novo),
+        confidence=hl.or_missing(is_de_novo & ~fail, confidence_expr),
         fail_reason=hl.or_missing(
             is_de_novo & fail,
             add_filters_expr(filters=fail_checks_expr),

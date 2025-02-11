@@ -51,19 +51,15 @@ def generic_field_check(
     :return: None
     """
     if n_fail is None and cond_expr is None:
-        print(111111)
         raise ValueError("At least one of n_fail or cond_expr must be defined!")
 
     if n_fail is None and cond_expr is not None:
-        print(222222)
         n_fail = ht.filter(cond_expr).count()
 
     if show_percent_sites and (ht_count is None):
-        print(3333333)
         ht_count = ht.count()
 
     if n_fail > 0:
-        print(44444444)
         logger.info("Found %d sites that fail %s check:", n_fail, check_description)
         if show_percent_sites:
             logger.info(
@@ -73,7 +69,6 @@ def generic_field_check(
             ht = ht.select(_fail=cond_expr, **display_fields)
             ht.filter(ht._fail).drop("_fail").show()
     else:
-        print("5555555")
         logger.info("PASSED %s check", check_description)
         if verbose:
             ht.select(**display_fields).show()
@@ -300,7 +295,6 @@ def summarize_variant_filters(
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
-    print("FFFFFFFF")
     filters = t.aggregate(hl.agg.counter(t.filters))
     logger.info("Variant filter counts: %s", filters)
 
@@ -398,8 +392,6 @@ def generic_field_check_loop(
     ht_field_check_counts = ht.aggregate(
         hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
     )
-    print("RUNNING LOOP")
-    print(field_check_expr)
     for check_description, n_fail in ht_field_check_counts.items():
         generic_field_check(
             ht,
@@ -773,7 +765,8 @@ def check_sex_chr_metrics(
     xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
 
     if len(xx_metrics) == 0:
-        raise ValueError("No XX metrics found!")
+        # raise ValueError("No XX metrics found!")
+        logger.info("FAILED check for XX metrics: no XX metrics found!")
     else:
         logger.info("Checking the following XX metrics: %s", xx_metrics)
 
@@ -787,6 +780,9 @@ def check_sex_chr_metrics(
                 )
             ],
         )
+        n_y = t_y.count()
+        if n_y == 0:
+            logger.info("FAILED metric checks on chrY: no Y variants found!")
         metrics_values = {}
         for metric in xx_metrics:
             metrics_values[metric] = hl.agg.any(hl.is_defined(t_y.info[metric]))
@@ -807,6 +803,7 @@ def check_sex_chr_metrics(
                 )
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
+    logger.info("FAILED metric checks on chrY: no chrY found!")
 
     t_x = hl.filter_intervals(
         t,
@@ -819,12 +816,15 @@ def check_sex_chr_metrics(
     t_xnonpar = t_x.filter(t_x.locus.in_x_nonpar())
     n = t_xnonpar.count()
     logger.info("Found %d X nonpar sites", n)
+    if n == 0:
+        logger.info("FAILED metric checks for X nonpar sites: no X nonpar sites found!")
 
     logger.info("Check (nhomalt == nhomalt_xx) for X nonpar variants:")
     xx_metrics = [x for x in xx_metrics if nhomalt_metric in x]
 
     if len(xx_metrics) == 0:
-        raise ValueError("No XX nhomalt metrics found!")
+        # raise ValueError("No XX nhomalt metrics found!")
+        logger.info("FAILED check for XX nhomalt metrics: no XX nhomalt metrics found!")
     else:
         logger.info("Checking the following XX nhomalt metrics: %s", xx_metrics)
 

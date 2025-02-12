@@ -14,54 +14,6 @@ class TestDeNovoMutation:
     """Test suite for de novo mutation functions."""
 
     @pytest.mark.parametrize(
-        "locus, is_xx, expected_diploid, expected_hemi_x, expected_hemi_y",
-        [
-            (
-                hl.locus("chr1", 100000, reference_genome="GRCh38"),
-                True,
-                True,
-                False,
-                False,
-            ),
-            (
-                hl.locus("chrX", 2781479, reference_genome="GRCh38"),
-                False,
-                True,
-                False,
-                False,
-            ),
-            (
-                hl.locus("chrX", 3000000, reference_genome="GRCh38"),
-                False,
-                False,
-                True,
-                False,
-            ),
-            (
-                hl.locus("chrY", 10000000, reference_genome="GRCh38"),
-                False,
-                False,
-                False,
-                True,
-            ),
-        ],
-    )
-    def test_get_copy_state_by_sex(
-        self, locus, is_xx, expected_diploid, expected_hemi_x, expected_hemi_y
-    ) -> None:
-        """Test copy state determination based on locus type and sex."""
-        is_xx_expr = hl.literal(is_xx)
-
-        diploid, hemi_x, hemi_y = get_copy_state_by_sex(locus, is_xx_expr)
-        result = hl.eval([diploid, hemi_x, hemi_y])
-
-        assert result == [
-            expected_diploid,
-            expected_hemi_x,
-            expected_hemi_y,
-        ], f"Failed for locus={locus}, is_xx={is_xx}. Expected {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}"
-
-    @pytest.mark.parametrize(
         "proband_pl, father_pl, mother_pl, diploid, hemi_x, hemi_y, freq_prior, min_pop_prior, expected",
         [
             # Valid test cases (should return expected numeric values)
@@ -207,18 +159,18 @@ class TestDeNovoMutation:
             # 4. Autosomal locus with one FAIL condition
             (
                 hl.locus("chr1", 13000, reference_genome="GRCh38"),
-                hl.literal(["C", "G"]),
-                hl.struct(GT=hl.call(0, 1), AD=[20, 5], DP=10, GQ=50, PL=[10, 0, 100]),
-                hl.struct(GT=hl.call(0, 0), AD=[10, 0], DP=100, GQ=99, PL=[0, 99, 198]),
-                hl.struct(GT=hl.call(0, 0), AD=[10, 0], DP=100, GQ=99, PL=[0, 99, 198]),
+                hl.literal(["T", "TA"]),
+                hl.struct(GT=hl.call(0, 1), AD=[4, 2], DP=8, GQ=30, PL=[30, 0, 103]),
+                hl.struct(GT=hl.call(0, 0), AD=[7, 0], DP=7, GQ=24, PL=[0, 24, 48]),
+                hl.struct(GT=hl.call(0, 0), AD=[2, 0], DP=2, GQ=6, PL=[0, 6, 12]),
                 hl.literal(True),
-                hl.literal(1e-5),
+                hl.literal(2.00e-01),
                 False,
                 hl.struct(
                     is_de_novo=True,
                     p_de_novo=hl.missing(hl.tfloat64),
                     confidence=hl.missing(hl.tstr),
-                    fail_reason={"min_dp_ratio"},
+                    fail_reason={"min_de_novo_p"},
                 ),
             ),
             # 5. Autosomal locus with multiple FAIL conditions

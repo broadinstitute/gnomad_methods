@@ -2791,6 +2791,9 @@ def get_copy_state_by_sex(
     """
     Determine the copy state of a variant by its locus and the sex karotype of a sample.
 
+    This function assumes that the sample contains only XX and XY karyotypes. It does
+    not account for ambiguous sex or aneuploidies (e.g., XXY, XYY).
+
     :param locus_expr: LocusExpression of the variant.
     :param is_xx_expr: BooleanExpression indicating whether the sample has an XX sex
        karyotype.

@@ -1,7 +1,8 @@
 # noqa: D100
 
+import io
 import logging
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from pprint import pprint
 from typing import Any, Dict, List, Optional, Union
 
@@ -10,12 +11,13 @@ from hail.utils.misc import new_temp_file
 
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
+import io
 
-# Save  original LogRecord factory.
+# Save original LogRecord factory.
 old_factory = logging.getLogRecordFactory()
 
 
-# 2Define the custom factory that appends function names.
+# Define custom factory that appends function names to logger.
 def custom_record_factory(suffix):
     """Returns a custom LogRecord factory that appends a given suffix to function names."""
 
@@ -29,7 +31,7 @@ def custom_record_factory(suffix):
     return factory
 
 
-# Define a context manager to temporarily enable the custom factory.
+# Define context manager to temporarily enable the custom factory.
 @contextmanager
 def temp_logger(function_name):
     """Temporarily modifies logging factory to append `function_name` to function names."""
@@ -93,18 +95,39 @@ def generic_field_check(
             ht_count = ht.count()
 
         if n_fail > 0:
-            logger.info("Found %d sites that fail %s check:", n_fail, check_description)
+            # logger.info("Found %d sites that fail %s check:", n_fail, check_description)
+            table_output = None
+
             if show_percent_sites:
                 logger.info(
                     "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
                 )
             if cond_expr is not None:
-                ht = ht.select(_fail=cond_expr, **display_fields)
-                ht.filter(ht._fail).drop("_fail").show()
+                ht_filtered = ht.select(_fail=cond_expr, **display_fields)
+                ht_filtered = ht_filtered.filter(ht_filtered._fail).drop("_fail")
+                log_stream = io.StringIO()
+                with redirect_stdout(log_stream):
+                    ht_filtered.show(width=200)
+                    table_output = log_stream.getvalue().strip()
+            logger.info(
+                "Found %d sites that fail %s check: %s",
+                n_fail,
+                check_description,
+                table_output,
+            )
         else:
-            logger.info("PASSED %s check", check_description)
+            table_output = None
             if verbose:
-                ht.select(**display_fields).show()
+                log_stream = io.StringIO()
+                with redirect_stdout(log_stream):
+                    ht.select(**display_fields).show(width=200)
+                    table_output = log_stream.getvalue().strip()
+
+            logger.info(
+                "PASSED %s check%s",
+                check_description,
+                f":\n{table_output}" if table_output else "",
+            )
 
 
 def generic_field_check_loop(

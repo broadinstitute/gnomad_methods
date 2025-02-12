@@ -7,7 +7,6 @@ from gnomad.sample_qc.relatedness import (
     calculate_de_novo_post_prob,
     default_get_de_novo_expr,
 )
-from gnomad.utils.annotations import get_copy_state_by_sex
 
 
 class TestDeNovoMutation:

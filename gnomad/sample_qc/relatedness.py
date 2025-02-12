@@ -1384,13 +1384,13 @@ def calculate_de_novo_post_prob(
 
             P(\text{data} \mid \text{missed het in parents}) = ( P(\text{het in father}) \cdot P(\text{hom_ref in mother}) + P(\text{hom_ref in father}) \cdot P(\text{het in mother})) \cdot P(\text{het in proband})
 
-      - **X non-PAR regions**:
+      - **X non-PAR regions (XY only)**:
 
         .. math::
 
             P(\text{data} \mid \text{missed het in mother}) = (P(\text{het in mother}) + P(\text{hom_alt in mother})) \cdot P(\text{hom_alt in proband})
 
-      - **Y non-PAR regions**:
+      - **Y non-PAR regions (XY only)**:
 
         .. math::
 

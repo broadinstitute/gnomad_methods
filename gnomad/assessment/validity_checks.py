@@ -95,13 +95,8 @@ def generic_field_check(
             ht_count = ht.count()
 
         if n_fail > 0:
-            # logger.info("Found %d sites that fail %s check:", n_fail, check_description)
             table_output = None
 
-            if show_percent_sites:
-                logger.info(
-                    "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
-                )
             if cond_expr is not None:
                 ht_filtered = ht.select(_fail=cond_expr, **display_fields)
                 ht_filtered = ht_filtered.filter(ht_filtered._fail).drop("_fail")
@@ -115,6 +110,10 @@ def generic_field_check(
                 check_description,
                 table_output,
             )
+            if show_percent_sites:
+                logger.info(
+                    "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
+                )
         else:
             table_output = None
             if verbose:
@@ -168,6 +167,44 @@ def generic_field_check_loop(
             ht_count=ht_count,
             function_name=function_name,
         )
+
+
+def generate_field_check_expr(
+    left_expr: Union[hl.expr.NumericExpression, hl.expr.StringExpression],
+    right_expr: Union[hl.expr.NumericExpression, hl.expr.StringExpression],
+    operator: str,
+) -> hl.expr.BooleanExpression:
+    """Generate a Hail expression to check field comparisons while handling missing values.
+
+    If both fields are missing, the retured expression will be False. If only one field is missing, the expression will be True. If both fields are defined and not equal, the expression will be True.
+
+    :param left_expr: Left expression field for comparison.
+    :param right_expr: Right expression field for comparison.
+    :param operator: Comparison operator as a string ("==", "!=", "<", "<=", ">", ">=").
+    :return: Hail conditional expression for field validation.
+    """
+
+    operators_exprs = {
+        "==": left_expr == right_expr,
+        "!=": left_expr != right_expr,
+        "<": left_expr < right_expr,
+        "<=": left_expr <= right_expr,
+        ">": left_expr > right_expr,
+        ">=": left_expr >= right_expr,
+    }
+
+    if operator not in operators_exprs:
+        raise ValueError(
+            f"Unsupported operator '{operator}'. Choose from: {list(operators_exprs.keys())}"
+        )
+
+    return (
+        hl.case()
+        .when(hl.is_missing(left_expr) & hl.is_missing(right_expr), False)
+        .when(hl.is_missing(left_expr) | hl.is_missing(right_expr), True)
+        .when(operators_exprs[operator], True)
+        .default(True)
+    )
 
 
 def make_filters_expr_dict(
@@ -244,7 +281,7 @@ def make_group_sum_expr_dict(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     # Check if subset string is provided to avoid adding a delimiter to empty string
-    # (An empty string is passed to run this check on the entire callset)
+    # (An empty string is passed to run this check on the entire callset).
     if subset:
         subset += delimiter
 
@@ -307,7 +344,7 @@ def make_group_sum_expr_dict(
     # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
     # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict
-    # key from above
+    # key from above.
     field_check_expr = {}
     for metric in metrics:
         if metric_first_field:
@@ -316,21 +353,9 @@ def make_group_sum_expr_dict(
             check_field_left = f"{subset}{metric}{delimiter}{group}"
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
-            "expr": hl.case()
-            .when(
-                hl.is_missing(t.info[check_field_left])
-                & hl.is_missing(annot_dict[check_field_right]),
-                False,
-            )  # Pass if both fields are missing.
-            .when(
-                hl.is_missing(t.info[check_field_left])
-                | hl.is_missing(annot_dict[check_field_right]),
-                True,
-            )  # Fail if only one field is missing.
-            .when(
-                t.info[check_field_left] != annot_dict[check_field_right], True
-            )  # Fail if the fields are not equal.
-            .default(True),
+            "expr": generate_field_check_expr(
+                t.info[check_field_left], annot_dict[check_field_right], "!="
+            ),
             "agg_func": hl.agg.count_where,
             "display_fields": hl.struct(
                 **{
@@ -518,7 +543,9 @@ def compare_subset_freqs(
                         )
 
                     field_check_expr[f"{check_field_left} != {check_field_right}"] = {
-                        "expr": t.info[check_field_left] == t.info[check_field_right],
+                        "expr": generate_field_check_expr(
+                            t.info[check_field_left], t.info[check_field_right], "=="
+                        ),
                         "agg_func": hl.agg.count_where,
                         "display_fields": hl.struct(
                             **{
@@ -789,7 +816,9 @@ def check_raw_and_adj_callstats(
             check_field_right = f"{field_check_label}adj"
 
             field_check_expr[f"{check_field_left} >= {check_field_right}"] = {
-                "expr": t.info[check_field_left] < t.info[check_field_right],
+                "expr": generate_field_check_expr(
+                    t.info[check_field_left], t.info[check_field_right], "<"
+                ),
                 "agg_func": hl.agg.count_where,
                 "display_fields": hl.struct(
                     **{
@@ -832,11 +861,11 @@ def check_sex_chr_metrics(
     xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
 
     if len(xx_metrics) == 0:
-        # raise ValueError("No XX metrics found!")
         logger.info("FAILED check for XX metrics: no XX metrics found!")
     else:
         logger.info("Checking the following XX metrics: %s", xx_metrics)
 
+    # Check that metrics for chrY variants in XX samples are NA and not 0.
     if "chrY" in contigs:
         logger.info("Check values of XX metrics for Y variants are NA:")
         t_y = hl.filter_intervals(
@@ -850,6 +879,8 @@ def check_sex_chr_metrics(
         n_y = t_y.count()
         if n_y == 0:
             logger.info("FAILED metric checks on chrY: no Y variants found!")
+        else:
+            logger.info("Found %d chrY variants", n_y)
         metrics_values = {}
         for metric in xx_metrics:
             metrics_values[metric] = hl.agg.any(hl.is_defined(t_y.info[metric]))
@@ -870,8 +901,10 @@ def check_sex_chr_metrics(
                 )
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
-    logger.info("FAILED metric checks on chrY: no chrY found!")
+    else:
+        logger.info("FAILED metric checks on chrY: no chrY found!")
 
+    # Check that nhomalt counts are equal to XX nhomalt counts for all non-PAR chrX variants.
     t_x = hl.filter_intervals(
         t,
         [
@@ -900,8 +933,11 @@ def check_sex_chr_metrics(
         check_field_left = f"{metric}"
         check_field_right = f"{standard_field}"
         field_check_expr[f"{check_field_left} == {check_field_right}"] = {
-            "expr": t_xnonpar.info[check_field_left]
-            != t_xnonpar.info[check_field_right],
+            "expr": generate_field_check_expr(
+                t_xnonpar.info[check_field_left],
+                t_xnonpar.info[check_field_right],
+                "!=",
+            ),
             "agg_func": hl.agg.count_where,
             "display_fields": hl.struct(
                 **{

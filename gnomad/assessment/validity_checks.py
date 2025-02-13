@@ -150,8 +150,6 @@ def generic_field_check_loop(
     :param function_name: Name of the function that initiated this check. The name will be appended to the logger output.
     :return: None
     """
-    # logger.info(f"First function in stack: {first_function}")  # Log the first caller
-
     ht_field_check_counts = ht.aggregate(
         hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
     )

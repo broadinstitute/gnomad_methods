@@ -11,7 +11,6 @@ from hail.utils.misc import new_temp_file
 
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
-import io
 
 # Save original LogRecord factory.
 old_factory = logging.getLogRecordFactory()

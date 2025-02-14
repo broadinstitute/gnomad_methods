@@ -18,7 +18,7 @@ old_factory = logging.getLogRecordFactory()
 
 # Define custom factory that appends function names to logger.
 def custom_record_factory(suffix):
-    """Returns a custom LogRecord factory that appends a given suffix to function names."""
+    """Return a custom LogRecord factory that appends a given suffix to function names."""
 
     def factory(*args, **kwargs):
         # Create original log record.
@@ -33,7 +33,7 @@ def custom_record_factory(suffix):
 # Define context manager to temporarily enable the custom factory.
 @contextmanager
 def temp_logger(function_name):
-    """Temporarily modifies logging factory to append `function_name` to function names."""
+    """Temporarily modify logging factory to append `function_name` to function names."""
     logging.setLogRecordFactory(custom_record_factory(function_name))
     yield
     # Restore original factory.
@@ -180,7 +180,6 @@ def generate_field_check_expr(
     :param operator: Comparison operator as a string ("==", "!=", "<", "<=", ">", ">=").
     :return: Hail conditional expression for field validation.
     """
-
     operators_exprs = {
         "==": left_expr == right_expr,
         "!=": left_expr != right_expr,

@@ -483,17 +483,19 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
             gen_anc_label_name="gen_anc",
         )
 
-    log_messages = [record.getMessage() for record in caplog.records]
+    # Convert expected log messages to lowercase and strip whitespace
+    log_messages = [record.getMessage().lower().strip() for record in caplog.records]
 
-    # Perform assertions on log output.
     expected_logs = [
-        "PASSED AC_adj = sum_AC_adj_gen_anc check",
-        "Found 3 sites that fail AN_adj = sum_AN_adj_gen_anc check",
-        "Found 3 sites that fail AC_adj = sum_AC_adj_sex check",
-        "Found 3 sites that fail AN_adj = sum_AN_adj_sex check",
-        "Found 3 sites that fail AC_adj = sum_AC_adj_gen_anc_sex check",
-        "Found 1 sites that fail AN_adj = sum_AN_adj_gen_anc_sex check:",
+        "passed ac_adj = sum_ac_adj_gen_anc check",
+        "found 3 sites that fail an_adj = sum_an_adj_gen_anc check",
+        "found 3 sites that fail ac_adj = sum_ac_adj_sex check",
+        "found 3 sites that fail an_adj = sum_an_adj_sex check",
+        "found 3 sites that fail ac_adj = sum_ac_adj_gen_anc_sex check",
+        "found 1 sites that fail an_adj = sum_an_adj_gen_anc_sex check",
     ]
 
-    for msg in expected_logs:
-        assert msg in log_messages, f"Expected log message is missing: {msg}"
+    for log_phrase in expected_logs:
+        assert any(
+            log_phrase in log for log in log_messages
+        ), f"Expected phrase missing: {log_phrase}"

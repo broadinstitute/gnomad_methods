@@ -1000,7 +1000,7 @@ def compute_missingness(
                 n_missing,
                 (100 * n_missing / n_sites),
             )
-    logger.warning("%d missing metrics checks failed", n_fail)
+    logger.warning("%d missing metrics checks failed for top level annotations", n_fail)
 
 
 def vcf_field_check(

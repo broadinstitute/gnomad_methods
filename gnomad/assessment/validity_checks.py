@@ -900,7 +900,8 @@ def check_sex_chr_metrics(
     else:
         logger.info("FAILED metric checks on chrY: no chrY found!")
 
-    # Check that nhomalt counts are equal to XX nhomalt counts for all non-PAR chrX variants.
+    # Check that nhomalt counts are equal to XX nhomalt counts for all non-PAR
+    # chrX variants.
     t_x = hl.filter_intervals(
         t,
         [

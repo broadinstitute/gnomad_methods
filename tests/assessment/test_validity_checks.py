@@ -444,13 +444,13 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
         )
     log_messages = [record.getMessage().lower().strip() for record in caplog.records]
 
-    # Perform assertions on log output.
+    # Perform assertions on log output (does not include all expected log messages).
     expected_logs = [
         "including field ac_afr_adj",
         "including field ac_amr_adj",
         "an_afr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
         "an_amr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
-        "generated annot_dict keys: ['sum_ac_adj_pop', 'sum_an_adj_pop']",  # Avoid exact key formatting issues
+        "generated annot_dict keys: ['sum_ac_adj_pop', 'sum_an_adj_pop']",
         "no valid fields found for sum_an_adj_pop",
     ]
 
@@ -488,10 +488,10 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
     # Perform assertions on log output.
     expected_logs = [
         "PASSED AC_adj = sum_AC_adj_gen_anc check",
-        "PASSED AN_adj = sum_AN_adj_gen_anc check",
-        "PASSED AC_adj = sum_AC_adj_sex check",
-        "PASSED AN_adj = sum_AN_adj_sex check",
-        "PASSED AC_adj = sum_AC_adj_gen_anc_sex check",
+        "Found 3 sites that fail AN_adj = sum_AN_adj_gen_anc check",
+        "Found 3 sites that fail AC_adj = sum_AC_adj_sex check",
+        "Found 3 sites that fail AN_adj = sum_AN_adj_sex check",
+        "Found 3 sites that fail AC_adj = sum_AC_adj_gen_anc_sex check",
         "Found 1 sites that fail AN_adj = sum_AN_adj_gen_anc_sex check:",
     ]
 

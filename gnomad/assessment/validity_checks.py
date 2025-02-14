@@ -199,7 +199,7 @@ def generate_field_check_expr(
         .when(hl.is_missing(left_expr) & hl.is_missing(right_expr), False)
         .when(hl.is_missing(left_expr) | hl.is_missing(right_expr), True)
         .when(operators_exprs[operator], True)
-        .default(True)
+        .default(False)
     )
 
 

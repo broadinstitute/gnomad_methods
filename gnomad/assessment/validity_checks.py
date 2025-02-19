@@ -1115,7 +1115,7 @@ def check_global_and_row_annot_lengths(
             n_rows = t.count()
             logger.info(
                 "%s global and row lengths comparison: Length of %s in"
-                " globals (%d) does %smatch length of %s in %d out of %d rows (%s)",
+                " globals (%d) does %smatch length of %s in %d out of %d rows (row length counter: %s)",
                 outcome,
                 global_field,
                 global_len,

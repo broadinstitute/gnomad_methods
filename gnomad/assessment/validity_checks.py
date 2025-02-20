@@ -1095,6 +1095,7 @@ def check_global_and_row_annot_lengths(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
     if not check_all_rows:
         t = t.head(1)
+    n_rows = t.count()
     for row_field, global_fields in row_to_globals_check.items():
         if not check_all_rows:
             logger.info(
@@ -1102,9 +1103,9 @@ def check_global_and_row_annot_lengths(
                 row_field,
                 global_fields,
             )
+        row_len_expr = hl.len(t[row_field])
         for global_field in global_fields:
             global_len = hl.eval(hl.len(t[global_field]))
-            row_len_expr = hl.len(t[row_field])
             failed_rows = t.aggregate(
                 hl.struct(
                     n_fail=hl.agg.count_where(row_len_expr != global_len),
@@ -1112,7 +1113,7 @@ def check_global_and_row_annot_lengths(
                 )
             )
             outcome = "Failed" if failed_rows["n_fail"] > 0 else "Passed"
-            n_rows = t.count()
+
             logger.info(
                 "%s global and row lengths comparison: Length of %s in"
                 " globals (%d) does %smatch length of %s in %d out of %d rows (row length counter: %s)",

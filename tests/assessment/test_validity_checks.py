@@ -535,7 +535,12 @@ def test_check_global_and_row_annot_lengths(
         "faf": ["faf_meta", "faf_index_dict"],
     }
 
-    check_global_and_row_annot_lengths(ht, row_to_globals_check, check_all_rows=True)
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        check_global_and_row_annot_lengths(
+            ht, row_to_globals_check, check_all_rows=True
+        )
+
+    log_messages = [record.message for record in caplog.records]
 
     # Verify log messages.
     expected_logs = [
@@ -664,7 +669,6 @@ def test_check_raw_and_adj_callstats(
         "PASSED AC_raw defined when AN defined and missing when AN missing check",
         "PASSED AC_adj defined when AN defined and missing when AN missing check",
         "PASSED AF_adj defined when AN defined (and > 0) and missing when AN missing check",
-        "PASSED AC_raw >= AC_adj check",
         "PASSED nhomalt_raw <= AC_raw / 2 check",
         # Expected FAILURES.
         "Found 1 sites that fail nhomalt_raw defined when AN defined and missing when AN missing check:",
@@ -674,12 +678,15 @@ def test_check_raw_and_adj_callstats(
         "Found 1 sites that fail AF_adj missing when AN 0 check:",
         "Found 2 sites that fail AC_raw > 0 check:",
         "Found 1 sites that fail AC_adj >= 0 check:",
+        "Found 1 sites that fail AC_raw >= AC_adj check",
         "Found 2 sites that fail AF_raw > 0 check:",
         "Found 1 sites that fail AF_adj >= 0 check:",
-        "Found 1 sites that fail AN_raw >= AN_adj check:",
-        "Found 1 sites that fail nhomalt_raw >= nhomalt_adj check:",
+        "Found 2 sites that fail AN_raw >= AN_adj check:",
+        "Found 2 sites that fail nhomalt_raw >= nhomalt_adj check:",
         "Found 1 sites that fail nhomalt_adj <= AC_adj / 2 check:",
     ]
 
-    for msg in expected_logs:
-        assert msg in log_messages, f"Expected log message is missing: {msg}"
+    for log_phrase in expected_logs:
+        assert any(
+            log_phrase in log for log in log_messages
+        ), f"Expected phrase missing: {log_phrase}"

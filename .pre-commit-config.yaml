@@ -11,13 +11,13 @@ repos:
     hooks:
       - id: black
         language_version: python3
-        files: gnomad tests
+        files: ^(gnomad|tests)/.*\.py$
   - repo: https://github.com/pre-commit/mirrors-autopep8
     rev: v2.0.2 # This should be kept in sync with the version in requirements-dev.in
     hooks:
       - id: autopep8
         args: ["--exit-code", "--in-place"]
-        files: gnomad tests
+        files: ^(gnomad|tests)/.*\.py$
   - repo: https://github.com/pycqa/pydocstyle
     rev: 6.3.0 # This should be kept in sync with the version in requirements-dev.in
     hooks:
@@ -27,4 +27,4 @@ repos:
     hooks:
       - id: isort
         args: ["--profile", "black", "--filter-files"]
-        files: gnomad tests
+        files: ^(gnomad|tests)/.*\.py$

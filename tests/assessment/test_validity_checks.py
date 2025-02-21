@@ -7,6 +7,7 @@ import hail as hl
 import pytest
 
 from gnomad.assessment.validity_checks import (
+    check_global_and_row_annot_lengths,
     check_missingness_of_struct,
     check_raw_and_adj_callstats,
     check_sex_chr_metrics,
@@ -503,246 +504,55 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
 
 
 @pytest.fixture
-def ht_for_check_sex_chr_metrics() -> hl.Table:
-    """Fixture to set up a Hail Table with the desired structure and data for testing check_sex_chr_metrics."""
-    data = [
-        {
-            "locus": hl.locus("chrX", 9000, reference_genome="GRCh38"),
-            "info": {
-                "nhomalt": 3,
-                "nhomalt_XX": 2,
-                "nhomalt_amr": 5,
-                "nhomalt_amr_XX": 1,
-                "AC": 6,
-                "AC_XX": 6,
-            },
-        },
-        {
-            "locus": hl.locus("chrX", 1000000, reference_genome="GRCh38"),
-            "info": {
-                "nhomalt": 5,
-                "nhomalt_XX": 5,
-                "nhomalt_amr": 5,
-                "nhomalt_amr_XX": 5,
-                "AC": 10,
-                "AC_XX": 10,
-            },
-        },
-        {
-            "locus": hl.locus("chrY", 1000000, reference_genome="GRCh38"),
-            "info": {
-                "nhomalt": 5,
-                "nhomalt_XX": hl.missing(hl.tint32),
-                "nhomalt_amr": hl.missing(hl.tint32),
-                "nhomalt_amr_XX": hl.missing(hl.tint32),
-                "AC_XX": hl.missing(hl.tint32),
-                "AC": 6,
-            },
-        },
-        {
-            "locus": hl.locus("chrY", 2000000, reference_genome="GRCh38"),
-            "info": {
-                "nhomalt": 5,
-                "nhomalt_XX": 3,
-                "nhomalt_amr": hl.missing(hl.tint32),
-                "nhomalt_amr_XX": hl.missing(hl.tint32),
-                "AC_XX": hl.missing(hl.tint32),
-                "AC": 6,
-            },
-        },
-    ]
-
+def ht_for_check_global_and_row_annot_lengths() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for check_global_and_row_annot_lengths."""
     ht = hl.Table.parallelize(
-        data,
-        hl.tstruct(
-            locus=hl.tlocus(reference_genome="GRCh38"),
-            info=hl.tstruct(
-                nhomalt=hl.tint32,
-                nhomalt_XX=hl.tint32,
-                nhomalt_amr=hl.tint32,
-                nhomalt_amr_XX=hl.tint32,
-                AC=hl.tint32,
-                AC_XX=hl.tint32,
-            ),
-        ),
-    )
-    ht = ht.key_by("locus")
-    return ht
-
-
-def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics) -> None:
-    """Test that check_sex_chr_metrics produces the expected log messages."""
-    ht = ht_for_check_sex_chr_metrics
-    info_metrics = [
-        "nhomalt",
-        "nhomalt_XX",
-        "nhomalt_amr",
-        "nhomalt_amr_XX",
-        "AC",
-        "AC_XX",
-    ]
-    contigs = ["chrX", "chrY"]
-    verbose = False
-
-    # Redirect logs to a buffer.
-    log_stream = StringIO()
-    logger = logging.getLogger("gnomad.assessment.validity_checks")
-    handler = logging.StreamHandler(log_stream)
-    logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-
-    # Run the check_sex_chr_metrics function.
-    check_sex_chr_metrics(
-        ht,
-        info_metrics=info_metrics,
-        contigs=contigs,
-        verbose=verbose,
-        delimiter="_",
+        [
+            {"freq": [0.1, 0.2, 0.3], "faf": [0.01, 0.02]},
+            {"freq": [0.8, 0.4, 0.5], "faf": [0.03, 0.04, 0.05]},
+        ],
+        hl.tstruct(freq=hl.tarray(hl.tfloat64), faf=hl.tarray(hl.tfloat64)),
     )
 
-    # Capture and parse the log output.
-    handler.flush()
-    log_output = log_stream.getvalue()
-    logger.removeHandler(handler)
-
-    # Perform assertions on the log output.
-    assert (
-        "FAILED nhomalt_XX = None check for Y variants. Values found: [3]" in log_output
-    )
-    assert "PASSED nhomalt_amr_XX = None check for Y variants" in log_output
-    assert "PASSED AC_XX = None check for Y variants" in log_output
-    assert "Found 1 sites that fail nhomalt_XX == nhomalt check:" in log_output
-
-
-@pytest.fixture
-def ht_for_group_sums() -> hl.Table:
-    """Fixture to set up a Hail Table with the desired structure and data for make_group_sum_expr_dict."""
-    data = [
-        {
-            "idx": 0,
-            "info": {
-                "AC_afr_adj": 5,
-                "AC_amr_adj": 10,
-                "AC_adj": 15,
-                "AN_afr_XX_adj": 20,
-                "AN_afr_XY_adj": 30,
-                "AN_adj": 50,
-            },
-        },
-        {
-            "idx": 1,
-            "info": {
-                "AC_afr_adj": 3,
-                "AC_amr_adj": 7,
-                "AC_adj": 10,
-                "AN_afr_XX_adj": 15,
-                "AN_afr_XY_adj": 25,
-                "AN_adj": 40,
-            },
-        },
-        {
-            "idx": 2,
-            "info": {
-                "AC_afr_adj": 2,
-                "AC_amr_adj": 3,
-                "AC_adj": 5,
-                "AN_afr_XX_adj": 10,
-                "AN_afr_XY_adj": 20,
-                "AN_adj": 35,
-            },
-        },
-    ]
-
-    ht = hl.Table.parallelize(
-        data,
-        hl.tstruct(
-            idx=hl.tint32,
-            info=hl.tstruct(
-                AC_afr_adj=hl.tint32,
-                AC_amr_adj=hl.tint32,
-                AC_adj=hl.tint32,
-                AN_afr_XX_adj=hl.tint32,
-                AN_afr_XY_adj=hl.tint32,
-                AN_adj=hl.tint32,
-            ),
-        ),
+    return ht.annotate_globals(
+        freq_meta=["A", "B", "C"],
+        freq_index_dict={"A": 0, "B": 1, "C": 2},
+        freq_meta_sample_count=[100, 200, 300],
+        faf_meta=["D", "E"],
+        faf_index_dict={"D": 0, "E": 1},
     )
 
-    return ht
 
+def test_check_global_and_row_annot_lengths(
+    ht_for_check_global_and_row_annot_lengths, caplog
+) -> None:
+    """Test that check_global_and_row_annot_lengths produces the expected log messages."""
+    ht = ht_for_check_global_and_row_annot_lengths
 
-def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
-    """Test that make_group_sum_expr_dict produces the expected log messages."""
-    ht = ht_for_group_sums
-
-    subset = ""
-    label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
-    sort_order = ["pop", "sex"]
-    delimiter = "_"
-    metric_first_field = True
-    metrics = ["AC", "AN"]
+    # Define the row_to_globals_check dictionary.
+    row_to_globals_check = {
+        "freq": ["freq_meta", "freq_index_dict", "freq_meta_sample_count"],
+        "faf": ["faf_meta", "faf_index_dict"],
+    }
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
-        make_group_sum_expr_dict(
-            ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
-        )
-    log_messages = [record.getMessage().lower().strip() for record in caplog.records]
-
-    # Perform assertions on log output (does not include all expected log messages).
-    expected_logs = [
-        "including field ac_afr_adj",
-        "including field ac_amr_adj",
-        "an_afr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
-        "an_amr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
-        "generated annot_dict keys: ['sum_ac_adj_pop', 'sum_an_adj_pop']",
-        "no valid fields found for sum_an_adj_pop",
-    ]
-
-    for log_phrase in expected_logs:
-        assert any(
-            log_phrase in log for log in log_messages
-        ), f"Expected phrase missing: {log_phrase}"
-
-
-def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
-    """Test that sum_group_callstats produces the expected log messages."""
-    ht = ht_for_group_sums
-
-    sexes = ["XX", "XY"]
-    subsets = [""]
-    pops = ["afr", "amr"]
-    groups = ["adj"]
-    metrics = ["AC", "AN"]
-
-    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
-        sum_group_callstats(
-            ht,
-            sexes=sexes,
-            subsets=subsets,
-            pops=pops,
-            groups=groups,
-            metrics=metrics,
-            verbose=True,
-            delimiter="_",
-            gen_anc_label_name="gen_anc",
+        check_global_and_row_annot_lengths(
+            ht, row_to_globals_check, check_all_rows=True
         )
 
-    # Convert expected log messages to lowercase and strip whitespace
-    log_messages = [record.getMessage().lower().strip() for record in caplog.records]
+    log_messages = [record.message for record in caplog.records]
 
+    # Verify log messages.
     expected_logs = [
-        "passed ac_adj = sum_ac_adj_gen_anc check",
-        "found 3 sites that fail an_adj = sum_an_adj_gen_anc check",
-        "found 3 sites that fail ac_adj = sum_ac_adj_sex check",
-        "found 3 sites that fail an_adj = sum_an_adj_sex check",
-        "found 3 sites that fail ac_adj = sum_ac_adj_gen_anc_sex check",
-        "found 1 sites that fail an_adj = sum_an_adj_gen_anc_sex check",
+        "Passed global and row lengths comparison: Length of freq_meta in globals (3) does match length of freq in 2 out of 2 rows (row length counter: {3: 2})",
+        "Passed global and row lengths comparison: Length of freq_index_dict in globals (3) does match length of freq in 2 out of 2 rows (row length counter: {3: 2})",
+        "Passed global and row lengths comparison: Length of freq_meta_sample_count in globals (3) does match length of freq in 2 out of 2 rows (row length counter: {3: 2})",
+        "Failed global and row lengths comparison: Length of faf_meta in globals (2) does NOT match length of faf in 1 out of 2 rows (row length counter: {2: 1, 3: 1})",
+        "Failed global and row lengths comparison: Length of faf_index_dict in globals (2) does NOT match length of faf in 1 out of 2 rows (row length counter: {2: 1, 3: 1})",
     ]
 
-    for log_phrase in expected_logs:
-        assert any(
-            log_phrase in log for log in log_messages
-        ), f"Expected phrase missing: {log_phrase}"
+    for msg in expected_logs:
+        assert msg in log_messages, f"Expected log message is missing: {msg}"
 
 
 @pytest.fixture

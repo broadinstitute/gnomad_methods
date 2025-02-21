@@ -7,7 +7,6 @@ import hail as hl
 import pytest
 
 from gnomad.assessment.validity_checks import (
-    check_global_and_row_annot_lengths,
     check_missingness_of_struct,
     check_raw_and_adj_callstats,
     check_sex_chr_metrics,
@@ -501,58 +500,6 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
         assert any(
             log_phrase in log for log in log_messages
         ), f"Expected phrase missing: {log_phrase}"
-
-
-@pytest.fixture
-def ht_for_check_global_and_row_annot_lengths() -> hl.Table:
-    """Fixture to set up a Hail Table with the desired structure and data for check_global_and_row_annot_lengths."""
-    ht = hl.Table.parallelize(
-        [
-            {"freq": [0.1, 0.2, 0.3], "faf": [0.01, 0.02]},
-            {"freq": [0.8, 0.4, 0.5], "faf": [0.03, 0.04, 0.05]},
-        ],
-        hl.tstruct(freq=hl.tarray(hl.tfloat64), faf=hl.tarray(hl.tfloat64)),
-    )
-
-    return ht.annotate_globals(
-        freq_meta=["A", "B", "C"],
-        freq_index_dict={"A": 0, "B": 1, "C": 2},
-        freq_meta_sample_count=[100, 200, 300],
-        faf_meta=["D", "E"],
-        faf_index_dict={"D": 0, "E": 1},
-    )
-
-
-def test_check_global_and_row_annot_lengths(
-    ht_for_check_global_and_row_annot_lengths, caplog
-) -> None:
-    """Test that check_global_and_row_annot_lengths produces the expected log messages."""
-    ht = ht_for_check_global_and_row_annot_lengths
-
-    # Define the row_to_globals_check dictionary.
-    row_to_globals_check = {
-        "freq": ["freq_meta", "freq_index_dict", "freq_meta_sample_count"],
-        "faf": ["faf_meta", "faf_index_dict"],
-    }
-
-    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
-        check_global_and_row_annot_lengths(
-            ht, row_to_globals_check, check_all_rows=True
-        )
-
-    log_messages = [record.message for record in caplog.records]
-
-    # Verify log messages.
-    expected_logs = [
-        "Passed global and row lengths comparison: Length of freq_meta in globals (3) does match length of freq in 2 out of 2 rows (row length counter: {3: 2})",
-        "Passed global and row lengths comparison: Length of freq_index_dict in globals (3) does match length of freq in 2 out of 2 rows (row length counter: {3: 2})",
-        "Passed global and row lengths comparison: Length of freq_meta_sample_count in globals (3) does match length of freq in 2 out of 2 rows (row length counter: {3: 2})",
-        "Failed global and row lengths comparison: Length of faf_meta in globals (2) does NOT match length of faf in 1 out of 2 rows (row length counter: {2: 1, 3: 1})",
-        "Failed global and row lengths comparison: Length of faf_index_dict in globals (2) does NOT match length of faf in 1 out of 2 rows (row length counter: {2: 1, 3: 1})",
-    ]
-
-    for msg in expected_logs:
-        assert msg in log_messages, f"Expected log message is missing: {msg}"
 
 
 @pytest.fixture

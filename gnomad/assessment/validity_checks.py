@@ -538,8 +538,18 @@ def compare_subset_freqs(
                             f"{subset}{delimiter}{metric}{delimiter}{group}"
                         )
 
-                    field_check_expr[f"{check_field_left} != {check_field_right}"] = {
-                        "expr": generate_field_check_expr(
+                    # Check that either the left or right field is non-zero. If both are zero, do not need to flag the variant.
+                    non_zero_condition = hl.or_else(
+                        (t.info[check_field_left] != 0)
+                        | (t.info[check_field_right] != 0),
+                        False,
+                    )
+
+                    field_check_expr[
+                        f"{check_field_left} != {check_field_right} and non-zero"
+                    ] = {
+                        "expr": non_zero_condition
+                        & generate_field_check_expr(
                             t.info[check_field_left], t.info[check_field_right], "=="
                         ),
                         "agg_func": hl.agg.count_where,

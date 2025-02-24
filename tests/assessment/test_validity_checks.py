@@ -11,6 +11,7 @@ from gnomad.assessment.validity_checks import (
     check_missingness_of_struct,
     check_raw_and_adj_callstats,
     check_sex_chr_metrics,
+    compare_subset_freqs,
     flatten_missingness_struct,
     make_group_sum_expr_dict,
     sum_group_callstats,
@@ -684,6 +685,81 @@ def test_check_raw_and_adj_callstats(
         "Found 2 sites that fail AN_raw >= AN_adj check:",
         "Found 2 sites that fail nhomalt_raw >= nhomalt_adj check:",
         "Found 1 sites that fail nhomalt_adj <= AC_adj / 2 check:",
+    ]
+
+    for log_phrase in expected_logs:
+        assert any(
+            log_phrase in log for log in log_messages
+        ), f"Expected phrase missing: {log_phrase}"
+
+
+@pytest.fixture
+def ht_for_compare_subset_freqs() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for compare_subset_freqs."""
+    data = [
+        {
+            "idx": 0,
+            "info": {
+                "AC_adj": 10,
+                "AC_raw": 12,
+                "AC_subset1_adj": 9,
+                "AC_subset1_raw": 12,
+            },
+        },
+        {
+            "idx": 1,
+            "info": {
+                "AC_adj": 0,
+                "AC_raw": 0,
+                "AC_subset1_adj": 0,
+                "AC_subset1_raw": 0,
+            },
+        },
+        {
+            "idx": 2,
+            "info": {
+                "AC_adj": 5,
+                "AC_raw": 7,
+                "AC_subset1_adj": 3,
+                "AC_subset1_raw": 6,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            info=hl.tstruct(
+                AC_adj=hl.tint32,
+                AC_raw=hl.tint32,
+                AC_subset1_adj=hl.tint32,
+                AC_subset1_raw=hl.tint32,
+            ),
+        ),
+    )
+
+    return ht
+
+
+def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
+    """Test that compare_subset_freqs produces the expected log messages."""
+    ht = ht_for_compare_subset_freqs
+
+    subsets = ["subset1"]
+    metrics = ["AC"]
+
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        compare_subset_freqs(ht, subsets, verbose=True, metrics=metrics, delimiter="_")
+
+    log_messages = [record.message for record in caplog.records]
+
+    # Verify log messages.
+    expected_logs = [
+        "PASSED AC_adj != AC_subset1_adj while non-zero check:",
+        "Found 1 sites that fail AC_raw != AC_subset1_raw while non-zero check:",
+        "Percentage of sites that fail: 33.33 %",
+        "Total defined raw AC count: 3",
     ]
 
     for log_phrase in expected_logs:

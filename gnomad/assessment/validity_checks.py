@@ -542,7 +542,8 @@ def compare_subset_freqs(
                             f"{subset}{delimiter}{metric}{delimiter}{group}"
                         )
 
-                    # Check that either the left or right field is non-zero. If both are zero, do not need to flag the variant.
+                    # Check that either the left or right field is non-zero. If both are
+                    # zero, do not need to flag the variant.
                     non_zero_condition = hl.or_else(
                         (t.info[check_field_left] != 0)
                         | (t.info[check_field_right] != 0),
@@ -614,8 +615,7 @@ def sum_group_callstats(
     :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "pop" or "gen_anc". Default is "pop".
     :return: None
     """
-    # TODO: Add support for subpop sums
-    # set_first_function()
+    # TODO: Add support for subpop sums.
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}

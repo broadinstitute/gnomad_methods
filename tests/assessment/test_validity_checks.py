@@ -758,7 +758,6 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     expected_logs = [
         "PASSED AC_adj != AC_subset1_adj while non-zero check:",
         "Found 1 sites (33.33%) that fail AC_raw != AC_subset1_raw while non-zero check:",
-        "Percentage of sites that fail: 33.33 %",
         "Total defined raw AC count: 3",
     ]
 

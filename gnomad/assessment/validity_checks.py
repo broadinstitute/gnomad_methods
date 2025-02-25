@@ -106,7 +106,7 @@ def generic_field_check(
 
             if show_percent_sites:
                 percent_failed = round(100 * (n_fail / ht_count), 2)
-                percent_failed_log = f" {percent_failed}%"
+                percent_failed_log = f" ({percent_failed}%)"
             else:
                 percent_failed_log = ""
 

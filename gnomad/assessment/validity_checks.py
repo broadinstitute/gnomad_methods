@@ -103,16 +103,20 @@ def generic_field_check(
                 with redirect_stdout(log_stream):
                     ht_filtered.show(width=200)
                     table_output = log_stream.getvalue().strip()
+
+            if show_percent_sites:
+                percent_failed = round(100 * (n_fail / ht_count), 2)
+                percent_failed_log = f" {percent_failed}%"
+            else:
+                percent_failed_log = ""
+
             logger.info(
-                "Found %d sites that fail %s check: %s",
+                "Found %d sites%s that fail %s check: %s",
                 n_fail,
+                percent_failed_log,
                 check_description,
                 table_output,
             )
-            if show_percent_sites:
-                logger.info(
-                    "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
-                )
         else:
             table_output = None
             if verbose:
@@ -1127,7 +1131,7 @@ def check_global_and_row_annot_lengths(
 
     global_lengths = {
         global_field: hl.eval(hl.len(t.index_globals()[global_field]))
-        for row_field, global_fields in row_to_globals_check.items()
+        for global_fields in row_to_globals_check.values()
         for global_field in global_fields
     }
 

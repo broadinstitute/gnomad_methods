@@ -8,6 +8,7 @@ import pytest
 
 from gnomad.assessment.validity_checks import (
     check_global_and_row_annot_lengths,
+    check_globals_for_retired_terms,
     check_missingness_of_struct,
     check_raw_and_adj_callstats,
     check_sex_chr_metrics,
@@ -765,3 +766,38 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
         assert any(
             log_phrase in log for log in log_messages
         ), f"Expected phrase missing: {log_phrase}"
+
+
+@pytest.fixture
+def ht_for_check_globals_for_retired_terms() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for check_globals_for_retired_terms."""
+    # Create a mock Hail Table with a single row.
+    ht = hl.utils.range_table(1)
+
+    # Annotate globals with test_meta and test_index_dict.
+    ht = ht.annotate_globals(
+        test_meta=[{"group": "adj", "pop": "oth"}, {"group": "raw", "pop": "nfe"}],
+        test_index_dict={"oth": 0, "nfe": 1},
+    )
+
+    return ht
+
+
+def test_check_globals_for_retired_terms(
+    ht_for_check_globals_for_retired_terms, caplog
+) -> None:
+    ht = ht_for_check_globals_for_retired_terms
+
+    with caplog.at_level(logging.INFO):
+        check_globals_for_retired_terms(ht)
+
+    expected_logs = [
+        "Found retired term 'pop' in global test_meta annotation",
+        "Found retired term 'oth' in global test_meta annotation",
+        "Found retired term 'oth' in global test_index_dict annotation",
+    ]
+
+    for log_message in expected_logs:
+        assert any(
+            log_message in record.message for record in caplog.records
+        ), f"Expected log message not found: {log_message}"

@@ -3,7 +3,7 @@
 import io
 import logging
 from contextlib import contextmanager, redirect_stdout
-from pprint import pprint
+from pprint import pprint, pformat
 from typing import Any, Dict, List, Optional, Union
 
 import hail as hl
@@ -1506,3 +1506,36 @@ def unfurl_array_annotations(
                 expr_dict[f"{f}_{k}"] = ht[array][i][f]
 
     return expr_dict
+
+
+def check_globals_for_retired_terms(ht: hl.Table) -> None:
+    """
+    Check list of dictionaries to see if the keys in the dictionaries contain either 'pop and 'oth'.
+
+    :param ht: Input Table
+    """
+    logger.info("Checking globals for retired terms...")
+    errors = []
+
+    for field in ht.globals:
+        if field.endswith("meta"):
+            for d in hl.eval(ht[field]):
+                if "pop" in d.keys():
+                    errors.append(
+                        f"Found retired term 'pop' in global {field} annotation: {d}"
+                    )
+                if "oth" in d.values():
+                    errors.append(
+                        f"Found retired term 'oth' in global {field} annotation: {d}"
+                    )
+        if "index_dict" in field:
+            for k in hl.eval(ht[field]).keys():
+                if "oth" in k:
+                    errors.append(
+                        f"Found retired term 'oth' in global {field} annotation: {k}"
+                    )
+
+    if len(errors) > 0:
+        logger.info("Failed retired term check: %s", errors)
+    else:
+        logger.info("Passed retired term check: No retired terms found in globals.")

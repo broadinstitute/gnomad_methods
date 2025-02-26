@@ -3,7 +3,7 @@
 import io
 import logging
 from contextlib import contextmanager, redirect_stdout
-from pprint import pprint, pformat
+from pprint import pformat, pprint
 from typing import Any, Dict, List, Optional, Union
 
 import hail as hl

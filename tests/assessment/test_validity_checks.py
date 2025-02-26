@@ -786,6 +786,7 @@ def ht_for_check_globals_for_retired_terms() -> hl.Table:
 def test_check_globals_for_retired_terms(
     ht_for_check_globals_for_retired_terms, caplog
 ) -> None:
+    """Test that check_globals_for_retired_terms produces the expected log messages."""
     ht = ht_for_check_globals_for_retired_terms
 
     with caplog.at_level(logging.INFO):

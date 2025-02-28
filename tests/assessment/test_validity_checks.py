@@ -15,8 +15,8 @@ from gnomad.assessment.validity_checks import (
     compare_subset_freqs,
     flatten_missingness_struct,
     make_group_sum_expr_dict,
-    summarize_variant_filters,
     sum_group_callstats,
+    summarize_variant_filters,
     unfurl_array_annotations,
 )
 

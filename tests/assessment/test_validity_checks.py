@@ -15,6 +15,7 @@ from gnomad.assessment.validity_checks import (
     compare_subset_freqs,
     flatten_missingness_struct,
     make_group_sum_expr_dict,
+    summarize_variant_filters,
     sum_group_callstats,
     unfurl_array_annotations,
 )
@@ -796,6 +797,129 @@ def test_check_globals_for_retired_terms(
         "Found retired term 'pop' in global test_meta annotation",
         "Found retired term 'oth' in global test_meta annotation",
         "Found retired term 'oth' in global test_index_dict annotation",
+    ]
+
+    for log_message in expected_logs:
+        assert any(
+            log_message in record.message for record in caplog.records
+        ), f"Expected log message not found: {log_message}"
+
+
+@pytest.fixture
+def ht_for_summarize_variant_filters() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for summarize_variant_filters."""
+    data = [
+        {
+            "idx": 0,
+            "alleles": ["A", "T"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": True,
+                "non_par": True,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 1,
+            "alleles": ["G", "C"],
+            "filters": hl.set(["AC0"]),
+            "info": {
+                "lcr": False,
+                "segdup": False,
+                "non_par": False,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 2,
+            "alleles": ["T", "A"],
+            "filters": hl.empty_set(hl.tstr),
+            "info": {
+                "lcr": True,
+                "segdup": True,
+                "non_par": True,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 3,
+            "alleles": ["C", "G"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": False,
+                "non_par": True,
+                "allele_type": "del",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 4,
+            "alleles": ["A", "G"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": False,
+                "non_par": True,
+                "allele_type": "del",
+                "n_alt_alleles": 2,
+            },
+        },
+        {
+            "idx": 5,
+            "alleles": ["T", "C"],
+            "filters": hl.set(["RF", "AC0"]),
+            "info": {
+                "lcr": True,
+                "segdup": False,
+                "non_par": False,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            alleles=hl.tarray(hl.tstr),
+            filters=hl.tset(hl.tstr),
+            info=hl.tstruct(
+                lcr=hl.tbool,
+                segdup=hl.tbool,
+                non_par=hl.tbool,
+                allele_type=hl.tstr,
+                n_alt_alleles=hl.tint32,
+            ),
+        ),
+    )
+
+    return ht
+
+
+def test_summarize_variant_filters(ht_for_summarize_variant_filters, caplog) -> None:
+    """Test that summarize_variant_filters produces the expected log messages."""
+    ht = ht_for_summarize_variant_filters
+
+    variant_filter_field = "RF"
+    problematic_regions = ["lcr", "segdup", "non_par"]
+
+    with caplog.at_level(logging.INFO):
+        summarize_variant_filters(
+            t=ht,
+            variant_filter_field=variant_filter_field,
+            problematic_regions=problematic_regions,
+            single_filter_count=True,
+        )
+
+    expected_logs = [
+        "Variant filter counts: {frozenset(): 1, frozenset({'AC0'}): 1, frozenset({'RF', 'AC0'}): 1, frozenset({'RF'}): 3}",
+        "Exploded variant filter counts: {'AC0': 2, 'RF': 4}",
     ]
 
     for log_message in expected_logs:

@@ -459,20 +459,32 @@ def summarize_variant_filters(
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_expr_dict returns a dict with %ages of variants filtered
-        t.group_by(**group_exprs).aggregate(
-            **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
-        ).order_by(hl.desc("n")).show(n_rows, n_cols)
+        log_stream = io.StringIO()
+        with redirect_stdout(log_stream):
+            t.group_by(**group_exprs).aggregate(
+                **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
+            ).order_by(hl.desc("n")).show(n_rows, n_cols)
+            table_output = log_stream.getvalue().strip()
+        return table_output
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-    _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
+    summary_table = _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
+    logger.info(
+        "Distributions of filtered variants amongst variant filters: %s",
+        f"\n{summary_table}",
+    )
 
     add_agg_expr = {}
     if "allele_type" in t.info:
         logger.info("Checking distributions of variant type amongst variant filters...")
         add_agg_expr["allele_type"] = t.info.allele_type
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type amongst variant filters: %s",
+            f"\n{summary_table}",
+        )
 
     if "in_problematic_region" in t.row:
         logger.info(
@@ -480,7 +492,11 @@ def summarize_variant_filters(
             " filters..."
         )
         add_agg_expr["in_problematic_region"] = t.in_problematic_region
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type and region amongst variant filters: %s",
+            f"\n{summary_table}",
+        )
 
     if "n_alt_alleles" in t.info:
         logger.info(
@@ -488,7 +504,11 @@ def summarize_variant_filters(
             " amongst variant filters..."
         )
         add_agg_expr["n_alt_alleles"] = t.info.n_alt_alleles
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type, region type, and number of alt alleles variant filters: %s",
+            f"\n{summary_table}",
+        )
 
 
 def compare_subset_freqs(

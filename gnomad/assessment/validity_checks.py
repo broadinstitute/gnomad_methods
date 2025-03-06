@@ -99,7 +99,7 @@ def generic_field_check(
             if cond_expr is not None:
                 ht_filtered = ht.select(_fail=cond_expr, **display_fields)
                 ht_filtered = ht_filtered.filter(ht_filtered._fail).drop("_fail")
-               # Use StringIO to capture the table from show() for display in the final output table.
+                # Use StringIO to capture the table from show() for display in the final output table.
                 log_stream = io.StringIO()
                 with redirect_stdout(log_stream):
                     ht_filtered.show(width=200)
@@ -175,7 +175,7 @@ def generate_field_check_expr(
     """
     Generate a Hail expression to check field comparisons while handling missing values.
 
-    If both fields are missing, the retured expression will be False. If only one field 
+    If both fields are missing, the retured expression will be False. If only one field
     is missing, the expression will be True. If both fields are defined and not equal,
     the expression will be True.
 

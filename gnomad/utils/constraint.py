@@ -1084,6 +1084,7 @@ def assemble_constraint_context_ht(
         "polyphen_score",
         "domains",
         "uniprot_isoform",
+        "amino_acids",
     ]
     vep_csq_fields = [x for x in vep_csq_fields if x in csqs.dtype.element_type]
     ht = ht.annotate(

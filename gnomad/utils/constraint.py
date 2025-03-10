@@ -92,6 +92,324 @@ def annotate_with_mu(
     )
 
 
+def _get_expression_for_annotation(
+    t: Optional[Union[hl.Table, hl.MatrixTable]] = None,
+    annotation_name: Optional[str] = None,
+    expr: Optional[hl.expr.Expression] = None,
+    expr_param_name: Optional[str] = None,
+) -> hl.expr.Expression:
+    """
+    Get an annotation from a Table or MatrixTable.
+
+    Either `t` and `annotation_name` or `expr` must be provided. If `expr` is not None,
+    it will be returned. Otherwise, the annotation with the name `annotation_name` will
+    be returned from the input Table or MatrixTable.
+
+    `expr_param_name` is an optional parameter that is only used in a logger message or
+    error message if `expr` is None.
+
+    :param t: Optional Input Table or MatrixTable.
+    :param annotation_name: Optional Name of the annotation to get.
+    :param expr: Optional expression to return. Default is None.
+    :param expr_param_name: Optional name of the parameter that `expr` is associated
+        with. Default is None.
+    :return: Expression of the annotation.
+    """
+    if (t is None or annotation_name) and expr is None:
+        raise ValueError("Either `t` and `annotation_name` or `expr` must be provided.")
+
+    expr_param_name = expr_param_name or "expr"
+    if expr is None and hasattr(t, annotation_name):
+        logger.warning(
+            f"{expr_param_name} was not provided, using '{annotation_name}'."
+        )
+        expr = t[annotation_name]
+    elif expr is None:
+        raise ValueError(
+            f"{expr_param_name} was not provided and '{annotation_name}' annotation is "
+            f"not present in the input Table."
+        )
+
+    return expr
+
+
+def single_variant_count_expr(
+    freq_expr: Optional[hl.expr.StructExpression] = None,
+    ht: Optional[hl.Table] = None,
+    singleton: bool = False,
+    max_af: Optional[float] = None,
+    count_missing: bool = False,
+) -> Union[hl.Table, Any]:
+    """
+    Get the expression for a single variant count based on specified criteria.
+
+    One of `ht` or `freq_expr` must be provided. If `freq_expr` is not provided, the
+    function will use `ht.freq` if it exists.
+
+    A single variant count can be 1 (variant meets criteria) or 0 (variant does not meet
+    criteria). The criteria are specified by `singleton` and `max_af`.
+
+    The variant count will be 1 if:
+        - `singleton` is True and the variant is a singleton (`freq_expr.AC == 1`).
+        - `max_af` is not None and the variant has an allele frequency less than or
+          equal to `max_af` and has an allele count greater than 0 (`freq_expr.AF <=
+          max_af` and `freq_expr.AC > 0`).
+        - If `max_af` is None and `singleton` is False, and `freq_expr` is not None, the
+          variant count will be 1 if the variant has an allele count greater than 0
+          (`freq_expr.AC > 0`).
+        - If `max_af` is None and `singleton` is False, and `freq_expr` is None, the
+          variant count will be 1.
+
+    :param freq_expr: Optional StructExpression with 'AC' and 'AF' annotations. Default
+        is None.
+    :param ht: Optional Input Table. Default is None.
+    :param singleton: Whether to count singletons. Default is False.
+    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
+        applied.
+    :param count_missing: Whether to count missing frequency values. Default is False.
+    :return: Expression for a single variant count.
+    """
+    if ht is None and freq_expr is None:
+        raise ValueError("Either `ht` or `freq_expr` must be provided.")
+
+    if max_af or singleton:
+        freq_expr = _get_expression_for_annotation(ht, "freq", freq_expr, "freq_expr")
+        if isinstance(freq_expr, hl.expr.ArrayExpression):
+            freq_expr = freq_expr[0]
+
+    if singleton:
+        count_var = freq_expr.AC == 1, count_missing
+    elif max_af:
+        count_var = (freq_expr.AC > 0) & (freq_expr.AF <= max_af)
+    elif freq_expr is not None:
+        count_var = freq_expr.AC > 0
+    else:
+        count_var = True
+
+    return hl.int(hl.or_else(count_var, count_missing))
+
+
+def single_variant_observed_and_possible_expr(
+    freq_expr: hl.ArrayExpression,
+    max_af: Optional[float] = None,
+    use_possible_adj: bool = True,
+) -> hl.expr.StructExpression:
+    """
+    Get the observed and possible variant annotations.
+
+    The function returns a struct indicating whether the variant should be included in
+    the observed and possible variant counts. It uses `single_variant_count_expr`
+    to determine the observed and possible variant counts for the frequency array.
+
+    :param freq_expr: Frequency array expression.
+    :param max_af: Optional maximum allele frequency to consider a variant as observed.
+    :param use_possible_adj: Whether to use the full dataset high-quality genotypes
+        (adj) frequency for the possible count (first element in the array). Otherwise,
+        the possible count is calculated for all entries in the frequency array.
+        Default is True.
+    :return: Struct containing the observed and possible variant annotations.
+    """
+    pos_expr = hl.array([freq_expr[0]]) if use_possible_adj else freq_expr
+    pos_expr = pos_expr.map(
+        lambda x: single_variant_count_expr(
+            freq_expr=x, max_af=max_af, count_missing=True
+        )
+    )
+    pos_expr = pos_expr[0] if use_possible_adj else pos_expr
+    return hl.struct(
+        observed_variants=freq_expr.map(
+            lambda x: single_variant_count_expr(freq_expr=x, max_af=max_af)
+        ),
+        possible_variants=pos_expr,
+    )
+
+
+def weighted_agg_sum_expr(
+    expr: Union[hl.ArrayExpression, hl.NumericExpression],
+    weight_expr: Union[hl.ArrayExpression, hl.NumericExpression],
+) -> Union[hl.ArrayExpression, hl.NumericExpression]:
+    """
+    Get the expression for a weighted aggregate sum.
+
+    The function will return the sum of the product of `expr` and `weight_expr`.
+
+    The parameters `expr` and `weight_expr` can be either ArrayExpression or
+    NumericExpression. If both are ArrayExpression, each element of the arrays will be
+    multiplied together and summed. If one is ArrayNumericExpression and the other is
+    NumericExpression, the NumericExpression will be multiplied by each element
+    of the ArrayExpression and summed.
+
+    :param expr: Expression to be weighted and summed.
+    :param weight_expr: Expression to weight `expr` by.
+    :return: Weighted aggregate sum expression.
+    """
+    expr_is_array = isinstance(expr, hl.expr.ArrayNumericExpression)
+    weight_is_array = isinstance(weight_expr, hl.expr.ArrayNumericExpression)
+    if expr_is_array and weight_is_array:
+        return hl.agg.array_sum(hl.zip(expr, weight_expr).map(lambda x: x[0] * x[1]))
+    elif not expr_is_array and not weight_is_array:
+        return hl.agg.sum(expr * weight_expr)
+    else:
+        return hl.agg.array_sum(expr * weight_expr)
+
+
+def get_counts_agg_expr(
+    freq_expr: Optional[Union[hl.expr.ArrayExpression, hl.expr.StructExpression]],
+    ht: Optional[hl.Table] = None,
+    count_singletons: bool = False,
+    max_af: Optional[float] = None,
+    count_missing: bool = False,
+) -> hl.expr.StructExpression:
+    """
+    Get aggregation expression for counting variants based on specified criteria.
+
+    One of `ht` or `freq_expr` must be provided. If `freq_expr` is not provided, the
+    function will use `ht.freq` if it exists.
+
+    The aggregation expression will return a StructExpression with 'variant_count' and
+    'singleton_count' annotations. 'variant_count' will be the count of variants that
+    meet the specified criteria. 'singleton_count' will be the count of singleton
+    variants if `count_singletons` is True.
+
+    The criteria for counting variants are specified by `count_singletons` and `max_af`.
+
+    The variant count will be 1 if:
+
+        - `count_singletons` is True and the variant is a singleton
+          (`freq_expr.AC == 1`).
+        - `max_af` is not None and the variant has an allele frequency less than or
+          equal to `max_af` and has an allele count greater than 0
+          (`freq_expr.AF <= max_af` and `freq_expr.AC > 0`).
+        - If `max_af` is None and `count_singletons` is False, and `freq_expr` is not
+          None, the variant count will be 1 if the variant has an allele count greater
+          than 0 (`freq_expr.AC > 0`).
+        - If `max_af` is None and `count_singletons` is False, and `freq_expr` is None,
+          the variant count will be 1.
+
+    :param freq_expr: Optional ArrayExpression or StructExpression with 'AC' and 'AF'
+        annotations. Default is None.
+    :param ht: Optional Input Table. Default is None.
+    :param count_singletons: Whether to count singletons. Default is False.
+    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
+        applied.
+    :param count_missing: Whether to count missing frequency values. Default is False.
+    :return: StructExpression with 'variant_count' and 'singleton_count' annotations.
+    """
+    if ht is None and freq_expr is None:
+        raise ValueError("Either `ht` or `freq_expr` must be provided.")
+
+    if max_af or count_singletons:
+        freq_expr = _get_expression_for_annotation(ht, "freq", freq_expr, "freq_expr")
+
+    if max_af:
+        logger.info(
+            "The maximum variant allele frequency to be included in "
+            "`variant_count` is %.3f.",
+            max_af,
+        )
+
+    if count_singletons:
+        logger.info(
+            "Counting singleton variants and adding as 'singleton_count' annotation."
+        )
+
+    params = {"variant_count": {"singleton": False, "max_af": max_af}}
+    if count_singletons:
+        params["singleton_count"] = {"singleton": True}
+
+    is_struct = isinstance(freq_expr, hl.expr.StructExpression)
+    if is_struct:
+        freq_expr = hl.array([freq_expr])
+
+    count_expr = {
+        k: freq_expr.map(
+            lambda x: single_variant_count_expr(
+                freq_expr=x, **p, count_missing=count_missing
+            )
+        )
+        for k, p in params.items()
+    }
+
+    agg_expr = {k: hl.agg.array_sum(v) for k, v in count_expr.items()}
+    agg_expr = {k: agg_expr[k][0] for k in agg_expr} if is_struct else agg_expr
+
+    return hl.struct(**agg_expr)
+
+
+def count_observed_and_possible_by_group(
+    ht: hl.Table,
+    possible_expr: hl.expr.Int32Expression,
+    observed_expr: hl.expr.ArrayExpression,
+    additional_grouping: Union[List[str]] = ("methylation_level",),
+    partition_hint: int = 100,
+    weight_exprs: Optional[
+        Union[
+            List[str],
+            Dict[str, Union[hl.expr.ArrayExpression, hl.expr.NumericExpression]],
+        ]
+    ] = None,
+    additional_agg_sum_exprs: Optional[
+        Union[
+            List[str],
+            Dict[str, Union[hl.expr.ArrayExpression, hl.expr.NumericExpression]],
+        ]
+    ] = None,
+) -> Union[hl.Table, Any]:
+    if isinstance(weight_exprs, list):
+        weight_exprs = {k: ht[k] for k in weight_exprs}
+    if isinstance(additional_agg_sum_exprs, list):
+        additional_agg_sum_exprs = {k: ht[k] for k in additional_agg_sum_exprs}
+
+    weight_exprs = weight_exprs or {}
+    additional_agg_sum_exprs = additional_agg_sum_exprs or {}
+
+    # Build the grouping struct for the variant count aggregation.
+    grouping = hl.struct(context=ht.context, ref=ht.ref, alt=ht.alt)
+    grouping = grouping.annotate(
+        **{g: ht[g] for g in additional_grouping if g not in grouping}
+    )
+    logger.info(
+        "The following annotations will be used to group the input Table rows when"
+        " counting variants: %s.",
+        ", ".join(grouping.keys()),
+    )
+
+    agg_expr = {
+        "observed_variants": hl.agg.array_sum(observed_expr),
+        "possible_variants": hl.agg.sum(possible_expr),
+    }
+
+    # Update the possible variant count aggregation expression to include weighted sums
+    # of possible variant counts.
+    agg_expr.update(
+        {
+            k: weighted_agg_sum_expr(possible_expr, v)
+            for k, v in weight_exprs.items()
+        }
+    )
+
+    # Get sum aggregation expressions for requested fields.
+    agg_expr.update(
+        {
+            k: (
+                hl.agg.array_sum(v)
+                if isinstance(v, hl.ArrayExpression)
+                else hl.agg.sum(v)
+            )
+            for k, v in additional_agg_sum_exprs.items()
+        }
+    )
+
+    # Apply each variant count aggregation in `agg_expr` to get counts for all
+    # combinations of `grouping`.
+    ht = ht.group_by(**grouping).partition_hint(partition_hint).aggregate(**agg_expr)
+
+    return ht
+
+
+# TODO: I think we should consider removing this or at least completely changing it
+#  To remove pop and downsampling support, since that should just be handled as an
+#  array, where the same thing is done.
 def count_variants_by_group(
     ht: hl.Table,
     freq_expr: Optional[hl.expr.ArrayExpression] = None,
@@ -845,29 +1163,138 @@ def assemble_constraint_context_ht(
     return ht
 
 
+def calibration_model_group_expr(
+    exomes_coverage_expr: hl.expr.Int32Expression,
+    cpg_expr: hl.expr.BooleanExpression,
+    low_cov_cutoff: Optional[int] = None,
+    high_cov_cutoff: int = COVERAGE_CUTOFF,
+    upper_cov_cutoff: Optional[int] = None,
+    skip_coverage_model: bool = False,
+    additional_grouping_exprs: Optional[Dict[str, hl.expr.StringExpression]] = None,
+) -> hl.expr.StructExpression:
+    """
+    Get the calibration model grouping annotation for a variant.
+
+    The calibration model expression is a struct with the following fields:
+
+        - genomic_region: The genomic region of the variant ("autosome_or_par",
+          "chrx_nonpar", or "chry_nonpar").
+        - high_or_low_coverage: Whether the variant belongs to the high or low coverage
+          calibration model. The variant is assigned to the high coverage model if the
+          exome coverage is greater than or equal to 'high_cov_cutoff' and less than or
+          equal to 'upper_cov_cutoff' (if provided). The variant is assigned to the low
+          coverage model if `skip_coverage_model` is False and the exome coverage is
+          greater than 'low_cov_cutoff' (if provided) and less than 'high_cov_cutoff'.
+        - cpg: Whether the variant is a CpG (`cpg_expr`).
+
+    The global parameters for the calibration model are the values of the function
+    parameters: `low_cov_cutoff`, `high_cov_cutoff`, `upper_cov_cutoff`, and
+    `skip_coverage_model`.
+
+    :param exomes_coverage_expr: Exome coverage expression.
+    :param cpg_expr: CpG expression.
+    :param low_cov_cutoff: Low coverage cutoff. Default is None.
+    :param high_cov_cutoff: High coverage cutoff. Default is COVERAGE_CUTOFF.
+    :param upper_cov_cutoff: Upper coverage cutoff. Default is None.
+    :param skip_coverage_model: Whether to skip the coverage model. Default is False.
+    :param additional_grouping_exprs: Optional Dictionary of additional expressions to
+        group by. Default is None.
+    :return: Tuple containing the calibration model expression and the globals.
+    """
+    high_cov_expr = exomes_coverage_expr >= high_cov_cutoff
+    if upper_cov_cutoff is not None:
+        high_cov_expr &= exomes_coverage_expr <= upper_cov_cutoff
+
+    low_cov_expr = hl.bool(False) if skip_coverage_model else hl.bool(True)
+    if low_cov_cutoff is not None:
+        low_cov_expr &= exomes_coverage_expr > low_cov_cutoff
+
+    # Define whether the variant should be included in the high or low coverage model.
+    model_expr = (
+        hl.case()
+        .when(high_cov_expr, "high")
+        .when(low_cov_expr,"low")
+        .or_missing()
+    )
+
+    return hl.or_missing(
+        hl.is_defined(model_expr),
+        hl.struct(
+            high_or_low_coverage=model_expr,
+            cpg=hl.or_missing(model_expr == "high", cpg_expr),
+            **(additional_grouping_exprs or {}),
+        )
+    )
+
+
+def _sum_agg_expr(
+    fields_to_sum: Optional[List[str]] = None,
+    exprs_to_sum: Optional[
+        Union[hl.expr.StructExpression, Dict[str, hl.expr.NumericExpression]]
+    ] = None,
+    ht: Optional[hl.Table] = None,
+) -> hl.expr.StructExpression:
+    """
+    Return an aggregation expression to sum fields or expressions in a Table.
+
+    The aggregation expression is a struct with the sum or array_sum of the fields or
+    expressions provided in `fields_to_sum` or `exprs_to_sum`.
+
+    :param fields_to_sum: List of fields to sum in the Table. Default is None.
+    :param exprs_to_sum: Dictionary of expressions to sum in the Table. Default is None.
+    :param ht: Input Table. Default is None.
+    :return: Aggregation expression to sum fields or expressions in the Table.
+    """
+    if fields_to_sum is None and exprs_to_sum is None:
+        raise ValueError("Either 'fields_to_sum' or 'exprs_to_sum' must be provided.")
+    if fields_to_sum is not None and ht is None:
+        raise ValueError("ht must be provided if 'fields_to_sum' is provided.")
+
+    exprs_to_sum = exprs_to_sum or {}
+    exprs_to_sum = hl.struct(
+        **exprs_to_sum,
+        **{f: ht[f] for f in fields_to_sum or []}
+    )
+
+    return hl.struct(
+        **{
+            k: (
+                hl.agg.array_sum(v)
+                if isinstance(v, hl.ArrayExpression)
+                else hl.agg.sum(v)
+            )
+            for k, v in exprs_to_sum.items()
+        }
+    )
+
+
+# TODO: I have changed this so that it doesn't split up the pops anymore. I don't think
+#  it is necessary to do this, and it makes the code more complicated. We should just
+#  keep things the way we do for freq with a freq_meta. So we expect the
+#  observed_variants and plateau_models_expr to be arrays of the same length.
 def build_models(
-    coverage_ht: hl.Table,
+    ht: hl.Table,
     coverage_expr: hl.expr.Int32Expression,
     weighted: bool = False,
-    pops: Tuple[str] = (),
     keys: Tuple[str] = (
         "context",
         "ref",
         "alt",
         "methylation_level",
-        "mu_snp",
     ),
+    model_group_expr: Optional[hl.expr.StructExpression] = None,
     high_cov_definition: int = COVERAGE_CUTOFF,
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
     log10_coverage: bool = True,
+    additional_grouping: Tuple[str] = (),
 ) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
     """
     Build coverage and plateau models.
 
     This function builds models (plateau_models) using linear regression to calibrate
     mutation rate estimates against the proportion observed of each substitution,
-    context, and methylation level in `coverage_ht`.
+    context, and methylation level in `ht`.
 
     Two plateau models are fit, one for CpG transitions, and one for the remainder of
     sites (transversions and non CpG transitions).
@@ -877,9 +1304,10 @@ def build_models(
 
     Plateau model: adjusts proportion of expected variation based on location in the
     genome and CpG status.
+
     The x and y of the plateau models:
-    - x: `mu_snp` - mutation rate
-    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
+        - x: `mu_snp` - mutation rate
+        - y: proportion observed ('observed_variants' / 'possible_variants')
 
     This function also builds models (coverage models) to calibrate the proportion of
     expected variation at low coverage sites (sites below `high_cov_definition`).
@@ -892,221 +1320,228 @@ def build_models(
     Low coverage sites are defined as sites with median coverage < `high_cov_definition`.
 
     The x and y of the coverage model:
-    - x: log10 groupings of exome coverage at low coverage sites
-    - y: sum('observed_variants')/ (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
 
-    `high_coverage_scale_factor` = sum('observed_variants') /
-                        sum('possible_variants' * 'mu_snp') at high coverage sites
+        - x: groupings of exome coverage at low coverage sites (log10 transformed if
+          requested)
+        - y: sum('observed_variants') / (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
+
+    `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage sites
 
     .. note::
 
-        This function expects that the input Table(`coverage_ht`) was created using
-        `get_proportion_observed_by_coverage`, which means that `coverage_ht` should
-        contain only high quality synonymous variants below 0.1% frequency.
+        This function expects that the input Table (`ht`) contains only high quality
+        synonymous variants below 0.1% frequency.
 
-        This function also expects that the following fields are present in
-        `coverage_ht`:
-        - context - trinucleotide genomic context
-        - ref - the reference allele
-        - alt - the alternate allele
-        - methylation_level - methylation level
-        - cpg - whether the site is CpG site
-        - observed_variants - the number of observed variants in the dataset for each
-        variant. Note that the term "variant" here refers to a specific substitution,
-        context, methylation level, and coverage combination
-        - downsampling_counts_{pop} (optional) - array of observed variant counts per
-        population after downsampling. Used only when `pops` is specified.
-        - mu_snp - mutation rate
-        - possible_variants - the number of possible variants in the dataset for each
-        variant
+    This function expects that the following fields are present in `coverage_ht`:
 
-    :param coverage_ht: Input coverage Table.
+        - context: trinucleotide genomic context.
+        - ref: the reference allele.
+        - alt: the alternate allele.
+        - methylation_level: methylation level.
+        - mu_snp: mutation rate.
+        - cpg: whether the variant is a CpG.
+        - observed_variants: the number of observed variants in the dataset for each
+          variant. Note that the term "variant" here refers to a specific substitution,
+          context, methylation level, and coverage combination.
+        - possible_variants: the number of possible variants in the dataset for each
+          variant.
+
+    :param ht: Input Table.
     :param coverage_expr: Expression that defines the coverage metric.
     :param weighted: Whether to weight the plateau models (a linear regression
         model) by 'possible_variants'. Default is False.
-    :param pops: List of populations used to build plateau models.
-        Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
-        Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
-    :param high_cov_definition: Lower median coverage cutoff. Sites with coverage above this cutoff
-        are considered well covered. Default is `COVERAGE_CUTOFF`.
-    :param upper_cov_cutoff: Upper median coverage cutoff. Sites with coverage above this cutoff
-        are excluded from the high coverage Table. Default is None.
-    :param skip_coverage_model: Whether to skip generating the coverage model. If set to True,
-        None is returned instead of the coverage model. Default is False.
+        Default is ("context", "ref", "alt", "methylation_level").
+    :param model_group_expr: Optional Expression with `high_or_low_coverage` annotation
+        to group variants into high or low coverage models. If not provided, the
+        `calibration_model_group_expr()` function is used to define the grouping.
+    :param high_cov_definition: Lower coverage cutoff. Sites with coverage above this
+        cutoff are considered well covered. Default is `COVERAGE_CUTOFF`.
+    :param upper_cov_cutoff: Upper coverage cutoff. Sites with coverage above this
+        cutoff are excluded from the high coverage Table. Default is None.
+    :param skip_coverage_model: Whether to skip generating the coverage model. If set
+        to True, None is returned instead of the coverage model. Default is False.
     :param log10_coverage: Whether to convert coverage sites with log10 when building
         the coverage model. Default is True.
+    :param additional_grouping: Optional Additional annotations to group by before
+        counting the observed and possible variants. Default is ().
     :return: Coverage model and plateau models.
     """
-    # Annotate coverage_ht with coverage_expr set as a temporary annotation
-    # '_coverage_metric' before modifying the coverage_ht.
-    coverage_ht = coverage_ht.annotate(_coverage_metric=coverage_expr)
-
-    # Filter to sites with coverage_expr equal to or above `high_cov_definition`.
-    high_cov_ht = coverage_ht.filter(
-        coverage_ht._coverage_metric >= high_cov_definition
-    )
-
-    # Filter to sites with coverage_expr equal to or below `upper_cov_cutoff` if
-    # specified.
-    if upper_cov_cutoff is not None:
-        high_cov_ht = high_cov_ht.filter(
-            high_cov_ht._coverage_metric <= upper_cov_cutoff
+    if model_group_expr is None:
+        # Define whether the variant should be included in the high or low coverage
+        # model.
+        model_group_expr = calibration_model_group_expr(
+            coverage_expr,
+            ht.cpg,
+            low_cov_cutoff=0,
+            high_cov_cutoff=high_cov_definition,
+            upper_cov_cutoff=upper_cov_cutoff,
+            skip_coverage_model=skip_coverage_model,
         )
 
-    agg_expr = {
-        "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
-        "possible_variants": hl.agg.sum(high_cov_ht.possible_variants),
-    }
-    for pop in pops:
-        agg_expr[f"observed_{pop}"] = hl.agg.array_sum(
-            high_cov_ht[f"downsampling_counts_{pop}"]
+    grouping = keys + additional_grouping
+    mu_type_fields = ("cpg", "transition", "mutation_type", "mutation_type_model")
+    has_mu_type = all([x in ht.row for x in mu_type_fields])
+    grouping += mu_type_fields if has_mu_type else ()
+
+    grouping_exprs = {"build_model": model_group_expr}
+    if not skip_coverage_model:
+        grouping_exprs["exomes_coverage"] = hl.or_missing(
+            model_group_expr.high_or_low_coverage == "low", coverage_expr
         )
 
-    # Generate a Table with all necessary annotations (x and y listed above)
-    # for the plateau models.
-    high_cov_group_ht = high_cov_ht.group_by(*keys).aggregate(**agg_expr)
-    high_cov_group_ht = annotate_mutation_type(high_cov_group_ht)
+    ht = ht.group_by(*grouping, **grouping_exprs).aggregate(
+        mu_snp=hl.agg.take(ht.mu_snp, 1)[0],
+        **_sum_agg_expr(
+            fields_to_sum=["observed_variants", "possible_variants"], ht=ht
+        ),
+    ).key_by(*keys)
+
+    if not has_mu_type:
+        ht = annotate_mutation_type(ht)
 
     # Build plateau models.
-    plateau_models_agg_expr = build_plateau_models(
-        cpg_expr=high_cov_group_ht.cpg,
-        mu_snp_expr=high_cov_group_ht.mu_snp,
-        observed_variants_expr=high_cov_group_ht.observed_variants,
-        possible_variants_expr=high_cov_group_ht.possible_variants,
-        pops_observed_variants_array_expr=[
-            high_cov_group_ht[f"observed_{pop}"] for pop in pops
-        ],
-        weighted=weighted,
-    )
-    if pops:
-        # Map the models to their corresponding populations if pops is specified.
-        _plateau_models = dict(
-            high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
+    is_high_expr = ht.build_model.high_or_low_coverage == "high"
+    agg_expr = {
+        "plateau": hl.agg.filter(
+            is_high_expr,
+            build_plateau_models(
+                ht.mu_snp,
+                ht.observed_variants,
+                ht.possible_variants,
+                model_group_expr=ht.build_model,
+                weighted=weighted,
+            ),
         )
-        pop_models = _plateau_models["pop"]
-        plateau_models = {
-            pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
-        }
-        plateau_models["total"] = _plateau_models["total"]
-        plateau_models = hl.struct(**plateau_models)
-    else:
-        plateau_models = high_cov_group_ht.aggregate(
-            hl.struct(**plateau_models_agg_expr)
-        )
+    }
 
     if not skip_coverage_model:
-        # Filter to sites with coverage below `high_cov_definition` and larger than 0.
-        low_cov_ht = coverage_ht.filter(
-            (coverage_ht._coverage_metric < high_cov_definition)
-            & (coverage_ht._coverage_metric > 0)
-        )
+        # The coverage model is only built using the full dataset observed variants
+        # so use the first element if the observed_variants is an array.
+        obs_is_array = isinstance(ht.observed_variants, hl.expr.ArrayExpression)
+        obs_expr = ht.observed_variants[0] if obs_is_array else ht.observed_variants
 
         # Create a metric that represents the relative mutability of the exome calculated
         # on high coverage sites and will be used as scaling factor when building the
         # coverage model.
-        high_coverage_scale_factor = high_cov_ht.aggregate(
-            hl.agg.sum(high_cov_ht.observed_variants)
-            / hl.agg.sum(high_cov_ht.possible_variants * high_cov_ht.mu_snp)
+        agg_expr["high_coverage_scale_factor"] = hl.agg.filter(
+            is_high_expr,
+            hl.agg.sum(obs_expr)
+            / hl.agg.sum(ht.possible_variants * ht.mu_snp)
         )
 
-        # Generate a Table with all necessary annotations (x and y listed above)
-        # for the coverage model.
-        if log10_coverage:
-            logger.info("Converting coverage sites by log10.")
-            cov_value = hl.log10(low_cov_ht._coverage_metric)
-        else:
-            cov_value = low_cov_ht._coverage_metric
-
-        low_cov_group_ht = low_cov_ht.group_by(cov_value=cov_value).aggregate(
-            low_coverage_oe=hl.agg.sum(low_cov_ht.observed_variants)
-            / (
-                high_coverage_scale_factor
-                * hl.agg.sum(low_cov_ht.possible_variants * low_cov_ht.mu_snp)
+        # Get the observed variant count and mu_snp for low coverage sites.
+        agg_expr["coverage"] = hl.agg.filter(
+            ht.build_model.high_or_low_coverage == "low",
+            hl.agg.group_by(
+                ht.exomes_coverage,
+                hl.struct(
+                    obs=hl.agg.sum(obs_expr),
+                    mu_snp=hl.agg.sum(ht.possible_variants * ht.mu_snp)
+                )
             )
         )
 
-        # Build the coverage model.
-        # TODO: consider weighting here as well.
-        coverage_model_expr = build_coverage_model(
-            low_coverage_oe_expr=low_cov_group_ht.low_coverage_oe,
-            coverage_expr=low_cov_group_ht.cov_value,
-        )
-        coverage_model = tuple(low_cov_group_ht.aggregate(coverage_model_expr).beta)
-    else:
-        coverage_model = None
+    models = ht.aggregate(hl.struct(**agg_expr))
 
-    return coverage_model, plateau_models
+    # Build coverage model.
+    coverage_model = None
+    if not skip_coverage_model:
+        coverage_model = hl.dict(models.coverage).map_values(
+            lambda x: x.annotate(
+                low_coverage_oe=x.obs / (models.high_coverage_scale_factor * x.mu_snp)
+            )
+        )
+
+        # TODO: consider weighting here as well.
+        coverage_model = tuple(
+            hl.eval(
+                coverage_model.items().aggregate(
+                    lambda x: build_coverage_model(
+                        x[1].low_coverage_oe, x[0], log10_coverage=log10_coverage
+                    )
+                ).beta
+            )
+        )
+
+    return coverage_model, models.plateau
 
 
 def build_plateau_models(
-    cpg_expr: hl.expr.BooleanExpression,
     mu_snp_expr: hl.expr.Float64Expression,
-    observed_variants_expr: hl.expr.Int64Expression,
-    possible_variants_expr: hl.expr.Int64Expression,
-    pops_observed_variants_array_expr: List[hl.expr.ArrayExpression] = [],
+    observed_variants_expr: Union[hl.expr.ArrayExpression, hl.expr.Int64Expression],
+    possible_variants_expr: Union[hl.expr.ArrayExpression, hl.expr.Int64Expression],
     weighted: bool = False,
-) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
+    cpg_expr: Optional[hl.expr.BooleanExpression] = None,
+    model_group_expr: Optional[hl.expr.StructExpression] = None,
+) -> hl.expr.DictExpression:
     """
     Build plateau models to calibrate mutation rate to compute predicted proportion observed value.
 
     The x and y of the plateau models:
-    - x: `mu_snp_expr`
-    - y: `observed_variants_expr` / `possible_variants_expr`
-    or `pops_observed_variants_array_expr`[index] / `possible_variants_expr`
-    if `pops` is specified
 
-    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
+        - x: `mu_snp_expr`
+        - y: `observed_variants_expr` / `possible_variants_expr`
+          or `pops_observed_variants_array_expr`[index] / `possible_variants_expr`
+          if `pops` is specified
+
     :param mu_snp_expr: Float64Expression of the mutation rate.
-    :param observed_variants_expr: Int64Expression of the observed variant counts.
-    :param possible_variants_expr: Int64Expression of the possible variant counts.
-    :param pops_observed_variants_array_expr: Nested ArrayExpression with all observed
-        variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,
-        1],[1,1,1]]`. Default is None.
+    :param observed_variants_expr: ArrayExpression or Int64Expression of the observed
+        variant counts.
+    :param possible_variants_expr: ArrayExpression or Int64Expression of the possible
+        variant counts.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
-    :return: A dictionary of intercepts and slopes of plateau models. The keys are
-        'total' (for all sites) and 'pop' (optional; for populations). The values for
-        'total' is a dictionary (e.g., <DictExpression of type dict<bool,
-        array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
-        g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The
-        key of the dictionary in the nested list is CpG status (BooleanExpression), and
-        the value is an ArrayExpression containing intercept and slope values.
+    :return: DictExpression of the intercepts and slopes of the plateau models for each
+        group in `model_group_expr`.
+    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
+    :param model_group_expr: StructExpression to group by in the aggregation.
+
     """
-    # Build plateau models for all sites
-    plateau_models_agg_expr = {
-        "total": hl.agg.group_by(
-            cpg_expr,
-            hl.agg.linreg(
-                observed_variants_expr / possible_variants_expr,
-                [1, mu_snp_expr],
-                weight=possible_variants_expr if weighted else None,
-            ).beta,
+    obs_is_array = isinstance(observed_variants_expr, hl.expr.ArrayExpression)
+    pos_is_array = isinstance(possible_variants_expr, hl.expr.ArrayExpression)
+
+    def _linreg(
+        o: hl.expr.Int64Expression = observed_variants_expr,
+        p: hl.expr.Int64Expression = possible_variants_expr,
+    ) -> hl.expr.StructExpression:
+        """
+        Compute the linear regression of the observed variant counts over the possible variant counts.
+
+        :param o: Int64Expression of the observed variant counts.
+        :param p: Int64Expression of the possible variant counts.
+        :return: StructExpression of the intercept and slope of the linear regression.
+        """
+        return hl.agg.linreg(
+            o / p, [1, mu_snp_expr], weight=p if weighted else None
+        ).beta
+
+    if obs_is_array and pos_is_array:
+        agg_expr = hl.agg.array_agg(
+            lambda x: _linreg(*x),
+            hl.zip(observed_variants_expr, possible_variants_expr)
         )
-    }
-    if pops_observed_variants_array_expr:
-        # Build plateau models using sites in population downsamplings if
-        # population is specified.
-        plateau_models_agg_expr["pop"] = hl.agg.array_agg(
-            lambda pop_obs_var_array_expr: hl.agg.array_agg(
-                lambda pop_observed_variants: hl.agg.group_by(
-                    cpg_expr,
-                    hl.agg.linreg(
-                        pop_observed_variants / possible_variants_expr,
-                        [1, mu_snp_expr],
-                        weight=possible_variants_expr,
-                    ).beta,
-                ),
-                pop_obs_var_array_expr,
-            ),
-            pops_observed_variants_array_expr,
-        )
-    return plateau_models_agg_expr
+    elif obs_is_array:
+        agg_expr = hl.agg.array_agg(lambda x: _linreg(o=x), observed_variants_expr)
+    elif pos_is_array:
+        agg_expr = hl.agg.array_agg(lambda x: _linreg(p=x), possible_variants_expr)
+    else:
+        agg_expr = _linreg()
+
+    if model_group_expr is None and cpg_expr is None:
+        return agg_expr
+
+    model_group_expr = model_group_expr or hl.struct()
+    if cpg_expr is not None:
+        model_group_expr = model_group_expr.annotate(cpg=cpg_expr)
+
+    return hl.agg.group_by(model_group_expr, agg_expr)
 
 
 def build_coverage_model(
     low_coverage_oe_expr: hl.expr.Float64Expression,
     coverage_expr: hl.expr.Float64Expression,
+    log10_coverage: bool = False,
 ) -> hl.expr.StructExpression:
     """
     Build coverage model.
@@ -1115,14 +1550,23 @@ def build_coverage_model(
     proportion of expected variation at low coverage sites.
 
     The x and y of the coverage model:
-    - x: `coverage_expr`
-    - y: `low_coverage_oe_expr`
+
+        - x: `coverage_expr`
+        - y: `low_coverage_oe_expr`
 
     :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio
         for a given coverage level.
     :param coverage_expr: The Float64Expression of the coverage expression.
+    :param log10_coverage: Whether to convert coverage sites by log10 when building the
+        coverage model. Default is False.
     :return: StructExpression with intercept and slope of the model.
     """
+    if log10_coverage:
+        logger.info(
+            "Converting coverage sites by log10 when building the coverage model."
+        )
+        coverage_expr = hl.log10(coverage_expr)
+
     return hl.agg.linreg(low_coverage_oe_expr, [1, coverage_expr])
 
 
@@ -1214,12 +1658,14 @@ def get_constraint_grouping_expr(
         groupings. Default is True.
     :param include_mane_select_group: Whether to include mane_select annotation in the
         groupings. Default is False.
-
     :return: A dictionary with keys as annotation names and values as actual
         annotations.
     """
     lof_expr = vep_annotation_expr.lof
-    polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
+    if "polyphen_prediction" in vep_annotation_expr:
+        polyphen_prediction_expr = vep_annotation_expr.polyphen_prediction
+    else:
+        polyphen_prediction_expr = hl.missing(hl.tstr)
 
     # Create constraint annotations to be used for groupings.
     groupings = {
@@ -1246,7 +1692,7 @@ def get_constraint_grouping_expr(
 
 def annotate_exploded_vep_for_constraint_groupings(
     ht: hl.Table,
-    coverage_expr: hl.expr.Int32Expression,
+    coverage_expr: hl.expr.Int32Expression = None,
     vep_annotation: str = "transcript_consequences",
     include_canonical_group: bool = True,
     include_mane_select_group: bool = False,
@@ -1287,7 +1733,8 @@ def annotate_exploded_vep_for_constraint_groupings(
     """
     # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric'
     # before modifying ht.
-    ht = ht.annotate(_coverage_metric=coverage_expr)
+    if coverage_expr is not None:
+        ht = ht.annotate(_coverage_metric=coverage_expr)
 
     if vep_annotation == "transcript_consequences":
         if not include_canonical_group and not include_mane_select_group:
@@ -1316,15 +1763,16 @@ def annotate_exploded_vep_for_constraint_groupings(
     # Collect the annotations used for groupings.
     groupings = get_constraint_grouping_expr(
         ht[vep_annotation],
-        coverage_expr=ht._coverage_metric,
+        coverage_expr=None if coverage_expr is None else ht._coverage_metric,
         include_transcript_group=include_transcript_group,
         include_canonical_group=include_canonical_group,
         include_mane_select_group=include_mane_select_group,
     )
 
-    return ht.annotate(**groupings), tuple(groupings.keys())
+    return ht.transmute(**groupings), tuple(groupings.keys())
 
 
+# TODO: Not totally sure this is needed anymore...
 def compute_expected_variants(
     ht: hl.Table,
     plateau_models_expr: hl.StructExpression,
@@ -1386,6 +1834,7 @@ def compute_expected_variants(
     return agg_expr
 
 
+# TODO: Can probably be modified some given my other changes.
 def oe_aggregation_expr(
     ht: hl.Table,
     filter_expr: hl.expr.BooleanExpression,
@@ -1455,6 +1904,219 @@ def oe_aggregation_expr(
 
     agg_expr = hl.struct(**agg_expr)
     return hl.agg.group_by(filter_expr, agg_expr).get(True, hl.missing(agg_expr.dtype))
+
+
+def apply_plateau_models(
+    mu_expr: hl.Float64Expression,
+    plateau_models_expr: hl.ArrayExpression,
+) -> Union[hl.ArrayExpression, hl.Float64Expression]:
+    """
+    Compute the predicted probability observed.
+
+    The predicted probability observed is computed as the mutation rate adjusted by the
+    plateau model.
+
+    :param mu_expr: Mutation rate expression.
+    :param plateau_models_expr: This can be either a single plateau model, where the
+        first element is the intercept and the second element is the slope, or an array
+        of plateau models.
+    :return: Predicted probability observed expression.
+    """
+    def _apply_model(plateau_model: hl.ArrayExpression) -> hl.Float64Expression:
+        """
+        Apply the plateau model to the mutation rate expression.
+
+        :param plateau_model: ArrayExpression of the plateau model.
+        :return: Predicted probability observed expression.
+        """
+        slope = plateau_model[1]
+        intercept = plateau_model[0]
+        ppo_expr = mu_expr * slope + intercept
+
+        return ppo_expr
+
+    if plateau_models_expr.dtype.element_type == hl.tarray(hl.tfloat64):
+        return plateau_models_expr.map(lambda x: _apply_model(x))
+
+    return _apply_model(plateau_models_expr)
+
+
+def coverage_correction_expr(
+    coverage_expr: hl.Float64Expression,
+    coverage_model: Tuple[float, float],
+    low_coverage_expr: Optional[hl.BooleanExpression] = None,
+    coverage_cutoff: Optional[int] = None,
+    log10_coverage: bool = False,
+) -> hl.Float64Expression:
+    """
+    Compute the coverage correction expression.
+
+    .. note::
+
+        One and only one of `low_coverage_expr` or `coverage_cutoff` must be specified.
+
+    The coverage correction expression is computed as follows:
+
+        - If the coverage is 0, the coverage correction is 0.
+        - If the low coverage expression (`low_coverage_expr`) is True, or the
+          coverage (`coverage_expr`) is below the coverage cutoff (`coverage_cutoff`),
+          the coverage model is applied to the coverage.
+        - Otherwise, the coverage correction is 1.
+
+    :param coverage_expr: Float64Expression of the coverage.
+    :param coverage_model: Tuple of the intercept and slope of the coverage model.
+    :param low_coverage_expr: Optional BooleanExpression indicating whether the site is
+        a low coverage site, and the coverage model should be applied. Default is None.
+    :param coverage_cutoff: Optional coverage cutoff. If specified, the coverage model
+        is applied to sites with coverage below this cutoff. Default is None.
+    :param log10_coverage: Whether to convert coverage sites by log10 when applying the
+        coverage model. Default is False.
+    :return: Float64Expression of the coverage correction.
+    """
+    if low_coverage_expr is None and coverage_cutoff is None:
+        raise ValueError(
+            "Either 'low_coverage_expr' or 'coverage_cutoff' must be specified!"
+        )
+    if low_coverage_expr is not None and coverage_cutoff is not None:
+        raise ValueError(
+            "Only one of 'low_coverage_expr' or 'coverage_cutoff' can be specified!"
+        )
+
+    if coverage_cutoff is not None:
+        low_coverage_expr = coverage_expr < coverage_cutoff
+
+    if log10_coverage:
+        cov_corr_expr = hl.log10(coverage_expr)
+    else:
+        cov_corr_expr = coverage_expr
+
+    return (
+        hl.case()
+        .when(coverage_expr == 0, 0)
+        .when(
+            low_coverage_expr,
+            coverage_model[1] * cov_corr_expr + coverage_model[0],
+        )
+        .default(1)
+    )
+
+
+def apply_models(
+    mu_expr: hl.expr.Float64Expression,
+    plateau_models_expr: hl.ArrayExpression,
+    possible_variants_expr: hl.expr.Int64Expression,
+    coverage_model: Optional[Tuple[float, float]] = None,
+    coverage_expr: Optional[hl.expr.Int32Expression] = None,
+    cpg_expr: Optional[hl.expr.BooleanExpression] = None,
+    model_group_expr: Optional[hl.expr.StructExpression] = None,
+    high_cov_definition: int = COVERAGE_CUTOFF,
+    log10_coverage: bool = True,
+) -> hl.expr.StructExpression:
+    """
+    Apply calibration models to compute predicted proportion observed ratio and expected variant counts.
+
+    :param mu_expr: Mutation rate expression.
+    :param plateau_models_expr: This can be either a single plateau model, where the
+        first element is the intercept and the second element is the slope, or an array
+        of plateau models.
+    :param possible_variants_expr: Int64Expression of possible variant counts to
+        multiply the predicted probability observed by. Default is None.
+    :param coverage_model: Tuple of the intercept and slope of the coverage model.
+        Default is None.
+    :param coverage_expr: Optional Int32Expression of the coverage. Default is None.
+    :param cpg_expr: Optional BooleanExpression of whether the variant is a CpG site.
+        Default is None.
+    :param model_group_expr: Optional Expression with `high_or_low_coverage` annotation
+        to group variants into high or low coverage models. If not provided, the
+        `calibration_model_group_expr()` function is used to define the grouping.
+        Default is None.
+    :param high_cov_definition: Definition of high coverage. This is used to define
+        whether the site/group of sites is high or low coverage. Default is
+        `COVERAGE_CUTOFF`.
+    :param log10_coverage: Whether to convert coverage sites by log10 when applying the
+        coverage model. Default is True.
+    :return: A dictionary with predicted proportion observed ratio and expected variant
+        counts.
+    """
+    if coverage_model is not None and coverage_expr is None:
+        raise ValueError(
+            "If 'coverage_model' is specified, 'coverage_expr' must also be specified!"
+        )
+    if model_group_expr is None and (coverage_expr is None or cpg_expr is None):
+        raise ValueError(
+            "If 'model_group_expr' is not specified, 'coverage_expr' and 'cpg_expr' must"
+            " be specified!"
+        )
+
+    if model_group_expr is None:
+        # Get the annotations relevant for applying the calibration models.
+        model_group_expr = calibration_model_group_expr(
+            coverage_expr,
+            cpg_expr,
+            high_cov_cutoff=high_cov_definition,
+            skip_coverage_model=coverage_model is None,
+        )
+
+    # Apply plateau models.
+    ppo_expr = apply_plateau_models(mu_expr, plateau_models_expr)
+    apply_expr = hl.struct(
+        predicted_proportion_observed=ppo_expr,
+        expected_variants=ppo_expr * possible_variants_expr,
+    )
+
+    # Get the coverage correction expression if a coverage model is provided.
+    if coverage_model is not None:
+        cov_corr_expr = coverage_correction_expr(
+            coverage_expr,
+            coverage_model,
+            low_coverage_expr=model_group_expr.high_or_low_coverage == "low",
+            log10_coverage=log10_coverage,
+        )
+        apply_expr = apply_expr.annotate(
+            expected_variants=apply_expr.expected_variants * cov_corr_expr,
+            coverage_correction=cov_corr_expr,
+        )
+
+    return apply_expr
+
+
+def aggregate_expected_variants_expr(
+    ht: hl.Table,
+    additional_fields_to_sum: Optional[List[str]] = None,
+    additional_exprs_to_sum: Optional[Dict[str, hl.expr.Expression]] = None,
+) -> hl.expr.StructExpression:
+    """
+    Get an aggregation expression for the sum of expected variants and other fields.
+
+    An aggregate sum or array sum is created for the following fields:
+
+        - mu_snp
+        - observed_variants
+        - possible_variants
+        - predicted_proportion_observed
+        - coverage_correction
+        - expected_variants
+
+    :param ht: Input Table.
+    :param additional_fields_to_sum: List of additional fields in `ht` to get an
+        aggregate sum expression for. Default is None.
+    :param additional_exprs_to_sum: Dictionary of additional expressions in `ht` to get
+        an aggregate sum expression for. Field names are the keys and expressions are
+        the values. Default is None.
+    :return: StructExpression with the sum of expected variants and other fields.
+    """
+    return _sum_agg_expr(
+        fields_to_sum=[
+            "mu_snp",
+            "observed_variants",
+            "possible_variants",
+            "predicted_proportion_observed",
+            "coverage_correction",
+            "expected_variants",
+        ] + (additional_fields_to_sum or []),
+        exprs_to_sum=additional_exprs_to_sum,
+        ht=ht,
+    )
 
 
 def compute_pli(
@@ -1604,7 +2266,7 @@ def oe_confidence_interval(
 def calculate_raw_z_score(
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
-) -> hl.expr.StructExpression:
+) -> hl.expr.Float64Expression:
     """
     Compute the signed raw z-score using observed and expected variant counts.
 
@@ -1613,7 +2275,7 @@ def calculate_raw_z_score(
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
-    :return: StructExpression for the raw z-score.
+    :return: Raw z-score expression.
     """
     chisq_expr = divide_null((obs_expr - exp_expr) ** 2, exp_expr)
     return hl.sqrt(chisq_expr) * hl.if_else(obs_expr > exp_expr, -1, 1)
@@ -1622,8 +2284,8 @@ def calculate_raw_z_score(
 def get_constraint_flags(
     exp_expr: hl.expr.Float64Expression,
     raw_z_expr: hl.expr.Float64Expression,
-    raw_z_lower_threshold: Optional[float] = -5.0,
-    raw_z_upper_threshold: Optional[float] = 5.0,
+    raw_z_lower_threshold: Optional[Union[float, hl.expr.Float64Expression]] = -5.0,
+    raw_z_upper_threshold: Optional[Union[float, hl.expr.Float64Expression]] = 5.0,
     flag_postfix: str = "",
 ) -> Dict[str, hl.expr.Expression]:
     """
@@ -1648,9 +2310,9 @@ def get_constraint_flags(
     """
     outlier_expr = False
     if raw_z_lower_threshold is not None:
-        outlier_expr |= raw_z_expr < raw_z_lower_threshold
+        outlier_expr |= hl.or_else(raw_z_expr < raw_z_lower_threshold, False)
     if raw_z_upper_threshold is not None:
-        outlier_expr |= raw_z_expr > raw_z_upper_threshold
+        outlier_expr |= hl.or_else(raw_z_expr > raw_z_upper_threshold, False)
 
     if flag_postfix:
         flag_postfix = f"_{flag_postfix}"

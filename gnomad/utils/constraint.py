@@ -1389,7 +1389,13 @@ def build_models(
     has_mu_type = all([x in ht.row for x in mu_type_fields])
     grouping += mu_type_fields if has_mu_type else ()
 
-    grouping_exprs = {"build_model": model_group_expr}
+    grouping_exprs = {
+        "build_model": model_group_expr.annotate(
+            model_group=model_group_expr.model_group.select(
+                *[k for k in model_group_expr.model_group if k != "sfs_bin"]
+            )
+        )
+    }
     if not skip_coverage_model:
         grouping_exprs["exomes_coverage"] = hl.or_missing(
             model_group_expr.high_or_low_coverage == "low", coverage_expr
@@ -1400,7 +1406,25 @@ def build_models(
         **_sum_agg_expr(
             fields_to_sum=["observed_variants", "possible_variants"], ht=ht
         ),
+        sfs_bin_counts=hl.agg.group_by(
+            model_group_expr.model_group,
+            _sum_agg_expr(
+                fields_to_sum=["observed_variants"], ht=ht
+            ),
+        ).items()
     ).key_by(*keys)
+
+    ht = ht.explode("sfs_bin_counts")
+    ht = ht.transmute(
+        build_model=ht.build_model.annotate(model_group=ht.sfs_bin_counts[0]),
+        observed_variants=hl.if_else(
+            ht.sfs_bin_counts[0].sfs_bin == 0,
+            ht.observed_variants,
+            # ht.observed_variants.map(lambda x: ht.possible_variants-x),
+            ht.sfs_bin_counts[1].observed_variants,
+        ),
+        possible_variants=ht.possible_variants,
+    )
 
     if not has_mu_type:
         ht = annotate_mutation_type(ht)

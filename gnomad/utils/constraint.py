@@ -1236,28 +1236,29 @@ def _sum_agg_expr(
     exprs_to_sum: Optional[
         Union[hl.expr.StructExpression, Dict[str, hl.expr.NumericExpression]]
     ] = None,
-    ht: Optional[hl.Table] = None,
+    t: Optional[Union[hl.Table, hl.expr.StructExpression]] = None,
 ) -> hl.expr.StructExpression:
     """
-    Return an aggregation expression to sum fields or expressions in a Table.
+    Return an aggregation expression to sum fields or expressions in a Table/StructExpression.
 
     The aggregation expression is a struct with the sum or array_sum of the fields or
     expressions provided in `fields_to_sum` or `exprs_to_sum`.
 
-    :param fields_to_sum: List of fields to sum in the Table. Default is None.
-    :param exprs_to_sum: Dictionary of expressions to sum in the Table. Default is None.
-    :param ht: Input Table. Default is None.
+    :param fields_to_sum: List of fields to sum. Default is None.
+    :param exprs_to_sum: Dictionary of expressions to sum. Default is None.
+    :param t: Optional Table or StructExpression to get `fields_to_sum` from. Default
+        is None.
     :return: Aggregation expression to sum fields or expressions in the Table.
     """
     if fields_to_sum is None and exprs_to_sum is None:
         raise ValueError("Either 'fields_to_sum' or 'exprs_to_sum' must be provided.")
-    if fields_to_sum is not None and ht is None:
-        raise ValueError("ht must be provided if 'fields_to_sum' is provided.")
+    if fields_to_sum is not None and t is None:
+        raise ValueError("t must be provided if 'fields_to_sum' is provided.")
 
     exprs_to_sum = exprs_to_sum or {}
     exprs_to_sum = hl.struct(
         **exprs_to_sum,
-        **{f: ht[f] for f in fields_to_sum or []}
+        **{f: t[f] for f in fields_to_sum or []}
     )
 
     return hl.struct(
@@ -1398,7 +1399,7 @@ def build_models(
     ht = ht.group_by(*grouping, **grouping_exprs).aggregate(
         mu_snp=hl.agg.take(ht.mu_snp, 1)[0],
         **_sum_agg_expr(
-            fields_to_sum=["observed_variants", "possible_variants"], ht=ht
+            fields_to_sum=["observed_variants", "possible_variants"], t=ht
         ),
     ).key_by(*keys)
 
@@ -2083,7 +2084,7 @@ def apply_models(
 
 
 def aggregate_expected_variants_expr(
-    ht: hl.Table,
+    t: Union[hl.Table, hl.StructExpression],
     additional_fields_to_sum: Optional[List[str]] = None,
     additional_exprs_to_sum: Optional[Dict[str, hl.expr.Expression]] = None,
 ) -> hl.expr.StructExpression:
@@ -2099,10 +2100,10 @@ def aggregate_expected_variants_expr(
         - coverage_correction
         - expected_variants
 
-    :param ht: Input Table.
-    :param additional_fields_to_sum: List of additional fields in `ht` to get an
+    :param t: Input Table or StructExpression.
+    :param additional_fields_to_sum: List of additional fields in `t` to get an
         aggregate sum expression for. Default is None.
-    :param additional_exprs_to_sum: Dictionary of additional expressions in `ht` to get
+    :param additional_exprs_to_sum: Dictionary of additional expressions in `t` to get
         an aggregate sum expression for. Field names are the keys and expressions are
         the values. Default is None.
     :return: StructExpression with the sum of expected variants and other fields.
@@ -2117,7 +2118,7 @@ def aggregate_expected_variants_expr(
             "expected_variants",
         ] + (additional_fields_to_sum or []),
         exprs_to_sum=additional_exprs_to_sum,
-        ht=ht,
+        t=t,
     )
 
 

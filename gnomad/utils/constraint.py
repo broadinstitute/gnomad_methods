@@ -1171,6 +1171,7 @@ def calibration_model_group_expr(
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
     additional_grouping_exprs: Optional[Dict[str, hl.expr.StringExpression]] = None,
+    cpg_in_high_only: bool = False,
 ) -> hl.expr.StructExpression:
     """
     Get the calibration model grouping annotation for a variant.
@@ -1217,12 +1218,15 @@ def calibration_model_group_expr(
         .or_missing()
     )
 
+    cpg_expr = hl.or_missing(model_expr == "high", cpg_expr) if cpg_in_high_only else cpg_expr
     return hl.or_missing(
         hl.is_defined(model_expr),
         hl.struct(
             high_or_low_coverage=model_expr,
-            cpg=hl.or_missing(model_expr == "high", cpg_expr),
-            **(additional_grouping_exprs or {}),
+            model_group=hl.struct(
+                cpg=cpg_expr,
+                **(additional_grouping_exprs or {}),
+            ),
         )
     )
 
@@ -1288,7 +1292,7 @@ def build_models(
     skip_coverage_model: bool = False,
     log10_coverage: bool = True,
     additional_grouping: Tuple[str] = (),
-) -> Tuple[Optional[Tuple[float, float]], hl.expr.StructExpression]:
+):
     """
     Build coverage and plateau models.
 
@@ -1377,6 +1381,7 @@ def build_models(
             high_cov_cutoff=high_cov_definition,
             upper_cov_cutoff=upper_cov_cutoff,
             skip_coverage_model=skip_coverage_model,
+            cpg_in_high_only=True,
         )
 
     grouping = keys + additional_grouping
@@ -1409,7 +1414,7 @@ def build_models(
                 ht.mu_snp,
                 ht.observed_variants,
                 ht.possible_variants,
-                model_group_expr=ht.build_model,
+                model_group_expr=ht.build_model.model_group,
                 weighted=weighted,
             ),
         )
@@ -1442,27 +1447,23 @@ def build_models(
             )
         )
 
-    models = ht.aggregate(hl.struct(**agg_expr))
+    models = ht.aggregate(hl.struct(**agg_expr), _localize=False)
 
     # Build coverage model.
     coverage_model = None
     if not skip_coverage_model:
-        coverage_model = hl.dict(models.coverage).map_values(
+        coverage_model = models.coverage.map_values(
             lambda x: x.annotate(
                 low_coverage_oe=x.obs / (models.high_coverage_scale_factor * x.mu_snp)
             )
         )
 
         # TODO: consider weighting here as well.
-        coverage_model = tuple(
-            hl.eval(
-                coverage_model.items().aggregate(
-                    lambda x: build_coverage_model(
-                        x[1].low_coverage_oe, x[0], log10_coverage=log10_coverage
-                    )
-                ).beta
+        coverage_model = coverage_model.items().aggregate(
+            lambda x: build_coverage_model(
+                x[1].low_coverage_oe, x[0], log10_coverage=log10_coverage
             )
-        )
+        ).beta
 
     return coverage_model, models.plateau
 
@@ -2060,6 +2061,7 @@ def apply_models(
     # Apply plateau models.
     ppo_expr = apply_plateau_models(mu_expr, plateau_models_expr)
     apply_expr = hl.struct(
+        mu=mu_expr * possible_variants_expr,
         predicted_proportion_observed=ppo_expr,
         expected_variants=ppo_expr * possible_variants_expr,
     )

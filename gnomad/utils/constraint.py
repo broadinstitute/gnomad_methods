@@ -1060,6 +1060,7 @@ def assemble_constraint_context_ht(
 
     # Trim heptamer context to create trimer context.
     ht = trimer_from_heptamer(ht)
+    ht = ht.filter(ht.context.matches(f"[ATCG]{{{3}}}"))
 
     # Annotate mutation type (such as "CpG", "non-CpG transition", "transversion") and
     # collapse strands to deduplicate the context.

@@ -458,7 +458,7 @@ def transform_grch38_methylation(
         locus_expr = ht.locus
 
     methylation_expr = hl.if_else(
-        locus_expr.contig != "chrX",
+        locus_expr.in_autosome_or_par(),
         transform_methylation_level(methylation_expr, (0, 5)),
         transform_methylation_level(methylation_expr, (0, 3)),
     )

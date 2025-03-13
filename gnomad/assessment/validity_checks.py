@@ -16,7 +16,8 @@ from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 old_factory = logging.getLogRecordFactory()
 
 
-# Define custom factory that appends function names to logger so we can parse them for the validation's output table.
+# Define custom factory that appends function names to logger so we can
+# parse them for the validation's output table.
 def custom_record_factory(suffix):
     """Return a custom LogRecord factory that appends a given suffix to function names."""
 
@@ -99,7 +100,8 @@ def generic_field_check(
             if cond_expr is not None:
                 ht_filtered = ht.select(_fail=cond_expr, **display_fields)
                 ht_filtered = ht_filtered.filter(ht_filtered._fail).drop("_fail")
-                # Use StringIO to capture the table from show() for display in the final output table.
+                # Use StringIO to capture the table from show() for display in the final
+                # output table.
                 log_stream = io.StringIO()
                 with redirect_stdout(log_stream):
                     ht_filtered.show(width=200)

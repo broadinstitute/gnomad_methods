@@ -2112,6 +2112,7 @@ def aggregate_expected_variants_expr(
     return _sum_agg_expr(
         fields_to_sum=[
             "mu_snp",
+            "mu",
             "observed_variants",
             "possible_variants",
             "predicted_proportion_observed",

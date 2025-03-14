@@ -1431,7 +1431,7 @@ def build_models(
         # Create a metric that represents the relative mutability of the exome calculated
         # on high coverage sites and will be used as scaling factor when building the
         # coverage model.
-        autosome_or_par_expr = ht.build_model.genomic_region == "autosome_or_par"
+        autosome_or_par_expr = ht.build_model.model_group.genomic_region == "autosome_or_par"
         agg_expr["high_coverage_scale_factor"] = hl.agg.filter(
             is_high_expr & autosome_or_par_expr,
             hl.agg.sum(obs_expr)
@@ -2078,6 +2078,7 @@ def apply_models(
             log10_coverage=log10_coverage,
         )
         apply_expr = apply_expr.annotate(
+            mu=apply_expr.mu * cov_corr_expr,
             expected_variants=apply_expr.expected_variants * cov_corr_expr,
             coverage_correction=cov_corr_expr,
         )

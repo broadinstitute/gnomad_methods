@@ -1431,15 +1431,16 @@ def build_models(
         # Create a metric that represents the relative mutability of the exome calculated
         # on high coverage sites and will be used as scaling factor when building the
         # coverage model.
+        autosome_or_par_expr = ht.build_model.genomic_region == "autosome_or_par"
         agg_expr["high_coverage_scale_factor"] = hl.agg.filter(
-            is_high_expr,
+            is_high_expr & autosome_or_par_expr,
             hl.agg.sum(obs_expr)
             / hl.agg.sum(ht.possible_variants * ht.mu_snp)
         )
 
         # Get the observed variant count and mu_snp for low coverage sites.
         agg_expr["coverage"] = hl.agg.filter(
-            ht.build_model.high_or_low_coverage == "low",
+            (ht.build_model.high_or_low_coverage == "low") & autosome_or_par_expr,
             hl.agg.group_by(
                 ht.exomes_coverage,
                 hl.struct(

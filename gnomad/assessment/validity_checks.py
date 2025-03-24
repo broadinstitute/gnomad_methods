@@ -12,18 +12,19 @@ from hail.utils.misc import new_temp_file
 from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
-# Save original LogRecord factory.
+# Save original LogRecord factory, i.e. the original logger.
 old_factory = logging.getLogRecordFactory()
 
 
-# Define custom factory that appends function names to logger.
+# Define custom factory that appends function names to logger so we can
+# parse them for the validation's output table.
 def custom_record_factory(suffix):
     """Return a custom LogRecord factory that appends a given suffix to function names."""
 
     def factory(*args, **kwargs):
         # Create original log record.
         record = old_factory(*args, **kwargs)
-        # Append suffix tooriginal log record.
+        # Append suffix to original log record for future parsing.
         record.funcName = f"{record.funcName}.{suffix}"
         return record
 
@@ -99,6 +100,8 @@ def generic_field_check(
             if cond_expr is not None:
                 ht_filtered = ht.select(_fail=cond_expr, **display_fields)
                 ht_filtered = ht_filtered.filter(ht_filtered._fail).drop("_fail")
+                # Use StringIO to capture the table from show() for display in the final
+                # output table.
                 log_stream = io.StringIO()
                 with redirect_stdout(log_stream):
                     ht_filtered.show(width=200)
@@ -175,9 +178,12 @@ def generate_field_check_expr(
     right_expr: Union[hl.expr.NumericExpression, hl.expr.StringExpression],
     operator: str,
 ) -> hl.expr.BooleanExpression:
-    """Generate a Hail expression to check field comparisons while handling missing values.
+    """
+    Generate a Hail expression to check field comparisons while handling missing values.
 
-    If both fields are missing, the retured expression will be False. If only one field is missing, the expression will be True. If both fields are defined and not equal, the expression will be True.
+    If both fields are missing, the retured expression will be False. If only one field
+    is missing, the expression will be True. If both fields are defined and not equal,
+    the expression will be True.
 
     :param left_expr: Left expression field for comparison.
     :param right_expr: Right expression field for comparison.

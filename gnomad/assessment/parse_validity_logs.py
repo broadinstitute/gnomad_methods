@@ -28,6 +28,10 @@ def parse_log_file(log_file):
         "make_group_sum_expr_dict": "group summations",
         "check_sex_chr_metrics": "XY check",
         "check_raw_and_adj_callstats": "raw/adj check",
+        "check_global_and_row_annot_lengths": "globals check",
+        "compare_subset_freqs": "subset freqs",
+        "check_globals_for_retired_terms": "globals check",
+        "summarize_variant_filters": "variant summary",
     }
 
     with hl.hadoop_open(log_file, "r") as f:
@@ -59,15 +63,13 @@ def parse_log_file(log_file):
 
                 # Determine the category.
                 message_lower = message.lower()
+                # Matches "fail" or "failed" as separate words only.
+                FAIL_REGEX = re.compile(r"\b(?:fail|failed)\b")
                 log_categories = {
                     "INFO": lambda msg: (
                         "pass"
                         if "passed" in msg
-                        else (
-                            "fail"
-                            if any(word in msg for word in ["failed", "fail"])
-                            else "info"
-                        )
+                        else ("fail" if FAIL_REGEX.search(message_lower) else "info")
                     ),
                     "WARNING": "warn",
                     "ERROR": "fail",
@@ -124,7 +126,7 @@ def generate_html_report(parsed_logs, output_file):
             }
             pre {
                 text-align: left;
-                white-space: pre-wrap;
+                white-space: pre;
                 font-family: monospace;
                 background: #f8f8f8;
                 padding: 10px;

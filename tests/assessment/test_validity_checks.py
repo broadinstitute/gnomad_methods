@@ -358,7 +358,6 @@ def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics) -> None:
         info_metrics=info_metrics,
         contigs=contigs,
         verbose=verbose,
-        delimiter="_",
     )
 
     # Capture and parse the log output.
@@ -439,7 +438,6 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
     subset = ""
     label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
     sort_order = ["pop", "sex"]
-    delimiter = "_"
     metric_first_field = True
     metrics = ["AC", "AN"]
 
@@ -484,7 +482,6 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
             groups=groups,
             metrics=metrics,
             verbose=True,
-            delimiter="_",
             gen_anc_label_name="gen_anc",
         )
 
@@ -662,7 +659,7 @@ def test_check_raw_and_adj_callstats(
     ht = ht_for_check_raw_and_adj_callstats
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         check_raw_and_adj_callstats(
-            ht, subsets=[""], verbose=True, delimiter="_", metric_first_field=True
+            ht, subsets=[""], verbose=True, metric_first_field=True
         )
 
     log_messages = [record.getMessage() for record in caplog.records]
@@ -761,7 +758,7 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     metrics = ["AC"]
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
-        compare_subset_freqs(ht, subsets, verbose=True, metrics=metrics, delimiter="_")
+        compare_subset_freqs(ht, subsets, verbose=True, metrics=metrics)
 
     log_messages = [record.message for record in caplog.records]
 

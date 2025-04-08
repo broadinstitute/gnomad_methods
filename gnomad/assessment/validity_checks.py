@@ -266,7 +266,7 @@ def make_group_sum_expr_dict(
     subset: str,
     label_groups: Dict[str, List[str]],
     sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> Dict[str, Dict[str, Union[hl.expr.Int64Expression, hl.expr.StructExpression]]]:
@@ -279,7 +279,7 @@ def make_group_sum_expr_dict(
     :param subset: String indicating sample subset.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: Dictionary of sample sum field check expressions and display fields.
@@ -522,7 +522,7 @@ def compare_subset_freqs(
     subsets: List[str],
     verbose: bool,
     show_percent_sites: bool = True,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
@@ -538,7 +538,7 @@ def compare_subset_freqs(
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset, e.g. AC-non_v2-. If False, subset precedes metric, non_v2-AC-XY. Default is True.
     :param metrics: List of metrics to compare between subset and entire callset. Default is ["AC", "AN", "nhomalt"].
     :return: None
@@ -616,7 +616,7 @@ def sum_group_callstats(
     additional_subsets_and_pops: Dict[str, List[str]] = None,
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
     gen_anc_label_name: str = "pop,",
@@ -635,7 +635,7 @@ def sum_group_callstats(
     :param additional_subsets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "pop" or "gen_anc". Default is "pop".
@@ -733,7 +733,7 @@ def check_raw_and_adj_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
     verbose: bool,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     nhomalt_metric: str = "nhomalt",
 ) -> None:
@@ -750,7 +750,7 @@ def check_raw_and_adj_callstats(
     :param t: Input MatrixTable or Table to check.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
@@ -891,7 +891,7 @@ def check_sex_chr_metrics(
     info_metrics: List[str],
     contigs: List[str],
     verbose: bool,
-    delimiter: str = "-",
+    delimiter: str = "_",
     nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
@@ -905,7 +905,7 @@ def check_sex_chr_metrics(
     :param info_metrics: List of metrics in info struct of input Table.
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
+    :param delimiter: String to use as the delimiter in XX metrics. Default is "_".
     :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """

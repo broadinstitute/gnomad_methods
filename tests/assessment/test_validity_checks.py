@@ -443,7 +443,12 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         make_group_sum_expr_dict(
-            ht, subset, label_groups, sort_order, metric_first_field, metrics
+            ht,
+            subset=subset,
+            label_groups=label_groups,
+            sort_order=sort_order,
+            metric_first_field=metric_first_field,
+            metrics=metrics,
         )
     log_messages = [record.getMessage().lower().strip() for record in caplog.records]
 
@@ -537,7 +542,7 @@ def test_check_global_and_row_annot_lengths(
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         check_global_and_row_annot_lengths(
-            ht, row_to_globals_check, check_all_rows=True
+            ht, row_to_globals_check=row_to_globals_check, check_all_rows=True
         )
 
     log_messages = [record.message for record in caplog.records]
@@ -758,7 +763,7 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     metrics = ["AC"]
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
-        compare_subset_freqs(ht, subsets, verbose=True, metrics=metrics)
+        compare_subset_freqs(ht, subsets=subsets, verbose=True, metrics=metrics)
 
     log_messages = [record.message for record in caplog.records]
 
@@ -918,7 +923,7 @@ def test_summarize_variant_filters(ht_for_summarize_variant_filters, caplog) -> 
 
     with caplog.at_level(logging.INFO):
         summarize_variant_filters(
-            t=ht,
+            ht,
             variant_filter_field=variant_filter_field,
             problematic_regions=problematic_regions,
             single_filter_count=True,

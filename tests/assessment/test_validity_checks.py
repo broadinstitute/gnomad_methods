@@ -443,7 +443,7 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         make_group_sum_expr_dict(
-            ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
+            ht, subset, label_groups, sort_order, metric_first_field, metrics
         )
     log_messages = [record.getMessage().lower().strip() for record in caplog.records]
 

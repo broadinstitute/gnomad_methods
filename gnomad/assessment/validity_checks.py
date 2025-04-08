@@ -1550,15 +1550,27 @@ def check_globals_for_retired_terms(ht: hl.Table) -> None:
                     errors.append(
                         f"Found retired term 'pop' in global {field} annotation: {d}"
                     )
+                if "population" in d.keys():
+                    errors.append(
+                        f"Found retired term 'population' in global {field} annotation: {d}"
+                    )
                 if "oth" in d.values():
                     errors.append(
                         f"Found retired term 'oth' in global {field} annotation: {d}"
+                    )
+                if "other" in d.values():
+                    errors.append(
+                        f"Found retired term 'other' in global {field} annotation: {d}"
                     )
         if "index_dict" in field:
             for k in hl.eval(ht[field]).keys():
                 if "oth" in k:
                     errors.append(
                         f"Found retired term 'oth' in global {field} annotation: {k}"
+                    )
+                if "other" in k:
+                    errors.append(
+                        f"Found retired term 'other' in global {field} annotation: {k}"
                     )
 
     if len(errors) > 0:

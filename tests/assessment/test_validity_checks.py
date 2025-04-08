@@ -726,6 +726,15 @@ def ht_for_compare_subset_freqs() -> hl.Table:
                 "AC_subset1_raw": 6,
             },
         },
+        {
+            "idx": 3,
+            "info": {
+                "AC_adj": 3,
+                "AC_raw": 7,
+                "AC_subset1_adj": 2,
+                "AC_subset1_raw": None,
+            },
+        },
     ]
 
     ht = hl.Table.parallelize(
@@ -759,8 +768,8 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     # Verify log messages.
     expected_logs = [
         "PASSED AC_adj != AC_subset1_adj while non-zero check:",
-        "Found 1 sites (33.33%) that fail AC_raw != AC_subset1_raw while non-zero check:",
-        "Total defined raw AC count: 3",
+        "Found 2 sites (50.0%) that fail AC_raw != AC_subset1_raw while non-zero check:",
+        "Total defined raw AC count: 4",
     ]
 
     for log_phrase in expected_logs:
@@ -778,7 +787,7 @@ def ht_for_check_globals_for_retired_terms() -> hl.Table:
     # Annotate globals with test_meta and test_index_dict.
     ht = ht.annotate_globals(
         test_meta=[{"group": "adj", "pop": "oth"}, {"group": "raw", "pop": "nfe"}],
-        test_index_dict={"oth": 0, "nfe": 1},
+        test_index_dict={"oth": 0, "nfe": 1, "other": 4},
     )
 
     return ht
@@ -797,6 +806,7 @@ def test_check_globals_for_retired_terms(
         "Found retired term 'pop' in global test_meta annotation",
         "Found retired term 'oth' in global test_meta annotation",
         "Found retired term 'oth' in global test_index_dict annotation",
+        "Found retired term 'other' in global test_index_dict annotation",
     ]
 
     for log_message in expected_logs:

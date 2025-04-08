@@ -930,7 +930,7 @@ def test_summarize_variant_filters(ht_for_summarize_variant_filters, caplog) -> 
         )
 
     expected_logs = [
-        "Variant filter counts: {frozenset(): 1, frozenset({'AC0'}): 1, frozenset({'AC0', 'RF'}): 1, frozenset({'RF'}): 3}",
+        "Variant filter counts: {frozenset(): 1, frozenset({'AC0'}): 1, frozenset({'RF', 'AC0'}): 1, frozenset({'RF'}): 3}",
         "Exploded variant filter counts: {'AC0': 2, 'RF': 4}",
     ]
 

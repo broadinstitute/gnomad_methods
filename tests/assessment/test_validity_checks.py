@@ -1,6 +1,5 @@
 """Tests for the validity_checks module."""
 
-import ast
 import logging
 from io import StringIO
 

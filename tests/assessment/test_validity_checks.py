@@ -719,7 +719,7 @@ def ht_for_compare_subset_freqs() -> hl.Table:
                 "AC_raw": 0,
                 "AC_subset1_adj": 0,
                 "AC_subset1_raw": 0,
-                "AC_subset2_adj": hl.missing(hl.tint),
+                "AC_subset2_adj": None,
                 "AC_subset2_raw": 0,
             },
         },
@@ -780,9 +780,9 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     # Verify log messages.
     expected_logs = [
         "PASSED AC_adj != AC_subset1_adj while non-zero check:",
-        "Found 3 sites that fail AC_raw != AC_subset1_raw while non-zero check:",
-        "Found 3 sites that fail AC_adj != AC_subset2_adj while non-zero check:",
-        "Found 2 sites that fail AC_raw != AC_subset2_raw while non-zero check:",
+        "Found 3 sites (75.0%) that fail AC_raw != AC_subset1_raw while non-zero check:",
+        "Found 3 sites (75.0%) that fail AC_adj != AC_subset2_adj while non-zero check:",
+        "Found 2 sites (50.0%) that fail AC_raw != AC_subset2_raw while non-zero check:",
         "Total defined raw AC count: 3",
     ]
 

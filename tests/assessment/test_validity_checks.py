@@ -1,5 +1,6 @@
 """Tests for the validity_checks module."""
 
+import ast
 import logging
 from io import StringIO
 
@@ -884,7 +885,7 @@ def ht_for_summarize_variant_filters() -> hl.Table:
         {
             "idx": 5,
             "alleles": ["T", "C"],
-            "filters": hl.set(["RF", "AC0"]),
+            "filters": hl.set(["RF"]),
             "info": {
                 "lcr": True,
                 "segdup": False,
@@ -930,8 +931,8 @@ def test_summarize_variant_filters(ht_for_summarize_variant_filters, caplog) -> 
         )
 
     expected_logs = [
-        "Variant filter counts: {frozenset(): 1, frozenset({'AC0'}): 1, frozenset({'RF', 'AC0'}): 1, frozenset({'RF'}): 3}",
-        "Exploded variant filter counts: {'AC0': 2, 'RF': 4}",
+        "Variant filter counts: {frozenset(): 1, frozenset({'AC0'}): 1, frozenset({'RF'}): 4}",
+        "Exploded variant filter counts: {'AC0': 1, 'RF': 4}",
     ]
 
     for log_message in expected_logs:

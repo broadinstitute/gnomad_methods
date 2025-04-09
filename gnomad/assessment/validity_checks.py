@@ -569,7 +569,8 @@ def compare_subset_freqs(
                         )
 
                     # Check that either the left or right field is non-zero. If both are
-                    # zero, do not need to flag the variant. If either is missing, will want to flag the variant.
+                    # zero, do not need to flag the variant. If either is missing, will
+                    # want to flag the variant.
                     non_zero_condition = hl.or_else(
                         (t.info[check_field_left] != 0)
                         | (t.info[check_field_right] != 0)

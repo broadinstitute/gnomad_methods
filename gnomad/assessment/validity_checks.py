@@ -569,10 +569,12 @@ def compare_subset_freqs(
                         )
 
                     # Check that either the left or right field is non-zero. If both are
-                    # zero, do not need to flag the variant.
+                    # zero, do not need to flag the variant. If either is missing, will want to flag the variant.
                     non_zero_condition = hl.or_else(
                         (t.info[check_field_left] != 0)
-                        | (t.info[check_field_right] != 0),
+                        | (t.info[check_field_right] != 0)
+                        | hl.is_missing(t.info[check_field_left])
+                        | hl.is_missing(t.info[check_field_right]),
                         False,
                     )
 
@@ -1536,7 +1538,7 @@ def unfurl_array_annotations(
 
 def check_globals_for_retired_terms(ht: hl.Table) -> None:
     """
-    Check list of dictionaries to see if the keys in the dictionaries contain either 'pop and 'oth'.
+    Check list of dictionaries to see if the keys in the meta dictionaries contain either 'pop' or 'oth'.
 
     :param ht: Input Table
     """

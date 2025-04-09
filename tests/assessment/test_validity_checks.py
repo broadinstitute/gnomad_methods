@@ -708,6 +708,8 @@ def ht_for_compare_subset_freqs() -> hl.Table:
                 "AC_raw": 12,
                 "AC_subset1_adj": 9,
                 "AC_subset1_raw": 12,
+                "AC_subset2_adj": 10,
+                "AC_subset2_raw": 12,
             },
         },
         {
@@ -717,15 +719,19 @@ def ht_for_compare_subset_freqs() -> hl.Table:
                 "AC_raw": 0,
                 "AC_subset1_adj": 0,
                 "AC_subset1_raw": 0,
+                "AC_subset2_adj": hl.missing(hl.tint),
+                "AC_subset2_raw": 0,
             },
         },
         {
             "idx": 2,
             "info": {
                 "AC_adj": 5,
-                "AC_raw": 7,
+                "AC_raw": None,
                 "AC_subset1_adj": 3,
                 "AC_subset1_raw": 6,
+                "AC_subset2_adj": 4,
+                "AC_subset2_raw": None,
             },
         },
         {
@@ -735,6 +741,8 @@ def ht_for_compare_subset_freqs() -> hl.Table:
                 "AC_raw": 7,
                 "AC_subset1_adj": 2,
                 "AC_subset1_raw": None,
+                "AC_subset2_adj": 3,
+                "AC_subset2_raw": None,
             },
         },
     ]
@@ -748,6 +756,8 @@ def ht_for_compare_subset_freqs() -> hl.Table:
                 AC_raw=hl.tint32,
                 AC_subset1_adj=hl.tint32,
                 AC_subset1_raw=hl.tint32,
+                AC_subset2_adj=hl.tint32,
+                AC_subset2_raw=hl.tint32,
             ),
         ),
     )
@@ -759,7 +769,7 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     """Test that compare_subset_freqs produces the expected log messages."""
     ht = ht_for_compare_subset_freqs
 
-    subsets = ["subset1"]
+    subsets = ["subset1", "subset2"]
     metrics = ["AC"]
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
@@ -770,8 +780,10 @@ def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
     # Verify log messages.
     expected_logs = [
         "PASSED AC_adj != AC_subset1_adj while non-zero check:",
-        "Found 2 sites (50.0%) that fail AC_raw != AC_subset1_raw while non-zero check:",
-        "Total defined raw AC count: 4",
+        "Found 3 sites that fail AC_raw != AC_subset1_raw while non-zero check:",
+        "Found 3 sites that fail AC_adj != AC_subset2_adj while non-zero check:",
+        "Found 2 sites that fail AC_raw != AC_subset2_raw while non-zero check:",
+        "Total defined raw AC count: 3",
     ]
 
     for log_phrase in expected_logs:

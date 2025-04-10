@@ -1548,7 +1548,6 @@ def check_globals_for_retired_terms(
     """
     logger.info("Checking globals for retired terms...")
     errors = []
-    retired_terms = {"pop", "population", "oth", "other"}
 
     for field in ht.globals:
         if field.endswith("meta"):

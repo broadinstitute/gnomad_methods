@@ -8,12 +8,15 @@ import pytest
 
 from gnomad.assessment.validity_checks import (
     check_global_and_row_annot_lengths,
+    check_globals_for_retired_terms,
     check_missingness_of_struct,
     check_raw_and_adj_callstats,
     check_sex_chr_metrics,
+    compare_subset_freqs,
     flatten_missingness_struct,
     make_group_sum_expr_dict,
     sum_group_callstats,
+    summarize_variant_filters,
     unfurl_array_annotations,
 )
 
@@ -355,7 +358,6 @@ def test_check_sex_chr_metrics_logs(ht_for_check_sex_chr_metrics) -> None:
         info_metrics=info_metrics,
         contigs=contigs,
         verbose=verbose,
-        delimiter="_",
     )
 
     # Capture and parse the log output.
@@ -436,13 +438,17 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
     subset = ""
     label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
     sort_order = ["pop", "sex"]
-    delimiter = "_"
     metric_first_field = True
     metrics = ["AC", "AN"]
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         make_group_sum_expr_dict(
-            ht, subset, label_groups, sort_order, delimiter, metric_first_field, metrics
+            ht,
+            subset=subset,
+            label_groups=label_groups,
+            sort_order=sort_order,
+            metric_first_field=metric_first_field,
+            metrics=metrics,
         )
     log_messages = [record.getMessage().lower().strip() for record in caplog.records]
 
@@ -481,7 +487,6 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
             groups=groups,
             metrics=metrics,
             verbose=True,
-            delimiter="_",
             gen_anc_label_name="gen_anc",
         )
 
@@ -537,7 +542,7 @@ def test_check_global_and_row_annot_lengths(
 
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         check_global_and_row_annot_lengths(
-            ht, row_to_globals_check, check_all_rows=True
+            ht, row_to_globals_check=row_to_globals_check, check_all_rows=True
         )
 
     log_messages = [record.message for record in caplog.records]
@@ -659,7 +664,7 @@ def test_check_raw_and_adj_callstats(
     ht = ht_for_check_raw_and_adj_callstats
     with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
         check_raw_and_adj_callstats(
-            ht, subsets=[""], verbose=True, delimiter="_", metric_first_field=True
+            ht, subsets=[""], verbose=True, metric_first_field=True
         )
 
     log_messages = [record.getMessage() for record in caplog.records]
@@ -690,3 +695,264 @@ def test_check_raw_and_adj_callstats(
         assert any(
             log_phrase in log for log in log_messages
         ), f"Expected phrase missing: {log_phrase}"
+
+
+@pytest.fixture
+def ht_for_compare_subset_freqs() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for compare_subset_freqs."""
+    data = [
+        {
+            "idx": 0,
+            "info": {
+                "AC_adj": 10,
+                "AC_raw": 12,
+                "AC_subset1_adj": 9,
+                "AC_subset1_raw": 12,
+                "AC_subset2_adj": 10,
+                "AC_subset2_raw": 12,
+            },
+        },
+        {
+            "idx": 1,
+            "info": {
+                "AC_adj": 0,
+                "AC_raw": 0,
+                "AC_subset1_adj": 0,
+                "AC_subset1_raw": 0,
+                "AC_subset2_adj": None,
+                "AC_subset2_raw": 0,
+            },
+        },
+        {
+            "idx": 2,
+            "info": {
+                "AC_adj": 5,
+                "AC_raw": None,
+                "AC_subset1_adj": 3,
+                "AC_subset1_raw": 6,
+                "AC_subset2_adj": 4,
+                "AC_subset2_raw": None,
+            },
+        },
+        {
+            "idx": 3,
+            "info": {
+                "AC_adj": 3,
+                "AC_raw": 7,
+                "AC_subset1_adj": 2,
+                "AC_subset1_raw": None,
+                "AC_subset2_adj": 3,
+                "AC_subset2_raw": None,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            info=hl.tstruct(
+                AC_adj=hl.tint32,
+                AC_raw=hl.tint32,
+                AC_subset1_adj=hl.tint32,
+                AC_subset1_raw=hl.tint32,
+                AC_subset2_adj=hl.tint32,
+                AC_subset2_raw=hl.tint32,
+            ),
+        ),
+    )
+
+    return ht
+
+
+def test_compare_subset_freqs(ht_for_compare_subset_freqs, caplog) -> None:
+    """Test that compare_subset_freqs produces the expected log messages."""
+    ht = ht_for_compare_subset_freqs
+
+    subsets = ["subset1", "subset2"]
+    metrics = ["AC"]
+
+    with caplog.at_level(logging.INFO, logger="gnomad.assessment.validity_checks"):
+        compare_subset_freqs(ht, subsets=subsets, verbose=True, metrics=metrics)
+
+    log_messages = [record.message for record in caplog.records]
+
+    # Verify log messages.
+    expected_logs = [
+        "PASSED AC_adj != AC_subset1_adj while non-zero check:",
+        "Found 3 sites (75.0%) that fail AC_raw != AC_subset1_raw while non-zero check:",
+        "Found 3 sites (75.0%) that fail AC_adj != AC_subset2_adj while non-zero check:",
+        "Found 2 sites (50.0%) that fail AC_raw != AC_subset2_raw while non-zero check:",
+        "Total defined raw AC count: 3",
+    ]
+
+    for log_phrase in expected_logs:
+        assert any(
+            log_phrase in log for log in log_messages
+        ), f"Expected phrase missing: {log_phrase}"
+
+
+@pytest.fixture
+def ht_for_check_globals_for_retired_terms() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for check_globals_for_retired_terms."""
+    # Create a mock Hail Table with a single row.
+    ht = hl.utils.range_table(1)
+
+    # Annotate globals with test_meta and test_index_dict.
+    ht = ht.annotate_globals(
+        test_meta=[
+            {"group": "adj", "pop": "oth"},
+            {"group": "raw", "pop": "nfe"},
+            {"group": "raw", "population": "amr"},
+        ],
+        test_index_dict={"oth": 0, "nfe": 1, "other": 4},
+    )
+
+    return ht
+
+
+def test_check_globals_for_retired_terms(
+    ht_for_check_globals_for_retired_terms, caplog
+) -> None:
+    """Test that check_globals_for_retired_terms produces the expected log messages."""
+    ht = ht_for_check_globals_for_retired_terms
+
+    with caplog.at_level(logging.INFO):
+        check_globals_for_retired_terms(ht)
+
+    expected_logs = [
+        "Found retired term(s) {'pop'} in global field keys {'group': 'adj', 'pop': 'oth'}",
+        "Found retired term(s) {'oth'} in global field values {'group': 'adj', 'pop': 'oth'}",
+        "Found retired term(s) {'pop'} in global field keys {'group': 'raw', 'pop': 'nfe'}",
+        "Found retired term(s) {'population'} in global field keys {'group': 'raw', 'population': 'amr'}",
+        "Found retired term(s) {'oth'} in global index field test_index_dict: {'nfe': 1, 'oth': 0, 'other': 4}",
+        "Found retired term(s) {'other'} in global index field test_index_dict: {'nfe': 1, 'oth': 0, 'other': 4}",
+    ]
+
+    for log_message in expected_logs:
+        assert any(
+            log_message in record.message for record in caplog.records
+        ), f"Expected log message not found: {log_message}"
+
+
+@pytest.fixture
+def ht_for_summarize_variant_filters() -> hl.Table:
+    """Fixture to set up a Hail Table with the desired structure and data for summarize_variant_filters."""
+    data = [
+        {
+            "idx": 0,
+            "alleles": ["A", "T"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": True,
+                "non_par": True,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 1,
+            "alleles": ["G", "C"],
+            "filters": hl.set(["AC0"]),
+            "info": {
+                "lcr": False,
+                "segdup": False,
+                "non_par": False,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 2,
+            "alleles": ["T", "A"],
+            "filters": hl.empty_set(hl.tstr),
+            "info": {
+                "lcr": True,
+                "segdup": True,
+                "non_par": True,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 3,
+            "alleles": ["C", "G"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": False,
+                "non_par": True,
+                "allele_type": "del",
+                "n_alt_alleles": 1,
+            },
+        },
+        {
+            "idx": 4,
+            "alleles": ["A", "G"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": False,
+                "non_par": True,
+                "allele_type": "del",
+                "n_alt_alleles": 2,
+            },
+        },
+        {
+            "idx": 5,
+            "alleles": ["T", "C"],
+            "filters": hl.set(["RF"]),
+            "info": {
+                "lcr": True,
+                "segdup": False,
+                "non_par": False,
+                "allele_type": "snv",
+                "n_alt_alleles": 1,
+            },
+        },
+    ]
+
+    ht = hl.Table.parallelize(
+        data,
+        hl.tstruct(
+            idx=hl.tint32,
+            alleles=hl.tarray(hl.tstr),
+            filters=hl.tset(hl.tstr),
+            info=hl.tstruct(
+                lcr=hl.tbool,
+                segdup=hl.tbool,
+                non_par=hl.tbool,
+                allele_type=hl.tstr,
+                n_alt_alleles=hl.tint32,
+            ),
+        ),
+    )
+
+    return ht
+
+
+def test_summarize_variant_filters(ht_for_summarize_variant_filters, caplog) -> None:
+    """Test that summarize_variant_filters produces the expected log messages."""
+    ht = ht_for_summarize_variant_filters
+
+    variant_filter_field = "RF"
+    problematic_regions = ["lcr", "segdup", "non_par"]
+
+    with caplog.at_level(logging.INFO):
+        summarize_variant_filters(
+            ht,
+            variant_filter_field=variant_filter_field,
+            problematic_regions=problematic_regions,
+            single_filter_count=True,
+        )
+
+    expected_logs = [
+        "Variant filter counts: {frozenset(): 1, frozenset({'AC0'}): 1, frozenset({'RF'}): 4}",
+        "Exploded variant filter counts: {'AC0': 1, 'RF': 4}",
+    ]
+
+    for log_message in expected_logs:
+        assert any(
+            log_message in record.message for record in caplog.records
+        ), f"Expected log message not found: {log_message}"

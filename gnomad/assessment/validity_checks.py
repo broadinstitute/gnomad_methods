@@ -4,7 +4,7 @@ import io
 import logging
 from contextlib import contextmanager, redirect_stdout
 from pprint import pprint
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import hail as hl
 from hail.utils.misc import new_temp_file
@@ -106,16 +106,20 @@ def generic_field_check(
                 with redirect_stdout(log_stream):
                     ht_filtered.show(width=200)
                     table_output = log_stream.getvalue().strip()
+
+            if show_percent_sites:
+                percent_failed = round(100 * (n_fail / ht_count), 2)
+                percent_failed_log = f" ({percent_failed}%)"
+            else:
+                percent_failed_log = ""
+
             logger.info(
-                "Found %d sites that fail %s check: %s",
+                "Found %d sites%s that fail %s check: %s",
                 n_fail,
+                percent_failed_log,
                 check_description,
                 table_output,
             )
-            if show_percent_sites:
-                logger.info(
-                    "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
-                )
         else:
             table_output = None
             if verbose:
@@ -262,7 +266,7 @@ def make_group_sum_expr_dict(
     subset: str,
     label_groups: Dict[str, List[str]],
     sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> Dict[str, Dict[str, Union[hl.expr.Int64Expression, hl.expr.StructExpression]]]:
@@ -275,7 +279,7 @@ def make_group_sum_expr_dict(
     :param subset: String indicating sample subset.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: Dictionary of sample sum field check expressions and display fields.
@@ -461,20 +465,32 @@ def summarize_variant_filters(
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_expr_dict returns a dict with %ages of variants filtered
-        t.group_by(**group_exprs).aggregate(
-            **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
-        ).order_by(hl.desc("n")).show(n_rows, n_cols)
+        log_stream = io.StringIO()
+        with redirect_stdout(log_stream):
+            t.group_by(**group_exprs).aggregate(
+                **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
+            ).order_by(hl.desc("n")).show(n_rows, n_cols)
+            table_output = log_stream.getvalue().strip()
+        return table_output
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-    _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
+    summary_table = _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
+    logger.info(
+        "Distributions of filtered variants amongst variant filters: %s",
+        f"\n{summary_table}",
+    )
 
     add_agg_expr = {}
     if "allele_type" in t.info:
         logger.info("Checking distributions of variant type amongst variant filters...")
         add_agg_expr["allele_type"] = t.info.allele_type
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type amongst variant filters: %s",
+            f"\n{summary_table}",
+        )
 
     if "in_problematic_region" in t.row:
         logger.info(
@@ -482,7 +498,11 @@ def summarize_variant_filters(
             " filters..."
         )
         add_agg_expr["in_problematic_region"] = t.in_problematic_region
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type and region amongst variant filters: %s",
+            f"\n{summary_table}",
+        )
 
     if "n_alt_alleles" in t.info:
         logger.info(
@@ -490,7 +510,11 @@ def summarize_variant_filters(
             " amongst variant filters..."
         )
         add_agg_expr["n_alt_alleles"] = t.info.n_alt_alleles
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type, region type, and number of alt alleles variant filters: %s",
+            f"\n{summary_table}",
+        )
 
 
 def compare_subset_freqs(
@@ -498,7 +522,7 @@ def compare_subset_freqs(
     subsets: List[str],
     verbose: bool,
     show_percent_sites: bool = True,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
@@ -514,7 +538,7 @@ def compare_subset_freqs(
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset, e.g. AC-non_v2-. If False, subset precedes metric, non_v2-AC-XY. Default is True.
     :param metrics: List of metrics to compare between subset and entire callset. Default is ["AC", "AN", "nhomalt"].
     :return: None
@@ -544,8 +568,22 @@ def compare_subset_freqs(
                             f"{subset}{delimiter}{metric}{delimiter}{group}"
                         )
 
-                    field_check_expr[f"{check_field_left} != {check_field_right}"] = {
-                        "expr": generate_field_check_expr(
+                    # Check that either the left or right field is non-zero. If both are
+                    # zero, do not need to flag the variant. If either is missing, will
+                    # want to flag the variant.
+                    non_zero_condition = hl.or_else(
+                        (t.info[check_field_left] != 0)
+                        | (t.info[check_field_right] != 0)
+                        | hl.is_missing(t.info[check_field_left])
+                        | hl.is_missing(t.info[check_field_right]),
+                        False,
+                    )
+
+                    field_check_expr[
+                        f"{check_field_left} != {check_field_right} while non-zero"
+                    ] = {
+                        "expr": non_zero_condition
+                        & generate_field_check_expr(
                             t.info[check_field_left], t.info[check_field_right], "=="
                         ),
                         "agg_func": hl.agg.count_where,
@@ -581,7 +619,7 @@ def sum_group_callstats(
     additional_subsets_and_pops: Dict[str, List[str]] = None,
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
     gen_anc_label_name: str = "pop,",
@@ -600,13 +638,13 @@ def sum_group_callstats(
     :param additional_subsets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "pop" or "gen_anc". Default is "pop".
     :return: None
     """
-    # TODO: Add support for subpop sums
+    # TODO: Add support for subpop sums.
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
@@ -698,7 +736,7 @@ def check_raw_and_adj_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
     verbose: bool,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     nhomalt_metric: str = "nhomalt",
 ) -> None:
@@ -715,7 +753,7 @@ def check_raw_and_adj_callstats(
     :param t: Input MatrixTable or Table to check.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
     :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
@@ -856,7 +894,7 @@ def check_sex_chr_metrics(
     info_metrics: List[str],
     contigs: List[str],
     verbose: bool,
-    delimiter: str = "-",
+    delimiter: str = "_",
     nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
@@ -870,7 +908,7 @@ def check_sex_chr_metrics(
     :param info_metrics: List of metrics in info struct of input Table.
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
+    :param delimiter: String to use as the delimiter in XX metrics. Default is "_".
     :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
@@ -1122,7 +1160,7 @@ def check_global_and_row_annot_lengths(
 
     global_lengths = {
         global_field: hl.eval(hl.len(t.index_globals()[global_field]))
-        for row_field, global_fields in row_to_globals_check.items()
+        for global_fields in row_to_globals_check.values()
         for global_field in global_fields
     }
 
@@ -1497,3 +1535,45 @@ def unfurl_array_annotations(
                 expr_dict[f"{f}_{k}"] = ht[array][i][f]
 
     return expr_dict
+
+
+def check_globals_for_retired_terms(
+    ht: hl.Table, retired_terms: Set[str] = {"pop", "population", "oth", "other"}
+) -> None:
+    """
+    Check list of dictionaries to see if the keys in the meta dictionaries contain retired terms.
+
+    :param ht: Input Table
+    :param retired_terms: Set of retired terms to check for in the global annotations. Default is {"pop", "population", "oth", "other"}.
+    """
+    logger.info("Checking globals for retired terms...")
+    errors = []
+
+    for field in ht.globals:
+        if field.endswith("meta"):
+            for d in hl.eval(ht[field]):
+                # Check for retired terms in global keys.
+                terms_in_global_keys = retired_terms.intersection(d.keys())
+                if len(terms_in_global_keys) > 0:
+                    errors.append(
+                        f"Found retired term(s) {terms_in_global_keys} in global field keys {d}"
+                    )
+                # Checks for retired terms in global values.
+                terms_in_global_values = retired_terms.intersection(d.values())
+                if len(terms_in_global_values) > 0:
+                    errors.append(
+                        f"Found retired term(s) {terms_in_global_values} in global field values {d}"
+                    )
+
+        if "index_dict" in field:
+            for k in hl.eval(ht[field]).keys():
+                terms_in_global_index = retired_terms.intersection({k})
+                if len(terms_in_global_index) > 0:
+                    errors.append(
+                        f"Found retired term(s) {terms_in_global_index} in global index field {field}: {hl.eval(ht[field])}"
+                    )
+
+    if len(errors) > 0:
+        logger.info("Failed retired term check: %s", errors)
+    else:
+        logger.info("Passed retired term check: No retired terms found in globals.")

@@ -1544,7 +1544,7 @@ def check_globals_for_retired_terms(
     Check list of dictionaries to see if the keys in the meta dictionaries contain retired terms.
 
     :param ht: Input Table
-    :param retired_terms": Set of retired terms to check for in the global annotations.
+    :param retired_terms: Set of retired terms to check for in the global annotations. Default is {"pop", "population", "oth", "other"}.
     """
     logger.info("Checking globals for retired terms...")
     errors = []

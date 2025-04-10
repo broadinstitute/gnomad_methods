@@ -800,7 +800,11 @@ def ht_for_check_globals_for_retired_terms() -> hl.Table:
 
     # Annotate globals with test_meta and test_index_dict.
     ht = ht.annotate_globals(
-        test_meta=[{"group": "adj", "pop": "oth"}, {"group": "raw", "pop": "nfe"}],
+        test_meta=[
+            {"group": "adj", "pop": "oth"},
+            {"group": "raw", "pop": "nfe"},
+            {"group": "raw", "population": "amr"},
+        ],
         test_index_dict={"oth": 0, "nfe": 1, "other": 4},
     )
 
@@ -817,10 +821,12 @@ def test_check_globals_for_retired_terms(
         check_globals_for_retired_terms(ht)
 
     expected_logs = [
-        "Found retired term 'pop' in global test_meta annotation",
-        "Found retired term 'oth' in global test_meta annotation",
-        "Found retired term 'oth' in global test_index_dict annotation",
-        "Found retired term 'other' in global test_index_dict annotation",
+        "Found retired term(s) {'pop'} in global field keys {'group': 'adj', 'pop': 'oth'}",
+        "Found retired term(s) {'oth'} in global field values {'group': 'adj', 'pop': 'oth'}",
+        "Found retired term(s) {'pop'} in global field keys {'group': 'raw', 'pop': 'nfe'}",
+        "Found retired term(s) {'population'} in global field keys {'group': 'raw', 'population': 'amr'}",
+        "Found retired term(s) {'oth'} in global index field test_index_dict: {'nfe': 1, 'oth': 0, 'other': 4}",
+        "Found retired term(s) {'other'} in global index field test_index_dict: {'nfe': 1, 'oth': 0, 'other': 4}",
     ]
 
     for log_message in expected_logs:

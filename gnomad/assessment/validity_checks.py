@@ -4,7 +4,7 @@ import io
 import logging
 from contextlib import contextmanager, redirect_stdout
 from pprint import pprint
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import hail as hl
 from hail.utils.misc import new_temp_file
@@ -1537,43 +1537,41 @@ def unfurl_array_annotations(
     return expr_dict
 
 
-def check_globals_for_retired_terms(ht: hl.Table) -> None:
+def check_globals_for_retired_terms(
+    ht: hl.Table, retired_terms: Set[str] = {"pop", "population", "oth", "other"}
+) -> None:
     """
     Check list of dictionaries to see if the keys in the meta dictionaries contain either 'pop' or 'oth'.
 
     :param ht: Input Table
+    :param retired_terms": Set of retired terms to check for in the global annotations.
     """
     logger.info("Checking globals for retired terms...")
     errors = []
+    retired_terms = {"pop", "population", "oth", "other"}
 
     for field in ht.globals:
         if field.endswith("meta"):
             for d in hl.eval(ht[field]):
-                if "pop" in d.keys():
+                # Check for retired terms in global keys.
+                terms_in_global_keys = retired_terms.intersection(d.keys())
+                if len(terms_in_global_keys) > 0:
                     errors.append(
-                        f"Found retired term 'pop' in global {field} annotation: {d}"
+                        f"Found retired term(s) {terms_in_global_keys} in global field keys {d}"
                     )
-                if "population" in d.keys():
+                # Checks for retired terms in global values.
+                terms_in_global_values = retired_terms.intersection(d.values())
+                if len(terms_in_global_values) > 0:
                     errors.append(
-                        f"Found retired term 'population' in global {field} annotation: {d}"
+                        f"Found retired term(s) {terms_in_global_values} in global field values {d}"
                     )
-                if "oth" in d.values():
-                    errors.append(
-                        f"Found retired term 'oth' in global {field} annotation: {d}"
-                    )
-                if "other" in d.values():
-                    errors.append(
-                        f"Found retired term 'other' in global {field} annotation: {d}"
-                    )
+
         if "index_dict" in field:
             for k in hl.eval(ht[field]).keys():
-                if "oth" in k:
+                terms_in_global_index = retired_terms.intersection({k})
+                if len(terms_in_global_index) > 0:
                     errors.append(
-                        f"Found retired term 'oth' in global {field} annotation: {k}"
-                    )
-                if "other" in k:
-                    errors.append(
-                        f"Found retired term 'other' in global {field} annotation: {k}"
+                        f"Found retired term(s) {terms_in_global_index} in global index field {field}: {hl.eval(ht[field])}"
                     )
 
     if len(errors) > 0:

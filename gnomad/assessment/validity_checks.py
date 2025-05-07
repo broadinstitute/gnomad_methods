@@ -1528,7 +1528,8 @@ def unfurl_array_annotations(
                 f"Unexpected key(s) {unspecified_keys} in freq_meta, all keys must be defined in the sort order"
             )
 
-        # Iterate through freq_meta and assign each index to a new flattend key containing all group info.
+        # Iterate through freq_meta and assign each index to a new flattend key
+        # containing all group info.
         index_map = {_make_key(meta): idx for idx, meta in enumerate(array_meta)}
         for k, i in index_map.items():
             for f in ht[array][0].keys():

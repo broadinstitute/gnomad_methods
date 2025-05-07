@@ -1513,7 +1513,7 @@ def unfurl_array_annotations(
 
     # Define function to combine keys for flattening.
     def _make_key(meta) -> str:
-        """Function to concatenate keys into a new annotation."""
+        """Concatenate keys into a new annotation."""
         return "_".join([meta[f] for f in sorted_keys if f in meta])
 
     for array, array_meta in array_meta_dicts.items():

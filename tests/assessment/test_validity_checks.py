@@ -170,12 +170,15 @@ def ht_for_check_array_struct_missingness() -> hl.Table:
         ),
     )
 
-    # Define global annotation for freq_index_dict.
-    freq_index_dict = {"adj": 0, "raw": 1}
-    ht = ht.annotate_globals(freq_index_dict=freq_index_dict)
+    # Define global annotation for freq_meta.
+    freq_meta = [{"group": "adj"}, {"group": "raw"}]
+    ht = ht.annotate_globals(freq_meta=freq_meta)
 
     # Unfurl indexed array annotations.
-    annotations = unfurl_array_annotations(ht, {"freq": "freq_index_dict"})
+    annotations = unfurl_array_annotations(
+        ht, array_meta_dicts={"freq": "freq_meta"}, sorted_keys=["group"]
+    )
+
     ht = ht.annotate(**annotations)
 
     return ht
@@ -186,10 +189,14 @@ def test_unfurl_array_annotations(
 ) -> None:
     """Test the unfurl_array_annotations function for all rows."""
     ht = ht_for_check_array_struct_missingness
-    indexed_array_annotations = {"freq": "freq_index_dict"}
+
+    array_meta_dicts = {"freq": "freq_meta"}
+    sorted_keys = ["gen_anc", "sex", "group"]
 
     # Call the unfurl_array_annotations function.
-    result = unfurl_array_annotations(ht, indexed_array_annotations)
+    result = unfurl_array_annotations(
+        ht=ht, array_meta_dicts=array_meta_dicts, sorted_keys=sorted_keys
+    )
 
     # Define names of the expected keys after unfurling.
     expected_keys = {

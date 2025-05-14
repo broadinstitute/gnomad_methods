@@ -1505,8 +1505,8 @@ def unfurl_array_annotations(
     Array annotations are expected to have corresponding metadata dictionaries defining the content of each array element.
 
     :param ht: Input Table.
-    :param array_meta_dicts: Dictionary containing the array annotations to unfurl and their corresponding metadata dictionaries. DEfault is {'freq': 'freq_meta'}.
-    :param sorted_keys: List containing the order in which keys should be falttened. Default is ["subset", "gen_anc", "sex", "group"].
+    :param array_meta_dicts: Dictionary containing the array annotations to unfurl and their corresponding metadata dictionaries. Default is {'freq': 'freq_meta'}.
+    :param sorted_keys: List containing the order in which keys should be flattened. Default is ["subset", "gen_anc", "sex", "group"].
     :return: Flattened dictionary of unfurled array annotations.
     """
     expr_dict = {}
@@ -1528,7 +1528,7 @@ def unfurl_array_annotations(
                 f"Unexpected key(s) {unspecified_keys} in freq_meta, all keys must be defined in the sort order"
             )
 
-        # Iterate through freq_meta and assign each index to a new flattend key
+        # Iterate through freq_meta and assign each index to a new flattened key
         # containing all group info.
         index_map = {_make_key(meta): idx for idx, meta in enumerate(array_meta)}
         for k, i in index_map.items():

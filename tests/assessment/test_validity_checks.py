@@ -136,25 +136,25 @@ def ht_for_check_array_struct_missingness() -> hl.Table:
         {
             "idx": 0,
             "freq": [
-                {"AC": 5, "AF": 0.1, "AN_eas": 20, "AN_sas": 3},
-                {"AC": 10, "AF": 0.05, "AN_eas": 5, "AN_sas": None},
+                {"AC": 5, "AF": 0.1, "AN": 20, "nhomalt": 3},
+                {"AC": 10, "AF": 0.05, "AN": 5, "nhomalt": None},
             ],
         },
         {
             "idx": 1,
             "freq": [
-                {"AC": 6, "AF": 0.08, "AN_eas": None, "AN_sas": 4},
-                {"AC": 8, "AF": 0.50, "AN_eas": None, "AN_sas": None},
+                {"AC": 6, "AF": 0.08, "AN": None, "nhomalt": 4},
+                {"AC": 8, "AF": 0.50, "AN": None, "nhomalt": None},
             ],
         },
         {
             "idx": 2,
             "freq": [
-                {"AC": 65, "AF": 0.18, "AN_eas": None, "AN_sas": 2},
-                {"AC": 88, "AF": 0.20, "AN_eas": None, "AN_sas": None},
+                {"AC": 65, "AF": 0.18, "AN": None, "nhomalt": 2},
+                {"AC": 88, "AF": 0.20, "AN": None, "nhomalt": None},
             ],
         },
-        {"idx": 3, "freq": [{"AC": 8, "AF": 0.08, "AN_eas": 16, "AN_sas": 2}, None]},
+        {"idx": 3, "freq": [{"AC": 8, "AF": 0.08, "AN": 16, "nhomalt": 2}, None]},
     ]
 
     # Create Table.
@@ -164,7 +164,7 @@ def ht_for_check_array_struct_missingness() -> hl.Table:
             idx=hl.tint32,
             freq=hl.tarray(
                 hl.tstruct(
-                    AC=hl.tint32, AF=hl.tfloat64, AN_eas=hl.tint32, AN_sas=hl.tint32
+                    AC=hl.tint32, AF=hl.tfloat64, AN=hl.tint32, nhomalt=hl.tint32
                 )
             ),
         ),
@@ -191,7 +191,7 @@ def test_unfurl_array_annotations(
     ht = ht_for_check_array_struct_missingness
 
     array_meta_dicts = {"freq": "freq_meta"}
-    sorted_keys = ["gen_anc", "sex", "group"]
+    sorted_keys = ["group"]
 
     # Call the unfurl_array_annotations function.
     result = unfurl_array_annotations(
@@ -202,12 +202,12 @@ def test_unfurl_array_annotations(
     expected_keys = {
         "AC_adj",
         "AF_adj",
-        "AN_eas_adj",
-        "AN_sas_adj",
+        "AN_adj",
+        "nhomalt_adj",
         "AC_raw",
         "AF_raw",
-        "AN_eas_raw",
-        "AN_sas_raw",
+        "AN_raw",
+        "nhomalt_raw",
     }
     assert (
         set(result.keys()) == expected_keys
@@ -222,42 +222,42 @@ def test_unfurl_array_annotations(
         {
             "AC_adj": 5,
             "AF_adj": 0.1,
-            "AN_eas_adj": 20,
-            "AN_sas_adj": 3,
+            "AN_adj": 20,
+            "nhomalt_adj": 3,
             "AC_raw": 10,
             "AF_raw": 0.05,
-            "AN_eas_raw": 5,
-            "AN_sas_raw": None,
+            "AN_raw": 5,
+            "nhomalt_raw": None,
         },
         {
             "AC_adj": 6,
             "AF_adj": 0.08,
-            "AN_eas_adj": None,
-            "AN_sas_adj": 4,
+            "AN_adj": None,
+            "nhomalt_adj": 4,
             "AC_raw": 8,
             "AF_raw": 0.50,
-            "AN_eas_raw": None,
-            "AN_sas_raw": None,
+            "AN_raw": None,
+            "nhomalt_raw": None,
         },
         {
             "AC_adj": 65,
             "AF_adj": 0.18,
-            "AN_eas_adj": None,
-            "AN_sas_adj": 2,
+            "AN_adj": None,
+            "nhomalt_adj": 2,
             "AC_raw": 88,
             "AF_raw": 0.20,
-            "AN_eas_raw": None,
-            "AN_sas_raw": None,
+            "AN_raw": None,
+            "nhomalt_raw": None,
         },
         {
             "AC_adj": 8,
             "AF_adj": 0.08,
-            "AN_eas_adj": 16,
-            "AN_sas_adj": 2,
+            "AN_adj": 16,
+            "nhomalt_adj": 2,
             "AC_raw": None,
             "AF_raw": None,
-            "AN_eas_raw": None,
-            "AN_sas_raw": None,
+            "AN_raw": None,
+            "nhomalt_raw": None,
         },
     ]
 

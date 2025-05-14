@@ -1503,6 +1503,7 @@ def unfurl_array_annotations(
     Unfurl specified arrays of structs into a dictionary of flattened expressions.
 
     Array annotations are expected to have corresponding metadata dictionaries defining the content of each array element.
+    All keys in the metadata dictionaries must be defined in the `sorted_keys` list.
 
     :param ht: Input Table.
     :param array_meta_dicts: Dictionary containing the array annotations to unfurl and their corresponding metadata dictionaries. Default is {'freq': 'freq_meta'}.
@@ -1528,7 +1529,7 @@ def unfurl_array_annotations(
                 f"Unexpected key(s) {unspecified_keys} in freq_meta, all keys must be defined in the sort order"
             )
 
-        # Iterate through freq_meta and assign each index to a new flattened key
+        # Iterate through array_meta and assign each index to a new flattened key
         # containing all group info.
         index_map = {_make_key(meta): idx for idx, meta in enumerate(array_meta)}
         for k, i in index_map.items():

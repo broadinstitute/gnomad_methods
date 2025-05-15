@@ -1496,44 +1496,45 @@ def flatten_missingness_struct(
 
 def unfurl_array_annotations(
     ht: hl.Table,
-    indexed_array_annotations: Dict[str, str] = {
-        "faf": "faf_index_dict",
-        "freq": "freq_index_dict",
-    },
+    array_meta_dicts={"freq": "freq_meta"},
+    sorted_keys: List[str] = ["subset", "gen_anc", "sex", "group"],
 ) -> Dict[str, Any]:
     """
     Unfurl specified arrays of structs into a dictionary of flattened expressions.
 
-    Array annotations must have a corresponding dictionary to define the indices for each array field.
-    Example: indexed_array_annotations = {"freq": "freq_index_dict"}, where 'freq' is structured as array<struct{AC: int32, AF: float64, AN: int32, homozygote_count: int64} and 'freq_index_dict' is defined as {'adj': 0, 'raw': 1}.
-    The keys of indexed_array_annotations should be present in the Table as row annotations, whereas the values should be present as global annotations.
+    Array annotations are expected to have corresponding metadata dictionaries defining the content of each array element.
+    All keys in the metadata dictionaries must be defined in the `sorted_keys` list.
 
     :param ht: Input Table.
-    :param indexed_array_annotations: Dictionary mapping array field names to their corresponding index dictionaries, which define the indices for each array field. Default is {'faf': 'faf_index_dict', 'freq': 'freq_index_dict'}.
+    :param array_meta_dicts: Dictionary containing the array annotations to unfurl and their corresponding metadata dictionaries. Default is {'freq': 'freq_meta'}.
+    :param sorted_keys: List containing the order in which keys should be flattened. Default is ["subset", "gen_anc", "sex", "group"].
     :return: Flattened dictionary of unfurled array annotations.
     """
     expr_dict = {}
 
-    # For each specified array, unfurl the array elements and their structs
-    # into expr_dict.
-    for array, array_index_dict in indexed_array_annotations.items():
-        # Check for presence of array in the Table rows and the array index in the
-        # globals.
-        if array not in ht.row:
-            raise ValueError(f"Annotation '{array}' not found in the Table rows.")
-        if array_index_dict not in ht.globals:
+    # Define function to combine keys for flattening.
+    def _make_key(meta) -> str:
+        """Concatenate keys into a new annotation."""
+        return "_".join([meta[f] for f in sorted_keys if f in meta])
+
+    for array, array_meta in array_meta_dicts.items():
+
+        array_meta = hl.eval(ht[array_meta])
+
+        # Raise error if any unsuspected keys found.
+        meta_keys = set(key for item in array_meta for key in item.keys())
+        unspecified_keys = meta_keys - set(sorted_keys)
+        if unspecified_keys:
             raise ValueError(
-                f"Annotation '{array_index_dict}' not found in the Table globals."
+                f"Unexpected key(s) {unspecified_keys} in freq_meta, all keys must be defined in the sort order"
             )
 
-        # Evaluate the index dictionary for the specified array.
-        array_index_dict = hl.eval(ht[array_index_dict])
-
-        # Unfurl the array elements and structs into the expression dictionary.
-        for k, i in array_index_dict.items():
+        # Iterate through array_meta and assign each index to a new flattened key
+        # containing all group info.
+        index_map = {_make_key(meta): idx for idx, meta in enumerate(array_meta)}
+        for k, i in index_map.items():
             for f in ht[array][0].keys():
                 expr_dict[f"{f}_{k}"] = ht[array][i][f]
-
     return expr_dict
 
 

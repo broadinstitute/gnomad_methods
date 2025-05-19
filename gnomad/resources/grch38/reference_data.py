@@ -208,8 +208,20 @@ ensembl_interval = VersionedTableResource(
 )
 
 clinvar = VersionedTableResource(
-    default_version="20190923",
+    default_version="20250504",
     versions={
+        "20250504": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20250504.ht",
+            import_func=_import_clinvar,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20250504.vcf.gz",
+                "force_bgz": True,
+                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
+            },
+        ),
         "20190923": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20190923.ht",
             import_func=_import_clinvar,
@@ -221,7 +233,7 @@ clinvar = VersionedTableResource(
                 "min_partitions": 100,
                 "reference_genome": "GRCh38",
             },
-        )
+        ),
     },
 )
 

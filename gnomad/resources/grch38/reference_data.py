@@ -5,6 +5,10 @@ from typing import Optional, Union
 import hail as hl
 from hail import Table
 
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
 from gnomad.resources.grch37.reference_data import _import_gtex_rsem
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
@@ -46,7 +50,12 @@ def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = clinvar.filter(
         hl.len(clinvar.alleles) > 1
     )  # Get around problematic single entry in alleles array in the clinvar vcf
+    _curr_source = gnomad_public_resource_configuration.source
+    gnomad_public_resource_configuration.source = (
+        GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
+    )
     clinvar = vep_or_lookup_vep(clinvar, reference="GRCh38")
+    gnomad_public_resource_configuration.source = _curr_source
     return clinvar
 
 

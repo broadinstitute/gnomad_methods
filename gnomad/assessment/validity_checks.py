@@ -622,7 +622,7 @@ def sum_group_callstats(
     delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
-    gen_anc_label_name: str = "pop,",
+    gen_anc_label_name: str = "pop",
 ) -> None:
     """
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.

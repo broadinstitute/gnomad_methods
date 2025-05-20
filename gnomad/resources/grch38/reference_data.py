@@ -5,6 +5,10 @@ from typing import Optional, Union
 import hail as hl
 from hail import Table
 
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
 from gnomad.resources.grch37.reference_data import _import_gtex_rsem
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
@@ -46,7 +50,12 @@ def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = clinvar.filter(
         hl.len(clinvar.alleles) > 1
     )  # Get around problematic single entry in alleles array in the clinvar vcf
+    _curr_source = gnomad_public_resource_configuration.source
+    gnomad_public_resource_configuration.source = (
+        GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
+    )
     clinvar = vep_or_lookup_vep(clinvar, reference="GRCh38")
+    gnomad_public_resource_configuration.source = _curr_source
     return clinvar
 
 
@@ -208,8 +217,20 @@ ensembl_interval = VersionedTableResource(
 )
 
 clinvar = VersionedTableResource(
-    default_version="20190923",
+    default_version="20250504",
     versions={
+        "20250504": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20250504.ht",
+            import_func=_import_clinvar,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20250504.vcf.gz",
+                "force_bgz": True,
+                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
+            },
+        ),
         "20190923": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20190923.ht",
             import_func=_import_clinvar,
@@ -221,7 +242,7 @@ clinvar = VersionedTableResource(
                 "min_partitions": 100,
                 "reference_genome": "GRCh38",
             },
-        )
+        ),
     },
 )
 

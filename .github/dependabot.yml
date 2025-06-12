@@ -11,12 +11,8 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 0
-    reviewers:
-      - 'broadinstitute/gnomad-production'
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 0
-    reviewers:
-      - 'broadinstitute/gnomad-production'

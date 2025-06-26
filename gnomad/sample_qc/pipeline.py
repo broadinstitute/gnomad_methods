@@ -708,8 +708,8 @@ def annotate_sex(
         sex_ht = hl.impute_sex(
             mt[gt_expr],
             aaf_threshold=aaf_threshold,
-            male_threshold=f_stat_cutoff,
-            female_threshold=f_stat_cutoff,
+            xy_threshold=f_stat_cutoff,
+            xx_threshold=f_stat_cutoff,
             aaf=aaf_expr,
         )
 

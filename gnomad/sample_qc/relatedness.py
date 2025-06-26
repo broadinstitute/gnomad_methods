@@ -766,7 +766,7 @@ def create_fake_pedigree(
                 pat_id=pat_id,
                 mat_id=mat_id,
                 fam_id=f"fake_{str(len(fake_trios))}",
-                is_xx=bool(random.getrandbits(1)),
+                is_female=bool(random.getrandbits(1)),
             )
 
     if tries == max_tries:

@@ -581,7 +581,7 @@ def infer_families(
                             fam_id=fam_id,
                             pat_id=possible_parents[0],
                             mat_id=possible_parents[1],
-                            is_xx=sex.get(s),
+                            is_female=sex.get(s),
                         )
                         for s in children
                     ]

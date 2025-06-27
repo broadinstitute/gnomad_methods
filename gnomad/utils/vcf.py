@@ -39,12 +39,12 @@ HISTS = ["gq_hist_alt", "gq_hist_all", "dp_hist_alt", "dp_hist_all", "ab_hist_al
 Quality histograms used in VCF export.
 """
 
-FAF_POPS = {
+FAF_GEN_ANC_GROUPS = {
     "v3": ["afr", "amr", "eas", "nfe", "sas"],
     "v4": ["afr", "amr", "eas", "mid", "nfe", "sas"],
 }
 """
-Global populations that are included in filtering allele frequency (faf) calculations. Used in VCF export.
+Genetic ancestry groups that are included in filtering allele frequency (faf) calculations. Used in VCF export.
 """
 
 SEXES = ["XX", "XY"]

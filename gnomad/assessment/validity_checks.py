@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Set, Union
 import hail as hl
 from hail.utils.misc import new_temp_file
 
-from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
+from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, GEN_ANC_GROUPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
 # Save original LogRecord factory, i.e. the original logger.
@@ -614,9 +614,9 @@ def sum_group_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     sexes: List[str] = SEXES,
     subsets: List[str] = [""],
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
+    gen_anc_groups: List[str] = GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"],
     groups: List[str] = ["adj"],
-    additional_subsets_and_pops: Dict[str, List[str]] = None,
+    additional_subsets_and_gen_anc_groups: Dict[str, List[str]] = None,
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
     delimiter: str = "_",
@@ -628,14 +628,14 @@ def sum_group_callstats(
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
 
     Displays results from checking the sum of the specified annotations in stdout.
-    Also checks that annotations for all expected sample populations are present.
+    Also checks that annotations for all expected sample genetic ancestry groups are present.
 
     :param t: Input Table.
     :param sexes: List of sexes in table.
-    :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
-    :param pops: List of pops contained within the subsets. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
-    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param additional_subsets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
+    :param subsets: List of sample subsets that contain genetic ancestry groups passed in gen_anc_groups parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
+    :param gen_anc_groups: List of genetic ancestry groups contained within the subsets. Default is GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the genetic ancestry group or sex groupings of any subset. Default is ["adj"]
+    :param additional_subsets_and_gen_anc_groups: Dict with subset (keys) and list of the subset's specific genetic ancestry groups (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
@@ -644,22 +644,22 @@ def sum_group_callstats(
     :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "gen_anc" or "pop". Default is "gen_anc".
     :return: None
     """
-    # TODO: Add support for subpop sums.
+    # TODO: Add support for subgroup sums.
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
-    default_pop_subset = {subset: pops for subset in subsets}
-    sample_sum_sets_and_pops = (
-        {**default_pop_subset, **additional_subsets_and_pops}
-        if additional_subsets_and_pops
-        else default_pop_subset
+    default_gen_anc_subset = {subset: gen_anc_groups for subset in subsets}
+    sample_sum_sets_and_gen_anc_groups = (
+        {**default_gen_anc_subset, **additional_subsets_and_gen_anc_groups}
+        if additional_subsets_and_gen_anc_groups
+        else default_gen_anc_subset
     )
-    for subset, pops in sample_sum_sets_and_pops.items():
+    for subset, gen_anc_groups in sample_sum_sets_and_gen_anc_groups.items():
         for group in groups:
             for grouping in [
-                {gen_anc_label_name: pops},
+                {gen_anc_label_name: gen_anc_groups},
                 {"sex": sexes},
-                {gen_anc_label_name: pops, "sex": sexes},
+                {gen_anc_label_name: gen_anc_groups, "sex": sexes},
             ]:
                 logger.info(
                     "Making group sum expression dictionary for grouping: %s", grouping
@@ -1214,7 +1214,7 @@ def pprint_global_anns(t: Union[hl.MatrixTable, hl.Table]) -> None:
 def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
+    gen_anc_groups: List[str] = GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"],
     missingness_threshold: float = 0.5,
     site_gt_check_expr: Dict[str, hl.expr.BooleanExpression] = None,
     verbose: bool = False,
@@ -1224,7 +1224,7 @@ def validate_release_t(
     sum_metrics: List[str] = ["AC", "AN", "nhomalt"],
     sexes: List[str] = SEXES,
     groups: List[str] = ["adj"],
-    sample_sum_sets_and_pops: Dict[str, List[str]] = None,
+    sample_sum_sets_and_gen_anc_groups: Dict[str, List[str]] = None,
     sort_order: List[str] = SORT_ORDER,
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
@@ -1254,7 +1254,7 @@ def validate_release_t(
 
     :param t: Input MatrixTable or Table containing variant annotations to check.
     :param subsets: List of subsets to be checked.
-    :param pops: List of pops within main callset. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param gen_anc_groups: List of genetic ancestry groups within main callset. Default is GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
     :param site_gt_check_expr: Optional boolean expression or dictionary of strings and boolean expressions typically used to log how many monoallelic or 100% heterozygous sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
@@ -1263,8 +1263,8 @@ def validate_release_t(
     :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
     :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
-    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the genetic ancestry group or sex groupings of any subset. Default is ["adj"]
+    :param sample_sum_sets_and_gen_anc_groups: Dict with subset (keys) and genetic ancestry groups within subset (values) for sample sum check.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
@@ -1327,9 +1327,9 @@ def validate_release_t(
             t,
             sexes,
             subsets,
-            pops,
+            gen_anc_groups,
             groups,
-            sample_sum_sets_and_pops,
+            sample_sum_sets_and_gen_anc_groups,
             verbose,
             sort_order,
             delimiter,

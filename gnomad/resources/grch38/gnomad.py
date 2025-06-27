@@ -82,7 +82,7 @@ Sample sexes used in VCF export.
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
-POPS = {
+GEN_ANC_GROUPS = {
     "v3": {
         "genomes": [
             "afr",
@@ -124,15 +124,15 @@ POPS = {
     },
 }
 """
-Global ancestry groups in gnomAD by version.
+Genetic ancestry groups in gnomAD by version.
 """
 
-COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
+COHORTS_WITH_GEN_ANC_STORED_AS_SUBGRP = ["tgp", "hgdp"]
 """
-Subsets in gnomAD v3.1 that are broken down by their known subpops instead of global pops in the frequency struct.
+Subsets in gnomAD v3.1 that are broken down by their known genetic ancestry subgroups instead of groups in the frequency struct.
 """
 
-TGP_POPS = [
+TGP_GEN_ANC_GROUPS = [
     "esn",
     "pur",
     "pjl",
@@ -161,10 +161,10 @@ TGP_POPS = [
     "gwd",
 ]
 """
-1000 Genomes Project (1KG/TGP) subpops.
+1000 Genomes Project (1KG/TGP) genetic ancestry subgroups.
 """
 
-HGDP_POPS = [
+HGDP_GEN_ANC_GROUPS = [
     "japanese",
     "papuanhighlands",
     "papuansepik",
@@ -221,10 +221,10 @@ HGDP_POPS = [
     "maya",
 ]
 """
-Human Genome Diversity Project (HGDP) subpops.
+Human Genome Diversity Project (HGDP) genetic ancestry subgroups.
 """
 
-TGP_POP_NAMES = {
+TGP_GEN_ANC_GROUP_NAMES = {
     "chb": "Han Chinese",
     "jpt": "Japanese",
     "chs": "Southern Han Chinese",
@@ -253,16 +253,16 @@ TGP_POP_NAMES = {
     "itu": "Indian Telugu",
 }
 """
-1000 Genomes Project (1KG/TGP) pop label map.
+1000 Genomes Project (1KG/TGP) genetic ancestry group label map.
 """
 
-POPS_STORED_AS_SUBPOPS = TGP_POPS + HGDP_POPS
-POPS_TO_REMOVE_FOR_POPMAX = {
+GEN_ANC_GROUPS_STORED_AS_SUBGRPS = TGP_GEN_ANC_GROUPS + HGDP_GEN_ANC_GROUPS
+GEN_ANC_GROUPS_TO_REMOVE_FOR_GRPMAX = {
     "v3": {"asj", "fin", "mid", "oth", "ami", "remaining"},
     "v4": {"asj", "fin", "oth", "ami", "remaining"},
 }
 """
-Populations that are removed before popmax calculations.
+Genetic ancestry groups that are removed before genetic ancestry group max calculations.
 """
 
 DOWNSAMPLINGS = {
@@ -596,7 +596,7 @@ def gnomad_gks(
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",
-    by_ancestry_group: bool = False,
+    by_gen_anc_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
     custom_ht: hl.Table = None,
@@ -611,7 +611,7 @@ def gnomad_gks(
         e.g. hl.locus_interval('chr1', 6424776, 6461367, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
-    :param by_ancestry_group: Boolean to pass to obtain frequency information for each cohort.
+    :param by_gen_anc_group: Boolean to pass to obtain frequency information for each cohort.
     :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex.
     :param vrs_only: Boolean to pass for only VRS info to be returned
         (will not include allele frequency information).
@@ -660,15 +660,19 @@ def gnomad_gks(
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
     # Retrieve ancestry groups from the imported POPS dictionary.
-    pops_list = list(POPS[high_level_version][data_type]) if by_ancestry_group else None
+    grps_list = (
+        list(GEN_ANC_GROUPS[high_level_version][data_type])
+        if by_gen_anc_group
+        else None
+    )
 
     # Throw warnings if contradictory arguments are passed.
-    if by_ancestry_group and vrs_only:
+    if by_gen_anc_group and vrs_only:
         logger.warning(
-            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
-            " 'by_ancestry_groups' list and returning only VRS information."
+            "Both 'vrs_only' and 'by_gen_anc_groups' have been specified. Ignoring"
+            " 'by_gen_anc_groups' list and returning only VRS information."
         )
-    elif by_sex and not by_ancestry_group:
+    elif by_sex and not by_gen_anc_group:
         logger.warning(
             "Splitting whole database by sex is not yet supported. If using 'by_sex',"
             " please also specify 'by_ancestry_group' to stratify by."
@@ -741,7 +745,7 @@ def gnomad_gks(
                 input_struct=variant,
                 label_name="gnomAD",
                 label_version=version,
-                ancestry_groups=pops_list,
+                ancestry_groups=grps_list,
                 ancestry_groups_dict=POP_NAMES,
                 by_sex=by_sex,
                 freq_index_dict=ht_freq_index_dict,

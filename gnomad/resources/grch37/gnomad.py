@@ -24,11 +24,11 @@ SUBPOPS = {
     "NFE": ["BGR", "EST", "NWE", "SEU", "SWE", "ONF"],
     "EAS": ["KOR", "JPN", "OEA"],
 }
-GENOME_POPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH"]
-EXOME_POPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH", "SAS"]
-EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
+GENOME_GEN_ANC_GROUPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH"]
+EXOME_GEN_ANC_GROUPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH", "SAS"]
+EXAC_GEN_ANC_GROUPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
-POP_NAMES = {
+GEN_ANC_GROUP_NAMES = {
     "oth": "Other",
     "afr": "African-American/African",
     "ami": "Amish",

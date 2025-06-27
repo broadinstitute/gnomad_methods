@@ -49,7 +49,7 @@ DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
-GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
+GENOME_GEN_ANCS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 SUBSETS = {
     "v3": [
         "non_v2",
@@ -568,7 +568,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
 
 def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
     """
-    Add a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
+    Add a grpMaxFAF95 struct with 'grpmax' and 'grpmax_gen_anc'.
 
     Also includes a jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
 
@@ -581,12 +581,12 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
         fafmax_field = ht.fafmax
     ht = ht.annotate(
         grpMaxFAF95=hl.struct(
-            popmax=fafmax_field.faf95_max,
-            popmax_population=fafmax_field.faf95_max_gen_anc,
+            grpmax=fafmax_field.faf95_max,
+            grpmax_gen_anc=fafmax_field.faf95_max_gen_anc,
         ),
         jointGrpMaxFAF95=hl.struct(
-            popmax=ht.joint_fafmax.faf95_max,
-            popmax_population=ht.joint_fafmax.faf95_max_gen_anc,
+            grpmax=ht.joint_fafmax.faf95_max,
+            grpmax_gen_anc=ht.joint_fafmax.faf95_max_gen_anc,
         ),
     )
     return ht

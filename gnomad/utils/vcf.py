@@ -710,7 +710,7 @@ def index_globals(
     Create a dictionary keyed by the specified label groupings with values describing the corresponding index of each grouping entry in the meta_array annotation.
 
     :param globals_array: Ordered list containing dictionary entries describing all the grouping combinations contained in the globals_array annotation.
-       Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
+       Keys are the grouping type (e.g., 'group', 'gen_anc', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"])
     :param label_delimiter: String used as delimiter when making group label combinations.
@@ -778,29 +778,30 @@ def make_combo_header_text(
 
 
 def create_label_groups(
-    pops: List[str],
+    gen_ancs: List[str],
     sexes: List[str] = SEXES,
     all_groups: List[str] = GROUPS,
-    pop_sex_groups: List[str] = ["adj"],
+    gen_anc_sex_groups: List[str] = ["adj"],
 ) -> List[Dict[str, List[str]]]:
     """
     Generate a list of label group dictionaries needed to populate info dictionary.
 
     Label dictionaries are passed as input to `make_info_dict`.
 
-    :param pops: List of population names.
+    :param gen_ancs: List of genetic ancestry group names.
     :param sexes: List of sample sexes.
     :param all_groups: List of data types (raw, adj). Default is `GROUPS`, which is ["raw", "adj"].
-    :param pop_sex_groups: List of data types (raw, adj) to populate with pops and sexes. Default is ["adj"].
+    :param gen_anc_sex_groups: List of data types (raw, adj) to populate with gen_ancs and sexes. Default is ["adj"].
     :return: List of label group dictionaries.
     """
     return [
         # This is to capture raw frequency fields, which are
-        # not stratified by sex or population (e.g., only AC_raw exists, not AC_XX_raw)
+        # not stratified by sex or genetic ancestry group (e.g., only AC_raw
+        # exists, not AC_XX_raw)
         dict(group=all_groups),
-        dict(group=pop_sex_groups, sex=sexes),
-        dict(group=pop_sex_groups, pop=pops),
-        dict(group=pop_sex_groups, pop=pops, sex=sexes),
+        dict(group=gen_anc_sex_groups, sex=sexes),
+        dict(group=gen_anc_sex_groups, gen_anc=gen_ancs),
+        dict(group=gen_anc_sex_groups, gen_anc=gen_ancs, sex=sexes),
     ]
 
 
@@ -830,7 +831,7 @@ def make_info_dict(
 
     Creates:
         - INFO fields for age histograms (bin freq, n_smaller, and n_larger for heterozygous and homozygous variant carriers)
-        - INFO fields for popmax AC, AN, AF, nhomalt, and popmax population
+        - INFO fields for grpmax AC, AN, AF, nhomalt, and grpmax genetic ancestry group
         - INFO fields for AC, AN, AF, nhomalt for each combination of sample genetic ancestry group, sex, and subgroup, both for adj and raw data
         - INFO fields for filtering allele frequency (faf) annotations
 

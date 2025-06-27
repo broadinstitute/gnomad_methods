@@ -1586,9 +1586,9 @@ def annotate_freq(
     If the `additional_strata_expr` parameter is used, frequencies will be computed for
     each of the strata dictionaries across all values. For example, if
     `additional_strata_expr` is set to `[{'platform': mt.platform},
-    {'platform':mt.platform, 'pop': mt.pop}, {'age_bin': mt.age_bin}]`, then
+    {'platform':mt.platform, 'gen_anc': mt.gen_anc}, {'age_bin': mt.age_bin}]`, then
     frequencies will be computed for each of the values of `mt.platform`, each of the
-    combined values of `mt.platform` and `mt.pop`, and each of the values of
+    combined values of `mt.platform` and `mt.gen_anc`, and each of the values of
     `mt.age_bin`.
 
     .. rubric:: The `downsamplings` parameter
@@ -1605,7 +1605,7 @@ def annotate_freq(
     downsampling groups were already created and are to be used in the frequency
     calculation.
 
-    .. rubric:: The `downsampling_expr` and `ds_pop_counts` parameters
+    .. rubric:: The `downsampling_expr` and `ds_gen_anc_counts` parameters
 
     If the `downsampling_expr` parameter is used, `downsamplings` must also be set
     and frequencies will be computed for all samples and by genetic ancestry group (if `gen_anc_expr`
@@ -1614,7 +1614,7 @@ def annotate_freq(
     is used, a 'gen_anc_idx' within the `downsampling_expr` to be used to determine if a
     sample belongs within a certain downsampling group, i.e. the index is less than
     the group size. `The function `annotate_downsamplings` can be used to to create
-    the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
+    the `downsampling_expr`, `downsamplings`, and `ds_gen_anc_counts` expressions.
 
     .. rubric:: The `entry_agg_funcs` parameter
 
@@ -1677,7 +1677,7 @@ def annotate_freq(
             mt, downsamplings, gen_anc_expr=gen_anc_expr
         ).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)
-        ds_pop_counts = hl.eval(ds_ht.ds_pop_counts)
+        ds_gen_anc_counts = hl.eval(ds_ht.ds_gen_anc_counts)
         downsampling_expr = ds_ht[mt.col_key].downsampling
 
     # Build list of all stratification groups to be used in the frequency calculation.
@@ -1700,7 +1700,7 @@ def annotate_freq(
         ht,
         strata_expr,
         downsamplings=downsamplings,
-        ds_pop_counts=ds_pop_counts,
+        ds_gen_anc_counts=ds_gen_anc_counts,
     )
 
     freq_ht = compute_freq_by_strata(
@@ -1756,7 +1756,7 @@ def annotate_downsamplings(
         )
         downsamplings = [x for x in downsamplings if x <= sum(gen_anc_counts.values())]
         downsamplings = sorted(set(downsamplings + list(gen_anc_counts.values())))
-        # Add an index by pop for use in computing frequencies, or other aggregate stats
+        # Add an index by gen_anc for use in computing frequencies, or other aggregate stats
         # on the downsamplings.
         scan_expr["gen_anc_idx"] = hl.scan.counter(ht.gen_anc).get(ht.gen_anc, 0)
     else:
@@ -1773,7 +1773,7 @@ def annotate_downsamplings(
 
     t = t.annotate_globals(
         downsamplings=downsamplings,
-        ds_pop_counts=pop_counts,
+        ds_gen_anc_counts=gen_anc_counts,
     )
 
     return t
@@ -1829,8 +1829,8 @@ def build_freq_stratification_list(
         if downsampling_expr.get("gen_anc_idx") is None:
             if gen_anc_expr is not None:
                 errors.append(
-                    "annotate_freq requires `downsampling_expr` with key 'pop_idx' when"
-                    " using `pop_expr`"
+                    "annotate_freq requires `downsampling_expr` with key 'gen_anc_idx' when"
+                    " using `gen_anc_expr`"
                 )
         else:
             if gen_anc_expr is None:
@@ -1853,7 +1853,7 @@ def build_freq_stratification_list(
     if subgrp_expr is not None:
         strata_expr.append({"gen_anc": gen_anc_expr, "subgrp": subgrp_expr})
 
-    # Add downsampling to strata expressions, include pop in the strata if supplied.
+    # Add downsampling to strata expressions, include gen_anc in the strata if supplied.
     if downsampling_expr is not None:
         downsampling_strata = {"downsampling": downsampling_expr}
         if gen_anc_expr is not None:
@@ -1873,7 +1873,7 @@ def generate_freq_group_membership_array(
     ht: hl.Table,
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
     downsamplings: Optional[List[int]] = None,
-    ds_pop_counts: Optional[Dict[str, int]] = None,
+    ds_gen_anc_counts: Optional[Dict[str, int]] = None,
     remove_zero_sample_groups: bool = False,
     no_raw_group: bool = False,
 ) -> hl.Table:
@@ -1889,7 +1889,7 @@ def generate_freq_group_membership_array(
         - freq_meta: Each element of the list contains metadata on a stratification
           group.
         - freq_meta_sample_count: sample count per grouping defined in `freq_meta`.
-        - If downsamplings or ds_pop_counts are specified, they are also added as
+        - If downsamplings or ds_gen_anc_counts are specified, they are also added as
           global annotations on the returned Table.
 
     Each sample is annotated with a 'group_membership' array indicating whether the
@@ -1901,7 +1901,7 @@ def generate_freq_group_membership_array(
         the keys of each dictionary are strings and the values are corresponding
         expressions that define the values to stratify frequency calculations by.
     :param downsamplings: List of downsampling values to include in the stratifications.
-    :param ds_pop_counts: Dictionary of population counts for each downsampling value.
+    :param ds_gen_anc_counts: Dictionary of genetic ancestry group counts for each downsampling value.
     :param remove_zero_sample_groups: Whether to remove groups with a sample count of 0.
         Default is False.
     :param no_raw_group: Whether to remove the raw group from the 'group_membership'
@@ -1914,11 +1914,11 @@ def generate_freq_group_membership_array(
     global_idx_in_ds_expr = any(
         "global_idx" in s["downsampling"] for s in strata_expr if "downsampling" in s
     )
-    pop_in_strata = any("pop" in s for s in strata_expr)
-    pop_idx_in_ds_expr = any(
-        "pop_idx" in s["downsampling"]
+    gen_anc_in_strata = any("gen_anc" in s for s in strata_expr)
+    gen_anc_idx_in_ds_expr = any(
+        "gen_anc_idx" in s["downsampling"]
         for s in strata_expr
-        if "downsampling" in s and ds_pop_counts is not None
+        if "downsampling" in s and ds_gen_anc_counts is not None
     )
 
     if downsamplings is not None and not ds_in_strata:
@@ -1931,15 +1931,15 @@ def generate_freq_group_membership_array(
             "Strata must contain a downsampling expression with 'global_idx' when "
             "downsamplings are provided."
         )
-    if ds_pop_counts is not None and not pop_in_strata:
+    if ds_gen_anc_counts is not None and not gen_anc_in_strata:
         errors.append(
-            "Strata must contain a population expression 'pop' when ds_pop_counts "
+            "Strata must contain a genetic ancestry group expression 'gen_anc' when ds_gen_anc_counts "
             " are provided."
         )
-    if ds_pop_counts is not None and not pop_idx_in_ds_expr:
+    if ds_gen_anc_counts is not None and not gen_anc_idx_in_ds_expr:
         errors.append(
-            "Strata must contain a downsampling expression with 'pop_idx' when "
-            "ds_pop_counts are provided."
+            "Strata must contain a downsampling expression with 'gen_anc_idx' when "
+            "ds_gen_anc_counts are provided."
         )
 
     if errors:
@@ -1961,37 +1961,37 @@ def generate_freq_group_membership_array(
     for strata in strata_expr:
         downsampling_expr = strata.get("downsampling")
         strata_values = []
-        # Add to all downsampling groups, both global and population-specific, to
+        # Add to all downsampling groups, both global and genetic ancestry group-specific, to
         # strata.
         for s in strata:
             if s == "downsampling":
                 v = [("downsampling", d) for d in downsamplings]
             else:
                 v = [(s, k[s]) for k in strata_counts.get(s, {})]
-                if s == "pop" and downsampling_expr is not None:
-                    v.append(("pop", "global"))
+                if s == "gen_anc" and downsampling_expr is not None:
+                    v.append(("gen_anc", "global"))
             strata_values.append(v)
 
         # Get all combinations of strata values.
         strata_combinations = itertools.product(*strata_values)
         # Create sample group filters that are evaluated on each sample for each strata
         # combination. Strata combinations are evaluated as a logical AND, e.g.
-        # {"pop":nfe, "downsampling":1000} or "nfe-10000" creates the filter expression
-        # pop == nfe AND downsampling pop_idx < 10000.
+        # {"gen_anc":nfe, "downsampling":1000} or "nfe-10000" creates the filter expression
+        # gen_anc == nfe AND downsampling gen_anc_idx < 10000.
         for combo in strata_combinations:
             combo = dict(combo)
             ds = combo.get("downsampling")
-            pop = combo.get("pop")
+            gen_anc = combo.get("gen_anc")
             # If combo contains downsampling, determine the downsampling index
             # annotation to use.
             downsampling_idx = "global_idx"
             if ds is not None:
-                if pop is not None and pop != "global":
-                    # Don't include population downsamplings where the downsampling is
-                    # larger than the number of samples in the population.
-                    if ds > ds_pop_counts[pop]:
+                if gen_anc is not None and gen_anc != "global":
+                    # Don't include genetic ancestry group downsamplings where the downsampling is
+                    # larger than the number of samples in the genetic ancestry group.
+                    if ds > ds_gen_anc_counts[gen_anc]:
                         continue
-                    downsampling_idx = "pop_idx"
+                    downsampling_idx = "gen_anc_idx"
 
             # If combo contains downsampling, add downsampling filter expression.
             combo_filter_exprs = []
@@ -1999,7 +1999,7 @@ def generate_freq_group_membership_array(
                 if s == "downsampling":
                     combo_filter_exprs.append(downsampling_expr[downsampling_idx] < v)
                 else:
-                    if s != "pop" or v != "global":
+                    if s != "gen_anc" or v != "global":
                         combo_filter_exprs.append(strata[s] == v)
             combo = {k: str(v) for k, v in combo.items()}
             sample_group_filters.append((combo, hl.all(combo_filter_exprs)))
@@ -2047,8 +2047,8 @@ def generate_freq_group_membership_array(
 
     if downsamplings is not None:
         global_expr["downsamplings"] = downsamplings
-    if ds_pop_counts is not None:
-        global_expr["ds_pop_counts"] = ds_pop_counts
+    if ds_gen_anc_counts is not None:
+        global_expr["ds_gen_anc_counts"] = ds_gen_anc_counts
 
     ht = ht.select_globals(**global_expr)
     ht = ht.checkpoint(hl.utils.new_temp_file("group_membership", "ht"))
@@ -2699,7 +2699,7 @@ def add_gks_va(
         "cohort": {"id": "ALL"},
     }
 
-    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
+    # Create ancillaryResults for additional frequency and grpMaxFAF95 information.
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
     }
@@ -2710,25 +2710,25 @@ def add_gks_va(
         ancillaryResults["hemizygotes"] = hemizygote_count
 
     # Add group max FAF if it exists
-    if input_struct.grpMaxFAF95.popmax_population is not None:
+    if input_struct.grpMaxFAF95.gen_anc_group is not None:
         ancillaryResults["grpMaxFAF95"] = {
-            "frequency": input_struct.grpMaxFAF95.popmax,
+            "frequency": input_struct.grpMaxFAF95.gen_anc_group,
             "confidenceInterval": 0.95,
             "groupId": (
-                f"{gnomad_id}.{input_struct.grpMaxFAF95.popmax_population.upper()}"
+                f"{gnomad_id}.{input_struct.grpMaxFAF95.gen_anc_group.upper()}"
             ),
         }
 
     # Add joint group max FAF if it exists.
     if (
         "jointGrpMaxFAF95" in input_struct
-        and input_struct.jointGrpMaxFAF95.popmax_population is not None
+        and input_struct.jointGrpMaxFAF95.gen_anc_group is not None
     ):
         ancillaryResults["jointGrpMaxFAF95"] = {
-            "frequency": input_struct.jointGrpMaxFAF95.popmax,
+            "frequency": input_struct.jointGrpMaxFAF95.gen_anc_group,
             "confidenceInterval": 0.95,
             "groupId": (
-                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.popmax_population.upper()}"
+                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.gen_anc_group.upper()}"
             ),
         }
 

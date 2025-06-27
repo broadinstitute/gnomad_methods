@@ -44,7 +44,7 @@ def freq_bin_expr(
 
         - Default index is 0 because function assumes freq_expr was calculated with
           `annotate_freq`.
-        - Frequency index 0 from `annotate_freq` is frequency for all pops calculated
+        - Frequency index 0 from `annotate_freq` is frequency for all gen anc groups calculated
           on adj genotypes only.
 
     :param freq_expr: Array of structs containing frequency information.
@@ -236,7 +236,7 @@ def get_summary_counts(
         - Input HT is annotated with VEP.
         - Multiallelic variants have been split and/or input HT contains bi-allelic variants only.
         - freq_expr was calculated with `annotate_freq`.
-        - (Frequency index 0 from `annotate_freq` is frequency for all pops calculated on adj genotypes only.)
+        - (Frequency index 0 from `annotate_freq` is frequency for all gen anc groups calculated on adj genotypes only.)
 
     :param ht: Input Table.
     :param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
@@ -1141,7 +1141,7 @@ def default_generate_gene_lof_summary(
     ).rows()
     ht = ht.annotate(
         p=(1 - hl.sqrt(hl.float64(ht.lof.no_alt_calls) / ht.lof.defined)),
-        pop_p=hl.dict(
+        gen_anc_p=hl.dict(
             hl.array(ht.lof.gen_anc_defined).map(
                 lambda x: (
                     x[0],

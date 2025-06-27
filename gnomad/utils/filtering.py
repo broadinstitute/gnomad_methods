@@ -50,7 +50,7 @@ def filter_by_frequency(
     :param direction: One of "above", "below", and "equal" (how to apply the filter)
     :param frequency: Frequency to filter by (one of frequency or allele_count is required)
     :param allele_count: Allele count to filter by (one of frequency or allele_count is required)
-    :param population: Genetic ancestry group in which to filter frequency
+    :param gen_anc: Genetic ancestry group in which to filter frequency
     :param subgrp: Subgroup in which to filter frequency
     :param downsampling: Downsampling in which to filter frequency
     :param keep: Whether to keep rows passing this frequency (passed to filter_rows)
@@ -91,9 +91,9 @@ def filter_by_frequency(
     if downsampling:
         criteria.append(lambda f: f.meta.get("downsampling", "") == str(downsampling))
         size += 1
-        if not population:
+        if not gen_anc:
             size += 1
-            criteria.append(lambda f: f.meta.get("pop", "") == "global")
+            criteria.append(lambda f: f.meta.get("gen_anc", "") == "global")
         if subgrp:
             raise ValueError("No downsampling data for subgroups implemented")
     criteria.append(lambda f: f.meta.size() == size)

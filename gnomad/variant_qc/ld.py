@@ -8,10 +8,10 @@ from gnomad.resources.grch37.gnomad_ld import ld_index, ld_matrix
 
 
 def get_r_human_readable(
-    pop: str, var1: str, var2: str, ref_genome: str = "GRCh37"
+    gen_anc: str, var1: str, var2: str, ref_genome: str = "GRCh37"
 ):  # noqa: D103
-    bm = ld_matrix(pop).bm()
-    ht = ld_index(pop).ht()
+    bm = ld_matrix(gen_anc).bm()
+    ht = ld_index(gen_anc).ht()
     chrom, pos, ref, alt = var1.split("-")
     var1 = (hl.parse_locus(f"{chrom}:{pos}", ref_genome), [ref, alt])
     chrom, pos, ref, alt = var2.split("-")
@@ -61,18 +61,18 @@ def get_r_for_pair_of_variants(
     return bm[idx1, idx2]
 
 
-def get_r_within_gene_in_pop(pop: str, gene: str):
+def get_r_within_gene_in_gen_anc(gen_anc: str, gene: str):
     """
-    Get LD information (`r`) for all pairs of variants within `gene` for a given `pop`.
+    Get LD information (`r`) for all pairs of variants within `gene` for a given `gen_anc`.
 
     Warning: this returns a table quadratic in number of variants. Exercise caution with large genes.
 
-    :param pop: Population for which to get LD information
+    :param gen_anc: Genetic ancestry group for which to get LD information
     :param gene: Gene symbol as string
     :return: Table with pairs of variants
     """
     return get_r_within_gene(
-        ld_matrix(pop).bm(), ld_index(pop).ht(), gene, None, "GRCh37"
+        ld_matrix(gen_anc).bm(), ld_index(gen_anc).ht(), gene, None, "GRCh37"
     )
 
 

@@ -273,11 +273,11 @@ def make_group_sum_expr_dict(
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
-    For example, if subset1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
+    For example, if subset1 consists of gen_anc1, gen_anc2, and gen_anc3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-gen_anc1, t.info.AC-subset1-gen_anc2, t.info.AC-subset1-gen_anc3).
 
     :param t: Input MatrixTable or Table containing call stats annotations to be summed.
     :param subset: String indicating sample subset.
-    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
@@ -301,7 +301,7 @@ def make_group_sum_expr_dict(
         )
     group = label_groups.pop("group")[0]
     # sum_group is a the type of high level annotation that you want to sum
-    # e.g. 'pop', 'pop-sex', 'sex'.
+    # e.g. 'gen_anc', 'gen_anc-sex', 'sex'.
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
@@ -309,10 +309,10 @@ def make_group_sum_expr_dict(
 
     # Loop through metrics and the label combos to build a dictionary
     # where the key is a string representing the sum_group annotations and the value is the sum of these annotations.
-    # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is pop, then the values below are:
-    # sum_group_exprs = ["AC-tgp-pop1", "AC-tgp-pop2", "AC-tgp-pop3"]
-    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1",
-    # "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])}
+    # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is gen_anc, then the values below are:
+    # sum_group_exprs = ["AC-tgp-gen_anc1", "AC-tgp-gen_anc2", "AC-tgp-gen_anc3"]
+    # annot_dict = {'sum-AC-tgp-adj-gen_anc': hl.sum(["AC-tgp-adj-gen_anc1",
+    # "AC-tgp-adj-gen_anc2", "AC-tgp-adj-gen_anc3"])}
     annot_dict = {}
     for metric in metrics:
         field_prefix = (
@@ -347,9 +347,9 @@ def make_group_sum_expr_dict(
 
     logger.info("Generated annot_dict keys: %s", list(annot_dict.keys()))
 
-    # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
+    # If metric_first_field is True, metric is AC, subset is tgp, sum_group is gen_anc, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
-    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict
+    # check_field_right = "sum-AC-tgp-adj-gen_anc" to match the annotation dict
     # key from above.
     field_check_expr = {}
     for metric in metrics:

@@ -19,7 +19,7 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-POP_NAMES = {
+GEN_ANC_NAMES = {
     "afr": "African/African-American",
     "ami": "Amish",
     "amr": "Admixed American",
@@ -53,7 +53,7 @@ POP_NAMES = {
     "unk": "Unknown",
 }
 
-POP_COLORS = {
+GEN_ANC_COLORS = {
     "afr": "#941494",
     "ami": "#FFC0CB",
     "amr": "#ED1E24",

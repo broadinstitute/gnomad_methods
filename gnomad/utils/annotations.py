@@ -1673,7 +1673,9 @@ def annotate_freq(
     # Generate downsamplings and assign downsampling_expr if it is None when
     # downsamplings is supplied.
     if downsamplings is not None and downsampling_expr is None:
-        ds_ht = annotate_downsamplings(mt, downsamplings, pop_expr=pop_expr).cols()
+        ds_ht = annotate_downsamplings(
+            mt, downsamplings, gen_anc_expr=gen_anc_expr
+        ).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)
         ds_pop_counts = hl.eval(ds_ht.ds_pop_counts)
         downsampling_expr = ds_ht[mt.col_key].downsampling
@@ -2563,7 +2565,7 @@ def add_gks_va(
     :freq_index_dict: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
         Default is None.
     :return: Tuple containing a dictionary containing GKS VA frequency information,
-        (split by ancestry groups and sex if desired) for the specified variant.
+        (split by genetic ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
     if by_sex and not gen_anc_groups:
@@ -2645,7 +2647,7 @@ def add_gks_va(
         return freq_record
 
     # Create a list to then add the dictionaries for frequency reports for
-    # different ancestry groups to.
+    # different genetic ancestry groups to.
     list_of_group_info_dicts = []
 
     # Iterate through provided groups and generate dictionaries.

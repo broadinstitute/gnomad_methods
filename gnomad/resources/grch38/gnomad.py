@@ -743,8 +743,8 @@ def gnomad_gks(
                 input_struct=variant,
                 label_name="gnomAD",
                 label_version=version,
-                ancestry_groups=grps_list,
-                ancestry_groups_dict=GEN_ANC_NAMES,
+                gen_anc_groups=grps_list,
+                gen_anc_groups_dict=GEN_ANC_NAMES,
                 by_sex=by_sex,
                 freq_index_dict=ht_freq_index_dict,
             )

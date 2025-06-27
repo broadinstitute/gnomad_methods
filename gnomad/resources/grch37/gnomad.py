@@ -256,7 +256,7 @@ def liftover(data_type: str) -> VersionedTableResource:
 
 def public_pca_loadings(subgrp: str = "") -> GnomadPublicTableResource:
     """
-    Return the TableResource containing sites and loadings from population PCA.
+    Return the TableResource containing sites and loadings from genetic ancestry PCA.
 
     :param subgrp: Can be empty ("") -> global, "eas" or "nfe"
     :return: gnomAD public PCA loadings TableResource

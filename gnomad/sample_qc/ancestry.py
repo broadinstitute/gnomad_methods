@@ -252,7 +252,7 @@ def assign_genetic_ancestry_pcs(
         the `expand_pd_array_col`can be used to expand this column into multiple `PC`
         columns.
 
-    :param pop_pca_scores: Input Hail Table or Pandas Dataframe.
+    :param gen_anc_pca_scores: Input Hail Table or Pandas Dataframe.
     :param pc_cols: List of which PCs to use/columns storing the PCs to use. Values
         provided should be 1-based and should be a list of integers when passing in a
         Hail Table (i.e. [1, 2, 4, 5]) or a list of strings when passing in a Pandas
@@ -297,7 +297,9 @@ def assign_genetic_ancestry_pcs(
             pc_col_len = list(
                 filter(
                     None,
-                    pop_pca_scores.aggregate(hl.agg.collect_as_set(hl.len(pc_cols))),
+                    gen_anc_pca_scores.aggregate(
+                        hl.agg.collect_as_set(hl.len(pc_cols))
+                    ),
                 )
             )
             if len(pc_col_len) > 1:

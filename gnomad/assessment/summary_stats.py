@@ -44,7 +44,7 @@ def freq_bin_expr(
 
         - Default index is 0 because function assumes freq_expr was calculated with
           `annotate_freq`.
-        - Frequency index 0 from `annotate_freq` is frequency for all pops calculated
+        - Frequency index 0 from `annotate_freq` is frequency for all gen anc groups calculated
           on adj genotypes only.
 
     :param freq_expr: Array of structs containing frequency information.
@@ -236,7 +236,7 @@ def get_summary_counts(
         - Input HT is annotated with VEP.
         - Multiallelic variants have been split and/or input HT contains bi-allelic variants only.
         - freq_expr was calculated with `annotate_freq`.
-        - (Frequency index 0 from `annotate_freq` is frequency for all pops calculated on adj genotypes only.)
+        - (Frequency index 0 from `annotate_freq` is frequency for all gen anc groups calculated on adj genotypes only.)
 
     :param ht: Input Table.
     :param freq_field: Name of field in HT containing frequency annotation (array of structs). Default is "freq".
@@ -981,7 +981,7 @@ def get_het_hom_summary_dict(
     defined_sites_expr: hl.expr.Int64Expression,
     num_homs_expr: hl.expr.Int64Expression,
     num_hets_expr: hl.expr.Int64Expression,
-    pop_expr: hl.expr.StringExpression,
+    gen_anc_expr: hl.expr.StringExpression,
 ) -> Dict[str, hl.expr.Int64Expression]:
     """
     Generate dictionary containing summary counts.
@@ -991,14 +991,14 @@ def get_het_hom_summary_dict(
         - Number of samples with heterozygous calls
         - Number of samples with homozygous calls
 
-    Function has option to generate counts by population.
+    Function has option to generate counts by genetic ancestry group.
 
     :param csq_set: Set containing transcript consequence string(s).
     :param most_severe_csq_expr: StringExpression containing most severe consequence.
     :param defined_sites_expr: Int64Expression containing number of sites with defined genotype calls.
     :param num_homs_expr: Int64Expression containing number of samples with homozygous genotype calls.
     :param num_hets_expr: Int64Expression containing number of samples with heterozygous genotype calls.
-    :param pop_expr: StringExpression containing sample population labels.
+    :param gen_anc_expr: StringExpression containing sample genetic ancestry labels.
     :return: Dictionary of summary annotation names and their values.
     """
     csq_filter_expr = hl.literal(csq_set).contains(most_severe_csq_expr)
@@ -1013,26 +1013,26 @@ def get_het_hom_summary_dict(
         ),
         "obs_hom": hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
         "defined": hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
-        "pop_no_alt_calls": hl.agg.group_by(
-            pop_expr,
+        "gen_anc_no_alt_calls": hl.agg.group_by(
+            gen_anc_expr,
             hl.agg.count_where(
                 (csq_filter_expr)
                 & (defined_sites_expr > 0)
                 & (num_homs_expr + num_hets_expr == 0)
             ),
         ),
-        "pop_obs_het": hl.agg.group_by(
-            pop_expr,
+        "gen_anc_obs_het": hl.agg.group_by(
+            gen_anc_expr,
             hl.agg.count_where(
                 (csq_filter_expr) & (num_homs_expr == 0) & (num_hets_expr > 0)
             ),
         ),
-        "pop_obs_hom": hl.agg.group_by(
-            pop_expr,
+        "gen_anc_obs_hom": hl.agg.group_by(
+            gen_anc_expr,
             hl.agg.count_where((csq_filter_expr) & (num_homs_expr > 0)),
         ),
-        "pop_defined": hl.agg.group_by(
-            pop_expr,
+        "gen_anc_defined": hl.agg.group_by(
+            gen_anc_expr,
             hl.agg.count_where((csq_filter_expr) & (defined_sites_expr > 0)),
         ),
     }
@@ -1044,7 +1044,7 @@ def default_generate_gene_lof_summary(
     tx: bool = False,
     lof_csq_set: Set[str] = LOF_CSQ_SET,
     meta_root: str = "meta",
-    pop_field: str = "pop",
+    gen_anc_field: str = "gen_anc",
     filter_loftee: bool = False,
 ) -> hl.Table:
     """
@@ -1058,7 +1058,7 @@ def default_generate_gene_lof_summary(
         - Number of samples with heterozygous pLoF variants.
         - Number of samples with homozygous pLoF variants.
         - Total number of sites with genotype calls.
-        - All of the above stats grouped by population.
+        - All of the above stats grouped by genetic ancestry group.
 
     Assumes MT was created using `default_generate_gene_lof_matrix`.
 
@@ -1072,7 +1072,7 @@ def default_generate_gene_lof_summary(
     :param tx: Whether input MT has transcript expression data. Default is False.
     :param lof_csq_set: Set containing LoF transcript consequence strings. Default is LOF_CSQ_SET.
     :param meta_root: String indicating top level name for sample metadata. Default is 'meta'.
-    :param pop_field: String indiciating field with sample population assignment information. Default is 'pop'.
+    :param gen_anc_field: String indicating field with sample genetic ancestry assignment information. Default is 'gen_anc'.
     :param filter_loftee: Filters to LOFTEE pass variants (and no LoF flags) only. Default is False.
     :return: Table with het/hom summary counts.
     """
@@ -1115,7 +1115,7 @@ def default_generate_gene_lof_summary(
                 defined_sites_expr=mt.defined_sites,
                 num_homs_expr=mt.num_homs,
                 num_hets_expr=mt.num_hets,
-                pop_expr=mt[meta_root][pop_field],
+                gen_anc_expr=mt[meta_root][gen_anc_field],
             ),
         ),
         missense=hl.struct(
@@ -1125,7 +1125,7 @@ def default_generate_gene_lof_summary(
                 defined_sites_expr=mt.defined_sites,
                 num_homs_expr=mt.num_homs,
                 num_hets_expr=mt.num_hets,
-                pop_expr=mt[meta_root][pop_field],
+                gen_anc_expr=mt[meta_root][gen_anc_field],
             ),
         ),
         synonymous=hl.struct(
@@ -1135,17 +1135,18 @@ def default_generate_gene_lof_summary(
                 defined_sites_expr=mt.defined_sites,
                 num_homs_expr=mt.num_homs,
                 num_hets_expr=mt.num_hets,
-                pop_expr=mt[meta_root][pop_field],
+                gen_anc_expr=mt[meta_root][gen_anc_field],
             ),
         ),
     ).rows()
     ht = ht.annotate(
         p=(1 - hl.sqrt(hl.float64(ht.lof.no_alt_calls) / ht.lof.defined)),
-        pop_p=hl.dict(
-            hl.array(ht.lof.pop_defined).map(
+        gen_anc_p=hl.dict(
+            hl.array(ht.lof.gen_anc_defined).map(
                 lambda x: (
                     x[0],
-                    1 - hl.sqrt(hl.float64(ht.lof.pop_no_alt_calls.get(x[0])) / x[1]),
+                    1
+                    - hl.sqrt(hl.float64(ht.lof.gen_anc_no_alt_calls.get(x[0])) / x[1]),
                 )
             )
         ),

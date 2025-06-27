@@ -443,8 +443,8 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
     ht = ht_for_group_sums
 
     subset = ""
-    label_groups = {"pop": ["afr", "amr"], "group": ["adj"]}
-    sort_order = ["pop", "sex"]
+    label_groups = {"gen_anc": ["afr", "amr"], "group": ["adj"]}
+    sort_order = ["gen_anc", "sex"]
     metric_first_field = True
     metrics = ["AC", "AN"]
 
@@ -465,8 +465,8 @@ def test_make_group_sum_expr_dict_logs(ht_for_group_sums, caplog) -> None:
         "including field ac_amr_adj",
         "an_afr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
         "an_amr_adj is not in table's info field, it will not be included in make_group_sum_expr_dict",
-        "generated annot_dict keys: ['sum_ac_adj_pop', 'sum_an_adj_pop']",
-        "no valid fields found for sum_an_adj_pop",
+        "generated annot_dict keys: ['sum_ac_adj_gen_anc', 'sum_an_adj_gen_anc']",
+        "no valid fields found for sum_an_adj_gen_anc",
     ]
 
     for log_phrase in expected_logs:
@@ -481,7 +481,7 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
 
     sexes = ["XX", "XY"]
     subsets = [""]
-    pops = ["afr", "amr"]
+    gen_anc_groups = ["afr", "amr"]
     groups = ["adj"]
     metrics = ["AC", "AN"]
 
@@ -490,7 +490,7 @@ def test_sum_group_callstats(ht_for_group_sums, caplog) -> None:
             ht,
             sexes=sexes,
             subsets=subsets,
-            pops=pops,
+            gen_anc_groups=gen_anc_groups,
             groups=groups,
             metrics=metrics,
             verbose=True,

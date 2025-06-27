@@ -20,15 +20,15 @@ GENOME_COVERAGE_RELEASES = ["2.1"]
 CURRENT_EXOME_COVERAGE_RELEASE = "2.1"
 CURRENT_GENOME_COVERAGE_RELEASE = "2.1"
 
-SUBPOPS = {
+SUBGROUPS = {
     "NFE": ["BGR", "EST", "NWE", "SEU", "SWE", "ONF"],
     "EAS": ["KOR", "JPN", "OEA"],
 }
-GENOME_POPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH"]
-EXOME_POPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH", "SAS"]
-EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
+GENOME_GEN_ANC_GROUPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH"]
+EXOME_GEN_ANC_GROUPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH", "SAS"]
+EXAC_GEN_ANC_GROUPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
-POP_NAMES = {
+GEN_ANC_GROUP_NAMES = {
     "oth": "Other",
     "afr": "African-American/African",
     "ami": "Amish",
@@ -88,15 +88,15 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
 
 
-def _public_pca_ht_path(subpop: str) -> str:
+def _public_pca_ht_path(subgrp: str) -> str:
     """
     Get public pca loadings path.
 
-    :param subpop: Can be empty ("") -> global, "eas" or "nfe"
+    :param subgrp: Can be empty ("") -> global, "eas" or "nfe"
     :return: Path to release Table
     """
-    subpop = f".{subpop}" if subpop else ""
-    return f"gs://gnomad-public-requester-pays/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
+    subgrp = f".{subgrp}" if subgrp else ""
+    return f"gs://gnomad-public-requester-pays/release/2.1/pca/gnomad.r2.1.pca_loadings{subgrp}.ht"
 
 
 def _liftover_data_path(data_type: str, version: str) -> str:
@@ -254,19 +254,19 @@ def liftover(data_type: str) -> VersionedTableResource:
     )
 
 
-def public_pca_loadings(subpop: str = "") -> GnomadPublicTableResource:
+def public_pca_loadings(subgrp: str = "") -> GnomadPublicTableResource:
     """
-    Return the TableResource containing sites and loadings from population PCA.
+    Return the TableResource containing sites and loadings from genetic ancestry PCA.
 
-    :param subpop: Can be empty ("") -> global, "eas" or "nfe"
+    :param subgrp: Can be empty ("") -> global, "eas" or "nfe"
     :return: gnomAD public PCA loadings TableResource
     """
-    if subpop not in ["", "eas", "nfe"]:
+    if subgrp not in ["", "eas", "nfe"]:
         raise DataException(
-            'Available subpops are "eas" or "nfe", default value "" for global'
+            'Available subgroups are "eas" or "nfe", default value "" for global'
         )
 
-    return GnomadPublicTableResource(path=_public_pca_ht_path(subpop))
+    return GnomadPublicTableResource(path=_public_pca_ht_path(subgrp))
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:

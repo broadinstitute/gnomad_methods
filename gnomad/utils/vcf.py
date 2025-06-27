@@ -676,7 +676,7 @@ def make_label_combos(
     Make combinations of all possible labels for a supplied dictionary of label groups.
 
     For example, if label_groups is {"sex": ["XY", "XX"], "gen_anc": ["afr", "nfe", "amr"]},
-    this function will return ["afr_XY", "afr_XX", "nfe_XY", "nfe_XX", "amr_XY", "amr_XX']
+    this function will return ["afr_XY", "afr_XX", "nfe_XY", "nfe_XX", "amr_XY", "amr_XX"]
 
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).

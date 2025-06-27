@@ -2537,8 +2537,8 @@ def add_gks_va(
     input_struct: hl.struct,
     label_name: str = "gnomAD",
     label_version: str = "3.1.2",
-    ancestry_groups: list = None,
-    ancestry_groups_dict: dict = None,
+    gen_anc_groups: list = None,
+    gen_anc_groups_dict: dict = None,
     by_sex: bool = False,
     freq_index_dict: dict = None,
 ) -> dict:
@@ -2554,9 +2554,9 @@ def add_gks_va(
     :param input_struct: Hail struct for a desired variant (such as result of running .collect()[0] on a Table).
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the table being used. Example: "3.1.2".
-    :param ancestry_groups: List of strings of shortened names of cohorts to return results for.
+    :param gen_anc_groups: List of strings of shortened names of cohorts to return results for.
         Example: ['afr','fin','nfe']. Default is None.
-    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
+    :param gen_anc_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
         Example: {'afr':'African/African American'}. Default is None.
     :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
         Default is None.
@@ -2566,10 +2566,10 @@ def add_gks_va(
         (split by ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
-    if by_sex and not ancestry_groups:
+    if by_sex and not gen_anc_groups:
         logger.warning(
             "Splitting whole database by sex is not yet supported. If using 'by_sex',"
-            " please also specify 'ancestry_groups' to stratify by."
+            " please also specify 'gen_anc_groups' to stratify by."
         )
 
     contig = input_struct.locus.contig
@@ -2649,11 +2649,11 @@ def add_gks_va(
     list_of_group_info_dicts = []
 
     # Iterate through provided groups and generate dictionaries.
-    if ancestry_groups:
-        for group in ancestry_groups:
+    if gen_anc_groups:
+        for group in gen_anc_groups:
             group_result = _create_group_dicts(
                 group_id=group,
-                group_label=ancestry_groups_dict[group],
+                group_label=gen_anc_groups_dict[group],
             )
 
             # If specified, stratify group information by sex.
@@ -2662,7 +2662,7 @@ def add_gks_va(
                 for sex in ["XX", "XY"]:
                     sex_result = _create_group_dicts(
                         group_id=group,
-                        group_label=ancestry_groups_dict[group],
+                        group_label=gen_anc_groups_dict[group],
                         group_sex=sex,
                     )
                     sex_list.append(sex_result)
@@ -2773,9 +2773,9 @@ def add_gks_va(
 
     final_freq_dict["qualityMeasures"] = qualityMeasures
 
-    # If ancestry_groups were passed, add the ancestry group dictionary to the
+    # If gen_anc_groups were passed, add the gen_anc group dictionary to the
     # final frequency dictionary to be returned.
-    if ancestry_groups:
+    if gen_anc_groups:
         final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
 
     return final_freq_dict

@@ -1,0 +1,13 @@
+gnomad
+======
+
+
+
+.. toctree::
+    :maxdepth: 2
+
+    assessment <assessment/index>
+    sample_qc <sample_qc/index>
+    resources <resources/index>
+    utils <utils/index>
+    variant_qc <variant_qc/index>

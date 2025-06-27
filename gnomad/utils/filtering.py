@@ -31,8 +31,8 @@ def filter_by_frequency(
     direction: str,
     frequency: float = None,
     allele_count: int = None,
-    population: str = None,
-    subpop: str = None,
+    gen_anc: str = None,
+    subgrp: str = None,
     downsampling: int = None,
     keep: bool = True,
     adj: bool = True,
@@ -44,14 +44,14 @@ def filter_by_frequency(
 
     At least one of frequency or allele_count is required.
 
-    Subpop can be specified without a population if desired.
+    Subgroup can be specified without a genetic ancestry group if desired.
 
     :param t: Input MatrixTable or Table
     :param direction: One of "above", "below", and "equal" (how to apply the filter)
     :param frequency: Frequency to filter by (one of frequency or allele_count is required)
     :param allele_count: Allele count to filter by (one of frequency or allele_count is required)
-    :param population: Population in which to filter frequency
-    :param subpop: Sub-population in which to filter frequency
+    :param population: Genetic ancestry group in which to filter frequency
+    :param subgrp: Subgroup in which to filter frequency
     :param downsampling: Downsampling in which to filter frequency
     :param keep: Whether to keep rows passing this frequency (passed to filter_rows)
     :param adj: Whether to use adj frequency
@@ -78,15 +78,15 @@ def filter_by_frequency(
         else:
             criteria.append(lambda f: f.AC[1] == allele_count)
     size = 1
-    if population:
-        criteria.append(lambda f: f.meta.get("pop", "") == population)
+    if gen_anc:
+        criteria.append(lambda f: f.meta.get("gen_anc", "") == gen_anc)
         size += 1
-    if subpop:
-        criteria.append(lambda f: f.meta.get("subpop", "") == subpop)
+    if subgrp:
+        criteria.append(lambda f: f.meta.get("subgrp", "") == subgrp)
         size += 1
-        # If one supplies a subpop but not a population, this will ensure this
+        # If one supplies a subgroup but not a genetic ancestry group, this will ensure this
         # gets it right
-        if not population:
+        if not gen_anc:
             size += 1
     if downsampling:
         criteria.append(lambda f: f.meta.get("downsampling", "") == str(downsampling))
@@ -94,8 +94,8 @@ def filter_by_frequency(
         if not population:
             size += 1
             criteria.append(lambda f: f.meta.get("pop", "") == "global")
-        if subpop:
-            raise ValueError("No downsampling data for subpopulations implemented")
+        if subgrp:
+            raise ValueError("No downsampling data for subgroups implemented")
     criteria.append(lambda f: f.meta.size() == size)
 
     filt = lambda x: combine_functions(criteria, x)

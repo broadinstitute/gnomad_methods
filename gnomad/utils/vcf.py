@@ -16,10 +16,11 @@ logger.setLevel(logging.INFO)
 SORT_ORDER = [
     "subset",
     "downsampling",
-    "popmax",
     "grpmax",
-    "pop",
+    "popmax",
     "gen_anc",
+    "pop",
+    "subgrp",
     "subpop",
     "sex",
     "group",
@@ -730,7 +731,7 @@ def index_globals(
 def make_combo_header_text(
     preposition: str,
     combo_dict: Dict[str, str],
-    pop_names: Dict[str, str],
+    gen_anc_names: Dict[str, str],
 ) -> str:
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
@@ -742,7 +743,7 @@ def make_combo_header_text(
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
         Possible grouping types are: "group", "gen_anc", "sex", and "subgroup".
         Example input: {"gen_anc": "afr", "sex": "XX"}
-    :param pop_names: Dict with global genetic ancestry group names (keys) and genetic ancestry group descriptions (values).
+    :param gen_anc_names: Dict with global genetic ancestry group names (keys) and genetic ancestry group descriptions (values).
     :return: String with automatically generated description text for a given set of combo fields.
     """
     header_text = " " + preposition
@@ -756,17 +757,17 @@ def make_combo_header_text(
 
     header_text = header_text + " samples"
 
-    if "subpop" in combo_dict or "pop" in combo_dict:
-        if "subpop" in combo_dict:
+    if "subgrp" in combo_dict or "gen_anc" in combo_dict:
+        if "subgrp" in combo_dict:
             header_text = (
                 header_text
-                + f" in the {pop_names[combo_dict['subpop']]} genetic ancestry subgroup"
+                + f" in the {gen_anc_names[combo_dict['subgrp']]} genetic ancestry subgroup"
             )
 
         else:
             header_text = (
                 header_text
-                + f" in the {pop_names[combo_dict['pop']]} genetic ancestry group"
+                + f" in the {gen_anc_names[combo_dict['gen_anc']]} genetic ancestry group"
             )
 
     if "group" in combo_dict:
@@ -807,12 +808,11 @@ def make_info_dict(
     prefix: str = "",
     suffix: str = "",
     prefix_before_metric: bool = True,
-    pop_names: Dict[str, str] = POP_NAMES,
+    gen_anc_names: Dict[str, str] = GEN_ANC_NAMES,
     label_groups: Dict[str, List[str]] = None,
     label_delimiter: str = "_",
     bin_edges: Dict[str, str] = None,
     faf: bool = False,
-    popmax: bool = False,
     grpmax: bool = False,
     fafmax: bool = False,
     callstats: bool = False,
@@ -837,13 +837,12 @@ def make_info_dict(
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
     :param suffix: Suffix string for data, e.g. "gnomAD". Default is empty string.
     :param prefix_before_metric: Whether prefix should be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
-    :param pop_names: Dict with global genetic ancestry group names (keys) and genetic ancestry group descriptions (values). Default is POP_NAMES.
+    :param gen_anc_names: Dict with global genetic ancestry group names (keys) and genetic ancestry group descriptions (values). Default is GEN_ANC_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
         e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param label_delimiter: String to use as delimiter when making group label combinations.
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
-    :param popmax: If True, use alternate logic to auto-populate dictionary values associated with popmax annotations.
     :param grpmax: If True, use alternate logic to auto-populate dictionary values associated with grpmax annotations.
     :param fafmax: If True, use alternate logic to auto-populate dictionary values associated with fafmax annotations.
     :param callstats: If True, use alternate logic to auto-populate dictionary values associated with callstats annotations.
@@ -912,50 +911,6 @@ def make_info_dict(
         }
         info_dict.update(age_hist_dict)
 
-    if popmax:
-        popmax_dict = {
-            f"{prefix}popmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    f"Population with the maximum allele frequency{description_text}"
-                ),
-            },
-            f"{prefix}AC{label_delimiter}popmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    "Allele count in the population with the maximum allele"
-                    f" frequency{description_text}"
-                ),
-            },
-            f"{prefix}AN{label_delimiter}popmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    "Total number of alleles in the population with the maximum allele"
-                    f" frequency{description_text}"
-                ),
-            },
-            f"{prefix}AF{label_delimiter}popmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    f"Maximum allele frequency across populations{description_text}"
-                ),
-            },
-            f"{prefix}nhomalt{label_delimiter}popmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    "Count of homozygous individuals in the population with the"
-                    f" maximum allele frequency{description_text}"
-                ),
-            },
-            f"{prefix}faf95{label_delimiter}popmax{suffix}": {
-                "Number": "A",
-                "Description": (
-                    "Filtering allele frequency (using Poisson 95% CI) for the"
-                    f" population with the maximum allele frequency{description_text}"
-                ),
-            },
-        }
-        info_dict.update(popmax_dict)
     if grpmax:
         grpmax_dict = {
             f"{prefix}grpmax{suffix}": {
@@ -1038,8 +993,8 @@ def make_info_dict(
             combo_fields = combo.split(label_delimiter)
             group_dict = dict(zip(group_types, combo_fields))
 
-            for_combo = make_combo_header_text("for", group_dict, pop_names)
-            in_combo = make_combo_header_text("in", group_dict, pop_names)
+            for_combo = make_combo_header_text("for", group_dict, gen_anc_names)
+            in_combo = make_combo_header_text("in", group_dict, gen_anc_names)
 
             metrics = ["AC", "AN", "AF", "nhomalt", "faf95", "faf99"]
             if freq_ctt:

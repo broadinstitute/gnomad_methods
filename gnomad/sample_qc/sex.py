@@ -61,16 +61,16 @@ def adjusted_sex_ploidy_expr(
 def adjust_sex_ploidy(
     mt: hl.MatrixTable,
     sex_expr: hl.expr.StringExpression,
-    xy_str: str = "xy",
-    xx_str: str = "xx",
+    xy_str: str = "XY",
+    xx_str: str = "XX",
 ) -> hl.MatrixTable:
     """
     Convert XY to haploid on non-PAR X/Y, sets XX to missing on Y.
 
     :param mt: Input MatrixTable
     :param sex_expr: Expression pointing to sex in MT (if not xy_str or xx_str, no change)
-    :param xy_str: String for XY (default 'xy')
-    :param xx_str: String for XX (default 'xx')
+    :param xy_str: String for XY (default 'XY')
+    :param xx_str: String for XX (default 'XX')
     :return: MatrixTable with fixed ploidy for sex chromosomes
     """
     return mt.annotate_entries(

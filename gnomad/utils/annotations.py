@@ -2548,7 +2548,7 @@ def add_gks_va(
     Generate Python dictionary containing GKS VA annotations.
 
     Populate the dictionary with frequency information conforming to the GKS VA frequency schema.
-    If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
+    If gen_anc_groups or by_sex is provided, also include subcohort schemas for each cohort.
     If input_struct has mean_depth, it is added to ancillaryResults.
     This annotation is added under the gks_va_freq_dict field of the table.
     The focusAllele field is not populated, and must be filled in by the caller.

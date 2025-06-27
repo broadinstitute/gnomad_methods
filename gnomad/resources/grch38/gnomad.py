@@ -12,7 +12,7 @@ from gnomad.resources.resource_utils import (
     VersionedMatrixTableResource,
     VersionedTableResource,
 )
-from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.sample_qc.ancestry import GEN_ANC_NAMES
 from gnomad.utils.annotations import add_gks_va, add_gks_vrs
 
 logging.basicConfig(
@@ -659,11 +659,9 @@ def gnomad_gks(
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
-    # Retrieve ancestry groups from the imported POPS dictionary.
+    # Retrieve ancestry groups from the imported GEN_ANC_NAMES dictionary.
     grps_list = (
-        list(GEN_ANC_GROUPS[high_level_version][data_type])
-        if by_gen_anc_group
-        else None
+        list(GEN_ANC_NAMES[high_level_version][data_type]) if by_gen_anc_group else None
     )
 
     # Throw warnings if contradictory arguments are passed.
@@ -746,7 +744,7 @@ def gnomad_gks(
                 label_name="gnomAD",
                 label_version=version,
                 ancestry_groups=grps_list,
-                ancestry_groups_dict=POP_NAMES,
+                ancestry_groups_dict=GEN_ANC_NAMES,
                 by_sex=by_sex,
                 freq_index_dict=ht_freq_index_dict,
             )

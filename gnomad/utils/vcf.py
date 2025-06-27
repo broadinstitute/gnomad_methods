@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Union
 
 import hail as hl
 
-from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.sample_qc.ancestry import GEN_ANC_NAMES
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

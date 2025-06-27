@@ -812,15 +812,15 @@ def filter_arrays_by_meta(
     The `items_to_filter` can be used to filter in the following ways based on
     `meta_expr` items:
     - By a list of keys, e.g. ["sex", "downsampling"].
-    - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
-    {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
-    {"pop": ["afr"], "sex": ["XX"]}.
+    - By specific key: value pairs, e.g. to filter where 'gen_anc' is 'han' or 'papuan'
+    {"gen_anc": ["han", "papuan"]}, or where 'gen_anc' is 'afr' and/or 'sex' is 'XX'
+    {"gen_anc": ["afr"], "sex": ["XX"]}.
 
     The items can be kept or removed from `meta_indexed_expr` and `meta_expr` based on
     the value of `keep`. For example if `meta_indexed_exprs` is {'freq': ht.freq,
     'freq_meta_sample_count': ht.index_globals().freq_meta_sample_count} and `meta_expr`
     is ht.freq_meta then if `keep` is True, the items specified by `items_to_filter`
-    such as  'pop' = 'han' will be kept and all other items will be removed from the
+    such as  'gen_anc' = 'han' will be kept and all other items will be removed from the
     ht.freq, ht.freq_meta_sample_count, and ht.freq_meta. `meta_indexed_exprs` can also
     be a single array expression such as ht.freq.
 

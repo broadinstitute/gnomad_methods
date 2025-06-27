@@ -124,7 +124,7 @@ def make_freq_index_dict_from_meta(
 
     The dictionary is keyed by the grouping combinations found in the frequency metadata
     array, where values are the corresponding 0-based indices for the groupings in the
-    frequency array. For example, if the `freq_meta` entry [{'pop': 'nfe'}, {'sex': 'XX'}]
+    frequency array. For example, if the `freq_meta` entry [{'gen_anc': 'nfe'}, {'sex': 'XX'}]
     corresponds to the 5th entry in the frequency array, the returned dictionary entry
     would be {'nfe_XX': 4}.
 

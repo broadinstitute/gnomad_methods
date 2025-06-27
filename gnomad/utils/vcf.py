@@ -26,7 +26,7 @@ SORT_ORDER = [
 ]
 """
 Order to sort subgroupings during VCF export.
-Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_female).
+Ensures that INFO labels in VCF are in desired order (e.g., raw_AC_afr_XX).
 """
 
 GROUPS = ["adj", "raw"]
@@ -675,11 +675,11 @@ def make_label_combos(
     """
     Make combinations of all possible labels for a supplied dictionary of label groups.
 
-    For example, if label_groups is `{"sex": ["male", "female"], "pop": ["afr", "nfe", "amr"]}`,
-    this function will return `["afr_male", "afr_female", "nfe_male", "nfe_female", "amr_male", "amr_female']`
+    For example, if label_groups is {"sex": ["XY", "XX"], "gen_anc": ["afr", "nfe", "amr"]},
+    this function will return ["afr_XY", "afr_XX", "nfe_XY", "nfe_XX", "amr_XY", "amr_XX"]
 
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+        e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param label_delimiter: String to use as delimiter when making group label combinations.
     :return: list of all possible combinations of values for the supplied label groupings.
@@ -711,7 +711,7 @@ def index_globals(
     :param globals_array: Ordered list containing dictionary entries describing all the grouping combinations contained in the globals_array annotation.
        Keys are the grouping type (e.g., 'group', 'pop', 'sex') and values are the grouping attribute (e.g., 'adj', 'eas', 'XY').
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"])
+        e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"])
     :param label_delimiter: String used as delimiter when making group label combinations.
     :return: Dictionary keyed by specified label grouping combinations, with values describing the corresponding index
         of each grouping entry in the globals
@@ -735,14 +735,14 @@ def make_combo_header_text(
     """
     Programmatically generate text to populate the VCF header description for a given variant annotation with specific groupings and subset.
 
-    For example, if preposition is "for", group_types is ["group", "pop", "sex"], and combo_fields is ["adj", "afr", "female"],
-    this function will return the string " for female samples in the African-American/African genetic ancestry group".
+    For example, if preposition is "for", group_types is ["group", "gen_anc", "sex"], and combo_fields is ["adj", "afr", "XX"],
+    this function will return the string " for XX samples in the African-American/African genetic ancestry group".
 
     :param preposition: Relevant preposition to precede automatically generated text.
     :param combo_dict: Dict with grouping types as keys and values for grouping type as values. This function generates text for these values.
-        Possible grouping types are: "group", "pop", "sex", and "subpop".
-        Example input: {"pop": "afr", "sex": "female"}
-    :param pop_names: Dict with global population names (keys) and population descriptions (values).
+        Possible grouping types are: "group", "gen_anc", "sex", and "subgroup".
+        Example input: {"gen_anc": "afr", "sex": "XX"}
+    :param pop_names: Dict with global genetic ancestry group names (keys) and genetic ancestry group descriptions (values).
     :return: String with automatically generated description text for a given set of combo fields.
     """
     header_text = " " + preposition
@@ -831,15 +831,15 @@ def make_info_dict(
     Creates:
         - INFO fields for age histograms (bin freq, n_smaller, and n_larger for heterozygous and homozygous variant carriers)
         - INFO fields for popmax AC, AN, AF, nhomalt, and popmax population
-        - INFO fields for AC, AN, AF, nhomalt for each combination of sample population, sex, and subpopulation, both for adj and raw data
+        - INFO fields for AC, AN, AF, nhomalt for each combination of sample genetic ancestry group, sex, and subgroup, both for adj and raw data
         - INFO fields for filtering allele frequency (faf) annotations
 
     :param prefix: Prefix string for data, e.g. "gnomAD". Default is empty string.
     :param suffix: Suffix string for data, e.g. "gnomAD". Default is empty string.
     :param prefix_before_metric: Whether prefix should be added before the metric (AC, AN, AF, nhomalt, faf95, faf99) in INFO field. Default is True.
-    :param pop_names: Dict with global population names (keys) and population descriptions (values). Default is POP_NAMES.
+    :param pop_names: Dict with global genetic ancestry group names (keys) and genetic ancestry group descriptions (values). Default is POP_NAMES.
     :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping,
-        e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["male", "female"] or ["afr", "nfe", "amr"]).
+        e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param label_delimiter: String to use as delimiter when making group label combinations.
     :param bin_edges: Dictionary keyed by annotation type, with values that reflect the bin edges corresponding to the annotation.
     :param faf: If True, use alternate logic to auto-populate dictionary values associated with filter allele frequency annotations.
@@ -1482,21 +1482,21 @@ def make_hist_dict(
     return header_hist_dict
 
 
-def set_female_y_metrics_to_na(
+def set_xx_y_metrics_to_na(
     t: Union[hl.Table, hl.MatrixTable],
 ) -> Dict[str, hl.expr.Int32Expression]:
     """
-    Set AC, AN, and nhomalt chrY variant annotations for females to NA (instead of 0).
+    Set AC, AN, and nhomalt chrY variant annotations for XX samples to NA (instead of 0).
 
-    :param t: Table/MatrixTable containing female variant annotations.
+    :param t: Table/MatrixTable containing XX variant annotations.
     :return: Dictionary with reset annotations
     """
     metrics = list(t.row.info)
-    female_metrics = [x for x in metrics if "_female" in x or "_XX" in x]
+    xx_metrics = [x for x in metrics if "_female" in x or "_XX" in x]
 
-    female_metrics_dict = {}
-    for metric in female_metrics:
-        female_metrics_dict.update(
+    xx_metrics_dict = {}
+    for metric in xx_metrics:
+        xx_metrics_dict.update(
             {
                 f"{metric}": hl.or_missing(
                     (~t.locus.in_y_nonpar() & ~t.locus.in_y_par()),
@@ -1504,7 +1504,7 @@ def set_female_y_metrics_to_na(
                 )
             }
         )
-    return female_metrics_dict
+    return xx_metrics_dict
 
 
 def build_vcf_export_reference(

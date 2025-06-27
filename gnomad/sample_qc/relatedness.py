@@ -400,10 +400,10 @@ def infer_families(
 
     .. note::
 
-        This function only returns complete trios defined as: one child, one father and one mother (sex is required for both parents).
+        This function only returns complete trios defined as: one child, one father, and one mother (sex is required for both parents).
 
     :param relationship_ht: Input relationship table
-    :param sex: A Table or dict giving the sex for each sample (`TRUE`=female, `FALSE`=male). If a Table is given, it should have a field `is_female`.
+    :param sex: A Table or dict giving the sex for each sample (`TRUE`=XX, `FALSE`=XY). If a Table is given, it should have a field `is_xx`.
     :param duplicated_samples: All duplicated samples TO REMOVE (If not provided, this function won't work as it assumes that each child has exactly two parents)
     :param i_col: Column containing the 1st sample of the pair in the relationship table
     :param j_col: Column containing the 2nd sample of the pair in the relationship table
@@ -661,7 +661,7 @@ def infer_families(
 
     # If sex is a Table, extract sex information as a Dict
     if isinstance(sex, hl.Table):
-        sex = dict(hl.tuple([sex.s, sex.is_female]).collect())
+        sex = dict(hl.tuple([sex.s, sex.is_xx]).collect())
 
     # Collect all related sample pairs and
     # create a dictionnary with pairs as keys and relationships as values
@@ -1051,7 +1051,7 @@ def generate_trio_stats_expr(
     :param transmitted_strata: Strata for the transmission counts
     :param de_novo_strata: Strata for the de novo counts
     :param ac_strata: Strata for the parent and child allele counts
-    :param proband_is_female_expr: An optional expression giving the sex the proband. If not given, DNMs are only computed for autosomes.
+    :param proband_is_xx_expr: An optional expression giving the karyotype of the proband (XX=True, XY=False). If not given, DNMs are only computed for autosomes.
     :return: An expression with the counts
     """
     # Create map for transmitted, untransmitted and DNM
@@ -1099,10 +1099,10 @@ def generate_trio_stats_expr(
         father_gt: hl.expr.CallExpression,
         mother_gt: hl.expr.CallExpression,
         locus: hl.expr.LocusExpression,
-        proband_is_female: Optional[hl.expr.BooleanExpression],
+        proband_is_xx: Optional[hl.expr.BooleanExpression],
     ) -> hl.expr.BooleanExpression:
         """Determine whether a trio genotype combination is a DNM."""
-        if proband_is_female is None:
+        if proband_is_xx is None:
             logger.warning(
                 "Since no proband sex expression was given to generate_trio_stats_expr,"
                 " only DNMs in autosomes will be counted."
@@ -1112,10 +1112,10 @@ def generate_trio_stats_expr(
                 proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
             )
         return hl.if_else(
-            locus.in_autosome_or_par() | (proband_is_female & locus.in_x_nonpar()),
+            locus.in_autosome_or_par() | (proband_is_xx & locus.in_x_nonpar()),
             proband_gt.is_het() & father_gt.is_hom_ref() & mother_gt.is_hom_ref(),
             hl.or_missing(
-                ~proband_is_female, proband_gt.is_hom_var() & father_gt.is_hom_ref()
+                ~proband_is_xx, proband_gt.is_hom_var() & father_gt.is_hom_ref()
             ),
         )
 

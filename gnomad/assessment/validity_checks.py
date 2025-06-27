@@ -622,7 +622,7 @@ def sum_group_callstats(
     delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
-    gen_anc_label_name: str = "pop",
+    gen_anc_label_name: str = "gen_anc",
 ) -> None:
     """
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
@@ -639,9 +639,9 @@ def sum_group_callstats(
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
-    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "pop" or "gen_anc". Default is "pop".
+    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "gen_anc" or "pop". Default is "gen_anc".
     :return: None
     """
     # TODO: Add support for subpop sums.
@@ -754,7 +754,7 @@ def check_raw_and_adj_callstats(
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
     :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
@@ -1260,7 +1260,7 @@ def validate_release_t(
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
     :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
     :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]

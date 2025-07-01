@@ -10,11 +10,11 @@ import numpy as np
 import onnx
 import onnxruntime as rt
 import pandas as pd
+from hail.utils import new_temp_file
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
 from gnomad.utils.filtering import filter_to_autosomes
-from hail.utils import new_temp_file
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)

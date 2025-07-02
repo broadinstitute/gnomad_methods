@@ -226,7 +226,7 @@ def assign_population_pcs(
     apply_model_func: Callable[
         [pd.DataFrame, Any], Any
     ] = apply_sklearn_classification_model,
-    n_partitions: int = 100,
+    n_partitions: Optional[hl.int] = None,
 ) -> Tuple[
     Union[hl.Table, pd.DataFrame], Any
 ]:  # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
@@ -279,7 +279,7 @@ def assign_population_pcs(
         `apply_sklearn_classification_model`, which will apply a sklearn classification
         model to the data. This default will work if no `fit` is set, or the supplied
         `fit` is a sklearn classification model.
-    :param n_partitions: Number of partitions to repartition the genetic ancestry group inference table to. Default is 100.
+    :param n_partitions: Optional nnumber of partitions to repartition the genetic ancestry group inference table to.
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs
         and imputed population labels, trained random forest model.
     """
@@ -385,7 +385,9 @@ def assign_population_pcs(
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
 
         pops_ht.write(new_temp_file("pops_ht", "ht"))
-        pops_ht = hl.read_table(new_temp_file("pops_ht", "ht"), _n_partitions=n_partitions)
+        pops_ht = hl.read_table(
+            new_temp_file("pops_ht", "ht"), _n_partitions=n_partitions
+        )
 
         pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)

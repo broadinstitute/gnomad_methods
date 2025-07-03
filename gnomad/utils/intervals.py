@@ -112,3 +112,27 @@ def pad_intervals(
         return [_add_padding(i) for i in intervals]
     else:
         return _add_padding(intervals)
+
+
+def explode_intervals_to_loci(
+    ht: hl.Table,
+    keep_intervals: bool = False,
+) -> hl.Table:
+    """
+    Expand intervals to loci.
+
+    :param ht: Hail Table with an interval field.
+    :param keep_intervals: If True, keep the original interval as a column in output.
+    :return: Hail Table keyed by loci and intervals as optional field.
+    """
+    ht = ht.annotate(
+        pos=hl.range(ht.interval.start.position, ht.interval.end.position + 1),
+    ).explode("pos")
+    ht = ht.annotate(
+        locus=hl.locus(
+            ht.interval.start.contig,
+            ht.pos,
+            reference_genome=ht.interval.start.dtype.reference_genome,
+        ),
+    ).key_by("locus")
+    return ht.drop("interval", "pos") if not keep_intervals else ht.drop("pos")

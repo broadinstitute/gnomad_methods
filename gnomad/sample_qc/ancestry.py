@@ -384,10 +384,10 @@ def assign_population_pcs(
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
 
-        pops_ht.write(new_temp_file("pops_ht", "ht"))
-        pops_ht = hl.read_table(
-            new_temp_file("pops_ht", "ht"), _n_partitions=n_partitions
-        )
+        tmp_path = new_temp_file("pops_ht", "ht")
+
+        pops_ht.write(tmp_path)
+        pops_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
 
         pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)

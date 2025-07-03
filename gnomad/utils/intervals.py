@@ -133,7 +133,7 @@ def explode_intervals_to_loci(
         locus=hl.locus(
             ht.interval.start.contig,
             ht.pos,
-            reference_genome=ht.interval.start.dtype.reference_genome,
+            reference_genome=ht.interval.start.reference_genome,
         ),
     ).key_by("locus")
     return ht.drop("interval", "pos") if not keep_intervals else ht.drop("pos")

@@ -123,6 +123,7 @@ def explode_intervals_to_loci(
 
     :param ht: Hail Table with an interval field.
     :param keep_intervals: If True, keep the original interval as a column in output.
+        Default is False.
     :return: Hail Table keyed by loci and intervals as optional field.
     """
     ht = ht.annotate(

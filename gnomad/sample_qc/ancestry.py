@@ -384,7 +384,6 @@ def assign_population_pcs(
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
 
-        tmp_path = new_temp_file("pops_ht", "ht")
 
         if n_partitions:
             tmp_path = new_temp_file("pops_ht", "ht")

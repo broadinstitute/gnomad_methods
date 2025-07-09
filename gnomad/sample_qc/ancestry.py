@@ -387,6 +387,7 @@ def assign_population_pcs(
         tmp_path = new_temp_file("pops_ht", "ht")
 
         if n_partitions:
+            tmp_path = new_temp_file("pops_ht", "ht")
             pops_ht.write(tmp_path)
             pops_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
 

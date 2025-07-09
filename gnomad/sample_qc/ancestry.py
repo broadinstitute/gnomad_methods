@@ -279,7 +279,7 @@ def assign_population_pcs(
         `apply_sklearn_classification_model`, which will apply a sklearn classification
         model to the data. This default will work if no `fit` is set, or the supplied
         `fit` is a sklearn classification model.
-    :param n_partitions: Optional nnumber of partitions to repartition the genetic ancestry group inference table to.
+    :param n_partitions: Optional number of partitions to repartition the genetic ancestry group inference table to.
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs
         and imputed population labels, trained random forest model.
     """

@@ -386,8 +386,9 @@ def assign_population_pcs(
 
         tmp_path = new_temp_file("pops_ht", "ht")
 
-        pops_ht.write(tmp_path)
-        pops_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
+        if n_partitions:
+            pops_ht.write(tmp_path)
+            pops_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
 
         pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)

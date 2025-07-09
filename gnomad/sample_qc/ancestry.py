@@ -10,6 +10,7 @@ import numpy as np
 import onnx
 import onnxruntime as rt
 import pandas as pd
+from hail.utils import new_temp_file
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
@@ -225,6 +226,7 @@ def assign_population_pcs(
     apply_model_func: Callable[
         [pd.DataFrame, Any], Any
     ] = apply_sklearn_classification_model,
+    n_partitions: Optional[hl.int] = None,
 ) -> Tuple[
     Union[hl.Table, pd.DataFrame], Any
 ]:  # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
@@ -277,6 +279,7 @@ def assign_population_pcs(
         `apply_sklearn_classification_model`, which will apply a sklearn classification
         model to the data. This default will work if no `fit` is set, or the supplied
         `fit` is a sklearn classification model.
+    :param n_partitions: Optional number of partitions to repartition the genetic ancestry group inference table to.
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs
         and imputed population labels, trained random forest model.
     """
@@ -380,6 +383,12 @@ def assign_population_pcs(
 
     if hail_input:
         pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
+
+        if n_partitions:
+            tmp_path = new_temp_file("pops_ht", "ht")
+            pops_ht.write(tmp_path)
+            pops_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
+
         pops_ht = pops_ht.annotate_globals(
             assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
         )

@@ -134,7 +134,9 @@ def explode_intervals_to_loci(
     includes_start = interval.includes_start.take(1)[0]
     includes_end = interval.includes_end.take(1)[0]
 
-    interval_start = interval.start.position if includes_start else interval.start.position + 1
+    interval_start = (
+        interval.start.position if includes_start else interval.start.position + 1
+    )
     interval_end = interval.end.position + 1 if includes_end else interval.end.position
 
     ht = ht.annotate(pos=hl.range(interval_start, interval_end)).explode("pos")
@@ -142,7 +144,7 @@ def explode_intervals_to_loci(
         locus=hl.locus(
             ht[interval_field].start.contig,
             ht.pos,
-            reference_genome=str(interval.start.take(1)[0].reference_genome)
+            reference_genome=str(interval.start.take(1)[0].reference_genome),
         )
     ).key_by("locus")
 

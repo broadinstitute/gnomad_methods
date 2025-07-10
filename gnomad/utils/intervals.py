@@ -115,25 +115,48 @@ def pad_intervals(
 
 
 def explode_intervals_to_loci(
-    ht: hl.Table,
+    obj: Union[hl.Table, hl.MatrixTable],
+    interval_field: str = "interval",
     keep_intervals: bool = False,
-) -> hl.Table:
+) -> Union[hl.Table, hl.MatrixTable]:
     """
     Expand intervals to loci.
 
-    :param ht: Hail Table with an interval field.
+    :param obj: Hail Table or MatrixTable with an interval field.
+    :param interval_field: Name of the interval field. Default is 'interval'.
     :param keep_intervals: If True, keep the original interval as a column in output.
-        Default is False.
-    :return: Hail Table keyed by loci and intervals as optional field.
+    :return: Hail Table or MatrixTable with interval exploded to loci.
     """
-    ht = ht.annotate(
-        pos=hl.range(ht.interval.start.position, ht.interval.end.position + 1),
-    ).explode("pos")
+    is_matrix = isinstance(obj, hl.MatrixTable)
+    ht = obj.rows() if is_matrix else obj
+
+    interval = ht[interval_field]
+    includes_start = interval.includes_start.take(1)[0]
+    includes_end = interval.includes_end.take(1)[0]
+
+    interval_start = interval.start.position if includes_start else interval.start.position + 1
+    interval_end = interval.end.position + 1 if includes_end else interval.end.position
+
+    ht = ht.annotate(pos=hl.range(interval_start, interval_end)).explode("pos")
     ht = ht.annotate(
         locus=hl.locus(
-            ht.interval.start.contig,
+            ht[interval_field].start.contig,
             ht.pos,
-            reference_genome=ht.interval.start.reference_genome,
-        ),
+            reference_genome=str(interval.start.take(1)[0].reference_genome)
+        )
     ).key_by("locus")
-    return ht.drop("interval", "pos") if not keep_intervals else ht.drop("pos")
+
+    fields_to_drop = ["pos"]
+    if not keep_intervals:
+        fields_to_drop.append(interval_field)
+
+    ht = ht.drop(*fields_to_drop)
+
+    if is_matrix:
+        mt = obj
+        ht = ht.select_globals()
+        mt = mt.annotate_rows(**ht[mt.row_key])
+        mt = mt.filter_rows(hl.is_defined(ht[mt.row_key]))
+        return mt
+    else:
+        return ht

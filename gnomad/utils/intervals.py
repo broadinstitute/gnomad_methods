@@ -118,7 +118,7 @@ def explode_intervals_to_loci(
     ht: hl.Table,
     interval_field: str = "interval",
     keep_intervals: bool = False,
-) -> Union[hl.Table, hl.MatrixTable]:
+) -> hl.Table,
     """
     Expand intervals to loci and key by loci.
 

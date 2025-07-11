@@ -120,7 +120,7 @@ def explode_intervals_to_loci(
     keep_intervals: bool = False,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
-    Expand intervals to loci.
+    Expand intervals to loci and key by loci.
 
     :param obj: Hail Table with intervals to be exploded.
     :param interval_field: Name of the interval field. Default is 'interval'.

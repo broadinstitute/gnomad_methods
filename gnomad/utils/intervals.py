@@ -122,7 +122,7 @@ def explode_intervals_to_loci(
     """
     Expand intervals to loci.
 
-    :param obj: Hail Table or MatrixTable with an interval field.
+    :param obj: Hail Table with intervals to be exploded.
     :param interval_field: Name of the interval field. Default is 'interval'.
     :param keep_intervals: If True, keep the original interval as a column in output.
     :return: Hail Table or MatrixTable with interval exploded to loci.

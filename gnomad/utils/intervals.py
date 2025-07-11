@@ -130,7 +130,7 @@ def explode_intervals_to_loci(
     is_matrix = isinstance(obj, hl.MatrixTable)
     ht = obj.rows() if is_matrix else obj
 
-    interval = ht[interval_field]
+    interval_expr = ht[interval_field]
     includes_start = interval.includes_start.take(1)[0]
     includes_end = interval.includes_end.take(1)[0]
 

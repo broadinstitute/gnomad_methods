@@ -140,13 +140,13 @@ def explode_intervals_to_loci(
     interval_end = interval.end.position + 1 if includes_end else interval.end.position
 
     ht = ht.annotate(pos=hl.range(interval_start, interval_end)).explode("pos")
-    ht = ht.annotate(
+    ht = ht.key_by(
         locus=hl.locus(
             ht[interval_field].start.contig,
             ht.pos,
-            reference_genome=str(interval.start.take(1)[0].reference_genome),
+            reference_genome=get_reference_genome(ht[interval_field])
         )
-    ).key_by("locus")
+    )
 
     fields_to_drop = ["pos"]
     if not keep_intervals:

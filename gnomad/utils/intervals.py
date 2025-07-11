@@ -115,7 +115,7 @@ def pad_intervals(
 
 
 def explode_intervals_to_loci(
-    obj: Union[hl.Table, hl.MatrixTable],
+    ht: hl.Table,
     interval_field: str = "interval",
     keep_intervals: bool = False,
 ) -> Union[hl.Table, hl.MatrixTable]:

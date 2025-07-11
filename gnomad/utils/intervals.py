@@ -128,13 +128,8 @@ def explode_intervals_to_loci(
     :return: Hail Table with intervals exploded to loci.
     """
     interval_expr = ht[interval_field]
-    includes_start = interval.includes_start.take(1)[0]
-    includes_end = interval.includes_end.take(1)[0]
-
-    interval_start = (
-        interval.start.position if includes_start else interval.start.position + 1
-    )
-    interval_end = interval.end.position + 1 if includes_end else interval.end.position
+    interval_start_expr = hl.if_else(interval_expr.includes_start, interval_expr.start.position, interval_expr.start.position + 1)
+    interval_end_expr = hl.if_else(interval_expr.includes_end, interval_expr.end.position + 1, interval_expr.end.position)
 
     ht = ht.annotate(pos=hl.range(interval_start, interval_end)).explode("pos")
     ht = ht.key_by(

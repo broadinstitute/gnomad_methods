@@ -144,13 +144,5 @@ def explode_intervals_to_loci(
     if not keep_intervals:
         fields_to_drop.append(interval_field)
 
-    ht = ht.drop(*fields_to_drop)
+    return ht.drop(*fields_to_drop)
 
-    if is_matrix:
-        mt = obj
-        ht = ht.select_globals()
-        mt = mt.annotate_rows(**ht[mt.row_key])
-        mt = mt.filter_rows(hl.is_defined(ht[mt.row_key]))
-        return mt
-    else:
-        return ht

@@ -3,6 +3,7 @@
 from typing import List, Union
 
 import hail as hl
+
 from gnomad.utils.reference_genome import get_reference_genome
 
 

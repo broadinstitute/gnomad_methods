@@ -3,6 +3,7 @@
 from typing import List, Union
 
 import hail as hl
+from gnomad.utils.reference_genome import get_reference_genome
 
 
 def sort_intervals(intervals: List[hl.Interval]):
@@ -115,34 +116,60 @@ def pad_intervals(
 
 
 def explode_intervals_to_loci(
-    ht: hl.Table,
+    obj: Union[hl.Table, hl.expr.IntervalExpression],
     interval_field: str = "interval",
     keep_intervals: bool = False,
-) -> hl.Table,
+) -> Union[hl.Table, hl.expr.ArrayExpression]:
     """
-    Expand intervals to loci and key by loci.
+    Expand intervals to loci and key by loci, or return loci range expression.
 
-    :param obj: Hail Table with intervals to be exploded.
-    :param interval_field: Name of the interval field. Default is 'interval'.
-    :param keep_intervals: If True, keep the original intervals as a column in output.
-    :return: Hail Table with intervals exploded to loci.
+    :param obj: Hail Table or Interval Expression.
+    :param interval_field: Name of the interval field if `obj` is a Hail Table.
+    :param keep_intervals: If True, keep the original intervals as a column in output, if `obj` is a Hail Table. Default is False.
+    :return: If input is a Hail Table, returns exploded Table keyed by locus. If input is an IntervalExpression, returns position array expression.
     """
-    interval_expr = ht[interval_field]
-    interval_start_expr = hl.if_else(interval_expr.includes_start, interval_expr.start.position, interval_expr.start.position + 1)
-    interval_end_expr = hl.if_else(interval_expr.includes_end, interval_expr.end.position + 1, interval_expr.end.position)
-
-    ht = ht.annotate(pos=hl.range(interval_start, interval_end)).explode("pos")
-    ht = ht.key_by(
-        locus=hl.locus(
-            ht[interval_field].start.contig,
-            ht.pos,
-            reference_genome=get_reference_genome(ht[interval_field])
+    if isinstance(obj, hl.expr.IntervalExpression):
+        interval = obj
+        interval_start_expr = hl.if_else(
+            interval.includes_start,
+            interval.start.position,
+            interval.start.position + 1,
         )
-    )
+        interval_end_expr = hl.if_else(
+            interval.includes_end, interval.end.position + 1, interval.end.position
+        )
+        return hl.range(interval_start_expr, interval_end_expr)
 
-    fields_to_drop = ["pos"]
-    if not keep_intervals:
-        fields_to_drop.append(interval_field)
+    elif isinstance(obj, hl.Table):
+        ht = obj
+        interval_expr = ht[interval_field]
+        interval_start_expr = hl.if_else(
+            interval_expr.includes_start,
+            interval_expr.start.position,
+            interval_expr.start.position + 1,
+        )
+        interval_end_expr = hl.if_else(
+            interval_expr.includes_end,
+            interval_expr.end.position + 1,
+            interval_expr.end.position,
+        )
 
-    return ht.drop(*fields_to_drop)
+        ht = ht.annotate(pos=hl.range(interval_start_expr, interval_end_expr)).explode(
+            "pos"
+        )
+        ht = ht.key_by(
+            locus=hl.locus(
+                ht[interval_field].start.contig,
+                ht.pos,
+                reference_genome=get_reference_genome(ht[interval_field]),
+            )
+        )
 
+        fields_to_drop = ["pos"]
+        if not keep_intervals:
+            fields_to_drop.append(interval_field)
+
+        return ht.drop(*fields_to_drop)
+
+    else:
+        raise TypeError("Input must be a Hail Table or a Hail Interval Expression.")

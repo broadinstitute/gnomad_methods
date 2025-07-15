@@ -10,6 +10,7 @@ import numpy as np
 import onnx
 import onnxruntime as rt
 import pandas as pd
+from hail.utils import new_temp_file
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
@@ -225,6 +226,7 @@ def assign_genetic_ancestry_pcs(
     apply_model_func: Callable[
         [pd.DataFrame, Any], Any
     ] = apply_sklearn_classification_model,
+    n_partitions: Optional[hl.int] = None,
 ) -> Tuple[
     Union[hl.Table, pd.DataFrame], Any
 ]:  # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
@@ -277,6 +279,7 @@ def assign_genetic_ancestry_pcs(
         `apply_sklearn_classification_model`, which will apply a sklearn classification
         model to the data. This default will work if no `fit` is set, or the supplied
         `fit` is a sklearn classification model.
+    :param n_partitions: Optional number of partitions to repartition the genetic ancestry group inference table to.
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs
         and imputed genetic ancestry labels, trained random forest model.
     """
@@ -393,8 +396,15 @@ def assign_genetic_ancestry_pcs(
         gen_anc_ht = hl.Table.from_pandas(
             gen_anc_pc_pd, key=list(gen_anc_pca_scores.key)
         )
+
+        if n_partitions:
+            tmp_path = new_temp_file("gen_anc_ht", "ht")
+            gen_anc_ht.write(tmp_path)
+            gen_anc_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
+
         gen_anc_ht = gen_anc_ht.annotate_globals(
-            assign_gen_anc_from_pc_params=hl.struct(min_assignment_prob=min_prob)
+            assign_gen_ancs_from_pc_params=hl.struct(min_assignment_prob=min_prob)
+
         )
 
         if not fit:

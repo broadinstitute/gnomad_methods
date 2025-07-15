@@ -118,8 +118,8 @@ def pad_intervals(
 
 def explode_intervals_to_loci(
     obj: Union[hl.Table, hl.expr.IntervalExpression],
-    interval_field: str = "interval",
-    keep_intervals: bool = False,
+    interval_field: Optional[str] = None,
+    keep_intervals: Optional[bool] = None,
 ) -> Union[hl.Table, hl.expr.ArrayExpression]:
     """
     Expand intervals to loci and key by loci, or return loci range expression.

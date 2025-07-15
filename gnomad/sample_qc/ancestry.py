@@ -404,7 +404,6 @@ def assign_genetic_ancestry_pcs(
 
         gen_anc_ht = gen_anc_ht.annotate_globals(
             assign_gen_ancs_from_pc_params=hl.struct(min_assignment_prob=min_prob)
-
         )
 
         if not fit:

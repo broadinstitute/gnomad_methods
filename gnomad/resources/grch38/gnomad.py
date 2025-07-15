@@ -659,7 +659,7 @@ def gnomad_gks(
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
-    # Retrieve ancestry groups from the imported GEN_ANC_NAMES dictionary.
+    # Retrieve genetic ancestry groups from the imported GEN_ANC_NAMES dictionary.
     grps_list = (
         list(GEN_ANC_NAMES[high_level_version][data_type]) if by_gen_anc_group else None
     )

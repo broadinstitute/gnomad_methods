@@ -166,36 +166,3 @@ def explode_intervals_to_loci(
     logger.warning("Input is an IntervalExpression, so function will return ArrayExpression of positions  within input intervals. To fully explode intervals to loci, we recommend annotating your dataset with the returned ArrayExpression, exploding the array, and converting the positions to loci!")
     return hl.range(intervals_start_expr, intervals_end_expr)
 
-    elif isinstance(obj, hl.Table):
-        ht = obj
-        interval_expr = ht[interval_field]
-        interval_start_expr = hl.if_else(
-            interval_expr.includes_start,
-            interval_expr.start.position,
-            interval_expr.start.position + 1,
-        )
-        interval_end_expr = hl.if_else(
-            interval_expr.includes_end,
-            interval_expr.end.position + 1,
-            interval_expr.end.position,
-        )
-
-        ht = ht.annotate(pos=hl.range(interval_start_expr, interval_end_expr)).explode(
-            "pos"
-        )
-        ht = ht.key_by(
-            locus=hl.locus(
-                ht[interval_field].start.contig,
-                ht.pos,
-                reference_genome=get_reference_genome(ht[interval_field]),
-            )
-        )
-
-        fields_to_drop = ["pos"]
-        if not keep_intervals:
-            fields_to_drop.append(interval_field)
-
-        return ht.drop(*fields_to_drop)
-
-    else:
-        raise TypeError("Input must be a Hail Table or a Hail Interval Expression.")

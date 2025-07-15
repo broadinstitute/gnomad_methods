@@ -200,7 +200,7 @@ def convert_sklearn_rf_to_onnx(
 
     logger.warning(
         "sklearn models have different rounding behavior than ONNX models. Use of sklearn"
-        "rf models rounds probabilities to two decimal places when used in assign_population_pcs(),"
+        "rf models rounds probabilities to two decimal places when used in assign_genetic_ancestry_pcs(),"
         "while use of onnx rf models does not. This may lead to subtly different assignment results"
         "for samples around probability cutoffs."
     )

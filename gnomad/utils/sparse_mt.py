@@ -1305,6 +1305,7 @@ def get_coverage_agg_func(
 def compute_coverage_stats(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
+    dp_field: str = "DP",
     interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
     row_key_fields: List[str] = ["locus"],
@@ -1324,12 +1325,13 @@ def compute_coverage_stats(
     computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
     created using `get_reference_ht`.
 
-    :param mtds: Input sparse MT or VDS
-    :param reference_ht: Input reference HT
-    :param interval_ht: Optional Table containing intervals to filter to
-    :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :param mtds: Input sparse MT or VDS.
+    :param reference_ht: Input reference HT.
+    :param dp_field: Name of sample depth field. Default is DP.
+    :param interval_ht: Optional Table containing intervals to filter to.
+    :param coverage_over_x_bins: List of boundaries for computing samples over X.
     :param row_key_fields: List of row key fields to use for joining `mtds` with
-        `reference_ht`
+        `reference_ht`.
     :param strata_expr: Optional list of dicts containing expressions to stratify the
         coverage stats by. Only one of `group_membership_ht` or `strata_expr` can be
         specified.
@@ -1358,7 +1360,9 @@ def compute_coverage_stats(
     max_cov_bin = cov_bins[-1]
     cov_bins = hl.array(cov_bins)
     entry_agg_funcs = {
-        "coverage_stats": get_coverage_agg_func(dp_field="DP", max_cov_bin=max_cov_bin)
+        "coverage_stats": get_coverage_agg_func(
+            dp_field=dp_field, max_cov_bin=max_cov_bin
+        )
     }
 
     ht = compute_stats_per_ref_site(
@@ -1367,7 +1371,7 @@ def compute_coverage_stats(
         entry_agg_funcs,
         row_key_fields=row_key_fields,
         interval_ht=interval_ht,
-        entry_keep_fields=[gt_field, "DP"],
+        entry_keep_fields=[gt_field, dp_field],
         strata_expr=strata_expr,
         group_membership_ht=group_membership_ht,
     )

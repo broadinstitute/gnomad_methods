@@ -134,15 +134,17 @@ def explode_intervals_to_loci(
     if isinstance(intervals, hl.Table) and (not interval_field or keep_intervals is None):
         raise ValueError("`interval_field` and `keep_intervals` must be defined if input is a Table!")
     assert interval_field in intervals.row, "`interval_field` must be an annotation present on input Table!"
-        interval = obj
-        interval_start_expr = hl.if_else(
-            interval.includes_start,
-            interval.start.position,
-            interval.start.position + 1,
-        )
-        interval_end_expr = hl.if_else(
-            interval.includes_end, interval.end.position + 1, interval.end.position
-        )
+      intervals_expr = intervals if isinstance(intervals, hl.expr.IntervalExpression) else intervals[interval_field]
+      intervals_start_expr = hl.if_else(
+          intervals_expr.includes_start,
+          intervals_expr.start.position,
+          intervals_expr.start.position + 1,
+      )
+      intervals_end_expr = hl.if_else(
+          intervals_expr.includes_end,
+          intervals_expr.end.position + 1,
+          intervals_expr.end.position
+      )
         return hl.range(interval_start_expr, interval_end_expr)
 
     elif isinstance(obj, hl.Table):

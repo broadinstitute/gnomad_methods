@@ -95,7 +95,7 @@ def _public_pca_ht_path(subgrp: str) -> str:
     :param subgrp: Can be empty ("") -> global, "eas" or "nfe"
     :return: Path to release Table
     """
-    subgrp = f".{subgrp}" if subgrp else ""
+    subgrp = f".{subpop}" if subgrp else ""
     return f"gs://gnomad-public-requester-pays/release/2.1/pca/gnomad.r2.1.pca_loadings{subgrp}.ht"
 
 

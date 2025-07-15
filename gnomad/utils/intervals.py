@@ -129,7 +129,11 @@ def explode_intervals_to_loci(
     :param keep_intervals: If True, keep the original intervals as a column in output. Only applies if input is a Hail Table. Default is False.
     :return: If input is a Hail Table, returns exploded Table keyed by locus. If input is an IntervalExpression, returns position array expression.
     """
-    if isinstance(obj, hl.expr.IntervalExpression):
+    assert isintance(intervals, hl.Table) or isinstance(intervals, hl.expr.IntervalExpression), "Input must be a Table or IntervalExpression!"
+
+    if isinstance(intervals, hl.Table) and (not interval_field or keep_intervals is None):
+        raise ValueError("`interval_field` and `keep_intervals` must be defined if input is a Table!")
+    assert interval_field in intervals.row, "`interval_field` must be an annotation present on input Table!"
         interval = obj
         interval_start_expr = hl.if_else(
             interval.includes_start,

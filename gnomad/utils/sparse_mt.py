@@ -1295,7 +1295,10 @@ def get_coverage_agg_func(
             # This expression creates a counter DP -> number of samples for DP
             # between 0 and max_cov_bin.
             coverage_counter=hl.agg.counter(hl.min(max_cov_bin, dp)),
-            mean=hl.if_else(hl.is_nan(hl.agg.mean(dp)), 0, hl.agg.mean(dp)),
+            mean=hl.bind(
+                lambda mean_dp: hl.if_else(hl.is_nan(mean_dp), 0, mean_dp),
+                hl.agg.mean(dp),
+            ),
             median_approx=hl.or_else(hl.agg.approx_median(dp), 0),
             total_DP=hl.agg.sum(dp),
         ),

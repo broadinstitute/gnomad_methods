@@ -1305,12 +1305,12 @@ def get_coverage_agg_func(
 def compute_coverage_stats(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
-    dp_field: str = "DP",
     interval_ht: Optional[hl.Table] = None,
     coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
     row_key_fields: List[str] = ["locus"],
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
+    dp_field: str = "DP",
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -1327,7 +1327,6 @@ def compute_coverage_stats(
 
     :param mtds: Input sparse MT or VDS.
     :param reference_ht: Input reference HT.
-    :param dp_field: Name of sample depth field. Default is DP.
     :param interval_ht: Optional Table containing intervals to filter to.
     :param coverage_over_x_bins: List of boundaries for computing samples over X.
     :param row_key_fields: List of row key fields to use for joining `mtds` with
@@ -1338,6 +1337,7 @@ def compute_coverage_stats(
     :param group_membership_ht: Optional Table containing group membership annotations
         to stratify the coverage stats by. Only one of `group_membership_ht` or
         `strata_expr` can be specified.
+    :param dp_field: Name of sample depth field. Default is DP.
     :return: Table with per-base coverage stats.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)

@@ -220,8 +220,8 @@ class TestGetCoverageAggFunc:
         # Values 1, 2, 3 should be counted as themselves
         assert coverage_counter.get(1, 0) == 1
         assert coverage_counter.get(2, 0) == 1
-        # Values 4-10 should all be counted as 3 (max_cov_bin)
-        # So there should be 8 values at position 3: original value 3 plus 7 capped values (4-10)
+        # Values 3-10 should all be counted as 3 (max_cov_bin)
+        # So there should be 8 values at position 3: the original value 3 plus 7 capped values (4-10)
         assert coverage_counter.get(3, 0) == 8
 
         # No values should be counted above max_cov_bin

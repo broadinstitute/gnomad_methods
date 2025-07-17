@@ -1,9 +1,14 @@
 """Tests for the sparse_mt utility module."""
 
+import logging
+
 import hail as hl
 import pytest
 
 from gnomad.utils.sparse_mt import get_coverage_agg_func
+
+# Set up logger for tests
+logger = logging.getLogger(__name__)
 
 
 class TestGetCoverageAggFunc:
@@ -375,15 +380,6 @@ class TestGetCoverageAggFunc:
         )
 
         result = ht.aggregate(agg_func(ht.DP))
-
-        # Debug: Print the actual values to understand what's happening
-        print(f"Test data: {test_data}")
-        print(f"Transformed values: {transformed_values}")
-        print(f"Expected total_DP: 215 (10+20+0+40+50+0+100-5)")
-        print(f"Actual total_DP: {result.total_DP}")
-        print(f"Expected mean: 26.875 (215/8)")
-        print(f"Actual mean: {result.mean}")
-        print(f"Coverage counter: {result.coverage_counter}")
 
         # Check that aggregation works correctly
         assert result.total_DP == 215  # 10+20+0+40+50+0+100-5

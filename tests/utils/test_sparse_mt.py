@@ -3,7 +3,6 @@
 import logging
 
 import hail as hl
-import pytest
 
 from gnomad.utils.sparse_mt import get_coverage_agg_func
 
@@ -13,25 +12,6 @@ logger = logging.getLogger(__name__)
 
 class TestGetCoverageAggFunc:
     """Test the get_coverage_agg_func function."""
-
-    @pytest.fixture
-    def sample_mt(self):
-        """Fixture to create a sample MatrixTable with DP field."""
-        return hl.Table.parallelize(
-            [
-                {"locus": hl.locus("chr1", 1000), "s": "sample1", "DP": 10},
-                {"locus": hl.locus("chr1", 1000), "s": "sample2", "DP": 20},
-                {"locus": hl.locus("chr1", 1000), "s": "sample3", "DP": 30},
-                {"locus": hl.locus("chr1", 1000), "s": "sample4", "DP": None},
-                {"locus": hl.locus("chr1", 1000), "s": "sample5", "DP": 0},
-                {
-                    "locus": hl.locus("chr1", 1000),
-                    "s": "sample6",
-                    "DP": 150,
-                },  # Above max_cov_bin
-            ],
-            hl.tstruct(locus=hl.tlocus("GRCh38"), s=hl.tstr, DP=hl.tint32),
-        ).key_by("locus", "s")
 
     def test_get_coverage_agg_func_returns_tuple(self):
         """Test that get_coverage_agg_func returns a tuple of two functions."""

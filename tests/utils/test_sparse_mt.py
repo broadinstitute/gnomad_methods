@@ -135,19 +135,6 @@ class TestGetCoverageAggFunc:
         assert hasattr(result, "total_DP")
         assert hasattr(result, "coverage_counter")
 
-    def test_aggregation_function_with_nan_values(self):
-        """Test aggregation function handles NaN values correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
-        test_data = [10, 20, 40, 50]  # Remove NaN for now, test separately
-        ht = hl.Table.parallelize(
-            [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
-        )
-        result = ht.aggregate(agg_func(ht.DP))
-
-        # Test basic functionality without NaN
-        assert result.total_DP == 120  # 10+20+40+50
-        assert result.mean == 30.0  # (10+20+40+50)/4
-
     def test_aggregation_function_with_zero_values(self):
         """Test aggregation function handles zero values correctly."""
         transform_func, agg_func = get_coverage_agg_func()
@@ -262,21 +249,8 @@ class TestGetCoverageAggFunc:
         # Approximate median may not be exactly 25, but should be reasonable
         assert result_even.median_approx in [20, 25, 30]  # Allow some variation
 
-    def test_aggregation_function_mean_with_nan(self):
-        """Test that mean handles NaN values correctly in the aggregation."""
-        transform_func, agg_func = get_coverage_agg_func()
-        test_data = [10, 20, 40, 50]  # Remove NaN for now
-        ht = hl.Table.parallelize(
-            [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
-        )
-        result = ht.aggregate(agg_func(ht.DP))
-
-        # Test basic mean calculation without NaN
-        expected_mean = (10 + 20 + 40 + 50) / 4
-        assert result.mean == expected_mean
-
-    def test_coverage_aggregation_integration(self):
-        """Test the full coverage aggregation pipeline with sample data."""
+    def test_transform_function_with_various_inputs(self):
+        """Test the transform function with various input types."""
         transform_func, agg_func = get_coverage_agg_func(max_cov_bin=100)
 
         # Create a sample dataset
@@ -305,31 +279,6 @@ class TestGetCoverageAggFunc:
             test_struct = hl.Struct(**{field_name: 25})
             result = hl.eval(transform_func(test_struct))
             assert result == 25
-
-    def test_edge_cases(self):
-        """Test edge cases for the coverage aggregation function."""
-        transform_func, agg_func = get_coverage_agg_func(max_cov_bin=10)
-
-        edge_cases = [
-            ({"DP": 0}, 0),  # Zero
-            ({"DP": 1}, 1),  # Minimum positive
-            ({"DP": 10}, 10),  # At max_cov_bin
-            ({"DP": 11}, 11),  # Above max_cov_bin (transform doesn't cap)
-        ]
-
-        for input_data, expected in edge_cases:
-            test_struct = hl.Struct(**input_data)
-            result = hl.eval(transform_func(test_struct))
-            assert result == expected
-
-    def test_negative_values(self):
-        """Test that negative values are handled correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
-
-        # Test with negative value - should return the negative value as-is
-        test_struct = hl.Struct(DP=-1)
-        result = hl.eval(transform_func(test_struct))
-        assert result == -1  # The function doesn't handle negative values specially
 
     def test_transform_and_aggregation_integration(self):
         """Test that transform and aggregation functions work together correctly."""

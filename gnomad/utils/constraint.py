@@ -136,13 +136,13 @@ def count_variants_by_group(
           quality genotypes.
         - `count_downsamplings` is not empty - When downsampling counts are requested,
           `freq_expr` needs to contain frequency information for downsamplings within
-          each population requested. In addition to needing `freq_expr`, this also
+          each genetic ancestry group requested. In addition to needing `freq_expr`, this also
           requires the use of `freq_meta_expr`. If `freq_meta_expr` is None,
           `freq_meta_expr` it defaults to `ht.freq_meta` if it exists. Similar to
           `freq_expr`, `freq_meta_expr` is expected to have the same format as
           the `freq_meta` global annotation that is created using `annotate_freq()`.
           `freq_meta_expr` is used to determine the index of allele frequency
-          information within `freq_expr` for each population requested and it's
+          information within `freq_expr` for each genetic ancestry group requested and it's
           downsamplings.
 
     This function will return a Table with annotations used for grouping ('context',
@@ -171,7 +171,7 @@ def count_variants_by_group(
         `freq_meta_expr` would be `ht.freq_meta`.
     :param count_singletons: Whether to count singletons (defined by `singleton_expr`).
         Default is False.
-    :param count_downsamplings: Tuple of populations to use for downsampling counts.
+    :param count_downsamplings: Tuple of genetic ancestry groups to use for downsampling counts.
         Default is ().
     :param downsamplings: Optional List of integers specifying what downsampling
         indices to obtain. Default is None, which will return all downsampling counts.
@@ -242,31 +242,31 @@ def count_variants_by_group(
         )
         agg["singleton_count"] = hl.agg.count_where(singleton_expr)
 
-    for pop in count_downsamplings:
+    for gen_anc in count_downsamplings:
         logger.info(
-            "Counting variants in downsamplings for population '%s', and adding as"
+            "Counting variants in downsamplings for genetic ancestry group '%s', and adding as"
             " 'downsampling_counts_%s' annotation.",
-            pop,
-            pop,
+            gen_anc,
+            gen_anc,
         )
-        agg[f"downsampling_counts_{pop}"] = downsampling_counts_expr(
+        agg[f"downsampling_counts_{gen_anc}"] = downsampling_counts_expr(
             freq_expr,
             freq_meta_expr,
-            pop,
+            gen_anc,
             max_af=max_af,
             downsamplings=downsamplings,
         )
         if count_singletons:
             logger.info(
-                "Counting singleton variants in downsamplings for population '%s', and"
+                "Counting singleton variants in downsamplings for genetic ancestry group '%s', and"
                 " adding as 'singleton_downsampling_counts_%s' annotation.",
-                pop,
-                pop,
+                gen_anc,
+                gen_anc,
             )
-            agg[f"singleton_downsampling_counts_{pop}"] = downsampling_counts_expr(
+            agg[f"singleton_downsampling_counts_{gen_anc}"] = downsampling_counts_expr(
                 freq_expr,
                 freq_meta_expr,
-                pop,
+                gen_anc,
                 max_af=max_af,
                 downsamplings=downsamplings,
                 singleton=True,
@@ -283,7 +283,7 @@ def count_variants_by_group(
 
 def get_downsampling_freq_indices(
     freq_meta_expr: hl.expr.ArrayExpression,
-    pop: str = "global",
+    gen_anc: str = "global",
     variant_quality: str = "adj",
     genetic_ancestry_label: Optional[str] = None,
     subset: Optional[str] = None,
@@ -294,13 +294,13 @@ def get_downsampling_freq_indices(
 
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
         element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
-        'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param pop: Population to use for filtering by the `genetic_ancestry_label` key in
+        'gen_anc': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'gen_anc': 'global'}]).
+    :param gen_anc: Genetic ancestry group to use for filtering by the `genetic_ancestry_label` key in
         `freq_meta_expr`. Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
     :param genetic_ancestry_label: Label defining the genetic ancestry groups. If None,
-        "gen_anc" or "pop" is used (in that order of preference) if present. Default is
+        "gen_anc" or "gen_anc" is used (in that order of preference) if present. Default is
         None.
     :param subset: Subset to use for filtering by the 'subset' key in `freq_meta_expr`.
         Default is None, which will return all downsampling indices without a 'subset'
@@ -319,7 +319,7 @@ def get_downsampling_freq_indices(
     def _get_filter_expr(m: hl.expr.StructExpression) -> hl.expr.BooleanExpression:
         filter_expr = (
             (m.get("group") == variant_quality)
-            & (hl.any([m.get(l, "") == pop for l in gen_anc]))
+            & (hl.any([m.get(l, "") == gen_anc for l in gen_anc]))
             & m.contains("downsampling")
         )
         if downsamplings is not None:
@@ -341,7 +341,7 @@ def get_downsampling_freq_indices(
 def downsampling_counts_expr(
     freq_expr: hl.expr.ArrayExpression,
     freq_meta_expr: hl.expr.ArrayExpression,
-    pop: str = "global",
+    gen_anc: str = "global",
     variant_quality: str = "adj",
     singleton: bool = False,
     max_af: Optional[float] = None,
@@ -355,13 +355,13 @@ def downsampling_counts_expr(
     The frequency metadata (`freq_meta_expr`) should be in a similar format to the
     `freq_meta` annotation added by `annotate_freq()`. Each downsampling should have
     'group', `genetic_ancestry_label`, and 'downsampling' keys. Included downsamplings
-    are those where 'group' == `variant_quality` and `genetic_ancestry_label` == `pop`.
+    are those where 'group' == `variant_quality` and `genetic_ancestry_label` == `gen_anc`.
 
     :param freq_expr: ArrayExpression of Structs with 'AC' and 'AF' annotations.
     :param freq_meta_expr: ArrayExpression containing the set of groupings for each
         element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
-        'pop': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'pop': 'global'}]).
-    :param pop: Population to use for filtering by the `genetic_ancestry_label` key in
+        'gen_anc': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'gen_anc': 'global'}]).
+    :param gen_anc: Genetic ancestry group to use for filtering by the `genetic_ancestry_label` key in
         `freq_meta_expr`. Default is 'global'.
     :param variant_quality: Variant quality to use for filtering by the 'group' key in
         `freq_meta_expr`. Default is 'adj'.
@@ -379,12 +379,12 @@ def downsampling_counts_expr(
     :param downsamplings: Optional List of integers specifying what downsampling
         indices to obtain. Default is None, which will return all downsampling counts.
     :return: Aggregation Expression for an array of the variant counts in downsamplings
-        for specified population.
+        for specified genetic ancestry group.
     """
     # Get an array of indices sorted by "downsampling" key.
     sorted_indices = get_downsampling_freq_indices(
         freq_meta_expr,
-        pop,
+        gen_anc,
         variant_quality,
         genetic_ancestry_label,
         subset,
@@ -408,7 +408,7 @@ def downsampling_counts_expr(
 
     # Map `_get_criteria` function to each downsampling indexed by `sorted_indices` to
     # generate a list of 1's and 0's for each variant, where the length of the array is
-    # the total number of downsamplings for the specified population and each element
+    # the total number of downsamplings for the specified genetic ancestry group and each element
     # in the array indicates if the variant in the downsampling indexed by
     # `sorted_indices` meets the specified criteria.
     # Return an array sum aggregation that aggregates arrays generated from mapping.
@@ -440,15 +440,15 @@ def explode_downsamplings_oe(
     ht = ht.select(
         _data=[
             hl.struct(
-                gen_anc=pop,
+                gen_anc=gen_anc,
                 downsampling=downsampling,
                 **{
-                    f"{metric}.{oe}": ht[metric][f"gen_anc_{oe}"][pop][i]
+                    f"{metric}.{oe}": ht[metric][f"gen_anc_{oe}"][gen_anc][i]
                     for oe in ["obs", "exp"]
                     for metric in metrics
                 },
             )
-            for pop, downsamplings in downsampling_meta.items()
+            for gen_anc, downsamplings in downsampling_meta.items()
             for i, downsampling in enumerate(downsamplings)
         ]
     )
@@ -849,7 +849,7 @@ def build_models(
     coverage_ht: hl.Table,
     coverage_expr: hl.expr.Int32Expression,
     weighted: bool = False,
-    pops: Tuple[str] = (),
+    gen_ancs: Tuple[str] = (),
     keys: Tuple[str] = (
         "context",
         "ref",
@@ -879,7 +879,7 @@ def build_models(
     genome and CpG status.
     The x and y of the plateau models:
     - x: `mu_snp` - mutation rate
-    - y: proportion observed ('observed_variants' or 'observed_{pop}' / 'possible_variants')
+    - y: proportion observed ('observed_variants' or 'observed_{gen_anc}' / 'possible_variants')
 
     This function also builds models (coverage models) to calibrate the proportion of
     expected variation at low coverage sites (sites below `high_cov_definition`).
@@ -914,8 +914,8 @@ def build_models(
         - observed_variants - the number of observed variants in the dataset for each
         variant. Note that the term "variant" here refers to a specific substitution,
         context, methylation level, and coverage combination
-        - downsampling_counts_{pop} (optional) - array of observed variant counts per
-        population after downsampling. Used only when `pops` is specified.
+        - downsampling_counts_{gen_anc} (optional) - array of observed variant counts per
+        genetic ancestry group after downsampling. Used only when `gen_ancs` is specified.
         - mu_snp - mutation rate
         - possible_variants - the number of possible variants in the dataset for each
         variant
@@ -924,7 +924,7 @@ def build_models(
     :param coverage_expr: Expression that defines the coverage metric.
     :param weighted: Whether to weight the plateau models (a linear regression
         model) by 'possible_variants'. Default is False.
-    :param pops: List of populations used to build plateau models.
+    :param gen_ancs: List of genetic ancestry groups used to build plateau models.
         Default is ().
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level", "mu_snp").
@@ -958,9 +958,9 @@ def build_models(
         "observed_variants": hl.agg.sum(high_cov_ht.observed_variants),
         "possible_variants": hl.agg.sum(high_cov_ht.possible_variants),
     }
-    for pop in pops:
-        agg_expr[f"observed_{pop}"] = hl.agg.array_sum(
-            high_cov_ht[f"downsampling_counts_{pop}"]
+    for gen_anc in gen_ancs:
+        agg_expr[f"observed_{gen_anc}"] = hl.agg.array_sum(
+            high_cov_ht[f"downsampling_counts_{gen_anc}"]
         )
 
     # Generate a Table with all necessary annotations (x and y listed above)
@@ -974,19 +974,21 @@ def build_models(
         mu_snp_expr=high_cov_group_ht.mu_snp,
         observed_variants_expr=high_cov_group_ht.observed_variants,
         possible_variants_expr=high_cov_group_ht.possible_variants,
-        pops_observed_variants_array_expr=[
-            high_cov_group_ht[f"observed_{pop}"] for pop in pops
+        gen_ancs_observed_variants_array_expr=[
+            high_cov_group_ht[f"observed_{gen_anc}"] for gen_anc in gen_ancs
         ],
         weighted=weighted,
     )
-    if pops:
-        # Map the models to their corresponding populations if pops is specified.
+    if gen_ancs:
+        # Map the models to their corresponding genetic ancestry groups if
+        # gen_ancs is specified.
         _plateau_models = dict(
             high_cov_group_ht.aggregate(hl.struct(**plateau_models_agg_expr))
         )
-        pop_models = _plateau_models["pop"]
+        gen_anc_models = _plateau_models["gen_anc"]
         plateau_models = {
-            pop: hl.literal(pop_models[idx]) for idx, pop in enumerate(pops)
+            gen_anc: hl.literal(gen_anc_models[idx])
+            for idx, gen_anc in enumerate(gen_ancs)
         }
         plateau_models["total"] = _plateau_models["total"]
         plateau_models = hl.struct(**plateau_models)
@@ -1044,7 +1046,7 @@ def build_plateau_models(
     mu_snp_expr: hl.expr.Float64Expression,
     observed_variants_expr: hl.expr.Int64Expression,
     possible_variants_expr: hl.expr.Int64Expression,
-    pops_observed_variants_array_expr: List[hl.expr.ArrayExpression] = [],
+    gen_ancs_observed_variants_array_expr: List[hl.expr.ArrayExpression] = [],
     weighted: bool = False,
 ) -> Dict[str, Union[Dict[bool, hl.expr.ArrayExpression], hl.ArrayExpression]]:
     """
@@ -1053,22 +1055,22 @@ def build_plateau_models(
     The x and y of the plateau models:
     - x: `mu_snp_expr`
     - y: `observed_variants_expr` / `possible_variants_expr`
-    or `pops_observed_variants_array_expr`[index] / `possible_variants_expr`
-    if `pops` is specified
+    or `gen_ancs_observed_variants_array_expr`[index] / `possible_variants_expr`
+    if `gen_ancs` is specified
 
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
     :param mu_snp_expr: Float64Expression of the mutation rate.
     :param observed_variants_expr: Int64Expression of the observed variant counts.
     :param possible_variants_expr: Int64Expression of the possible variant counts.
-    :param pops_observed_variants_array_expr: Nested ArrayExpression with all observed
-        variant counts ArrayNumericExpressions for specified populations. e.g., `[[1,1,
+    :param gen_ancs_observed_variants_array_expr: Nested ArrayExpression with all observed
+        variant counts ArrayNumericExpressions for specified genetic ancestry groups. e.g., `[[1,1,
         1],[1,1,1]]`. Default is None.
     :param weighted: Whether to generalize the model to weighted least squares using
         'possible_variants'. Default is False.
     :return: A dictionary of intercepts and slopes of plateau models. The keys are
-        'total' (for all sites) and 'pop' (optional; for populations). The values for
+        'total' (for all sites) and 'gen_anc' (optional; for genetic ancestry groups). The values for
         'total' is a dictionary (e.g., <DictExpression of type dict<bool,
-        array<float64>>>), and the value for 'pop' is a nested list of dictionaries (e.
+        array<float64>>>), and the value for 'gen_anc' is a nested list of dictionaries (e.
         g., <ArrayExpression of type array<array<dict<bool, array<float64>>>>>). The
         key of the dictionary in the nested list is CpG status (BooleanExpression), and
         the value is an ArrayExpression containing intercept and slope values.
@@ -1084,22 +1086,22 @@ def build_plateau_models(
             ).beta,
         )
     }
-    if pops_observed_variants_array_expr:
-        # Build plateau models using sites in population downsamplings if
-        # population is specified.
-        plateau_models_agg_expr["pop"] = hl.agg.array_agg(
-            lambda pop_obs_var_array_expr: hl.agg.array_agg(
-                lambda pop_observed_variants: hl.agg.group_by(
+    if gen_ancs_observed_variants_array_expr:
+        # Build plateau models using sites in genetic ancestry group downsamplings if
+        # genetic ancestry group is specified.
+        plateau_models_agg_expr["gen_anc"] = hl.agg.array_agg(
+            lambda gen_anc_obs_var_array_expr: hl.agg.array_agg(
+                lambda gen_anc_observed_variants: hl.agg.group_by(
                     cpg_expr,
                     hl.agg.linreg(
-                        pop_observed_variants / possible_variants_expr,
+                        gen_anc_observed_variants / possible_variants_expr,
                         [1, mu_snp_expr],
                         weight=possible_variants_expr,
                     ).beta,
                 ),
-                pop_obs_var_array_expr,
+                gen_anc_obs_var_array_expr,
             ),
-            pops_observed_variants_array_expr,
+            gen_ancs_observed_variants_array_expr,
         )
     return plateau_models_agg_expr
 
@@ -1126,48 +1128,51 @@ def build_coverage_model(
     return hl.agg.linreg(low_coverage_oe_expr, [1, coverage_expr])
 
 
-def get_all_pop_lengths(
+def get_all_gen_anc_lengths(
     ht: hl.Table,
-    pops: Tuple[str],
+    gen_ancs: Tuple[str],
     obs_expr: hl.expr.StructExpression,
 ) -> List[Tuple[str, str]]:
     """
-    Get the minimum length of observed variant counts array for each population downsampling.
+    Get the minimum length of observed variant counts array for each genetic ancestry group downsampling.
 
-    The observed variant counts for each population in `pops` are specified by
+    The observed variant counts for each genetic ancestry group in `gen_ancs` are specified by
     annotations on the `obs_expr` expression.
 
-    The function also performs a check that arrays of variant counts within population
+    The function also performs a check that arrays of variant counts within genetic ancestry group
     downsamplings all have the same lengths.
 
     :param ht: Input Table containing `obs_expr`.
-    :param pops: Populations used to categorize observed variant counts in downsamplings.
-    :param obs_expr: Expression for the population observed variant counts. Should be a
-        struct containing an array for each pop in `pops`.
-    :return: A Dictionary with the minimum array length for each population.
+    :param gen_ancs: Genetic ancestry groups used to categorize observed variant counts in downsamplings.
+    :param obs_expr: Expression for the genetic ancestry group observed variant counts. Should be a
+        struct containing an array for each gen_anc in `gen_ancs`.
+    :return: A Dictionary with the minimum array length for each genetic ancestry group.
     """
     # TODO: This function will be converted into doing just the length check if there
-    #  is no usage of pop_lengths in the constraint pipeline.
-    # Get minimum length of downsamplings for each population.
-    pop_downsampling_lengths = ht.aggregate(
-        [hl.agg.min(hl.len(obs_expr[pop])) for pop in pops]
+    #  is no usage of gen_anc_lengths in the constraint pipeline.
+    # Get minimum length of downsamplings for each genetic ancestry group.
+    gen_anc_downsampling_lengths = ht.aggregate(
+        [hl.agg.min(hl.len(obs_expr[gen_anc])) for gen_anc in gen_ancs]
     )
 
-    # Zip population name with their downsampling length.
-    pop_lengths = list(zip(pop_downsampling_lengths, pops))
-    logger.info("Found: %s", "".join(map(str, pop_lengths)))
+    # Zip genetic ancestry group name with their downsampling length.
+    gen_anc_lengths = list(zip(gen_anc_downsampling_lengths, gen_ancs))
+    logger.info("Found: %s", "".join(map(str, gen_anc_lengths)))
 
     assert ht.all(
         hl.all(
             lambda f: f,
-            [hl.len(obs_expr[pop]) == length for length, pop in pop_lengths],
+            [
+                hl.len(obs_expr[gen_anc]) == length
+                for length, gen_anc in gen_anc_lengths
+            ],
         )
     ), (
-        "The arrays of variant counts within population downsamplings have different"
+        "The arrays of variant counts within genetic ancestry group downsamplings have different"
         " lengths!"
     )
 
-    return pop_lengths
+    return gen_anc_lengths
 
 
 def get_constraint_grouping_expr(
@@ -1332,55 +1337,55 @@ def compute_expected_variants(
     cov_corr_expr: hl.Float64Expression,
     possible_variants_expr: hl.Int64Expression,
     cpg_expr: hl.BooleanExpression,
-    pop: Optional[str] = None,
+    gen_anc: Optional[str] = None,
 ) -> Dict[str, Union[hl.Float64Expression, hl.Int64Expression]]:
     """
-    Apply plateau models for all sites and for a population (if specified) to compute predicted proportion observed ratio and expected variant counts.
+    Apply plateau models for all sites and for a genetic ancestry group (if specified) to compute predicted proportion observed ratio and expected variant counts.
 
     :param ht: Input Table.
     :param plateau_models_expr: Linear models (output of `build_models()`, with the values
         of the dictionary formatted as a StructExpression of intercept and slope, that
         calibrates mutation rate to proportion observed for high coverage exomes. It
-        includes models for CpG, non-CpG sites, and each population if specified.
+        includes models for CpG, non-CpG sites, and each genetic ancestry group if specified.
     :param mu_expr: Float64Expression of mutation rate.
     :param possible_variants_expr: Int64Expression of possible variant counts.
     :param cov_corr_expr: Float64Expression of corrected coverage expression.
     :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
-    :param pop: Optional population to use when applying plateau model. Default is
+    :param gen_anc: Optional genetic ancestry group to use when applying plateau model. Default is
         None.
     :return: A dictionary with predicted proportion observed ratio and expected variant
         counts.
     """
-    if pop is None:
-        pop = ""
+    if gen_anc is None:
+        gen_anc = ""
         plateau_model = hl.literal(plateau_models_expr.total)[cpg_expr]
         slope = plateau_model[1]
         intercept = plateau_model[0]
         agg_func = hl.agg.sum
         ann_to_sum = ["observed_variants", "possible_variants"]
     else:
-        plateau_model = hl.literal(plateau_models_expr[pop])
+        plateau_model = hl.literal(plateau_models_expr[gen_anc])
         slope = hl.map(lambda f: f[cpg_expr][1], plateau_model)
         intercept = hl.map(lambda f: f[cpg_expr][0], plateau_model)
         agg_func = hl.agg.array_sum
-        pop = f"_{pop}"
-        ann_to_sum = [f"downsampling_counts{pop}"]
+        gen_anc = f"_{gen_anc}"
+        ann_to_sum = [f"downsampling_counts{gen_anc}"]
 
-    # Apply plateau models for specified population.
+    # Apply plateau models for specified genetic ancestry group.
     ppo_expr = mu_expr * slope + intercept
 
     # Generate sum aggregators for 'predicted_proportion_observed' and
-    # 'expected_variants', for specified population.
+    # 'expected_variants', for specified genetic ancestry group.
     agg_expr = {
-        f"predicted_proportion_observed{pop}": agg_func(ppo_expr),
-        f"expected_variants{pop}": agg_func(
+        f"predicted_proportion_observed{gen_anc}": agg_func(ppo_expr),
+        f"expected_variants{gen_anc}": agg_func(
             ppo_expr * cov_corr_expr * possible_variants_expr
         ),
     }
 
     # Generate sum aggregators for 'observed_variants' and 'possible_variants' on
-    # the entire dataset if pop is None, and for 'downsampling_counts' for
-    # specified population if pop is not None.
+    # the entire dataset if gen_anc is None, and for 'downsampling_counts' for
+    # specified genetic ancestry group if gen_anc is not None.
     agg_expr.update({ann: agg_func(ht[ann]) for ann in ann_to_sum})
 
     return agg_expr
@@ -1389,7 +1394,7 @@ def compute_expected_variants(
 def oe_aggregation_expr(
     ht: hl.Table,
     filter_expr: hl.expr.BooleanExpression,
-    pops: Tuple[str] = (),
+    gen_ancs: Tuple[str] = (),
     exclude_mu_sum: bool = False,
 ) -> hl.expr.StructExpression:
     """
@@ -1407,11 +1412,11 @@ def oe_aggregation_expr(
         - exp - expected number of variants filtered to `filter_expr`.
         - oe - observed:expected ratio of variants filtered to `filter_expr`.
 
-        If `pops` is specified:
-            - gen_anc_exp - Struct with the expected number of variants per population (for
-              all pop in `pops`) filtered to `filter_expr`.
-            - gen_anc_obs - Struct with the observed number of variants per population (for
-              all pop in `pops`) filtered to `filter_expr`.
+        If `gen_ancs` is specified:
+            - gen_anc_exp - Struct with the expected number of variants per genetic ancestry group (for
+              all gen_anc in `gen_ancs`) filtered to `filter_expr`.
+            - gen_anc_obs - Struct with the observed number of variants per genetic ancestry group (for
+              all gen_anc in `gen_ancs`) filtered to `filter_expr`.
 
     .. note::
         The following annotations should be present in `ht`:
@@ -1419,13 +1424,13 @@ def oe_aggregation_expr(
             - mu
             - possible_variants
             - expected_variants
-        If `pops` is specified, the following annotations should also be present:
-            - expected_variants_{pop} for all pop in `pops`
-            - downsampling_counts_{pop} for all pop in `pops`
+        If `gen_ancs` is specified, the following annotations should also be present:
+            - expected_variants_{gen_anc} for all gen_anc in `gen_ancs`
+            - downsampling_counts_{gen_anc} for all gen_anc in `gen_ancs`
 
     :param ht: Input Table to create observed:expected ratio aggregation expressions for.
     :param filter_expr: Boolean expression used to filter `ht` before aggregation.
-    :param pops: List of populations to compute constraint metrics for. Default is ().
+    :param gen_ancs: List of genetic ancestry groups to compute constraint metrics for. Default is ().
     :param exclude_mu_sum: Whether to exclude mu sum aggregation expression from
         returned struct. Default is False.
     :return: StructExpression with observed:expected ratio aggregation expressions.
@@ -1444,13 +1449,19 @@ def oe_aggregation_expr(
         agg_expr["mu"] = hl.agg.sum(ht.mu)
 
     # Create aggregators that sum the number of observed variants
-    # and expected variants for each population if pops is specified.
-    if pops:
+    # and expected variants for each genetic ancestry group if gen_ancs is specified.
+    if gen_ancs:
         agg_expr["gen_anc_exp"] = hl.struct(
-            **{pop: hl.agg.array_sum(ht[f"expected_variants_{pop}"]) for pop in pops}
+            **{
+                gen_anc: hl.agg.array_sum(ht[f"expected_variants_{gen_anc}"])
+                for gen_anc in gen_ancs
+            }
         )
         agg_expr["gen_anc_obs"] = hl.struct(
-            **{pop: hl.agg.array_sum(ht[f"downsampling_counts_{pop}"]) for pop in pops}
+            **{
+                gen_anc: hl.agg.array_sum(ht[f"downsampling_counts_{gen_anc}"])
+                for gen_anc in gen_ancs
+            }
         )
 
     agg_expr = hl.struct(**agg_expr)

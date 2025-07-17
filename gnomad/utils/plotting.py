@@ -163,7 +163,7 @@ def plot_multi_hail_hist(
 
     .. code-block:: python
 
-        plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.pop, hl.agg.hist(ht.data, start, end, bins))))
+        plot_multi_hail_hist(ht.aggregate(hl.agg.group_by(ht.gen_anc, hl.agg.hist(ht.data, start, end, bins))))
 
     :param hist_data: Data to plot
     :param title: Plot title

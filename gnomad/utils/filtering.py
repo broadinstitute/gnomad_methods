@@ -31,8 +31,8 @@ def filter_by_frequency(
     direction: str,
     frequency: float = None,
     allele_count: int = None,
-    population: str = None,
-    subpop: str = None,
+    gen_anc: str = None,
+    subgrp: str = None,
     downsampling: int = None,
     keep: bool = True,
     adj: bool = True,
@@ -44,14 +44,14 @@ def filter_by_frequency(
 
     At least one of frequency or allele_count is required.
 
-    Subpop can be specified without a population if desired.
+    Subgroup can be specified without a genetic ancestry group if desired.
 
     :param t: Input MatrixTable or Table
     :param direction: One of "above", "below", and "equal" (how to apply the filter)
     :param frequency: Frequency to filter by (one of frequency or allele_count is required)
     :param allele_count: Allele count to filter by (one of frequency or allele_count is required)
-    :param population: Population in which to filter frequency
-    :param subpop: Sub-population in which to filter frequency
+    :param gen_anc: Genetic ancestry group in which to filter frequency
+    :param subgrp: Subgroup in which to filter frequency
     :param downsampling: Downsampling in which to filter frequency
     :param keep: Whether to keep rows passing this frequency (passed to filter_rows)
     :param adj: Whether to use adj frequency
@@ -78,24 +78,24 @@ def filter_by_frequency(
         else:
             criteria.append(lambda f: f.AC[1] == allele_count)
     size = 1
-    if population:
-        criteria.append(lambda f: f.meta.get("pop", "") == population)
+    if gen_anc:
+        criteria.append(lambda f: f.meta.get("gen_anc", "") == gen_anc)
         size += 1
-    if subpop:
-        criteria.append(lambda f: f.meta.get("subpop", "") == subpop)
+    if subgrp:
+        criteria.append(lambda f: f.meta.get("subgrp", "") == subgrp)
         size += 1
-        # If one supplies a subpop but not a population, this will ensure this
+        # If one supplies a subgroup but not a genetic ancestry group, this will ensure this
         # gets it right
-        if not population:
+        if not gen_anc:
             size += 1
     if downsampling:
         criteria.append(lambda f: f.meta.get("downsampling", "") == str(downsampling))
         size += 1
-        if not population:
+        if not gen_anc:
             size += 1
-            criteria.append(lambda f: f.meta.get("pop", "") == "global")
-        if subpop:
-            raise ValueError("No downsampling data for subpopulations implemented")
+            criteria.append(lambda f: f.meta.get("gen_anc", "") == "global")
+        if subgrp:
+            raise ValueError("No downsampling data for subgroups implemented")
     criteria.append(lambda f: f.meta.size() == size)
 
     filt = lambda x: combine_functions(criteria, x)
@@ -812,15 +812,15 @@ def filter_arrays_by_meta(
     The `items_to_filter` can be used to filter in the following ways based on
     `meta_expr` items:
     - By a list of keys, e.g. ["sex", "downsampling"].
-    - By specific key: value pairs, e.g. to filter where 'pop' is 'han' or 'papuan'
-    {"pop": ["han", "papuan"]}, or where 'pop' is 'afr' and/or 'sex' is 'XX'
-    {"pop": ["afr"], "sex": ["XX"]}.
+    - By specific key: value pairs, e.g. to filter where 'gen_anc' is 'han' or 'papuan'
+    {"gen_anc": ["han", "papuan"]}, or where 'gen_anc' is 'afr' and/or 'sex' is 'XX'
+    {"gen_anc": ["afr"], "sex": ["XX"]}.
 
     The items can be kept or removed from `meta_indexed_expr` and `meta_expr` based on
     the value of `keep`. For example if `meta_indexed_exprs` is {'freq': ht.freq,
     'freq_meta_sample_count': ht.index_globals().freq_meta_sample_count} and `meta_expr`
     is ht.freq_meta then if `keep` is True, the items specified by `items_to_filter`
-    such as  'pop' = 'han' will be kept and all other items will be removed from the
+    such as  'gen_anc' = 'han' will be kept and all other items will be removed from the
     ht.freq, ht.freq_meta_sample_count, and ht.freq_meta. `meta_indexed_exprs` can also
     be a single array expression such as ht.freq.
 

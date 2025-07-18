@@ -46,9 +46,9 @@ class TestGetCoverageAggFunc:
         result = hl.eval(transform_func(test_struct))
         assert result == 0
 
-    def test_get_coverage_agg_func_custom_dp_field(self):
-        """Test get_coverage_agg_func with custom DP field name."""
-        transform_func, _ = get_coverage_agg_func(dp_field="depth", max_cov_bin=50)
+    def test_get_coverage_agg_func_custom_dp_field_transform(self):
+        """Test get_coverage_agg_func transform function with custom DP field name."""
+        transform_func, _ = get_coverage_agg_func(dp_field="depth")
 
         # Test the transform function with custom field name.
         test_cases = [

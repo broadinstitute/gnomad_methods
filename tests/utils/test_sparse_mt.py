@@ -71,7 +71,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_structure(self):
         """Test that the aggregation function returns the expected structure."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
         test_data = [10, 20, 30, 40, 50]
         # Create a Hail Table with a DP field.
         ht = hl.Table.parallelize(
@@ -85,7 +85,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_values(self):
         """Test that the aggregation function computes correct values."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
         test_data = [10, 20, 30, 40, 50]
         ht = hl.Table.parallelize(
             [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
@@ -104,7 +104,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_with_missing_values(self):
         """Test aggregation function handles missing values correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
         test_data = [10, 20, None, 40, 50]
         ht = hl.Table.parallelize(
             [{"DP": v if v is not None else hl.missing(hl.tint32)} for v in test_data],
@@ -123,7 +123,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_with_zero_values(self):
         """Test aggregation function handles zero values correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
         test_data = [0, 10, 20, 0, 30]
         ht = hl.Table.parallelize(
             [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
@@ -137,7 +137,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_with_negative_values(self):
         """Test aggregation function handles negative values correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
         test_data = [-5, 10, 20, -3, 30]
         ht = hl.Table.parallelize(
             [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
@@ -152,7 +152,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_with_custom_dp_field(self):
         """Test aggregation function works with custom DP field names."""
-        transform_func, agg_func = get_coverage_agg_func(dp_field="depth")
+        _, agg_func = get_coverage_agg_func(dp_field="depth")
         test_data = [10, 20, 30, 40, 50]
         ht = hl.Table.parallelize(
             [{"depth": v} for v in test_data], hl.tstruct(depth=hl.tint32)
@@ -165,7 +165,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_edge_cases(self):
         """Test aggregation function with edge cases."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
 
         # Test with single value.
         ht1 = hl.Table.parallelize([{"DP": 42}], hl.tstruct(DP=hl.tint32))
@@ -182,7 +182,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_with_different_max_cov_bin(self):
         """Test that max_cov_bin parameter affects the aggregation function."""
-        transform_func, agg_func = get_coverage_agg_func(max_cov_bin=5)
+        _, agg_func = get_coverage_agg_func(max_cov_bin=5)
         test_data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         ht = hl.Table.parallelize(
             [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
@@ -195,7 +195,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_max_cov_bin_capping(self):
         """Test that max_cov_bin properly caps values in coverage_counter."""
-        transform_func, agg_func = get_coverage_agg_func(max_cov_bin=3)
+        _, agg_func = get_coverage_agg_func(max_cov_bin=3)
         test_data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         ht = hl.Table.parallelize(
             [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
@@ -217,7 +217,7 @@ class TestGetCoverageAggFunc:
 
     def test_aggregation_function_median_approximation(self):
         """Test that median_approx provides reasonable approximation."""
-        transform_func, agg_func = get_coverage_agg_func()
+        _, agg_func = get_coverage_agg_func()
 
         # Test with odd number of values.
         test_data_odd = [10, 20, 30, 40, 50]

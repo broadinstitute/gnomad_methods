@@ -187,13 +187,17 @@ class TestMergeArrayExpressions:
         result_meta = hl.eval(result_meta)
 
         # Expected: union of groups A, B, C, D with summed values.
-        # A: 10+5=15, B: 20+15=35, C: 30+0=30, D: 0+25=25.
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}, {"group": "D"}]
         assert result_meta == expected_meta
 
         # Check that arrays are properly merged.
         for row in result:
             assert len(row.result_array) == 4
+            # Check actual values: A: 10+5=15, B: 20+15=35, C: 30+0=30, D: 0+25=25.
+            assert row.result_array[0] == 15  # Group A.
+            assert row.result_array[1] == 35  # Group B.
+            assert row.result_array[2] == 30  # Group C.
+            assert row.result_array[3] == 25  # Group D.
 
     def test_merge_integer_arrays_diff(self, sample_ht):
         """Test merging integer arrays with diff operation."""
@@ -217,9 +221,16 @@ class TestMergeArrayExpressions:
         result_meta = hl.eval(result_meta)
 
         # Expected: only groups from first array (A, B, C) with subtracted values.
-        # A: 10-5=5, B: 20-15=5, C: 30-0=30.
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
+
+        # Check that arrays are properly merged with diff operation.
+        for row in result:
+            assert len(row.result_array) == 3
+            # Check actual values: A: 10-5=5, B: 20-15=5, C: 30-0=30.
+            assert row.result_array[0] == 5  # Group A.
+            assert row.result_array[1] == 5  # Group B.
+            assert row.result_array[2] == 30  # Group C.
 
     def test_merge_struct_arrays_sum(self, sample_ht):
         """Test merging struct arrays with sum operation."""

@@ -54,7 +54,7 @@ class TestGetCoverageAggFunc:
         test_cases = [
             ({"depth": 10}, 10),
             ({"depth": 0}, 0),
-            ({"depth": 100}, 100),  # Should not be capped at 50 in transform.
+            ({"depth": 100}, 100),
         ]
 
         for input_data, expected in test_cases:

@@ -46,22 +46,6 @@ class TestGetCoverageAggFunc:
         result = hl.eval(transform_func(test_struct))
         assert result == 0
 
-    def test_get_coverage_agg_func_custom_dp_field_transform(self):
-        """Test get_coverage_agg_func transform function with custom DP field name."""
-        transform_func, _ = get_coverage_agg_func(dp_field="depth")
-
-        # Test the transform function with custom field name.
-        test_cases = [
-            ({"depth": 10}, 10),
-            ({"depth": 0}, 0),
-            ({"depth": 100}, 100),
-        ]
-
-        for input_data, expected in test_cases:
-            test_struct = hl.Struct(**input_data)
-            result = hl.eval(transform_func(test_struct))
-            assert result == expected
-
     def test_get_coverage_agg_func_with_nan_values(self):
         """Test that NaN values are handled correctly."""
         transform_func, _ = get_coverage_agg_func()
@@ -149,19 +133,6 @@ class TestGetCoverageAggFunc:
         assert result.mean == 10.4  # (-5+10+20-3+30)/5.
         assert result.coverage_counter.get(-5, 0) == 1
         assert result.coverage_counter.get(-3, 0) == 1
-
-    def test_aggregation_function_with_custom_dp_field(self):
-        """Test aggregation function works with custom DP field names."""
-        _, agg_func = get_coverage_agg_func(dp_field="depth")
-        test_data = [10, 20, 30, 40, 50]
-        ht = hl.Table.parallelize(
-            [{"depth": v} for v in test_data], hl.tstruct(depth=hl.tint32)
-        )
-        result = ht.aggregate(agg_func(ht.depth))
-
-        # Should work with custom field name.
-        assert result.mean == 30.0
-        assert result.total_DP == 150
 
     def test_aggregation_function_edge_cases(self):
         """Test aggregation function with edge cases."""

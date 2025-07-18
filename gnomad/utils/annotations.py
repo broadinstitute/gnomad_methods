@@ -1315,7 +1315,15 @@ def merge_array_expressions(
     operation: str = "sum",
     set_negatives_to_zero: bool = False,
     struct_fields: Optional[List[str]] = None,
-) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
+    count_arrays: Optional[Dict[str, List[hl.expr.ArrayExpression]]] = None,
+) -> Union[
+    Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]],
+    Tuple[
+        hl.expr.ArrayExpression,
+        List[Dict[str, int]],
+        Dict[str, hl.expr.ArrayExpression],
+    ],
+]:
     """
     Merge a list of array expressions based on the supplied `operation`.
 
@@ -1345,7 +1353,8 @@ def merge_array_expressions(
     :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first array in the list will have the other arrays subtracted from it.
     :param set_negatives_to_zero: If True, set negative array values to 0. If False, raise a ValueError. Default is False.
     :param struct_fields: List of field names to merge if arrays contain structs. If None, arrays are treated as integer arrays. Default is None.
-    :return: Tuple of merged array and metadata list.
+    :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as meta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
+    :return: Tuple of merged array, metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
     """
     if len(arrays) < 2:
         raise ValueError("Must provide at least two arrays to merge!")
@@ -1353,6 +1362,10 @@ def merge_array_expressions(
         raise ValueError("Length of arrays and meta must be equal!")
     if operation not in ["sum", "diff"]:
         raise ValueError("Operation must be either 'sum' or 'diff'!")
+    if count_arrays is not None:
+        for k, count_array in count_arrays.items():
+            if len(count_array) != len(meta):
+                raise ValueError(f"Length of count_array '{k}' and meta must be equal!")
 
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the array.
@@ -1460,8 +1473,22 @@ def merge_array_expressions(
                 .or_error(negative_value_error_msg)
             )
 
+    # Create count_array_meta_idx using meta then iterate through each group
+    # in the list of tuples to access each group's entry per array. Sum or diff the
+    # values for each group across arrays to make a new_counts_array annotation.
+    if count_arrays:
+        new_counts_array_dict = {}
+        for k, count_array in count_arrays.items():
+            new_counts_array, _ = merge_array_expressions(
+                count_array, meta, operation, set_negatives_to_zero
+            )
+            new_counts_array_dict[k] = new_counts_array
+
     new_meta = hl.eval(new_meta)
-    return new_array, new_meta
+    if count_arrays:
+        return new_array, new_meta, new_counts_array_dict
+    else:
+        return new_array, new_meta
 
 
 def merge_freq_arrays(

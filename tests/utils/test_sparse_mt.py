@@ -298,8 +298,9 @@ class TestGetCoverageAggFunc:
         assert (
             result.coverage_counter.get(0, 0) == 2
         )  # 2 zero values (explicit 0 + missing->0).
-        # Values 50 (original) and 100 (capped) should be at position 50.
-        assert result.coverage_counter.get(50, 0) == 2  # Accept actual behavior.
+        # Values 50 (original) and 100 (capped to 50 by max_cov_bin) should be at
+        # position 50.
+        assert result.coverage_counter.get(50, 0) == 2
 
     def test_custom_field_transform_and_aggregation(self):
         """Test both transform and aggregation with custom field names."""

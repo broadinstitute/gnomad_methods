@@ -196,7 +196,7 @@ class TestGetCoverageAggFunc:
             [{"DP": v} for v in test_data_odd], hl.tstruct(DP=hl.tint32)
         )
         result_odd = ht_odd.aggregate(agg_func(ht_odd.DP))
-        assert result_odd.median_approx == 30  # Should be close to 30.
+        assert result_odd.median_approx == 30
 
         # Test with even number of values - approximate median may vary.
         test_data_even = [10, 20, 30, 40]
@@ -204,8 +204,10 @@ class TestGetCoverageAggFunc:
             [{"DP": v} for v in test_data_even], hl.tstruct(DP=hl.tint32)
         )
         result_even = ht_even.aggregate(agg_func(ht_even.DP))
-        # Approximate median may not be exactly 25, but should be reasonable.
-        assert result_even.median_approx in [20, 25, 30]  # Allow some variation.
+        # Hail's median_approx is non-deterministic, so we can't test for exact
+        # equality.
+        # Approximate median should be close to 25 (true median).
+        assert result_even.median_approx in [20, 25, 30]
 
     def test_transform_function_with_various_inputs(self):
         """Test the transform function with various input types."""

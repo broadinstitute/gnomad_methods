@@ -22,7 +22,7 @@ class TestGetCoverageAggFunc:
 
     def test_get_coverage_agg_func_default_params(self):
         """Test get_coverage_agg_func with default parameters."""
-        transform_func, agg_func = get_coverage_agg_func()
+        transform_func, _ = get_coverage_agg_func()
 
         # Test the transform function with various inputs.
         test_cases = [
@@ -39,7 +39,7 @@ class TestGetCoverageAggFunc:
 
     def test_get_coverage_agg_func_missing_values(self):
         """Test that missing values are handled correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
+        transform_func, _ = get_coverage_agg_func()
 
         # Test with missing value - need to use hl.missing.
         test_struct = hl.Struct(DP=hl.missing(hl.tint32))
@@ -48,9 +48,7 @@ class TestGetCoverageAggFunc:
 
     def test_get_coverage_agg_func_custom_dp_field(self):
         """Test get_coverage_agg_func with custom DP field name."""
-        transform_func, agg_func = get_coverage_agg_func(
-            dp_field="depth", max_cov_bin=50
-        )
+        transform_func, _ = get_coverage_agg_func(dp_field="depth", max_cov_bin=50)
 
         # Test the transform function with custom field name.
         test_cases = [
@@ -64,10 +62,9 @@ class TestGetCoverageAggFunc:
             result = hl.eval(transform_func(test_struct))
             assert result == expected
 
-
     def test_get_coverage_agg_func_with_nan_values(self):
         """Test that NaN values are handled correctly."""
-        transform_func, agg_func = get_coverage_agg_func()
+        transform_func, _ = get_coverage_agg_func()
         test_struct = hl.Struct(DP=hl.float64("nan"))
         result = hl.eval(transform_func(test_struct))
         assert result == 0
@@ -241,7 +238,7 @@ class TestGetCoverageAggFunc:
 
     def test_transform_function_with_various_inputs(self):
         """Test the transform function with various input types."""
-        transform_func, agg_func = get_coverage_agg_func(max_cov_bin=100)
+        transform_func, _ = get_coverage_agg_func(max_cov_bin=100)
 
         # Create a sample dataset.
         sample_data = [{"DP": 10}, {"DP": 20}, {"DP": 30}, {"DP": 0}, {"DP": 150}]
@@ -263,7 +260,7 @@ class TestGetCoverageAggFunc:
         field_names = ["DP", "depth", "coverage", "read_depth"]
 
         for field_name in field_names:
-            transform_func, agg_func = get_coverage_agg_func(dp_field=field_name)
+            transform_func, _ = get_coverage_agg_func(dp_field=field_name)
 
             # Test with the custom field name.
             test_struct = hl.Struct(**{field_name: 25})

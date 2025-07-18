@@ -208,6 +208,7 @@ class TestGetCoverageAggFunc:
         result_even = ht_even.aggregate(agg_func(ht_even.DP))
         # Hail's median_approx is non-deterministic, so we can't test for exact
         # equality.
+        # See https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.approx_median.
         # Approximate median should be close to 25 (true median).
         assert result_even.median_approx in [20, 25, 30]
 

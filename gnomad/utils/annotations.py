@@ -1367,6 +1367,9 @@ def merge_array_expressions(
             if len(count_array) != len(meta):
                 raise ValueError(f"Length of count_array '{k}' and meta must be equal!")
 
+    # Store original metadata for count arrays processing
+    original_meta = meta
+
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the array.
     meta = [hl.dict(hl.enumerate(m).map(lambda x: (x[1], [x[0]]))) for m in meta]
@@ -1480,7 +1483,7 @@ def merge_array_expressions(
         new_counts_array_dict = {}
         for k, count_array in count_arrays.items():
             new_counts_array, _ = merge_array_expressions(
-                count_array, meta, operation, set_negatives_to_zero
+                count_array, original_meta, operation, set_negatives_to_zero
             )
             new_counts_array_dict[k] = new_counts_array
 

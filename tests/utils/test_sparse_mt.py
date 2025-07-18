@@ -242,26 +242,37 @@ class TestGetCoverageAggFunc:
         """Test that transform and aggregation functions work together correctly."""
         transform_func, agg_func = get_coverage_agg_func(max_cov_bin=50)
 
-        # Create test data with various edge cases (avoiding NaN for now).
-        test_data = [10, 20, None, 40, 50, 0, 100, -5]
+        # Create test data with various edge cases.
+        test_data = [10, 20, None, 40, 50, 0, 100, -5, float("nan")]
 
         # Test transform function on individual values.
         transformed_values = []
         for value in test_data:
             if value is None:
                 test_struct = hl.Struct(DP=hl.missing(hl.tint32))
+            elif isinstance(value, float) and value != value:  # Check for NaN
+                test_struct = hl.Struct(DP=hl.float64("nan"))
             else:
                 test_struct = hl.Struct(DP=value)
             result = hl.eval(transform_func(test_struct))
             transformed_values.append(result)
 
-        # Expected transformed values: [10, 20, 0, 40, 50, 0, 100, -5].
-        expected_transformed = [10, 20, 0, 40, 50, 0, 100, -5]
+        # Expected transformed values: [10, 20, 0, 40, 50, 0, 100, -5, 0].
+        expected_transformed = [10, 20, 0, 40, 50, 0, 100, -5, 0]
+        # For aggregation test (without NaN): [10, 20, 0, 40, 50, 0, 100, -5]
+        expected_transformed_no_nan = [10, 20, 0, 40, 50, 0, 100, -5]
         assert transformed_values == expected_transformed
 
-        # Test aggregation function on the same data.
+        # Test aggregation function on the same data (excluding NaN due to type
+        # handling complexity).
+        test_data_no_nan = [
+            v for v in test_data if not (isinstance(v, float) and v != v)
+        ]
         ht = hl.Table.parallelize(
-            [{"DP": v if v is not None else hl.missing(hl.tint32)} for v in test_data],
+            [
+                {"DP": v if v is not None else hl.missing(hl.tint32)}
+                for v in test_data_no_nan
+            ],
             hl.tstruct(DP=hl.tint32),
         )
 
@@ -274,7 +285,10 @@ class TestGetCoverageAggFunc:
         # The aggregation function operates on transformed data (missing values become 0).
         # So mean should be calculated from all 8 values: 215/8 = 26.875.
         assert (
-            abs(result.mean - sum(expected_transformed) / len(expected_transformed))
+            abs(
+                result.mean
+                - sum(expected_transformed_no_nan) / len(expected_transformed_no_nan)
+            )
             < 0.1
         )  # Allow small tolerance.
         # Now that we're using transformed data, there are 2 zeros: one explicit,

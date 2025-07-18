@@ -1309,6 +1309,161 @@ def hemi_expr(
     )
 
 
+def merge_array_expressions(
+    arrays: List[hl.expr.ArrayExpression],
+    meta: List[List[Dict[str, str]]],
+    operation: str = "sum",
+    set_negatives_to_zero: bool = False,
+    struct_fields: Optional[List[str]] = None,
+) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]]:
+    """
+    Merge a list of array expressions based on the supplied `operation`.
+
+    This function can handle both:
+    1. Arrays of integers (e.g., allele numbers).
+    2. Arrays of structs containing integer fields (e.g., frequency structs with AC, AN, etc.).
+
+    .. warning::
+        Arrays must be on the same Table.
+
+    .. note::
+
+        Arrays do not have to contain the same groupings or order of groupings but
+        the array indices for an array in `arrays` must be the same as its associated
+        metadata index in `meta` i.e., `arrays = [arr1, arr2]` then `meta`
+        must equal `[meta1, meta2]` where meta1 contains the metadata information
+        for arr1.
+
+        If `operation` is set to "sum", groups in the merged array
+        will be the union of groupings found within the arrays' metadata and all arrays
+        will be summed by grouping. If `operation` is set to "diff", the merged array
+        will contain groups only found in the first array of `meta`. Any array containing
+        any of these groups will have their values subtracted from the values of the first array.
+
+    :param arrays: List of arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
+    :param meta: List of metadata for arrays being merged.
+    :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first array in the list will have the other arrays subtracted from it.
+    :param set_negatives_to_zero: If True, set negative array values to 0. If False, raise a ValueError. Default is False.
+    :param struct_fields: List of field names to merge if arrays contain structs. If None, arrays are treated as integer arrays. Default is None.
+    :return: Tuple of merged array and metadata list.
+    """
+    if len(arrays) < 2:
+        raise ValueError("Must provide at least two arrays to merge!")
+    if len(arrays) != len(meta):
+        raise ValueError("Length of arrays and meta must be equal!")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'!")
+
+    # Create a list where each entry is a dictionary whose key is an aggregation
+    # group and the value is the corresponding index in the array.
+    meta = [hl.dict(hl.enumerate(m).map(lambda x: (x[1], [x[0]]))) for m in meta]
+    all_keys = hl.fold(lambda i, j: (i | j.key_set()), meta[0].key_set(), meta[1:])
+
+    # Merge dictionaries in the list into a single dictionary where key is aggregation
+    # group and the value is a list of the group's index in each of the arrays, if
+    # it exists. For "sum" operation, use keys, aka groups, found in all dictionaries.
+    # For "diff" operations, only use key_set from the first entry.
+    meta = hl.fold(
+        lambda i, j: hl.dict(
+            (hl.if_else(operation == "sum", all_keys, i.key_set())).map(
+                lambda k: (
+                    k,
+                    i.get(k, [hl.missing(hl.tint32)]).extend(
+                        j.get(k, [hl.missing(hl.tint32)])
+                    ),
+                )
+            )
+        ),
+        meta[0],
+        meta[1:],
+    )
+
+    # Create a list of tuples from the dictionary, sorted by the list of indices for
+    # each aggregation group.
+    meta = hl.sorted(meta.items(), key=lambda f: f[1])
+
+    # Create a list of the aggregation groups, maintaining the sorted order.
+    new_meta = meta.map(lambda x: x[0])
+
+    # Create array for each aggregation group of arrays containing the group's values
+    # from each array.
+    meta_idx = meta.map(lambda x: hl.zip(arrays, x[1]).map(lambda i: i[0][i[1]]))
+
+    def _sum_or_diff_values(
+        val_1_expr: hl.expr.Expression, val_2_expr: hl.expr.Expression
+    ) -> hl.expr.Expression:
+        """
+        Sum or subtract values.
+
+        :param val_1_expr: First value to sum or diff.
+        :param val_2_expr: Second value to sum or diff.
+        :return: Merged value.
+        """
+        return hl.if_else(
+            operation == "sum",
+            hl.or_else(val_1_expr, 0) + hl.or_else(val_2_expr, 0),
+            hl.or_else(val_1_expr, 0) - hl.or_else(val_2_expr, 0),
+        )
+
+    if struct_fields is not None:
+        # Handle struct arrays.
+        new_array = meta_idx.map(
+            lambda x: hl.fold(
+                lambda i, j: hl.struct(
+                    **{
+                        field: _sum_or_diff_values(i[field], j[field])
+                        for field in struct_fields
+                    }
+                ),
+                x[0].select(*struct_fields),
+                x[1:],
+            )
+        )
+    else:
+        # Handle integer arrays
+        new_array = meta_idx.map(
+            lambda x: hl.fold(
+                lambda i, j: _sum_or_diff_values(i, j),
+                x[0],
+                x[1:],
+            )
+        )
+
+    # Check and see if any value within the merged array is negative. If so,
+    # raise an error if set_negatives_to_zero is False or set the value to 0 if
+    # set_negatives_to_zero is True.
+    if operation == "diff":
+        negative_value_error_msg = (
+            "Negative values found in merged array. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+
+        if struct_fields is not None:
+            new_array = new_array.map(
+                lambda x: x.annotate(
+                    **{
+                        field: (
+                            hl.case()
+                            .when(set_negatives_to_zero, hl.max(x[field], 0))
+                            .when(x[field] >= 0, x[field])
+                            .or_error(negative_value_error_msg)
+                        )
+                        for field in struct_fields
+                    }
+                )
+            )
+        else:
+            new_array = new_array.map(
+                lambda x: hl.case()
+                .when(set_negatives_to_zero, hl.max(x, 0))
+                .when(x >= 0, x)
+                .or_error(negative_value_error_msg)
+            )
+
+    new_meta = hl.eval(new_meta)
+    return new_array, new_meta
+
+
 def merge_freq_arrays(
     farrays: List[hl.expr.ArrayExpression],
     fmeta: List[List[Dict[str, str]]],
@@ -1363,121 +1518,30 @@ def merge_freq_arrays(
                     f"Length of  count_array '{k}' and fmeta must be equal!"
                 )
 
-    # Create a list where each entry is a dictionary whose key is an aggregation
-    # group and the value is the corresponding index in the freq array.
-    fmeta = [hl.dict(hl.enumerate(f).map(lambda x: (x[1], [x[0]]))) for f in fmeta]
-    all_keys = hl.fold(lambda i, j: (i | j.key_set()), fmeta[0].key_set(), fmeta[1:])
-
-    # Merge dictionaries in the list into a single dictionary where key is aggregation
-    # group and the value is a list of the group's index in each of the freq arrays, if
-    # it exists. For "sum" operation, use keys, aka groups, found in all freq dictionaries.
-    # For "diff" operations, only use key_set from the first entry.
-    fmeta = hl.fold(
-        lambda i, j: hl.dict(
-            (hl.if_else(operation == "sum", all_keys, i.key_set())).map(
-                lambda k: (
-                    k,
-                    i.get(k, [hl.missing(hl.tint32)]).extend(
-                        j.get(k, [hl.missing(hl.tint32)])
-                    ),
-                )
-            )
-        ),
-        fmeta[0],
-        fmeta[1:],
-    )
-
-    # Create a list of tuples from the dictionary, sorted by the list of indices for
-    # each aggregation group.
-    fmeta = hl.sorted(fmeta.items(), key=lambda f: f[1])
-
-    # Create a list of the aggregation groups, maintaining the sorted order.
-    new_freq_meta = fmeta.map(lambda x: x[0])
-
-    # Create array for each aggregation group of arrays containing the group's freq
-    # values from each freq array.
-    freq_meta_idx = fmeta.map(lambda x: hl.zip(farrays, x[1]).map(lambda i: i[0][i[1]]))
-
-    def _sum_or_diff_fields(
-        field_1_expr: str, field_2_expr: str
-    ) -> hl.expr.Int32Expression:
-        """
-        Sum or subtract fields in call statistics struct.
-
-        :param field_1_expr: First field to sum or diff.
-        :param field_2_expr: Second field to sum or diff.
-        :return: Merged field value.
-        """
-        return hl.if_else(
-            operation == "sum",
-            hl.or_else(field_1_expr, 0) + hl.or_else(field_2_expr, 0),
-            hl.or_else(field_1_expr, 0) - hl.or_else(field_2_expr, 0),
-        )
-
-    # Iterate through the groups and their freq lists to merge callstats.
+    # Define the callstat annotations to merge
     callstat_ann = ["AC", "AN", "homozygote_count"]
     callstat_ann_af = ["AC", "AF", "AN", "homozygote_count"]
-    new_freq = freq_meta_idx.map(
-        lambda x: hl.bind(
-            lambda y: y.annotate(AF=hl.or_missing(y.AN > 0, y.AC / y.AN)).select(
-                *callstat_ann_af
-            ),
-            hl.fold(
-                lambda i, j: hl.struct(
-                    **{ann: _sum_or_diff_fields(i[ann], j[ann]) for ann in callstat_ann}
-                ),
-                x[0].select(*callstat_ann),
-                x[1:],
-            ),
+
+    # Use the generalized function to merge the frequency arrays
+    new_freq, new_freq_meta = merge_array_expressions(
+        farrays, fmeta, operation, set_negatives_to_zero, struct_fields=callstat_ann
+    )
+
+    # Add AF calculation for the merged frequency arrays
+    new_freq = new_freq.map(
+        lambda x: x.annotate(AF=hl.or_missing(x.AN > 0, x.AC / x.AN)).select(
+            *callstat_ann_af
         )
     )
-    # Create count_array_meta_idx using the fmeta then iterate through each group
-    # in the list of tuples to access each group's entry per array. Sum or diff the
-    # values for each group across arrays to make a new_counts_array annotation.
+
+    # Handle count arrays if provided
     if count_arrays:
         new_counts_array_dict = {}
         for k, count_array in count_arrays.items():
-            count_array_meta_idx = fmeta.map(
-                lambda x: hl.zip(count_array, x[1]).map(lambda i: i[0][i[1]])
+            new_counts_array, _ = merge_array_expressions(
+                count_array, fmeta, operation, set_negatives_to_zero
             )
-
-            new_counts_array_dict[k] = count_array_meta_idx.map(
-                lambda x: hl.fold(
-                    lambda i, j: _sum_or_diff_fields(i, j),
-                    x[0],
-                    x[1:],
-                ),
-            )
-    # Check and see if any annotation within the merged array is negative. If so,
-    # raise an error if set_negatives_to_zero is False or set the value to 0 if
-    # set_negatives_to_zero is True.
-    if operation == "diff":
-        negative_value_error_msg = (
-            "Negative values found in merged %s array. Review data or set"
-            " `set_negatives_to_zero` to True to set negative values to 0."
-        )
-        callstat_ann.append("AF")
-        new_freq = new_freq.map(
-            lambda x: x.annotate(
-                **{
-                    ann: (
-                        hl.case()
-                        .when(set_negatives_to_zero, hl.max(x[ann], 0))
-                        .when(x[ann] >= 0, x[ann])
-                        .or_error(negative_value_error_msg % "freq")
-                    )
-                    for ann in callstat_ann
-                }
-            )
-        )
-        if count_arrays:
-            for k, new_counts_array in new_counts_array_dict.items():
-                new_counts_array_dict[k] = new_counts_array.map(
-                    lambda x: hl.case()
-                    .when(set_negatives_to_zero, hl.max(x, 0))
-                    .when(x >= 0, x)
-                    .or_error(negative_value_error_msg % "counts")
-                )
+            new_counts_array_dict[k] = new_counts_array
 
     new_freq_meta = hl.eval(new_freq_meta)
     if count_arrays:

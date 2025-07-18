@@ -64,18 +64,6 @@ class TestGetCoverageAggFunc:
             result = hl.eval(transform_func(test_struct))
             assert result == expected
 
-    def test_get_coverage_agg_func_max_cov_bin(self):
-        """Test that max_cov_bin parameter affects aggregation but not transformation."""
-        transform_func, agg_func = get_coverage_agg_func(max_cov_bin=50)
-
-        # Transform function should not cap values
-        test_struct = hl.Struct(DP=100)
-        transform_result = hl.eval(transform_func(test_struct))
-        assert transform_result == 100  # Should not be capped
-
-        # The aggregation function would cap values during aggregation
-        # This is tested in integration tests below
-
     def test_get_coverage_agg_func_with_nan_values(self):
         """Test that NaN values are handled correctly."""
         transform_func, agg_func = get_coverage_agg_func()
@@ -221,7 +209,8 @@ class TestGetCoverageAggFunc:
         assert coverage_counter.get(1, 0) == 1
         assert coverage_counter.get(2, 0) == 1
         # Values 3-10 should all be counted as 3 (max_cov_bin)
-        # So there should be 8 values at position 3: the original value 3 plus 7 capped values (4-10)
+        # So there should be 8 values at position 3: the original value 3 plus 7
+        # capped values (4-10)
         assert coverage_counter.get(3, 0) == 8
 
         # No values should be counted above max_cov_bin

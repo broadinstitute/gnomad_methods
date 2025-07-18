@@ -1275,6 +1275,36 @@ def compute_stats_per_ref_site(
     return ht
 
 
+def get_coverage_agg_func(
+    dp_field: str = "DP", max_cov_bin: int = 100
+) -> Tuple[Callable, Callable]:
+    """
+    Get a transformation and aggregation function for computing coverage.
+
+    Can be used as an entry aggregation function in `compute_stats_per_ref_site`.
+
+    :param dp_field: Depth field to use for computing coverage. Default is 'DP'.
+    :param max_cov_bin: Maximum coverage bin (used when computing samples over X bin). Default is 100.
+    :return: Tuple of functions to transform and aggregate coverage.
+    """
+    return (
+        lambda t: hl.if_else(
+            hl.is_missing(t[dp_field]) | hl.is_nan(t[dp_field]), 0, t[dp_field]
+        ),
+        lambda dp: hl.struct(
+            # This expression creates a counter DP -> number of samples for DP
+            # between 0 and max_cov_bin.
+            coverage_counter=hl.agg.counter(hl.min(max_cov_bin, dp)),
+            mean=hl.bind(
+                lambda mean_dp: hl.if_else(hl.is_nan(mean_dp), 0, mean_dp),
+                hl.agg.mean(dp),
+            ),
+            median_approx=hl.or_else(hl.agg.approx_median(dp), 0),
+            total_DP=hl.agg.sum(dp),
+        ),
+    )
+
+
 def compute_coverage_stats(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
@@ -1283,6 +1313,7 @@ def compute_coverage_stats(
     row_key_fields: List[str] = ["locus"],
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
+    dp_field: str = "DP",
 ) -> hl.Table:
     """
     Compute coverage statistics for every base of the `reference_ht` provided.
@@ -1297,18 +1328,19 @@ def compute_coverage_stats(
     computed on. It needs to be keyed by `locus`. The `reference_ht` can e.g. be
     created using `get_reference_ht`.
 
-    :param mtds: Input sparse MT or VDS
-    :param reference_ht: Input reference HT
-    :param interval_ht: Optional Table containing intervals to filter to
-    :param coverage_over_x_bins: List of boundaries for computing samples over X
+    :param mtds: Input sparse MT or VDS.
+    :param reference_ht: Input reference HT.
+    :param interval_ht: Optional Table containing intervals to filter to.
+    :param coverage_over_x_bins: List of boundaries for computing samples over X.
     :param row_key_fields: List of row key fields to use for joining `mtds` with
-        `reference_ht`
+        `reference_ht`.
     :param strata_expr: Optional list of dicts containing expressions to stratify the
         coverage stats by. Only one of `group_membership_ht` or `strata_expr` can be
         specified.
     :param group_membership_ht: Optional Table containing group membership annotations
         to stratify the coverage stats by. Only one of `group_membership_ht` or
         `strata_expr` can be specified.
+    :param dp_field: Name of sample depth field. Default is DP.
     :return: Table with per-base coverage stats.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1331,16 +1363,8 @@ def compute_coverage_stats(
     max_cov_bin = cov_bins[-1]
     cov_bins = hl.array(cov_bins)
     entry_agg_funcs = {
-        "coverage_stats": (
-            lambda t: hl.if_else(hl.is_missing(t.DP) | hl.is_nan(t.DP), 0, t.DP),
-            lambda dp: hl.struct(
-                # This expression creates a counter DP -> number of samples for DP
-                # between 0 and max_cov_bin.
-                coverage_counter=hl.agg.counter(hl.min(max_cov_bin, dp)),
-                mean=hl.if_else(hl.is_nan(hl.agg.mean(dp)), 0, hl.agg.mean(dp)),
-                median_approx=hl.or_else(hl.agg.approx_median(dp), 0),
-                total_DP=hl.agg.sum(dp),
-            ),
+        "coverage_stats": get_coverage_agg_func(
+            dp_field=dp_field, max_cov_bin=max_cov_bin
         )
     }
 
@@ -1350,7 +1374,7 @@ def compute_coverage_stats(
         entry_agg_funcs,
         row_key_fields=row_key_fields,
         interval_ht=interval_ht,
-        entry_keep_fields=[gt_field, "DP"],
+        entry_keep_fields=[gt_field, dp_field],
         strata_expr=strata_expr,
         group_membership_ht=group_membership_ht,
     )

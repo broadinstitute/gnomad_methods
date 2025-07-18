@@ -160,7 +160,9 @@ class TestGetCoverageAggFunc:
         )
         result = ht.aggregate(agg_func(ht.DP))
         coverage_counter = result.coverage_counter
-        assert coverage_counter.get(5, 0) > 0
+        assert (
+            coverage_counter.get(5, 0) == 6
+        )  # 1 original value 5 + 5 capped values (6-10)
         assert coverage_counter.get(6, 0) == 0
         assert coverage_counter.get(7, 0) == 0
 

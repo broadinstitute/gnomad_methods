@@ -6,7 +6,7 @@ import hail as hl
 
 from gnomad.utils.sparse_mt import get_coverage_agg_func
 
-# Set up logger for tests
+# Set up logger for tests.
 logger = logging.getLogger(__name__)
 
 
@@ -24,15 +24,15 @@ class TestGetCoverageAggFunc:
         """Test get_coverage_agg_func with default parameters."""
         transform_func, agg_func = get_coverage_agg_func()
 
-        # Test the transform function with various inputs
+        # Test the transform function with various inputs.
         test_cases = [
-            ({"DP": 10}, 10),  # Normal case
-            ({"DP": 0}, 0),  # Zero value
-            ({"DP": 150}, 150),  # Large value
+            ({"DP": 10}, 10),  # Normal case.
+            ({"DP": 0}, 0),  # Zero value.
+            ({"DP": 150}, 150),  # Large value.
         ]
 
         for input_data, expected in test_cases:
-            # Create a simple struct for testing
+            # Create a simple struct for testing.
             test_struct = hl.Struct(**input_data)
             result = hl.eval(transform_func(test_struct))
             assert result == expected
@@ -41,7 +41,7 @@ class TestGetCoverageAggFunc:
         """Test that missing values are handled correctly."""
         transform_func, agg_func = get_coverage_agg_func()
 
-        # Test with missing value - need to use hl.missing
+        # Test with missing value - need to use hl.missing.
         test_struct = hl.Struct(DP=hl.missing(hl.tint32))
         result = hl.eval(transform_func(test_struct))
         assert result == 0
@@ -52,17 +52,18 @@ class TestGetCoverageAggFunc:
             dp_field="depth", max_cov_bin=50
         )
 
-        # Test the transform function with custom field name
+        # Test the transform function with custom field name.
         test_cases = [
             ({"depth": 10}, 10),
             ({"depth": 0}, 0),
-            ({"depth": 100}, 100),  # Should not be capped at 50 in transform
+            ({"depth": 100}, 100),  # Should not be capped at 50 in transform.
         ]
 
         for input_data, expected in test_cases:
             test_struct = hl.Struct(**input_data)
             result = hl.eval(transform_func(test_struct))
             assert result == expected
+
 
     def test_get_coverage_agg_func_with_nan_values(self):
         """Test that NaN values are handled correctly."""
@@ -75,11 +76,11 @@ class TestGetCoverageAggFunc:
         """Test that the aggregation function returns the expected structure."""
         transform_func, agg_func = get_coverage_agg_func()
         test_data = [10, 20, 30, 40, 50]
-        # Create a Hail Table with a DP field
+        # Create a Hail Table with a DP field.
         ht = hl.Table.parallelize(
             [{"DP": v} for v in test_data], hl.tstruct(DP=hl.tint32)
         )
-        # Aggregate using the aggregation function
+        # Aggregate using the aggregation function.
         result = ht.aggregate(agg_func(ht.DP))
         expected_fields = ["coverage_counter", "mean", "median_approx", "total_DP"]
         for field in expected_fields:
@@ -94,10 +95,10 @@ class TestGetCoverageAggFunc:
         )
         result = ht.aggregate(agg_func(ht.DP))
 
-        # Test computed values
-        assert result.mean == 30.0  # (10+20+30+40+50)/5
-        assert result.total_DP == 150  # 10+20+30+40+50
-        assert result.median_approx == 30  # Approximate median
+        # Test computed values.
+        assert result.mean == 30.0  # (10+20+30+40+50)/5.
+        assert result.total_DP == 150  # 10+20+30+40+50.
+        assert result.median_approx == 30  # Approximate median.
         assert result.coverage_counter.get(10, 0) == 1
         assert result.coverage_counter.get(20, 0) == 1
         assert result.coverage_counter.get(30, 0) == 1
@@ -115,10 +116,10 @@ class TestGetCoverageAggFunc:
         result = ht.aggregate(agg_func(ht.DP))
 
         # Missing values should be transformed to 0, so they should be included in
-        # aggregation
-        assert result.total_DP == 120  # 10+20+0+40+50
-        # The mean calculation may vary depending on how missing values are handled
-        # Let's check that the structure is correct
+        # aggregation.
+        assert result.total_DP == 120  # 10+20+0+40+50.
+        # The mean calculation may vary depending on how missing values are handled.
+        # Let's check that the structure is correct.
         assert hasattr(result, "mean")
         assert hasattr(result, "total_DP")
         assert hasattr(result, "coverage_counter")
@@ -132,9 +133,9 @@ class TestGetCoverageAggFunc:
         )
         result = ht.aggregate(agg_func(ht.DP))
 
-        # Zero values should be preserved
-        assert result.total_DP == 60  # 0+10+20+0+30
-        assert result.mean == 12.0  # (0+10+20+0+30)/5
+        # Zero values should be preserved.
+        assert result.total_DP == 60  # 0+10+20+0+30.
+        assert result.mean == 12.0  # (0+10+20+0+30)/5.
         assert result.coverage_counter.get(0, 0) == 2
 
     def test_aggregation_function_with_negative_values(self):
@@ -146,9 +147,9 @@ class TestGetCoverageAggFunc:
         )
         result = ht.aggregate(agg_func(ht.DP))
 
-        # Negative values should be preserved
-        assert result.total_DP == 52  # -5+10+20-3+30
-        assert result.mean == 10.4  # (-5+10+20-3+30)/5
+        # Negative values should be preserved.
+        assert result.total_DP == 52  # -5+10+20-3+30.
+        assert result.mean == 10.4  # (-5+10+20-3+30)/5.
         assert result.coverage_counter.get(-5, 0) == 1
         assert result.coverage_counter.get(-3, 0) == 1
 
@@ -161,7 +162,7 @@ class TestGetCoverageAggFunc:
         )
         result = ht.aggregate(agg_func(ht.depth))
 
-        # Should work with custom field name
+        # Should work with custom field name.
         assert result.mean == 30.0
         assert result.total_DP == 150
 
@@ -169,14 +170,14 @@ class TestGetCoverageAggFunc:
         """Test aggregation function with edge cases."""
         transform_func, agg_func = get_coverage_agg_func()
 
-        # Test with single value
+        # Test with single value.
         ht1 = hl.Table.parallelize([{"DP": 42}], hl.tstruct(DP=hl.tint32))
         result1 = ht1.aggregate(agg_func(ht1.DP))
         assert result1.mean == 42.0
         assert result1.total_DP == 42
         assert result1.coverage_counter.get(42, 0) == 1
 
-        # Test with empty table (should handle gracefully)
+        # Test with empty table (should handle gracefully).
         ht2 = hl.Table.parallelize([], hl.tstruct(DP=hl.tint32))
         result2 = ht2.aggregate(agg_func(ht2.DP))
         assert result2.total_DP == 0
@@ -205,15 +206,15 @@ class TestGetCoverageAggFunc:
         result = ht.aggregate(agg_func(ht.DP))
         coverage_counter = result.coverage_counter
 
-        # Values 1, 2, 3 should be counted as themselves
+        # Values 1, 2, 3 should be counted as themselves.
         assert coverage_counter.get(1, 0) == 1
         assert coverage_counter.get(2, 0) == 1
-        # Values 3-10 should all be counted as 3 (max_cov_bin)
+        # Values 3-10 should all be counted as 3 (max_cov_bin).
         # So there should be 8 values at position 3: the original value 3 plus 7
-        # capped values (4-10)
+        # capped values (4-10).
         assert coverage_counter.get(3, 0) == 8
 
-        # No values should be counted above max_cov_bin
+        # No values should be counted above max_cov_bin.
         assert coverage_counter.get(4, 0) == 0
         assert coverage_counter.get(5, 0) == 0
 
@@ -221,41 +222,41 @@ class TestGetCoverageAggFunc:
         """Test that median_approx provides reasonable approximation."""
         transform_func, agg_func = get_coverage_agg_func()
 
-        # Test with odd number of values
+        # Test with odd number of values.
         test_data_odd = [10, 20, 30, 40, 50]
         ht_odd = hl.Table.parallelize(
             [{"DP": v} for v in test_data_odd], hl.tstruct(DP=hl.tint32)
         )
         result_odd = ht_odd.aggregate(agg_func(ht_odd.DP))
-        assert result_odd.median_approx == 30  # Should be close to 30
+        assert result_odd.median_approx == 30  # Should be close to 30.
 
-        # Test with even number of values - approximate median may vary
+        # Test with even number of values - approximate median may vary.
         test_data_even = [10, 20, 30, 40]
         ht_even = hl.Table.parallelize(
             [{"DP": v} for v in test_data_even], hl.tstruct(DP=hl.tint32)
         )
         result_even = ht_even.aggregate(agg_func(ht_even.DP))
-        # Approximate median may not be exactly 25, but should be reasonable
-        assert result_even.median_approx in [20, 25, 30]  # Allow some variation
+        # Approximate median may not be exactly 25, but should be reasonable.
+        assert result_even.median_approx in [20, 25, 30]  # Allow some variation.
 
     def test_transform_function_with_various_inputs(self):
         """Test the transform function with various input types."""
         transform_func, agg_func = get_coverage_agg_func(max_cov_bin=100)
 
-        # Create a sample dataset
+        # Create a sample dataset.
         sample_data = [{"DP": 10}, {"DP": 20}, {"DP": 30}, {"DP": 0}, {"DP": 150}]
 
-        # Transform the data
+        # Transform the data.
         transformed_data = []
         for data in sample_data:
             test_struct = hl.Struct(**data)
             result = hl.eval(transform_func(test_struct))
             transformed_data.append(result)
 
-        # Test that transformation worked correctly
+        # Test that transformation worked correctly.
         assert len(transformed_data) == 5
-        assert 150 in transformed_data  # Large value should not be capped in transform
-        assert 0 in transformed_data  # Zero values should be preserved
+        assert 150 in transformed_data  # Large value should not be capped in transform.
+        assert 0 in transformed_data  # Zero values should be preserved.
 
     def test_different_dp_field_names(self):
         """Test that different DP field names work correctly."""
@@ -264,7 +265,7 @@ class TestGetCoverageAggFunc:
         for field_name in field_names:
             transform_func, agg_func = get_coverage_agg_func(dp_field=field_name)
 
-            # Test with the custom field name
+            # Test with the custom field name.
             test_struct = hl.Struct(**{field_name: 25})
             result = hl.eval(transform_func(test_struct))
             assert result == 25
@@ -273,10 +274,10 @@ class TestGetCoverageAggFunc:
         """Test that transform and aggregation functions work together correctly."""
         transform_func, agg_func = get_coverage_agg_func(max_cov_bin=50)
 
-        # Create test data with various edge cases (avoiding NaN for now)
+        # Create test data with various edge cases (avoiding NaN for now).
         test_data = [10, 20, None, 40, 50, 0, 100, -5]
 
-        # Test transform function on individual values
+        # Test transform function on individual values.
         transformed_values = []
         for value in test_data:
             if value is None:
@@ -286,35 +287,35 @@ class TestGetCoverageAggFunc:
             result = hl.eval(transform_func(test_struct))
             transformed_values.append(result)
 
-        # Expected transformed values: [10, 20, 0, 40, 50, 0, 100, -5]
+        # Expected transformed values: [10, 20, 0, 40, 50, 0, 100, -5].
         expected_transformed = [10, 20, 0, 40, 50, 0, 100, -5]
         assert transformed_values == expected_transformed
 
-        # Test aggregation function on the same data
+        # Test aggregation function on the same data.
         ht = hl.Table.parallelize(
             [{"DP": v if v is not None else hl.missing(hl.tint32)} for v in test_data],
             hl.tstruct(DP=hl.tint32),
         )
 
-        # Apply the transform function to each row to create transformed data
+        # Apply the transform function to each row to create transformed data.
         ht = ht.annotate(transformed_DP=transform_func(ht))
         result = ht.aggregate(agg_func(ht.transformed_DP))
 
-        # Check that aggregation works correctly
-        assert result.total_DP == 215  # 10+20+0+40+50+0+100-5
-        # The aggregation function operates on transformed data (missing values become 0)
-        # So mean should be calculated from all 8 values: 215/8 = 26.875
+        # Check that aggregation works correctly.
+        assert result.total_DP == 215  # 10+20+0+40+50+0+100-5.
+        # The aggregation function operates on transformed data (missing values become 0).
+        # So mean should be calculated from all 8 values: 215/8 = 26.875.
         assert (
             abs(result.mean - sum(expected_transformed) / len(expected_transformed))
             < 0.1
-        )  # Allow small tolerance
+        )  # Allow small tolerance.
         # Now that we're using transformed data, there are 2 zeros: one explicit,
-        # one from missing
+        # one from missing.
         assert (
             result.coverage_counter.get(0, 0) == 2
-        )  # 2 zero values (explicit 0 + missing->0)
-        # Values 50 (original) and 100 (capped) should be at position 50
-        assert result.coverage_counter.get(50, 0) == 2  # Accept actual behavior
+        )  # 2 zero values (explicit 0 + missing->0).
+        # Values 50 (original) and 100 (capped) should be at position 50.
+        assert result.coverage_counter.get(50, 0) == 2  # Accept actual behavior.
 
     def test_custom_field_transform_and_aggregation(self):
         """Test both transform and aggregation with custom field names."""
@@ -322,11 +323,11 @@ class TestGetCoverageAggFunc:
             dp_field="depth", max_cov_bin=30
         )
 
-        # Test transform function
+        # Test transform function.
         test_cases = [
             ({"depth": 10}, 10),
             ({"depth": 0}, 0),
-            ({"depth": 50}, 50),  # Should not be capped in transform
+            ({"depth": 50}, 50),  # Should not be capped in transform.
         ]
 
         for input_data, expected in test_cases:
@@ -342,8 +343,8 @@ class TestGetCoverageAggFunc:
 
         result = ht.aggregate(agg_func(ht.depth))
 
-        # Check aggregation results
-        assert result.total_DP == 275  # Sum of all values
-        assert result.mean == 27.5  # 275/10
-        # Values 35, 40, 45, 50 should be capped to 30, plus the original 30
-        assert result.coverage_counter.get(30, 0) == 5  # 4 capped + 1 original
+        # Check aggregation results.
+        assert result.total_DP == 275  # Sum of all values.
+        assert result.mean == 27.5  # 275/10.
+        # Values 35, 40, 45, 50 should be capped to 30, plus the original 30.
+        assert result.coverage_counter.get(30, 0) == 5  # 4 capped + 1 original.

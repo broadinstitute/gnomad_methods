@@ -1545,7 +1545,7 @@ def merge_freq_arrays(
         for k, count_array in count_arrays.items():
             if len(count_array) != len(fmeta):
                 raise ValueError(
-                    f"Length of  count_array '{k}' and fmeta must be equal!"
+                    f"Length of count_array '{k}' and fmeta must be equal!"
                 )
 
     # Define the callstat annotations to merge

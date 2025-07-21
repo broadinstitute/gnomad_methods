@@ -1482,9 +1482,9 @@ def merge_array_expressions(
     if count_arrays:
         new_counts_array_dict = {}
         for k, count_array in count_arrays.items():
-            new_counts_array, _ = merge_array_expressions(
+            new_counts_array = merge_array_expressions(
                 count_array, original_meta, operation, set_negatives_to_zero
-            )
+            )[0]
             new_counts_array_dict[k] = new_counts_array
 
     new_meta = hl.eval(new_meta)
@@ -1555,7 +1555,7 @@ def merge_freq_arrays(
     # Use the generalized function to merge the frequency arrays
     new_freq, new_freq_meta = merge_array_expressions(
         farrays, fmeta, operation, set_negatives_to_zero, struct_fields=callstat_ann
-    )
+    )[:2]
 
     # Add AF calculation for the merged frequency arrays
     new_freq = new_freq.map(
@@ -1568,9 +1568,9 @@ def merge_freq_arrays(
     if count_arrays:
         new_counts_array_dict = {}
         for k, count_array in count_arrays.items():
-            new_counts_array, _ = merge_array_expressions(
+            new_counts_array = merge_array_expressions(
                 count_array, fmeta, operation, set_negatives_to_zero
-            )
+            )[0]
             new_counts_array_dict[k] = new_counts_array
 
     new_freq_meta = hl.eval(new_freq_meta)

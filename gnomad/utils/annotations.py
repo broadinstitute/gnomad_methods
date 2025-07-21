@@ -1526,7 +1526,7 @@ def merge_freq_arrays(
         will be the union of groupings found within the arrays' metadata and all arrays
         with be summed by grouping. If `operation` is set to "diff", the merged array
         will contain groups only found in the first array of `fmeta`. Any array containing
-        any of these groups will have thier values subtracted from the values of the first array.
+        any of these groups will have their values subtracted from the values of the first array.
 
     :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
     :param fmeta: List of frequency metadata for arrays being merged.

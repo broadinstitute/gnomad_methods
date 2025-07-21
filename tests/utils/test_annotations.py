@@ -180,7 +180,7 @@ class TestMergeArrayExpressions:
         # Merge arrays.
         result_array, result_meta = merge_array_expressions(
             [ht.array1, ht.array2], [meta1, meta2], operation="sum"
-        )
+        )[:2]
 
         # Collect results.
         result = ht.select(result_array=result_array).collect()
@@ -214,7 +214,7 @@ class TestMergeArrayExpressions:
         # Merge arrays with diff operation.
         result_array, result_meta = merge_array_expressions(
             [ht.array1, ht.array2], [meta1, meta2], operation="diff"
-        )
+        )[:2]
 
         # Collect results.
         result = ht.select(result_array=result_array).collect()
@@ -260,7 +260,7 @@ class TestMergeArrayExpressions:
             [meta1, meta2],
             operation="sum",
             struct_fields=["AC", "AN", "homozygote_count"],
-        )
+        )[:2]
 
         # Collect results.
         result = ht.select(result_array=result_array).collect()
@@ -308,7 +308,7 @@ class TestMergeArrayExpressions:
             [meta1, meta2],
             operation="diff",
             struct_fields=["AC", "AN", "homozygote_count"],
-        )
+        )[:2]
 
         # Collect results.
         result = ht.select(result_array=result_array).collect()
@@ -341,9 +341,9 @@ class TestMergeArrayExpressions:
         meta2 = [{"group": "A"}, {"group": "B"}]
 
         # Get the result array (this won't raise an error yet).
-        result_array, _ = merge_array_expressions(
+        result_array = merge_array_expressions(
             [ht.array1, ht.array2], [meta1, meta2], operation="diff"
-        )
+        )[0]
 
         # The error should be raised when we try to evaluate the result.
         with pytest.raises(Exception):
@@ -362,12 +362,12 @@ class TestMergeArrayExpressions:
         meta2 = [{"group": "A"}, {"group": "B"}]
 
         # Should not raise error and set negatives to zero.
-        result_array, _ = merge_array_expressions(
+        result_array = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
             operation="diff",
             set_negatives_to_zero=True,
-        )
+        )[0]
 
         # Collect results.
         result = ht.select(result_array=result_array).collect()
@@ -847,12 +847,12 @@ class TestMergeFreqArrays:
         meta2 = [{"group": "A"}, {"group": "B"}]
 
         # Merge with set_negatives_to_zero=True.
-        result_freq, _ = merge_freq_arrays(
+        result_freq = merge_freq_arrays(
             [ht.freq1, ht.freq2],
             [meta1, meta2],
             operation="diff",
             set_negatives_to_zero=True,
-        )
+        )[0]
 
         # Collect results.
         result = ht.select(result_freq=result_freq).collect()

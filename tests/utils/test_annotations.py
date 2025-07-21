@@ -894,7 +894,7 @@ class TestMergeFreqArrays:
 
         # Test mismatched count array lengths.
         with pytest.raises(
-            ValueError, match="Length of  count_array 'test' and fmeta must be equal!"
+            ValueError, match="Length of count_array 'test' and fmeta must be equal!"
         ):
             merge_freq_arrays(
                 [ht.freq1, ht.freq2],

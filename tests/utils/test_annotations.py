@@ -704,7 +704,7 @@ class TestMergeFreqArrays:
         # Merge frequency arrays.
         result_freq, result_meta = merge_freq_arrays(
             [ht.freq1, ht.freq2], [meta1, meta2], operation="sum"
-        )
+        )[:2]
 
         # Collect results.
         result = ht.select(result_freq=result_freq).collect()
@@ -749,7 +749,7 @@ class TestMergeFreqArrays:
         # Merge frequency arrays with diff operation.
         result_freq, result_meta = merge_freq_arrays(
             [ht.freq1, ht.freq2], [meta1, meta2], operation="diff"
-        )
+        )[:2]
 
         # Collect results.
         result = ht.select(result_freq=result_freq).collect()

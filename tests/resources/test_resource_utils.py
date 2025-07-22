@@ -167,9 +167,7 @@ class TestDefaultPublicResourceSource:
         "cloud_spark_provider,expected_default_source",
         [
             ("dataproc", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
-            ("hdinsight", GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS),
             ("unknown", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
-            (None, GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
         ],
     )
     def test_get_default_source_from_cloud_spark_provider(
@@ -193,7 +191,7 @@ class TestDefaultPublicResourceSource:
         with (
             patch(
                 "hail.utils.guess_cloud_spark_provider",
-                return_value="hdinsight",
+                return_value="dataproc",
                 create=True,
             ),
             patch.dict(

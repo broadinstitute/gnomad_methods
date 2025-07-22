@@ -168,6 +168,7 @@ class TestDefaultPublicResourceSource:
         [
             ("dataproc", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
             ("unknown", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
+            (None, GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
         ],
     )
     def test_get_default_source_from_cloud_spark_provider(

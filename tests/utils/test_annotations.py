@@ -740,7 +740,6 @@ class TestMergeFreqArrays:
         ).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: union of groups A, B, C.
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 

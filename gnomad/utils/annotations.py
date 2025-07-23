@@ -1535,19 +1535,6 @@ def merge_freq_arrays(
     :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
     :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
     """
-    if len(farrays) < 2:
-        raise ValueError("Must provide at least two frequency arrays to merge!")
-    if len(farrays) != len(fmeta):
-        raise ValueError("Length of farrays and fmeta must be equal!")
-    if operation not in ["sum", "diff"]:
-        raise ValueError("Operation must be either 'sum' or 'diff'!")
-    if count_arrays is not None:
-        for k, count_array in count_arrays.items():
-            if len(count_array) != len(fmeta):
-                raise ValueError(
-                    f"Length of count_array '{k}' and fmeta must be equal!"
-                )
-
     # Define the callstat annotations to merge
     callstat_ann = ["AC", "AN", "homozygote_count"]
     callstat_ann_af = ["AC", "AF", "AN", "homozygote_count"]

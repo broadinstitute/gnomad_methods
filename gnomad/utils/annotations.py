@@ -1367,7 +1367,7 @@ def merge_array_expressions(
             if len(count_array) != len(meta):
                 raise ValueError(f"Length of count_array '{k}' and meta must be equal!")
 
-    # Store original metadata for count arrays processing
+    # Store original metadata for count arrays processing.
     original_meta = meta
 
     # Create a list where each entry is a dictionary whose key is an aggregation
@@ -1436,7 +1436,7 @@ def merge_array_expressions(
             )
         )
     else:
-        # Handle integer arrays
+        # Handle integer arrays.
         new_array = meta_idx.map(
             lambda x: hl.fold(
                 lambda i, j: _sum_or_diff_values(i, j),
@@ -1535,16 +1535,16 @@ def merge_freq_arrays(
     :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
     :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
     """
-    # Define the callstat annotations to merge
+    # Define the callstat annotations to merge.
     callstat_ann = ["AC", "AN", "homozygote_count"]
     callstat_ann_af = ["AC", "AF", "AN", "homozygote_count"]
 
-    # Use the generalized function to merge the frequency arrays
+    # Use the generalized function to merge the frequency arrays.
     new_freq, new_freq_meta = merge_array_expressions(
         farrays, fmeta, operation, set_negatives_to_zero, struct_fields=callstat_ann
     )[:2]
 
-    # Add AF calculation for the merged frequency arrays
+    # Add AF calculation for the merged frequency arrays.
     new_freq = new_freq.map(
         lambda x: x.annotate(AF=hl.or_missing(x.AN > 0, x.AC / x.AN)).select(
             *callstat_ann_af

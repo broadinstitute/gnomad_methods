@@ -1551,7 +1551,6 @@ def merge_freq_arrays(
         )
     )
 
-    # Handle count arrays if provided
     if count_arrays:
         new_counts_array_dict = {}
         for k, count_array in count_arrays.items():

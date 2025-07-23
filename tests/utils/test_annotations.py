@@ -167,30 +167,24 @@ class TestMergeArrayExpressions:
 
     def test_merge_integer_arrays_sum(self, sample_ht):
         """Test merging integer arrays with sum operation."""
-        # Create arrays of integers.
         ht = sample_ht.annotate(
             array1=hl.array([10, 20, 30]),
             array2=hl.array([5, 15, 25]),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         meta2 = [{"group": "A"}, {"group": "B"}, {"group": "D"}]
 
-        # Merge arrays.
         result_array, result_meta = merge_array_expressions(
             [ht.array1, ht.array2], [meta1, meta2], operation="sum"
         )[:2]
 
-        # Collect results.
         result = ht.select(result_array=result_array).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: union of groups A, B, C, D with summed values.
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}, {"group": "D"}]
         assert result_meta == expected_meta
 
-        # Check that arrays are properly merged.
         for row in result:
             assert len(row.result_array) == 4
             # Check actual values: A: 10+5=15, B: 20+15=35, C: 30+0=30, D: 0+25=25.
@@ -201,30 +195,24 @@ class TestMergeArrayExpressions:
 
     def test_merge_integer_arrays_diff(self, sample_ht):
         """Test merging integer arrays with diff operation."""
-        # Create arrays of integers.
         ht = sample_ht.annotate(
             array1=hl.array([10, 20, 30]),
             array2=hl.array([5, 15, 25]),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         meta2 = [{"group": "A"}, {"group": "B"}, {"group": "D"}]
 
-        # Merge arrays with diff operation.
         result_array, result_meta = merge_array_expressions(
             [ht.array1, ht.array2], [meta1, meta2], operation="diff"
         )[:2]
 
-        # Collect results.
         result = ht.select(result_array=result_array).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: only groups from first array (A, B, C) with subtracted values.
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that arrays are properly merged with diff operation.
         for row in result:
             assert len(row.result_array) == 3
             # Check actual values: A: 10-5=5, B: 20-15=5, C: 30-0=30.
@@ -234,7 +222,6 @@ class TestMergeArrayExpressions:
 
     def test_merge_struct_arrays_sum(self, sample_ht):
         """Test merging struct arrays with sum operation."""
-        # Create arrays of structs.
         ht = sample_ht.annotate(
             array1=hl.array(
                 [
@@ -250,11 +237,9 @@ class TestMergeArrayExpressions:
             ),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge arrays.
         result_array, result_meta = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
@@ -262,15 +247,12 @@ class TestMergeArrayExpressions:
             struct_fields=["AC", "AN", "homozygote_count"],
         )[:2]
 
-        # Collect results.
         result = ht.select(result_array=result_array).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: union of groups A, B, C with summed struct fields.
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that structs are properly merged.
         for row in result:
             assert len(row.result_array) == 3
             # Check first element (group A): AC=10+5=15, AN=100+50=150,
@@ -282,7 +264,6 @@ class TestMergeArrayExpressions:
 
     def test_merge_struct_arrays_diff(self, sample_ht):
         """Test merging struct arrays with diff operation."""
-        # Create arrays of structs.
         ht = sample_ht.annotate(
             array1=hl.array(
                 [
@@ -298,11 +279,9 @@ class TestMergeArrayExpressions:
             ),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge arrays with diff operation.
         result_array, result_meta = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
@@ -310,15 +289,12 @@ class TestMergeArrayExpressions:
             struct_fields=["AC", "AN", "homozygote_count"],
         )[:2]
 
-        # Collect results.
         result = ht.select(result_array=result_array).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: only groups from first array (A, B) with subtracted values.
         expected_meta = [{"group": "A"}, {"group": "B"}]
         assert result_meta == expected_meta
 
-        # Check that structs are properly merged.
         for row in result:
             assert len(row.result_array) == 2
             # Check first element (group A): AC=10-5=5, AN=100-50=50,
@@ -330,13 +306,11 @@ class TestMergeArrayExpressions:
 
     def test_merge_with_negatives_error(self, sample_ht):
         """Test that negative values raise error when set_negatives_to_zero=False."""
-        # Create arrays that will result in negative values.
         ht = sample_ht.annotate(
             array1=hl.array([10, 20]),
             array2=hl.array([15, 25]),  # Will cause negative values in diff operation.
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "B"}]
 
@@ -351,13 +325,11 @@ class TestMergeArrayExpressions:
 
     def test_merge_with_negatives_set_to_zero(self, sample_ht):
         """Test that negative values are set to zero when set_negatives_to_zero=True."""
-        # Create arrays that will result in negative values.
         ht = sample_ht.annotate(
             array1=hl.array([10, 20]),
             array2=hl.array([15, 25]),  # Will cause negative values in diff operation.
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "B"}]
 
@@ -369,7 +341,6 @@ class TestMergeArrayExpressions:
             set_negatives_to_zero=True,
         )[0]
 
-        # Collect results.
         result = ht.select(result_array=result_array).collect()
 
         # Check that negative values are set to zero.
@@ -415,23 +386,19 @@ class TestMergeArrayExpressions:
 
     def test_merge_array_expressions_with_count_arrays(self, sample_ht):
         """Test merging arrays with count_arrays argument."""
-        # Create arrays
         ht = sample_ht.annotate(
             array1=hl.array([10, 20]),
             array2=hl.array([5, 15]),
         )
 
-        # Create count arrays
         ht = ht.annotate(
             count1=hl.array([100, 200]),
             count2=hl.array([50, 150]),
         )
 
-        # Create metadata
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge arrays with count arrays
         result_array, result_meta, result_counts = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
@@ -439,17 +406,14 @@ class TestMergeArrayExpressions:
             count_arrays={"sample_count": [ht.count1, ht.count2]},
         )
 
-        # Collect results
         result = ht.select(
             result_array=result_array, result_counts=result_counts
         ).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: union of groups A, B, C
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that both arrays are properly merged
         for row in result:
             assert len(row.result_array) == 3
             assert len(row.result_counts["sample_count"]) == 3
@@ -464,7 +428,6 @@ class TestMergeArrayExpressions:
 
     def test_merge_struct_arrays_with_count_arrays(self, sample_ht):
         """Test merging struct arrays with count_arrays argument."""
-        # Create arrays of structs
         ht = sample_ht.annotate(
             array1=hl.array(
                 [
@@ -480,17 +443,14 @@ class TestMergeArrayExpressions:
             ),
         )
 
-        # Create count arrays
         ht = ht.annotate(
             count1=hl.array([100, 200]),
             count2=hl.array([50, 150]),
         )
 
-        # Create metadata
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge struct arrays with count arrays
         result_array, result_meta, result_counts = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
@@ -499,17 +459,14 @@ class TestMergeArrayExpressions:
             count_arrays={"sample_count": [ht.count1, ht.count2]},
         )
 
-        # Collect results
         result = ht.select(
             result_array=result_array, result_counts=result_counts
         ).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: union of groups A, B, C
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that both struct and count arrays are properly merged
         for row in result:
             assert len(row.result_array) == 3
             assert len(row.result_counts["sample_count"]) == 3
@@ -526,13 +483,11 @@ class TestMergeArrayExpressions:
 
     def test_merge_arrays_with_multiple_count_arrays(self, sample_ht):
         """Test merging arrays with multiple count_arrays."""
-        # Create arrays
         ht = sample_ht.annotate(
             array1=hl.array([10, 20]),
             array2=hl.array([5, 15]),
         )
 
-        # Create multiple count arrays
         ht = ht.annotate(
             count1=hl.array([100, 200]),
             count2=hl.array([50, 150]),
@@ -540,11 +495,9 @@ class TestMergeArrayExpressions:
             qual2=hl.array([25, 35]),
         )
 
-        # Create metadata
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge arrays with multiple count arrays
         result_array, result_meta, result_counts = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
@@ -555,17 +508,14 @@ class TestMergeArrayExpressions:
             },
         )
 
-        # Collect results
         result = ht.select(
             result_array=result_array, result_counts=result_counts
         ).collect()
         result_meta = hl.eval(result_meta)
 
-        # Expected: union of groups A, B, C
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that all arrays are properly merged
         for row in result:
             assert len(row.result_array) == 3
             assert len(row.result_counts["sample_count"]) == 3
@@ -585,23 +535,19 @@ class TestMergeArrayExpressions:
 
     def test_merge_arrays_with_count_arrays_diff(self, sample_ht):
         """Test merging arrays with count_arrays using diff operation."""
-        # Create arrays
         ht = sample_ht.annotate(
             array1=hl.array([10, 20]),
             array2=hl.array([5, 15]),
         )
 
-        # Create count arrays
         ht = ht.annotate(
             count1=hl.array([100, 200]),
             count2=hl.array([50, 150]),
         )
 
-        # Create metadata
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "B"}]
 
-        # Merge arrays with count arrays using diff operation
         result_array, result_meta, result_counts = merge_array_expressions(
             [ht.array1, ht.array2],
             [meta1, meta2],
@@ -609,7 +555,6 @@ class TestMergeArrayExpressions:
             count_arrays={"sample_count": [ht.count1, ht.count2]},
         )
 
-        # Collect results
         result = ht.select(
             result_array=result_array, result_counts=result_counts
         ).collect()
@@ -619,7 +564,6 @@ class TestMergeArrayExpressions:
         expected_meta = [{"group": "A"}, {"group": "B"}]
         assert result_meta == expected_meta
 
-        # Check that both arrays are properly merged with diff operation
         for row in result:
             assert len(row.result_array) == 2
             assert len(row.result_counts["sample_count"]) == 2
@@ -681,7 +625,6 @@ class TestMergeFreqArrays:
 
     def test_merge_freq_arrays_sum(self, sample_ht):
         """Test merging frequency arrays with sum operation."""
-        # Create frequency arrays.
         ht = sample_ht.annotate(
             freq1=hl.array(
                 [
@@ -697,16 +640,13 @@ class TestMergeFreqArrays:
             ),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge frequency arrays.
         result_freq, result_meta = merge_freq_arrays(
             [ht.freq1, ht.freq2], [meta1, meta2], operation="sum"
         )[:2]
 
-        # Collect results.
         result = ht.select(result_freq=result_freq).collect()
         result_meta = hl.eval(result_meta)
 
@@ -714,7 +654,6 @@ class TestMergeFreqArrays:
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that frequency structs are properly merged.
         for row in result:
             assert len(row.result_freq) == 3
             # Check first element (group A): AC=10+5=15, AN=100+50=150, AF=15/150=0.1.
@@ -726,7 +665,6 @@ class TestMergeFreqArrays:
 
     def test_merge_freq_arrays_diff(self, sample_ht):
         """Test merging frequency arrays with diff operation."""
-        # Create frequency arrays.
         ht = sample_ht.annotate(
             freq1=hl.array(
                 [
@@ -742,16 +680,13 @@ class TestMergeFreqArrays:
             ),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge frequency arrays with diff operation.
         result_freq, result_meta = merge_freq_arrays(
             [ht.freq1, ht.freq2], [meta1, meta2], operation="diff"
         )[:2]
 
-        # Collect results.
         result = ht.select(result_freq=result_freq).collect()
         result_meta = hl.eval(result_meta)
 
@@ -759,7 +694,6 @@ class TestMergeFreqArrays:
         expected_meta = [{"group": "A"}, {"group": "B"}]
         assert result_meta == expected_meta
 
-        # Check that frequency structs are properly merged.
         for row in result:
             assert len(row.result_freq) == 2
             # Check first element (group A): AC=10-5=5, AN=100-50=50, AF=5/50=0.1.
@@ -771,7 +705,6 @@ class TestMergeFreqArrays:
 
     def test_merge_freq_arrays_with_count_arrays(self, sample_ht):
         """Test merging frequency arrays with count arrays."""
-        # Create frequency arrays.
         ht = sample_ht.annotate(
             freq1=hl.array(
                 [
@@ -787,17 +720,14 @@ class TestMergeFreqArrays:
             ),
         )
 
-        # Create count arrays.
         ht = ht.annotate(
             count1=hl.array([100, 200]),
             count2=hl.array([50, 150]),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "C"}]
 
-        # Merge frequency arrays with count arrays.
         result_freq, result_meta, result_counts = merge_freq_arrays(
             [ht.freq1, ht.freq2],
             [meta1, meta2],
@@ -805,7 +735,6 @@ class TestMergeFreqArrays:
             count_arrays={"sample_count": [ht.count1, ht.count2]},
         )
 
-        # Collect results.
         result = ht.select(
             result_freq=result_freq, result_counts=result_counts
         ).collect()
@@ -815,7 +744,6 @@ class TestMergeFreqArrays:
         expected_meta = [{"group": "A"}, {"group": "B"}, {"group": "C"}]
         assert result_meta == expected_meta
 
-        # Check that both frequency and count arrays are properly merged.
         for row in result:
             assert len(row.result_freq) == 3
             assert len(row.result_counts["sample_count"]) == 3
@@ -842,11 +770,9 @@ class TestMergeFreqArrays:
             ),
         )
 
-        # Create metadata.
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "B"}]
 
-        # Merge with set_negatives_to_zero=True.
         result_freq = merge_freq_arrays(
             [ht.freq1, ht.freq2],
             [meta1, meta2],
@@ -854,10 +780,8 @@ class TestMergeFreqArrays:
             set_negatives_to_zero=True,
         )[0]
 
-        # Collect results.
         result = ht.select(result_freq=result_freq).collect()
 
-        # Check that negative values are set to zero.
         for row in result:
             # A: AC=10-15=-5 -> 0, AN=100-50=50, AF=0/50=0.0.
             first_struct = row.result_freq[0]

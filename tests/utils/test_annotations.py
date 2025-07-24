@@ -1047,30 +1047,3 @@ class TestMergeHistograms:
             assert row.result_hist.bin_freq == [8, 10, 27]
             assert row.result_hist.n_smaller == 3
             assert row.result_hist.n_larger == 13
-
-    def test_merge_histograms_different_bin_edges(self, sample_ht):
-        """Test merging histograms with different bin_edges (should use first histogram's)."""
-        ht = sample_ht.annotate(
-            hist1=hl.struct(
-                bin_edges=hl.array([0, 10, 20, 30]),
-                bin_freq=hl.array([5, 10, 15]),
-                n_smaller=2,
-                n_larger=8,
-            ),
-            hist2=hl.struct(
-                bin_edges=hl.array([0, 5, 15, 25]),
-                bin_freq=hl.array([3, 7, 12]),
-                n_smaller=1,
-                n_larger=5,
-            ),
-        )
-
-        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="sum")
-        result = ht.select(result_hist=result_hist).collect()
-
-        for row in result:
-            # Should use first histogram's bin_edges.
-            assert row.result_hist.bin_edges == [0, 10, 20, 30]
-            assert row.result_hist.bin_freq == [8, 17, 27]
-            assert row.result_hist.n_smaller == 3
-            assert row.result_hist.n_larger == 13

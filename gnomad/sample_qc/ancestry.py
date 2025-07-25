@@ -408,7 +408,7 @@ def assign_genetic_ancestry_pcs(
 
         if not fit:
             gen_anc_ht = gen_anc_ht.annotate_globals(
-                assign_gen_anc_from_pc_params=gen_anc_ht.assign_gen_anc_from_pc_params.annotate(
+                assign_gen_ancs_from_pc_params=gen_anc_ht.assign_gen_ancs_from_pc_params.annotate(
                     error_rate=error_rate
                 )
             )

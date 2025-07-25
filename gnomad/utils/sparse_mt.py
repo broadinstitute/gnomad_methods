@@ -1217,7 +1217,9 @@ def compute_stats_per_ref_site(
     if is_vds:
         rmt = mtds.reference_data
         mtds = hl.vds.VariantDataset(
-            rmt.select_entries(*((set(entry_keep_fields) & set(rmt.entry)) | {"END"})),
+            rmt.select_entries(
+                *((set(entry_keep_fields) & set(rmt.entry)) | {"END", "LEN"})
+            ),
             mtds.variant_data,
         )
 

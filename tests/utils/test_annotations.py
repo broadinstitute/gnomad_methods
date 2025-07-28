@@ -946,25 +946,8 @@ class TestMergeHistograms:
             # n_larger: 8 - 12 = -4 -> 0.
             assert row.result_hist.n_larger == 0
 
-    def test_merge_histograms_insufficient_histograms(self, sample_ht):
-        """Test that insufficient histograms raises ValueError."""
-        ht = sample_ht.annotate(
-            hist1=hl.struct(
-                bin_edges=hl.array([0, 10, 20, 30]),
-                bin_freq=hl.array([5, 10, 15]),
-                n_smaller=2,
-                n_larger=8,
-            ),
-        )
-
-        # Should raise an error due to not enough histograms to merge.
-        with pytest.raises(
-            ValueError, match="Must provide at least two histograms to merge!"
-        ):
-            merge_histograms([ht.hist1])
-
-    def test_merge_histograms_invalid_operation(self, sample_ht):
-        """Test that invalid operation raises ValueError."""
+    def test_merge_histograms_validation_errors(self, sample_ht):
+        """Test that merge_histograms raises appropriate ValueError for invalid inputs."""
         ht = sample_ht.annotate(
             hist1=hl.struct(
                 bin_edges=hl.array([0, 10, 20, 30]),
@@ -980,7 +963,11 @@ class TestMergeHistograms:
             ),
         )
 
-        # Should raise an error due to invalid operation argument.
+        with pytest.raises(
+            ValueError, match="Must provide at least two histograms to merge!"
+        ):
+            merge_histograms([ht.hist1])
+
         with pytest.raises(
             ValueError, match="Operation must be either 'sum' or 'diff'!"
         ):

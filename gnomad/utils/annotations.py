@@ -1599,7 +1599,7 @@ def merge_histograms(
 
     .. note::
 
-        Bin edges are assumed to be the same for all histograms.
+        Bin edges are assumed to be the same for all histograms, and lengths of bin edges and frequencies are assumed to be the same for all histograms.
 
     :param hists: List of histogram structs to merge.
     :param operation: Merge operation to perform. Options are "sum" and "diff".

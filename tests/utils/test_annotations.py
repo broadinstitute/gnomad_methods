@@ -809,19 +809,16 @@ class TestMergeFreqArrays:
         meta1 = [{"group": "A"}, {"group": "B"}]
         meta2 = [{"group": "A"}, {"group": "B"}]
 
-        # Test insufficient histograms.
         with pytest.raises(
             ValueError, match="Must provide at least two arrays to merge!"
         ):
             merge_freq_arrays([ht.freq1], [meta1])
 
-        # Test mismatched lengths.
         with pytest.raises(
             ValueError, match="Length of arrays and meta must be equal!"
         ):
             merge_freq_arrays([ht.freq1, ht.freq2], [meta1])
 
-        # Test invalid operation.
         with pytest.raises(
             ValueError, match="Operation must be either 'sum' or 'diff'!"
         ):

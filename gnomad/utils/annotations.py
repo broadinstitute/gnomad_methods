@@ -1634,23 +1634,22 @@ def merge_histograms(
         merged_n_larger = _sum_or_diff_values(i.n_larger, j.n_larger, operation)
 
         # Handle negative values if performing diff operation or if user wants to
-        # handle negatives
-        if operation == "diff" or set_negatives_to_zero:
-            negative_value_error_msg = (
-                "Negative values found in merged histogram. Review data or set"
-                " `set_negatives_to_zero` to True to set negative values to 0."
+        # handle negatives, otherwise raise an error.
+        negative_value_error_msg = (
+            "Negative values found in merged histogram. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+        merged_bin_freq = merged_bin_freq.map(
+            lambda x: _handle_negative_values(
+                x, set_negatives_to_zero, negative_value_error_msg
             )
-            merged_bin_freq = merged_bin_freq.map(
-                lambda x: _handle_negative_values(
-                    x, set_negatives_to_zero, negative_value_error_msg
-                )
-            )
-            merged_n_smaller = _handle_negative_values(
-                merged_n_smaller, set_negatives_to_zero, negative_value_error_msg
-            )
-            merged_n_larger = _handle_negative_values(
-                merged_n_larger, set_negatives_to_zero, negative_value_error_msg
-            )
+        )
+        merged_n_smaller = _handle_negative_values(
+            merged_n_smaller, set_negatives_to_zero, negative_value_error_msg
+        )
+        merged_n_larger = _handle_negative_values(
+            merged_n_larger, set_negatives_to_zero, negative_value_error_msg
+        )
 
         return hl.struct(
             bin_edges=hl.or_else(i.bin_edges, j.bin_edges),

@@ -108,13 +108,13 @@ def _sum_or_diff_values(
     )
 
 
-def _handle_negative_values_for_diff(
+def _handle_negative_values(
     value_expr: hl.expr.Expression,
     set_negatives_to_zero: bool = False,
     error_msg: str = "Negative values found in merged values. Review data or set `set_negatives_to_zero` to True to set negative values to 0.",
 ) -> hl.expr.Expression:
     """
-    Handle negative values for diff operations.
+    Handle negative values in merged expressions.
 
     :param value_expr: The value expression to check for negative values.
     :param set_negatives_to_zero: If True, set negative values to 0. If False, raise an error.
@@ -1481,7 +1481,7 @@ def merge_array_expressions(
             new_array = new_array.map(
                 lambda x: x.annotate(
                     **{
-                        field: _handle_negative_values_for_diff(
+                        field: _handle_negative_values(
                             x[field], set_negatives_to_zero, negative_value_error_msg
                         )
                         for field in struct_fields
@@ -1490,7 +1490,7 @@ def merge_array_expressions(
             )
         else:
             new_array = new_array.map(
-                lambda x: _handle_negative_values_for_diff(
+                lambda x: _handle_negative_values(
                     x, set_negatives_to_zero, negative_value_error_msg
                 )
             )
@@ -1630,25 +1630,27 @@ def merge_histograms(
             fill_missing=True,
         ).map(lambda x: _sum_or_diff_values(x[0], x[1], operation))
 
-        negative_value_error_msg = (
-            "Negative values found in merged histogram. Review data or set"
-            " `set_negatives_to_zero` to True to set negative values to 0."
-        )
-        merged_bin_freq = merged_bin_freq.map(
-            lambda x: _handle_negative_values_for_diff(
-                x, set_negatives_to_zero, negative_value_error_msg
+        merged_n_smaller = _sum_or_diff_values(i.n_smaller, j.n_smaller, operation)
+        merged_n_larger = _sum_or_diff_values(i.n_larger, j.n_larger, operation)
+
+        # Handle negative values if performing diff operation or if user wants to
+        # handle negatives
+        if operation == "diff" or set_negatives_to_zero:
+            negative_value_error_msg = (
+                "Negative values found in merged histogram. Review data or set"
+                " `set_negatives_to_zero` to True to set negative values to 0."
             )
-        )
-        merged_n_smaller = _handle_negative_values_for_diff(
-            _sum_or_diff_values(i.n_smaller, j.n_smaller, operation),
-            set_negatives_to_zero,
-            negative_value_error_msg,
-        )
-        merged_n_larger = _handle_negative_values_for_diff(
-            _sum_or_diff_values(i.n_larger, j.n_larger, operation),
-            set_negatives_to_zero,
-            negative_value_error_msg,
-        )
+            merged_bin_freq = merged_bin_freq.map(
+                lambda x: _handle_negative_values(
+                    x, set_negatives_to_zero, negative_value_error_msg
+                )
+            )
+            merged_n_smaller = _handle_negative_values(
+                merged_n_smaller, set_negatives_to_zero, negative_value_error_msg
+            )
+            merged_n_larger = _handle_negative_values(
+                merged_n_larger, set_negatives_to_zero, negative_value_error_msg
+            )
 
         return hl.struct(
             bin_edges=hl.or_else(i.bin_edges, j.bin_edges),

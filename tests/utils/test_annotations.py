@@ -1031,3 +1031,57 @@ class TestMergeHistograms:
             assert row.result_hist.bin_freq == [8, 10, 27]
             assert row.result_hist.n_smaller == 3
             assert row.result_hist.n_larger == 13
+
+    def test_merge_histograms_sum_with_negatives_set_to_zero(self, sample_ht):
+        """Test that negative values are handled correctly in sum operation when set_negatives_to_zero=True."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([-3, -5, -7]),
+                n_smaller=-1,
+                n_larger=-3,
+            ),
+        )
+
+        # Test that negative values are set to zero when set_negatives_to_zero=True
+        result_hist = merge_histograms(
+            [ht.hist1, ht.hist2], operation="sum", set_negatives_to_zero=True
+        )
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            # bin_freq: [5+(-3), 10+(-5), 15+(-7)] = [2, 5, 8] (no negatives in sum)
+            assert row.result_hist.bin_freq == [2, 5, 8]
+            # n_smaller: 2 + (-1) = 1
+            assert row.result_hist.n_smaller == 1
+            # n_larger: 8 + (-3) = 5
+            assert row.result_hist.n_larger == 5
+
+    def test_merge_histograms_sum_with_negatives_error(self, sample_ht):
+        """Test that negative values in sum operation raise error when set_negatives_to_zero=False."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([-8, -15, -20]),
+                n_smaller=-5,
+                n_larger=-12,
+            ),
+        )
+
+        # Test that negative values in sum operation raise error when
+        # set_negatives_to_zero=False
+        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="sum")
+        with pytest.raises(Exception):
+            ht.select(result_hist=result_hist).collect()

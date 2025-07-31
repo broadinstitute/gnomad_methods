@@ -1633,7 +1633,7 @@ def merge_histograms(
         merged_n_smaller = _sum_or_diff_values(i.n_smaller, j.n_smaller, operation)
         merged_n_larger = _sum_or_diff_values(i.n_larger, j.n_larger, operation)
 
-        # If specified, set negative values in histogram to zero after merge operation, otherwise
+        # If specified, set negative values in histogram to zero after merge operation,
         # otherwise raise an error.
         negative_value_error_msg = (
             "Negative values found in merged histogram. Review data or set"

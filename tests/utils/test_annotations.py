@@ -10,6 +10,7 @@ from gnomad.utils.annotations import (
     get_copy_state_by_sex,
     merge_array_expressions,
     merge_freq_arrays,
+    merge_histograms,
     missing_struct_expr,
 )
 
@@ -787,3 +788,300 @@ class TestMergeFreqArrays:
             assert first_struct.AC == 0
             assert first_struct.AN == 50
             assert first_struct.AF == 0.0
+
+    def test_merge_freq_arrays_validation_errors(self, sample_ht):
+        """Test validation errors in merge_freq_arrays."""
+        ht = sample_ht.annotate(
+            freq1=hl.array(
+                [
+                    hl.struct(AC=10, AN=100, homozygote_count=2),
+                    hl.struct(AC=20, AN=200, homozygote_count=4),
+                ]
+            ),
+            freq2=hl.array(
+                [
+                    hl.struct(AC=5, AN=50, homozygote_count=1),
+                    hl.struct(AC=15, AN=150, homozygote_count=3),
+                ]
+            ),
+        )
+
+        meta1 = [{"group": "A"}, {"group": "B"}]
+        meta2 = [{"group": "A"}, {"group": "B"}]
+
+        with pytest.raises(
+            ValueError, match="Must provide at least two arrays to merge!"
+        ):
+            merge_freq_arrays([ht.freq1], [meta1])
+
+        with pytest.raises(
+            ValueError, match="Length of arrays and meta must be equal!"
+        ):
+            merge_freq_arrays([ht.freq1, ht.freq2], [meta1])
+
+        with pytest.raises(
+            ValueError, match="Operation must be either 'sum' or 'diff'!"
+        ):
+            merge_freq_arrays([ht.freq1, ht.freq2], [meta1, meta2], operation="invalid")
+
+
+class TestMergeHistograms:
+    """Test the merge_histograms function."""
+
+    @pytest.fixture
+    def sample_ht(self):
+        """Create a sample Hail Table for testing."""
+        return hl.Table.parallelize(
+            [
+                {"id": 1, "group": "A"},
+                {"id": 2, "group": "B"},
+                {"id": 3, "group": "C"},
+            ],
+            hl.tstruct(id=hl.tint32, group=hl.tstr),
+        )
+
+    def test_merge_histograms_sum(self, sample_ht):
+        """Test merging histograms with sum operation."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([3, 7, 12]),
+                n_smaller=1,
+                n_larger=5,
+            ),
+        )
+
+        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="sum")
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            assert row.result_hist.bin_edges == [0, 10, 20, 30]
+            # Check bin_freq (summed): [5+3, 10+7, 15+12] = [8, 17, 27].
+            assert row.result_hist.bin_freq == [8, 17, 27]
+            assert row.result_hist.n_smaller == 3
+            assert row.result_hist.n_larger == 13
+
+    def test_merge_histograms_diff(self, sample_ht):
+        """Test merging histograms with diff operation."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([10, 20, 30]),
+                n_smaller=5,
+                n_larger=15,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([3, 7, 12]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+        )
+
+        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="diff")
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            assert row.result_hist.bin_edges == [0, 10, 20, 30]
+            # Check bin_freq (subtracted): [10-3, 20-7, 30-12] = [7, 13, 18].
+            assert row.result_hist.bin_freq == [7, 13, 18]
+            assert row.result_hist.n_smaller == 3
+            assert row.result_hist.n_larger == 7
+
+    def test_merge_histograms_with_negatives_error(self, sample_ht):
+        """Test that negative values raise error when set_negatives_to_zero=False."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([8, 15, 20]),
+                n_smaller=5,
+                n_larger=12,
+            ),
+        )
+
+        # Should raise an error due to negative values in diff operation.
+        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="diff")
+        with pytest.raises(Exception):
+            ht.select(result_hist=result_hist).collect()
+
+    def test_merge_histograms_with_negatives_set_to_zero(self, sample_ht):
+        """Test that negative values are set to zero when set_negatives_to_zero=True."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([8, 15, 20]),
+                n_smaller=5,
+                n_larger=12,
+            ),
+        )
+
+        result_hist = merge_histograms(
+            [ht.hist1, ht.hist2], operation="diff", set_negatives_to_zero=True
+        )
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            # bin_freq: [5-8, 10-15, 15-20] = [-3, -5, -5] -> [0, 0, 0].
+            assert row.result_hist.bin_freq == [0, 0, 0]
+            # n_smaller: 2 - 5 = -3 -> 0.
+            assert row.result_hist.n_smaller == 0
+            # n_larger: 8 - 12 = -4 -> 0.
+            assert row.result_hist.n_larger == 0
+
+    def test_merge_histograms_validation_errors(self, sample_ht):
+        """Test that merge_histograms raises appropriate ValueError for invalid inputs."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([3, 7, 12]),
+                n_smaller=1,
+                n_larger=5,
+            ),
+        )
+
+        with pytest.raises(
+            ValueError, match="Must provide at least two histograms to merge!"
+        ):
+            merge_histograms([ht.hist1])
+
+        with pytest.raises(
+            ValueError, match="Operation must be either 'sum' or 'diff'!"
+        ):
+            merge_histograms([ht.hist1, ht.hist2], operation="invalid")
+
+    def test_merge_histograms_multiple_histograms(self, sample_ht):
+        """Test merging multiple histograms."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([3, 7, 12]),
+                n_smaller=1,
+                n_larger=5,
+            ),
+            hist3=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([2, 4, 6]),
+                n_smaller=0,
+                n_larger=3,
+            ),
+        )
+
+        result_hist = merge_histograms([ht.hist1, ht.hist2, ht.hist3], operation="sum")
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            assert row.result_hist.bin_edges == [0, 10, 20, 30]
+            # Check bin_freq (summed): [5+3+2, 10+7+4, 15+12+6] = [10, 21, 33].
+            assert row.result_hist.bin_freq == [10, 21, 33]
+            assert row.result_hist.n_smaller == 3
+            assert row.result_hist.n_larger == 16
+
+    def test_merge_histograms_with_missing_values(self, sample_ht):
+        """Test merging histograms with missing values."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([3, None, 12]),
+                n_smaller=1,
+                n_larger=5,
+            ),
+        )
+
+        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="sum")
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            # Check bin_freq: [5+3, 10+0, 15+12] = [8, 10, 27] (missing treated as 0).
+            assert row.result_hist.bin_freq == [8, 10, 27]
+            assert row.result_hist.n_smaller == 3
+            assert row.result_hist.n_larger == 13
+
+    def test_merge_histograms_sum_with_negatives_set_to_zero(self, sample_ht):
+        """Test that negative values are handled correctly in sum operation when set_negatives_to_zero=True."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([-3, -5, -7]),
+                n_smaller=-1,
+                n_larger=-3,
+            ),
+        )
+
+        # Test that negative values are set to zero when set_negatives_to_zero=True
+        result_hist = merge_histograms(
+            [ht.hist1, ht.hist2], operation="sum", set_negatives_to_zero=True
+        )
+        result = ht.select(result_hist=result_hist).collect()
+
+        for row in result:
+            # bin_freq: [5+(-3), 10+(-5), 15+(-7)] = [2, 5, 8] (no negatives in sum)
+            assert row.result_hist.bin_freq == [2, 5, 8]
+            # n_smaller: 2 + (-1) = 1
+            assert row.result_hist.n_smaller == 1
+            # n_larger: 8 + (-3) = 5
+            assert row.result_hist.n_larger == 5
+
+    def test_merge_histograms_sum_with_negatives_error(self, sample_ht):
+        """Test that negative values in sum operation raise error when set_negatives_to_zero=False."""
+        ht = sample_ht.annotate(
+            hist1=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([5, 10, 15]),
+                n_smaller=2,
+                n_larger=8,
+            ),
+            hist2=hl.struct(
+                bin_edges=hl.array([0, 10, 20, 30]),
+                bin_freq=hl.array([-8, -15, -20]),
+                n_smaller=-5,
+                n_larger=-12,
+            ),
+        )
+
+        # Test that negative values in sum operation raise error when
+        # set_negatives_to_zero=False
+        result_hist = merge_histograms([ht.hist1, ht.hist2], operation="sum")
+        with pytest.raises(Exception):
+            ht.select(result_hist=result_hist).collect()

@@ -90,6 +90,45 @@ VRS_CHROM_IDS = {
 }
 
 
+def _sum_or_diff_values(
+    val_1_expr: hl.expr.Expression, val_2_expr: hl.expr.Expression, operation: str
+) -> hl.expr.Expression:
+    """
+    Sum or subtract values based on the operation.
+
+    :param val_1_expr: First value to sum or diff.
+    :param val_2_expr: Second value to sum or diff.
+    :param operation: Operation to perform ("sum" or "diff").
+    :return: Merged value.
+    """
+    return hl.if_else(
+        operation == "sum",
+        hl.or_else(val_1_expr, 0) + hl.or_else(val_2_expr, 0),
+        hl.or_else(val_1_expr, 0) - hl.or_else(val_2_expr, 0),
+    )
+
+
+def _handle_negative_values(
+    value_expr: hl.expr.Expression,
+    set_negatives_to_zero: bool = False,
+    error_msg: str = "Negative values found in merged values. Review data or set `set_negatives_to_zero` to True to set negative values to 0.",
+) -> hl.expr.Expression:
+    """
+    Handle negative values in merged expressions.
+
+    :param value_expr: The value expression to check for negative values.
+    :param set_negatives_to_zero: If True, set negative values to 0. If False, raise an error.
+    :param error_msg: Custom error message to display when negative values are found.
+    :return: Value expression with negative value handling applied.
+    """
+    return (
+        hl.case()
+        .when(set_negatives_to_zero, hl.max(value_expr, 0))
+        .when(value_expr >= 0, value_expr)
+        .or_error(error_msg)
+    )
+
+
 def annotate_with_ht(
     t: Union[hl.MatrixTable, hl.Table],
     annotation_ht: hl.Table,
@@ -1405,29 +1444,13 @@ def merge_array_expressions(
     # from each array.
     meta_idx = meta.map(lambda x: hl.zip(arrays, x[1]).map(lambda i: i[0][i[1]]))
 
-    def _sum_or_diff_values(
-        val_1_expr: hl.expr.Expression, val_2_expr: hl.expr.Expression
-    ) -> hl.expr.Expression:
-        """
-        Sum or subtract values.
-
-        :param val_1_expr: First value to sum or diff.
-        :param val_2_expr: Second value to sum or diff.
-        :return: Merged value.
-        """
-        return hl.if_else(
-            operation == "sum",
-            hl.or_else(val_1_expr, 0) + hl.or_else(val_2_expr, 0),
-            hl.or_else(val_1_expr, 0) - hl.or_else(val_2_expr, 0),
-        )
-
     if struct_fields is not None:
         # Handle struct arrays.
         new_array = meta_idx.map(
             lambda x: hl.fold(
                 lambda i, j: hl.struct(
                     **{
-                        field: _sum_or_diff_values(i[field], j[field])
+                        field: _sum_or_diff_values(i[field], j[field], operation)
                         for field in struct_fields
                     }
                 ),
@@ -1439,7 +1462,7 @@ def merge_array_expressions(
         # Handle integer arrays.
         new_array = meta_idx.map(
             lambda x: hl.fold(
-                lambda i, j: _sum_or_diff_values(i, j),
+                lambda i, j: _sum_or_diff_values(i, j, operation),
                 x[0],
                 x[1:],
             )
@@ -1458,11 +1481,8 @@ def merge_array_expressions(
             new_array = new_array.map(
                 lambda x: x.annotate(
                     **{
-                        field: (
-                            hl.case()
-                            .when(set_negatives_to_zero, hl.max(x[field], 0))
-                            .when(x[field] >= 0, x[field])
-                            .or_error(negative_value_error_msg)
+                        field: _handle_negative_values(
+                            x[field], set_negatives_to_zero, negative_value_error_msg
                         )
                         for field in struct_fields
                     }
@@ -1470,10 +1490,9 @@ def merge_array_expressions(
             )
         else:
             new_array = new_array.map(
-                lambda x: hl.case()
-                .when(set_negatives_to_zero, hl.max(x, 0))
-                .when(x >= 0, x)
-                .or_error(negative_value_error_msg)
+                lambda x: _handle_negative_values(
+                    x, set_negatives_to_zero, negative_value_error_msg
+                )
             )
 
     # Create count_array_meta_idx using meta then iterate through each group
@@ -1566,34 +1585,81 @@ def merge_freq_arrays(
         return new_freq, new_freq_meta
 
 
-def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.expr.Expression:
+def merge_histograms(
+    hists: List[hl.expr.StructExpression],
+    operation: str = "sum",
+    set_negatives_to_zero: bool = False,
+) -> hl.expr.Expression:
     """
     Merge a list of histogram annotations.
 
-    This function merges a list of histogram annotations by summing the arrays
-    in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
-    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing them.
+    This function merges a list of histogram annotations by summing or subtracting the
+    arrays in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
+    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing or subtracting them.
 
     .. note::
 
-        Bin edges are assumed to be the same for all histograms.
+        Bin edges are assumed to be the same for all histograms, and lengths of bin edges and frequencies are assumed to be the same for all histograms.
 
     :param hists: List of histogram structs to merge.
+    :param operation: Merge operation to perform. Options are "sum" and "diff".
+        If "diff" is passed, the first histogram will have the other histograms
+        subtracted from it. Default is "sum".
+    :param set_negatives_to_zero: If True, set negative values to 0. If False, raise
+        a ValueError. Default is False.
     :return: Merged histogram struct.
     """
+    if len(hists) < 2:
+        raise ValueError("Must provide at least two histograms to merge!")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'!")
+
+    def _merge_histogram_values(
+        i: hl.expr.StructExpression, j: hl.expr.StructExpression
+    ) -> hl.expr.StructExpression:
+        """
+        Merge two histogram structs together.
+
+        :param i: First histogram struct (accumulator).
+        :param j: Second histogram struct to merge.
+        :return: Merged histogram struct.
+        """
+        merged_bin_freq = hl.zip(
+            hl.or_else(i.bin_freq, hl.literal([hl.missing(hl.tint)])),
+            hl.or_else(j.bin_freq, hl.literal([hl.missing(hl.tint)])),
+            fill_missing=True,
+        ).map(lambda x: _sum_or_diff_values(x[0], x[1], operation))
+
+        merged_n_smaller = _sum_or_diff_values(i.n_smaller, j.n_smaller, operation)
+        merged_n_larger = _sum_or_diff_values(i.n_larger, j.n_larger, operation)
+
+        # If specified, set negative values in histogram to zero after merge operation,
+        # otherwise raise an error.
+        negative_value_error_msg = (
+            "Negative values found in merged histogram. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+        merged_bin_freq = merged_bin_freq.map(
+            lambda x: _handle_negative_values(
+                x, set_negatives_to_zero, negative_value_error_msg
+            )
+        )
+        merged_n_smaller = _handle_negative_values(
+            merged_n_smaller, set_negatives_to_zero, negative_value_error_msg
+        )
+        merged_n_larger = _handle_negative_values(
+            merged_n_larger, set_negatives_to_zero, negative_value_error_msg
+        )
+
+        return hl.struct(
+            bin_edges=hl.or_else(i.bin_edges, j.bin_edges),
+            bin_freq=merged_bin_freq,
+            n_smaller=merged_n_smaller,
+            n_larger=merged_n_larger,
+        )
+
     return hl.fold(
-        lambda i, j: hl.struct(
-            **{
-                "bin_edges": hl.or_else(i.bin_edges, j.bin_edges),
-                "bin_freq": hl.zip(
-                    hl.or_else(i.bin_freq, hl.literal([hl.missing(hl.tint)])),
-                    hl.or_else(j.bin_freq, hl.literal([hl.missing(hl.tint)])),
-                    fill_missing=True,
-                ).map(lambda x: hl.or_else(x[0], 0) + hl.or_else(x[1], 0)),
-                "n_smaller": hl.or_else(i.n_smaller, 0) + hl.or_else(j.n_smaller, 0),
-                "n_larger": hl.or_else(i.n_larger, 0) + hl.or_else(j.n_larger, 0),
-            }
-        ),
+        _merge_histogram_values,
         hists[0].select("bin_edges", "bin_freq", "n_smaller", "n_larger"),
         hists[1:],
     )

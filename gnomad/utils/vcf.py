@@ -575,6 +575,14 @@ FORMAT_DICT = {
         "Number": "4",
         "Type": "Integer",
     },
+    "RGQ": {
+        "Description": (
+            "Unconditional reference genotype confidence, encoded as a phred"
+            " quality -10*log10 p(genotype call is wrong)"
+        ),
+        "Number": "1",
+        "Type": "Integer",
+    },
 }
 """
 Dictionary used during VCF export to export MatrixTable entries.

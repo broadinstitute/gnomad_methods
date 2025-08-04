@@ -2672,9 +2672,20 @@ def add_gks_vrs(
         "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
     }
 
-    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
-        ga4gh_vrs.models.SequenceLocation(**vrs_dict_out["location"])
-    )
+    # Check VRS version and use appropriate API
+    if hasattr(ga4gh_core, "ga4gh_identify"):
+        # VRS 2.0.0+ API
+        seq_loc = ga4gh_vrs.models.SequenceLocation(
+            sequenceReference=vrs_chrom_id,
+            start=vrs_start_value,
+            end=vrs_end_value,
+        )
+        location_id = ga4gh_core.ga4gh_identify(seq_loc)
+    else:
+        # VRS 0.8.4 API
+        location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
+            ga4gh_vrs.models.SequenceLocation(**vrs_dict_out["location"])
+        )
 
     vrs_dict_out["location"]["_id"] = location_id
 

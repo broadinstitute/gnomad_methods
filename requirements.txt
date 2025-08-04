@@ -1,5 +1,5 @@
 annoy
-ga4gh.vrs[extras]
+ga4gh.vrs[extras]==2.0.0
 hail
 hdbscan
 ipywidgets

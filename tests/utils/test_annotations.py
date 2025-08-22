@@ -6,6 +6,7 @@ import hail as hl
 import pytest
 
 from gnomad.utils.annotations import (
+    VRS_CHROM_IDS,
     add_gks_va,
     add_gks_vrs,
     fill_missing_key_combinations,
@@ -1094,16 +1095,14 @@ class TestVRSFunctions:
 
     def test_add_gks_vrs_import(self):
         """Test that the VRS functions can be imported successfully."""
-        from gnomad.utils.annotations import add_gks_va, add_gks_vrs
-
         assert callable(add_gks_vrs)
         assert callable(add_gks_va)
 
     def test_vrs_imports_work(self):
         """Test that VRS-related imports work without errors."""
         try:
-            import ga4gh.core as ga4gh_core
-            import ga4gh.vrs as ga4gh_vrs
+            import ga4gh.core  # noqa: F401
+            import ga4gh.vrs  # noqa: F401
 
             assert True  # If we get here, imports worked
         except ImportError as e:
@@ -1134,8 +1133,6 @@ class TestVRSFunctions:
 
     def test_vrs_error_handling(self):
         """Test that VRS functions handle errors gracefully."""
-        from gnomad.utils.annotations import add_gks_vrs
-
         # Test with invalid locus (should raise appropriate error)
         with pytest.raises((AttributeError, TypeError)):
             # This should fail because we're not providing proper Hail locus objects
@@ -1143,10 +1140,6 @@ class TestVRSFunctions:
 
     def test_add_gks_vrs_actual_api_call(self):
         """Test that add_gks_vrs actually calls the VRS 2.0.1 API with real data."""
-        import hail as hl
-
-        from gnomad.utils.annotations import VRS_CHROM_IDS, add_gks_vrs
-
         # Create a real Hail locus and VRS struct that would come from actual data
         locus = hl.locus("chr1", 100, reference_genome="GRCh38")
 
@@ -1187,10 +1180,6 @@ class TestVRSFunctions:
 
     def test_add_gks_vrs_grch37_chromosome_mapping(self):
         """Test that VRS chromosome mapping works correctly for GRCh37."""
-        import hail as hl
-
-        from gnomad.utils.annotations import VRS_CHROM_IDS, add_gks_vrs
-
         # Test GRCh37 (note different chromosome naming: "1" vs "chr1")
         locus_grch37 = hl.locus("1", 100, reference_genome="GRCh37")
         vrs_struct = hl.struct(
@@ -1223,6 +1212,4 @@ class TestVRSFunctions:
         assert hasattr(ga4gh_core, "ga4gh_identify"), "VRS 2.0.1+ is required"
 
         # The function should work with VRS 2.0.1+
-        from gnomad.utils.annotations import add_gks_vrs
-
         assert callable(add_gks_vrs)

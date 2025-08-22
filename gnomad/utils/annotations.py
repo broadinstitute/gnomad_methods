@@ -1917,13 +1917,12 @@ def annotate_downsamplings(
     else:
         t = t.annotate(downsampling=ht[t.s])
 
+    t = t.annotate_globals(downsamplings=downsamplings)
+    
     if gen_anc_counts:
-        return t.annotate_globals(
-            downsamplings=downsamplings,
-            ds_gen_anc_counts=gen_anc_counts,
-        )
+        t = t.annotate_globals(ds_gen_anc_counts=gen_anc_counts)
 
-    return t.annotate_globals(downsamplings=downsamplings)
+    return t
 
 
 def build_freq_stratification_list(

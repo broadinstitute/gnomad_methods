@@ -1094,21 +1094,6 @@ class TestMergeHistograms:
 class TestVRSFunctions:
     """Test the VRS-related functions."""
 
-    def test_add_gks_vrs_import(self):
-        """Test that the VRS functions can be imported successfully."""
-        assert callable(add_gks_vrs)
-        assert callable(add_gks_va)
-
-    def test_vrs_imports_work(self):
-        """Test that VRS-related imports work without errors."""
-        try:
-            import ga4gh.core  # noqa: F401
-            import ga4gh.vrs  # noqa: F401
-
-            assert True  # If we get here, imports worked
-        except ImportError as e:
-            pytest.fail(f"VRS imports failed: {e}")
-
     def test_vrs_identifier_generation(self):
         """Test that GA4GH identifiers are generated correctly."""
         import ga4gh.core as ga4gh_core

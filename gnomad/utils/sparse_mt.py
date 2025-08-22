@@ -751,6 +751,10 @@ def default_compute_info(
     if n_partitions is not None:
         info_ht = info_ht.naive_coalesce(n_partitions)
 
+    info_ht = info_ht.annotate_globals(retain_cdfs=retain_cdfs)
+    if retain_cdfs:
+        info_ht = info_ht.annotate_globals(cdf_k=cdf_k)
+
     return info_ht
 
 

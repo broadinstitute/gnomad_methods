@@ -1080,6 +1080,10 @@ def assemble_constraint_context_ht(
         "canonical",
         "lof",
         "lof_flags",
+        "sift_score",
+        "polyphen_score",
+        "domains",
+        "uniprot_isoform",
     ]
     vep_csq_fields = [x for x in vep_csq_fields if x in csqs.dtype.element_type]
     ht = ht.annotate(

@@ -338,9 +338,9 @@ mills = GnomadPublicTableResource(
     },
 )
 
-# Methylation scores range from 0-15 and are described in Chen et al
+# Methylation scores for autosomes range from 0-15 and are described in Chen et al
 # (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-methylation_sites = GnomadPublicTableResource(
+methylation_sites_autosomes = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
     import_func=_import_methylation_sites,
     import_args={
@@ -348,14 +348,13 @@ methylation_sites = GnomadPublicTableResource(
     },
 )
 
-# Methylation scores for chromosome X range from 0-12 and are described in Chen et al
+# Merged methylation data including autosomes, chrX, and chrY. This resource combines
+# methylation scores from `methylation_sites_autosomes` with scores from chrX
+# and chrY non-PAR. Autosomes and chrX PAR use a 0-15 scale, while chrX and chrY non-PAR
+# use a 0-12 scale as described in Chen et al
 # (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-methylation_sites_chrx = GnomadPublicTableResource(
-    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.ht",
-    import_func=_import_methylation_sites,
-    import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.bed",
-    },
+methylation_sites = GnomadPublicTableResource(
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_all.ht",
 )
 
 lcr_intervals = GnomadPublicTableResource(
@@ -454,14 +453,15 @@ def transform_grch38_methylation(
 
         One of ht or methylation_expr must be provided.
 
-    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes. The
-    determination of this score is described in Chen et al:
+    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes.
+    The determination of this score for autosomes is described in Chen et al:
     https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full
-    For chrX, methylation scores range from 0 to 12, but these scores are not directly
-    comparable to the autosome scores (chrX and autosomes were analyzed separately and
-    levels are relative). Cutoffs to translate these scores to the 0-2 methylation
-    level were determined by correlating these scores with the GRCh37 liftover scores.
-    Proposed cutoffs are: 0, 1-5, 6+ for autosomes, and 0, 1-3, 4+ for chrX.
+    For chrX and chrY non-PAR, methylation scores range from 0 to 12, but these scores
+    are not directly comparable to the autosome scores (chrX/chrY and autosomes were
+    analyzed separately and levels are relative). Cutoffs to translate these scores to
+    the 0-2 methylation level were determined by correlating these scores with the
+    GRCh37 liftover scores. Proposed cutoffs are: 0, 1-5, 6+ for autosomes/chrX PAR,
+    and 0, 1-3, 4+ for chrX and chrY non-PAR.
 
     :param ht: Optional Hail Table with methylation data. Default is None.
     :param methylation_expr: Optional methylation level expression. Default is None.
@@ -479,7 +479,7 @@ def transform_grch38_methylation(
         locus_expr = ht.locus
 
     methylation_expr = hl.if_else(
-        locus_expr.contig != "chrX",
+        locus_expr.in_autosome_or_par(),
         transform_methylation_level(methylation_expr, (0, 5)),
         transform_methylation_level(methylation_expr, (0, 3)),
     )

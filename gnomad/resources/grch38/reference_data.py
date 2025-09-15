@@ -426,8 +426,20 @@ gtex_rsem = VersionedMatrixTableResource(
 )
 
 gencode = VersionedTableResource(
+    # The default version is v39, which is the version of gencode used by VEP 105, which
+    # is the version used to annotate gnomAD v4.
     default_version="v39",
     versions={
+        "v49": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v49.annotation.ht",
+            import_func=import_gencode,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v49.annotation.gtf.gz",
+                "reference_genome": "GRCh38",
+                "force": True,
+                "min_partitions": 100,
+            },
+        ),
         "v39": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v39.annotation.ht",
             import_func=import_gencode,

@@ -7,8 +7,8 @@ import hail as hl
 
 from gnomad.resources.grch38.gnomad import (
     CURRENT_MAJOR_RELEASE,
+    GEN_ANC_GROUPS,
     GROUPS,
-    POPS,
     SEXES,
     SUBSETS,
 )
@@ -25,7 +25,7 @@ logger.setLevel(logging.INFO)
 def make_faf_index_dict(
     faf_meta: List[Dict[str, str]],
     groups: List[str] = ["adj"],
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
+    gen_anc_groups: List[str] = GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"],
     sexes: List[str] = SEXES,
     label_delimiter: str = "_",
 ) -> Dict[str, int]:
@@ -33,12 +33,12 @@ def make_faf_index_dict(
     Create a look-up Dictionary for entries contained in the filter allele frequency annotation array.
 
     :param faf_meta: Global annotation containing the set of groupings for each element of the faf array
-        (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
+        (e.g., [{'group': 'adj'}, {'group': 'adj', 'gen_anc': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS
-    :param pops: List of sample global population names for gnomAD data type. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param gen_anc_groups: List of sample genetic ancestry group names for gnomAD data type. Default is GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param label_delimiter: String used as delimiter when making group label combinations
-    :return: Dictionary of faf annotation population groupings, where values are the corresponding 0-based indices for the
+    :return: Dictionary of faf annotation genetic ancestry group groupings, where values are the corresponding 0-based indices for the
         groupings in the faf_meta array
     """
 
@@ -47,9 +47,9 @@ def make_faf_index_dict(
 
     index_dict = {
         **_get_index(dict(group=groups)),
-        **_get_index(dict(group=groups, pop=pops)),
+        **_get_index(dict(group=groups, gen_anc=gen_anc_groups)),
         **_get_index(dict(group=groups, sex=sexes)),
-        **_get_index(dict(group=groups, pop=pops, sex=sexes)),
+        **_get_index(dict(group=groups, gen_anc=gen_anc_groups, sex=sexes)),
     }
     return index_dict
 
@@ -57,7 +57,7 @@ def make_faf_index_dict(
 def make_freq_index_dict(
     freq_meta: List[Dict[str, str]],
     groups: List[str] = GROUPS,
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
+    gen_anc_groups: List[str] = GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"],
     sexes: List[str] = SEXES,
     subsets: List[str] = SUBSETS[CURRENT_MAJOR_RELEASE],
     downsamplings: Optional[List[int]] = None,
@@ -71,9 +71,9 @@ def make_freq_index_dict(
         Downsampling groupings are only computed on 'adj'-filtered genotypes
 
     :param freq_meta: List containing the set of groupings for each element of the freq array
-        (e.g., [{'group': 'adj'}, {'group': 'adj', 'pop': 'nfe'}])
+        (e.g., [{'group': 'adj'}, {'group': 'adj', 'gen_anc': 'nfe'}])
     :param groups: List of sample groups [adj, raw]. Default is GROUPS
-    :param pops: List of sample global population names for gnomAD data type. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param gen_anc_groups: List of sample global genetic ancestry group names for gnomAD data type. Default is GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param sexes: List of sample sexes used in VCF export. Default is SEXES
     :param subsets: List of sample subsets in dataset. Default is SUBSETS[CURRENT_MAJOR_RELEASE]
     :param downsamplings: List of downsampling cohort sizes present in global frequency array
@@ -87,18 +87,28 @@ def make_freq_index_dict(
 
     index_dict = {
         **_get_index(dict(group=groups)),
-        **_get_index(dict(group=groups, pop=pops)),
+        **_get_index(dict(group=groups, gen_anc=gen_anc_groups)),
         **_get_index(dict(group=groups, sex=sexes)),
-        **_get_index(dict(group=groups, pop=pops, sex=sexes)),
+        **_get_index(dict(group=groups, gen_anc=gen_anc_groups, sex=sexes)),
         **_get_index(dict(group=groups, subset=subsets)),
-        **_get_index(dict(group=groups, subset=subsets, pop=pops)),
+        **_get_index(dict(group=groups, subset=subsets, gen_anc=gen_anc_groups)),
         **_get_index(dict(group=groups, subset=subsets, sex=sexes)),
-        **_get_index(dict(group=groups, subset=subsets, pop=pops, sex=sexes)),
+        **_get_index(
+            dict(group=groups, subset=subsets, gen_anc=gen_anc_groups, sex=sexes)
+        ),
     }
 
     if downsamplings:
         index_dict.update(
-            {**_get_index(dict(downsampling=downsamplings, group=["adj"], pop=pops))}
+            {
+                **_get_index(
+                    dict(
+                        downsampling=downsamplings,
+                        group=["adj"],
+                        gen_anc=gen_anc_groups,
+                    )
+                )
+            }
         )
 
     return index_dict
@@ -114,7 +124,7 @@ def make_freq_index_dict_from_meta(
 
     The dictionary is keyed by the grouping combinations found in the frequency metadata
     array, where values are the corresponding 0-based indices for the groupings in the
-    frequency array. For example, if the `freq_meta` entry [{'pop': 'nfe'}, {'sex': 'XX'}]
+    frequency array. For example, if the `freq_meta` entry [{'gen_anc': 'nfe'}, {'sex': 'XX'}]
     corresponds to the 5th entry in the frequency array, the returned dictionary entry
     would be {'nfe_XX': 4}.
 

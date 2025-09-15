@@ -14,7 +14,7 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-SEXES = {"Male": "Male", "Female": "Female"}
+SEXES = {"XY": "XY", "XX": "XX"}
 
 
 def adjusted_sex_ploidy_expr(
@@ -61,20 +61,20 @@ def adjusted_sex_ploidy_expr(
 def adjust_sex_ploidy(
     mt: hl.MatrixTable,
     sex_expr: hl.expr.StringExpression,
-    male_str: str = "male",
-    female_str: str = "female",
+    xy_str: str = "XY",
+    xx_str: str = "XX",
 ) -> hl.MatrixTable:
     """
-    Convert males to haploid on non-PAR X/Y, sets females to missing on Y.
+    Convert XY to haploid on non-PAR X/Y, sets XX to missing on Y.
 
     :param mt: Input MatrixTable
-    :param sex_expr: Expression pointing to sex in MT (if not male_str or female_str, no change)
-    :param male_str: String for males (default 'male')
-    :param female_str: String for females (default 'female')
+    :param sex_expr: Expression pointing to sex in MT (if not xy_str or xx_str, no change)
+    :param xy_str: String for XY (default 'XY')
+    :param xx_str: String for XX (default 'XX')
     :return: MatrixTable with fixed ploidy for sex chromosomes
     """
     return mt.annotate_entries(
-        GT=adjusted_sex_ploidy_expr(mt.locus, mt.GT, sex_expr, male_str, female_str)
+        GT=adjusted_sex_ploidy_expr(mt.locus, mt.GT, sex_expr, xy_str, xx_str)
     )
 
 

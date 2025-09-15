@@ -120,10 +120,6 @@ class TestDefaultPublicResourceSource:
                 "s3a://gnomad-public-us-east-1/example.ht",
             ),
             (
-                GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
-                "wasbs://dataset@datasetgnomad.blob.core.windows.net/example.ht",
-            ),
-            (
                 "gs://my-bucket/gnomad-resources",
                 "gs://my-bucket/gnomad-resources/example.ht",
             ),
@@ -154,7 +150,6 @@ class TestDefaultPublicResourceSource:
                 "Registry of Open Data on AWS",
                 GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS,
             ),
-            ("Azure Open Datasets", GnomadPublicResourceSource.AZURE_OPEN_DATASETS),
             ("gs://my-bucket/gnomad-resources", "gs://my-bucket/gnomad-resources"),
         ],
     )
@@ -172,7 +167,6 @@ class TestDefaultPublicResourceSource:
         "cloud_spark_provider,expected_default_source",
         [
             ("dataproc", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
-            ("hdinsight", GnomadPublicResourceSource.AZURE_OPEN_DATASETS),
             ("unknown", GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
             (None, GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS),
         ],
@@ -198,7 +192,7 @@ class TestDefaultPublicResourceSource:
         with (
             patch(
                 "hail.utils.guess_cloud_spark_provider",
-                return_value="hdinsight",
+                return_value="dataproc",
                 create=True,
             ),
             patch.dict(
@@ -254,16 +248,6 @@ def gnomad_public_resource_test_parameters(
             f"gs://gnomad-public-requester-pays{path}",
             GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS,
             f"s3a://gnomad-public-us-east-1{path}",
-        ),
-        (
-            f"gs://gnomad-public{path}",
-            GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
-            f"wasbs://dataset@datasetgnomad.blob.core.windows.net{path}",
-        ),
-        (
-            f"gs://gnomad-public-requester-pays{path}",
-            GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
-            f"wasbs://dataset@datasetgnomad.blob.core.windows.net{path}",
         ),
         (
             f"gs://gnomad-public{path}",

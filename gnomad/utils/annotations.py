@@ -90,6 +90,45 @@ VRS_CHROM_IDS = {
 }
 
 
+def _sum_or_diff_values(
+    val_1_expr: hl.expr.Expression, val_2_expr: hl.expr.Expression, operation: str
+) -> hl.expr.Expression:
+    """
+    Sum or subtract values based on the operation.
+
+    :param val_1_expr: First value to sum or diff.
+    :param val_2_expr: Second value to sum or diff.
+    :param operation: Operation to perform ("sum" or "diff").
+    :return: Merged value.
+    """
+    return hl.if_else(
+        operation == "sum",
+        hl.or_else(val_1_expr, 0) + hl.or_else(val_2_expr, 0),
+        hl.or_else(val_1_expr, 0) - hl.or_else(val_2_expr, 0),
+    )
+
+
+def _handle_negative_values(
+    value_expr: hl.expr.Expression,
+    set_negatives_to_zero: bool = False,
+    error_msg: str = "Negative values found in merged values. Review data or set `set_negatives_to_zero` to True to set negative values to 0.",
+) -> hl.expr.Expression:
+    """
+    Handle negative values in merged expressions.
+
+    :param value_expr: The value expression to check for negative values.
+    :param set_negatives_to_zero: If True, set negative values to 0. If False, raise an error.
+    :param error_msg: Custom error message to display when negative values are found.
+    :return: Value expression with negative value handling applied.
+    """
+    return (
+        hl.case()
+        .when(set_negatives_to_zero, hl.max(value_expr, 0))
+        .when(value_expr >= 0, value_expr)
+        .or_error(error_msg)
+    )
+
+
 def annotate_with_ht(
     t: Union[hl.MatrixTable, hl.Table],
     annotation_ht: hl.Table,
@@ -130,17 +169,17 @@ def annotate_with_ht(
     return t
 
 
-def pop_max_expr(
+def grpmax_expr(
     freq: hl.expr.ArrayExpression,
     freq_meta: hl.expr.ArrayExpression,
-    pops_to_exclude: Optional[Set[str]] = None,
-    pop_label: str = "pop",
+    gen_anc_groups_to_exclude: Optional[Set[str]] = None,
+    gen_anc_label: str = "gen_anc",
 ) -> hl.expr.StructExpression:
     """
 
-    Create an expression containing the frequency information about the population that has the highest AF in `freq_meta`.
+    Create an expression containing the frequency information about the genetic ancestry group that has the highest AF in `freq_meta`.
 
-    Populations specified in `pops_to_exclude` are excluded and only frequencies from adj populations are considered.
+    Genetic ancestry groups specified in `gen_anc_groups_to_exclude` are excluded and only frequencies from adj genetic ancestry groups are considered.
 
     This resulting struct contains the following fields:
 
@@ -148,28 +187,28 @@ def pop_max_expr(
         - AF: float64
         - AN: int32
         - homozygote_count: int32
-        - pop: str
+        - gen_anc: str
 
     :param freq: ArrayExpression of Structs with fields ['AC', 'AF', 'AN', 'homozygote_count']
     :param freq_meta: ArrayExpression of meta dictionaries corresponding to freq (as returned by annotate_freq)
-    :param pops_to_exclude: Set of populations to skip for popmax calcluation
-    :param pop_label: Label of the population field in the meta dictionary
-    :return: Popmax struct
+    :param gen_anc_groups_to_exclude: Set of genetic ancestry groups to skip for genetic ancestry max calculation
+    :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
+    :return: Genetic ancestry max struct
     """
-    _pops_to_exclude = (
-        hl.literal(pops_to_exclude)
-        if pops_to_exclude is not None
+    _gen_anc_groups_to_exclude = (
+        hl.literal(gen_anc_groups_to_exclude)
+        if gen_anc_groups_to_exclude is not None
         else hl.empty_set(hl.tstr)
     )
 
     # pylint: disable=invalid-unary-operand-type
-    popmax_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (hl.set(freq_meta[i].keys()) == {"group", pop_label})
+    gen_anc_max_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
+        lambda i: (hl.set(freq_meta[i].keys()) == {"group", gen_anc_label})
         & (freq_meta[i]["group"] == "adj")
-        & (~_pops_to_exclude.contains(freq_meta[i][pop_label]))
+        & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
     )
-    freq_filtered = popmax_freq_indices.map(
-        lambda i: freq[i].annotate(**{pop_label: freq_meta[i][pop_label]})
+    freq_filtered = gen_anc_max_freq_indices.map(
+        lambda i: freq[i].annotate(**{gen_anc_label: freq_meta[i][gen_anc_label]})
     ).filter(lambda f: f.AC > 0)
 
     sorted_freqs = hl.sorted(freq_filtered, key=lambda x: x.AF, reverse=True)
@@ -243,20 +282,20 @@ def faf_expr(
     freq: hl.expr.ArrayExpression,
     freq_meta: hl.expr.ArrayExpression,
     locus: hl.expr.LocusExpression,
-    pops_to_exclude: Optional[Set[str]] = None,
+    gen_anc_groups_to_exclude: Optional[Set[str]] = None,
     faf_thresholds: List[float] = [0.95, 0.99],
-    pop_label: str = "pop",
+    gen_anc_label: str = "gen_anc",
 ) -> Tuple[hl.expr.ArrayExpression, List[Dict[str, str]]]:
     """
     Calculate the filtering allele frequency (FAF) for each threshold specified in `faf_thresholds`.
 
     See http://cardiodb.org/allelefrequencyapp/ for more information.
 
-    The FAF is computed for each of the following population stratification if found in `freq_meta`:
+    The FAF is computed for each of the following genetic ancestry group stratification if found in `freq_meta`:
 
         - All samples, with adj criteria
-        - For each population, with adj criteria
-        - For all sex/population on the non-PAR regions of sex chromosomes (will be missing on autosomes and PAR regions of sex chromosomes)
+        - For each genetic ancestry group, with adj criteria
+        - For all sex/genetic ancestry group on the non-PAR regions of sex chromosomes (will be missing on autosomes and PAR regions of sex chromosomes)
 
     Each of the FAF entry is a struct with one entry per threshold specified in `faf_thresholds` of type float64.
 
@@ -268,14 +307,14 @@ def faf_expr(
     :param freq: ArrayExpression of call stats structs (typically generated by hl.agg.call_stats)
     :param freq_meta: ArrayExpression of meta dictionaries corresponding to freq (typically generated using annotate_freq)
     :param locus: locus
-    :param pops_to_exclude: Set of populations to exclude from faf calculation (typically bottlenecked or consanguineous populations)
+    :param gen_anc_groups_to_exclude: Set of genetic ancestry groups to exclude from faf calculation (typically bottlenecked or consanguineous genetic ancestry groups)
     :param faf_thresholds: List of FAF thresholds to compute
-    :param pop_label: Label of the population field in the meta dictionary
+    :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
     :return: (FAF expression, FAF metadata)
     """
-    _pops_to_exclude = (
-        hl.literal(pops_to_exclude)
-        if pops_to_exclude is not None
+    _gen_anc_groups_to_exclude = (
+        hl.literal(gen_anc_groups_to_exclude)
+        if gen_anc_groups_to_exclude is not None
         else hl.empty_set(hl.tstr)
     )
 
@@ -285,8 +324,8 @@ def faf_expr(
         & (
             (freq_meta[i].size() == 1)
             | (
-                (hl.set(freq_meta[i].keys()) == {pop_label, "group"})
-                & (~_pops_to_exclude.contains(freq_meta[i][pop_label]))
+                (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group"})
+                & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
             )
         )
     )
@@ -296,8 +335,8 @@ def faf_expr(
         & (
             (freq_meta[i].size() == 2)
             | (
-                (hl.set(freq_meta[i].keys()) == {pop_label, "group", "sex"})
-                & (~_pops_to_exclude.contains(freq_meta[i][pop_label]))
+                (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group", "sex"})
+                & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
             )
         )
     )
@@ -338,7 +377,7 @@ def faf_expr(
 def gen_anc_faf_max_expr(
     faf: hl.expr.ArrayExpression,
     faf_meta: hl.expr.ArrayExpression,
-    pop_label: str = "pop",
+    gen_anc_label: str = "gen_anc",
 ) -> hl.expr.StructExpression:
     """
     Retrieve the maximum FAF and corresponding genetic ancestry for each of the thresholds in `faf`.
@@ -354,11 +393,11 @@ def gen_anc_faf_max_expr(
         `faf_expr` is used, contains fields 'faf95' and 'faf99'.
     :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
         returned by faf_expr)
-    :param pop_label: Label of the population field in the meta dictionary
+    :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
     :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
-        lambda i: (hl.set(i[1].keys()) == {"group", pop_label})
+        lambda i: (hl.set(i[1].keys()) == {"group", gen_anc_label})
         & (i[1]["group"] == "adj")
     )
     max_fafs_expr = hl.struct()
@@ -373,7 +412,7 @@ def gen_anc_faf_max_expr(
                         faf[x[0]][threshold] > 0, faf[x[0]][threshold]
                     ),
                     f"{threshold}_max_gen_anc": hl.or_missing(
-                        faf[x[0]][threshold] > 0, x[1][pop_label]
+                        faf[x[0]][threshold] > 0, x[1][gen_anc_label]
                     ),
                 }
             ),
@@ -1239,23 +1278,23 @@ def missing_callstats_expr() -> hl.expr.StructExpression:
     )
 
 
-def set_female_y_metrics_to_na_expr(
+def set_xx_y_metrics_to_na_expr(
     t: Union[hl.Table, hl.MatrixTable],
     freq_expr: Union[hl.expr.ArrayExpression, str] = "freq",
     freq_meta_expr: Union[hl.expr.ArrayExpression, str] = "freq_meta",
     freq_index_dict_expr: Union[hl.expr.DictExpression, str] = "freq_index_dict",
 ) -> hl.expr.ArrayExpression:
     """
-    Set Y-variant frequency callstats for female-specific metrics to missing structs.
+    Set Y-variant frequency callstats for XX-specific metrics to missing structs.
 
-    :param t: Table or MatrixTable for which to adjust female metrics.
+    :param t: Table or MatrixTable for which to adjust XX metrics.
     :param freq_expr: Array expression or string annotation name for the frequency
         array. Default is "freq".
     :param freq_meta_expr: Array expression or string annotation name for the frequency
         metadata. Default is "freq_meta".
     :param freq_index_dict_expr: Dict expression or string annotation name for the
         frequency metadata index dictionary. Default is "freq_index_dict".
-    :return: Hail array expression to set female Y-variant metrics to missing values.
+    :return: Hail array expression to set XX Y-variant metrics to missing values.
     """
     if isinstance(freq_expr, str):
         freq_expr = t[freq_expr]
@@ -1264,7 +1303,7 @@ def set_female_y_metrics_to_na_expr(
     if isinstance(freq_index_dict_expr, str):
         freq_index_dict_expr = t[freq_index_dict_expr]
 
-    female_idx = hl.map(
+    xx_idx = hl.map(
         lambda x: freq_index_dict_expr[x],
         hl.filter(lambda x: x.contains("XX"), freq_index_dict_expr.keys()),
     )
@@ -1274,7 +1313,7 @@ def set_female_y_metrics_to_na_expr(
         (t.locus.in_y_nonpar() | t.locus.in_y_par()),
         hl.map(
             lambda x: hl.if_else(
-                female_idx.contains(x), missing_callstats_expr(), freq_expr[x]
+                xx_idx.contains(x), missing_callstats_expr(), freq_expr[x]
             ),
             freq_idx_range,
         ),
@@ -1309,6 +1348,171 @@ def hemi_expr(
     )
 
 
+def merge_array_expressions(
+    arrays: List[hl.expr.ArrayExpression],
+    meta: List[List[Dict[str, str]]],
+    operation: str = "sum",
+    set_negatives_to_zero: bool = False,
+    struct_fields: Optional[List[str]] = None,
+    count_arrays: Optional[Dict[str, List[hl.expr.ArrayExpression]]] = None,
+) -> Union[
+    Tuple[hl.expr.ArrayExpression, List[Dict[str, int]]],
+    Tuple[
+        hl.expr.ArrayExpression,
+        List[Dict[str, int]],
+        Dict[str, hl.expr.ArrayExpression],
+    ],
+]:
+    """
+    Merge a list of array expressions based on the supplied `operation`.
+
+    This function can handle both:
+    1. Arrays of integers (e.g., allele numbers).
+    2. Arrays of structs containing integer fields (e.g., frequency structs with AC, AN, etc.).
+
+    .. warning::
+        Arrays must be on the same Table.
+
+    .. note::
+
+        Arrays do not have to contain the same groupings or order of groupings but
+        the array indices for an array in `arrays` must be the same as its associated
+        metadata index in `meta` i.e., `arrays = [arr1, arr2]` then `meta`
+        must equal `[meta1, meta2]` where meta1 contains the metadata information
+        for arr1.
+
+        If `operation` is set to "sum", groups in the merged array
+        will be the union of groupings found within the arrays' metadata and all arrays
+        will be summed by grouping. If `operation` is set to "diff", the merged array
+        will contain groups only found in the first array of `meta`. Any array containing
+        any of these groups will have their values subtracted from the values of the first array.
+
+    :param arrays: List of arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
+    :param meta: List of metadata for arrays being merged.
+    :param operation: Merge operation to perform. Options are "sum" and "diff". If "diff" is passed, the first array in the list will have the other arrays subtracted from it.
+    :param set_negatives_to_zero: If True, set negative array values to 0. If False, raise a ValueError. Default is False.
+    :param struct_fields: List of field names to merge if arrays contain structs. If None, arrays are treated as integer arrays. Default is None.
+    :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as meta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
+    :return: Tuple of merged array, metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
+    """
+    if len(arrays) < 2:
+        raise ValueError("Must provide at least two arrays to merge!")
+    if len(arrays) != len(meta):
+        raise ValueError("Length of arrays and meta must be equal!")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'!")
+    if count_arrays is not None:
+        for k, count_array in count_arrays.items():
+            if len(count_array) != len(meta):
+                raise ValueError(f"Length of count_array '{k}' and meta must be equal!")
+
+    # Store original metadata for count arrays processing.
+    original_meta = meta
+
+    # Create a list where each entry is a dictionary whose key is an aggregation
+    # group and the value is the corresponding index in the array.
+    meta = [hl.dict(hl.enumerate(m).map(lambda x: (x[1], [x[0]]))) for m in meta]
+    all_keys = hl.fold(lambda i, j: (i | j.key_set()), meta[0].key_set(), meta[1:])
+
+    # Merge dictionaries in the list into a single dictionary where key is aggregation
+    # group and the value is a list of the group's index in each of the arrays, if
+    # it exists. For "sum" operation, use keys, aka groups, found in all dictionaries.
+    # For "diff" operations, only use key_set from the first entry.
+    meta = hl.fold(
+        lambda i, j: hl.dict(
+            (hl.if_else(operation == "sum", all_keys, i.key_set())).map(
+                lambda k: (
+                    k,
+                    i.get(k, [hl.missing(hl.tint32)]).extend(
+                        j.get(k, [hl.missing(hl.tint32)])
+                    ),
+                )
+            )
+        ),
+        meta[0],
+        meta[1:],
+    )
+
+    # Create a list of tuples from the dictionary, sorted by the list of indices for
+    # each aggregation group.
+    meta = hl.sorted(meta.items(), key=lambda f: f[1])
+
+    # Create a list of the aggregation groups, maintaining the sorted order.
+    new_meta = meta.map(lambda x: x[0])
+
+    # Create array for each aggregation group of arrays containing the group's values
+    # from each array.
+    meta_idx = meta.map(lambda x: hl.zip(arrays, x[1]).map(lambda i: i[0][i[1]]))
+
+    if struct_fields is not None:
+        # Handle struct arrays.
+        new_array = meta_idx.map(
+            lambda x: hl.fold(
+                lambda i, j: hl.struct(
+                    **{
+                        field: _sum_or_diff_values(i[field], j[field], operation)
+                        for field in struct_fields
+                    }
+                ),
+                x[0].select(*struct_fields),
+                x[1:],
+            )
+        )
+    else:
+        # Handle integer arrays.
+        new_array = meta_idx.map(
+            lambda x: hl.fold(
+                lambda i, j: _sum_or_diff_values(i, j, operation),
+                x[0],
+                x[1:],
+            )
+        )
+
+    # Check and see if any value within the merged array is negative. If so,
+    # raise an error if set_negatives_to_zero is False or set the value to 0 if
+    # set_negatives_to_zero is True.
+    if operation == "diff":
+        negative_value_error_msg = (
+            "Negative values found in merged array. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+
+        if struct_fields is not None:
+            new_array = new_array.map(
+                lambda x: x.annotate(
+                    **{
+                        field: _handle_negative_values(
+                            x[field], set_negatives_to_zero, negative_value_error_msg
+                        )
+                        for field in struct_fields
+                    }
+                )
+            )
+        else:
+            new_array = new_array.map(
+                lambda x: _handle_negative_values(
+                    x, set_negatives_to_zero, negative_value_error_msg
+                )
+            )
+
+    # Create count_array_meta_idx using meta then iterate through each group
+    # in the list of tuples to access each group's entry per array. Sum or diff the
+    # values for each group across arrays to make a new_counts_array annotation.
+    if count_arrays:
+        new_counts_array_dict = {}
+        for k, count_array in count_arrays.items():
+            new_counts_array = merge_array_expressions(
+                count_array, original_meta, operation, set_negatives_to_zero
+            )[0]
+            new_counts_array_dict[k] = new_counts_array
+
+    new_meta = hl.eval(new_meta)
+    if count_arrays:
+        return new_array, new_meta, new_counts_array_dict
+    else:
+        return new_array, new_meta
+
+
 def merge_freq_arrays(
     farrays: List[hl.expr.ArrayExpression],
     fmeta: List[List[Dict[str, str]]],
@@ -1341,7 +1545,7 @@ def merge_freq_arrays(
         will be the union of groupings found within the arrays' metadata and all arrays
         with be summed by grouping. If `operation` is set to "diff", the merged array
         will contain groups only found in the first array of `fmeta`. Any array containing
-        any of these groups will have thier values subtracted from the values of the first array.
+        any of these groups will have their values subtracted from the values of the first array.
 
     :param farrays: List of frequency arrays to merge. First entry in the list is the primary array to which other arrays will be added or subtracted. All arrays must be on the same Table.
     :param fmeta: List of frequency metadata for arrays being merged.
@@ -1350,134 +1554,29 @@ def merge_freq_arrays(
     :param count_arrays: Dictionary of Lists of arrays containing counts to merge using the passed operation. Must use the same group indexing as fmeta. Keys are the descriptor names, values are Lists of arrays to merge. Default is None.
     :return: Tuple of merged frequency array, frequency metadata list and if `count_arrays` is not None, a dictionary of merged count arrays.
     """
-    if len(farrays) < 2:
-        raise ValueError("Must provide at least two frequency arrays to merge!")
-    if len(farrays) != len(fmeta):
-        raise ValueError("Length of farrays and fmeta must be equal!")
-    if operation not in ["sum", "diff"]:
-        raise ValueError("Operation must be either 'sum' or 'diff'!")
-    if count_arrays is not None:
-        for k, count_array in count_arrays.items():
-            if len(count_array) != len(fmeta):
-                raise ValueError(
-                    f"Length of  count_array '{k}' and fmeta must be equal!"
-                )
-
-    # Create a list where each entry is a dictionary whose key is an aggregation
-    # group and the value is the corresponding index in the freq array.
-    fmeta = [hl.dict(hl.enumerate(f).map(lambda x: (x[1], [x[0]]))) for f in fmeta]
-    all_keys = hl.fold(lambda i, j: (i | j.key_set()), fmeta[0].key_set(), fmeta[1:])
-
-    # Merge dictionaries in the list into a single dictionary where key is aggregation
-    # group and the value is a list of the group's index in each of the freq arrays, if
-    # it exists. For "sum" operation, use keys, aka groups, found in all freq dictionaries.
-    # For "diff" operations, only use key_set from the first entry.
-    fmeta = hl.fold(
-        lambda i, j: hl.dict(
-            (hl.if_else(operation == "sum", all_keys, i.key_set())).map(
-                lambda k: (
-                    k,
-                    i.get(k, [hl.missing(hl.tint32)]).extend(
-                        j.get(k, [hl.missing(hl.tint32)])
-                    ),
-                )
-            )
-        ),
-        fmeta[0],
-        fmeta[1:],
-    )
-
-    # Create a list of tuples from the dictionary, sorted by the list of indices for
-    # each aggregation group.
-    fmeta = hl.sorted(fmeta.items(), key=lambda f: f[1])
-
-    # Create a list of the aggregation groups, maintaining the sorted order.
-    new_freq_meta = fmeta.map(lambda x: x[0])
-
-    # Create array for each aggregation group of arrays containing the group's freq
-    # values from each freq array.
-    freq_meta_idx = fmeta.map(lambda x: hl.zip(farrays, x[1]).map(lambda i: i[0][i[1]]))
-
-    def _sum_or_diff_fields(
-        field_1_expr: str, field_2_expr: str
-    ) -> hl.expr.Int32Expression:
-        """
-        Sum or subtract fields in call statistics struct.
-
-        :param field_1_expr: First field to sum or diff.
-        :param field_2_expr: Second field to sum or diff.
-        :return: Merged field value.
-        """
-        return hl.if_else(
-            operation == "sum",
-            hl.or_else(field_1_expr, 0) + hl.or_else(field_2_expr, 0),
-            hl.or_else(field_1_expr, 0) - hl.or_else(field_2_expr, 0),
-        )
-
-    # Iterate through the groups and their freq lists to merge callstats.
+    # Define the callstat annotations to merge.
     callstat_ann = ["AC", "AN", "homozygote_count"]
     callstat_ann_af = ["AC", "AF", "AN", "homozygote_count"]
-    new_freq = freq_meta_idx.map(
-        lambda x: hl.bind(
-            lambda y: y.annotate(AF=hl.or_missing(y.AN > 0, y.AC / y.AN)).select(
-                *callstat_ann_af
-            ),
-            hl.fold(
-                lambda i, j: hl.struct(
-                    **{ann: _sum_or_diff_fields(i[ann], j[ann]) for ann in callstat_ann}
-                ),
-                x[0].select(*callstat_ann),
-                x[1:],
-            ),
+
+    # Use the generalized function to merge the frequency arrays.
+    new_freq, new_freq_meta = merge_array_expressions(
+        farrays, fmeta, operation, set_negatives_to_zero, struct_fields=callstat_ann
+    )[:2]
+
+    # Add AF calculation for the merged frequency arrays.
+    new_freq = new_freq.map(
+        lambda x: x.annotate(AF=hl.or_missing(x.AN > 0, x.AC / x.AN)).select(
+            *callstat_ann_af
         )
     )
-    # Create count_array_meta_idx using the fmeta then iterate through each group
-    # in the list of tuples to access each group's entry per array. Sum or diff the
-    # values for each group across arrays to make a new_counts_array annotation.
+
     if count_arrays:
         new_counts_array_dict = {}
         for k, count_array in count_arrays.items():
-            count_array_meta_idx = fmeta.map(
-                lambda x: hl.zip(count_array, x[1]).map(lambda i: i[0][i[1]])
-            )
-
-            new_counts_array_dict[k] = count_array_meta_idx.map(
-                lambda x: hl.fold(
-                    lambda i, j: _sum_or_diff_fields(i, j),
-                    x[0],
-                    x[1:],
-                ),
-            )
-    # Check and see if any annotation within the merged array is negative. If so,
-    # raise an error if set_negatives_to_zero is False or set the value to 0 if
-    # set_negatives_to_zero is True.
-    if operation == "diff":
-        negative_value_error_msg = (
-            "Negative values found in merged %s array. Review data or set"
-            " `set_negatives_to_zero` to True to set negative values to 0."
-        )
-        callstat_ann.append("AF")
-        new_freq = new_freq.map(
-            lambda x: x.annotate(
-                **{
-                    ann: (
-                        hl.case()
-                        .when(set_negatives_to_zero, hl.max(x[ann], 0))
-                        .when(x[ann] >= 0, x[ann])
-                        .or_error(negative_value_error_msg % "freq")
-                    )
-                    for ann in callstat_ann
-                }
-            )
-        )
-        if count_arrays:
-            for k, new_counts_array in new_counts_array_dict.items():
-                new_counts_array_dict[k] = new_counts_array.map(
-                    lambda x: hl.case()
-                    .when(set_negatives_to_zero, hl.max(x, 0))
-                    .when(x >= 0, x)
-                    .or_error(negative_value_error_msg % "counts")
-                )
+            new_counts_array = merge_array_expressions(
+                count_array, fmeta, operation, set_negatives_to_zero
+            )[0]
+            new_counts_array_dict[k] = new_counts_array
 
     new_freq_meta = hl.eval(new_freq_meta)
     if count_arrays:
@@ -1486,34 +1585,81 @@ def merge_freq_arrays(
         return new_freq, new_freq_meta
 
 
-def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.expr.Expression:
+def merge_histograms(
+    hists: List[hl.expr.StructExpression],
+    operation: str = "sum",
+    set_negatives_to_zero: bool = False,
+) -> hl.expr.Expression:
     """
     Merge a list of histogram annotations.
 
-    This function merges a list of histogram annotations by summing the arrays
-    in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
-    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing them.
+    This function merges a list of histogram annotations by summing or subtracting the
+    arrays in an element-wise fashion. It keeps one 'bin_edge' annotation but merges the
+    'bin_freq', 'n_smaller', and 'n_larger' annotations by summing or subtracting them.
 
     .. note::
 
-        Bin edges are assumed to be the same for all histograms.
+        Bin edges are assumed to be the same for all histograms, and lengths of bin edges and frequencies are assumed to be the same for all histograms.
 
     :param hists: List of histogram structs to merge.
+    :param operation: Merge operation to perform. Options are "sum" and "diff".
+        If "diff" is passed, the first histogram will have the other histograms
+        subtracted from it. Default is "sum".
+    :param set_negatives_to_zero: If True, set negative values to 0. If False, raise
+        a ValueError. Default is False.
     :return: Merged histogram struct.
     """
+    if len(hists) < 2:
+        raise ValueError("Must provide at least two histograms to merge!")
+    if operation not in ["sum", "diff"]:
+        raise ValueError("Operation must be either 'sum' or 'diff'!")
+
+    def _merge_histogram_values(
+        i: hl.expr.StructExpression, j: hl.expr.StructExpression
+    ) -> hl.expr.StructExpression:
+        """
+        Merge two histogram structs together.
+
+        :param i: First histogram struct (accumulator).
+        :param j: Second histogram struct to merge.
+        :return: Merged histogram struct.
+        """
+        merged_bin_freq = hl.zip(
+            hl.or_else(i.bin_freq, hl.literal([hl.missing(hl.tint)])),
+            hl.or_else(j.bin_freq, hl.literal([hl.missing(hl.tint)])),
+            fill_missing=True,
+        ).map(lambda x: _sum_or_diff_values(x[0], x[1], operation))
+
+        merged_n_smaller = _sum_or_diff_values(i.n_smaller, j.n_smaller, operation)
+        merged_n_larger = _sum_or_diff_values(i.n_larger, j.n_larger, operation)
+
+        # If specified, set negative values in histogram to zero after merge operation,
+        # otherwise raise an error.
+        negative_value_error_msg = (
+            "Negative values found in merged histogram. Review data or set"
+            " `set_negatives_to_zero` to True to set negative values to 0."
+        )
+        merged_bin_freq = merged_bin_freq.map(
+            lambda x: _handle_negative_values(
+                x, set_negatives_to_zero, negative_value_error_msg
+            )
+        )
+        merged_n_smaller = _handle_negative_values(
+            merged_n_smaller, set_negatives_to_zero, negative_value_error_msg
+        )
+        merged_n_larger = _handle_negative_values(
+            merged_n_larger, set_negatives_to_zero, negative_value_error_msg
+        )
+
+        return hl.struct(
+            bin_edges=hl.or_else(i.bin_edges, j.bin_edges),
+            bin_freq=merged_bin_freq,
+            n_smaller=merged_n_smaller,
+            n_larger=merged_n_larger,
+        )
+
     return hl.fold(
-        lambda i, j: hl.struct(
-            **{
-                "bin_edges": hl.or_else(i.bin_edges, j.bin_edges),
-                "bin_freq": hl.zip(
-                    hl.or_else(i.bin_freq, hl.literal([hl.missing(hl.tint)])),
-                    hl.or_else(j.bin_freq, hl.literal([hl.missing(hl.tint)])),
-                    fill_missing=True,
-                ).map(lambda x: hl.or_else(x[0], 0) + hl.or_else(x[1], 0)),
-                "n_smaller": hl.or_else(i.n_smaller, 0) + hl.or_else(j.n_smaller, 0),
-                "n_larger": hl.or_else(i.n_larger, 0) + hl.or_else(j.n_larger, 0),
-            }
-        ),
+        _merge_histogram_values,
         hists[0].select("bin_edges", "bin_freq", "n_smaller", "n_larger"),
         hists[1:],
     )
@@ -1523,8 +1669,8 @@ def merge_histograms(hists: List[hl.expr.StructExpression]) -> hl.expr.Expressio
 def annotate_freq(
     mt: hl.MatrixTable,
     sex_expr: Optional[hl.expr.StringExpression] = None,
-    pop_expr: Optional[hl.expr.StringExpression] = None,
-    subpop_expr: Optional[hl.expr.StringExpression] = None,
+    gen_anc_expr: Optional[hl.expr.StringExpression] = None,
+    subgrp_expr: Optional[hl.expr.StringExpression] = None,
     additional_strata_expr: Optional[
         Union[
             List[Dict[str, hl.expr.StringExpression]],
@@ -1533,7 +1679,7 @@ def annotate_freq(
     ] = None,
     downsamplings: Optional[List[int]] = None,
     downsampling_expr: Optional[hl.expr.StructExpression] = None,
-    ds_pop_counts: Optional[Dict[str, int]] = None,
+    ds_gen_anc_counts: Optional[Dict[str, int]] = None,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
     annotate_mt: bool = True,
 ) -> Union[hl.Table, hl.MatrixTable]:
@@ -1586,35 +1732,35 @@ def annotate_freq(
     If the `additional_strata_expr` parameter is used, frequencies will be computed for
     each of the strata dictionaries across all values. For example, if
     `additional_strata_expr` is set to `[{'platform': mt.platform},
-    {'platform':mt.platform, 'pop': mt.pop}, {'age_bin': mt.age_bin}]`, then
+    {'platform':mt.platform, 'gen_anc': mt.gen_anc}, {'age_bin': mt.age_bin}]`, then
     frequencies will be computed for each of the values of `mt.platform`, each of the
-    combined values of `mt.platform` and `mt.pop`, and each of the values of
+    combined values of `mt.platform` and `mt.gen_anc`, and each of the values of
     `mt.age_bin`.
 
     .. rubric:: The `downsamplings` parameter
 
     If the `downsamplings` parameter is used without the `downsampling_expr`,
-    frequencies will be computed for all samples and by population (if `pop_expr` is
+    frequencies will be computed for all samples and by genetic ancestry group (if `gen_anc_expr` is
     specified) by downsampling the number of samples without replacement to each of the
     numbers specified in the `downsamplings` array, provided that there are enough
-    samples in the dataset. In addition, if `pop_expr` is specified, a downsampling to
-    each of the exact number of samples present in each population is added. Note that
+    samples in the dataset. In addition, if `gen_anc_expr` is specified, a downsampling to
+    each of the exact number of samples present in each genetic ancestry group is added. Note that
     samples are randomly sampled only once, meaning that the lower downsamplings are
     subsets of the higher ones. If the `downsampling_expr` parameter is used with the
     `downsamplings` parameter, the `downsamplings` parameter informs the function which
     downsampling groups were already created and are to be used in the frequency
     calculation.
 
-    .. rubric:: The `downsampling_expr` and `ds_pop_counts` parameters
+    .. rubric:: The `downsampling_expr` and `ds_gen_anc_counts` parameters
 
     If the `downsampling_expr` parameter is used, `downsamplings` must also be set
-    and frequencies will be computed for all samples and by population (if `pop_expr`
+    and frequencies will be computed for all samples and by genetic ancestry group (if `gen_anc_expr`
     is specified) using the downsampling indices to each of the numbers specified in
-    the `downsamplings` array. The function expects a 'global_idx', and if `pop_expr`
-    is used, a 'pop_idx' within the `downsampling_expr` to be used to determine if a
+    the `downsamplings` array. The function expects a 'global_idx', and if `gen_anc_expr`
+    is used, a 'gen_anc_idx' within the `downsampling_expr` to be used to determine if a
     sample belongs within a certain downsampling group, i.e. the index is less than
     the group size. `The function `annotate_downsamplings` can be used to to create
-    the `downsampling_expr`, `downsamplings`, and `ds_pop_counts` expressions.
+    the `downsampling_expr`, `downsamplings`, and `ds_gen_anc_counts` expressions.
 
     .. rubric:: The `entry_agg_funcs` parameter
 
@@ -1628,24 +1774,24 @@ def annotate_freq(
     array of the number of adj samples per strata in each row.
 
     :param mt: Input MatrixTable
-    :param sex_expr: When specified, frequencies are stratified by sex. If `pop_expr`
-        is also specified, then a pop/sex stratifiction is added.
-    :param pop_expr: When specified, frequencies are stratified by population. If
-        `sex_expr` is also specified, then a pop/sex stratifiction is added.
-    :param subpop_expr: When specified, frequencies are stratified by sub-continental
-        population. Note that `pop_expr` is required as well when using this option.
+    :param sex_expr: When specified, frequencies are stratified by sex. If `gen_anc_expr`
+        is also specified, then a genetic ancestry group/sex stratification is added.
+    :param gen_anc_expr: When specified, frequencies are stratified by genetic ancestry group. If
+        `sex_expr` is also specified, then a genetic ancestry group/sex stratification is added.
+    :param subgrp_expr: When specified, frequencies are stratified by genetic ancestry subgroup.
+        Note that `gen_anc_expr` is required as well when using this option.
     :param additional_strata_expr: When specified, frequencies are stratified by the
         given additional strata. This can e.g. be used to stratify by platform,
-        platform-pop, platform-pop-sex.
+        platform-gen-anc, platform-gen-anc-sex.
     :param downsamplings: When specified, frequencies are computed by downsampling the
-        data to the number of samples given in the list. Note that if `pop_expr` is
-        specified, downsamplings by population is also computed.
+        data to the number of samples given in the list. Note that if `gen_anc_expr` is
+        specified, downsamplings by genetic ancestry group is also computed.
     :param downsampling_expr: When specified, frequencies are computed using the
-        downsampling indices in the provided StructExpression. Note that if `pop_idx`
-        is specified within the struct, downsamplings by population is also computed.
-    :param ds_pop_counts: When specified, frequencies are computed by downsampling the
-        data to the number of samples per pop in the dict. The key is the population
-        and the value is the number of samples.
+        downsampling indices in the provided StructExpression. Note that if `gen_anc_idx`
+        is specified within the struct, downsamplings by genetic ancestry group is also computed.
+    :param ds_gen_anc_counts: When specified, frequencies are computed by downsampling the
+        data to the number of samples per genetic ancestry group in the dict. The key is the
+        genetic ancestry group and the value is the number of samples.
     :param entry_agg_funcs: When specified, additional annotations are added to the
         output Table/MatrixTable. The keys of the dict are the names of the annotations
         and the values are tuples of functions. The first function is used to transform
@@ -1661,11 +1807,11 @@ def annotate_freq(
             errors.append(
                 "annotate_freq requires `downsamplings` when using `downsampling_expr`"
             )
-        if downsampling_expr.get("pop_idx") is not None:
-            if ds_pop_counts is None:
+        if downsampling_expr.get("gen_anc_idx") is not None:
+            if ds_gen_anc_counts is None:
                 errors.append(
-                    "annotate_freq requires `ds_pop_counts` when using "
-                    "`downsampling_expr` with pop_idx"
+                    "annotate_freq requires `ds_gen_anc_counts` when using "
+                    "`downsampling_expr` with gen_anc_idx"
                 )
     if errors:
         raise ValueError("The following errors were found: \n" + "\n".join(errors))
@@ -1673,16 +1819,18 @@ def annotate_freq(
     # Generate downsamplings and assign downsampling_expr if it is None when
     # downsamplings is supplied.
     if downsamplings is not None and downsampling_expr is None:
-        ds_ht = annotate_downsamplings(mt, downsamplings, pop_expr=pop_expr).cols()
+        ds_ht = annotate_downsamplings(
+            mt, downsamplings, gen_anc_expr=gen_anc_expr
+        ).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)
-        ds_pop_counts = hl.eval(ds_ht.ds_pop_counts)
+        ds_gen_anc_counts = hl.eval(ds_ht.ds_gen_anc_counts)
         downsampling_expr = ds_ht[mt.col_key].downsampling
 
     # Build list of all stratification groups to be used in the frequency calculation.
     strata_expr = build_freq_stratification_list(
         sex_expr=sex_expr,
-        pop_expr=pop_expr,
-        subpop_expr=subpop_expr,
+        gen_anc_expr=gen_anc_expr,
+        subgrp_expr=subgrp_expr,
         additional_strata_expr=additional_strata_expr,
         downsampling_expr=downsampling_expr,
     )
@@ -1698,7 +1846,7 @@ def annotate_freq(
         ht,
         strata_expr,
         downsamplings=downsamplings,
-        ds_pop_counts=ds_pop_counts,
+        ds_gen_anc_counts=ds_gen_anc_counts,
     )
 
     freq_ht = compute_freq_by_strata(
@@ -1719,25 +1867,25 @@ def annotate_freq(
 def annotate_downsamplings(
     t: Union[hl.MatrixTable, hl.Table],
     downsamplings: List[int],
-    pop_expr: Optional[hl.expr.StringExpression] = None,
+    gen_anc_expr: Optional[hl.expr.StringExpression] = None,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Annotate MatrixTable or Table with downsampling groups.
 
     :param t: Input MatrixTable or Table.
     :param downsamplings: List of downsampling sizes.
-    :param pop_expr: Optional expression for population group. When provided, population
-        sample sizes are added as values to downsamplings.
+    :param gen_anc_expr: Optional expression for genetic ancestry group. When provided, genetic ancestry group
+        downsamplings will be computed for each genetic ancestry group.
     :return: MatrixTable or Table with downsampling annotations.
     """
     if isinstance(t, hl.MatrixTable):
-        if pop_expr is not None:
-            ht = t.annotate_cols(pop=pop_expr).cols()
+        if gen_anc_expr is not None:
+            ht = t.annotate_cols(gen_anc=gen_anc_expr).cols()
         else:
             ht = t.cols()
     else:
-        if pop_expr is not None:
-            ht = t.annotate(pop=pop_expr)
+        if gen_anc_expr is not None:
+            ht = t.annotate(gen_anc=gen_anc_expr)
         else:
             ht = t
 
@@ -1747,18 +1895,18 @@ def annotate_downsamplings(
     # the downsamplings.
     scan_expr = {"global_idx": hl.scan.count()}
 
-    # If pop_expr is provided, add all pop counts to the downsamplings list.
-    if pop_expr is not None:
-        pop_counts = ht.aggregate(
-            hl.agg.filter(hl.is_defined(ht.pop), hl.agg.counter(ht.pop))
+    # If gen_anc_expr is provided, add all gen_anc counts to the downsamplings list.
+    if gen_anc_expr is not None:
+        gen_anc_counts = ht.aggregate(
+            hl.agg.filter(hl.is_defined(ht.gen_anc), hl.agg.counter(ht.gen_anc))
         )
-        downsamplings = [x for x in downsamplings if x <= sum(pop_counts.values())]
-        downsamplings = sorted(set(downsamplings + list(pop_counts.values())))
-        # Add an index by pop for use in computing frequencies, or other aggregate stats
+        downsamplings = [x for x in downsamplings if x <= sum(gen_anc_counts.values())]
+        downsamplings = sorted(set(downsamplings + list(gen_anc_counts.values())))
+        # Add an index by gen_anc for use in computing frequencies, or other aggregate stats
         # on the downsamplings.
-        scan_expr["pop_idx"] = hl.scan.counter(ht.pop).get(ht.pop, 0)
+        scan_expr["gen_anc_idx"] = hl.scan.counter(ht.gen_anc).get(ht.gen_anc, 0)
     else:
-        pop_counts = None
+        gen_anc_counts = None
     logger.info("Found %i downsamplings: %s", len(downsamplings), downsamplings)
 
     ht = ht.annotate(**scan_expr)
@@ -1769,18 +1917,18 @@ def annotate_downsamplings(
     else:
         t = t.annotate(downsampling=ht[t.s])
 
-    t = t.annotate_globals(
-        downsamplings=downsamplings,
-        ds_pop_counts=pop_counts,
-    )
+    t = t.annotate_globals(downsamplings=downsamplings)
+
+    if gen_anc_counts:
+        t = t.annotate_globals(ds_gen_anc_counts=gen_anc_counts)
 
     return t
 
 
 def build_freq_stratification_list(
     sex_expr: Optional[hl.expr.StringExpression] = None,
-    pop_expr: Optional[hl.expr.StringExpression] = None,
-    subpop_expr: Optional[hl.expr.StringExpression] = None,
+    gen_anc_expr: Optional[hl.expr.StringExpression] = None,
+    subgrp_expr: Optional[hl.expr.StringExpression] = None,
     additional_strata_expr: Optional[
         Union[
             List[Dict[str, hl.expr.StringExpression]],
@@ -1798,44 +1946,43 @@ def build_freq_stratification_list(
         `generate_freq_group_membership_array`.
 
     :param sex_expr: When specified, the returned list contains a stratification for
-        sex. If `pop_expr` is also specified, then the returned list also contains a
-        pop/sex stratification.
-    :param pop_expr: When specified, the returned list contains a stratification for
-        population. If `sex_expr` is also specified, then the returned list also
-        contains a pop/sex stratification.
-    :param subpop_expr: When specified, the returned list contains a stratification for
-        sub-continental population. Note that `pop_expr` is required as well when using
+        sex. If `gen_anc_expr` is also specified, then the returned list also contains a
+        stratification for sex/genetic ancestry group.
+    :param gen_anc_expr: When specified, the returned list contains a stratification for
+        genetic ancestry group.
+    :param subgrp_expr: When specified, the returned list contains a stratification for
+        genetic ancestry subgroup. Note that `gen_anc_expr` is required as well when using
         this option.
     :param additional_strata_expr: When specified, the returned list contains a
         stratification for each of the additional strata. This can e.g. be used to
-        stratify by platform, platform-pop, platform-pop-sex.
+        stratify by platform, platform-gen-anc, platform-gen-anc-sex.
     :param downsampling_expr: When specified, the returned list contains a
-        stratification for downsampling. If `pop_expr` is also specified, then the
-        returned list also contains a downsampling/pop stratification.
+        stratification for downsampling. If `gen_anc_expr` is also specified, then the
+        returned list also contains a downsampling/gen-anc stratification.
     :return: List of dictionaries specifying stratification groups where the keys of
         each dictionary are strings and the values are corresponding expressions that
         define the values to stratify frequency calculations by.
     """
     errors = []
-    if subpop_expr is not None and pop_expr is None:
-        errors.append("annotate_freq requires pop_expr when using subpop_expr")
+    if subgrp_expr is not None and gen_anc_expr is None:
+        errors.append("annotate_freq requires gen_anc_expr when using subgrp_expr")
 
     if downsampling_expr is not None:
         if downsampling_expr.get("global_idx") is None:
             errors.append(
                 "annotate_freq requires `downsampling_expr` with key 'global_idx'"
             )
-        if downsampling_expr.get("pop_idx") is None:
-            if pop_expr is not None:
+        if downsampling_expr.get("gen_anc_idx") is None:
+            if gen_anc_expr is not None:
                 errors.append(
-                    "annotate_freq requires `downsampling_expr` with key 'pop_idx' when"
-                    " using `pop_expr`"
+                    "annotate_freq requires `downsampling_expr` with key 'gen_anc_idx' when"
+                    " using `gen_anc_expr`"
                 )
         else:
-            if pop_expr is None:
+            if gen_anc_expr is None:
                 errors.append(
-                    "annotate_freq requires `pop_expr` when using `downsampling_expr` "
-                    "with pop_idx"
+                    "annotate_freq requires `gen_anc_expr` when using `downsampling_expr` "
+                    "with gen_anc_idx"
                 )
 
     if errors:
@@ -1843,20 +1990,20 @@ def build_freq_stratification_list(
 
     # Build list of strata expressions based on supplied parameters.
     strata_expr = []
-    if pop_expr is not None:
-        strata_expr.append({"pop": pop_expr})
+    if gen_anc_expr is not None:
+        strata_expr.append({"gen_anc": gen_anc_expr})
     if sex_expr is not None:
         strata_expr.append({"sex": sex_expr})
-        if pop_expr is not None:
-            strata_expr.append({"pop": pop_expr, "sex": sex_expr})
-    if subpop_expr is not None:
-        strata_expr.append({"pop": pop_expr, "subpop": subpop_expr})
+        if gen_anc_expr is not None:
+            strata_expr.append({"gen_anc": gen_anc_expr, "sex": sex_expr})
+    if subgrp_expr is not None:
+        strata_expr.append({"gen_anc": gen_anc_expr, "subgrp": subgrp_expr})
 
-    # Add downsampling to strata expressions, include pop in the strata if supplied.
+    # Add downsampling to strata expressions, include gen_anc in the strata if supplied.
     if downsampling_expr is not None:
         downsampling_strata = {"downsampling": downsampling_expr}
-        if pop_expr is not None:
-            downsampling_strata["pop"] = pop_expr
+        if gen_anc_expr is not None:
+            downsampling_strata["gen_anc"] = gen_anc_expr
         strata_expr.append(downsampling_strata)
 
     # Add additional strata expressions.
@@ -1872,7 +2019,7 @@ def generate_freq_group_membership_array(
     ht: hl.Table,
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
     downsamplings: Optional[List[int]] = None,
-    ds_pop_counts: Optional[Dict[str, int]] = None,
+    ds_gen_anc_counts: Optional[Dict[str, int]] = None,
     remove_zero_sample_groups: bool = False,
     no_raw_group: bool = False,
 ) -> hl.Table:
@@ -1888,7 +2035,7 @@ def generate_freq_group_membership_array(
         - freq_meta: Each element of the list contains metadata on a stratification
           group.
         - freq_meta_sample_count: sample count per grouping defined in `freq_meta`.
-        - If downsamplings or ds_pop_counts are specified, they are also added as
+        - If downsamplings or ds_gen_anc_counts are specified, they are also added as
           global annotations on the returned Table.
 
     Each sample is annotated with a 'group_membership' array indicating whether the
@@ -1900,7 +2047,7 @@ def generate_freq_group_membership_array(
         the keys of each dictionary are strings and the values are corresponding
         expressions that define the values to stratify frequency calculations by.
     :param downsamplings: List of downsampling values to include in the stratifications.
-    :param ds_pop_counts: Dictionary of population counts for each downsampling value.
+    :param ds_gen_anc_counts: Dictionary of genetic ancestry group counts for each downsampling value.
     :param remove_zero_sample_groups: Whether to remove groups with a sample count of 0.
         Default is False.
     :param no_raw_group: Whether to remove the raw group from the 'group_membership'
@@ -1913,11 +2060,11 @@ def generate_freq_group_membership_array(
     global_idx_in_ds_expr = any(
         "global_idx" in s["downsampling"] for s in strata_expr if "downsampling" in s
     )
-    pop_in_strata = any("pop" in s for s in strata_expr)
-    pop_idx_in_ds_expr = any(
-        "pop_idx" in s["downsampling"]
+    gen_anc_in_strata = any("gen_anc" in s for s in strata_expr)
+    gen_anc_idx_in_ds_expr = any(
+        "gen_anc_idx" in s["downsampling"]
         for s in strata_expr
-        if "downsampling" in s and ds_pop_counts is not None
+        if "downsampling" in s and ds_gen_anc_counts is not None
     )
 
     if downsamplings is not None and not ds_in_strata:
@@ -1930,15 +2077,15 @@ def generate_freq_group_membership_array(
             "Strata must contain a downsampling expression with 'global_idx' when "
             "downsamplings are provided."
         )
-    if ds_pop_counts is not None and not pop_in_strata:
+    if ds_gen_anc_counts is not None and not gen_anc_in_strata:
         errors.append(
-            "Strata must contain a population expression 'pop' when ds_pop_counts "
+            "Strata must contain a genetic ancestry group expression 'gen_anc' when ds_gen_anc_counts "
             " are provided."
         )
-    if ds_pop_counts is not None and not pop_idx_in_ds_expr:
+    if ds_gen_anc_counts is not None and not gen_anc_idx_in_ds_expr:
         errors.append(
-            "Strata must contain a downsampling expression with 'pop_idx' when "
-            "ds_pop_counts are provided."
+            "Strata must contain a downsampling expression with 'gen_anc_idx' when "
+            "ds_gen_anc_counts are provided."
         )
 
     if errors:
@@ -1960,37 +2107,37 @@ def generate_freq_group_membership_array(
     for strata in strata_expr:
         downsampling_expr = strata.get("downsampling")
         strata_values = []
-        # Add to all downsampling groups, both global and population-specific, to
+        # Add to all downsampling groups, both global and genetic ancestry group-specific, to
         # strata.
         for s in strata:
             if s == "downsampling":
                 v = [("downsampling", d) for d in downsamplings]
             else:
                 v = [(s, k[s]) for k in strata_counts.get(s, {})]
-                if s == "pop" and downsampling_expr is not None:
-                    v.append(("pop", "global"))
+                if s == "gen_anc" and downsampling_expr is not None:
+                    v.append(("gen_anc", "global"))
             strata_values.append(v)
 
         # Get all combinations of strata values.
         strata_combinations = itertools.product(*strata_values)
         # Create sample group filters that are evaluated on each sample for each strata
         # combination. Strata combinations are evaluated as a logical AND, e.g.
-        # {"pop":nfe, "downsampling":1000} or "nfe-10000" creates the filter expression
-        # pop == nfe AND downsampling pop_idx < 10000.
+        # {"gen_anc":nfe, "downsampling":1000} or "nfe-10000" creates the filter expression
+        # gen_anc == nfe AND downsampling gen_anc_idx < 10000.
         for combo in strata_combinations:
             combo = dict(combo)
             ds = combo.get("downsampling")
-            pop = combo.get("pop")
+            gen_anc = combo.get("gen_anc")
             # If combo contains downsampling, determine the downsampling index
             # annotation to use.
             downsampling_idx = "global_idx"
             if ds is not None:
-                if pop is not None and pop != "global":
-                    # Don't include population downsamplings where the downsampling is
-                    # larger than the number of samples in the population.
-                    if ds > ds_pop_counts[pop]:
+                if gen_anc is not None and gen_anc != "global":
+                    # Don't include genetic ancestry group downsamplings where the downsampling is
+                    # larger than the number of samples in the genetic ancestry group.
+                    if ds > ds_gen_anc_counts[gen_anc]:
                         continue
-                    downsampling_idx = "pop_idx"
+                    downsampling_idx = "gen_anc_idx"
 
             # If combo contains downsampling, add downsampling filter expression.
             combo_filter_exprs = []
@@ -1998,7 +2145,7 @@ def generate_freq_group_membership_array(
                 if s == "downsampling":
                     combo_filter_exprs.append(downsampling_expr[downsampling_idx] < v)
                 else:
-                    if s != "pop" or v != "global":
+                    if s != "gen_anc" or v != "global":
                         combo_filter_exprs.append(strata[s] == v)
             combo = {k: str(v) for k, v in combo.items()}
             sample_group_filters.append((combo, hl.all(combo_filter_exprs)))
@@ -2046,8 +2193,8 @@ def generate_freq_group_membership_array(
 
     if downsamplings is not None:
         global_expr["downsamplings"] = downsamplings
-    if ds_pop_counts is not None:
-        global_expr["ds_pop_counts"] = ds_pop_counts
+    if ds_gen_anc_counts is not None:
+        global_expr["ds_gen_anc_counts"] = ds_gen_anc_counts
 
     ht = ht.select_globals(**global_expr)
     ht = ht.checkpoint(hl.utils.new_temp_file("group_membership", "ht"))
@@ -2538,8 +2685,8 @@ def add_gks_va(
     input_struct: hl.struct,
     label_name: str = "gnomAD",
     label_version: str = "3.1.2",
-    ancestry_groups: list = None,
-    ancestry_groups_dict: dict = None,
+    gen_anc_groups: list = None,
+    gen_anc_groups_dict: dict = None,
     by_sex: bool = False,
     freq_index_dict: dict = None,
 ) -> dict:
@@ -2547,7 +2694,7 @@ def add_gks_va(
     Generate Python dictionary containing GKS VA annotations.
 
     Populate the dictionary with frequency information conforming to the GKS VA frequency schema.
-    If ancestry_groups or by_sex is provided, also include subcohort schemas for each cohort.
+    If gen_anc_groups or by_sex is provided, also include subcohort schemas for each cohort.
     If input_struct has mean_depth, it is added to ancillaryResults.
     This annotation is added under the gks_va_freq_dict field of the table.
     The focusAllele field is not populated, and must be filled in by the caller.
@@ -2555,22 +2702,22 @@ def add_gks_va(
     :param input_struct: Hail struct for a desired variant (such as result of running .collect()[0] on a Table).
     :param label_name: Label name to use within the returned dictionary. Example: "gnomAD".
     :param label_version: String listing the version of the table being used. Example: "3.1.2".
-    :param ancestry_groups: List of strings of shortened names of cohorts to return results for.
+    :param gen_anc_groups: List of strings of shortened names of cohorts to return results for.
         Example: ['afr','fin','nfe']. Default is None.
-    :param ancestry_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
+    :param gen_anc_groups_dict: Dict mapping shortened genetic ancestry group names to full names.
         Example: {'afr':'African/African American'}. Default is None.
     :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
         Default is None.
     :freq_index_dict: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
         Default is None.
     :return: Tuple containing a dictionary containing GKS VA frequency information,
-        (split by ancestry groups and sex if desired) for the specified variant.
+        (split by genetic ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.
-    if by_sex and not ancestry_groups:
+    if by_sex and not gen_anc_groups:
         logger.warning(
             "Splitting whole database by sex is not yet supported. If using 'by_sex',"
-            " please also specify 'ancestry_groups' to stratify by."
+            " please also specify 'gen_anc_groups' to stratify by."
         )
 
     contig = input_struct.locus.contig
@@ -2646,15 +2793,15 @@ def add_gks_va(
         return freq_record
 
     # Create a list to then add the dictionaries for frequency reports for
-    # different ancestry groups to.
+    # different genetic ancestry groups to.
     list_of_group_info_dicts = []
 
     # Iterate through provided groups and generate dictionaries.
-    if ancestry_groups:
-        for group in ancestry_groups:
+    if gen_anc_groups:
+        for group in gen_anc_groups:
             group_result = _create_group_dicts(
                 group_id=group,
-                group_label=ancestry_groups_dict[group],
+                group_label=gen_anc_groups_dict[group],
             )
 
             # If specified, stratify group information by sex.
@@ -2663,7 +2810,7 @@ def add_gks_va(
                 for sex in ["XX", "XY"]:
                     sex_result = _create_group_dicts(
                         group_id=group,
-                        group_label=ancestry_groups_dict[group],
+                        group_label=gen_anc_groups_dict[group],
                         group_sex=sex,
                     )
                     sex_list.append(sex_result)
@@ -2698,7 +2845,7 @@ def add_gks_va(
         "cohort": {"id": "ALL"},
     }
 
-    # Create ancillaryResults for additional frequency and popMaxFAF95 information.
+    # Create ancillaryResults for additional frequency and grpMaxFAF95 information.
     ancillaryResults = {
         "homozygotes": overall_freq["homozygote_count"],
     }
@@ -2709,25 +2856,25 @@ def add_gks_va(
         ancillaryResults["hemizygotes"] = hemizygote_count
 
     # Add group max FAF if it exists
-    if input_struct.grpMaxFAF95.popmax_population is not None:
+    if input_struct.grpMaxFAF95.grpmax_gen_anc is not None:
         ancillaryResults["grpMaxFAF95"] = {
-            "frequency": input_struct.grpMaxFAF95.popmax,
+            "frequency": input_struct.grpMaxFAF95.grpmax_gen_anc,
             "confidenceInterval": 0.95,
             "groupId": (
-                f"{gnomad_id}.{input_struct.grpMaxFAF95.popmax_population.upper()}"
+                f"{gnomad_id}.{input_struct.grpMaxFAF95.grpmax_gen_anc.upper()}"
             ),
         }
 
     # Add joint group max FAF if it exists.
     if (
         "jointGrpMaxFAF95" in input_struct
-        and input_struct.jointGrpMaxFAF95.popmax_population is not None
+        and input_struct.jointGrpMaxFAF95.grpmax_gen_anc is not None
     ):
         ancillaryResults["jointGrpMaxFAF95"] = {
-            "frequency": input_struct.jointGrpMaxFAF95.popmax,
+            "frequency": input_struct.jointGrpMaxFAF95.grpmax_gen_anc,
             "confidenceInterval": 0.95,
             "groupId": (
-                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.popmax_population.upper()}"
+                f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.grpmax_gen_anc.upper()}"
             ),
         }
 
@@ -2774,9 +2921,37 @@ def add_gks_va(
 
     final_freq_dict["qualityMeasures"] = qualityMeasures
 
-    # If ancestry_groups were passed, add the ancestry group dictionary to the
+    # If gen_anc_groups were passed, add the gen_anc group dictionary to the
     # final frequency dictionary to be returned.
-    if ancestry_groups:
+    if gen_anc_groups:
         final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
 
     return final_freq_dict
+
+
+def get_copy_state_by_sex(
+    locus_expr: hl.expr.LocusExpression,
+    is_xx_expr: hl.expr.BooleanExpression,
+) -> Tuple[
+    hl.expr.BooleanExpression, hl.expr.BooleanExpression, hl.expr.BooleanExpression
+]:
+    """
+    Determine the copy state of a variant by its locus and the sex karotype of a sample.
+
+    This function assumes that the sample contains only XX and XY karyotypes. It does
+    not account for ambiguous sex or aneuploidies (e.g., XXY, XYY).
+
+    :param locus_expr: LocusExpression of the variant.
+    :param is_xx_expr: BooleanExpression indicating whether the sample has an XX sex
+       karyotype.
+    :return: Tuple of BooleanExpressions:
+        - diploid_expr: True if the variant is in autosomes or PAR regions, or in the X non-PAR region for XX individuals.
+        - hemi_x_expr: True if the variant is in the X non-PAR region for XY individuals.
+        - hemi_y_expr: True if the variant is in the Y non-PAR region for XY individuals.
+    """
+    diploid_expr = locus_expr.in_autosome_or_par() | (
+        locus_expr.in_x_nonpar() & is_xx_expr
+    )
+    hemi_x_expr = locus_expr.in_x_nonpar() & ~is_xx_expr
+    hemi_y_expr = locus_expr.in_y_nonpar() & ~is_xx_expr
+    return diploid_expr, hemi_x_expr, hemi_y_expr

@@ -2,12 +2,12 @@
 
 from typing import Dict, List
 
+import ga4gh
 import hail as hl
 import pytest
 
 from gnomad.utils.annotations import (
     VRS_CHROM_IDS,
-    add_gks_va,
     add_gks_vrs,
     annotate_downsamplings,
     fill_missing_key_combinations,

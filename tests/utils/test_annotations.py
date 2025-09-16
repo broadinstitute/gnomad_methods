@@ -1096,21 +1096,18 @@ class TestVRSFunctions:
 
     def test_vrs_identifier_generation(self):
         """Test that GA4GH identifiers are generated correctly."""
-        import ga4gh.core as ga4gh_core
-        import ga4gh.vrs as ga4gh_vrs
-
         # Test that we can import and access VRS modules
-        assert hasattr(ga4gh_core, "__version__")
-        assert hasattr(ga4gh_vrs, "models")
-        assert hasattr(ga4gh_vrs.models, "SequenceLocation")
+        assert hasattr(ga4gh.core, "__version__")
+        assert hasattr(ga4gh.vrs, "models")
+        assert hasattr(ga4gh.vrs.models, "SequenceLocation")
 
         # Test that VRS 2.0.1+ API is available
         assert hasattr(
-            ga4gh_core, "ga4gh_identify"
+            ga4gh.core, "ga4gh_identify"
         ), "VRS 2.0.1+ ga4gh_identify function not found"
 
         # Test that we can create a VRS object using the 2.0.1+ API
-        seq_loc = ga4gh_vrs.models.SequenceLocation(
+        seq_loc = ga4gh.vrs.models.SequenceLocation(
             sequenceReference="ga4gh:SQ.test",
             start=1,
             end=2,
@@ -1141,7 +1138,6 @@ class TestVRSFunctions:
         locus_py = hl.eval(locus)
         vrs_py = hl.eval(vrs_struct)
 
-        # This should actually call ga4gh_core.ga4gh_identify()
         result = add_gks_vrs(locus_py, vrs_py)
 
         # Verify the result has the expected VRS structure
@@ -1192,10 +1188,8 @@ class TestVRSFunctions:
 
     def test_vrs_version_compatibility(self):
         """Test that VRS 2.0.1+ is properly installed."""
-        import ga4gh.core as ga4gh_core
-
         # Test that VRS 2.0.1+ API is available
-        assert hasattr(ga4gh_core, "ga4gh_identify"), "VRS 2.0.1+ is required"
+        assert hasattr(ga4gh.core, "ga4gh_identify"), "VRS 2.0.1+ is required"
 
         # The function should work with VRS 2.0.1+
         assert callable(add_gks_vrs)

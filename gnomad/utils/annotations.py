@@ -2864,9 +2864,7 @@ def add_gks_va(
         ancillaryResults["grpMaxFAF95"] = {
             "frequency": input_struct.grpMaxFAF95.grpmax_gen_anc,
             "confidenceInterval": 0.95,
-            "groupId": (
-                f"{gnomad_id}.{input_struct.grpMaxFAF95.grpmax_gen_anc.upper()}"
-            ),
+            "groupId": f"{gnomad_id}.{input_struct.grpMaxFAF95.grpmax_gen_anc.upper()}",
         }
 
     # Add joint group max FAF if it exists.

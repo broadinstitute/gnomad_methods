@@ -173,7 +173,6 @@ def apply_sklearn_classification_model(
     logger.warning(
         "The use of .onnx files and apply_onnx_classification_model is recommended."
     )
-
     classification = fit.predict(data_pd)
     probs = fit.predict_proba(data_pd)
     probs = pd.DataFrame(probs, columns=[f"prob_{p}" for p in fit.classes_])

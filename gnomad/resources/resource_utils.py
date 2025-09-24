@@ -724,8 +724,8 @@ def import_gencode(
     Import GENCODE annotations GTF file as a Hail Table.
 
     :param gtf_path: Path to GENCODE GTF file.
-    :param include_version: Whether to include additional fields with the full gene_id
-        and transcript_id including the version number.
+    :param include_version: Whether to include two additional fields that contain the full gene or transcript
+        ID and the version number (`gene_id_version`, `transcript_id_version`).
     :return: Table with GENCODE annotation information.
     """
     ht = hl.experimental.import_gtf(gtf_path, **kwargs)

@@ -2386,16 +2386,20 @@ def add_gencode_transcript_annotations(
     ht: hl.Table,
     gencode_ht: hl.Table,
     annotations: List[str] = [
+        "transcript_id_version",
+        "gene_id_version",
         "level",
         "transcript_type",
         "start_position",
         "end_position",
     ],
+    remove_y_par: bool = True,
 ) -> hl.Table:
     """
     Add GENCODE annotations to Table based on transcript id.
 
     .. note::
+
         Added annotations by default are:
         - level
         - transcript_type
@@ -2409,10 +2413,28 @@ def add_gencode_transcript_annotations(
 
     :param ht: Input Table.
     :param gencode_ht: Table with GENCODE annotations.
-    :param annotations: List of GENCODE annotations to add. Default is ["level", "transcript_type"].
-        Added annotations also become keys for the group by when computing "cds_length" and "num_coding_exons".
+    :param annotations: List of GENCODE annotations to add. Default is
+        ["transcript_id_version", "gene_id_version", "level", "transcript_type",
+        "start_position", "end_position"].
+    :param remove_y_par: Whether to remove features for the Y chromosome PAR regions.
+        Default is True because the Y chromosome PAR regions are typically not included
+        in the constraint calculations and both chrX and chrY will have the same
+        'transcript_id' field for these regions. This parameter can only be True if
+        `gencode_ht` includes a 'transcript_id_version' field because Y_PAR is included
+        in the version of the transcript, which has been stripped from the
+        'transcript_id' field.
     :return: Table with transcript annotations from GENCODE added.
     """
+    if remove_y_par and "transcript_id_version" not in gencode_ht.row:
+        raise ValueError(
+            "remove_y_par is True but 'transcript_id_version' is not in gencode_ht"
+        )
+
+    if remove_y_par:
+        gencode_ht = gencode_ht.filter(
+            ~gencode_ht.transcript_id_version.endswith("Y_PAR")
+        )
+
     gencode_ht = gencode_ht.annotate(
         length=gencode_ht.interval.end.position
         - gencode_ht.interval.start.position
@@ -2434,6 +2456,7 @@ def add_gencode_transcript_annotations(
     # Obtain CDS annotations from GENCODE file and calculate CDS length and
     # number of exons.
     annotations_to_add = set(annotations + ["chromosome", "transcript_id", "length"])
+
     gencode_cds_ht = (
         gencode_ht.filter(gencode_ht.feature == "CDS")
         .select(*annotations_to_add)
@@ -2442,8 +2465,10 @@ def add_gencode_transcript_annotations(
     )
 
     annotations_to_add.remove("length")
+
     gencode_cds_ht = gencode_cds_ht.group_by("transcript_id").aggregate(
-        cds_length=hl.agg.sum(gencode_cds_ht.length), num_coding_exons=hl.agg.count()
+        cds_length=hl.agg.sum(gencode_cds_ht.length),
+        num_coding_exons=hl.agg.count(),
     )
 
     # Join the transcript and CDS annotations.

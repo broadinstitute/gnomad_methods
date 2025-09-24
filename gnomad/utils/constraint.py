@@ -1711,6 +1711,8 @@ def add_gencode_transcript_annotations(
     ht: hl.Table,
     gencode_ht: hl.Table,
     annotations: List[str] = [
+        "transcript_id_version",
+        "gene_id_version",
         "level",
         "transcript_type",
         "start_position",
@@ -1737,7 +1739,8 @@ def add_gencode_transcript_annotations(
     :param ht: Input Table.
     :param gencode_ht: Table with GENCODE annotations.
     :param annotations: List of GENCODE annotations to add. Default is
-        ["level", "transcript_type", "start_position", "end_position"].
+        ["transcript_id_version", "gene_id_version", "level", "transcript_type",
+        "start_position", "end_position"].
     :param remove_y_par: Whether to remove features for the Y chromosome PAR regions.
         Default is True because the Y chromosome PAR regions are typically not included
         in the constraint calculations and both chrX and chrY will have the same

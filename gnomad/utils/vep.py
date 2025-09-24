@@ -54,8 +54,8 @@ CSQ_CODING_LOW_IMPACT = [
     "start_retained_variant",  # new in v92
     "stop_retained_variant",
     "synonymous_variant",
-    "coding_sequence_variant",
-    "coding_transcript_variant",
+    "coding_sequence_variant",  # considered modifier/non-coding in v105, but keeping as low
+    "coding_transcript_variant",  # considered modifier/non-coding in v105, but keeping as low
 ]
 
 CSQ_NON_CODING = [
@@ -75,9 +75,9 @@ CSQ_NON_CODING = [
     "TF_binding_site_variant",
     "regulatory_region_ablation",
     "regulatory_region_amplification",
-    "feature_elongation",
+    "feature_elongation",  # considered high impact in v105, but keeping as modifier/non-coding
     "regulatory_region_variant",
-    "feature_truncation",
+    "feature_truncation",  # considered high impact in v105, but keeping as modifier/non-coding
     "intergenic_variant",
     "sequence_variant",
 ]

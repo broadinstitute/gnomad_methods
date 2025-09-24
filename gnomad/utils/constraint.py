@@ -2105,7 +2105,15 @@ def apply_models(
 
 def aggregate_expected_variants_expr(
     t: Union[hl.Table, hl.StructExpression],
-    additional_fields_to_sum: Optional[List[str]] = None,
+    fields_to_sum: List[str] = [
+        "mu_snp",
+        "mu",
+        "observed_variants",
+        "possible_variants",
+        "predicted_proportion_observed",
+        "coverage_correction",
+        "expected_variants",
+    ],
     additional_exprs_to_sum: Optional[Dict[str, hl.expr.Expression]] = None,
 ) -> hl.expr.StructExpression:
     """
@@ -2121,24 +2129,15 @@ def aggregate_expected_variants_expr(
         - expected_variants
 
     :param t: Input Table or StructExpression.
-    :param additional_fields_to_sum: List of additional fields in `t` to get an
-        aggregate sum expression for. Default is None.
+    :param fields_to_sum: List of fields in `t` to get an aggregate sum expression for.
+        Default is the fields listed above.
     :param additional_exprs_to_sum: Dictionary of additional expressions in `t` to get
         an aggregate sum expression for. Field names are the keys and expressions are
         the values. Default is None.
     :return: StructExpression with the sum of expected variants and other fields.
     """
     return _sum_agg_expr(
-        fields_to_sum=[
-            "mu_snp",
-            "mu",
-            "observed_variants",
-            "possible_variants",
-            "predicted_proportion_observed",
-            "coverage_correction",
-            "expected_variants",
-        ]
-        + (additional_fields_to_sum or []),
+        fields_to_sum=fields_to_sum,
         exprs_to_sum=additional_exprs_to_sum,
         t=t,
     )
@@ -2386,7 +2385,12 @@ def calculate_raw_z_score_sd(
 def add_gencode_transcript_annotations(
     ht: hl.Table,
     gencode_ht: hl.Table,
-    annotations: List[str] = ["level", "transcript_type"],
+    annotations: List[str] = [
+        "level",
+        "transcript_type",
+        "start_position",
+        "end_position",
+    ],
 ) -> hl.Table:
     """
     Add GENCODE annotations to Table based on transcript id.
@@ -2395,6 +2399,8 @@ def add_gencode_transcript_annotations(
         Added annotations by default are:
         - level
         - transcript_type
+        - start_position (start of the transcript)
+        - end_position (end of the transcript)
 
         Computed annotations are:
         - chromosome
@@ -2412,13 +2418,23 @@ def add_gencode_transcript_annotations(
         - gencode_ht.interval.start.position
         + 1,
         chromosome=gencode_ht.interval.start.contig,
+        start_position=gencode_ht.interval.start.position,
+        end_position=gencode_ht.interval.end.position,
+    )
+
+    # Add transcript annotations to input Table.
+    annotations_to_add = set(annotations + ["chromosome", "transcript_id"])
+    gencode_transcript_ht = (
+        gencode_ht.filter(gencode_ht.feature == "transcript")
+        .select(*annotations_to_add)
+        .key_by("transcript_id")
+        .drop("interval")
     )
 
     # Obtain CDS annotations from GENCODE file and calculate CDS length and
     # number of exons.
     annotations_to_add = set(annotations + ["chromosome", "transcript_id", "length"])
-
-    gencode_cds = (
+    gencode_cds_ht = (
         gencode_ht.filter(gencode_ht.feature == "CDS")
         .select(*annotations_to_add)
         .key_by("transcript_id")
@@ -2426,20 +2442,16 @@ def add_gencode_transcript_annotations(
     )
 
     annotations_to_add.remove("length")
-
-    gencode_cds = (
-        gencode_cds.group_by(*annotations_to_add)
-        .aggregate(
-            cds_length=hl.agg.sum(gencode_cds.length), num_coding_exons=hl.agg.count()
-        )
-        .key_by("transcript_id")
+    gencode_cds_ht = gencode_cds_ht.group_by("transcript_id").aggregate(
+        cds_length=hl.agg.sum(gencode_cds_ht.length), num_coding_exons=hl.agg.count()
     )
 
-    gencode_cds = gencode_cds.checkpoint(
-        new_temp_file(prefix="gencode_cds", extension="ht")
+    # Join the transcript and CDS annotations.
+    gencode_transcript_ht = gencode_transcript_ht.join(gencode_cds_ht).checkpoint(
+        new_temp_file(prefix="gencode", extension="ht")
     )
 
     # Add GENCODE annotations to input Table.
-    ht = ht.annotate(**gencode_cds[ht.transcript])
+    ht = ht.annotate(**gencode_transcript_ht[ht.transcript])
 
     return ht

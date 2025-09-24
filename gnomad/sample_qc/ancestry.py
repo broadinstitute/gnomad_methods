@@ -10,6 +10,7 @@ import numpy as np
 import onnx
 import onnxruntime as rt
 import pandas as pd
+from hail.utils import new_temp_file
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
@@ -19,7 +20,7 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-POP_NAMES = {
+GEN_ANC_NAMES = {
     "afr": "African/African-American",
     "ami": "Amish",
     "amr": "Admixed American",
@@ -53,7 +54,7 @@ POP_NAMES = {
     "unk": "Unknown",
 }
 
-POP_COLORS = {
+GEN_ANC_COLORS = {
     "afr": "#941494",
     "ami": "#FFC0CB",
     "amr": "#ED1E24",
@@ -169,6 +170,10 @@ def apply_sklearn_classification_model(
     except TypeError:
         raise TypeError("The supplied model is not an sklearn model!")
 
+    logger.warning(
+        "The use of .onnx files and apply_onnx_classification_model is recommended."
+    )
+
     classification = fit.predict(data_pd)
     probs = fit.predict_proba(data_pd)
     probs = pd.DataFrame(probs, columns=[f"prob_{p}" for p in fit.classes_])
@@ -193,6 +198,13 @@ def convert_sklearn_rf_to_onnx(
     except TypeError:
         raise TypeError("The supplied model is not an sklearn model!")
 
+    logger.warning(
+        "sklearn models have different rounding behavior than ONNX models. Use of sklearn"
+        "rf models rounds probabilities to two decimal places when used in assign_genetic_ancestry_pcs(),"
+        "while use of onnx rf models does not. This may lead to subtly different assignment results"
+        "for samples around probability cutoffs."
+    )
+
     initial_type = [("float_input", FloatTensorType([None, fit.n_features_in_]))]
     onx = convert_sklearn(fit, initial_types=initial_type, target_opset=target_opset)
 
@@ -209,27 +221,28 @@ def convert_sklearn_rf_to_onnx(
     return onx
 
 
-def assign_population_pcs(
-    pop_pca_scores: Union[hl.Table, pd.DataFrame],
+def assign_genetic_ancestry_pcs(
+    gen_anc_pca_scores: Union[hl.Table, pd.DataFrame],
     pc_cols: Union[hl.expr.ArrayExpression, List[int], List[str]],
-    known_col: str = "known_pop",
+    known_col: str = "known_label",
     fit: Any = None,  # Type should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     seed: int = 42,
     prop_train: float = 0.8,
     n_estimators: int = 100,
     min_prob: float = 0.9,
-    output_col: str = "pop",
+    output_col: str = "gen_anc",
     missing_label: str = "oth",
     pc_expr: Union[hl.expr.ArrayExpression, str] = "scores",
     convert_model_func: Optional[Callable[[Any], Any]] = None,
     apply_model_func: Callable[
         [pd.DataFrame, Any], Any
     ] = apply_sklearn_classification_model,
+    n_partitions: Optional[hl.int] = None,
 ) -> Tuple[
     Union[hl.Table, pd.DataFrame], Any
 ]:  # 2nd element of the tuple should be RandomForestClassifier but we do not want to import sklearn.RandomForestClassifier outside
     """
-    Use a random forest model to assign population labels based on the results of PCA.
+    Use a random forest model to assign genetic ancestry labels based on the results of PCA.
 
     Default values for model and assignment parameters are those used in gnomAD.
 
@@ -252,21 +265,21 @@ def assign_population_pcs(
         the `expand_pd_array_col`can be used to expand this column into multiple `PC`
         columns.
 
-    :param pop_pca_scores: Input Hail Table or Pandas Dataframe.
+    :param gen_anc_pca_scores: Input Hail Table or Pandas Dataframe.
     :param pc_cols: List of which PCs to use/columns storing the PCs to use. Values
         provided should be 1-based and should be a list of integers when passing in a
         Hail Table (i.e. [1, 2, 4, 5]) or a list of strings when passing in a Pandas
         Dataframe (i.e. ["PC1", "PC2", "PC4", "PC5"]). When passing a HT this can also
         be an ArrayExpression containing all the PCs to use.
-    :param known_col: Column storing the known population labels.
+    :param known_col: Column storing the known genetic ancestry labels.
     :param fit: Fit from a previously trained random forest model (i.e., the output
         from a previous RandomForestClassifier() call).
     :param seed: Random seed.
     :param prop_train: Proportion of known data used for training.
     :param n_estimators: Number of trees to use in the RF model.
-    :param min_prob: Minimum probability of belonging to a given population for the
-        population to be set (otherwise set to `None`).
-    :param output_col: Output column storing the assigned population.
+    :param min_prob: Minimum probability of belonging to a given genetic ancestry group for the
+        genetic ancestry group to be set (otherwise set to `None`).
+    :param output_col: Output column storing the assigned genetic ancestry.
     :param missing_label: Label for samples for which the assignment probability is
         smaller than `min_prob`.
     :param pc_expr: Column storing the list of PCs. Only used if `pc_cols` is a List of
@@ -277,12 +290,13 @@ def assign_population_pcs(
         `apply_sklearn_classification_model`, which will apply a sklearn classification
         model to the data. This default will work if no `fit` is set, or the supplied
         `fit` is a sklearn classification model.
+    :param n_partitions: Optional number of partitions to repartition the genetic ancestry group inference table to.
     :return: Hail Table or Pandas Dataframe (depending on input) containing sample IDs
-        and imputed population labels, trained random forest model.
+        and imputed genetic ancestry labels, trained random forest model.
     """
     from sklearn.ensemble import RandomForestClassifier
 
-    hail_input = isinstance(pop_pca_scores, hl.Table)
+    hail_input = isinstance(gen_anc_pca_scores, hl.Table)
     if hail_input:
         if isinstance(pc_cols, list):
             if not all(isinstance(n, int) for n in pc_cols):
@@ -291,13 +305,15 @@ def assign_population_pcs(
                     "requires all values of the pc_cols list to be integers."
                 )
             if isinstance(pc_expr, str):
-                pc_expr = pop_pca_scores[pc_expr]
+                pc_expr = gen_anc_pca_scores[pc_expr]
             pcs_to_pull = [pc_expr[i - 1] for i in pc_cols]
         else:
             pc_col_len = list(
                 filter(
                     None,
-                    pop_pca_scores.aggregate(hl.agg.collect_as_set(hl.len(pc_cols))),
+                    gen_anc_pca_scores.aggregate(
+                        hl.agg.collect_as_set(hl.len(pc_cols))
+                    ),
                 )
             )
             if len(pc_col_len) > 1:
@@ -308,15 +324,19 @@ def assign_population_pcs(
             pcs_to_pull = pc_cols
             pc_cols = list(range(1, pc_col_len[0] + 1))
         if not fit:
-            pop_pca_scores = pop_pca_scores.select(known_col, pca_scores=pcs_to_pull)
+            gen_anc_pca_scores = gen_anc_pca_scores.select(
+                known_col, pca_scores=pcs_to_pull
+            )
         else:
-            pop_pca_scores = pop_pca_scores.select(pca_scores=pcs_to_pull)
+            gen_anc_pca_scores = gen_anc_pca_scores.select(pca_scores=pcs_to_pull)
 
-        pop_pc_pd = pop_pca_scores.to_pandas()
+        gen_anc_pc_pd = gen_anc_pca_scores.to_pandas()
 
         # Explode the PC array
         pc_cols = [f"PC{i}" for i in pc_cols]
-        pop_pc_pd[pc_cols] = pd.DataFrame(pop_pc_pd["pca_scores"].values.tolist())
+        gen_anc_pc_pd[pc_cols] = pd.DataFrame(
+            gen_anc_pc_pd["pca_scores"].values.tolist()
+        )
 
     else:
         if not all(isinstance(n, str) for n in pc_cols):
@@ -324,11 +344,11 @@ def assign_population_pcs(
                 "Using a Pandas DataFrame with pc_cols requires all values of the"
                 " pc_cols list to be strings."
             )
-        pop_pc_pd = pop_pca_scores
+        gen_anc_pc_pd = gen_anc_pca_scores
 
     # Split training data into subsamples for fitting and evaluating.
     if not fit:
-        train_data = pop_pc_pd.loc[~pop_pc_pd[known_col].isnull()]
+        train_data = gen_anc_pc_pd.loc[~gen_anc_pc_pd[known_col].isnull()]
         N = len(train_data)
         random.seed(seed)
         train_subsample_ridx = random.sample(list(range(0, N)), int(N * prop_train))
@@ -341,63 +361,78 @@ def assign_population_pcs(
         training_set_pcs = train_fit[pc_cols].values
         evaluation_set_pcs = evaluate_fit[pc_cols].values
 
-        pop_clf = RandomForestClassifier(n_estimators=n_estimators, random_state=seed)
-        pop_clf.fit(training_set_pcs, training_set_known_labels)
+        gen_anc_clf = RandomForestClassifier(
+            n_estimators=n_estimators, random_state=seed
+        )
+        gen_anc_clf.fit(training_set_pcs, training_set_known_labels)
         logger.info(
             "Random forest feature importances are as follows: %s",
-            pop_clf.feature_importances_,
+            gen_anc_clf.feature_importances_,
         )
 
         # Evaluate RF.
-        predictions = pop_clf.predict(evaluation_set_pcs)
+        predictions = gen_anc_clf.predict(evaluation_set_pcs)
         error_rate = 1 - sum(evaluate_fit[known_col] == predictions) / float(
             len(predictions)
         )
         logger.info("Estimated error rate for RF model is %.4f", error_rate)
     else:
-        pop_clf = fit
+        gen_anc_clf = fit
 
     # Classify data.
-    classifications, probs = apply_model_func(pop_pc_pd[pc_cols].values, pop_clf)
+    classifications, probs = apply_model_func(
+        gen_anc_pc_pd[pc_cols].values, gen_anc_clf
+    )
 
-    pop_pc_pd[output_col] = classifications
-    pop_pc_pd = pd.concat(
-        [pop_pc_pd.reset_index(drop=True), probs.reset_index(drop=True)], axis=1
+    gen_anc_pc_pd[output_col] = classifications
+    gen_anc_pc_pd = pd.concat(
+        [gen_anc_pc_pd.reset_index(drop=True), probs.reset_index(drop=True)], axis=1
     )
     probs["max"] = probs.max(axis=1)
-    pop_pc_pd.loc[probs["max"] < min_prob, output_col] = missing_label
-    pop_pc_pd = pop_pc_pd.drop(pc_cols, axis="columns")
+    gen_anc_pc_pd.loc[probs["max"] < min_prob, output_col] = missing_label
+    gen_anc_pc_pd = gen_anc_pc_pd.drop(pc_cols, axis="columns")
 
     logger.info(
-        "Found the following sample count after population assignment: %s",
+        "Found the following sample count after genetic ancestry assignment: %s",
         ", ".join(
-            f"{pop}: {count}" for pop, count in Counter(pop_pc_pd[output_col]).items()
+            f"{gen_anc}: {count}"
+            for gen_anc, count in Counter(gen_anc_pc_pd[output_col]).items()
         ),
     )
 
     if convert_model_func is not None:
-        pop_clf = convert_model_func(pop_clf)
+        gen_anc_clf = convert_model_func(gen_anc_clf)
 
     if hail_input:
-        pops_ht = hl.Table.from_pandas(pop_pc_pd, key=list(pop_pca_scores.key))
-        pops_ht = pops_ht.annotate_globals(
-            assign_pops_from_pc_params=hl.struct(min_assignment_prob=min_prob)
+        gen_anc_ht = hl.Table.from_pandas(
+            gen_anc_pc_pd, key=list(gen_anc_pca_scores.key)
+        )
+
+        if n_partitions:
+            tmp_path = new_temp_file("gen_anc_ht", "ht")
+            gen_anc_ht.write(tmp_path)
+            gen_anc_ht = hl.read_table(tmp_path, _n_partitions=n_partitions)
+
+        gen_anc_ht = gen_anc_ht.annotate_globals(
+            assign_gen_ancs_from_pc_params=hl.struct(min_assignment_prob=min_prob)
         )
 
         if not fit:
-            pops_ht = pops_ht.annotate_globals(
-                assign_pops_from_pc_params=pops_ht.assign_pops_from_pc_params.annotate(
+            gen_anc_ht = gen_anc_ht.annotate_globals(
+                assign_gen_ancs_from_pc_params=gen_anc_ht.assign_gen_ancs_from_pc_params.annotate(
                     error_rate=error_rate
                 )
             )
 
-            pops_ht = pops_ht.annotate(
-                evaluation_sample=hl.literal(list(evaluate_fit.s)).contains(pops_ht.s),
-                training_sample=hl.literal(list(train_fit.s)).contains(pops_ht.s),
+            gen_anc_ht = gen_anc_ht.annotate(
+                evaluation_sample=hl.literal(list(evaluate_fit.s)).contains(
+                    gen_anc_ht.s
+                ),
+                training_sample=hl.literal(list(train_fit.s)).contains(gen_anc_ht.s),
             )
-        return pops_ht, pop_clf
+        return gen_anc_ht, gen_anc_clf
     else:
-        return pop_pc_pd, pop_clf
+        return gen_anc_pc_pd, gen_anc_clf
 
 
 def run_pca_with_relateds(

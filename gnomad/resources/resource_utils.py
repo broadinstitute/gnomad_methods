@@ -592,9 +592,6 @@ class GnomadPublicResource(BaseResource, ABC):
         if resource_source == GnomadPublicResourceSource.REGISTRY_OF_OPEN_DATA_ON_AWS:
             return f"s3a://gnomad-public-us-east-1{relative_path}"
 
-        if resource_source == GnomadPublicResourceSource.AZURE_OPEN_DATASETS:
-            return f"wasbs://dataset@datasetgnomad.blob.core.windows.net{relative_path}"
-
         return (
             f"{resource_source.rstrip('/')}{relative_path}"  # pylint: disable=no-member
         )

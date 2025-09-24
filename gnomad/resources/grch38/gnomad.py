@@ -12,7 +12,7 @@ from gnomad.resources.resource_utils import (
     VersionedMatrixTableResource,
     VersionedTableResource,
 )
-from gnomad.sample_qc.ancestry import POP_NAMES
+from gnomad.sample_qc.ancestry import GEN_ANC_NAMES
 from gnomad.utils.annotations import add_gks_va, add_gks_vrs
 
 logging.basicConfig(
@@ -26,6 +26,8 @@ CURRENT_EXOME_RELEASE = "4.1"
 CURRENT_GENOME_RELEASE = "4.1"
 CURRENT_JOINT_RELEASE = "4.1"
 
+CURRENT_BROWSER_RELEASE = "4.1"
+
 CURRENT_EXOME_COVERAGE_RELEASE = "4.0"
 CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 
@@ -35,6 +37,7 @@ CURRENT_GENOME_AN_RELEASE = "4.1"
 EXOME_RELEASES = ["4.0", "4.1"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2", "4.0", "4.1"]
 JOINT_RELEASES = ["4.1"]
+BROWSER_RELEASES = ["4.1"]
 
 EXOME_COVERAGE_RELEASES = ["4.0"]
 GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
@@ -46,7 +49,7 @@ DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
 CURRENT_MAJOR_RELEASE = MAJOR_RELEASES[-1]
 
-GENOME_POPS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
+GENOME_GEN_ANCS = ["AFR", "AMI", "AMR", "ASJ", "EAS", "FIN", "NFE", "SAS", "OTH"]
 SUBSETS = {
     "v3": [
         "non_v2",
@@ -79,7 +82,7 @@ Sample sexes used in VCF export.
 Used to stratify frequency annotations (AC, AN, AF) for each sex.
 """
 
-POPS = {
+GEN_ANC_GROUPS = {
     "v3": {
         "genomes": [
             "afr",
@@ -121,15 +124,15 @@ POPS = {
     },
 }
 """
-Global ancestry groups in gnomAD by version.
+Genetic ancestry groups in gnomAD by version.
 """
 
-COHORTS_WITH_POP_STORED_AS_SUBPOP = ["tgp", "hgdp"]
+COHORTS_WITH_GEN_ANC_STORED_AS_SUBGRP = ["tgp", "hgdp"]
 """
-Subsets in gnomAD v3.1 that are broken down by their known subpops instead of global pops in the frequency struct.
+Subsets in gnomAD v3.1 that are broken down by their known genetic ancestry subgroups instead of groups in the frequency struct.
 """
 
-TGP_POPS = [
+TGP_GEN_ANC_GROUPS = [
     "esn",
     "pur",
     "pjl",
@@ -158,10 +161,10 @@ TGP_POPS = [
     "gwd",
 ]
 """
-1000 Genomes Project (1KG/TGP) subpops.
+1000 Genomes Project (1KG/TGP) genetic ancestry subgroups.
 """
 
-HGDP_POPS = [
+HGDP_GEN_ANC_GROUPS = [
     "japanese",
     "papuanhighlands",
     "papuansepik",
@@ -218,10 +221,10 @@ HGDP_POPS = [
     "maya",
 ]
 """
-Human Genome Diversity Project (HGDP) subpops.
+Human Genome Diversity Project (HGDP) genetic ancestry subgroups.
 """
 
-TGP_POP_NAMES = {
+TGP_GEN_ANC_GROUP_NAMES = {
     "chb": "Han Chinese",
     "jpt": "Japanese",
     "chs": "Southern Han Chinese",
@@ -250,16 +253,16 @@ TGP_POP_NAMES = {
     "itu": "Indian Telugu",
 }
 """
-1000 Genomes Project (1KG/TGP) pop label map.
+1000 Genomes Project (1KG/TGP) genetic ancestry group label map.
 """
 
-POPS_STORED_AS_SUBPOPS = TGP_POPS + HGDP_POPS
-POPS_TO_REMOVE_FOR_POPMAX = {
+GEN_ANC_GROUPS_STORED_AS_SUBGRPS = TGP_GEN_ANC_GROUPS + HGDP_GEN_ANC_GROUPS
+GEN_ANC_GROUPS_TO_REMOVE_FOR_GRPMAX = {
     "v3": {"asj", "fin", "mid", "oth", "ami", "remaining"},
     "v4": {"asj", "fin", "oth", "ami", "remaining"},
 }
 """
-Populations that are removed before popmax calculations.
+Genetic ancestry groups that are removed before genetic ancestry group max calculations.
 """
 
 DOWNSAMPLINGS = {
@@ -389,6 +392,31 @@ def _public_constraint_ht_path(version: str) -> str:
     :return: Path to gene constraint Table.
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
+
+
+def _public_browser_variant_ht_path(version: str) -> str:
+    """
+    Get public browser variant table path.
+
+    :param version: One of the release versions of gnomAD on GRCh38.
+    :return: Path to browser variant Table.
+    """
+    return f"gs://gnomad-public-requester-pays/release/{version}/ht/browser/gnomad.browser.v{version}.sites.ht"
+
+
+def _public_browser_gene_ht_path() -> str:
+    """
+    Get public browser gene table path.
+
+    .. note::
+
+       This table has smaller number of partitions (n=100) for faster computation and
+       contains pext data compared to gnomad.genes.GRCh38.GENCODEv39.ht (which was
+       used by the browser for ES export) under the same path.
+
+    :return: Path to browser gene Table.
+    """
+    return "gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.pext.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -540,7 +568,7 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
 
 def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
     """
-    Add a grpMaxFAF95 struct with 'popmax' and 'popmax_population'.
+    Add a grpMaxFAF95 struct with 'grpmax' and 'grpmax_gen_anc'.
 
     Also includes a jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
 
@@ -553,12 +581,12 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
         fafmax_field = ht.fafmax
     ht = ht.annotate(
         grpMaxFAF95=hl.struct(
-            popmax=fafmax_field.faf95_max,
-            popmax_population=fafmax_field.faf95_max_gen_anc,
+            grpmax=fafmax_field.faf95_max,
+            grpmax_gen_anc=fafmax_field.faf95_max_gen_anc,
         ),
         jointGrpMaxFAF95=hl.struct(
-            popmax=ht.joint_fafmax.faf95_max,
-            popmax_population=ht.joint_fafmax.faf95_max_gen_anc,
+            grpmax=ht.joint_fafmax.faf95_max,
+            grpmax_gen_anc=ht.joint_fafmax.faf95_max_gen_anc,
         ),
     )
     return ht
@@ -568,7 +596,7 @@ def gnomad_gks(
     locus_interval: hl.IntervalExpression,
     version: str,
     data_type: str = "genomes",
-    by_ancestry_group: bool = False,
+    by_gen_anc_group: bool = False,
     by_sex: bool = False,
     vrs_only: bool = False,
     custom_ht: hl.Table = None,
@@ -583,7 +611,7 @@ def gnomad_gks(
         e.g. hl.locus_interval('chr1', 6424776, 6461367, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
     :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
-    :param by_ancestry_group: Boolean to pass to obtain frequency information for each cohort.
+    :param by_gen_anc_group: Boolean to pass to obtain frequency information for each cohort.
     :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex.
     :param vrs_only: Boolean to pass for only VRS info to be returned
         (will not include allele frequency information).
@@ -631,16 +659,18 @@ def gnomad_gks(
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
-    # Retrieve ancestry groups from the imported POPS dictionary.
-    pops_list = list(POPS[high_level_version][data_type]) if by_ancestry_group else None
+    # Retrieve genetic ancestry groups from the imported GEN_ANC_NAMES dictionary.
+    grps_list = (
+        list(GEN_ANC_NAMES[high_level_version][data_type]) if by_gen_anc_group else None
+    )
 
     # Throw warnings if contradictory arguments are passed.
-    if by_ancestry_group and vrs_only:
+    if by_gen_anc_group and vrs_only:
         logger.warning(
-            "Both 'vrs_only' and 'by_ancestry_groups' have been specified. Ignoring"
-            " 'by_ancestry_groups' list and returning only VRS information."
+            "Both 'vrs_only' and 'by_gen_anc_groups' have been specified. Ignoring"
+            " 'by_gen_anc_groups' list and returning only VRS information."
         )
-    elif by_sex and not by_ancestry_group:
+    elif by_sex and not by_gen_anc_group:
         logger.warning(
             "Splitting whole database by sex is not yet supported. If using 'by_sex',"
             " please also specify 'by_ancestry_group' to stratify by."
@@ -713,8 +743,8 @@ def gnomad_gks(
                 input_struct=variant,
                 label_name="gnomAD",
                 label_version=version,
-                ancestry_groups=pops_list,
-                ancestry_groups_dict=POP_NAMES,
+                gen_anc_groups=grps_list,
+                gen_anc_groups_dict=GEN_ANC_NAMES,
                 by_sex=by_sex,
                 freq_index_dict=ht_freq_index_dict,
             )
@@ -739,19 +769,12 @@ def pext(pext_type: str = "base_level") -> GnomadPublicTableResource:
     return GnomadPublicTableResource(path=_public_pext_ht_path(pext_type))
 
 
-def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
+def constraint() -> VersionedTableResource:
     """
     Retrieve gene constraint Table.
 
-    :param version: One of the release versions of gnomAD on GRCh38. Default is the current exome release.
     :return: Gene constraint Table.
-    :raises ValueError: If the version is not a valid release.
     """
-    if version not in EXOME_RELEASES:
-        raise ValueError(
-            f"Invalid version: {version}. Must be one of {EXOME_RELEASES}."
-        )
-
     return VersionedTableResource(
         CURRENT_EXOME_RELEASE,
         {
@@ -759,3 +782,29 @@ def constraint(version: str = CURRENT_EXOME_RELEASE) -> VersionedTableResource:
             for release in EXOME_RELEASES
         },
     )
+
+
+def browser_variant() -> VersionedTableResource:
+    """
+    Retrieve browser variant table.
+
+    :return: Browser variant Table.
+    """
+    return VersionedTableResource(
+        CURRENT_BROWSER_RELEASE,
+        {
+            release: GnomadPublicTableResource(
+                path=_public_browser_variant_ht_path(release)
+            )
+            for release in BROWSER_RELEASES
+        },
+    )
+
+
+def browser_gene() -> GnomadPublicTableResource:
+    """
+    Retrieve browser gene table.
+
+    :return: Browser gene Table.
+    """
+    return GnomadPublicTableResource(path=_public_browser_gene_ht_path())

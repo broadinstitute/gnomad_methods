@@ -14,7 +14,6 @@ class GnomadPublicResourceSource(Enum):
     GNOMAD = "gnomAD"
     GOOGLE_CLOUD_PUBLIC_DATASETS = "Google Cloud Public Datasets"
     REGISTRY_OF_OPEN_DATA_ON_AWS = "Registry of Open Data on AWS"
-    AZURE_OPEN_DATASETS = "Azure Open Datasets"
 
 
 def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, str]:
@@ -25,7 +24,6 @@ def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, st
 
     - If the ``GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`` environment variable is set, use the source configured there.
     - Otherwise, if Hail determines that is is running in a cloud provider's Spark environment, use the source from that cloud provider.
-      For example, use Azure Open Datasets if running on an Azure HDInsight cluster.
     - Otherwise, use Google Cloud Public Datasets.
 
     :returns: Default resource source
@@ -54,7 +52,6 @@ def get_default_public_resource_source() -> Union[GnomadPublicResourceSource, st
         cloud_spark_provider = guess_cloud_spark_provider()
         default_resource_sources_by_provider = {
             "dataproc": GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS,
-            "hdinsight": GnomadPublicResourceSource.AZURE_OPEN_DATASETS,
         }
         if cloud_spark_provider:
             try:

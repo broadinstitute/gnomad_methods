@@ -5,6 +5,10 @@ from typing import Optional, Union
 import hail as hl
 from hail import Table
 
+from gnomad.resources.config import (
+    GnomadPublicResourceSource,
+    gnomad_public_resource_configuration,
+)
 from gnomad.resources.grch37.reference_data import _import_gtex_rsem
 from gnomad.resources.resource_utils import (
     DBSNP_B154_CHR_CONTIG_RECODING,
@@ -46,7 +50,12 @@ def _import_clinvar(**kwargs) -> hl.Table:
     clinvar = clinvar.filter(
         hl.len(clinvar.alleles) > 1
     )  # Get around problematic single entry in alleles array in the clinvar vcf
+    _curr_source = gnomad_public_resource_configuration.source
+    gnomad_public_resource_configuration.source = (
+        GnomadPublicResourceSource.GOOGLE_CLOUD_PUBLIC_DATASETS
+    )
     clinvar = vep_or_lookup_vep(clinvar, reference="GRCh38")
+    gnomad_public_resource_configuration.source = _curr_source
     return clinvar
 
 
@@ -208,8 +217,20 @@ ensembl_interval = VersionedTableResource(
 )
 
 clinvar = VersionedTableResource(
-    default_version="20190923",
+    default_version="20250504",
     versions={
+        "20250504": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20250504.ht",
+            import_func=_import_clinvar,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20250504.vcf.gz",
+                "force_bgz": True,
+                "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
+                "skip_invalid_loci": True,
+                "min_partitions": 100,
+                "reference_genome": "GRCh38",
+            },
+        ),
         "20190923": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20190923.ht",
             import_func=_import_clinvar,
@@ -221,7 +242,7 @@ clinvar = VersionedTableResource(
                 "min_partitions": 100,
                 "reference_genome": "GRCh38",
             },
-        )
+        ),
     },
 )
 
@@ -317,9 +338,9 @@ mills = GnomadPublicTableResource(
     },
 )
 
-# Methylation scores range from 0-15 and are described in Chen et al
+# Methylation scores for autosomes range from 0-15 and are described in Chen et al
 # (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-methylation_sites = GnomadPublicTableResource(
+methylation_sites_autosomes = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
     import_func=_import_methylation_sites,
     import_args={
@@ -327,14 +348,13 @@ methylation_sites = GnomadPublicTableResource(
     },
 )
 
-# Methylation scores for chromosome X range from 0-12 and are described in Chen et al
+# Merged methylation data including autosomes, chrX, and chrY. This resource combines
+# methylation scores from `methylation_sites_autosomes` with scores from chrX
+# and chrY non-PAR. Autosomes and chrX PAR use a 0-15 scale, while chrX and chrY non-PAR
+# use a 0-12 scale as described in Chen et al
 # (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-methylation_sites_chrx = GnomadPublicTableResource(
-    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.ht",
-    import_func=_import_methylation_sites,
-    import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.bed",
-    },
+methylation_sites = GnomadPublicTableResource(
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_all.ht",
 )
 
 lcr_intervals = GnomadPublicTableResource(
@@ -406,8 +426,20 @@ gtex_rsem = VersionedMatrixTableResource(
 )
 
 gencode = VersionedTableResource(
+    # The default version is v39, which is the version of gencode used by VEP 105, which
+    # is the version used to annotate gnomAD v4.
     default_version="v39",
     versions={
+        "v49": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v49.annotation.ht",
+            import_func=import_gencode,
+            import_args={
+                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v49.annotation.gtf.gz",
+                "reference_genome": "GRCh38",
+                "force": True,
+                "min_partitions": 100,
+            },
+        ),
         "v39": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v39.annotation.ht",
             import_func=import_gencode,
@@ -433,14 +465,15 @@ def transform_grch38_methylation(
 
         One of ht or methylation_expr must be provided.
 
-    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes. The
-    determination of this score is described in Chen et al:
+    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes.
+    The determination of this score for autosomes is described in Chen et al:
     https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full
-    For chrX, methylation scores range from 0 to 12, but these scores are not directly
-    comparable to the autosome scores (chrX and autosomes were analyzed separately and
-    levels are relative). Cutoffs to translate these scores to the 0-2 methylation
-    level were determined by correlating these scores with the GRCh37 liftover scores.
-    Proposed cutoffs are: 0, 1-5, 6+ for autosomes, and 0, 1-3, 4+ for chrX.
+    For chrX and chrY non-PAR, methylation scores range from 0 to 12, but these scores
+    are not directly comparable to the autosome scores (chrX/chrY and autosomes were
+    analyzed separately and levels are relative). Cutoffs to translate these scores to
+    the 0-2 methylation level were determined by correlating these scores with the
+    GRCh37 liftover scores. Proposed cutoffs are: 0, 1-5, 6+ for autosomes/chrX PAR,
+    and 0, 1-3, 4+ for chrX and chrY non-PAR.
 
     :param ht: Optional Hail Table with methylation data. Default is None.
     :param methylation_expr: Optional methylation level expression. Default is None.
@@ -458,7 +491,7 @@ def transform_grch38_methylation(
         locus_expr = ht.locus
 
     methylation_expr = hl.if_else(
-        locus_expr.contig != "chrX",
+        locus_expr.in_autosome_or_par(),
         transform_methylation_level(methylation_expr, (0, 5)),
         transform_methylation_level(methylation_expr, (0, 3)),
     )

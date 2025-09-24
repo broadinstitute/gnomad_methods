@@ -1,16 +1,50 @@
 # noqa: D100
 
+import io
 import logging
+from contextlib import contextmanager, redirect_stdout
 from pprint import pprint
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import hail as hl
 from hail.utils.misc import new_temp_file
 
-from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, POPS, SEXES
+from gnomad.resources.grch38.gnomad import CURRENT_MAJOR_RELEASE, GEN_ANC_GROUPS, SEXES
 from gnomad.utils.vcf import HISTS, SORT_ORDER, make_label_combos
 
-logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
+# Save original LogRecord factory, i.e. the original logger.
+old_factory = logging.getLogRecordFactory()
+
+
+# Define custom factory that appends function names to logger so we can
+# parse them for the validation's output table.
+def custom_record_factory(suffix):
+    """Return a custom LogRecord factory that appends a given suffix to function names."""
+
+    def factory(*args, **kwargs):
+        # Create original log record.
+        record = old_factory(*args, **kwargs)
+        # Append suffix to original log record for future parsing.
+        record.funcName = f"{record.funcName}.{suffix}"
+        return record
+
+    return factory
+
+
+# Define context manager to temporarily enable the custom factory.
+@contextmanager
+def temp_logger(function_name):
+    """Temporarily modify logging factory to append `function_name` to function names."""
+    logging.setLogRecordFactory(custom_record_factory(function_name))
+    yield
+    # Restore original factory.
+    logging.setLogRecordFactory(old_factory)
+
+
+logging.basicConfig(
+    format="%(levelname)s (%(name)s %(module)s.%(funcName)s %(lineno)d): %(message)s"
+)
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -24,6 +58,7 @@ def generic_field_check(
     show_percent_sites: bool = False,
     n_fail: Optional[int] = None,
     ht_count: Optional[int] = None,
+    function_name: Optional[str] = None,
 ) -> None:
     """
     Check generic logical condition `cond_expr` involving annotations in a Hail Table when `n_fail` is absent and print the results to stdout.
@@ -46,30 +81,136 @@ def generic_field_check(
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param n_fail: Optional number of sites that fail the conditional checks (previously computed). If not supplied, `cond_expr` is used to filter the Table and obtain the count of sites that fail the checks.
     :param ht_count: Optional number of sites within hail Table (previously computed). If not supplied, a count of sites in the Table is performed.
+    :param function_name: Name of the function that initiated this check. The name will be appended to the logger output.
     :return: None
     """
-    if n_fail is None and cond_expr is None:
-        raise ValueError("At least one of n_fail or cond_expr must be defined!")
+    with temp_logger(function_name):
+        if n_fail is None and cond_expr is None:
+            raise ValueError("At least one of n_fail or cond_expr must be defined!")
 
-    if n_fail is None and cond_expr is not None:
-        n_fail = ht.filter(cond_expr).count()
+        if n_fail is None and cond_expr is not None:
+            n_fail = ht.filter(cond_expr).count()
 
-    if show_percent_sites and (ht_count is None):
-        ht_count = ht.count()
+        if show_percent_sites and (ht_count is None):
+            ht_count = ht.count()
 
-    if n_fail > 0:
-        logger.info("Found %d sites that fail %s check:", n_fail, check_description)
-        if show_percent_sites:
+        if n_fail > 0:
+            table_output = None
+
+            if cond_expr is not None:
+                ht_filtered = ht.select(_fail=cond_expr, **display_fields)
+                ht_filtered = ht_filtered.filter(ht_filtered._fail).drop("_fail")
+                # Use StringIO to capture the table from show() for display in the final
+                # output table.
+                log_stream = io.StringIO()
+                with redirect_stdout(log_stream):
+                    ht_filtered.show(width=200)
+                    table_output = log_stream.getvalue().strip()
+
+            if show_percent_sites:
+                percent_failed = round(100 * (n_fail / ht_count), 2)
+                percent_failed_log = f" ({percent_failed}%)"
+            else:
+                percent_failed_log = ""
+
             logger.info(
-                "Percentage of sites that fail: %.2f %%", 100 * (n_fail / ht_count)
+                "Found %d sites%s that fail %s check: %s",
+                n_fail,
+                percent_failed_log,
+                check_description,
+                table_output,
             )
-        if cond_expr is not None:
-            ht = ht.select(_fail=cond_expr, **display_fields)
-            ht.filter(ht._fail).drop("_fail").show()
-    else:
-        logger.info("PASSED %s check", check_description)
-        if verbose:
-            ht.select(**display_fields).show()
+        else:
+            table_output = None
+            if verbose:
+                log_stream = io.StringIO()
+                with redirect_stdout(log_stream):
+                    ht.select(**display_fields).show(width=200)
+                    table_output = log_stream.getvalue().strip()
+
+            logger.info(
+                "PASSED %s check%s",
+                check_description,
+                f":\n{table_output}" if table_output else "",
+            )
+
+
+def generic_field_check_loop(
+    ht: hl.Table,
+    field_check_expr: Dict[str, Dict[str, Any]],
+    verbose: bool,
+    show_percent_sites: bool = False,
+    ht_count: int = None,
+    function_name: Optional[str] = None,
+) -> None:
+    """
+    Loop through all conditional checks for a given hail Table.
+
+    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check.
+
+    :param ht: Table containing annotations to be checked.
+    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
+    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
+    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
+    :param ht_count: Previously computed sum of sites within hail Table. Default is None.
+    :param function_name: Name of the function that initiated this check. The name will be appended to the logger output.
+    :return: None
+    """
+    ht_field_check_counts = ht.aggregate(
+        hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
+    )
+    for check_description, n_fail in ht_field_check_counts.items():
+        generic_field_check(
+            ht,
+            check_description=check_description,
+            n_fail=n_fail,
+            display_fields=field_check_expr[check_description]["display_fields"],
+            cond_expr=field_check_expr[check_description]["expr"],
+            verbose=verbose,
+            show_percent_sites=show_percent_sites,
+            ht_count=ht_count,
+            function_name=function_name,
+        )
+
+
+def generate_field_check_expr(
+    left_expr: Union[hl.expr.NumericExpression, hl.expr.StringExpression],
+    right_expr: Union[hl.expr.NumericExpression, hl.expr.StringExpression],
+    operator: str,
+) -> hl.expr.BooleanExpression:
+    """
+    Generate a Hail expression to check field comparisons while handling missing values.
+
+    If both fields are missing, the retured expression will be False. If only one field
+    is missing, the expression will be True. If both fields are defined and not equal,
+    the expression will be True.
+
+    :param left_expr: Left expression field for comparison.
+    :param right_expr: Right expression field for comparison.
+    :param operator: Comparison operator as a string ("==", "!=", "<", "<=", ">", ">=").
+    :return: Hail conditional expression for field validation.
+    """
+    operators_exprs = {
+        "==": left_expr == right_expr,
+        "!=": left_expr != right_expr,
+        "<": left_expr < right_expr,
+        "<=": left_expr <= right_expr,
+        ">": left_expr > right_expr,
+        ">=": left_expr >= right_expr,
+    }
+
+    if operator not in operators_exprs:
+        raise ValueError(
+            f"Unsupported operator '{operator}'. Choose from: {list(operators_exprs.keys())}"
+        )
+
+    return (
+        hl.case()
+        .when(hl.is_missing(left_expr) & hl.is_missing(right_expr), False)
+        .when(hl.is_missing(left_expr) | hl.is_missing(right_expr), True)
+        .when(operators_exprs[operator], True)
+        .default(False)
+    )
 
 
 def make_filters_expr_dict(
@@ -125,20 +266,20 @@ def make_group_sum_expr_dict(
     subset: str,
     label_groups: Dict[str, List[str]],
     sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> Dict[str, Dict[str, Union[hl.expr.Int64Expression, hl.expr.StructExpression]]]:
     """
     Compute the sum of call stats annotations for a specified group of annotations, compare to the annotated version, and display the result in stdout.
 
-    For example, if subset1 consists of pop1, pop2, and pop3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-pop1, t.info.AC-subset1-pop2, t.info.AC-subset1-pop3).
+    For example, if subset1 consists of gen_anc1, gen_anc2, and gen_anc3, check that t.info.AC-subset1 == sum(t.info.AC-subset1-gen_anc1, t.info.AC-subset1-gen_anc2, t.info.AC-subset1-gen_anc3).
 
     :param t: Input MatrixTable or Table containing call stats annotations to be summed.
     :param subset: String indicating sample subset.
-    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "pop", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
+    :param label_groups: Dictionary containing an entry for each label group, where key is the name of the grouping, e.g. "sex" or "gen_anc", and value is a list of all possible values for that grouping (e.g. ["XY", "XX"] or ["afr", "nfe", "amr"]).
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset in the Table's fields, e.g. AC-hgdp. If False, subset precedes metric, hgdp-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
     :return: Dictionary of sample sum field check expressions and display fields.
@@ -146,7 +287,7 @@ def make_group_sum_expr_dict(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     # Check if subset string is provided to avoid adding a delimiter to empty string
-    # (An empty string is passed to run this check on the entire callset)
+    # (An empty string is passed to run this check on the entire callset).
     if subset:
         subset += delimiter
 
@@ -154,9 +295,13 @@ def make_group_sum_expr_dict(
     # Grab the first group for check and remove if from the label_group
     # dictionary. In gnomAD, this is 'adj', as we do not retain the raw metric
     # counts for all sample groups so we do not check raw sample sums.
+    if "group" not in label_groups or not label_groups["group"]:
+        raise ValueError(
+            "Expected 'group' key in label_groups but it's missing or empty."
+        )
     group = label_groups.pop("group")[0]
     # sum_group is a the type of high level annotation that you want to sum
-    # e.g. 'pop', 'pop-sex', 'sex'.
+    # e.g. 'gen_anc', 'gen_anc-sex', 'sex'.
     sum_group = delimiter.join(
         sorted(label_groups.keys(), key=lambda x: sort_order.index(x))
     )
@@ -164,33 +309,48 @@ def make_group_sum_expr_dict(
 
     # Loop through metrics and the label combos to build a dictionary
     # where the key is a string representing the sum_group annotations and the value is the sum of these annotations.
-    # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is pop, then the values below are:
-    # sum_group_exprs = ["AC-tgp-pop1", "AC-tgp-pop2", "AC-tgp-pop3"]
-    # annot_dict = {'sum-AC-tgp-adj-pop': hl.sum(["AC-tgp-adj-pop1",
-    # "AC-tgp-adj-pop2", "AC-tgp-adj-pop3"])}
+    # If metric_first_field is True, metric is AC, subset is tgp, group is adj, sum_group is gen_anc, then the values below are:
+    # sum_group_exprs = ["AC-tgp-gen_anc1", "AC-tgp-gen_anc2", "AC-tgp-gen_anc3"]
+    # annot_dict = {'sum-AC-tgp-adj-gen_anc': hl.sum(["AC-tgp-adj-gen_anc1",
+    # "AC-tgp-adj-gen_anc2", "AC-tgp-adj-gen_anc3"])}
     annot_dict = {}
     for metric in metrics:
-        if metric_first_field:
-            field_prefix = f"{metric}{delimiter}{subset}"
-        else:
-            field_prefix = f"{subset}{metric}{delimiter}"
+        field_prefix = (
+            f"{metric}{delimiter}{subset}"
+            if metric_first_field
+            else f"{subset}{metric}{delimiter}"
+        )
 
         sum_group_exprs = []
         for label in label_combos:
             field = f"{field_prefix}{label}"
             if field in info_fields:
+                logger.info("Including field %s in make_group_sum_expr_dict.", field)
                 sum_group_exprs.append(t.info[field])
             else:
-                logger.warning("%s is not in table's info field", field)
+                logger.warning(
+                    "%s is NOT in table's info field, it will NOT be included in make_group_sum_expr_dict.",
+                    field,
+                )
 
-        annot_dict[f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"] = (
-            hl.sum(sum_group_exprs)
-        )
+        sum_field_name = f"sum{delimiter}{field_prefix}{group}{delimiter}{sum_group}"
 
-    # If metric_first_field is True, metric is AC, subset is tgp, sum_group is pop, and group is adj, then the values below are:
+        if not sum_group_exprs:
+            logger.warning(
+                "No valid fields found for %s. Assigning hl.missing()", sum_field_name
+            )
+            annot_dict[sum_field_name] = hl.missing(hl.tint64)
+        else:
+            annot_dict[sum_field_name] = hl.sum(
+                hl.array(sum_group_exprs).filter(hl.is_defined)
+            )
+
+    logger.info("Generated annot_dict keys: %s", list(annot_dict.keys()))
+
+    # If metric_first_field is True, metric is AC, subset is tgp, sum_group is gen_anc, and group is adj, then the values below are:
     # check_field_left = "AC-tgp-adj"
-    # check_field_right = "sum-AC-tgp-adj-pop" to match the annotation dict
-    # key from above
+    # check_field_right = "sum-AC-tgp-adj-gen_anc" to match the annotation dict
+    # key from above.
     field_check_expr = {}
     for metric in metrics:
         if metric_first_field:
@@ -199,7 +359,9 @@ def make_group_sum_expr_dict(
             check_field_left = f"{subset}{metric}{delimiter}{group}"
         check_field_right = f"sum{delimiter}{check_field_left}{delimiter}{sum_group}"
         field_check_expr[f"{check_field_left} = {check_field_right}"] = {
-            "expr": t.info[check_field_left] != annot_dict[check_field_right],
+            "expr": generate_field_check_expr(
+                t.info[check_field_left], annot_dict[check_field_right], "!="
+            ),
             "agg_func": hl.agg.count_where,
             "display_fields": hl.struct(
                 **{
@@ -260,7 +422,6 @@ def summarize_variant_filters(
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
-
     filters = t.aggregate(hl.agg.counter(t.filters))
     logger.info("Variant filter counts: %s", filters)
 
@@ -304,20 +465,32 @@ def summarize_variant_filters(
         """
         t = t.rows() if isinstance(t, hl.MatrixTable) else t
         # NOTE: make_filters_expr_dict returns a dict with %ages of variants filtered
-        t.group_by(**group_exprs).aggregate(
-            **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
-        ).order_by(hl.desc("n")).show(n_rows, n_cols)
+        log_stream = io.StringIO()
+        with redirect_stdout(log_stream):
+            t.group_by(**group_exprs).aggregate(
+                **make_filters_expr_dict(t, extra_filter_checks, variant_filter_field)
+            ).order_by(hl.desc("n")).show(n_rows, n_cols)
+            table_output = log_stream.getvalue().strip()
+        return table_output
 
     logger.info(
         "Checking distributions of filtered variants amongst variant filters..."
     )
-    _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
+    summary_table = _filter_agg_order(t, {"is_filtered": t.is_filtered}, n_rows, n_cols)
+    logger.info(
+        "Distributions of filtered variants amongst variant filters: %s",
+        f"\n{summary_table}",
+    )
 
     add_agg_expr = {}
     if "allele_type" in t.info:
         logger.info("Checking distributions of variant type amongst variant filters...")
         add_agg_expr["allele_type"] = t.info.allele_type
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type amongst variant filters: %s",
+            f"\n{summary_table}",
+        )
 
     if "in_problematic_region" in t.row:
         logger.info(
@@ -325,7 +498,11 @@ def summarize_variant_filters(
             " filters..."
         )
         add_agg_expr["in_problematic_region"] = t.in_problematic_region
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type and region amongst variant filters: %s",
+            f"\n{summary_table}",
+        )
 
     if "n_alt_alleles" in t.info:
         logger.info(
@@ -333,41 +510,10 @@ def summarize_variant_filters(
             " amongst variant filters..."
         )
         add_agg_expr["n_alt_alleles"] = t.info.n_alt_alleles
-        _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
-
-
-def generic_field_check_loop(
-    ht: hl.Table,
-    field_check_expr: Dict[str, Dict[str, Any]],
-    verbose: bool,
-    show_percent_sites: bool = False,
-    ht_count: int = None,
-) -> None:
-    """
-    Loop through all conditional checks for a given hail Table.
-
-    This loop allows aggregation across the hail Table once, as opposed to aggregating during every conditional check.
-
-    :param ht: Table containing annotations to be checked.
-    :param field_check_expr: Dictionary whose keys are conditions being checked and values are the expressions for filtering to condition.
-    :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
-    :param ht_count: Previously computed sum of sites within hail Table. Default is None.
-    :return: None
-    """
-    ht_field_check_counts = ht.aggregate(
-        hl.struct(**{k: v["agg_func"](v["expr"]) for k, v in field_check_expr.items()})
-    )
-    for check_description, n_fail in ht_field_check_counts.items():
-        generic_field_check(
-            ht,
-            check_description=check_description,
-            n_fail=n_fail,
-            display_fields=field_check_expr[check_description]["display_fields"],
-            cond_expr=field_check_expr[check_description]["expr"],
-            verbose=verbose,
-            show_percent_sites=show_percent_sites,
-            ht_count=ht_count,
+        summary_table = _filter_agg_order(t, add_agg_expr, n_rows, n_cols)
+        logger.info(
+            "Distributions of variant type, region type, and number of alt alleles variant filters: %s",
+            f"\n{summary_table}",
         )
 
 
@@ -376,7 +522,7 @@ def compare_subset_freqs(
     subsets: List[str],
     verbose: bool,
     show_percent_sites: bool = True,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
 ) -> None:
@@ -392,7 +538,7 @@ def compare_subset_freqs(
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
     :param show_percent_sites: If True, show the percentage and count of overall sites that fail; if False, only show the number of sites that fail.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
     :param metric_first_field: If True, metric precedes subset, e.g. AC-non_v2-. If False, subset precedes metric, non_v2-AC-XY. Default is True.
     :param metrics: List of metrics to compare between subset and entire callset. Default is ["AC", "AN", "nhomalt"].
     :return: None
@@ -422,8 +568,24 @@ def compare_subset_freqs(
                             f"{subset}{delimiter}{metric}{delimiter}{group}"
                         )
 
-                    field_check_expr[f"{check_field_left} != {check_field_right}"] = {
-                        "expr": t.info[check_field_left] == t.info[check_field_right],
+                    # Check that either the left or right field is non-zero. If both are
+                    # zero, do not need to flag the variant. If either is missing, will
+                    # want to flag the variant.
+                    non_zero_condition = hl.or_else(
+                        (t.info[check_field_left] != 0)
+                        | (t.info[check_field_right] != 0)
+                        | hl.is_missing(t.info[check_field_left])
+                        | hl.is_missing(t.info[check_field_right]),
+                        False,
+                    )
+
+                    field_check_expr[
+                        f"{check_field_left} != {check_field_right} while non-zero"
+                    ] = {
+                        "expr": non_zero_condition
+                        & generate_field_check_expr(
+                            t.info[check_field_left], t.info[check_field_right], "=="
+                        ),
                         "agg_func": hl.agg.count_where,
                         "display_fields": hl.struct(
                             **{
@@ -438,6 +600,7 @@ def compare_subset_freqs(
         field_check_expr,
         verbose,
         show_percent_sites=show_percent_sites,
+        function_name="compare_subset_freqs",
     )
 
     # Spot check the raw AC counts
@@ -451,78 +614,69 @@ def sum_group_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     sexes: List[str] = SEXES,
     subsets: List[str] = [""],
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
+    gen_anc_groups: List[str] = GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"],
     groups: List[str] = ["adj"],
-    additional_subsets_and_pops: Dict[str, List[str]] = None,
+    additional_subsets_and_gen_anc_groups: Dict[str, List[str]] = None,
     verbose: bool = False,
     sort_order: List[str] = SORT_ORDER,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
     metrics: List[str] = ["AC", "AN", "nhomalt"],
+    gen_anc_label_name: str = "gen_anc",
 ) -> None:
     """
     Compute the sum of annotations for a specified group of annotations, and compare to the annotated version.
 
     Displays results from checking the sum of the specified annotations in stdout.
-    Also checks that annotations for all expected sample populations are present.
+    Also checks that annotations for all expected sample genetic ancestry groups are present.
 
     :param t: Input Table.
     :param sexes: List of sexes in table.
-    :param subsets: List of sample subsets that contain pops passed in pops parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
-    :param pops: List of pops contained within the subsets. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
-    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and list of the subset's specific populations (values). Default is None.
+    :param subsets: List of sample subsets that contain genetic ancestry groups passed in gen_anc_groups parameter. An empty string, e.g. "", should be passed to test entire callset. Default is [""].
+    :param gen_anc_groups: List of genetic ancestry groups contained within the subsets. Default is GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the genetic ancestry group or sex groupings of any subset. Default is ["adj"]
+    :param additional_subsets_and_gen_anc_groups: Dict with subset (keys) and list of the subset's specific genetic ancestry groups (values). Default is None.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks. Default is False.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
     :param metrics: List of metrics to sum and compare to annotationed versions. Default is ["AC", "AN", "nhomalt"].
+    :param gen_anc_label_name: Name of label used to denote genetic ancestry groups, such as "gen_anc" or "pop". Default is "gen_anc".
     :return: None
     """
-    # TODO: Add support for subpop sums
+    # TODO: Add support for subgroup sums.
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     field_check_expr = {}
-    default_pop_subset = {subset: pops for subset in subsets}
-    sample_sum_sets_and_pops = (
-        {**default_pop_subset, **additional_subsets_and_pops}
-        if additional_subsets_and_pops
-        else default_pop_subset
+    default_gen_anc_subset = {subset: gen_anc_groups for subset in subsets}
+    sample_sum_sets_and_gen_anc_groups = (
+        {**default_gen_anc_subset, **additional_subsets_and_gen_anc_groups}
+        if additional_subsets_and_gen_anc_groups
+        else default_gen_anc_subset
     )
-    for subset, pops in sample_sum_sets_and_pops.items():
+    for subset, gen_anc_groups in sample_sum_sets_and_gen_anc_groups.items():
         for group in groups:
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], pop=pops),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], sex=sexes),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-            field_check_expr_s = make_group_sum_expr_dict(
-                t,
-                subset,
-                dict(group=[group], pop=pops, sex=sexes),
-                sort_order,
-                delimiter,
-                metric_first_field,
-                metrics,
-            )
-            field_check_expr.update(field_check_expr_s)
-
-    generic_field_check_loop(t, field_check_expr, verbose)
+            for grouping in [
+                {gen_anc_label_name: gen_anc_groups},
+                {"sex": sexes},
+                {gen_anc_label_name: gen_anc_groups, "sex": sexes},
+            ]:
+                logger.info(
+                    "Making group sum expression dictionary for grouping: %s", grouping
+                )
+                field_check_expr_s = make_group_sum_expr_dict(
+                    t,
+                    subset,
+                    dict(group=[group], **grouping),
+                    sort_order,
+                    delimiter,
+                    metric_first_field,
+                    metrics,
+                )
+                field_check_expr.update(field_check_expr_s)
+    generic_field_check_loop(
+        t, field_check_expr, verbose, function_name="sum_group_callstats"
+    )
 
 
 def summarize_variants(
@@ -582,8 +736,9 @@ def check_raw_and_adj_callstats(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str],
     verbose: bool,
-    delimiter: str = "-",
+    delimiter: str = "_",
     metric_first_field: bool = True,
+    nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
     Perform validity checks on raw and adj data in input Table/MatrixTable.
@@ -598,8 +753,9 @@ def check_raw_and_adj_callstats(
     :param t: Input MatrixTable or Table to check.
     :param subsets: List of sample subsets.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param delimiter: String to use as delimiter when making group label combinations. Default is "_".
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
+    :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
@@ -608,7 +764,7 @@ def check_raw_and_adj_callstats(
 
     for group in ["raw", "adj"]:
         # Check AC and nhomalt missing if AN is missing and defined if AN is defined.
-        for subfield in ["AC", "nhomalt"]:
+        for subfield in ["AC", nhomalt_metric]:
             check_field = f"{subfield}{delimiter}{group}"
             an_field = f"AN{delimiter}{group}"
             field_check_expr[
@@ -624,6 +780,21 @@ def check_raw_and_adj_callstats(
                     **{an_field: t.info[an_field], check_field: t.info[check_field]}
                 ),
             }
+
+        # Check that nhomalt <= AC / 2.
+        check_field_nhomalt = f"{nhomalt_metric}{delimiter}{group}"
+        check_field_AC = f"AC{delimiter}{group}"
+
+        field_check_expr[f"{check_field_nhomalt} <= {check_field_AC} / 2"] = {
+            "expr": t.info[check_field_nhomalt] > (t.info[check_field_AC] / 2),
+            "agg_func": hl.agg.count_where,
+            "display_fields": hl.struct(
+                **{
+                    check_field_nhomalt: t.info[check_field_nhomalt],
+                    check_field_AC: t.info[check_field_AC],
+                }
+            ),
+        }
 
         # Check AF missing if AN is missing and defined if AN is defined and > 0.
         check_field = f"AF{delimiter}{group}"
@@ -654,7 +825,7 @@ def check_raw_and_adj_callstats(
         }
 
     for subfield in ["AC", "AF"]:
-        # Check raw AC, AF > 0
+        # If defined, check that raw AC, AF > 0.
         check_field = f"{subfield}{delimiter}raw"
         field_check_expr[f"{check_field} > 0"] = {
             "expr": t.info[check_field] <= 0,
@@ -662,7 +833,7 @@ def check_raw_and_adj_callstats(
             "display_fields": hl.struct(**{check_field: t.info[check_field]}),
         }
 
-        # Check adj AC, AF > 0
+        # If defined, check adj AC, AF >= 0.
         check_field = f"{subfield}{delimiter}adj"
         field_check_expr[f"{check_field} >= 0"] = {
             "expr": t.info[check_field] < 0,
@@ -672,8 +843,8 @@ def check_raw_and_adj_callstats(
             ),
         }
 
-    # Check overall gnomad's raw subfields >= adj
-    for subfield in ["AC", "AN", "nhomalt"]:
+    # Check overall gnomad's raw subfields >= adj.
+    for subfield in ["AC", "AN", nhomalt_metric]:
         check_field_left = f"{subfield}{delimiter}raw"
         check_field_right = f"{subfield}{delimiter}adj"
 
@@ -689,7 +860,7 @@ def check_raw_and_adj_callstats(
         }
 
         for subset in subsets:
-            # Add delimiter for subsets but not "" representing entire callset
+            # Add delimiter for subsets but not "" representing entire callset.
             if subset:
                 subset += delimiter
             field_check_label = (
@@ -701,7 +872,9 @@ def check_raw_and_adj_callstats(
             check_field_right = f"{field_check_label}adj"
 
             field_check_expr[f"{check_field_left} >= {check_field_right}"] = {
-                "expr": t.info[check_field_left] < t.info[check_field_right],
+                "expr": generate_field_check_expr(
+                    t.info[check_field_left], t.info[check_field_right], "<"
+                ),
                 "agg_func": hl.agg.count_where,
                 "display_fields": hl.struct(
                     **{
@@ -711,7 +884,9 @@ def check_raw_and_adj_callstats(
                 ),
             }
 
-    generic_field_check_loop(t, field_check_expr, verbose)
+    generic_field_check_loop(
+        t, field_check_expr, verbose, function_name="check_raw_and_adj_callstats"
+    )
 
 
 def check_sex_chr_metrics(
@@ -719,7 +894,8 @@ def check_sex_chr_metrics(
     info_metrics: List[str],
     contigs: List[str],
     verbose: bool,
-    delimiter: str = "-",
+    delimiter: str = "_",
+    nhomalt_metric: str = "nhomalt",
 ) -> None:
     """
     Perform validity checks for annotations on the sex chromosomes.
@@ -732,16 +908,35 @@ def check_sex_chr_metrics(
     :param info_metrics: List of metrics in info struct of input Table.
     :param contigs: List of contigs present in input Table.
     :param verbose: If True, show top values of annotations being checked, including checks that pass; if False, show only top values of annotations that fail checks.
-    :param delimiter: String to use as the delimiter in XX metrics. Default is "-".
+    :param delimiter: String to use as the delimiter in XX metrics. Default is "_".
+    :param nhomalt_metric: Name of metric denoting homozygous alternate counts. Default is "nhomalt".
     :return: None
     """
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
 
     xx_metrics = [x for x in info_metrics if f"{delimiter}XX" in x]
 
+    if len(xx_metrics) == 0:
+        logger.info("FAILED check for XX metrics: no XX metrics found!")
+    else:
+        logger.info("Checking the following XX metrics: %s", xx_metrics)
+
+    # Check that metrics for chrY variants in XX samples are NA and not 0.
     if "chrY" in contigs:
         logger.info("Check values of XX metrics for Y variants are NA:")
-        t_y = hl.filter_intervals(t, [hl.parse_locus_interval("chrY")])
+        t_y = hl.filter_intervals(
+            t,
+            [
+                hl.parse_locus_interval(
+                    "chrY", reference_genome=t.locus.dtype.reference_genome
+                )
+            ],
+        )
+        n_y = t_y.count()
+        if n_y == 0:
+            logger.info("FAILED metric checks on chrY: no Y variants found!")
+        else:
+            logger.info("Found %d chrY variants", n_y)
         metrics_values = {}
         for metric in xx_metrics:
             metrics_values[metric] = hl.agg.any(hl.is_defined(t_y.info[metric]))
@@ -762,14 +957,32 @@ def check_sex_chr_metrics(
                 )
             else:
                 logger.info("PASSED %s = %s check for Y variants", metric, None)
+    else:
+        logger.info("FAILED metric checks on chrY: no chrY found!")
 
-    t_x = hl.filter_intervals(t, [hl.parse_locus_interval("chrX")])
+    # Check that nhomalt counts are equal to XX nhomalt counts for all non-PAR
+    # chrX variants.
+    t_x = hl.filter_intervals(
+        t,
+        [
+            hl.parse_locus_interval(
+                "chrX", reference_genome=t.locus.dtype.reference_genome
+            )
+        ],
+    )
     t_xnonpar = t_x.filter(t_x.locus.in_x_nonpar())
     n = t_xnonpar.count()
     logger.info("Found %d X nonpar sites", n)
+    if n == 0:
+        logger.info("FAILED metric checks for X nonpar sites: no X nonpar sites found!")
 
     logger.info("Check (nhomalt == nhomalt_xx) for X nonpar variants:")
-    xx_metrics = [x for x in xx_metrics if "nhomalt" in x]
+    xx_metrics = [x for x in xx_metrics if nhomalt_metric in x]
+
+    if len(xx_metrics) == 0:
+        logger.info("FAILED check for XX nhomalt metrics: no XX nhomalt metrics found!")
+    else:
+        logger.info("Checking the following XX nhomalt metrics: %s", xx_metrics)
 
     field_check_expr = {}
     for metric in xx_metrics:
@@ -777,8 +990,11 @@ def check_sex_chr_metrics(
         check_field_left = f"{metric}"
         check_field_right = f"{standard_field}"
         field_check_expr[f"{check_field_left} == {check_field_right}"] = {
-            "expr": t_xnonpar.info[check_field_left]
-            != t_xnonpar.info[check_field_right],
+            "expr": generate_field_check_expr(
+                t_xnonpar.info[check_field_left],
+                t_xnonpar.info[check_field_right],
+                "!=",
+            ),
             "agg_func": hl.agg.count_where,
             "display_fields": hl.struct(
                 **{
@@ -788,7 +1004,9 @@ def check_sex_chr_metrics(
             ),
         }
 
-    generic_field_check_loop(t_xnonpar, field_check_expr, verbose)
+    generic_field_check_loop(
+        t_xnonpar, field_check_expr, verbose, function_name="check_sex_chr_metrics"
+    )
 
 
 def compute_missingness(
@@ -841,7 +1059,7 @@ def compute_missingness(
                 n_missing,
                 (100 * n_missing / n_sites),
             )
-    logger.info("%d missing metrics checks failed", n_fail)
+    logger.warning("%d missing metrics checks failed for top level annotations", n_fail)
 
 
 def vcf_field_check(
@@ -937,6 +1155,20 @@ def check_global_and_row_annot_lengths(
     t = t.rows() if isinstance(t, hl.MatrixTable) else t
     if not check_all_rows:
         t = t.head(1)
+
+    n_rows = t.count()
+
+    global_lengths = {
+        global_field: hl.eval(hl.len(t.index_globals()[global_field]))
+        for global_fields in row_to_globals_check.values()
+        for global_field in global_fields
+    }
+
+    row_length_counts = {
+        row_field: t.aggregate(hl.agg.counter(hl.len(t[row_field])))
+        for row_field in row_to_globals_check.keys()
+    }
+
     for row_field, global_fields in row_to_globals_check.items():
         if not check_all_rows:
             logger.info(
@@ -944,28 +1176,28 @@ def check_global_and_row_annot_lengths(
                 row_field,
                 global_fields,
             )
+
+        row_lengths = row_length_counts[row_field]
+
         for global_field in global_fields:
-            global_len = hl.eval(hl.len(t[global_field]))
-            row_len_expr = hl.len(t[row_field])
-            failed_rows = t.aggregate(
-                hl.struct(
-                    n_fail=hl.agg.count_where(row_len_expr != global_len),
-                    row_len=hl.agg.counter(row_len_expr),
-                )
+            global_len = global_lengths[global_field]
+            failed_rows = sum(
+                count for length, count in row_lengths.items() if length != global_len
             )
-            outcome = "Failed" if failed_rows["n_fail"] > 0 else "Passed"
-            n_rows = t.count()
+
+            outcome = "Failed" if failed_rows > 0 else "Passed"
+
             logger.info(
                 "%s global and row lengths comparison: Length of %s in"
-                " globals (%d) does %smatch length of %s in %d out of %d rows (%s)",
+                " globals (%d) does %smatch length of %s in %d out of %d rows (row length counter: %s)",
                 outcome,
                 global_field,
                 global_len,
                 "NOT " if outcome == "Failed" else "",
                 row_field,
-                failed_rows["n_fail"] if outcome == "Failed" else n_rows,
+                failed_rows if outcome == "Failed" else n_rows,
                 n_rows,
-                failed_rows["row_len"],
+                row_lengths,
             )
 
 
@@ -982,7 +1214,7 @@ def pprint_global_anns(t: Union[hl.MatrixTable, hl.Table]) -> None:
 def validate_release_t(
     t: Union[hl.MatrixTable, hl.Table],
     subsets: List[str] = [""],
-    pops: List[str] = POPS[CURRENT_MAJOR_RELEASE]["exomes"],
+    gen_anc_groups: List[str] = GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"],
     missingness_threshold: float = 0.5,
     site_gt_check_expr: Dict[str, hl.expr.BooleanExpression] = None,
     verbose: bool = False,
@@ -992,7 +1224,7 @@ def validate_release_t(
     sum_metrics: List[str] = ["AC", "AN", "nhomalt"],
     sexes: List[str] = SEXES,
     groups: List[str] = ["adj"],
-    sample_sum_sets_and_pops: Dict[str, List[str]] = None,
+    sample_sum_sets_and_gen_anc_groups: Dict[str, List[str]] = None,
     sort_order: List[str] = SORT_ORDER,
     variant_filter_field: str = "RF",
     problematic_regions: List[str] = ["lcr", "segdup", "nonpar"],
@@ -1022,17 +1254,17 @@ def validate_release_t(
 
     :param t: Input MatrixTable or Table containing variant annotations to check.
     :param subsets: List of subsets to be checked.
-    :param pops: List of pops within main callset. Default is POPS[CURRENT_MAJOR_RELEASE]["exomes"].
+    :param gen_anc_groups: List of genetic ancestry groups within main callset. Default is GEN_ANC_GROUPS[CURRENT_MAJOR_RELEASE]["exomes"].
     :param missingness_threshold: Upper cutoff for allowed amount of missingness. Default is 0.5.
     :param site_gt_check_expr: Optional boolean expression or dictionary of strings and boolean expressions typically used to log how many monoallelic or 100% heterozygous sites are in the Table.
     :param verbose: If True, display top values of relevant annotations being checked, regardless of whether check conditions are violated; if False, display only top values of relevant annotations if check conditions are violated.
     :param show_percent_sites: Show percentage of sites that fail checks. Default is False.
     :param delimiter: String to use as delimiter when making group label combinations. Default is "-".
-    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-male. If False, label group precedes metric, afr-male-AC. Default is True.
+    :param metric_first_field: If True, metric precedes label group, e.g. AC-afr-XY. If False, label group precedes metric, afr-XY-AC. Default is True.
     :param sum_metrics: List of metrics to sum and compare to annotationed versions and between subsets and entire callset. Default is ["AC", "AN", "nhomalt"].
     :param sexes: List of sexes in table. Default is SEXES.
-    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the pop or sex groupings of any subset. Default is ["adj"]
-    :param sample_sum_sets_and_pops: Dict with subset (keys) and populations within subset (values) for sample sum check.
+    :param groups: List of callstat groups, e.g. "adj" and "raw" contained within the callset. gnomAD does not store the raw callstats for the genetic ancestry group or sex groupings of any subset. Default is ["adj"]
+    :param sample_sum_sets_and_gen_anc_groups: Dict with subset (keys) and genetic ancestry groups within subset (values) for sample sum check.
     :param sort_order: List containing order to sort label group combinations. Default is SORT_ORDER.
     :param variant_filter_field: String of variant filtration used in the filters annotation on `ht` (e.g. RF, VQSR, AS_VQSR). Default is "RF".
     :param problematic_regions: List of regions considered problematic to run filter check in. Default is ["lcr", "segdup", "nonpar"].
@@ -1095,9 +1327,9 @@ def validate_release_t(
             t,
             sexes,
             subsets,
-            pops,
+            gen_anc_groups,
             groups,
-            sample_sum_sets_and_pops,
+            sample_sum_sets_and_gen_anc_groups,
             verbose,
             sort_order,
             delimiter,
@@ -1211,3 +1443,138 @@ def count_vep_annotated_variants_per_interval(
     )
 
     return interval_ht
+
+
+def check_missingness_of_struct(
+    struct_expr: hl.expr.StructExpression, prefix: str = ""
+) -> Dict[str, Any]:
+    """
+    Recursively check the fraction of missing values of all fields within a StructExpression.
+
+    Either a standalone or nested struct can be provided. If the struct contains an array (or set) of values, the array
+    will be considered missing if it is NA, an empty array, or only has missing elements.
+
+    :param struct_expr: StructExpression for which to check for missing values.
+    :param prefix: Prefix to append to names of struct fields within the struct_expr.
+    :return: Dictionary mapping field names to their missingness fraction expressions, with nested dictionaries representing any nested structs.
+    """
+    if isinstance(struct_expr, hl.expr.StructExpression):
+        return {
+            f"{prefix}.{key}": check_missingness_of_struct(
+                struct_expr[key], f"{prefix}.{key}"
+            )
+            for key in struct_expr.keys()
+        }
+    elif isinstance(struct_expr, (hl.expr.ArrayExpression, hl.expr.SetExpression)):
+        # Count array/set as missing if it is NA, an empty array/set, or only has missing
+        # elements.
+        return hl.agg.fraction(
+            hl.or_else(struct_expr.all(lambda x: hl.is_missing(x)), True)
+        )
+    else:
+        return hl.agg.fraction(hl.is_missing(struct_expr))
+
+
+def flatten_missingness_struct(
+    missingness_struct: hl.expr.StructExpression,
+) -> Dict[str, float]:
+    """
+    Recursively flatten and evaluate nested dictionaries of missingness within a Struct.
+
+    :param missingness_struct: Struct containing dictionaries of missingness values.
+    :return: Dictionary with field names as keys and their evaluated missingness fractions as values.
+    """
+    missingness_dict = {}
+    for key, value in missingness_struct.items():
+        # Recursively check nested missingness dictionaries and flatten if needed.
+        if isinstance(value, dict):
+            missingness_dict.update(flatten_missingness_struct(value))
+        else:
+            missingness_dict[key] = hl.eval(value)
+    return missingness_dict
+
+
+def unfurl_array_annotations(
+    ht: hl.Table,
+    array_meta_dicts={"freq": "freq_meta"},
+    sorted_keys: List[str] = ["subset", "gen_anc", "sex", "group"],
+) -> Dict[str, Any]:
+    """
+    Unfurl specified arrays of structs into a dictionary of flattened expressions.
+
+    Array annotations are expected to have corresponding metadata dictionaries defining the content of each array element.
+    All keys in the metadata dictionaries must be defined in the `sorted_keys` list.
+
+    :param ht: Input Table.
+    :param array_meta_dicts: Dictionary containing the array annotations to unfurl and their corresponding metadata dictionaries. Default is {'freq': 'freq_meta'}.
+    :param sorted_keys: List containing the order in which keys should be flattened. Default is ["subset", "gen_anc", "sex", "group"].
+    :return: Flattened dictionary of unfurled array annotations.
+    """
+    expr_dict = {}
+
+    # Define function to combine keys for flattening.
+    def _make_key(meta) -> str:
+        """Concatenate keys into a new annotation."""
+        return "_".join([meta[f] for f in sorted_keys if f in meta])
+
+    for array, array_meta in array_meta_dicts.items():
+
+        array_meta = hl.eval(ht[array_meta])
+
+        # Raise error if any unsuspected keys found.
+        meta_keys = set(key for item in array_meta for key in item.keys())
+        unspecified_keys = meta_keys - set(sorted_keys)
+        if unspecified_keys:
+            raise ValueError(
+                f"Unexpected key(s) {unspecified_keys} in freq_meta, all keys must be defined in the sort order"
+            )
+
+        # Iterate through array_meta and assign each index to a new flattened key
+        # containing all group info.
+        index_map = {_make_key(meta): idx for idx, meta in enumerate(array_meta)}
+        for k, i in index_map.items():
+            for f in ht[array][0].keys():
+                expr_dict[f"{f}_{k}"] = ht[array][i][f]
+    return expr_dict
+
+
+def check_globals_for_retired_terms(
+    ht: hl.Table, retired_terms: Set[str] = {"pop", "population", "oth", "other"}
+) -> None:
+    """
+    Check list of dictionaries to see if the keys in the meta dictionaries contain retired terms.
+
+    :param ht: Input Table
+    :param retired_terms: Set of retired terms to check for in the global annotations. Default is {"pop", "population", "oth", "other"}.
+    """
+    logger.info("Checking globals for retired terms...")
+    errors = []
+
+    for field in ht.globals:
+        if field.endswith("meta"):
+            for d in hl.eval(ht[field]):
+                # Check for retired terms in global keys.
+                terms_in_global_keys = retired_terms.intersection(d.keys())
+                if len(terms_in_global_keys) > 0:
+                    errors.append(
+                        f"Found retired term(s) {terms_in_global_keys} in global field keys {d}"
+                    )
+                # Checks for retired terms in global values.
+                terms_in_global_values = retired_terms.intersection(d.values())
+                if len(terms_in_global_values) > 0:
+                    errors.append(
+                        f"Found retired term(s) {terms_in_global_values} in global field values {d}"
+                    )
+
+        if "index_dict" in field:
+            for k in hl.eval(ht[field]).keys():
+                terms_in_global_index = retired_terms.intersection({k})
+                if len(terms_in_global_index) > 0:
+                    errors.append(
+                        f"Found retired term(s) {terms_in_global_index} in global index field {field}: {hl.eval(ht[field])}"
+                    )
+
+    if len(errors) > 0:
+        logger.info("Failed retired term check: %s", errors)
+    else:
+        logger.info("Passed retired term check: No retired terms found in globals.")

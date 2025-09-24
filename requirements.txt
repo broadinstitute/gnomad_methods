@@ -4,7 +4,7 @@ hail
 hdbscan
 ipywidgets
 networkx
-onnx
+onnx==1.17.0
 onnxruntime
 scikit-learn
 skl2onnx

@@ -20,15 +20,15 @@ GENOME_COVERAGE_RELEASES = ["2.1"]
 CURRENT_EXOME_COVERAGE_RELEASE = "2.1"
 CURRENT_GENOME_COVERAGE_RELEASE = "2.1"
 
-SUBPOPS = {
+SUBGROUPS = {
     "NFE": ["BGR", "EST", "NWE", "SEU", "SWE", "ONF"],
     "EAS": ["KOR", "JPN", "OEA"],
 }
-GENOME_POPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH"]
-EXOME_POPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH", "SAS"]
-EXAC_POPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
+GENOME_GEN_ANC_GROUPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH"]
+EXOME_GEN_ANC_GROUPS = ["AFR", "AMR", "ASJ", "EAS", "FIN", "NFE", "OTH", "SAS"]
+EXAC_GEN_ANC_GROUPS = ["AFR", "AMR", "EAS", "FIN", "NFE", "OTH", "SAS"]
 
-POP_NAMES = {
+GEN_ANC_GROUP_NAMES = {
     "oth": "Other",
     "afr": "African-American/African",
     "ami": "Amish",
@@ -88,15 +88,15 @@ def _public_coverage_ht_path(data_type: str, version: str) -> str:
     return f"gs://gnomad-public-requester-pays/release/{version}/coverage/{data_type}/gnomad.{data_type}.r{version}.coverage.ht"
 
 
-def _public_pca_ht_path(subpop: str) -> str:
+def _public_pca_ht_path(subgrp: str) -> str:
     """
     Get public pca loadings path.
 
-    :param subpop: Can be empty ("") -> global, "eas" or "nfe"
+    :param subgrp: Can be empty ("") -> global, "eas" or "nfe"
     :return: Path to release Table
     """
-    subpop = f".{subpop}" if subpop else ""
-    return f"gs://gnomad-public-requester-pays/release/2.1/pca/gnomad.r2.1.pca_loadings{subpop}.ht"
+    subgrp = f".{subgrp}" if subgrp else ""
+    return f"gs://gnomad-public-requester-pays/release/2.1/pca/gnomad.r2.1.pca_loadings{subgrp}.ht"
 
 
 def _liftover_data_path(data_type: str, version: str) -> str:
@@ -125,7 +125,6 @@ def _public_pext_path(pext_type: str = "base_level") -> str:
 
     :param pext_type: One of "annotation_level" or "base_level". Default is "base_level".
     :return: Path to pext data.
-    :raises DataException: If the provided pext_type is invalid.
     """
     pext_paths = {
         "annotation_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht",
@@ -139,6 +138,36 @@ def _public_pext_path(pext_type: str = "base_level") -> str:
         )
 
     return pext_paths[pext_type]
+
+
+def _public_browser_gene_ht_path() -> str:
+    """
+    Get public browser gene table path.
+
+    .. note::
+
+       This table has smaller number of partitions (n=100) for faster computation and
+       contains pext data compared to gnomad.genes.GRCh37.GENCODEv19.ht (which was
+       used by the browser for ES export) under the same path.
+
+    :return: Path to browser gene Table.
+    """
+    return "gs://gnomad-public-requester-pays/resources/grch37/browser/gnomad.genes.GRCh37.GENCODEv19.pext.ht"
+
+
+def _public_mnv_path(distance: int = 1) -> str:
+    """
+    Get path to public multinucleotide variant (MNV) data.
+
+    :param distance: Distance between two SNVs in MNV. Default is 1.
+    :return: Path to MNV data.
+    """
+    distances = set(range(1, 11))
+    if distance not in distances:
+        raise DataException(
+            f"Invalid distance: '{distance}'. Valid options are {distances}."
+        )
+    return f"gs://gnomad-public-requester-pays/release/2.1/mnv/genome/gnomad_mnv_genome_d{distance}.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:
@@ -225,19 +254,19 @@ def liftover(data_type: str) -> VersionedTableResource:
     )
 
 
-def public_pca_loadings(subpop: str = "") -> GnomadPublicTableResource:
+def public_pca_loadings(subgrp: str = "") -> GnomadPublicTableResource:
     """
-    Return the TableResource containing sites and loadings from population PCA.
+    Return the TableResource containing sites and loadings from genetic ancestry PCA.
 
-    :param subpop: Can be empty ("") -> global, "eas" or "nfe"
+    :param subgrp: Can be empty ("") -> global, "eas" or "nfe"
     :return: gnomAD public PCA loadings TableResource
     """
-    if subpop not in ["", "eas", "nfe"]:
+    if subgrp not in ["", "eas", "nfe"]:
         raise DataException(
-            'Available subpops are "eas" or "nfe", default value "" for global'
+            'Available subgroups are "eas" or "nfe", default value "" for global'
         )
 
-    return GnomadPublicTableResource(path=_public_pca_ht_path(subpop))
+    return GnomadPublicTableResource(path=_public_pca_ht_path(subgrp))
 
 
 def release_vcf_path(data_type: str, version: str, contig: str) -> str:
@@ -275,3 +304,22 @@ def constraint() -> GnomadPublicTableResource:
     :return: Gene constraint Table.
     """
     return GnomadPublicTableResource(path=_public_constraint_ht_path())
+
+
+def mnv(distance: int = 1) -> GnomadPublicTableResource:
+    """
+    Retrieve multinucleotide variant table.
+
+    :param distance: Distance between two SNVs in MNV. Default is 1.
+    :return: MNV Table.
+    """
+    return GnomadPublicTableResource(path=_public_mnv_path(distance))
+
+
+def browser_gene() -> GnomadPublicTableResource:
+    """
+    Retrieve browser gene table.
+
+    :return: Browser gene Table.
+    """
+    return GnomadPublicTableResource(path=_public_browser_gene_ht_path())

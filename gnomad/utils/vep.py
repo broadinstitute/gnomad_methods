@@ -1062,6 +1062,20 @@ def get_loftee_end_trunc_filter_expr(
     True is returned if the GERP distance is less than the cutoff and the '50_BP_RULE'
     annotation is not 'PASS'.
 
+    The END_TRUNC filter is designed to identify loss-of-function variants that occur
+    near the end of transcripts, which are often less likely to cause true loss of
+    function.
+
+    GERP (Genomic Evolutionary Rate Profiling) scores measure evolutionary constraint,
+    with positive values indicating conservation and negative values indicating less
+    constraint. The default cutoff of 0.0 means that variants in regions with any level
+    of evolutionary constraint (GERP >= 0) will NOT be filtered as END_TRUNC, while
+    variants in less constrained regions (GERP < 0) will be filtered.
+
+    The filter also requires that the '50_BP_RULE' annotation is not 'PASS', meaning
+    the variant falls within the last 50 base pairs of the transcript where Nonsense
+    Mediated Decay (NMD) escape is more likely.
+
     :param csq_expr: StructExpression containing the LOFTEE annotation 'lof_info', with
         'GERP_DIST' and '50_BP_RULE' info.
     :param gerp_dist_cutoff: GERP distance cutoff for end truncation. Default is 0.0.

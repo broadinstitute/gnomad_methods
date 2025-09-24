@@ -1748,6 +1748,11 @@ def add_gencode_transcript_annotations(
         'transcript_id' field.
     :return: Table with transcript annotations from GENCODE added.
     """
+    if remove_y_par and "transcript_id_version" not in gencode_ht.row:
+        raise ValueError(
+            "remove_y_par is True but 'transcript_id_version' is not in gencode_ht"
+        )
+
     if remove_y_par:
         gencode_ht = gencode_ht.filter(
             ~gencode_ht.transcript_id_version.endswith("Y_PAR")

@@ -1125,8 +1125,9 @@ def update_loftee_end_trunc_filter(
         :return: Consequence Struct with updated LOFTEE annotations.
         """
         end_trunc_expr = get_loftee_end_trunc_filter_expr(csq_expr, gerp_dist_cutoff)
+        filter_parts = csq_expr.lof_filter.split(",")
         filter_expr = hl.or_else(
-            hl.set(csq_expr.lof_filter.split(",")), hl.empty_set(hl.tstr)
+            hl.set(filter_parts.filter(lambda x: x != "")), hl.empty_set(hl.tstr)
         )
         filter_expr = hl.if_else(
             end_trunc_expr,

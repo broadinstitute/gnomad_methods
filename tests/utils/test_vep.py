@@ -120,7 +120,7 @@ class TestUpdateLofteeEndTruncFilter:
                 lof_filter="SINGLE_EXON,END_TRUNC",
                 lof="LC",
             ),
-            # Case 4: Should add END_TRUNC
+            # Case 4: Should add END_TRUNC.
             hl.Struct(
                 lof_info="GERP_DIST:-1.0,50_BP_RULE:FAIL", lof_filter="", lof="HC"
             ),
@@ -221,7 +221,9 @@ class TestUpdateLofteeEndTruncFilter:
         # Collect results.
         results = ht.collect()
 
-        # Should handle missing lof gracefully.
+        # This case shouldn't happen. If lof_filter is defined, lof should be defined
+        # too. However, we should handle it gracefully by adding END_TRUNC, but
+        # maintaining the lof missingness status.
         assert results[0].updated_csq.lof_filter == "END_TRUNC,SINGLE_EXON"
         assert results[0].updated_csq.lof is None
 

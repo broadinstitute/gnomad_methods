@@ -120,8 +120,7 @@ class TestUpdateLofteeEndTruncFilter:
                 lof_filter="SINGLE_EXON,END_TRUNC",
                 lof="LC",
             ),
-            # Case 4: Should add END_TRUNC, but will show ",END_TRUNC" due to empty
-            # filter handling.
+            # Case 4: Should add END_TRUNC
             hl.Struct(
                 lof_info="GERP_DIST:-1.0,50_BP_RULE:FAIL", lof_filter="", lof="HC"
             ),

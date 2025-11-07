@@ -311,10 +311,10 @@ DOWNSAMPLINGS = {
     # Need to update these with final counts.
     "v5": [
         10000,
-        62145,
-        67336,
+        51698,
+        68269,
         100000,
-        199794,
+        189824,
     ],
 }
 """

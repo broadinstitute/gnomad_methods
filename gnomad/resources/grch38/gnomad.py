@@ -308,6 +308,13 @@ DOWNSAMPLINGS = {
         200000,
         500000,
     ],
+    "v5": [
+        10000,
+        59355,
+        89074,
+        100000,
+        223733,
+    ],
 }
 """
 List of the downsampling numbers to use for frequency calculations by version.

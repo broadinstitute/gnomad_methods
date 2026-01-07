@@ -156,6 +156,9 @@ vep_context = VersionedTableResource(
         "105": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.v105.ht",
         ),
+        "115": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.v115.ht",
+        ),
     },
 )
 

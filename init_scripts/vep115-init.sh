@@ -71,7 +71,6 @@ cat > /vep_data/vep115-GRCh38.json <<EOF
     "--gene_phenotype",
     "--mirna",
     "--allele_number",
-    "--no_stats",
     "--plugin", "context",
     "--plugin", "LoF,loftee_path:/opt/vep/Plugins,gerp_bigwig:/opt/vep/.vep/loftee_data/gerp_conservation_scores.homo_sapiens.GRCh38.bw,human_ancestor_fa:/opt/vep/.vep/loftee_data/human_ancestor.fa.gz,conservation_file:/opt/vep/.vep/loftee_data/loftee.sql",
     "--dir_plugins", "/opt/vep/Plugins/",

@@ -23,7 +23,7 @@ apt-get install -y --allow-unauthenticated docker-ce
 
 
 mkdir -p /vep_data/loftee_data
-gsutil -u ${PROJECT} cat gs://${VEP_BUCKET}/loftee-beta/${ASSEMBLY}.tar | tar -xf - -C /vep_data/loftee_data &
+gsutil -u ${PROJECT} cat gs://${VEP_BUCKET}/loftee-beta/${ASSEMBLY}.tar | tar -xf - -C /vep_data/loftee_data
 
 docker pull ${VEP_DOCKER_IMAGE}
 

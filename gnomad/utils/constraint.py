@@ -355,6 +355,23 @@ def count_observed_and_possible_by_group(
         ]
     ] = None,
 ) -> Union[hl.Table, Any]:
+    """
+    Count observed and possible variants by group.
+
+    Counts the number of observed and possible variants for each group defined by
+    `additional_grouping`. The groups are defined by the `context`, `ref`, and `alt`
+    annotations. If `additional_grouping` is provided, the groups are defined by the
+    `context`, `ref`, `alt`, and `additional_grouping` annotations.
+
+    :param ht: Input Table.
+    :param possible_expr: Expression for the possible variant count.
+    :param observed_expr: Expression for the observed variant count.
+    :param additional_grouping: Additional grouping annotations.
+    :param partition_hint: Partition hint.
+    :param weight_exprs: Weight expressions.
+    :param additional_agg_sum_exprs: Additional aggregation sum expressions.
+    :return: Table with the observed and possible variant counts for each group.
+    """
     if isinstance(weight_exprs, list):
         weight_exprs = {k: ht[k] for k in weight_exprs}
     if isinstance(additional_agg_sum_exprs, list):
@@ -1082,6 +1099,7 @@ def assemble_constraint_context_ht(
         "domains",
         "uniprot_isoform",
         "amino_acids",
+        "codons",
     ]
     vep_csq_fields = [x for x in vep_csq_fields if x in csqs.dtype.element_type]
     ht = ht.annotate(

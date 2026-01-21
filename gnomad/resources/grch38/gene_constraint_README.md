@@ -1,6 +1,6 @@
 # Constraint Field Descriptions
 
-Descriptions of columns in the gnomAD v4 constraint metrics tsv. Descriptions also apply to rows in Hail Tables, where a "." in the field name indicates a struct.
+Descriptions of columns in the gnomAD v4.1.1 gene constraint metrics tsv. Descriptions also apply to rows in Hail Tables, where a "." in the field name indicates a struct.
 
 ## General Fields
 

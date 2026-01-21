@@ -1,6 +1,6 @@
 # gnomAD Methylation Sites Data
 
-This directory contains methylation site annotations for the GRCh38 reference genome, used in gnomAD constraint calculations and variant annotation pipelines.
+This directory contains methylation site annotations for the GRCh38 reference genome used in gnomAD constraint calculations and variant annotation pipelines.
 
 ## Files Description
 

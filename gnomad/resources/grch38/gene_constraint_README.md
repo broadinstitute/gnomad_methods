@@ -29,7 +29,7 @@ Descriptions of columns in the gnomAD v4.1.1 gene constraint metrics tsv. Descri
 - `lof.obs`: Number of observed high confidence predicted loss-of-function (pLoF) variants in transcript
 - `lof.exp`: Number of expected high confidence pLoF variants in transcript
 - `lof.possible`: Number of possible high confidence pLoF variants in transcript
-- `lof.oe`: Observed over expected ratio for high confidence pLoF variants in transcript (lof.obs divided by lof.exp)
+- `lof.oe`: Observed over expected ratio for high confidence pLoF variants in transcript (`lof.obs` divided by `lof.exp`)
 - `lof.mu`: Mutation rate summed across all possible high confidence pLoF variants in transcript
 - `lof.oe_ci.lower`: Lower bound of 90% confidence interval for `oe` ratio for high confidence pLoF variants
 - `lof.oe_ci.upper`: LOEUF: upper bound of 90% confidence interval for `oe` ratio for high confidence pLoF variants (lower values indicate more constrained)

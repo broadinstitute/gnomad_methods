@@ -60,7 +60,7 @@ Descriptions of columns in the gnomAD v4.1.1 gene constraint metrics tsv. Descri
 - `syn.obs`: Number of observed synonymous variants in transcript
 - `syn.exp`: Number of expected synonymous variants in transcript
 - `syn.possible`: Number of possible synonymous variants in transcript
-- `syn.oe`: Observed over expected ratio for synonymous variants in transcript (syn.obs divided by syn.exp)
+- `syn.oe`: Observed over expected ratio for synonymous variants in transcript (`syn.obs` divided by `syn.exp`)
 - `syn.mu`: Mutation rate summed across all synonymous variants in transcript
 - `syn.oe_ci.lower`: Lower bound of 90% confidence interval for `oe` ratio for synonymous variants
 - `syn.oe_ci.upper`: Upper bound of 90% confidence interval for `oe` ratio for synonymous variants

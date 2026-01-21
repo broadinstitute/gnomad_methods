@@ -13,7 +13,7 @@ Descriptions of columns in the gnomAD v4.1.1 gene constraint metrics tsv. Descri
 
 ## Loss-of-Function (High and Low Confidence)
 
-- `lof_hc_lc.obs`: Number of observed high and low confidence loss-of-function (pLoF) variants in transcript
+- `lof_hc_lc.obs`: Number of observed high and low confidence predicted loss-of-function (pLoF) variants in transcript
 - `lof_hc_lc.exp`: Number of expected high and low confidence pLoF variants in transcript
 - `lof_hc_lc.possible`: Number of possible high and low confidence pLoF variants in transcript
 - `lof_hc_lc.mu`: Mutation rate summed across all possible high and low confidence pLoF variants in transcript

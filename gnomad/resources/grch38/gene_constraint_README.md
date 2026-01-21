@@ -18,15 +18,15 @@ Descriptions of columns in the gnomAD v4.1.1 gene constraint metrics tsv. Descri
 - `lof_hc_lc.possible`: Number of possible high and low confidence pLoF variants in transcript
 - `lof_hc_lc.mu`: Mutation rate summed across all possible high and low confidence pLoF variants in transcript
 - `lof_hc_lc.oe_ci.lower`: Lower bound of 90% confidence interval for observed to expected (`oe`) ratio for high and low confidence pLoF variants
-- `lof_hc_lc.oe_ci.upper`: Upper bound of 90% confidence interval for `oe` ratio for high and low confidence pLoF variants (lower values indicate more constrained)
+- `lof_hc_lc.oe_ci.upper`: LOEUF: upper bound of 90% confidence interval for `oe` ratio for high and low confidence pLoF variants (lower values indicate more constrained)
 - `lof_hc_lc.oe_ci.upper_rank`: Transcript's rank of upper bound `oe` CI value compared to other transcripts (lower values indicate more constrained). This annotation is only applied to MANE Select transcripts unless a gene does not have a MANE Select transcript, in which case the canonical transcript will be used instead if available.
-- `lof_hc_lc.oe_ci.upper_bin_decile`: Decile bin of upper bound `oe` CI for given transcript (lower values indicate more constrained). This annotation is only applied to MANE Select transcripts unless a gene does not have a MANE Select transcript, in which case the canonical transcript will be used instead if available.
-- `lof_hc_lc.oe_ci.upper_bin_sextile`: Sextile bin of upper bound `oe` CI for given transcript (lower values indicate more constrained). This annotation is only applied to MANE Select transcripts unless a gene does not have a MANE Select transcript, in which case the canonical transcript will be used instead if available.
+- `lof_hc_lc.oe_ci.upper_bin_decile`: Decile bin of LOEUF for given transcript (lower values indicate more constrained).  This annotation is only applied to MANE Select transcripts unless a gene does not have a MANE Select transcript, in which case the canonical transcript will be used instead if available.
+- `lof_hc_lc.oe_ci.upper_bin_sextile`: Sextile bin of LOEUF for given transcript (lower values indicate more constrained). This annotation is only applied to MANE Select transcripts unless a gene does not have a MANE Select transcript, in which case the canonical transcript will be used instead if available.
 - `lof_hc_lc.z_score`: Z-score for high and low confidence pLoF variants in transcript. Higher (more positive) Z scores indicate that the transcript is more intolerant of variation (more constrained)
 
 ## Loss-of-Function (High Confidence Only)
 
-- `lof.obs`: Number of observed high confidence loss-of-function (pLoF) variants in transcript
+- `lof.obs`: Number of observed high confidence predicted loss-of-function (pLoF) variants in transcript
 - `lof.exp`: Number of expected high confidence pLoF variants in transcript
 - `lof.possible`: Number of possible high confidence pLoF variants in transcript
 - `lof.oe`: Observed over expected ratio for high confidence pLoF variants in transcript (lof.obs divided by lof.exp)

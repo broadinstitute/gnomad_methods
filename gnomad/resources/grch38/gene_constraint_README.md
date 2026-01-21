@@ -46,7 +46,7 @@ Descriptions of columns in the gnomAD v4.1.1 gene constraint metrics tsv. Descri
 - `mis.obs`: Number of observed missense variants in transcript
 - `mis.exp`: Number of expected missense variants in transcript
 - `mis.possible`: Number of possible missense variants in transcript
-- `mis.oe`: Observed over expected ratio for missense variants in transcript (mis.obs divided by mis.exp)
+- `mis.oe`: Observed over expected ratio for missense variants in transcript (`mis.obs` divided by `mis.exp`)
 - `mis.mu`: Mutation rate summed across all possible missense variants in transcript
 - `mis.oe_ci.lower`: Lower bound of 90% confidence interval for `oe` ratio for missense variants
 - `mis.oe_ci.upper`: Upper bound of 90% confidence interval for `oe` ratio for missense variants

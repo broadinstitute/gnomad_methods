@@ -5,7 +5,7 @@ Descriptions of columns in the gnomAD v4 constraint metrics tsv. Descriptions al
 ## General Fields
 
 - `gene`: Gene name
-- `transcript`: Ensembl or RefSeq transcript ID
+- `transcript`: Ensembl or RefSeq transcript ID (GENCODE v39)
 - `canonical`: Boolean indicator as to whether the transcript is the canonical transcript for the gene
 - `mane_select`: Boolean indicator as to whether the transcript is the MANE Select transcript for the gene
 

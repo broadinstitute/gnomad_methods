@@ -49,13 +49,6 @@ Descriptions of columns in the gnomAD v4 constraint metrics tsv. Descriptions al
 - `mis.z_raw`: Raw Z-score for missense variants in transcript
 - `mis.z_score`: Z-score for missense variants in transcript. Higher (more positive) Z scores indicate that the transcript is more intolerant of variation (more constrained)
 
-## Missense (PolyPhen-2 Probably Damaging)
-
-- `mis_pphen.obs`: Number of observed missense variants in transcript predicted "probably damaging" by PolyPhen-2
-- `mis_pphen.exp`: Number of expected missense variants in transcript predicted "probably damaging" by PolyPhen-2
-- `mis_pphen.possible`: Number of possible missense variants in transcript that are predicted "probably damaging" by PolyPhen-2
-- `mis_pphen.oe`: Observed over expected ratio for PolyPhen-2 predicted "probably damaging" missense variants in transcript (mis_pphen.obs divided by mis_pphen.exp)
-
 ## Synonymous
 
 - `syn.obs`: Number of observed synonymous variants in transcript

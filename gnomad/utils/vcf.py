@@ -497,6 +497,20 @@ VRS_FIELDS_DICT = {
             " Alleles corresponding to the GT indexes of the reference and alternate alleles"
         ),
     },
+    "VRS_Lengths": {
+        "Number": "R",
+        "Description": (
+            "The length values from ReferenceLengthExpression states for the GA4GH VRS"
+            " Alleles corresponding to the GT indexes of the reference and alternate alleles"
+        ),
+    },
+    "VRS_RepeatSubunitLengths": {
+        "Number": "R",
+        "Description": (
+            "The repeatSubunitLength values from ReferenceLengthExpression states for the GA4GH VRS"
+            " Alleles corresponding to the GT indexes of the reference and alternate alleles"
+        ),
+    },
 }
 """
 Dictionary with VRS annotations to include in the VCF INFO field and VCF header.

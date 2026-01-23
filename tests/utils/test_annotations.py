@@ -7,6 +7,7 @@ import pytest
 
 from gnomad.utils.annotations import (
     annotate_downsamplings,
+    check_annotation_missingness,
     fill_missing_key_combinations,
     get_copy_state_by_sex,
     merge_array_expressions,
@@ -1245,3 +1246,300 @@ class TestAnnotateDownsamplings:
         for row in rows:
             assert "global_idx" in row.downsampling
             assert "gen_anc_idx" in row.downsampling
+
+
+class TestCheckAnnotationMissingness:
+    """Test the check_annotation_missingness function."""
+
+    @pytest.fixture
+    def table_with_simple_annotation(self):
+        """Create a Table with a simple annotation containing some missing values."""
+        return hl.Table.parallelize(
+            [
+                {"idx": 1, "value": 10, "optional": "a"},
+                {"idx": 2, "value": 20, "optional": None},
+                {"idx": 3, "value": None, "optional": "c"},
+                {"idx": 4, "value": 40, "optional": None},
+                {"idx": 5, "value": 50, "optional": "e"},
+            ],
+            hl.tstruct(idx=hl.tint32, value=hl.tint32, optional=hl.tstr),
+        ).key_by("idx")
+
+    @pytest.fixture
+    def table_with_nested_struct(self):
+        """Create a Table with nested struct annotations."""
+        return hl.Table.parallelize(
+            [
+                {
+                    "idx": 1,
+                    "info": hl.Struct(field1=10, field2="a", nested=hl.Struct(x=1.0)),
+                },
+                {
+                    "idx": 2,
+                    "info": hl.Struct(field1=20, field2=None, nested=hl.Struct(x=2.0)),
+                },
+                {
+                    "idx": 3,
+                    "info": hl.Struct(
+                        field1=None, field2="c", nested=hl.Struct(x=None)
+                    ),
+                },
+                {
+                    "idx": 4,
+                    "info": hl.Struct(field1=40, field2=None, nested=hl.Struct(x=4.0)),
+                },
+            ],
+            hl.tstruct(
+                idx=hl.tint32,
+                info=hl.tstruct(
+                    field1=hl.tint32,
+                    field2=hl.tstr,
+                    nested=hl.tstruct(x=hl.tfloat64),
+                ),
+            ),
+        ).key_by("idx")
+
+    @pytest.fixture
+    def table_with_array_annotation(self):
+        """Create a Table with array annotations."""
+        return hl.Table.parallelize(
+            [
+                {"idx": 1, "values": [1, 2, 3]},
+                {"idx": 2, "values": []},
+                {"idx": 3, "values": None},
+                {"idx": 4, "values": [4, 5]},
+            ],
+            hl.tstruct(idx=hl.tint32, values=hl.tarray(hl.tint32)),
+        ).key_by("idx")
+
+    @pytest.fixture
+    def table_with_completely_missing_field(self):
+        """Create a Table with a completely missing field."""
+        return hl.Table.parallelize(
+            [
+                {"idx": 1, "present": 10, "missing": None},
+                {"idx": 2, "present": 20, "missing": None},
+                {"idx": 3, "present": 30, "missing": None},
+            ],
+            hl.tstruct(idx=hl.tint32, present=hl.tint32, missing=hl.tint32),
+        ).key_by("idx")
+
+    @pytest.fixture
+    def matrix_table_with_annotation(self):
+        """Create a MatrixTable with row annotations."""
+        mt = hl.Table.parallelize(
+            [
+                {
+                    "locus": hl.locus("chr1", 1000, reference_genome="GRCh38"),
+                    "alleles": ["A", "T"],
+                    "s": "sample1",
+                    "GT": hl.call(0, 1),
+                },
+                {
+                    "locus": hl.locus("chr1", 2000, reference_genome="GRCh38"),
+                    "alleles": ["C", "G"],
+                    "s": "sample1",
+                    "GT": hl.call(0, 0),
+                },
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+
+        # Add row annotations with some missing values.
+        mt = mt.annotate_rows(
+            info=hl.struct(
+                AC=hl.if_else(mt.locus.position == 1000, 5, hl.missing(hl.tint32)),
+                AF=0.1,
+            )
+        )
+        return mt
+
+    def test_simple_annotation_missingness(self, table_with_simple_annotation):
+        """Test missingness check on simple scalar annotations."""
+        ht, results = check_annotation_missingness(
+            table_with_simple_annotation, "value"
+        )
+
+        assert "missingness" in results
+        assert "value" in results["missingness"]
+        # 1 out of 5 values is missing = 20%
+        assert results["missingness"]["value"] == pytest.approx(0.2)
+
+    def test_nested_struct_missingness(self, table_with_nested_struct):
+        """Test missingness check recursively handles nested structs."""
+        ht, results = check_annotation_missingness(table_with_nested_struct, "info")
+
+        assert "missingness" in results
+        # Check that all nested fields are present.
+        assert "info.field1" in results["missingness"]
+        assert "info.field2" in results["missingness"]
+        assert "info.nested.x" in results["missingness"]
+
+        # field1: 1 out of 4 missing = 25%
+        assert results["missingness"]["info.field1"] == pytest.approx(0.25)
+        # field2: 2 out of 4 missing = 50%
+        assert results["missingness"]["info.field2"] == pytest.approx(0.5)
+        # nested.x: 1 out of 4 missing = 25%
+        assert results["missingness"]["info.nested.x"] == pytest.approx(0.25)
+
+    def test_array_annotation_missingness(self, table_with_array_annotation):
+        """Test missingness check handles arrays correctly."""
+        ht, results = check_annotation_missingness(
+            table_with_array_annotation, "values"
+        )
+
+        assert "missingness" in results
+        assert "values" in results["missingness"]
+        # Empty arrays and None are considered missing: 2 out of 4 = 50%
+        assert results["missingness"]["values"] == pytest.approx(0.5)
+
+    def test_low_coverage_threshold(self, table_with_nested_struct):
+        """Test that fields exceeding low_coverage_threshold are flagged."""
+        # With threshold 0.3, field2 (50% missing) should be flagged.
+        ht, results = check_annotation_missingness(
+            table_with_nested_struct, "info", low_coverage_threshold=0.3
+        )
+
+        assert "low_coverage_fields" in results
+        assert "info.field2" in results["low_coverage_fields"]
+        # field1 and nested.x are at 25%, should not be flagged.
+        assert "info.field1" not in results["low_coverage_fields"]
+        assert "info.nested.x" not in results["low_coverage_fields"]
+
+    def test_completely_missing_fields_identified(
+        self, table_with_completely_missing_field
+    ):
+        """Test that completely missing fields are identified."""
+        ht, results = check_annotation_missingness(
+            table_with_completely_missing_field, "missing"
+        )
+
+        assert "completely_missing_fields" in results
+        assert "missing" in results["completely_missing_fields"]
+        assert results["missingness"]["missing"] == 1.0
+
+    def test_remove_missing_fields(self, table_with_completely_missing_field):
+        """Test that completely missing fields can be removed."""
+        # Add a struct with both present and missing fields.
+        ht = table_with_completely_missing_field.annotate(
+            info=hl.struct(
+                present=table_with_completely_missing_field.present,
+                missing=table_with_completely_missing_field.missing,
+            )
+        )
+
+        ht_result, results = check_annotation_missingness(
+            ht, "info", remove_missing_fields=True
+        )
+
+        # The 'missing' field should be removed from the struct.
+        assert "present" in ht_result.info.dtype.fields
+        assert "missing" not in ht_result.info.dtype.fields
+        assert "info.missing" in results["completely_missing_fields"]
+
+    def test_matrix_table_row_annotation(self, matrix_table_with_annotation):
+        """Test missingness check works on MatrixTable row annotations."""
+        mt, results = check_annotation_missingness(matrix_table_with_annotation, "info")
+
+        assert "missingness" in results
+        assert "info.AC" in results["missingness"]
+        assert "info.AF" in results["missingness"]
+
+        # AC: 1 out of 2 missing = 50%
+        assert results["missingness"]["info.AC"] == pytest.approx(0.5)
+        # AF: 0 out of 2 missing = 0%
+        assert results["missingness"]["info.AF"] == pytest.approx(0.0)
+
+    def test_annotation_not_found_raises_error(self, table_with_simple_annotation):
+        """Test that ValueError is raised when annotation doesn't exist."""
+        with pytest.raises(ValueError, match="not found"):
+            check_annotation_missingness(
+                table_with_simple_annotation, "nonexistent_annotation"
+            )
+
+    def test_no_modifications_when_remove_missing_false(
+        self, table_with_completely_missing_field
+    ):
+        """Test that table is not modified when remove_missing_fields=False."""
+        ht_result, results = check_annotation_missingness(
+            table_with_completely_missing_field,
+            "missing",
+            remove_missing_fields=False,
+        )
+
+        # The field should still exist.
+        assert "missing" in ht_result.row.dtype.fields
+        assert "missing" in results["completely_missing_fields"]
+
+    @pytest.fixture
+    def table_with_multiple_annotations(self):
+        """Create a Table with multiple annotations for testing check all."""
+        return hl.Table.parallelize(
+            [
+                {"idx": 1, "field_a": 10, "field_b": "x", "field_c": 1.0},
+                {"idx": 2, "field_a": 20, "field_b": None, "field_c": 2.0},
+                {"idx": 3, "field_a": None, "field_b": "z", "field_c": None},
+                {"idx": 4, "field_a": 40, "field_b": None, "field_c": 4.0},
+            ],
+            hl.tstruct(
+                idx=hl.tint32,
+                field_a=hl.tint32,
+                field_b=hl.tstr,
+                field_c=hl.tfloat64,
+            ),
+        ).key_by("idx")
+
+    def test_check_all_annotations_when_none_passed(
+        self, table_with_multiple_annotations
+    ):
+        """Test that all annotations are checked when annotation=None."""
+        ht, results = check_annotation_missingness(table_with_multiple_annotations)
+
+        assert "missingness" in results
+        # Should have checked all non-key fields.
+        assert "field_a" in results["missingness"]
+        assert "field_b" in results["missingness"]
+        assert "field_c" in results["missingness"]
+        # Key field should not be included.
+        assert "idx" not in results["missingness"]
+
+        # Verify missingness values.
+        # field_a: 1 out of 4 missing = 25%
+        assert results["missingness"]["field_a"] == pytest.approx(0.25)
+        # field_b: 2 out of 4 missing = 50%
+        assert results["missingness"]["field_b"] == pytest.approx(0.5)
+        # field_c: 1 out of 4 missing = 25%
+        assert results["missingness"]["field_c"] == pytest.approx(0.25)
+
+    def test_check_all_annotations_matrix_table(self, matrix_table_with_annotation):
+        """Test checking all annotations on a MatrixTable."""
+        mt, results = check_annotation_missingness(matrix_table_with_annotation)
+
+        assert "missingness" in results
+        # Should check the info annotation.
+        assert "info.AC" in results["missingness"]
+        assert "info.AF" in results["missingness"]
+
+    def test_check_all_annotations_with_remove_missing(
+        self, table_with_multiple_annotations
+    ):
+        """Test remove_missing_fields works when checking all annotations."""
+        # Add a completely missing field.
+        ht = table_with_multiple_annotations.annotate(all_missing=hl.missing(hl.tint32))
+
+        ht_result, results = check_annotation_missingness(
+            ht, remove_missing_fields=True
+        )
+
+        # The all_missing field should be dropped.
+        assert "all_missing" not in ht_result.row.dtype.fields
+        assert "all_missing" in results["completely_missing_fields"]
+        # Other fields should still exist.
+        assert "field_a" in ht_result.row.dtype.fields
+        assert "field_b" in ht_result.row.dtype.fields
+        assert "field_c" in ht_result.row.dtype.fields

@@ -196,12 +196,19 @@ syndip_hc_intervals = VersionedTableResource(
 
 # These Ensembl Interval Tables are focused on protein-coding genes on chr1-22,X,Y.
 # Downloaded from the biomart of Ensembl Archive (https://useast.ensembl.org/info/website/archives/index.html)
-# Ensembl 101 & 105 are included, since 101 was used to annotate gnomAD v3 and 105 to gnomAD v4.
-# Basic stats: 19924 protein-coding genes in Ensembl 101, and1 19951
-# protein-coding genes in Ensembl 105.
+# Ensembl 101 was used to annotate gnomAD v3, 105 for gnomAD v4, and 115 for VEP 115.
+# Basic stats: 19924 protein-coding genes in Ensembl 101, 19951 in Ensembl 105,
+# and ~19400 in Ensembl 115 (GENCODE 49).
 ensembl_interval = VersionedTableResource(
     default_version="105",
     versions={
+        "115": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_115_pc_genes_grch38.ht",
+            import_func=_import_ensembl_interval,
+            import_args={
+                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_115_pc_genes_grch38.tsv",
+            },
+        ),
         "105": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.ht",
             import_func=_import_ensembl_interval,

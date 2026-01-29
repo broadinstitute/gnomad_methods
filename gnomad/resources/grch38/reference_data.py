@@ -206,7 +206,7 @@ syndip_hc_intervals = VersionedTableResource(
 
 # These Ensembl Interval Tables are focused on protein-coding genes on chr1-22,X,Y.
 # Downloaded from the biomart of Ensembl Archive (https://useast.ensembl.org/info/website/archives/index.html)
-# Ensembl 101 was used to annotate gnomAD v3, Ensembl 105 for gnomAD v4, and gnomAD v5
+# Ensembl 101 was used to annotate gnomAD v3, Ensembl 105 for gnomAD v4, and gnomAD v4.1.1
 # uses Ensembl 115 in addition to 105.
 #
 # Ensembl/GENCODE version mapping and protein-coding gene counts:

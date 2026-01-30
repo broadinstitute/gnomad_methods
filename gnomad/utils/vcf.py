@@ -459,29 +459,28 @@ VRS_FIELDS_DICT = {
     "VRS_Allele_IDs": {
         "Number": "R",
         "Description": (
-            "The computed identifiers for the GA4GH VRS Alleles corresponding to the"
-            " values in the REF and ALT fields"
+            "The computed identifiers for the GA4GH VRS Alleles corresponding to the GT indexes of the reference and alternate alleles"
         ),
     },
     "VRS_Starts": {
         "Number": "R",
         "Description": (
             "Interresidue coordinates used as the location starts for the GA4GH VRS"
-            " Alleles corresponding to the values in the REF and ALT fields"
+            " Alleles corresponding to the GT indexes of the reference and alternate alleles"
         ),
     },
     "VRS_Ends": {
         "Number": "R",
         "Description": (
             "Interresidue coordinates used as the location ends for the GA4GH VRS"
-            " Alleles corresponding to the values in the REF and ALT fields"
+            " Alleles corresponding to the GT indexes of the reference and alternate alleles"
         ),
     },
     "VRS_States": {
         "Number": ".",
         "Description": (
             "The literal sequence states used for the GA4GH VRS Alleles corresponding"
-            " to the values in the REF and ALT fields"
+            " to the GT indexes of the reference and alternate alleles"
         ),
     },
     "VRS_Lengths": {

@@ -203,9 +203,11 @@ def grpmax_expr(
 
     # pylint: disable=invalid-unary-operand-type
     gen_anc_max_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (hl.set(freq_meta[i].keys()) == {"group", gen_anc_label})
-        & (freq_meta[i]["group"] == "adj")
-        & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        lambda i: (
+            (hl.set(freq_meta[i].keys()) == {"group", gen_anc_label})
+            & (freq_meta[i]["group"] == "adj")
+            & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        )
     )
     freq_filtered = gen_anc_max_freq_indices.map(
         lambda i: freq[i].annotate(**{gen_anc_label: freq_meta[i][gen_anc_label]})
@@ -319,23 +321,35 @@ def faf_expr(
 
     # pylint: disable=invalid-unary-operand-type
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (freq_meta[i].get("group") == "adj")
-        & (
-            (freq_meta[i].size() == 1)
-            | (
-                (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group"})
-                & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        lambda i: (
+            (freq_meta[i].get("group") == "adj")
+            & (
+                (freq_meta[i].size() == 1)
+                | (
+                    (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group"})
+                    & (
+                        ~_gen_anc_groups_to_exclude.contains(
+                            freq_meta[i][gen_anc_label]
+                        )
+                    )
+                )
             )
         )
     )
     sex_faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (freq_meta[i].get("group") == "adj")
-        & (freq_meta[i].contains("sex"))
-        & (
-            (freq_meta[i].size() == 2)
-            | (
-                (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group", "sex"})
-                & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        lambda i: (
+            (freq_meta[i].get("group") == "adj")
+            & (freq_meta[i].contains("sex"))
+            & (
+                (freq_meta[i].size() == 2)
+                | (
+                    (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group", "sex"})
+                    & (
+                        ~_gen_anc_groups_to_exclude.contains(
+                            freq_meta[i][gen_anc_label]
+                        )
+                    )
+                )
             )
         )
     )
@@ -396,8 +410,9 @@ def gen_anc_faf_max_expr(
     :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
-        lambda i: (hl.set(i[1].keys()) == {"group", gen_anc_label})
-        & (i[1]["group"] == "adj")
+        lambda i: (
+            (hl.set(i[1].keys()) == {"group", gen_anc_label}) & (i[1]["group"] == "adj")
+        )
     )
     max_fafs_expr = hl.struct()
 
@@ -1412,7 +1427,7 @@ def merge_array_expressions(
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the array.
     meta = [hl.dict(hl.enumerate(m).map(lambda x: (x[1], [x[0]]))) for m in meta]
-    all_keys = hl.fold(lambda i, j: (i | j.key_set()), meta[0].key_set(), meta[1:])
+    all_keys = hl.fold(lambda i, j: i | j.key_set(), meta[0].key_set(), meta[1:])
 
     # Merge dictionaries in the list into a single dictionary where key is aggregation
     # group and the value is a list of the group's index in each of the arrays, if
@@ -2630,8 +2645,9 @@ def missing_struct_expr(
 
 
 def add_gks_vrs(
-    input_locus: hl.locus,
-    input_vrs: hl.struct,
+    input_locus: hl.Locus,
+    input_vrs: hl.Struct,
+    include_ref_allele: bool = False,  # TODO
 ) -> dict:
     """
     Generate a dictionary containing VRS information from a given locus and struct of VRS information.
@@ -2656,9 +2672,31 @@ def add_gks_vrs(
     vrs_start_value = input_vrs.VRS_Starts[1]
     vrs_end_value = input_vrs.VRS_Ends[1]
     vrs_state_sequence = input_vrs.VRS_States[1]
+    vrs_lengths = input_vrs.VRS_Lengths[1]
+    vrs_repeat_subunit_lengths = input_vrs.VRS_RepeatSubunitLengths[1]
+
+    if vrs_id is None:
+        raise ValueError(
+            "Input VRS struct is missing a value in the VRS_Allele_IDs field. "
+            "This variant may have failed translation to VRS."
+        )
+
+    if vrs_repeat_subunit_lengths is not None:
+        # The Allele state is a ReferenceLengthExpression
+        # https://github.com/ga4gh/vrs/blob/2.0/schema/vrs/json/ReferenceLengthExpression
+        state = {
+            "type": "ReferenceLengthExpression",
+            "lengths": vrs_lengths,
+            "repeatSubunitLengths": vrs_repeat_subunit_lengths,
+        }
+    else:
+        # The Allele state is a LiteralSequenceExpression
+        # https://github.com/ga4gh/vrs/blob/2.0/schema/vrs/json/LiteralSequenceExpression
+        state = {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence}
 
     vrs_dict_out = {
         "id": vrs_id,
+        "digest": vrs_id.split(".")[1],
         "type": "Allele",
         "location": {
             "type": "SequenceLocation",
@@ -2670,7 +2708,7 @@ def add_gks_vrs(
                 "refgetAccession": vrs_chrom_id,
             },
         },
-        "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
+        "state": state,
     }
 
     seq_ref = ga4gh_vrs.models.SequenceReference(refgetAccession=vrs_chrom_id)
@@ -2690,7 +2728,7 @@ def add_gks_vrs(
 
 
 def add_gks_va(
-    input_struct: hl.struct,
+    input_struct: hl.Struct,
     label_name: str = "gnomAD",
     label_version: str = "3.1.2",
     gen_anc_groups: list = None,

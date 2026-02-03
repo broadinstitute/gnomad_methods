@@ -2682,16 +2682,22 @@ def add_gks_vrs(
         )
 
     if vrs_repeat_subunit_lengths is not None:
-        # The Allele state is a ReferenceLengthExpression
-        # https://github.com/ga4gh/vrs/blob/2.0/schema/vrs/json/ReferenceLengthExpression
+        # The Allele state is a ReferenceLengthExpression.
+        # Required fields are `length` and `repeatSubunitLength`. `sequence` is optional.
         state = {
             "type": "ReferenceLengthExpression",
-            "lengths": vrs_lengths,
-            "repeatSubunitLengths": vrs_repeat_subunit_lengths,
+            "length": vrs_lengths,
+            "repeatSubunitLength": vrs_repeat_subunit_lengths,
         }
+        if vrs_state_sequence is not None:
+            state["sequence"] = vrs_state_sequence
     else:
-        # The Allele state is a LiteralSequenceExpression
-        # https://github.com/ga4gh/vrs/blob/2.0/schema/vrs/json/LiteralSequenceExpression
+        # The Allele state is a LiteralSequenceExpression.
+        if vrs_state_sequence is None:
+            raise ValueError(
+                "Input VRS struct is missing a value in the VRS_States field. "
+                "This variant may have failed translation to VRS."
+            )
         state = {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence}
 
     vrs_dict_out = {

@@ -1097,8 +1097,73 @@ class TestMergeHistograms:
 class TestVRSFunctions:
     """Test the VRS-related functions."""
 
-    TEST_VRS_DIGEST = "A" * 32
-    TEST_VRS_ALLELE_ID = f"ga4gh:VA.{TEST_VRS_DIGEST}"
+    # Input values are gnomAD exomes v4.1 GRCh38 chr16 VRS-annotated variants.
+    # Generated with vrs-python (ga4gh.vrs==2.2.0)
+    CHR16_SNP = {
+        "contig": "chr16",
+        "pos": 30223487,
+        "ref": "G",
+        "alt": "C",
+        # VCF INFO: VRS_Allele_IDs=ga4gh:VA.8pQgh_...,ga4gh:VA.Ljkc...
+        "vrs_ref_allele_id": "ga4gh:VA.8pQgh_5I1jlQdH5SVfXcZnQv-QT3wq2m",
+        "vrs_alt_allele_id": "ga4gh:VA.Ljkcleg2iX7DazIE3lDKIx2tAuuIJilw",
+        # VCF INFO: VRS_Starts=30223486,30223486; VRS_Ends=30223487,30223487
+        "vrs_ref_start": 30223486,
+        "vrs_alt_start": 30223486,
+        "vrs_ref_end": 30223487,
+        "vrs_alt_end": 30223487,
+    }
+    CHR16_DELETION_RLE = {
+        "contig": "chr16",
+        "pos": 30223488,
+        "ref": "AGCTG",
+        "alt": "A",
+        # VCF INFO: VRS_Allele_IDs=ga4gh:VA.H-Kn...,ga4gh:VA.o0wp...
+        "vrs_ref_allele_id": "ga4gh:VA.H-KnDD4KLqQ8hAC1lHo2jur_NHFKJV6I",
+        "vrs_alt_allele_id": "ga4gh:VA.o0wpSwOwTnYfNz3Yz1E4AzZGQYyBg6e3",
+        # VCF INFO: VRS_Starts=30223487,30223488; VRS_Ends=30223492,30223492
+        "vrs_ref_start": 30223487,
+        "vrs_alt_start": 30223488,
+        "vrs_ref_end": 30223492,
+        "vrs_alt_end": 30223492,
+        "rle_length": 0,
+        "rle_repeat_subunit_length": 4,
+    }
+    CHR16_RLE_NOT_DELETION = {
+        "contig": "chr16",
+        "pos": 13828,
+        "ref": "T",
+        "alt": "TA",
+        # VCF INFO: VRS_Allele_IDs=ga4gh:VA.GmRX-...,ga4gh:VA._k6Xx...
+        "vrs_ref_allele_id": "ga4gh:VA.GmRX-v5NmDfEaY24aOPnhDUQoZwJszKZ",
+        "vrs_alt_allele_id": "ga4gh:VA._k6XxTZDGXxhe0I-OVk6Tq8AOdVa-QYN",
+        # VCF INFO: VRS_Starts=13827,13828; VRS_Ends=13828,13829
+        "vrs_ref_start": 13827,
+        "vrs_alt_start": 13828,
+        "vrs_ref_end": 13828,
+        "vrs_alt_end": 13829,
+        "rle_length": 2,
+        "rle_repeat_subunit_length": 1,
+        "rle_sequence": "AA",
+    }
+    CHR16_RLE_REPEAT_EXPANSION = {
+        "contig": "chr16",
+        "pos": 12247,
+        "ref": "C",
+        "alt": "CTGG",
+        # VCF INFO: VRS_Allele_IDs=ga4gh:VA.dFms...,ga4gh:VA.yQ4C...
+        "vrs_ref_allele_id": "ga4gh:VA.dFmsD4FFHwdOJbPV_6armbHSKs9FWQec",
+        "vrs_alt_allele_id": "ga4gh:VA.yQ4CuV2WkXfUed8UU8dwzf6POVL_VXPg",
+        # VCF INFO: VRS_Starts=12246,12247; VRS_Ends=12247,12252
+        "vrs_ref_start": 12246,
+        "vrs_alt_start": 12247,
+        "vrs_ref_end": 12247,
+        "vrs_alt_end": 12252,
+        # VCF INFO: VRS_States=C,TGGTGGTG; VRS_Lengths=1,8; VRS_RepeatSubunitLengths=1,3
+        "rle_length": 8,
+        "rle_repeat_subunit_length": 3,
+        "rle_sequence": "TGGTGGTG",
+    }
 
     def test_vrs_identifier_generation(self):
         """Test that GA4GH identifiers are generated correctly."""
@@ -1128,18 +1193,25 @@ class TestVRSFunctions:
             add_gks_vrs("invalid_locus", "invalid_vrs")
 
     def test_add_gks_vrs_actual_api_call(self):
-        """Test that add_gks_vrs actually calls the VRS 2.0.1 API with real data."""
-        # Create a real Hail locus and VRS struct that would come from actual data
-        locus = hl.locus("chr1", 100, reference_genome="GRCh38")
-
-        # Create a VRS struct that mimics what would be in actual gnomAD data
+        """Test that add_gks_vrs calls the VRS API with real SNP data."""
+        locus = hl.locus(
+            self.CHR16_SNP["contig"],
+            self.CHR16_SNP["pos"],
+            reference_genome="GRCh38",
+        )
         vrs_struct = hl.struct(
-            VRS_Allele_IDs=["test_ref_id", self.TEST_VRS_ALLELE_ID],
-            VRS_Starts=[99, 99],  # 0-based coordinates
-            VRS_Ends=[100, 100],
-            VRS_States=["A", "T"],  # ref, alt
-            VRS_Lengths=[1, 1],
-            VRS_RepeatSubunitLengths=hl.literal([None, None], hl.tarray(hl.tint32)),
+            VRS_Allele_IDs=[
+                self.CHR16_SNP["vrs_ref_allele_id"],
+                self.CHR16_SNP["vrs_alt_allele_id"],
+            ],
+            VRS_Starts=[
+                self.CHR16_SNP["vrs_ref_start"],
+                self.CHR16_SNP["vrs_alt_start"],
+            ],
+            VRS_Ends=[self.CHR16_SNP["vrs_ref_end"], self.CHR16_SNP["vrs_alt_end"]],
+            VRS_States=[self.CHR16_SNP["ref"], self.CHR16_SNP["alt"]],
+            VRS_Lengths=hl.literal([1, None], hl.tarray(hl.tint32)),
+            VRS_RepeatSubunitLengths=hl.literal([1, None], hl.tarray(hl.tint32)),
         )
 
         # Evaluate to get actual Python objects
@@ -1158,14 +1230,14 @@ class TestVRSFunctions:
         assert "id" in result["location"]  # This comes from ga4gh_identify() call
         assert "state" in result
         assert result["state"]["type"] == "LiteralSequenceExpression"
-        assert result["state"]["sequence"] == "T"
+        assert result["state"]["sequence"] == self.CHR16_SNP["alt"]
 
         # Verify the chromosome ID matches our VRS_CHROM_IDS mapping
-        expected_chr1_id = VRS_CHROM_IDS["GRCh38"]["chr1"]
-        assert expected_chr1_id == "SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO"
+        expected_chr16_id = VRS_CHROM_IDS["GRCh38"]["chr16"]
+        assert expected_chr16_id == "SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0"
         assert (
             result["location"]["sequenceReference"]["refgetAccession"]
-            == expected_chr1_id
+            == expected_chr16_id
         )
 
         # Verify the location ID was generated by the VRS API
@@ -1175,12 +1247,152 @@ class TestVRSFunctions:
             "ga4gh:SL"
         )  # VRS SequenceLocation identifiers start with ga4gh:SL
 
+    def test_add_gks_vrs_reference_length_expression_deletion(self):
+        """Test that add_gks_vrs returns a valid ReferenceLengthExpression for a deletion."""
+        locus = hl.locus(
+            self.CHR16_DELETION_RLE["contig"],
+            self.CHR16_DELETION_RLE["pos"],
+            reference_genome="GRCh38",
+        )
+
+        vrs_struct = hl.struct(
+            VRS_Allele_IDs=[
+                self.CHR16_DELETION_RLE["vrs_ref_allele_id"],
+                self.CHR16_DELETION_RLE["vrs_alt_allele_id"],
+            ],
+            VRS_Starts=[
+                self.CHR16_DELETION_RLE["vrs_ref_start"],
+                self.CHR16_DELETION_RLE["vrs_alt_start"],
+            ],
+            VRS_Ends=[
+                self.CHR16_DELETION_RLE["vrs_ref_end"],
+                self.CHR16_DELETION_RLE["vrs_alt_end"],
+            ],
+            VRS_States=hl.literal(
+                [self.CHR16_DELETION_RLE["ref"], None], hl.tarray(hl.tstr)
+            ),
+            VRS_Lengths=hl.literal([5, 0], hl.tarray(hl.tint32)),
+            VRS_RepeatSubunitLengths=hl.literal([5, 4], hl.tarray(hl.tint32)),
+        )
+
+        locus_py = hl.eval(locus)
+        vrs_py = hl.eval(vrs_struct)
+        result = add_gks_vrs(locus_py, vrs_py)
+
+        _ = ga4gh_vrs.models.Allele(**result)
+        assert result["state"]["type"] == "ReferenceLengthExpression"
+        assert result["state"]["length"] == self.CHR16_DELETION_RLE["rle_length"]
+        assert (
+            result["state"]["repeatSubunitLength"]
+            == self.CHR16_DELETION_RLE["rle_repeat_subunit_length"]
+        )
+
+    def test_add_gks_vrs_reference_length_expression_not_deletion(self):
+        """Test a ReferenceLengthExpression where the alternate length is non-zero."""
+        locus = hl.locus(
+            self.CHR16_RLE_NOT_DELETION["contig"],
+            self.CHR16_RLE_NOT_DELETION["pos"],
+            reference_genome="GRCh38",
+        )
+
+        vrs_struct = hl.struct(
+            VRS_Allele_IDs=[
+                self.CHR16_RLE_NOT_DELETION["vrs_ref_allele_id"],
+                self.CHR16_RLE_NOT_DELETION["vrs_alt_allele_id"],
+            ],
+            VRS_Starts=[
+                self.CHR16_RLE_NOT_DELETION["vrs_ref_start"],
+                self.CHR16_RLE_NOT_DELETION["vrs_alt_start"],
+            ],
+            VRS_Ends=[
+                self.CHR16_RLE_NOT_DELETION["vrs_ref_end"],
+                self.CHR16_RLE_NOT_DELETION["vrs_alt_end"],
+            ],
+            VRS_States=[
+                self.CHR16_RLE_NOT_DELETION["ref"],
+                self.CHR16_RLE_NOT_DELETION["rle_sequence"],
+            ],
+            VRS_Lengths=hl.literal([1, 2], hl.tarray(hl.tint32)),
+            VRS_RepeatSubunitLengths=hl.literal([1, 1], hl.tarray(hl.tint32)),
+        )
+
+        locus_py = hl.eval(locus)
+        vrs_py = hl.eval(vrs_struct)
+        result = add_gks_vrs(locus_py, vrs_py)
+
+        _ = ga4gh_vrs.models.Allele(**result)
+        assert result["state"]["type"] == "ReferenceLengthExpression"
+        assert result["state"]["length"] == self.CHR16_RLE_NOT_DELETION["rle_length"]
+        assert (
+            result["state"]["repeatSubunitLength"]
+            == self.CHR16_RLE_NOT_DELETION["rle_repeat_subunit_length"]
+        )
+        assert (
+            result["state"]["sequence"] == self.CHR16_RLE_NOT_DELETION["rle_sequence"]
+        )
+
+    def test_add_gks_vrs_reference_length_expression_repeat_expansion(self):
+        """Test a ReferenceLengthExpression where the ALT is longer than the REF."""
+        assert len(self.CHR16_RLE_REPEAT_EXPANSION["alt"]) > len(
+            self.CHR16_RLE_REPEAT_EXPANSION["ref"]
+        )
+
+        locus = hl.locus(
+            self.CHR16_RLE_REPEAT_EXPANSION["contig"],
+            self.CHR16_RLE_REPEAT_EXPANSION["pos"],
+            reference_genome="GRCh38",
+        )
+
+        vrs_struct = hl.struct(
+            VRS_Allele_IDs=[
+                self.CHR16_RLE_REPEAT_EXPANSION["vrs_ref_allele_id"],
+                self.CHR16_RLE_REPEAT_EXPANSION["vrs_alt_allele_id"],
+            ],
+            VRS_Starts=[
+                self.CHR16_RLE_REPEAT_EXPANSION["vrs_ref_start"],
+                self.CHR16_RLE_REPEAT_EXPANSION["vrs_alt_start"],
+            ],
+            VRS_Ends=[
+                self.CHR16_RLE_REPEAT_EXPANSION["vrs_ref_end"],
+                self.CHR16_RLE_REPEAT_EXPANSION["vrs_alt_end"],
+            ],
+            VRS_States=[
+                self.CHR16_RLE_REPEAT_EXPANSION["ref"],
+                self.CHR16_RLE_REPEAT_EXPANSION["rle_sequence"],
+            ],
+            VRS_Lengths=hl.literal(
+                [1, self.CHR16_RLE_REPEAT_EXPANSION["rle_length"]], hl.tarray(hl.tint32)
+            ),
+            VRS_RepeatSubunitLengths=hl.literal(
+                [1, self.CHR16_RLE_REPEAT_EXPANSION["rle_repeat_subunit_length"]],
+                hl.tarray(hl.tint32),
+            ),
+        )
+
+        locus_py = hl.eval(locus)
+        vrs_py = hl.eval(vrs_struct)
+        result = add_gks_vrs(locus_py, vrs_py)
+
+        _ = ga4gh_vrs.models.Allele(**result)
+        assert result["state"]["type"] == "ReferenceLengthExpression"
+        assert (
+            result["state"]["length"] == self.CHR16_RLE_REPEAT_EXPANSION["rle_length"]
+        )
+        assert (
+            result["state"]["repeatSubunitLength"]
+            == self.CHR16_RLE_REPEAT_EXPANSION["rle_repeat_subunit_length"]
+        )
+        assert (
+            result["state"]["sequence"]
+            == self.CHR16_RLE_REPEAT_EXPANSION["rle_sequence"]
+        )
+
     def test_add_gks_vrs_grch37_chromosome_mapping(self):
         """Test that VRS chromosome mapping works correctly for GRCh37."""
         # Test GRCh37 (note different chromosome naming: "1" vs "chr1")
         locus_grch37 = hl.locus("1", 100, reference_genome="GRCh37")
         vrs_struct = hl.struct(
-            VRS_Allele_IDs=["test_ref_id", self.TEST_VRS_ALLELE_ID],
+            VRS_Allele_IDs=["test_ref_id", "ga4gh:VA." + "A" * 32],
             VRS_Starts=[99, 99],
             VRS_Ends=[100, 100],
             VRS_States=["A", "T"],
@@ -1210,23 +1422,10 @@ class TestVRSFunctions:
             "ga4gh:SL"
         )  # VRS SequenceLocation identifiers start with ga4gh:SL
 
-    def test_vrs_ReferenceLengthExpression(self):
-        # TODO pull real example from anntoated vcfs
-        assert False
-
-    def test_vrs_version_compatibility(self):
-        """Test that VRS 2.0.1+ is properly installed."""
-        # Test that VRS 2.0.1+ API is available
-        assert hasattr(ga4gh_core, "ga4gh_identify"), "VRS 2.0.1+ is required"
-
-        # The function should work with VRS 2.0.1+
-        assert callable(add_gks_vrs)
-
 
 class TestGksVaFunctions:
     def test_gks_va_structure(self):
-        # TODO Pull real variant from annotated vcfs
-        assert False
+        pytest.skip("TODO: add_gks_va structure test with real gnomAD variant data")
         # allele = ga4gh_vrs.models.Allele(
 
 

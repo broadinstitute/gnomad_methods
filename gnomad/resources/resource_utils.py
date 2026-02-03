@@ -715,19 +715,31 @@ def import_sites_vcf(**kwargs) -> hl.Table:
     return hl.import_vcf(**kwargs).rows()
 
 
-def import_gencode(gtf_path: str, **kwargs) -> hl.Table:
+def import_gencode(
+    gtf_path: str,
+    include_version: bool = False,
+    **kwargs,
+) -> hl.Table:
     """
     Import GENCODE annotations GTF file as a Hail Table.
 
     :param gtf_path: Path to GENCODE GTF file.
+    :param include_version: Whether to include two additional fields that contain the full gene or transcript
+        ID and the version number (`gene_id_version`, `transcript_id_version`).
     :return: Table with GENCODE annotation information.
     """
     ht = hl.experimental.import_gtf(gtf_path, **kwargs)
 
     # Only get gene and transcript stable IDs (without version numbers if they
     # exist), early versions of GENCODE have no version numbers but later ones do.
-    ht = ht.annotate(
-        gene_id=ht.gene_id.split("\\.")[0],
-        transcript_id=ht.transcript_id.split("\\.")[0],
-    )
+    ann_expr = {
+        "gene_id": ht.gene_id.split("\\.")[0],
+        "transcript_id": ht.transcript_id.split("\\.")[0],
+    }
+    if include_version:
+        ann_expr["gene_id_version"] = ht.gene_id
+        ann_expr["transcript_id_version"] = ht.transcript_id
+
+    ht = ht.annotate(**ann_expr)
+
     return ht

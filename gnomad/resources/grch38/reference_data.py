@@ -118,7 +118,9 @@ purcell_5k_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/purcell_5k_intervals/purcell5k.ht",
     import_func=_import_purcell_5k,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch38/purcell_5k_intervals/purcell5k.interval_list",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch38/purcell_5k_intervals/purcell5k.interval_list"
+        ),
     },
 )
 
@@ -126,7 +128,9 @@ na12878_giab = GnomadPublicMatrixTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.mt",
     import_func=hl.import_vcf,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_PGandRTGphasetransfer.vcf.gz"
+        ),
         "force_bgz": True,
         "min_partitions": 100,
         "reference_genome": "GRCh38",
@@ -137,7 +141,9 @@ na12878_giab_hc_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7_hc_regions.ht",
     import_func=hl.import_bed,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch38/na12878/HG001_GRCh38_GIAB_highconf_CG-IllFB-IllGATKHC-Ion-10X-SOLID_CHROM1-X_v.3.3.2_highconf_nosomaticdel_noCENorHET7.bed"
+        ),
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
     },
@@ -156,6 +162,9 @@ vep_context = VersionedTableResource(
         "105": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.v105.ht",
         ),
+        "115": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/context/grch38_context_vep_annotated.v115.ht",
+        ),
     },
 )
 
@@ -166,7 +175,9 @@ syndip = VersionedMatrixTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/syndip/syndip.b38_20180222.mt",
             import_func=hl.import_vcf,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/syndip/full.38.20180222.vcf.gz",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/syndip/full.38.20180222.vcf.gz"
+                ),
                 "force_bgz": True,
                 "min_partitions": 100,
                 "reference_genome": "GRCh38",
@@ -182,7 +193,9 @@ syndip_hc_intervals = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/syndip/syndip_b38_20180222_hc_regions.ht",
             import_func=hl.import_bed,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/syndip/syndip.b38_20180222.bed",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/syndip/syndip.b38_20180222.bed"
+                ),
                 "reference_genome": "GRCh38",
                 "skip_invalid_intervals": True,
                 "min_partitions": 10,
@@ -193,24 +206,43 @@ syndip_hc_intervals = VersionedTableResource(
 
 # These Ensembl Interval Tables are focused on protein-coding genes on chr1-22,X,Y.
 # Downloaded from the biomart of Ensembl Archive (https://useast.ensembl.org/info/website/archives/index.html)
-# Ensembl 101 & 105 are included, since 101 was used to annotate gnomAD v3 and 105 to gnomAD v4.
-# Basic stats: 19924 protein-coding genes in Ensembl 101, and1 19951
-# protein-coding genes in Ensembl 105.
+# Ensembl 101 was used to annotate gnomAD v3, Ensembl 105 for gnomAD v4, and gnomAD v4.1.1
+# uses Ensembl 115 in addition to 105.
+#
+# Ensembl/GENCODE version mapping and protein-coding gene counts:
+#   - Ensembl 101 / GENCODE 35: 19,924 protein-coding genes
+#   - Ensembl 105 / GENCODE 39: 19,951 protein-coding genes
+#   - Ensembl 115 / GENCODE 49: 19,433 protein-coding genes
+#
+# Gene counts from: https://www.gencodegenes.org/human/releases.html
 ensembl_interval = VersionedTableResource(
     default_version="105",
     versions={
+        "115": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_115_pc_genes_grch38.ht",
+            import_func=_import_ensembl_interval,
+            import_args={
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_115_pc_genes_grch38.tsv"
+                ),
+            },
+        ),
         "105": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.ht",
             import_func=_import_ensembl_interval,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.tsv",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_105_pc_genes_grch38.tsv"
+                ),
             },
         ),
         "101": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.ht",
             import_func=_import_ensembl_interval,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.tsv",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/ensembl/ensembl_101_pc_genes_grch38.tsv"
+                ),
             },
         ),
     },
@@ -223,7 +255,9 @@ clinvar = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20250504.ht",
             import_func=_import_clinvar,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20250504.vcf.gz",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20250504.vcf.gz"
+                ),
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -235,7 +269,9 @@ clinvar = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/clinvar/clinvar_20190923.ht",
             import_func=_import_clinvar,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20190923.vcf.gz",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/clinvar/clinvar_20190923.vcf.gz"
+                ),
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -253,8 +289,12 @@ dbsnp = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b156_grch38_all_20221116.ht",
             import_func=_import_dbsnp,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.bgz",
-                "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.header",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.bgz"
+                ),
+                "header_file": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b156_grch38_all_GCF_000001405.40_20221116.vcf.header"
+                ),
                 "force_bgz": True,
                 "contig_recoding": DBSNP_B154_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -266,8 +306,12 @@ dbsnp = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b154_grch38_all_20200514.ht",
             import_func=_import_dbsnp,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz",
-                "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.bgz"
+                ),
+                "header_file": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b154_grch38_all_GCF_000001405.38_20200514.vcf.header"
+                ),
                 "force_bgz": True,
                 "contig_recoding": DBSNP_B154_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -279,8 +323,12 @@ dbsnp = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.ht",
             import_func=import_sites_vcf,
             import_args={
-                "path": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.bgz",
-                "header_file": "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.header",
+                "path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.bgz"
+                ),
+                "header_file": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/dbsnp/dbsnp_b151_grch38_all_20180418.vcf.header"
+                ),
                 "force_bgz": True,
                 "contig_recoding": NO_CHR_TO_CHR_CONTIG_RECODING,
                 "skip_invalid_loci": True,
@@ -307,7 +355,9 @@ kgp_omni = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/kgp/1000G_omni2.5.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
-        "path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz",
+        "path": (
+            "gs://genomics-public-data/resources/broad/hg38/v0/1000G_omni2.5.hg38.vcf.gz"
+        ),
         "force_bgz": True,
         "reference_genome": "GRCh38",
     },
@@ -320,7 +370,9 @@ kgp = VersionedTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/kgp/1000G_phase1.snps.high_confidence.hg38.ht",
             import_func=import_sites_vcf,
             import_args={
-                "path": "gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz",
+                "path": (
+                    "gs://genomics-public-data/resources/broad/hg38/v0/1000G_phase1.snps.high_confidence.hg38.vcf.gz"
+                ),
                 "force_bgz": True,
                 "reference_genome": "GRCh38",
             },
@@ -332,37 +384,42 @@ mills = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/mills/Mills_and_1000G_gold_standard.indels.hg38.ht",
     import_func=import_sites_vcf,
     import_args={
-        "path": "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz",
+        "path": (
+            "gs://genomics-public-data/resources/broad/hg38/v0/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"
+        ),
         "force_bgz": True,
         "reference_genome": "GRCh38",
     },
 )
 
-# Methylation scores range from 0-15 and are described in Chen et al
+# Methylation scores for autosomes range from 0-15 and are described in Chen et al
 # (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-methylation_sites = GnomadPublicTableResource(
+methylation_sites_autosomes = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.ht",
     import_func=_import_methylation_sites,
     import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.bed",
+        "path": (
+            "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation.bed"
+        ),
     },
 )
 
-# Methylation scores for chromosome X range from 0-12 and are described in Chen et al
+# Merged methylation data including autosomes, chrX, and chrY. This resource combines
+# methylation scores from `methylation_sites_autosomes` with scores from chrX
+# and chrY non-PAR. Autosomes and chrX PAR use a 0-15 scale, while chrX and chrY non-PAR
+# use a 0-12 scale as described in Chen et al
 # (https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full).
-methylation_sites_chrx = GnomadPublicTableResource(
-    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.ht",
-    import_func=_import_methylation_sites,
-    import_args={
-        "path": "gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_chrX.bed",
-    },
+methylation_sites = GnomadPublicTableResource(
+    path="gs://gnomad-public-requester-pays/resources/grch38/methylation_sites/methylation_all.ht",
 )
 
 lcr_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/lcr_intervals/LCRFromHengHg38.ht",
     import_func=hl.import_locus_intervals,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch38/lcr_intervals/LCRFromHengHg38.txt",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch38/lcr_intervals/LCRFromHengHg38.txt"
+        ),
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
     },
@@ -372,7 +429,9 @@ seg_dup_intervals = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/seg_dup_intervals/GRCh38_segdups.ht",
     import_func=hl.import_bed,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch38/seg_dup_intervals/GRCh38_segdups.bed",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch38/seg_dup_intervals/GRCh38_segdups.bed"
+        ),
         "reference_genome": "GRCh38",
     },
 )
@@ -381,7 +440,9 @@ telomeres_and_centromeres = GnomadPublicTableResource(
     path="gs://gnomad-public-requester-pays/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.ht",
     import_func=hl.import_bed,
     import_args={
-        "path": "gs://gcp-public-data--gnomad/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.bed",
+        "path": (
+            "gs://gcp-public-data--gnomad/resources/grch38/telomeres_and_centromeres/hg38.telomeresAndMergedCentromeres.bed"
+        ),
         "reference_genome": "GRCh38",
         "skip_invalid_intervals": True,
     },
@@ -418,8 +479,12 @@ gtex_rsem = VersionedMatrixTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gtex/v10/gtex_rsem.v10.mt",
             import_func=_import_gtex_rsem,
             import_args={
-                "gtex_path": "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_2022-06-06_v10_RSEMv1.3.3_transcripts_tpm.txt.bgz",
-                "meta_path": "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_v10_Open_Access_Reduced_Annotations_SampleAttributesDS.txt.bgz",
+                "gtex_path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_2022-06-06_v10_RSEMv1.3.3_transcripts_tpm.txt.bgz"
+                ),
+                "meta_path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/gtex/v10/GTEx_Analysis_v10_Open_Access_Reduced_Annotations_SampleAttributesDS.txt.bgz"
+                ),
                 "min_partitions": 1000,
             },
         ),
@@ -427,13 +492,29 @@ gtex_rsem = VersionedMatrixTableResource(
 )
 
 gencode = VersionedTableResource(
+    # The default version is v39, which is the version of gencode used by VEP 105, which
+    # is the version used to annotate gnomAD v4.
     default_version="v39",
     versions={
+        "v49": GnomadPublicTableResource(
+            path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v49.annotation.ht",
+            import_func=import_gencode,
+            import_args={
+                "gtf_path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v49.annotation.gtf.gz"
+                ),
+                "reference_genome": "GRCh38",
+                "force": True,
+                "min_partitions": 100,
+            },
+        ),
         "v39": GnomadPublicTableResource(
             path="gs://gnomad-public-requester-pays/resources/grch38/gencode/gencode.v39.annotation.ht",
             import_func=import_gencode,
             import_args={
-                "gtf_path": "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz",
+                "gtf_path": (
+                    "gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v39.annotation.gtf.gz"
+                ),
                 "reference_genome": "GRCh38",
                 "force_bgz": True,
                 "min_partitions": 100,
@@ -454,14 +535,15 @@ def transform_grch38_methylation(
 
         One of ht or methylation_expr must be provided.
 
-    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes. The
-    determination of this score is described in Chen et al:
+    The GRCh38 methylation resource provides a score ranging from 0 to 15 for autosomes.
+    The determination of this score for autosomes is described in Chen et al:
     https://www.biorxiv.org/content/10.1101/2022.03.20.485034v2.full
-    For chrX, methylation scores range from 0 to 12, but these scores are not directly
-    comparable to the autosome scores (chrX and autosomes were analyzed separately and
-    levels are relative). Cutoffs to translate these scores to the 0-2 methylation
-    level were determined by correlating these scores with the GRCh37 liftover scores.
-    Proposed cutoffs are: 0, 1-5, 6+ for autosomes, and 0, 1-3, 4+ for chrX.
+    For chrX and chrY non-PAR, methylation scores range from 0 to 12, but these scores
+    are not directly comparable to the autosome scores (chrX/chrY and autosomes were
+    analyzed separately and levels are relative). Cutoffs to translate these scores to
+    the 0-2 methylation level were determined by correlating these scores with the
+    GRCh37 liftover scores. Proposed cutoffs are: 0, 1-5, 6+ for autosomes/chrX PAR,
+    and 0, 1-3, 4+ for chrX and chrY non-PAR.
 
     :param ht: Optional Hail Table with methylation data. Default is None.
     :param methylation_expr: Optional methylation level expression. Default is None.
@@ -479,7 +561,7 @@ def transform_grch38_methylation(
         locus_expr = ht.locus
 
     methylation_expr = hl.if_else(
-        locus_expr.contig != "chrX",
+        locus_expr.in_autosome_or_par(),
         transform_methylation_level(methylation_expr, (0, 5)),
         transform_methylation_level(methylation_expr, (0, 3)),
     )

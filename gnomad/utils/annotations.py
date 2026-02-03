@@ -258,8 +258,7 @@ def project_max_expr(
             lambda ai: hl.sorted(
                 project_cs.filter(
                     # filter to projects with AF > 0
-                    lambda x: x[1].AF[ai]
-                    > 0
+                    lambda x: x[1].AF[ai] > 0
                 ),
                 # order the callstats computed by AF in decreasing order
                 lambda x: -x[1].AF[ai],
@@ -1125,7 +1124,8 @@ def fs_from_sb(
 
     # Return null if counts <= `min_count`
     return hl.or_missing(
-        sb_sum > min_count, hl.max(0, fs_expr)  # Needed to avoid -0.0 values
+        sb_sum > min_count,
+        hl.max(0, fs_expr),  # Needed to avoid -0.0 values
     )
 
 
@@ -2658,15 +2658,16 @@ def add_gks_vrs(
     vrs_state_sequence = input_vrs.VRS_States[1]
 
     vrs_dict_out = {
-        "_id": vrs_id,
+        "id": vrs_id,
         "type": "Allele",
         "location": {
             "type": "SequenceLocation",
-            "sequence_id": vrs_chrom_id,
-            "interval": {
-                "start": {"type": "Number", "value": vrs_start_value},
-                "end": {"type": "Number", "value": vrs_end_value},
-                "type": "SequenceInterval",
+            "id": vrs_chrom_id,
+            "start": vrs_start_value,
+            "end": vrs_end_value,
+            "sequenceReference": {
+                "type": "SequenceReference",
+                "refgetAccession": vrs_chrom_id,
             },
         },
         "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
@@ -2680,8 +2681,11 @@ def add_gks_vrs(
     )
     location_id = ga4gh_core.ga4gh_identify(seq_loc)
 
-    vrs_dict_out["location"]["_id"] = location_id
+    # Validate it is a valid Allele structure but do not renormalize.
+    # allele = ga4gh_vrs.models.Allele(**vrs_dict_out)
+    # return allele.model_dump_json(exclude_none=True)
 
+    vrs_dict_out["location"]["id"] = location_id
     return vrs_dict_out
 
 

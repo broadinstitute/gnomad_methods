@@ -260,7 +260,8 @@ def project_max_expr(
             lambda ai: hl.sorted(
                 project_cs.filter(
                     # filter to projects with AF > 0
-                    lambda x: x[1].AF[ai] > 0
+                    lambda x: x[1].AF[ai]
+                    > 0
                 ),
                 # order the callstats computed by AF in decreasing order
                 lambda x: -x[1].AF[ai],
@@ -2686,7 +2687,8 @@ def add_gks_vrs(
 
         if vrs_repeat_subunit_lengths is not None:
             # The Allele state is a ReferenceLengthExpression.
-            # Required fields are `length` and `repeatSubunitLength`. `sequence` is optional.
+            # Required fields are `length` and `repeatSubunitLength`.
+            # `sequence` is optional.
             state = {
                 "type": "ReferenceLengthExpression",
                 "length": vrs_lengths,
@@ -2701,7 +2703,10 @@ def add_gks_vrs(
                     "Input VRS struct is missing a value in the VRS_States field. "
                     "This variant may have failed translation to VRS."
                 )
-            state = {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence}
+            state = {
+                "type": "LiteralSequenceExpression",
+                "sequence": vrs_state_sequence,
+            }
 
         vrs_dict_out = {
             "id": vrs_id,
@@ -2826,7 +2831,8 @@ def add_gks_va(
         # Obtain frequency information for the specified variant.
         group_freq = input_struct.freq[freq_index_dict[freq_index_key]]
 
-        # Cohort characteristics (StudyGroup.characteristics uses GKS-Core MappableConcept).
+        # Cohort characteristics
+        # StudyGroup.characteristics uses GKS-Core MappableConcept.
         characteristics = [{"conceptType": "genetic ancestry", "name": group_label}]
         if group_sex is not None:
             characteristics.append({"conceptType": "biological sex", "name": group_sex})
@@ -2903,7 +2909,8 @@ def add_gks_va(
         "type": "CohortAlleleFrequencyStudyResult",
         "name": f"Overall Cohort Allele Frequency for {gnomad_id}",
         "sourceDataSet": source_dataset,
-        "focusAllele": "#/focusAllele",  # Caller may overwrite with add_gks_vrs() output.
+        # Caller may overwrite focusAllele with add_gks_vrs() output.
+        "focusAllele": "#/focusAllele",
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
         "focusAlleleFrequency": (

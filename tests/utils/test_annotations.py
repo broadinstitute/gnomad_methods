@@ -153,9 +153,7 @@ class TestGetCopyStateBySex:
             expected_diploid,
             expected_hemi_x,
             expected_hemi_y,
-        ], (
-            f"Failed for locus={locus}, is_xx={is_xx}. Expected {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}"
-        )
+        ], f"Failed for locus={locus}, is_xx={is_xx}. Expected {[expected_diploid, expected_hemi_x, expected_hemi_y]}, got {result}"
 
 
 class TestMergeArrayExpressions:
@@ -1173,9 +1171,9 @@ class TestVRSFunctions:
         assert hasattr(ga4gh_vrs.models, "SequenceLocation")
 
         # Test that VRS 2.0.1+ API is available
-        assert hasattr(ga4gh_core, "ga4gh_identify"), (
-            "VRS 2.0.1+ ga4gh_identify function not found"
-        )
+        assert hasattr(
+            ga4gh_core, "ga4gh_identify"
+        ), "VRS 2.0.1+ ga4gh_identify function not found"
 
         # Test that we can create a VRS object using the 2.0.1+ API
         seq_loc = ga4gh_vrs.models.SequenceLocation(
@@ -1331,13 +1329,16 @@ class TestVRSFunctions:
         alt_result = result[1]
         _ = ga4gh_vrs.models.Allele(**alt_result)
         assert alt_result["state"]["type"] == "ReferenceLengthExpression"
-        assert alt_result["state"]["length"] == self.CHR16_RLE_NOT_DELETION["rle_length"]
+        assert (
+            alt_result["state"]["length"] == self.CHR16_RLE_NOT_DELETION["rle_length"]
+        )
         assert (
             alt_result["state"]["repeatSubunitLength"]
             == self.CHR16_RLE_NOT_DELETION["rle_repeat_subunit_length"]
         )
         assert (
-            alt_result["state"]["sequence"] == self.CHR16_RLE_NOT_DELETION["rle_sequence"]
+            alt_result["state"]["sequence"]
+            == self.CHR16_RLE_NOT_DELETION["rle_sequence"]
         )
 
     def test_add_gks_vrs_reference_length_expression_repeat_expansion(self):
@@ -1388,7 +1389,8 @@ class TestVRSFunctions:
         _ = ga4gh_vrs.models.Allele(**alt_result)
         assert alt_result["state"]["type"] == "ReferenceLengthExpression"
         assert (
-            alt_result["state"]["length"] == self.CHR16_RLE_REPEAT_EXPANSION["rle_length"]
+            alt_result["state"]["length"]
+            == self.CHR16_RLE_REPEAT_EXPANSION["rle_length"]
         )
         assert (
             alt_result["state"]["repeatSubunitLength"]

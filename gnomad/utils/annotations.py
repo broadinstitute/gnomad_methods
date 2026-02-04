@@ -2647,16 +2647,17 @@ def missing_struct_expr(
 def add_gks_vrs(
     input_locus: hl.Locus,
     input_vrs: hl.Struct,
-    include_ref_allele: bool = False,  # TODO
-) -> dict:
+) -> List[dict]:
     """
-    Generate a dictionary containing VRS information from a given locus and struct of VRS information.
+    Generate VRS Allele dictionaries from a given locus and struct of VRS information.
 
-    Dict will have GA4GH GKS VRS structure.
+    Returns a list of dictionaries with GA4GH GKS VRS Allele structure.
+    Index 0 corresponds to the reference allele (index 0 in the input VRS fields),
+    and index 1 corresponds to the alternate allele (index 1 in the input VRS fields).
 
     :param input_locus: Locus field from a struct (locus of result of running .collect() on a Hail table).
     :param input_vrs: VRS struct (such as from a ht.info.vrs field).
-    :return: Python dictionary conforming to GA4GH GKS VRS structure.
+    :return: List of Python dictionaries conforming to GA4GH GKS VRS Allele structure.
     """
     # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
     # imported. Importing ga4gh here to avoid this issue.
@@ -2667,69 +2668,74 @@ def add_gks_vrs(
     chr_in = input_locus.contig
 
     chrom_dict = VRS_CHROM_IDS[build_in]
-    vrs_id = input_vrs.VRS_Allele_IDs[1]
     vrs_chrom_id = chrom_dict[chr_in]
-    vrs_start_value = input_vrs.VRS_Starts[1]
-    vrs_end_value = input_vrs.VRS_Ends[1]
-    vrs_state_sequence = input_vrs.VRS_States[1]
-    vrs_lengths = input_vrs.VRS_Lengths[1]
-    vrs_repeat_subunit_lengths = input_vrs.VRS_RepeatSubunitLengths[1]
-    if vrs_id is None:
-        raise ValueError(
-            "Input VRS struct is missing a value in the VRS_Allele_IDs field. "
-            "This variant may have failed translation to VRS."
-        )
 
-    if vrs_repeat_subunit_lengths is not None:
-        # The Allele state is a ReferenceLengthExpression.
-        # Required fields are `length` and `repeatSubunitLength`. `sequence` is optional.
-        state = {
-            "type": "ReferenceLengthExpression",
-            "length": vrs_lengths,
-            "repeatSubunitLength": vrs_repeat_subunit_lengths,
-        }
-        if vrs_state_sequence is not None:
-            state["sequence"] = vrs_state_sequence
-    else:
-        # The Allele state is a LiteralSequenceExpression.
-        if vrs_state_sequence is None:
+    def _build_vrs_allele(allele_index: int) -> dict:
+        vrs_id = input_vrs.VRS_Allele_IDs[allele_index]
+        vrs_start_value = input_vrs.VRS_Starts[allele_index]
+        vrs_end_value = input_vrs.VRS_Ends[allele_index]
+        vrs_state_sequence = input_vrs.VRS_States[allele_index]
+        vrs_lengths = input_vrs.VRS_Lengths[allele_index]
+        vrs_repeat_subunit_lengths = input_vrs.VRS_RepeatSubunitLengths[allele_index]
+
+        if vrs_id is None:
             raise ValueError(
-                "Input VRS struct is missing a value in the VRS_States field. "
+                "Input VRS struct is missing a value in the VRS_Allele_IDs field. "
                 "This variant may have failed translation to VRS."
             )
-        state = {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence}
 
-    vrs_dict_out = {
-        "id": vrs_id,
-        "digest": vrs_id.split(".")[1],
-        "type": "Allele",
-        "location": {
-            "type": "SequenceLocation",
-            "id": vrs_chrom_id,
-            "start": vrs_start_value,
-            "end": vrs_end_value,
-            "sequenceReference": {
-                "type": "SequenceReference",
-                "refgetAccession": vrs_chrom_id,
+        if vrs_repeat_subunit_lengths is not None:
+            # The Allele state is a ReferenceLengthExpression.
+            # Required fields are `length` and `repeatSubunitLength`. `sequence` is optional.
+            state = {
+                "type": "ReferenceLengthExpression",
+                "length": vrs_lengths,
+                "repeatSubunitLength": vrs_repeat_subunit_lengths,
+            }
+            if vrs_state_sequence is not None:
+                state["sequence"] = vrs_state_sequence
+        else:
+            # The Allele state is a LiteralSequenceExpression.
+            if vrs_state_sequence is None:
+                raise ValueError(
+                    "Input VRS struct is missing a value in the VRS_States field. "
+                    "This variant may have failed translation to VRS."
+                )
+            state = {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence}
+
+        vrs_dict_out = {
+            "id": vrs_id,
+            "digest": vrs_id.split(".")[1],
+            "type": "Allele",
+            "location": {
+                "type": "SequenceLocation",
+                "id": vrs_chrom_id,
+                "start": vrs_start_value,
+                "end": vrs_end_value,
+                "sequenceReference": {
+                    "type": "SequenceReference",
+                    "refgetAccession": vrs_chrom_id,
+                },
             },
-        },
-        "state": state,
-    }
+            "state": state,
+        }
 
-    seq_ref = ga4gh_vrs.models.SequenceReference(refgetAccession=vrs_chrom_id)
-    seq_loc = ga4gh_vrs.models.SequenceLocation(
-        sequenceReference=seq_ref,
-        start=vrs_start_value,
-        end=vrs_end_value,
-    )
-    location_id = ga4gh_core.ga4gh_identify(seq_loc)
+        seq_ref = ga4gh_vrs.models.SequenceReference(refgetAccession=vrs_chrom_id)
+        seq_loc = ga4gh_vrs.models.SequenceLocation(
+            sequenceReference=seq_ref,
+            start=vrs_start_value,
+            end=vrs_end_value,
+        )
+        location_id = ga4gh_core.ga4gh_identify(seq_loc)
 
-    # Validate it is a valid Allele structure but do not renormalize.
-    # allele = ga4gh_vrs.models.Allele(**vrs_dict_out)
-    # return allele.model_dump_json(exclude_none=True)
+        # Validate it is a valid Allele structure but do not renormalize.
+        # allele = ga4gh_vrs.models.Allele(**vrs_dict_out)
+        # return allele.model_dump_json(exclude_none=True)
 
-    vrs_dict_out["location"]["id"] = location_id
-    return vrs_dict_out
+        vrs_dict_out["location"]["id"] = location_id
+        return vrs_dict_out
+
+    return [_build_vrs_allele(0), _build_vrs_allele(1)]
 
 
 def add_gks_va(

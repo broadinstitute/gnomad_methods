@@ -770,7 +770,7 @@ def gnomad_gks(
     # then return list
     outputs = []
     for variant in variant_list:
-        vrs_variant = add_gks_vrs(variant.locus, variant.vrs)
+        vrs_variants = add_gks_vrs(variant.locus, variant.vrs)
 
         out = {
             "locus": {
@@ -779,7 +779,7 @@ def gnomad_gks(
                 "reference_genome": variant.locus.reference_genome.name,
             },
             "alleles": variant.alleles,
-            "gks_vrs_variant": vrs_variant,
+            "gks_vrs_variant": vrs_variants,
         }
 
         if not vrs_only:
@@ -794,7 +794,7 @@ def gnomad_gks(
             )
 
             # Assign existing VRS information to "focusAllele" key
-            va_freq_dict["focusAllele"] = vrs_variant
+            va_freq_dict["focusAllele"] = vrs_variants[1]
             out["gks_va_freq"] = va_freq_dict
 
         # Append variant dictionary to list of outputs

@@ -747,11 +747,7 @@ def gnomad_gks(
     if "jointGrpMaxFAF95" in ht.row:
         keep_fields.append(ht.jointGrpMaxFAF95)
 
-    print("Before selecting relevant fields:")
-    ht.describe()
     ht = ht.select(*keep_fields)
-    print("After selecting relevant fields:")
-    ht.describe()
 
     # Checkpoint narrower set of columns if not skipped.
     ht = hl.filter_intervals(ht, [locus_interval])

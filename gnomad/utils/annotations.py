@@ -2674,7 +2674,6 @@ def add_gks_vrs(
     vrs_state_sequence = input_vrs.VRS_States[1]
     vrs_lengths = input_vrs.VRS_Lengths[1]
     vrs_repeat_subunit_lengths = input_vrs.VRS_RepeatSubunitLengths[1]
-
     if vrs_id is None:
         raise ValueError(
             "Input VRS struct is missing a value in the VRS_Allele_IDs field. "
@@ -2745,7 +2744,8 @@ def add_gks_va(
     """
     Generate Python dictionary containing GKS VA annotations.
 
-    Populate the dictionary with frequency information conforming to the GKS VA frequency schema.
+    Populate the dictionary with frequency information conforming to the GA4GH VA-Spec
+    `CohortAlleleFrequencyStudyResult` JSON Schema.
     If gen_anc_groups or by_sex is provided, also include subcohort schemas for each cohort.
     If input_struct has mean_depth, it is added to ancillaryResults.
     This annotation is added under the gks_va_freq_dict field of the table.
@@ -2772,11 +2772,23 @@ def add_gks_va(
             " please also specify 'gen_anc_groups' to stratify by."
         )
 
+    if gen_anc_groups and freq_index_dict is None:
+        raise ValueError(
+            "`freq_index_dict` is required when `gen_anc_groups` is provided."
+        )
+
     contig = input_struct.locus.contig
     pos = input_struct.locus.position
     ref = input_struct.alleles[0]
     var = input_struct.alleles[1]
     gnomad_id = f"{contig}-{pos}-{ref}-{var}"
+
+    source_dataset = {
+        "id": f"{label_name}{label_version}",
+        "type": "DataSet",
+        "name": f"{label_name} v{label_version}",
+        "version": f"{label_version}",
+    }
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
@@ -2808,24 +2820,28 @@ def add_gks_va(
         # Obtain frequency information for the specified variant.
         group_freq = input_struct.freq[freq_index_dict[freq_index_key]]
 
-        # Cohort characteristics.
-        characteristics = []
-        characteristics.append({"name": "genetic ancestry", "value": group_label})
+        # Cohort characteristics (StudyGroup.characteristics uses GKS-Core MappableConcept).
+        characteristics = [{"conceptType": "genetic ancestry", "name": group_label}]
         if group_sex is not None:
-            characteristics.append({"name": "biological sex", "value": group_sex})
+            characteristics.append({"conceptType": "biological sex", "name": group_sex})
 
         # Dictionary to be returned containing information for a specified group.
         freq_record = {
             "id": record_id,
-            "type": "CohortAlleleFrequency",
-            "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
+            "type": "CohortAlleleFrequencyStudyResult",
+            "name": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
+            "sourceDataSet": source_dataset,
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
-            "alleleFrequency": (
+            "focusAlleleFrequency": (
                 group_freq["AF"] if group_freq["AF"] is not None else 0.0
             ),
-            "cohort": {"id": cohort_id, "characteristics": characteristics},
+            "cohort": {
+                "id": cohort_id,
+                "type": "StudyGroup",
+                "characteristics": characteristics,
+            },
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
 
@@ -2867,7 +2883,7 @@ def add_gks_va(
                     )
                     sex_list.append(sex_result)
 
-                group_result["subcohortFrequency"] = sex_list
+                group_result["subCohortFrequency"] = sex_list
 
             list_of_group_info_dicts.append(group_result)
 
@@ -2878,23 +2894,16 @@ def add_gks_va(
     # Create final dictionary to be returned.
     final_freq_dict = {
         "id": f"{label_name}-{label_version}-{gnomad_id}",
-        "type": "CohortAlleleFrequency",
-        "label": f"Overall Cohort Allele Frequency for {gnomad_id}",
-        "derivedFrom": {
-            "id": f"{label_name}{label_version}",
-            "type": "DataSet",
-            "label": f"{label_name} v{label_version}",
-            "version": f"{label_version}",
-        },
-        "focusAllele": (
-            ""
-        ),  # Information can be populated with the result of add_gks_vrs()
+        "type": "CohortAlleleFrequencyStudyResult",
+        "name": f"Overall Cohort Allele Frequency for {gnomad_id}",
+        "sourceDataSet": source_dataset,
+        "focusAllele": "#/focusAllele",  # Caller may overwrite with add_gks_vrs() output.
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
-        "alleleFrequency": (
+        "focusAlleleFrequency": (
             overall_freq["AF"] if overall_freq["AF"] is not None else 0.0
         ),
-        "cohort": {"id": "ALL"},
+        "cohort": {"id": "ALL", "type": "StudyGroup", "name": "ALL"},
     }
 
     # Create ancillaryResults for additional frequency and grpMaxFAF95 information.
@@ -2974,7 +2983,7 @@ def add_gks_va(
     # If gen_anc_groups were passed, add the gen_anc group dictionary to the
     # final frequency dictionary to be returned.
     if gen_anc_groups:
-        final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
+        final_freq_dict["subCohortFrequency"] = list_of_group_info_dicts
 
     return final_freq_dict
 

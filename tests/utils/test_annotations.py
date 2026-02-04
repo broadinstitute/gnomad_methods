@@ -1423,12 +1423,6 @@ class TestVRSFunctions:
         )  # VRS SequenceLocation identifiers start with ga4gh:SL
 
 
-class TestGksVaFunctions:
-    def test_gks_va_structure(self):
-        pytest.skip("TODO: add_gks_va structure test with real gnomAD variant data")
-        # allele = ga4gh_vrs.models.Allele(
-
-
 class TestAnnotateDownsamplings:
     """Test the annotate_downsamplings function."""
 

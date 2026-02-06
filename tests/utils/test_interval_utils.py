@@ -65,13 +65,9 @@ class TestExplodeIntervalsToLoci:
         result = result_ht.collect()
 
         # Expected loci for the first interval (100-105, both inclusive).
-        expected_loci_1 = [
-            hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)
-        ]
+        expected_loci_1 = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
         # Expected loci for the second interval (200-203, start inclusive, end exclusive).
-        expected_loci_2 = [
-            hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)
-        ]
+        expected_loci_2 = [hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)]
 
         # Get the loci from the result.
         result_loci = [row.locus for row in result]
@@ -130,7 +126,9 @@ class TestExplodeIntervalsToLoci:
         # Verify that other fields are still present.
         assert all(hasattr(row, "gene") for row in result)
 
-    def test_explode_interval_expression(self, sample_interval_expr: hl.Interval) -> None:
+    def test_explode_interval_expression(
+        self, sample_interval_expr: hl.Interval
+    ) -> None:
         """
         Test exploding an interval expression to an array of positions.
 
@@ -266,7 +264,9 @@ class TestExplodeIntervalsToLoci:
         :param sample_interval_table: Sample Hail Table with intervals.
         :return: None.
         """
-        with pytest.raises(ValueError, match="`interval_field` and `keep_intervals` must be defined"):
+        with pytest.raises(
+            ValueError, match="`interval_field` and `keep_intervals` must be defined"
+        ):
             explode_intervals_to_loci(sample_interval_table)
 
     def test_explode_table_invalid_interval_field_raises_error(
@@ -278,7 +278,9 @@ class TestExplodeIntervalsToLoci:
         :param sample_interval_table: Sample Hail Table with intervals.
         :return: None.
         """
-        with pytest.raises(AssertionError, match="`interval_field` must be an annotation"):
+        with pytest.raises(
+            AssertionError, match="`interval_field` must be an annotation"
+        ):
             explode_intervals_to_loci(
                 sample_interval_table,
                 interval_field="nonexistent_field",
@@ -365,5 +367,7 @@ class TestExplodeIntervalsToLoci:
 
         :return: None.
         """
-        with pytest.raises(AssertionError, match="Input must be a Table or IntervalExpression"):
+        with pytest.raises(
+            AssertionError, match="Input must be a Table or IntervalExpression"
+        ):
             explode_intervals_to_loci("invalid_input")

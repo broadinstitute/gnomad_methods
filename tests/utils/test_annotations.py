@@ -1367,7 +1367,7 @@ class TestCheckAnnotationMissingness:
 
         assert "missingness" in results
         assert "value" in results["missingness"]
-        # 1 out of 5 values is missing = 20%
+        # 1 out of 5 values is missing = 20%.
         assert results["missingness"]["value"] == pytest.approx(0.2)
 
     def test_nested_struct_missingness(self, table_with_nested_struct):
@@ -1380,11 +1380,11 @@ class TestCheckAnnotationMissingness:
         assert "info.field2" in results["missingness"]
         assert "info.nested.x" in results["missingness"]
 
-        # field1: 1 out of 4 missing = 25%
+        # field1: 1 out of 4 missing = 25%.
         assert results["missingness"]["info.field1"] == pytest.approx(0.25)
-        # field2: 2 out of 4 missing = 50%
+        # field2: 2 out of 4 missing = 50%.
         assert results["missingness"]["info.field2"] == pytest.approx(0.5)
-        # nested.x: 1 out of 4 missing = 25%
+        # nested.x: 1 out of 4 missing = 25%.
         assert results["missingness"]["info.nested.x"] == pytest.approx(0.25)
 
     def test_array_annotation_missingness(self, table_with_array_annotation):
@@ -1395,7 +1395,7 @@ class TestCheckAnnotationMissingness:
 
         assert "missingness" in results
         assert "values" in results["missingness"]
-        # Empty arrays and None are considered missing: 2 out of 4 = 50%
+        # Empty arrays and None are considered missing: 2 out of 4 = 50%.
         assert results["missingness"]["values"] == pytest.approx(0.5)
 
     def test_low_coverage_threshold(self, table_with_nested_struct):
@@ -1450,9 +1450,9 @@ class TestCheckAnnotationMissingness:
         assert "info.AC" in results["missingness"]
         assert "info.AF" in results["missingness"]
 
-        # AC: 1 out of 2 missing = 50%
+        # AC: 1 out of 2 missing = 50%.
         assert results["missingness"]["info.AC"] == pytest.approx(0.5)
-        # AF: 0 out of 2 missing = 0%
+        # AF: 0 out of 2 missing = 0%.
         assert results["missingness"]["info.AF"] == pytest.approx(0.0)
 
     def test_annotation_not_found_raises_error(self, table_with_simple_annotation):
@@ -1472,7 +1472,7 @@ class TestCheckAnnotationMissingness:
             remove_missing_fields=False,
         )
 
-        # The field should still exist.
+        # The field 'missing' should still exist.
         assert "missing" in ht_result.row.dtype.fields
         assert "missing" in results["completely_missing_fields"]
 
@@ -1509,11 +1509,11 @@ class TestCheckAnnotationMissingness:
         assert "idx" not in results["missingness"]
 
         # Verify missingness values.
-        # field_a: 1 out of 4 missing = 25%
+        # field_a: 1 out of 4 missing = 25%.
         assert results["missingness"]["field_a"] == pytest.approx(0.25)
-        # field_b: 2 out of 4 missing = 50%
+        # field_b: 2 out of 4 missing = 50%.
         assert results["missingness"]["field_b"] == pytest.approx(0.5)
-        # field_c: 1 out of 4 missing = 25%
+        # field_c: 1 out of 4 missing = 25%.
         assert results["missingness"]["field_c"] == pytest.approx(0.25)
 
     def test_check_all_annotations_matrix_table(self, matrix_table_with_annotation):

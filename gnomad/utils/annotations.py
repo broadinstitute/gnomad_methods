@@ -3001,7 +3001,7 @@ def check_annotation_missingness(
     This function computes the fraction of missing values for each field within the
     specified annotation (or all annotations if none specified). For nested structs
     (e.g., VEP annotations), it recursively checks all nested fields. Arrays and sets
-    are considered missing if they are NA, empty, or contain only missing elements.
+    are considered missing if they are NA, empty, or contain only missing elements. If option is set, completely missing fields will be removed.
 
     The function returns a dictionary containing:
         - 'missingness': A dictionary mapping field paths to their missingness fractions.
@@ -3117,9 +3117,9 @@ def check_annotation_missingness(
         # Remove completely missing fields if requested.
         if remove_missing_fields and completely_missing_fields:
             logger.info(
-                "Removing %d completely missing field(s) from '%s'.",
+                "Removing %d completely missing field(s): '%s'.",
                 len(completely_missing_fields),
-                annotation,
+                completely_missing_fields,
             )
 
             filtered_annotation = _filter_missing_fields(

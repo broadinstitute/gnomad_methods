@@ -146,7 +146,6 @@ def get_vep_csq_header(vep_version: str = CURRENT_VEP_VERSION) -> str:
 
     :param vep_version: VEP version (e.g., "101", "105", "115"). Default is CURRENT_VEP_VERSION.
     :return: CSQ header string for the specified VEP version.
-    :raises ValueError: If the VEP version is not in VEP_CSQ_FIELDS.
     """
     if vep_version not in VEP_CSQ_FIELDS:
         raise ValueError(
@@ -755,17 +754,22 @@ def vep_struct_to_csq(
         ("motif_feature_consequences", "MotifFeature"),
         ("intergenic_consequences", "Intergenic"),
     ]:
-        # Check if the field exists in the VEP struct before accessing it.
-        # Some VEP versions (e.g., 115) may not have all consequence types.
-        if feature_field in vep_expr:
-            csq = csq.extend(
-                hl.or_else(
-                    vep_expr[feature_field].map(
-                        lambda x: get_csq_from_struct(x, feature_type=feature_type)
-                    ),
-                    hl.empty_array(hl.tstr),
-                )
+        # Some VEP versions (e.g., 115) may not have all consequence types (e.g.,
+        # motif_feature_consequences).
+        if feature_field not in vep_expr:
+            logger.warning(
+                "Field '%s' not found in VEP expression, skipping.",
+                feature_field,
             )
+            continue
+        csq = csq.extend(
+            hl.or_else(
+                vep_expr[feature_field].map(
+                    lambda x: get_csq_from_struct(x, feature_type=feature_type)
+                ),
+                hl.empty_array(hl.tstr),
+            )
+        )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
 

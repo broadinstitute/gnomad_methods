@@ -1308,6 +1308,7 @@ class TestCheckAnnotationMissingness:
                 {"idx": 2, "values": []},
                 {"idx": 3, "values": None},
                 {"idx": 4, "values": [4, 5]},
+                {"idx": 5, "values": [None, None]},
             ],
             hl.tstruct(idx=hl.tint32, values=hl.tarray(hl.tint32)),
         ).key_by("idx")
@@ -1322,6 +1323,24 @@ class TestCheckAnnotationMissingness:
                 {"idx": 3, "present": 30, "missing": None},
             ],
             hl.tstruct(idx=hl.tint32, present=hl.tint32, missing=hl.tint32),
+        ).key_by("idx")
+
+    @pytest.fixture
+    def table_with_multiple_annotations(self):
+        """Create a Table with multiple annotations for testing check all."""
+        return hl.Table.parallelize(
+            [
+                {"idx": 1, "field_a": 10, "field_b": "x", "field_c": 1.0},
+                {"idx": 2, "field_a": 20, "field_b": None, "field_c": 2.0},
+                {"idx": 3, "field_a": None, "field_b": "z", "field_c": None},
+                {"idx": 4, "field_a": 40, "field_b": None, "field_c": 4.0},
+            ],
+            hl.tstruct(
+                idx=hl.tint32,
+                field_a=hl.tint32,
+                field_b=hl.tstr,
+                field_c=hl.tfloat64,
+            ),
         ).key_by("idx")
 
     @pytest.fixture
@@ -1395,21 +1414,22 @@ class TestCheckAnnotationMissingness:
 
         assert "missingness" in results
         assert "values" in results["missingness"]
-        # Empty arrays and None are considered missing: 2 out of 4 = 50%.
-        assert results["missingness"]["values"] == pytest.approx(0.5)
+        # Empty arrays, None, and all-missing-element arrays are considered missing:
+        # 3 out of 5 = 60%.
+        assert results["missingness"]["values"] == pytest.approx(0.6)
 
-    def test_low_coverage_threshold(self, table_with_nested_struct):
-        """Test that fields exceeding low_coverage_threshold are flagged."""
+    def test_high_missingness_threshold(self, table_with_nested_struct):
+        """Test that fields exceeding high_missingness_threshold are flagged."""
         # With threshold 0.3, field2 (50% missing) should be flagged.
         ht, results = check_annotation_missingness(
-            table_with_nested_struct, "info", low_coverage_threshold=0.3
+            table_with_nested_struct, "info", high_missingness_threshold=0.3
         )
 
-        assert "low_coverage_fields" in results
-        assert "info.field2" in results["low_coverage_fields"]
+        assert "high_missingness_fields" in results
+        assert "info.field2" in results["high_missingness_fields"]
         # field1 and nested.x are at 25%, should not be flagged.
-        assert "info.field1" not in results["low_coverage_fields"]
-        assert "info.nested.x" not in results["low_coverage_fields"]
+        assert "info.field1" not in results["high_missingness_fields"]
+        assert "info.nested.x" not in results["high_missingness_fields"]
 
     def test_completely_missing_fields_identified(
         self, table_with_completely_missing_field
@@ -1455,6 +1475,42 @@ class TestCheckAnnotationMissingness:
         # AF: 0 out of 2 missing = 0%.
         assert results["missingness"]["info.AF"] == pytest.approx(0.0)
 
+    def test_matrix_table_include_col_annotations(self):
+        """Test that include_col_annotations checks column annotations."""
+        mt = hl.Table.parallelize(
+            [
+                {
+                    "locus": hl.locus("chr1", 1000, reference_genome="GRCh38"),
+                    "alleles": ["A", "T"],
+                    "s": "sample1",
+                    "GT": hl.call(0, 1),
+                },
+                {
+                    "locus": hl.locus("chr1", 1000, reference_genome="GRCh38"),
+                    "alleles": ["A", "T"],
+                    "s": "sample2",
+                    "GT": hl.call(1, 1),
+                },
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+
+        mt = mt.annotate_cols(
+            pop=hl.if_else(mt.s == "sample1", "EUR", hl.missing(hl.tstr))
+        )
+
+        mt, results = check_annotation_missingness(mt, include_col_annotations=True)
+
+        # Column annotation should appear with "col." prefix.
+        assert "col.pop" in results["missingness"]
+        # 1 out of 2 samples missing = 50%.
+        assert results["missingness"]["col.pop"] == pytest.approx(0.5)
+
     def test_annotation_not_found_raises_error(self, table_with_simple_annotation):
         """Test that ValueError is raised when annotation doesn't exist."""
         with pytest.raises(ValueError, match="not found"):
@@ -1475,24 +1531,6 @@ class TestCheckAnnotationMissingness:
         # The field 'missing' should still exist.
         assert "missing" in ht_result.row.dtype.fields
         assert "missing" in results["completely_missing_fields"]
-
-    @pytest.fixture
-    def table_with_multiple_annotations(self):
-        """Create a Table with multiple annotations for testing check all."""
-        return hl.Table.parallelize(
-            [
-                {"idx": 1, "field_a": 10, "field_b": "x", "field_c": 1.0},
-                {"idx": 2, "field_a": 20, "field_b": None, "field_c": 2.0},
-                {"idx": 3, "field_a": None, "field_b": "z", "field_c": None},
-                {"idx": 4, "field_a": 40, "field_b": None, "field_c": 4.0},
-            ],
-            hl.tstruct(
-                idx=hl.tint32,
-                field_a=hl.tint32,
-                field_b=hl.tstr,
-                field_c=hl.tfloat64,
-            ),
-        ).key_by("idx")
 
     def test_check_all_annotations_when_none_passed(
         self, table_with_multiple_annotations

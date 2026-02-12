@@ -2991,7 +2991,7 @@ def _get_missingness_expr(
 def check_annotation_missingness(
     t: Union[hl.Table, hl.MatrixTable],
     annotation: Optional[str] = None,
-    low_coverage_threshold: float = 0.05,
+    high_missingness_threshold: float = 0.05,
     remove_missing_fields: bool = False,
     include_col_annotations: bool = False,
 ) -> Tuple[Union[hl.Table, hl.MatrixTable], Dict[str, Dict[str, Any]]]:
@@ -3005,7 +3005,7 @@ def check_annotation_missingness(
 
     The function returns a dictionary containing:
         - 'missingness': A dictionary mapping field paths to their missingness fractions.
-        - 'low_coverage_fields': A list of fields exceeding the low_coverage_threshold.
+        - 'high_missingness_fields': A list of fields exceeding the high_missingness_threshold.
         - 'completely_missing_fields': A list of fields that are 100% missing.
 
     Example usage::
@@ -3014,7 +3014,7 @@ def check_annotation_missingness(
         ht, results = check_annotation_missingness(ht)
 
         # Check VEP annotation missingness
-        ht, results = check_annotation_missingness(ht, "vep", low_coverage_threshold=0.08)
+        ht, results = check_annotation_missingness(ht, "vep", high_missingness_threshold=0.08)
 
         # Check info struct missingness and remove completely missing fields
         ht, results = check_annotation_missingness(
@@ -3028,8 +3028,8 @@ def check_annotation_missingness(
     :param annotation: Name of the annotation to check for missingness. If None, checks
         all row annotations (and column annotations if include_col_annotations is True
         for MatrixTables).
-    :param low_coverage_threshold: Threshold above which a field is flagged as having
-        low coverage (high missingness). Default is 0.05 (5% missing).
+    :param high_missingness_threshold: Threshold above which a field is flagged as having
+        high missingness. Default is 0.05 (5% missing).
     :param remove_missing_fields: If True, remove fields that are 100% missing from
         the annotation. Default is False.
     :param include_col_annotations: If True and input is a MatrixTable, also check
@@ -3045,25 +3045,21 @@ def check_annotation_missingness(
         prefix: str,
         missing_fields: List[str],
     ) -> Optional[hl.expr.Expression]:
-        """Recursively filter out missing fields from a struct."""
-        if isinstance(expr, hl.expr.StructExpression):
-            new_fields = {}
-            for key in expr.keys():
-                nested_prefix = f"{prefix}.{key}" if prefix else key
-                if nested_prefix in missing_fields:
-                    continue
-                filtered = _filter_missing_fields(
-                    expr[key], nested_prefix, missing_fields
-                )
-                if filtered is not None:
-                    new_fields[key] = filtered
-            if not new_fields:
-                return None
-            return hl.struct(**new_fields)
-        else:
-            if prefix in missing_fields:
-                return None
+        """Recursively remove fields whose fully-qualified paths are listed in missing_fields."""
+        if prefix in missing_fields:
+            return None
+
+        if not isinstance(expr, hl.expr.StructExpression):
             return expr
+
+        fields = {}
+        for key in expr.keys():
+            path = f"{prefix}.{key}" if prefix else key
+            value = _filter_missing_fields(expr[key], path, missing_fields)
+            if value is not None:
+                fields[key] = value
+
+        return hl.struct(**fields) if fields else None
 
     def _check_single_annotation(
         t: Union[hl.Table, hl.MatrixTable],
@@ -3089,7 +3085,7 @@ def check_annotation_missingness(
         missingness_dict = dict(missingness_results)
 
         # Identify low coverage and completely missing fields.
-        low_coverage_fields = []
+        high_missingness_fields = []
         completely_missing_fields = []
 
         for field_path, fraction_missing in missingness_dict.items():
@@ -3099,13 +3095,14 @@ def check_annotation_missingness(
                     "Field '%s' is 100%% missing.",
                     field_path,
                 )
-            elif fraction_missing >= low_coverage_threshold:
-                low_coverage_fields.append(field_path)
+            elif fraction_missing >= high_missingness_threshold:
+                high_missingness_fields.append(field_path)
                 logger.warning(
-                    "Field '%s' has low coverage: %.2f%% missing (threshold: %.2f%%).",
+                    "Field '%s' has high missingness: %.2f%% missing (threshold:"
+                    " %.2f%%).",
                     field_path,
                     fraction_missing * 100,
-                    low_coverage_threshold * 100,
+                    high_missingness_threshold * 100,
                 )
             else:
                 logger.info(
@@ -3144,7 +3141,7 @@ def check_annotation_missingness(
 
         return t, {
             "missingness": missingness_dict,
-            "low_coverage_fields": low_coverage_fields,
+            "high_missingness_fields": high_missingness_fields,
             "completely_missing_fields": completely_missing_fields,
         }
 
@@ -3171,7 +3168,7 @@ def check_annotation_missingness(
     # Check all annotations.
     combined_results = {
         "missingness": {},
-        "low_coverage_fields": [],
+        "high_missingness_fields": [],
         "completely_missing_fields": [],
     }
 
@@ -3188,7 +3185,9 @@ def check_annotation_missingness(
     for annot in row_annotations:
         t, results = _check_single_annotation(t, annot, "row")
         combined_results["missingness"].update(results["missingness"])
-        combined_results["low_coverage_fields"].extend(results["low_coverage_fields"])
+        combined_results["high_missingness_fields"].extend(
+            results["high_missingness_fields"]
+        )
         combined_results["completely_missing_fields"].extend(
             results["completely_missing_fields"]
         )
@@ -3207,8 +3206,8 @@ def check_annotation_missingness(
             # Prefix col annotations to distinguish from row annotations.
             col_missingness = {f"col.{k}": v for k, v in results["missingness"].items()}
             combined_results["missingness"].update(col_missingness)
-            combined_results["low_coverage_fields"].extend(
-                [f"col.{f}" for f in results["low_coverage_fields"]]
+            combined_results["high_missingness_fields"].extend(
+                [f"col.{f}" for f in results["high_missingness_fields"]]
             )
             combined_results["completely_missing_fields"].extend(
                 [f"col.{f}" for f in results["completely_missing_fields"]]

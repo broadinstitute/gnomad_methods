@@ -756,20 +756,20 @@ def vep_struct_to_csq(
     ]:
         # Some VEP versions (e.g., 115) may not have all consequence types (e.g.,
         # motif_feature_consequences).
-        if feature_field not in vep_expr:
+        if feature_field in vep_expr:
+            csq = csq.extend(
+                hl.or_else(
+                    vep_expr[feature_field].map(
+                        lambda x: get_csq_from_struct(x, feature_type=feature_type)
+                    ),
+                    hl.empty_array(hl.tstr),
+                )
+            )
+        else:
             logger.warning(
-                "Field '%s' not found in VEP expression, skipping.",
+                "Field '%s' not found in VEP expression, skipping CSQ generation for this feature type.",
                 feature_field,
             )
-            continue
-        csq = csq.extend(
-            hl.or_else(
-                vep_expr[feature_field].map(
-                    lambda x: get_csq_from_struct(x, feature_type=feature_type)
-                ),
-                hl.empty_array(hl.tstr),
-            )
-        )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
 

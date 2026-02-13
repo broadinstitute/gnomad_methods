@@ -2955,3 +2955,262 @@ def get_copy_state_by_sex(
     hemi_x_expr = locus_expr.in_x_nonpar() & ~is_xx_expr
     hemi_y_expr = locus_expr.in_y_nonpar() & ~is_xx_expr
     return diploid_expr, hemi_x_expr, hemi_y_expr
+
+
+def _get_missingness_expr(
+    expr: hl.expr.Expression,
+    prefix: str = "",
+) -> Dict[str, hl.expr.Float64Expression]:
+    """
+    Recursively build missingness aggregation expressions for an annotation.
+
+    This helper function traverses nested struct types and returns a dictionary
+    mapping field paths to their missingness fraction expressions.
+
+    :param expr: Hail expression to check for missingness.
+    :param prefix: Prefix to prepend to field names (used for nested structs).
+    :return: Dictionary mapping field paths to missingness fraction expressions.
+    """
+    result = {}
+
+    if isinstance(expr, hl.expr.StructExpression):
+        for key in expr.keys():
+            nested_prefix = f"{prefix}.{key}" if prefix else key
+            result.update(_get_missingness_expr(expr[key], nested_prefix))
+    elif isinstance(expr, (hl.expr.ArrayExpression, hl.expr.SetExpression)):
+        # Count array/set as missing if it is NA, empty, or only has missing elements.
+        result[prefix] = hl.agg.fraction(
+            hl.or_else(expr.all(lambda x: hl.is_missing(x)), True)
+        )
+    else:
+        result[prefix] = hl.agg.fraction(hl.is_missing(expr))
+
+    return result
+
+
+def check_annotation_missingness(
+    t: Union[hl.Table, hl.MatrixTable],
+    annotation: Optional[str] = None,
+    high_missingness_threshold: float = 0.05,
+    remove_missing_fields: bool = False,
+    include_col_annotations: bool = False,
+) -> Tuple[Union[hl.Table, hl.MatrixTable], Dict[str, Dict[str, Any]]]:
+    """
+    Check missingness of annotations in a Table or MatrixTable, recursively handling structs.
+
+    This function computes the fraction of missing values for each field within the
+    specified annotation (or all annotations if none specified). For nested structs
+    (e.g., VEP annotations), it recursively checks all nested fields. Arrays and sets
+    are considered missing if they are NA, empty, or contain only missing elements. If option is set, completely missing fields will be removed.
+
+    The function returns a dictionary containing:
+        - 'missingness': A dictionary mapping field paths to their missingness fractions.
+        - 'high_missingness_fields': A list of fields exceeding the high_missingness_threshold.
+        - 'completely_missing_fields': A list of fields that are 100% missing.
+
+    Example usage::
+
+        # Check all row annotations
+        ht, results = check_annotation_missingness(ht)
+
+        # Check VEP annotation missingness
+        ht, results = check_annotation_missingness(ht, "vep", high_missingness_threshold=0.08)
+
+        # Check info struct missingness and remove completely missing fields
+        ht, results = check_annotation_missingness(
+            ht, "info", remove_missing_fields=True
+        )
+
+        # Check all annotations in a MatrixTable including column annotations
+        mt, results = check_annotation_missingness(mt, include_col_annotations=True)
+
+    :param t: Input Table or MatrixTable.
+    :param annotation: Name of the annotation to check for missingness. If None, checks
+        all row annotations (and column annotations if include_col_annotations is True
+        for MatrixTables).
+    :param high_missingness_threshold: Threshold above which a field is flagged as having
+        high missingness. Default is 0.05 (5% missing).
+    :param remove_missing_fields: If True, remove fields that are 100% missing from
+        the annotation. Default is False.
+    :param include_col_annotations: If True and input is a MatrixTable, also check
+        column annotations when annotation is None. Default is False.
+    :return: Tuple of:
+        - The (potentially modified) Table or MatrixTable.
+        - Dictionary containing missingness statistics and flagged fields.
+    """
+    is_mt = isinstance(t, hl.MatrixTable)
+
+    def _filter_missing_fields(
+        expr: hl.expr.Expression,
+        prefix: str,
+        missing_fields: List[str],
+    ) -> Optional[hl.expr.Expression]:
+        """Recursively remove fields whose fully-qualified paths are listed in missing_fields."""
+        if prefix in missing_fields:
+            return None
+
+        if not isinstance(expr, hl.expr.StructExpression):
+            return expr
+
+        fields = {}
+        for key in expr.keys():
+            path = f"{prefix}.{key}" if prefix else key
+            value = _filter_missing_fields(expr[key], path, missing_fields)
+            if value is not None:
+                fields[key] = value
+
+        return hl.struct(**fields) if fields else None
+
+    def _check_single_annotation(
+        t: Union[hl.Table, hl.MatrixTable],
+        annotation: str,
+        annotation_type: str,
+    ) -> Tuple[Union[hl.Table, hl.MatrixTable], Dict[str, Any]]:
+        """Check missingness for a single annotation."""
+        expr = t[annotation]
+
+        # Build missingness expressions recursively.
+        missingness_exprs = _get_missingness_expr(expr, annotation)
+
+        # Aggregate missingness fractions.
+        if is_mt:
+            if annotation_type == "row":
+                missingness_results = t.aggregate_rows(hl.struct(**missingness_exprs))
+            else:
+                missingness_results = t.aggregate_cols(hl.struct(**missingness_exprs))
+        else:
+            missingness_results = t.aggregate(hl.struct(**missingness_exprs))
+
+        # Convert results to a regular dictionary.
+        missingness_dict = dict(missingness_results)
+
+        # Identify low coverage and completely missing fields.
+        high_missingness_fields = []
+        completely_missing_fields = []
+
+        for field_path, fraction_missing in missingness_dict.items():
+            if fraction_missing == 1.0:
+                completely_missing_fields.append(field_path)
+                logger.warning(
+                    "Field '%s' is 100%% missing.",
+                    field_path,
+                )
+            elif fraction_missing >= high_missingness_threshold:
+                high_missingness_fields.append(field_path)
+                logger.warning(
+                    "Field '%s' has high missingness: %.2f%% missing (threshold:"
+                    " %.2f%%).",
+                    field_path,
+                    fraction_missing * 100,
+                    high_missingness_threshold * 100,
+                )
+            else:
+                logger.info(
+                    "Field '%s': %.2f%% missing.",
+                    field_path,
+                    fraction_missing * 100,
+                )
+
+        # Remove completely missing fields if requested.
+        if remove_missing_fields and completely_missing_fields:
+            logger.info(
+                "Removing %d completely missing field(s): '%s'.",
+                len(completely_missing_fields),
+                completely_missing_fields,
+            )
+
+            filtered_annotation = _filter_missing_fields(
+                expr, annotation, completely_missing_fields
+            )
+
+            if filtered_annotation is not None:
+                if is_mt:
+                    if annotation_type == "row":
+                        t = t.annotate_rows(**{annotation: filtered_annotation})
+                    else:
+                        t = t.annotate_cols(**{annotation: filtered_annotation})
+                else:
+                    t = t.annotate(**{annotation: filtered_annotation})
+            else:
+                # The entire annotation is missing; drop it.
+                logger.warning(
+                    "Entire annotation '%s' is 100%% missing. Dropping annotation.",
+                    annotation,
+                )
+                t = t.drop(annotation)
+
+        return t, {
+            "missingness": missingness_dict,
+            "high_missingness_fields": high_missingness_fields,
+            "completely_missing_fields": completely_missing_fields,
+        }
+
+    # If a specific annotation is provided, check only that annotation.
+    if annotation is not None:
+        # Validate annotation exists.
+        if is_mt:
+            if annotation in t.row:
+                annotation_type = "row"
+            elif annotation in t.col:
+                annotation_type = "col"
+            else:
+                raise ValueError(
+                    f"Annotation '{annotation}' not found in MatrixTable row or column "
+                    "fields."
+                )
+        else:
+            if annotation not in t.row:
+                raise ValueError(f"Annotation '{annotation}' not found in Table.")
+            annotation_type = "row"
+
+        return _check_single_annotation(t, annotation, annotation_type)
+
+    # Check all annotations.
+    combined_results = {
+        "missingness": {},
+        "high_missingness_fields": [],
+        "completely_missing_fields": [],
+    }
+
+    # Get row annotations (excluding key fields).
+    if is_mt:
+        row_key_fields = set(t.row_key.keys())
+        row_annotations = [f for f in t.row if f not in row_key_fields]
+    else:
+        key_fields = set(t.key.keys())
+        row_annotations = [f for f in t.row if f not in key_fields]
+
+    logger.info("Checking %d row annotation(s) for missingness.", len(row_annotations))
+
+    for annot in row_annotations:
+        t, results = _check_single_annotation(t, annot, "row")
+        combined_results["missingness"].update(results["missingness"])
+        combined_results["high_missingness_fields"].extend(
+            results["high_missingness_fields"]
+        )
+        combined_results["completely_missing_fields"].extend(
+            results["completely_missing_fields"]
+        )
+
+    # Check column annotations for MatrixTables if requested.
+    if is_mt and include_col_annotations:
+        col_key_fields = set(t.col_key.keys())
+        col_annotations = [f for f in t.col if f not in col_key_fields]
+
+        logger.info(
+            "Checking %d column annotation(s) for missingness.", len(col_annotations)
+        )
+
+        for annot in col_annotations:
+            t, results = _check_single_annotation(t, annot, "col")
+            # Prefix col annotations to distinguish from row annotations.
+            col_missingness = {f"col.{k}": v for k, v in results["missingness"].items()}
+            combined_results["missingness"].update(col_missingness)
+            combined_results["high_missingness_fields"].extend(
+                [f"col.{f}" for f in results["high_missingness_fields"]]
+            )
+            combined_results["completely_missing_fields"].extend(
+                [f"col.{f}" for f in results["completely_missing_fields"]]
+            )
+
+    return t, combined_results

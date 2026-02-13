@@ -618,10 +618,6 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
             grpmax=fafmax_field.faf95_max,
             grpmax_gen_anc=fafmax_field.faf95_max_gen_anc,
         ),
-        jointGrpMaxFAF95=hl.struct(
-            grpmax=ht.joint_fafmax.faf95_max,
-            grpmax_gen_anc=ht.joint_fafmax.faf95_max_gen_anc,
-        ),
     )
     return ht
 
@@ -664,6 +660,11 @@ def gnomad_gks(
             "gnomad_gks() is currently only implemented for gnomAD v4."
         )
 
+    if data_type not in ["exomes", "genomes"]:
+        raise NotImplementedError(
+            "gnomad_gks() is currently only implemented for gnomAD exomes and genomes."
+        )
+
     # Read public_release table if no custom table provided.
     if custom_ht:
         ht = custom_ht
@@ -693,10 +694,15 @@ def gnomad_gks(
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
-    # Retrieve genetic ancestry groups from the imported GEN_ANC_NAMES dictionary.
-    grps_list = (
-        list(GEN_ANC_NAMES[high_level_version][data_type]) if by_gen_anc_group else None
-    )
+    # Determine which genetic ancestry groups to include (list of group IDs).
+    if by_gen_anc_group:
+        if data_type not in GEN_ANC_GROUPS[high_level_version]:
+            raise NotImplementedError(
+                f"No genetic ancestry group list configured for {high_level_version} {data_type}."
+            )
+        grps_list = list(GEN_ANC_GROUPS[high_level_version][data_type])
+    else:
+        grps_list = None
 
     # Throw warnings if contradictory arguments are passed.
     if by_gen_anc_group and vrs_only:
@@ -741,7 +747,11 @@ def gnomad_gks(
     if "jointGrpMaxFAF95" in ht.row:
         keep_fields.append(ht.jointGrpMaxFAF95)
 
+    print("Before selecting relevant fields:")
+    ht.describe()
     ht = ht.select(*keep_fields)
+    print("After selecting relevant fields:")
+    ht.describe()
 
     # Checkpoint narrower set of columns if not skipped.
     ht = hl.filter_intervals(ht, [locus_interval])
@@ -760,7 +770,7 @@ def gnomad_gks(
     # then return list
     outputs = []
     for variant in variant_list:
-        vrs_variant = add_gks_vrs(variant.locus, variant.vrs)
+        vrs_variants = add_gks_vrs(variant.locus, variant.vrs)
 
         out = {
             "locus": {
@@ -769,7 +779,7 @@ def gnomad_gks(
                 "reference_genome": variant.locus.reference_genome.name,
             },
             "alleles": variant.alleles,
-            "gks_vrs_variant": vrs_variant,
+            "gks_vrs_variant": vrs_variants,
         }
 
         if not vrs_only:
@@ -784,7 +794,7 @@ def gnomad_gks(
             )
 
             # Assign existing VRS information to "focusAllele" key
-            va_freq_dict["focusAllele"] = vrs_variant
+            va_freq_dict["focusAllele"] = vrs_variants[1]
             out["gks_va_freq"] = va_freq_dict
 
         # Append variant dictionary to list of outputs

@@ -36,56 +36,56 @@ ANNOTATIONS_HISTS = {
 
 VRS_CHROM_IDS = {
     "GRCh38": {
-        "chr1": "ga4gh:SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
-        "chr2": "ga4gh:SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
-        "chr3": "ga4gh:SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
-        "chr4": "ga4gh:SQ.HxuclGHh0XCDuF8x6yQrpHUBL7ZntAHc",
-        "chr5": "ga4gh:SQ.aUiQCzCPZ2d0csHbMSbh2NzInhonSXwI",
-        "chr6": "ga4gh:SQ.0iKlIQk2oZLoeOG9P1riRU6hvL5Ux8TV",
-        "chr7": "ga4gh:SQ.F-LrLMe1SRpfUZHkQmvkVKFEGaoDeHul",
-        "chr8": "ga4gh:SQ.209Z7zJ-mFypBEWLk4rNC6S_OxY5p7bs",
-        "chr9": "ga4gh:SQ.KEO-4XBcm1cxeo_DIQ8_ofqGUkp4iZhI",
-        "chr10": "ga4gh:SQ.ss8r_wB0-b9r44TQTMmVTI92884QvBiB",
-        "chr11": "ga4gh:SQ.2NkFm8HK88MqeNkCgj78KidCAXgnsfV1",
-        "chr12": "ga4gh:SQ.6wlJpONE3oNb4D69ULmEXhqyDZ4vwNfl",
-        "chr13": "ga4gh:SQ._0wi-qoDrvram155UmcSC-zA5ZK4fpLT",
-        "chr14": "ga4gh:SQ.eK4D2MosgK_ivBkgi6FVPg5UXs1bYESm",
-        "chr15": "ga4gh:SQ.AsXvWL1-2i5U_buw6_niVIxD6zTbAuS6",
-        "chr16": "ga4gh:SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0",
-        "chr17": "ga4gh:SQ.dLZ15tNO1Ur0IcGjwc3Sdi_0A6Yf4zm7",
-        "chr18": "ga4gh:SQ.vWwFhJ5lQDMhh-czg06YtlWqu0lvFAZV",
-        "chr19": "ga4gh:SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl",
-        "chr20": "ga4gh:SQ.-A1QmD_MatoqxvgVxBLZTONHz9-c7nQo",
-        "chr21": "ga4gh:SQ.5ZUqxCmDDgN4xTRbaSjN8LwgZironmB8",
-        "chr22": "ga4gh:SQ.7B7SHsmchAR0dFcDCuSFjJAo7tX87krQ",
-        "chrX": "ga4gh:SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
-        "chrY": "ga4gh:SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
+        "chr1": "SQ.Ya6Rs7DHhDeg7YaOSg1EoNi3U_nQ9SvO",
+        "chr2": "SQ.pnAqCRBrTsUoBghSD1yp_jXWSmlbdh4g",
+        "chr3": "SQ.Zu7h9AggXxhTaGVsy7h_EZSChSZGcmgX",
+        "chr4": "SQ.HxuclGHh0XCDuF8x6yQrpHUBL7ZntAHc",
+        "chr5": "SQ.aUiQCzCPZ2d0csHbMSbh2NzInhonSXwI",
+        "chr6": "SQ.0iKlIQk2oZLoeOG9P1riRU6hvL5Ux8TV",
+        "chr7": "SQ.F-LrLMe1SRpfUZHkQmvkVKFEGaoDeHul",
+        "chr8": "SQ.209Z7zJ-mFypBEWLk4rNC6S_OxY5p7bs",
+        "chr9": "SQ.KEO-4XBcm1cxeo_DIQ8_ofqGUkp4iZhI",
+        "chr10": "SQ.ss8r_wB0-b9r44TQTMmVTI92884QvBiB",
+        "chr11": "SQ.2NkFm8HK88MqeNkCgj78KidCAXgnsfV1",
+        "chr12": "SQ.6wlJpONE3oNb4D69ULmEXhqyDZ4vwNfl",
+        "chr13": "SQ._0wi-qoDrvram155UmcSC-zA5ZK4fpLT",
+        "chr14": "SQ.eK4D2MosgK_ivBkgi6FVPg5UXs1bYESm",
+        "chr15": "SQ.AsXvWL1-2i5U_buw6_niVIxD6zTbAuS6",
+        "chr16": "SQ.yC_0RBj3fgBlvgyAuycbzdubtLxq-rE0",
+        "chr17": "SQ.dLZ15tNO1Ur0IcGjwc3Sdi_0A6Yf4zm7",
+        "chr18": "SQ.vWwFhJ5lQDMhh-czg06YtlWqu0lvFAZV",
+        "chr19": "SQ.IIB53T8CNeJJdUqzn9V_JnRtQadwWCbl",
+        "chr20": "SQ.-A1QmD_MatoqxvgVxBLZTONHz9-c7nQo",
+        "chr21": "SQ.5ZUqxCmDDgN4xTRbaSjN8LwgZironmB8",
+        "chr22": "SQ.7B7SHsmchAR0dFcDCuSFjJAo7tX87krQ",
+        "chrX": "SQ.w0WZEvgJF0zf_P4yyTzjjv9oW1z61HHP",
+        "chrY": "SQ.8_liLu1aycC0tPQPFmUaGXJLDs5SbPZ5",
     },
     "GRCh37": {
-        "1": "ga4gh:SQ.S_KjnFVz-FE7M0W6yoaUDgYxLPc1jyWU",
-        "2": "ga4gh:SQ.9KdcA9ZpY1Cpvxvg8bMSLYDUpsX6GDLO",
-        "3": "ga4gh:SQ.VNBualIltAyi2AI_uXcKU7M9XUOuA7MS",
-        "4": "ga4gh:SQ.iy7Zfceb5_VGtTQzJ-v5JpPbpeifHD_V",
-        "5": "ga4gh:SQ.vbjOdMfHJvTjK_nqvFvpaSKhZillW0SX",
-        "6": "ga4gh:SQ.KqaUhJMW3CDjhoVtBetdEKT1n6hM-7Ek",
-        "7": "ga4gh:SQ.IW78mgV5Cqf6M24hy52hPjyyo5tCCd86",
-        "8": "ga4gh:SQ.tTm7wmhz0G4lpt8wPspcNkAD_qiminj6",
-        "9": "ga4gh:SQ.HBckYGQ4wYG9APHLpjoQ9UUe9v7NxExt",
-        "10": "ga4gh:SQ.-BOZ8Esn8J88qDwNiSEwUr5425UXdiGX",
-        "11": "ga4gh:SQ.XXi2_O1ly-CCOi3HP5TypAw7LtC6niFG",
-        "12": "ga4gh:SQ.105bBysLoDFQHhajooTAUyUkNiZ8LJEH",
-        "13": "ga4gh:SQ.Ewb9qlgTqN6e_XQiRVYpoUfZJHXeiUfH",
-        "14": "ga4gh:SQ.5Ji6FGEKfejK1U6BMScqrdKJK8GqmIGf",
-        "15": "ga4gh:SQ.zIMZb3Ft7RdWa5XYq0PxIlezLY2ccCgt",
-        "16": "ga4gh:SQ.W6wLoIFOn4G7cjopxPxYNk2lcEqhLQFb",
-        "17": "ga4gh:SQ.AjWXsI7AkTK35XW9pgd3UbjpC3MAevlz",
-        "18": "ga4gh:SQ.BTj4BDaaHYoPhD3oY2GdwC_l0uqZ92UD",
-        "19": "ga4gh:SQ.ItRDD47aMoioDCNW_occY5fWKZBKlxCX",
-        "20": "ga4gh:SQ.iy_UbUrvECxFRX5LPTH_KPojdlT7BKsf",
-        "21": "ga4gh:SQ.LpTaNW-hwuY_yARP0rtarCnpCQLkgVCg",
-        "22": "ga4gh:SQ.XOgHwwR3Upfp5sZYk6ZKzvV25a4RBVu8",
-        "X": "ga4gh:SQ.v7noePfnNpK8ghYXEqZ9NukMXW7YeNsm",
-        "Y": "ga4gh:SQ.BT7QyW5iXaX_1PSX-msSGYsqRdMKqkj-",
+        "1": "SQ.S_KjnFVz-FE7M0W6yoaUDgYxLPc1jyWU",
+        "2": "SQ.9KdcA9ZpY1Cpvxvg8bMSLYDUpsX6GDLO",
+        "3": "SQ.VNBualIltAyi2AI_uXcKU7M9XUOuA7MS",
+        "4": "SQ.iy7Zfceb5_VGtTQzJ-v5JpPbpeifHD_V",
+        "5": "SQ.vbjOdMfHJvTjK_nqvFvpaSKhZillW0SX",
+        "6": "SQ.KqaUhJMW3CDjhoVtBetdEKT1n6hM-7Ek",
+        "7": "SQ.IW78mgV5Cqf6M24hy52hPjyyo5tCCd86",
+        "8": "SQ.tTm7wmhz0G4lpt8wPspcNkAD_qiminj6",
+        "9": "SQ.HBckYGQ4wYG9APHLpjoQ9UUe9v7NxExt",
+        "10": "SQ.-BOZ8Esn8J88qDwNiSEwUr5425UXdiGX",
+        "11": "SQ.XXi2_O1ly-CCOi3HP5TypAw7LtC6niFG",
+        "12": "SQ.105bBysLoDFQHhajooTAUyUkNiZ8LJEH",
+        "13": "SQ.Ewb9qlgTqN6e_XQiRVYpoUfZJHXeiUfH",
+        "14": "SQ.5Ji6FGEKfejK1U6BMScqrdKJK8GqmIGf",
+        "15": "SQ.zIMZb3Ft7RdWa5XYq0PxIlezLY2ccCgt",
+        "16": "SQ.W6wLoIFOn4G7cjopxPxYNk2lcEqhLQFb",
+        "17": "SQ.AjWXsI7AkTK35XW9pgd3UbjpC3MAevlz",
+        "18": "SQ.BTj4BDaaHYoPhD3oY2GdwC_l0uqZ92UD",
+        "19": "SQ.ItRDD47aMoioDCNW_occY5fWKZBKlxCX",
+        "20": "SQ.iy_UbUrvECxFRX5LPTH_KPojdlT7BKsf",
+        "21": "SQ.LpTaNW-hwuY_yARP0rtarCnpCQLkgVCg",
+        "22": "SQ.XOgHwwR3Upfp5sZYk6ZKzvV25a4RBVu8",
+        "X": "SQ.v7noePfnNpK8ghYXEqZ9NukMXW7YeNsm",
+        "Y": "SQ.BT7QyW5iXaX_1PSX-msSGYsqRdMKqkj-",
     },
 }
 
@@ -203,9 +203,11 @@ def grpmax_expr(
 
     # pylint: disable=invalid-unary-operand-type
     gen_anc_max_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (hl.set(freq_meta[i].keys()) == {"group", gen_anc_label})
-        & (freq_meta[i]["group"] == "adj")
-        & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        lambda i: (
+            (hl.set(freq_meta[i].keys()) == {"group", gen_anc_label})
+            & (freq_meta[i]["group"] == "adj")
+            & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        )
     )
     freq_filtered = gen_anc_max_freq_indices.map(
         lambda i: freq[i].annotate(**{gen_anc_label: freq_meta[i][gen_anc_label]})
@@ -320,23 +322,35 @@ def faf_expr(
 
     # pylint: disable=invalid-unary-operand-type
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (freq_meta[i].get("group") == "adj")
-        & (
-            (freq_meta[i].size() == 1)
-            | (
-                (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group"})
-                & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        lambda i: (
+            (freq_meta[i].get("group") == "adj")
+            & (
+                (freq_meta[i].size() == 1)
+                | (
+                    (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group"})
+                    & (
+                        ~_gen_anc_groups_to_exclude.contains(
+                            freq_meta[i][gen_anc_label]
+                        )
+                    )
+                )
             )
         )
     )
     sex_faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
-        lambda i: (freq_meta[i].get("group") == "adj")
-        & (freq_meta[i].contains("sex"))
-        & (
-            (freq_meta[i].size() == 2)
-            | (
-                (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group", "sex"})
-                & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
+        lambda i: (
+            (freq_meta[i].get("group") == "adj")
+            & (freq_meta[i].contains("sex"))
+            & (
+                (freq_meta[i].size() == 2)
+                | (
+                    (hl.set(freq_meta[i].keys()) == {gen_anc_label, "group", "sex"})
+                    & (
+                        ~_gen_anc_groups_to_exclude.contains(
+                            freq_meta[i][gen_anc_label]
+                        )
+                    )
+                )
             )
         )
     )
@@ -397,8 +411,9 @@ def gen_anc_faf_max_expr(
     :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
-        lambda i: (hl.set(i[1].keys()) == {"group", gen_anc_label})
-        & (i[1]["group"] == "adj")
+        lambda i: (
+            (hl.set(i[1].keys()) == {"group", gen_anc_label}) & (i[1]["group"] == "adj")
+        )
     )
     max_fafs_expr = hl.struct()
 
@@ -1125,7 +1140,8 @@ def fs_from_sb(
 
     # Return null if counts <= `min_count`
     return hl.or_missing(
-        sb_sum > min_count, hl.max(0, fs_expr)  # Needed to avoid -0.0 values
+        sb_sum > min_count,
+        hl.max(0, fs_expr),  # Needed to avoid -0.0 values
     )
 
 
@@ -1412,7 +1428,7 @@ def merge_array_expressions(
     # Create a list where each entry is a dictionary whose key is an aggregation
     # group and the value is the corresponding index in the array.
     meta = [hl.dict(hl.enumerate(m).map(lambda x: (x[1], [x[0]]))) for m in meta]
-    all_keys = hl.fold(lambda i, j: (i | j.key_set()), meta[0].key_set(), meta[1:])
+    all_keys = hl.fold(lambda i, j: i | j.key_set(), meta[0].key_set(), meta[1:])
 
     # Merge dictionaries in the list into a single dictionary where key is aggregation
     # group and the value is a list of the group's index in each of the arrays, if
@@ -2630,17 +2646,19 @@ def missing_struct_expr(
 
 
 def add_gks_vrs(
-    input_locus: hl.locus,
-    input_vrs: hl.struct,
-) -> dict:
+    input_locus: hl.Locus,
+    input_vrs: hl.Struct,
+) -> List[dict]:
     """
-    Generate a dictionary containing VRS information from a given locus and struct of VRS information.
+    Generate VRS Allele dictionaries from a given locus and struct of VRS information.
 
-    Dict will have GA4GH GKS VRS structure.
+    Returns a list of dictionaries with GA4GH GKS VRS Allele structure.
+    Index 0 corresponds to the reference allele (index 0 in the input VRS fields),
+    and index 1 corresponds to the alternate allele (index 1 in the input VRS fields).
 
     :param input_locus: Locus field from a struct (locus of result of running .collect() on a Hail table).
     :param input_vrs: VRS struct (such as from a ht.info.vrs field).
-    :return: Python dictionary conforming to GA4GH GKS VRS structure.
+    :return: List of Python dictionaries conforming to GA4GH GKS VRS Allele structure.
     """
     # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
     # imported. Importing ga4gh here to avoid this issue.
@@ -2651,38 +2669,82 @@ def add_gks_vrs(
     chr_in = input_locus.contig
 
     chrom_dict = VRS_CHROM_IDS[build_in]
-    vrs_id = input_vrs.VRS_Allele_IDs[1]
     vrs_chrom_id = chrom_dict[chr_in]
-    vrs_start_value = input_vrs.VRS_Starts[1]
-    vrs_end_value = input_vrs.VRS_Ends[1]
-    vrs_state_sequence = input_vrs.VRS_States[1]
 
-    vrs_dict_out = {
-        "_id": vrs_id,
-        "type": "Allele",
-        "location": {
-            "type": "SequenceLocation",
-            "sequence_id": vrs_chrom_id,
-            "interval": {
-                "start": {"type": "Number", "value": vrs_start_value},
-                "end": {"type": "Number", "value": vrs_end_value},
-                "type": "SequenceInterval",
+    def _build_vrs_allele(allele_index: int) -> dict:
+        vrs_id = input_vrs.VRS_Allele_IDs[allele_index]
+        vrs_start_value = input_vrs.VRS_Starts[allele_index]
+        vrs_end_value = input_vrs.VRS_Ends[allele_index]
+        vrs_state_sequence = input_vrs.VRS_States[allele_index]
+        vrs_lengths = input_vrs.VRS_Lengths[allele_index]
+        vrs_repeat_subunit_lengths = input_vrs.VRS_RepeatSubunitLengths[allele_index]
+
+        if vrs_id is None:
+            raise ValueError(
+                "Input VRS struct is missing a value in the VRS_Allele_IDs field. "
+                "This variant may have failed translation to VRS."
+            )
+
+        if vrs_repeat_subunit_lengths is not None:
+            # The Allele state is a ReferenceLengthExpression.
+            # Required fields are `length` and `repeatSubunitLength`.
+            # `sequence` is optional.
+            state = {
+                "type": "ReferenceLengthExpression",
+                "length": vrs_lengths,
+                "repeatSubunitLength": vrs_repeat_subunit_lengths,
+            }
+            if vrs_state_sequence is not None:
+                state["sequence"] = vrs_state_sequence
+        else:
+            # The Allele state is a LiteralSequenceExpression.
+            if vrs_state_sequence is None:
+                raise ValueError(
+                    "Input VRS struct is missing a value in the VRS_States field. "
+                    "This variant may have failed translation to VRS."
+                )
+            state = {
+                "type": "LiteralSequenceExpression",
+                "sequence": vrs_state_sequence,
+            }
+
+        vrs_dict_out = {
+            "id": vrs_id,
+            "digest": vrs_id.split(".")[1],
+            "type": "Allele",
+            "location": {
+                "type": "SequenceLocation",
+                "id": vrs_chrom_id,
+                "start": vrs_start_value,
+                "end": vrs_end_value,
+                "sequenceReference": {
+                    "type": "SequenceReference",
+                    "refgetAccession": vrs_chrom_id,
+                },
             },
-        },
-        "state": {"type": "LiteralSequenceExpression", "sequence": vrs_state_sequence},
-    }
+            "state": state,
+        }
 
-    location_id = ga4gh_core._internal.identifiers.ga4gh_identify(
-        ga4gh_vrs.models.SequenceLocation(**vrs_dict_out["location"])
-    )
+        seq_ref = ga4gh_vrs.models.SequenceReference(refgetAccession=vrs_chrom_id)
+        seq_loc = ga4gh_vrs.models.SequenceLocation(
+            sequenceReference=seq_ref,
+            start=vrs_start_value,
+            end=vrs_end_value,
+        )
+        location_id = ga4gh_core.ga4gh_identify(seq_loc)
 
-    vrs_dict_out["location"]["_id"] = location_id
+        # Validate it is a valid Allele structure but do not renormalize.
+        # allele = ga4gh_vrs.models.Allele(**vrs_dict_out)
+        # return allele.model_dump_json(exclude_none=True)
 
-    return vrs_dict_out
+        vrs_dict_out["location"]["id"] = location_id
+        return vrs_dict_out
+
+    return [_build_vrs_allele(0), _build_vrs_allele(1)]
 
 
 def add_gks_va(
-    input_struct: hl.struct,
+    input_struct: hl.Struct,
     label_name: str = "gnomAD",
     label_version: str = "3.1.2",
     gen_anc_groups: list = None,
@@ -2693,7 +2755,8 @@ def add_gks_va(
     """
     Generate Python dictionary containing GKS VA annotations.
 
-    Populate the dictionary with frequency information conforming to the GKS VA frequency schema.
+    Populate the dictionary with frequency information conforming to the GA4GH VA-Spec
+    `CohortAlleleFrequencyStudyResult` JSON Schema.
     If gen_anc_groups or by_sex is provided, also include subcohort schemas for each cohort.
     If input_struct has mean_depth, it is added to ancillaryResults.
     This annotation is added under the gks_va_freq_dict field of the table.
@@ -2720,11 +2783,23 @@ def add_gks_va(
             " please also specify 'gen_anc_groups' to stratify by."
         )
 
+    if gen_anc_groups and freq_index_dict is None:
+        raise ValueError(
+            "`freq_index_dict` is required when `gen_anc_groups` is provided."
+        )
+
     contig = input_struct.locus.contig
     pos = input_struct.locus.position
     ref = input_struct.alleles[0]
     var = input_struct.alleles[1]
     gnomad_id = f"{contig}-{pos}-{ref}-{var}"
+
+    source_dataset = {
+        "id": f"{label_name}{label_version}",
+        "type": "DataSet",
+        "name": f"{label_name} v{label_version}",
+        "version": f"{label_version}",
+    }
 
     # Define function to return a frequency report dictionary for a given group
     def _create_group_dicts(
@@ -2756,24 +2831,29 @@ def add_gks_va(
         # Obtain frequency information for the specified variant.
         group_freq = input_struct.freq[freq_index_dict[freq_index_key]]
 
-        # Cohort characteristics.
-        characteristics = []
-        characteristics.append({"name": "genetic ancestry", "value": group_label})
+        # Cohort characteristics
+        # StudyGroup.characteristics uses GKS-Core MappableConcept.
+        characteristics = [{"conceptType": "genetic ancestry", "name": group_label}]
         if group_sex is not None:
-            characteristics.append({"name": "biological sex", "value": group_sex})
+            characteristics.append({"conceptType": "biological sex", "name": group_sex})
 
         # Dictionary to be returned containing information for a specified group.
         freq_record = {
             "id": record_id,
-            "type": "CohortAlleleFrequency",
-            "label": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
+            "type": "CohortAlleleFrequencyStudyResult",
+            "name": f"{group_label} Cohort Allele Frequency for {gnomad_id}",
+            "sourceDataSet": source_dataset,
             "focusAllele": "#/focusAllele",
             "focusAlleleCount": group_freq["AC"],
             "locusAlleleCount": group_freq["AN"],
-            "alleleFrequency": (
+            "focusAlleleFrequency": (
                 group_freq["AF"] if group_freq["AF"] is not None else 0.0
             ),
-            "cohort": {"id": cohort_id, "characteristics": characteristics},
+            "cohort": {
+                "id": cohort_id,
+                "type": "StudyGroup",
+                "characteristics": characteristics,
+            },
             "ancillaryResults": {"homozygotes": group_freq["homozygote_count"]},
         }
 
@@ -2815,7 +2895,7 @@ def add_gks_va(
                     )
                     sex_list.append(sex_result)
 
-                group_result["subcohortFrequency"] = sex_list
+                group_result["subCohortFrequency"] = sex_list
 
             list_of_group_info_dicts.append(group_result)
 
@@ -2826,23 +2906,17 @@ def add_gks_va(
     # Create final dictionary to be returned.
     final_freq_dict = {
         "id": f"{label_name}-{label_version}-{gnomad_id}",
-        "type": "CohortAlleleFrequency",
-        "label": f"Overall Cohort Allele Frequency for {gnomad_id}",
-        "derivedFrom": {
-            "id": f"{label_name}{label_version}",
-            "type": "DataSet",
-            "label": f"{label_name} v{label_version}",
-            "version": f"{label_version}",
-        },
-        "focusAllele": (
-            ""
-        ),  # Information can be populated with the result of add_gks_vrs()
+        "type": "CohortAlleleFrequencyStudyResult",
+        "name": f"Overall Cohort Allele Frequency for {gnomad_id}",
+        "sourceDataSet": source_dataset,
+        # Caller may overwrite focusAllele with add_gks_vrs() output.
+        "focusAllele": "#/focusAllele",
         "focusAlleleCount": overall_freq["AC"],
         "locusAlleleCount": overall_freq["AN"],
-        "alleleFrequency": (
+        "focusAlleleFrequency": (
             overall_freq["AF"] if overall_freq["AF"] is not None else 0.0
         ),
-        "cohort": {"id": "ALL"},
+        "cohort": {"id": "ALL", "type": "StudyGroup", "name": "ALL"},
     }
 
     # Create ancillaryResults for additional frequency and grpMaxFAF95 information.
@@ -2860,9 +2934,7 @@ def add_gks_va(
         ancillaryResults["grpMaxFAF95"] = {
             "frequency": input_struct.grpMaxFAF95.grpmax_gen_anc,
             "confidenceInterval": 0.95,
-            "groupId": (
-                f"{gnomad_id}.{input_struct.grpMaxFAF95.grpmax_gen_anc.upper()}"
-            ),
+            "groupId": f"{gnomad_id}.{input_struct.grpMaxFAF95.grpmax_gen_anc.upper()}",
         }
 
     # Add joint group max FAF if it exists.
@@ -2924,7 +2996,7 @@ def add_gks_va(
     # If gen_anc_groups were passed, add the gen_anc group dictionary to the
     # final frequency dictionary to be returned.
     if gen_anc_groups:
-        final_freq_dict["subcohortFrequency"] = list_of_group_info_dicts
+        final_freq_dict["subCohortFrequency"] = list_of_group_info_dicts
 
     return final_freq_dict
 

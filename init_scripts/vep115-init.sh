@@ -21,61 +21,31 @@ sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debi
 apt-get update
 apt-get install -y --allow-unauthenticated docker-ce
 
-gsutil -u ${PROJECT} -m cp -r gs://gnomad-tmp/vep_data /vep_data
 
-#mkdir -p /vep_data/loftee_data
-#gsutil -u ${PROJECT} cat gs://${VEP_BUCKET}/loftee-beta/${ASSEMBLY}.tar | tar -xf - -C /vep_data/loftee_data &
-
-#wget https://ftp.ensembl.org/pub/current_fasta/ancestral_alleles/homo_sapiens_ancestor_GRCh38.tar.gz -O /vep_data/homo_sapiens_ancestor_GRCh38.tar.gz &
-
-#gsutil -u ${PROJECT} cp gs://dm_alphamissense/AlphaMissense_hg38.tsv.gz /vep_data/AlphaMissense_hg38.tsv.gz &
-
-#wget https://krishna.gs.washington.edu/download/CADD/v1.7/GRCh38/whole_genome_SNVs.tsv.gz -O /vep_data/whole_genome_SNVs.tsv.gz &
-#wget https://krishna.gs.washington.edu/download/CADD/v1.7/GRCh38/whole_genome_SNVs.tsv.gz.tbi -O /vep_data/whole_genome_SNVs.tsv.gz.tbi &
-
-#wget https://krishna.gs.washington.edu/download/CADD/v1.7/GRCh38/gnomad.genomes.r4.0.indel.tsv.gz -O /vep_data/gnomad.genomes.r4.0.indel.tsv.gz &
-#
-
-#wget https://rothsj06.dmz.hpc.mssm.edu/revel-v1.3_all_chromosomes.zip -O /vep_data/revel-v1.3_all_chromosomes.zip &
-
-#wait
-
-#mkdir -p /vep_data/homo_sapiens_ancestor_GRCh38
-#tar xfz /vep_data/homo_sapiens_ancestor_GRCh38.tar.gz -C /vep_data/homo_sapiens_ancestor_GRCh38
-#cat /vep_data/homo_sapiens_ancestor_GRCh38/homo_sapiens_ancestor_GRCh38/*.fa | bgzip -c > /vep_data/homo_sapiens_ancestor_GRCh38.fa.gz
-#rm -rf /vep_data/homo_sapiens_ancestor_GRCh38/ /vep_data/homo_sapiens_ancestor_GRCh38.tar.gz
-
-tabix -s 1 -b 2 -e 2 -f -S 1 /vep_data/AlphaMissense_hg38.tsv.gz
-
-#unzip /vep_data/revel-v1.3_all_chromosomes.zip -d /vep_data/revel-v1.3_all_chromosomes
-#rm /vep_data/revel-v1.3_all_chromosomes.zip
-#cat /vep_data/revel-v1.3_all_chromosomes/revel_with_transcript_ids | tr "," "\t" > /vep_data/tabbed_revel.tsv
-#sed '1s/.*/#&/' /vep_data/tabbed_revel.tsv > /vep_data/new_tabbed_revel.tsv
-#bgzip /vep_data/new_tabbed_revel.tsv
-tabix -f -s 1 -b 2 -e 2 /vep_data/new_tabbed_revel.tsv.gz
-zcat /vep_data/new_tabbed_revel.tsv.gz | head -n1 > /vep_data/header.tsv
-zgrep -h -v ^#chr /vep_data/new_tabbed_revel.tsv.gz | awk '$3 != "." ' | sort -k1,1 -k3,3n - | cat /vep_data/header.tsv - | bgzip -c > /vep_data/new_tabbed_revel_grch38.tsv.gz
-tabix -f -s 1 -b 3 -e 3 /vep_data/new_tabbed_revel_grch38.tsv.gz
-
-gsutil -u ${PROJECT} -m cp -r /vep_data gs://gnomad-tmp-4day/vep_data
+mkdir -p /vep_data/loftee_data
+gsutil -u ${PROJECT} cat gs://${VEP_BUCKET}/loftee-beta/${ASSEMBLY}.tar | tar -xf - -C /vep_data/loftee_data
 
 docker pull ${VEP_DOCKER_IMAGE}
-
 
 ################################################################
 # Added stuff
 ################################################################
 
 # GCS copy of https://ftp.ebi.ac.uk/ensemblorg/pub/release-115/variation/indexed_vep_cache/homo_sapiens_merged_vep_115_GRCh38.tar.gz
-gsutil -u $PROJECT cat gs://gcp-public-data--gnomad/resources/vep/v115/homo_sapiens_merged_vep_115_GRCh38.tar.gz | tar -xzf - -C /vep_data
+gsutil cat gs://gcp-public-data--gnomad/resources/vep/v115/homo_sapiens_merged_vep_115_GRCh38.tar.gz | tar -xzf - -C /vep_data
 
 
 # FASTA file for GRCh38.
-gsutil -u "$PROJECT" cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz /vep_data/
-gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.fai /vep_data/
-gsutil -u $PROJECT cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.gzi /vep_data/
+gsutil cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz /vep_data/
+gsutil cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.fai /vep_data/
+gsutil cp gs://gcp-public-data--gnomad/resources/vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz.gzi /vep_data/
 
 # Create config file.
+# NOTE: The context plugin is excluded to prevent '-nan' errors encountered in the
+# context field when running VEP on chr18 centromere variants. Add back if necessary
+# for your specific use case.
+#     "--plugin", "context",
+# "vep_json_schema": "Struct{allele_string:String,colocated_variants:Array[Struct{allele_string:String,clin_sig:Array[String],clin_sig_allele:String,end:Int32,id:String,phenotype_or_disease:Int32,pubmed:Array[Int32],somatic:Int32,seq_region_name:String,start:Int32,strand:Int32}],end:Int32,id:String,input:String,intergenic_consequences:Array[Struct{allele_num:Int32,consequence_terms:Array[String],context:String,impact:String,variant_allele:String}],most_severe_consequence:String,motif_feature_consequences:Array[Struct{allele_num:Int32,biotype:String,consequence_terms:Array[String],high_inf_pos:String,impact:String,motif_feature_id:String,motif_name:String,motif_pos:Int32,motif_score_change:Float64,transcription_factors:Array[String],strand:Int32,variant_allele:String}],regulatory_feature_consequences:Array[Struct{allele_num:Int32,biotype:String,consequence_terms:Array[String],context:String,impact:String,regulatory_feature_id:String,variant_allele:String}],seq_region_name:String,start:Int32,strand:Int32,transcript_consequences:Array[Struct{allele_num:Int32,amino_acids:String,appris:String,biotype:String,canonical:Int32,ccds:String,cdna_start:Int32,cdna_end:Int32,cds_end:Int32,cds_start:Int32,codons:String,consequence_terms:Array[String],context:String,distance:Int32,domains:Array[Struct{db:String,name:String}],exon:String,flags:String,gene_id:String,gene_pheno:Int32,gene_symbol:String,gene_symbol_source:String,hgnc_id:String,hgvsc:String,hgvsp:String,hgvs_offset:Int32,impact:String,intron:String,lof:String,lof_filter:String,lof_flags:String,lof_info:String,mane:Array[String],mane_select:String,mane_plus_clinical:String,mirna:Array[String],polyphen_prediction:String,polyphen_score:Float64,protein_end:Int32,protein_id:String,protein_start:Int32,sift_prediction:String,sift_score:Float64,source:String,strand:Int32,swissprot:Array[String],transcript_id:String,trembl:Array[String],tsl:Int32,uniparc:Array[String],uniprot_isoform:Array[String],variant_allele:String}],variant_class:String}"
 cat > /vep_data/vep115-GRCh38.json <<EOF
 {"command": [
     "/vep",
@@ -85,6 +55,7 @@ cat > /vep_data/vep115-GRCh38.json <<EOF
     "--fasta", "/opt/vep/.vep/Homo_sapiens.GRCh38.dna.toplevel.fa.gz",
     "--merged",
     "--cache", "--offline",
+    "--gencode_basic",
     "--sift", "b",
     "--polyphen", "b",
     "--ccds",
@@ -105,20 +76,12 @@ cat > /vep_data/vep115-GRCh38.json <<EOF
     "--gene_phenotype",
     "--mirna",
     "--allele_number",
-    "--no_stats",
-    "--minimal",
-    "--plugin", "context",
-    "--plugin", "ancestral,human_ancestor_fa:/opt/vep/.vep/human_ancestor.fa.gz",
     "--plugin", "LoF,loftee_path:/opt/vep/Plugins,gerp_bigwig:/opt/vep/.vep/loftee_data/gerp_conservation_scores.homo_sapiens.GRCh38.bw,human_ancestor_fa:/opt/vep/.vep/loftee_data/human_ancestor.fa.gz,conservation_file:/opt/vep/.vep/loftee_data/loftee.sql",
-    "--plugin", "AncestralAllele,/opt/vep/.vep/homo_sapiens_ancestor_GRCh38.fa.gz",
-    "--plugin", "AlphaMissense,file:/opt/vep/.vep/AlphaMissense_hg38.tsv.gz",
-    "--plugin", "CADD,snv:/opt/vep/.vep/whole_genome_SNVs.tsv.gz,indels:/opt/vep/.vep/gnomad.genomes.r4.0.indel.tsv.gz",
-    "--plugin", "REVEL,file:/opt/vep/.vep/new_tabbed_revel_grch38.tsv.gz",
     "--dir_plugins", "/opt/vep/Plugins/",
     "-o", "STDOUT"
 ],
  "env": {},
-"vep_json_schema": "Struct{allele_string:String,assembly_name:String,colocated_variants:Array[Struct{allele_string:String,clin_sig:Array[String],clin_sig_allele:String,end:Int32,evidence:Array[String],id:String,minor_allele:String,minor_allele_freq:Float64,phenotype_or_disease:Int32,phenotypes:Array[String],pubmed:Array[String],somatic:Int32,seq_region_name:String,start:Int32,strand:Int32}],end:Int32,id:String,input:String,intergenic_consequences:Array[Struct{allele_num:Int32,ancestral:String,consequence_terms:Array[String],context:String,impact:String,variant_allele:String}],minimised:Int32,most_severe_consequence:String,motif_feature_consequences:Array[Struct{allele_num:Int32,biotype:String,consequence_terms:Array[String],high_inf_pos:String,impact:String,motif_feature_id:String,motif_name:String,motif_pos:Int32,motif_score_change:Float64,transcription_factors:Array[String],strand:Int32,variant_allele:String}],regulatory_feature_consequences:Array[Struct{allele_num:Int32,ancestral:String,biotype:String,consequence_terms:Array[String],context:String,impact:String,regulatory_feature_id:String,variant_allele:String}],seq_region_name:String,start:Int32,strand:Int32,transcript_consequences:Array[Struct{allele_num:Int32,amino_acids:String,am_pathogenicity:Float64,am_class:String,ancestral:String,appris:String,bam_edit:String,biotype:String,canonical:Int32,ccds:String,cdna_start:Int32,cdna_end:Int32,cds_end:Int32,cds_start:Int32,codons:String,consequence_terms:Array[String],context:String,distance:Int32,domains:Array[Struct{db:String,name:String}],exon:String,gene_id:String,gene_pheno:Int32,gene_symbol:String,gene_symbol_source:String,given_ref:String,hgnc_id:String,hgvsc:String,hgvsp:String,hgvs_offset:Int32,impact:String,intron:String,lof:String,lof_filter:String,lof_flags:String,lof_info:String,mane:Array[String],mane_select:String,mane_plus_clinical:String,polyphen_prediction:String,polyphen_score:Float64,protein_end:Int32,protein_id:String,protein_start:Int32,sift_prediction:String,sift_score:Float64,source:String,strand:Int32,swissprot:Array[String],transcript_id:String,trembl:Array[String],tsl:Int32,uniparc:Array[String],uniprot_isoform:Array[String],used_ref:String,variant_allele:String}],variant_class:String}"
+"vep_json_schema": "Struct{allele_string:String,colocated_variants:Array[Struct{allele_string:String,clin_sig:Array[String],clin_sig_allele:String,end:Int32,id:String,phenotype_or_disease:Int32,pubmed:Array[Int32],somatic:Int32,seq_region_name:String,start:Int32,strand:Int32}],end:Int32,id:String,input:String,intergenic_consequences:Array[Struct{allele_num:Int32,consequence_terms:Array[String],impact:String,variant_allele:String}],most_severe_consequence:String,motif_feature_consequences:Array[Struct{allele_num:Int32,biotype:String,consequence_terms:Array[String],high_inf_pos:String,impact:String,motif_feature_id:String,motif_name:String,motif_pos:Int32,motif_score_change:Float64,transcription_factors:Array[String],strand:Int32,variant_allele:String}],regulatory_feature_consequences:Array[Struct{allele_num:Int32,biotype:String,consequence_terms:Array[String],impact:String,regulatory_feature_id:String,variant_allele:String}],seq_region_name:String,start:Int32,strand:Int32,transcript_consequences:Array[Struct{allele_num:Int32,amino_acids:String,appris:String,biotype:String,canonical:Int32,ccds:String,cdna_start:Int32,cdna_end:Int32,cds_end:Int32,cds_start:Int32,codons:String,consequence_terms:Array[String],distance:Int32,domains:Array[Struct{db:String,name:String}],exon:String,flags:String,gene_id:String,gene_pheno:Int32,gene_symbol:String,gene_symbol_source:String,hgnc_id:String,hgvsc:String,hgvsp:String,hgvs_offset:Int32,impact:String,intron:String,lof:String,lof_filter:String,lof_flags:String,lof_info:String,mane:Array[String],mane_select:String,mane_plus_clinical:String,mirna:Array[String],polyphen_prediction:String,polyphen_score:Float64,protein_end:Int32,protein_id:String,protein_start:Int32,sift_prediction:String,sift_score:Float64,source:String,strand:Int32,swissprot:Array[String],transcript_id:String,trembl:Array[String],tsl:Int32,uniparc:Array[String],uniprot_isoform:Array[String],variant_allele:String}],variant_class:String}"
 }
 EOF
 

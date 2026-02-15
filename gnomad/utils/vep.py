@@ -16,10 +16,10 @@ logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-VEP_VERSIONS = ["101", "105"]
-CURRENT_VEP_VERSION = VEP_VERSIONS[-1]
+VEP_VERSIONS = ["101", "105", "115"]
+CURRENT_VEP_VERSION = "105"
 """
-Versions of VEP used in gnomAD data, the latest version is 105.
+Versions of VEP used in gnomAD data.
 """
 
 # Note that these terms are current as of v105 with some included for backwards
@@ -54,8 +54,8 @@ CSQ_CODING_LOW_IMPACT = [
     "start_retained_variant",  # new in v92
     "stop_retained_variant",
     "synonymous_variant",
-    "coding_sequence_variant",
-    "coding_transcript_variant",
+    "coding_sequence_variant",  # considered modifier/non-coding in v105, but keeping as low
+    "coding_transcript_variant",  # considered modifier/non-coding in v105, but keeping as low
 ]
 
 CSQ_NON_CODING = [
@@ -75,9 +75,9 @@ CSQ_NON_CODING = [
     "TF_binding_site_variant",
     "regulatory_region_ablation",
     "regulatory_region_amplification",
-    "feature_elongation",
+    "feature_elongation",  # considered high impact in v105, but keeping as modifier/non-coding
     "regulatory_region_variant",
-    "feature_truncation",
+    "feature_truncation",  # considered high impact in v105, but keeping as modifier/non-coding
     "intergenic_variant",
     "sequence_variant",
 ]
@@ -114,8 +114,18 @@ Constant that contains the local path to the VEP config file
 """
 
 VEP_CSQ_FIELDS = {
-    "101": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info",
-    "105": "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|UNIPROT_ISOFORM|SOURCE|SIFT|PolyPhen|DOMAINS|miRNA|HGVS_OFFSET|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|TRANSCRIPTION_FACTORS|LoF|LoF_filter|LoF_flags|LoF_info",
+    "101": (
+        "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info"
+    ),
+    "105": (
+        "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|UNIPROT_ISOFORM|SOURCE|SIFT|PolyPhen|DOMAINS|miRNA|HGVS_OFFSET|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|TRANSCRIPTION_FACTORS|LoF|LoF_filter|LoF_flags|LoF_info"
+    ),
+    # NOTE: The VEP 115 CSQ header is for release HT validation ONLY. It is
+    # NOT used in VCF export and needs to be confirmed and updated if
+    # necessary prior to use.
+    "115": (
+        "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|UNIPROT_ISOFORM|SOURCE|GENE_PHENO|SIFT|PolyPhen|DOMAINS|miRNA|HGVS_OFFSET|LoF|LoF_filter|LoF_flags|LoF_info"
+    ),
 }
 """
 Constant that defines the order of VEP annotations used in VCF export, currently stored in a dictionary with the VEP version as the key.
@@ -128,6 +138,25 @@ VEP_CSQ_HEADER = (
 """
 Constant that contains description for VEP used in VCF export.
 """
+
+
+def get_vep_csq_header(vep_version: str = CURRENT_VEP_VERSION) -> str:
+    """
+    Get the VEP CSQ header string for a specific VEP version.
+
+    :param vep_version: VEP version (e.g., "101", "105", "115"). Default is CURRENT_VEP_VERSION.
+    :return: CSQ header string for the specified VEP version.
+    """
+    if vep_version not in VEP_CSQ_FIELDS:
+        raise ValueError(
+            f"VEP version {vep_version} not found in VEP_CSQ_FIELDS. "
+            f"Available versions: {list(VEP_CSQ_FIELDS.keys())}"
+        )
+    return (
+        f"Consequence annotations from Ensembl VEP. Format:"
+        f" {VEP_CSQ_FIELDS[vep_version]}"
+    )
+
 
 LOFTEE_LABELS = ["HC", "LC", "OS"]
 """
@@ -633,37 +662,53 @@ def vep_struct_to_csq(
                 "gene": element.gene_id,
                 "symbol": element.gene_symbol,
                 "symbol_source": element.gene_symbol_source,
-                "cdna_position": hl.str(element.cdna_start)
-                + hl.if_else(
-                    element.cdna_start == element.cdna_end,
-                    "",
-                    "-" + hl.str(element.cdna_end),
+                "cdna_position": (
+                    hl.str(element.cdna_start)
+                    + hl.if_else(
+                        element.cdna_start == element.cdna_end,
+                        "",
+                        "-" + hl.str(element.cdna_end),
+                    )
                 ),
-                "cds_position": hl.str(element.cds_start)
-                + hl.if_else(
-                    element.cds_start == element.cds_end,
-                    "",
-                    "-" + hl.str(element.cds_end),
+                "cds_position": (
+                    hl.str(element.cds_start)
+                    + hl.if_else(
+                        element.cds_start == element.cds_end,
+                        "",
+                        "-" + hl.str(element.cds_end),
+                    )
                 ),
                 "mirna": hl.delimit(element.mirna, "&") if "mirna" in element else None,
-                "protein_position": hl.str(element.protein_start)
-                + hl.if_else(
-                    element.protein_start == element.protein_end,
-                    "",
-                    "-" + hl.str(element.protein_end),
+                "protein_position": (
+                    hl.str(element.protein_start)
+                    + hl.if_else(
+                        element.protein_start == element.protein_end,
+                        "",
+                        "-" + hl.str(element.protein_end),
+                    )
                 ),
                 "uniprot_isoform": (
                     hl.delimit(element.uniprot_isoform, "&")
                     if "uniprot_isoform" in element
                     else None
                 ),
+                "mane": hl.delimit(element.mane, "&") if "mane" in element else None,
+                "swissprot": (
+                    hl.delimit(element.swissprot, "&")
+                    if "swissprot" in element
+                    else None
+                ),
+                "trembl": (
+                    hl.delimit(element.trembl, "&") if "trembl" in element else None
+                ),
+                "uniparc": (
+                    hl.delimit(element.uniparc, "&") if "uniparc" in element else None
+                ),
             }
-            # Retain transcript dict updates only for fields that exist in the csq
-            # fields.
+            # Retain transcript dict updates only for fields that exist in the
+            # filtered csq fields.
             transcript_dict = {
-                k: v
-                for k, v in transcript_dict.items()
-                if k in [x.lower() for x in csq_fields.split("|")]
+                k: v for k, v in transcript_dict.items() if k in _csq_fields
             }
             fields.update(transcript_dict)
 
@@ -709,14 +754,22 @@ def vep_struct_to_csq(
         ("motif_feature_consequences", "MotifFeature"),
         ("intergenic_consequences", "Intergenic"),
     ]:
-        csq = csq.extend(
-            hl.or_else(
-                vep_expr[feature_field].map(
-                    lambda x: get_csq_from_struct(x, feature_type=feature_type)
-                ),
-                hl.empty_array(hl.tstr),
+        # Some VEP versions (e.g., 115) may not have all consequence types (e.g.,
+        # motif_feature_consequences).
+        if feature_field in vep_expr:
+            csq = csq.extend(
+                hl.or_else(
+                    vep_expr[feature_field].map(
+                        lambda x: get_csq_from_struct(x, feature_type=feature_type)
+                    ),
+                    hl.empty_array(hl.tstr),
+                )
             )
-        )
+        else:
+            logger.warning(
+                "Field '%s' not found in VEP expression, skipping CSQ generation for this feature type.",
+                feature_field,
+            )
 
     return hl.or_missing(hl.len(csq) > 0, csq)
 
@@ -838,13 +891,15 @@ def filter_vep_transcript_csqs(
     """
     is_mt = isinstance(t, hl.MatrixTable)
     vep_data = {
-        vep_root: t[vep_root].annotate(
-            transcript_consequences=filter_vep_transcript_csqs_expr(
-                t[vep_root].transcript_consequences,
-                synonymous=synonymous,
-                canonical=canonical,
-                ensembl_only=ensembl_only,
-                **kwargs,
+        vep_root: (
+            t[vep_root].annotate(
+                transcript_consequences=filter_vep_transcript_csqs_expr(
+                    t[vep_root].transcript_consequences,
+                    synonymous=synonymous,
+                    canonical=canonical,
+                    ensembl_only=ensembl_only,
+                    **kwargs,
+                )
             )
         )
     }
@@ -1062,6 +1117,20 @@ def get_loftee_end_trunc_filter_expr(
     True is returned if the GERP distance is less than the cutoff and the '50_BP_RULE'
     annotation is not 'PASS'.
 
+    The END_TRUNC filter is designed to identify loss-of-function variants that occur
+    near the end of transcripts, which are often less likely to cause true loss of
+    function.
+
+    GERP (Genomic Evolutionary Rate Profiling) scores measure evolutionary constraint,
+    with positive values indicating conservation and negative values indicating less
+    constraint. The default cutoff of 0.0 means that variants in regions with any level
+    of evolutionary constraint (GERP >= 0) will NOT be filtered as END_TRUNC, while
+    variants in less constrained regions (GERP < 0) will be filtered.
+
+    The filter also requires that the '50_BP_RULE' annotation is not 'PASS', meaning
+    the variant falls within the last 50 base pairs of the transcript where Nonsense
+    Mediated Decay (NMD) escape is more likely.
+
     :param csq_expr: StructExpression containing the LOFTEE annotation 'lof_info', with
         'GERP_DIST' and '50_BP_RULE' info.
     :param gerp_dist_cutoff: GERP distance cutoff for end truncation. Default is 0.0.
@@ -1111,8 +1180,9 @@ def update_loftee_end_trunc_filter(
         :return: Consequence Struct with updated LOFTEE annotations.
         """
         end_trunc_expr = get_loftee_end_trunc_filter_expr(csq_expr, gerp_dist_cutoff)
+        filter_parts = csq_expr.lof_filter.split(",")
         filter_expr = hl.or_else(
-            hl.set(csq_expr.lof_filter.split(",")), hl.empty_set(hl.tstr)
+            hl.set(filter_parts.filter(lambda x: x != "")), hl.empty_set(hl.tstr)
         )
         filter_expr = hl.if_else(
             end_trunc_expr,

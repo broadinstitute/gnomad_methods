@@ -61,6 +61,7 @@ SUBSETS = {
         "hgdp",
     ],
     "v4": ["non_ukb"],
+    "v5": ["non_aou"],
 }
 """
 Order to sort subgroupings during VCF export by version.
@@ -98,6 +99,31 @@ GEN_ANC_GROUPS = {
         ]
     },
     "v4": {
+        "exomes": [
+            "afr",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "mid",
+            "nfe",
+            "remaining",
+            "sas",
+        ],
+        "genomes": [
+            "afr",
+            "ami",
+            "amr",
+            "asj",
+            "eas",
+            "fin",
+            "mid",
+            "nfe",
+            "remaining",
+            "sas",
+        ],
+    },
+    "v5": {
         "exomes": [
             "afr",
             "amr",
@@ -260,6 +286,7 @@ GEN_ANC_GROUPS_STORED_AS_SUBGRPS = TGP_GEN_ANC_GROUPS + HGDP_GEN_ANC_GROUPS
 GEN_ANC_GROUPS_TO_REMOVE_FOR_GRPMAX = {
     "v3": {"asj", "fin", "mid", "oth", "ami", "remaining"},
     "v4": {"asj", "fin", "oth", "ami", "remaining"},
+    "v5": {"asj", "fin", "oth", "ami", "remaining"},
 }
 """
 Genetic ancestry groups that are removed before genetic ancestry group max calculations.
@@ -307,6 +334,13 @@ DOWNSAMPLINGS = {
         100000,
         200000,
         500000,
+    ],
+    "v5": [
+        10000,
+        59355,
+        89074,
+        100000,
+        223733,
     ],
 }
 """

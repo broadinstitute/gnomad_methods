@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.assessment.parse_validity_logs &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../api_reference/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gnomad.assessment.parse_validity_logs</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gnomad.assessment.parse_validity_logs</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Script to parse logs from validity check output.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">re</span>
+
+<span class="kn">import</span> <span class="nn">hail</span> <span class="k">as</span> <span class="nn">hl</span>
+
+
+<div class="viewcode-block" id="parse_log_file"><a class="viewcode-back" href="../../../api_reference/assessment/parse_validity_logs.html#gnomad.assessment.parse_validity_logs.parse_log_file">[docs]</a><span class="k">def</span> <span class="nf">parse_log_file</span><span class="p">(</span><span class="n">log_file</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Parse a log file and categorizes messages for formatting, extracting function names and sources.</span>
+
+<span class="sd">    :param log_file: Path to the log file containing python logging output (such as INFO and WARNING statements).</span>
+<span class="sd">    :return: List of tuples containing logger information describing the validity check, status category, source, message, and associated table if relevant.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">parsed_logs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">log_pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span>
+        <span class="sa">r</span><span class="s2">&quot;^(INFO|WARNING|ERROR) \(([^)]+)\.(\w+) (\d+)\): (.*)&quot;</span>
+    <span class="p">)</span>  <span class="c1"># Extract log level, module, function, line number, and message.</span>
+
+    <span class="n">function_mapping</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;validate_config&quot;</span><span class="p">:</span> <span class="s2">&quot;general info&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;validate_ht_fields&quot;</span><span class="p">:</span> <span class="s2">&quot;general info&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;main&quot;</span><span class="p">:</span> <span class="s2">&quot;general info&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;validate_federated_data&quot;</span><span class="p">:</span> <span class="s2">&quot;general info&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;summarize_variants&quot;</span><span class="p">:</span> <span class="s2">&quot;variant summary&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;sum_group_callstats&quot;</span><span class="p">:</span> <span class="s2">&quot;group summations&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;check_missingness&quot;</span><span class="p">:</span> <span class="s2">&quot;missingness&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compute_missingness&quot;</span><span class="p">:</span> <span class="s2">&quot;missingness&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;make_group_sum_expr_dict&quot;</span><span class="p">:</span> <span class="s2">&quot;group summations&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;check_sex_chr_metrics&quot;</span><span class="p">:</span> <span class="s2">&quot;XY check&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;check_raw_and_adj_callstats&quot;</span><span class="p">:</span> <span class="s2">&quot;raw/adj check&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;check_global_and_row_annot_lengths&quot;</span><span class="p">:</span> <span class="s2">&quot;globals check&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;compare_subset_freqs&quot;</span><span class="p">:</span> <span class="s2">&quot;subset freqs&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;check_globals_for_retired_terms&quot;</span><span class="p">:</span> <span class="s2">&quot;globals check&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;summarize_variant_filters&quot;</span><span class="p">:</span> <span class="s2">&quot;variant summary&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+
+    <span class="k">with</span> <span class="n">hl</span><span class="o">.</span><span class="n">hadoop_open</span><span class="p">(</span><span class="n">log_file</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">current_message</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="n">current_table</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">current_metadata</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Stores log metadata before a table appears.</span>
+
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">match</span> <span class="o">=</span> <span class="n">log_pattern</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">match</span><span class="p">:</span>
+                <span class="c1"># Store previous log if it had a table.</span>
+                <span class="k">if</span> <span class="n">current_message</span> <span class="ow">and</span> <span class="n">current_metadata</span><span class="p">:</span>
+                    <span class="c1"># Remove ASCII table lines from the message part but keep the full</span>
+                    <span class="c1">#  table separately.</span>
+                    <span class="n">cleaned_message</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\+\-.*\+$&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">current_message</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+                    <span class="n">parsed_logs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">(</span>
+                            <span class="o">*</span><span class="n">current_metadata</span><span class="p">,</span>
+                            <span class="n">cleaned_message</span><span class="p">,</span>
+                            <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">current_table</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
+                        <span class="p">)</span>
+                    <span class="p">)</span>
+
+                <span class="c1"># Start new log message.</span>
+                <span class="n">log_level</span><span class="p">,</span> <span class="n">module</span><span class="p">,</span> <span class="n">function_name</span><span class="p">,</span> <span class="n">line_number</span><span class="p">,</span> <span class="n">message</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">groups</span><span class="p">()</span>
+                <span class="n">source</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">function_name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">line_number</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">validity_check</span> <span class="o">=</span> <span class="n">function_mapping</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">function_name</span><span class="p">,</span> <span class="n">function_name</span><span class="p">)</span>
+
+                <span class="c1"># Determine the category.</span>
+                <span class="n">message_lower</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="c1"># Matches &quot;fail&quot; or &quot;failed&quot; as separate words only.</span>
+                <span class="n">FAIL_REGEX</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\b(?:fail|failed)\b&quot;</span><span class="p">)</span>
+                <span class="n">log_categories</span> <span class="o">=</span> <span class="p">{</span>
+                    <span class="s2">&quot;INFO&quot;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">msg</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="s2">&quot;pass&quot;</span>
+                        <span class="k">if</span> <span class="s2">&quot;passed&quot;</span> <span class="ow">in</span> <span class="n">msg</span>
+                        <span class="k">else</span> <span class="p">(</span><span class="s2">&quot;fail&quot;</span> <span class="k">if</span> <span class="n">FAIL_REGEX</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">message_lower</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;info&quot;</span><span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="s2">&quot;WARNING&quot;</span><span class="p">:</span> <span class="s2">&quot;warn&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;ERROR&quot;</span><span class="p">:</span> <span class="s2">&quot;fail&quot;</span><span class="p">,</span>
+                <span class="p">}</span>
+                <span class="n">category</span> <span class="o">=</span> <span class="n">log_categories</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">log_level</span><span class="p">,</span> <span class="s2">&quot;info&quot;</span><span class="p">)</span>
+                <span class="n">category</span> <span class="o">=</span> <span class="n">category</span><span class="p">(</span><span class="n">message_lower</span><span class="p">)</span> <span class="k">if</span> <span class="nb">callable</span><span class="p">(</span><span class="n">category</span><span class="p">)</span> <span class="k">else</span> <span class="n">category</span>
+
+                <span class="c1"># Reset tracking.</span>
+                <span class="n">current_message</span> <span class="o">=</span> <span class="n">message</span>
+                <span class="n">current_table</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="n">current_metadata</span> <span class="o">=</span> <span class="p">(</span><span class="n">validity_check</span><span class="p">,</span> <span class="n">category</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
+
+            <span class="k">elif</span> <span class="s2">&quot;+----&quot;</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">or</span> <span class="s2">&quot;| locus&quot;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>  <span class="c1"># Table start detection.</span>
+                <span class="n">current_table</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>  <span class="c1"># Add table row.</span>
+            <span class="k">elif</span> <span class="n">current_table</span><span class="p">:</span>  <span class="c1"># If already collecting a table.</span>
+                <span class="n">current_table</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+
+        <span class="c1"># Store last log if it had a table.</span>
+        <span class="k">if</span> <span class="n">current_message</span> <span class="ow">and</span> <span class="n">current_metadata</span><span class="p">:</span>
+            <span class="n">cleaned_message</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="sa">r</span><span class="s2">&quot;\+\-.*\+$&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">current_message</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+            <span class="n">parsed_logs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="p">(</span><span class="o">*</span><span class="n">current_metadata</span><span class="p">,</span> <span class="n">cleaned_message</span><span class="p">,</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">current_table</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+            <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">parsed_logs</span></div>
+
+
+<div class="viewcode-block" id="generate_html_report"><a class="viewcode-back" href="../../../api_reference/assessment/parse_validity_logs.html#gnomad.assessment.parse_validity_logs.generate_html_report">[docs]</a><span class="k">def</span> <span class="nf">generate_html_report</span><span class="p">(</span><span class="n">parsed_logs</span><span class="p">,</span> <span class="n">output_file</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate an HTML report with sortable and filterable columns, with expandable tables for results.&quot;&quot;&quot;</span>
+    <span class="n">html_template</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">    &lt;html&gt;</span>
+<span class="s2">    &lt;head&gt;</span>
+<span class="s2">        &lt;style&gt;</span>
+<span class="s2">            body { font-family: Arial, sans-serif; }</span>
+<span class="s2">            table { width: 100%; border-collapse: collapse; }</span>
+<span class="s2">            th, td { border: 1px solid black; padding: 8px; text-align: left; vertical-align: top; }</span>
+<span class="s2">            th { background-color: #f2f2f2; cursor: pointer; }</span>
+<span class="s2">            .pass { color: 0d1cb6; }</span>
+<span class="s2">            .fail { color: #D42736; font-weight: bold;}</span>
+<span class="s2">            .warn { color: #DAA520; }</span>
+<span class="s2">            .info { color: black; }</span>
+<span class="s2">            .hidden-table { display: none; }</span>
+<span class="s2">            .toggle-btn {</span>
+<span class="s2">                cursor: pointer;</span>
+<span class="s2">                color: blue;</span>
+<span class="s2">                text-decoration: underline;</span>
+<span class="s2">                float: right;  /* Moves &quot;View Table&quot; to the right */</span>
+<span class="s2">                margin-left: 15px; /* Adds spacing between message and button */</span>
+<span class="s2">                font-weight: normal;</span>
+<span class="s2">            }</span>
+<span class="s2">            .checkbox-container {</span>
+<span class="s2">                display: inline-block;</span>
+<span class="s2">                margin-left: 20px;</span>
+<span class="s2">            }</span>
+<span class="s2">            pre {</span>
+<span class="s2">                text-align: left;</span>
+<span class="s2">                white-space: pre;</span>
+<span class="s2">                font-family: monospace;</span>
+<span class="s2">                background: #f8f8f8;</span>
+<span class="s2">                padding: 10px;</span>
+<span class="s2">                border-radius: 5px;</span>
+<span class="s2">                overflow-x: auto;</span>
+<span class="s2">                width: 100%;</span>
+<span class="s2">                display: block;</span>
+<span class="s2">                color: black; /* Ensure table text is plain black */</span>
+<span class="s2">                font-weight: normal; /* Ensure no bolding */</span>
+<span class="s2">            }</span>
+<span class="s2">        &lt;/style&gt;</span>
+<span class="s2">        &lt;script&gt;</span>
+<span class="s2">            function toggleTable(id) {</span>
+<span class="s2">                var tableDiv = document.getElementById(id);</span>
+<span class="s2">                tableDiv.style.display = (tableDiv.style.display === &quot;none&quot; || tableDiv.style.display === &quot;&quot;) ? &quot;block&quot; : &quot;none&quot;;</span>
+<span class="s2">            }</span>
+
+<span class="s2">            function toggleAllTables() {</span>
+<span class="s2">                var tables = document.getElementsByClassName(&quot;hidden-table&quot;);</span>
+<span class="s2">                var checkbox = document.getElementById(&quot;toggleAll&quot;);</span>
+<span class="s2">                var showAll = checkbox.checked;</span>
+
+<span class="s2">                for (var i = 0; i &lt; tables.length; i++) {</span>
+<span class="s2">                    tables[i].style.display = showAll ? &quot;block&quot; : &quot;none&quot;;</span>
+<span class="s2">                }</span>
+<span class="s2">            }</span>
+
+<span class="s2">            function sortTable(n) {</span>
+<span class="s2">                var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;</span>
+<span class="s2">                table = document.getElementById(&quot;logTable&quot;);</span>
+<span class="s2">                switching = true;</span>
+<span class="s2">                dir = &quot;asc&quot;;</span>
+<span class="s2">                while (switching) {</span>
+<span class="s2">                    switching = false;</span>
+<span class="s2">                    rows = table.rows;</span>
+<span class="s2">                    for (i = 1; i &lt; (rows.length - 1); i++) {</span>
+<span class="s2">                        shouldSwitch = false;</span>
+<span class="s2">                        x = rows[i].getElementsByTagName(&quot;TD&quot;)[n].innerHTML.toLowerCase();</span>
+<span class="s2">                        y = rows[i + 1].getElementsByTagName(&quot;TD&quot;)[n].innerHTML.toLowerCase();</span>
+<span class="s2">                        if ((dir == &quot;asc&quot; &amp;&amp; x &gt; y) || (dir == &quot;desc&quot; &amp;&amp; x &lt; y)) {</span>
+<span class="s2">                            shouldSwitch = true;</span>
+<span class="s2">                            break;</span>
+<span class="s2">                        }</span>
+<span class="s2">                    }</span>
+<span class="s2">                    if (shouldSwitch) {</span>
+<span class="s2">                        rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);</span>
+<span class="s2">                        switching = true;</span>
+<span class="s2">                        switchcount++;</span>
+<span class="s2">                    } else {</span>
+<span class="s2">                        if (switchcount === 0 &amp;&amp; dir === &quot;asc&quot;) {</span>
+<span class="s2">                            dir = &quot;desc&quot;;</span>
+<span class="s2">                            switching = true;</span>
+<span class="s2">                        }</span>
+<span class="s2">                    }</span>
+<span class="s2">                }</span>
+<span class="s2">            }</span>
+
+<span class="s2">            function filterTable() {</span>
+<span class="s2">                var validityFilter = document.getElementById(&quot;functionFilter&quot;).value.toLowerCase();</span>
+<span class="s2">                var statusFilter = document.getElementById(&quot;statusFilter&quot;).value.toLowerCase();</span>
+<span class="s2">                var table, tr, i;</span>
+<span class="s2">                table = document.getElementById(&quot;logTable&quot;);</span>
+<span class="s2">                tr = table.getElementsByTagName(&quot;tr&quot;);</span>
+
+<span class="s2">                for (i = 1; i &lt; tr.length; i++) {</span>
+<span class="s2">                    var validityCheck = tr[i].getElementsByTagName(&quot;td&quot;)[0].innerHTML.toLowerCase();</span>
+<span class="s2">                    var status = tr[i].getElementsByTagName(&quot;td&quot;)[1].innerHTML.toLowerCase();</span>
+
+<span class="s2">                    if ((validityFilter === &quot;all&quot; || validityCheck === validityFilter) &amp;&amp;</span>
+<span class="s2">                        (statusFilter === &quot;all&quot; || status === statusFilter)) {</span>
+<span class="s2">                        tr[i].style.display = &quot;&quot;;</span>
+<span class="s2">                    } else {</span>
+<span class="s2">                        tr[i].style.display = &quot;none&quot;;</span>
+<span class="s2">                    }</span>
+<span class="s2">                }</span>
+<span class="s2">            }</span>
+<span class="s2">        &lt;/script&gt;</span>
+<span class="s2">    &lt;/head&gt;</span>
+<span class="s2">    &lt;body&gt;</span>
+<span class="s2">        &lt;h2&gt;Log Report&lt;/h2&gt;</span>
+<span class="s2">        &lt;label for=&quot;functionFilter&quot;&gt;Filter by Validity Check:&lt;/label&gt;</span>
+<span class="s2">        &lt;select id=&quot;functionFilter&quot; onchange=&quot;filterTable()&quot;&gt;</span>
+<span class="s2">            &lt;option value=&quot;all&quot;&gt;All&lt;/option&gt;</span>
+<span class="s2">    &quot;&quot;&quot;</span>
+
+    <span class="n">validity_checks</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="n">statuses</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+
+    <span class="k">for</span> <span class="n">validity_check</span><span class="p">,</span> <span class="n">category</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">table</span> <span class="ow">in</span> <span class="n">parsed_logs</span><span class="p">:</span>
+        <span class="n">validity_checks</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">validity_check</span><span class="p">)</span>
+        <span class="n">statuses</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">category</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">validity_check</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">validity_checks</span><span class="p">):</span>
+        <span class="n">html_template</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;&lt;option value=&quot;</span><span class="si">{</span><span class="n">validity_check</span><span class="si">}</span><span class="s1">&quot;&gt;</span><span class="si">{</span><span class="n">validity_check</span><span class="si">}</span><span class="s1">&lt;/option&gt;&#39;</span>
+
+    <span class="n">html_template</span> <span class="o">+=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        &lt;/select&gt;</span>
+<span class="s2">        &lt;label for=&quot;statusFilter&quot;&gt;Filter by Status:&lt;/label&gt;</span>
+<span class="s2">        &lt;select id=&quot;statusFilter&quot; onchange=&quot;filterTable()&quot;&gt;</span>
+<span class="s2">            &lt;option value=&quot;all&quot;&gt;All&lt;/option&gt;</span>
+<span class="s2">    &quot;&quot;&quot;</span>
+
+    <span class="k">for</span> <span class="n">status</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">statuses</span><span class="p">):</span>
+        <span class="n">html_template</span> <span class="o">+=</span> <span class="sa">f</span><span class="s1">&#39;&lt;option value=&quot;</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="s1">&quot;&gt;</span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s1">&lt;/option&gt;&#39;</span>
+
+    <span class="n">html_template</span> <span class="o">+=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        &lt;/select&gt;</span>
+
+<span class="s2">        &lt;!-- Checkbox to show/hide all tables --&gt;</span>
+<span class="s2">        &lt;span class=&quot;checkbox-container&quot;&gt;</span>
+<span class="s2">            &lt;input type=&quot;checkbox&quot; id=&quot;toggleAll&quot; onclick=&quot;toggleAllTables()&quot;&gt;</span>
+<span class="s2">            &lt;label for=&quot;toggleAll&quot;&gt;Show All Tables&lt;/label&gt;</span>
+<span class="s2">        &lt;/span&gt;</span>
+
+<span class="s2">        &lt;table id=&quot;logTable&quot;&gt;</span>
+<span class="s2">            &lt;tr&gt;</span>
+<span class="s2">                &lt;th onclick=&quot;sortTable(0)&quot;&gt;Validity Check&lt;/th&gt;</span>
+<span class="s2">                &lt;th onclick=&quot;sortTable(1)&quot;&gt;Status&lt;/th&gt;</span>
+<span class="s2">                &lt;th onclick=&quot;sortTable(2)&quot;&gt;Source&lt;/th&gt;</span>
+<span class="s2">                &lt;th onclick=&quot;sortTable(3)&quot;&gt;Message&lt;/th&gt;</span>
+<span class="s2">            &lt;/tr&gt;</span>
+<span class="s2">    &quot;&quot;&quot;</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">validity_check</span><span class="p">,</span> <span class="n">category</span><span class="p">,</span> <span class="n">source</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">table</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">parsed_logs</span><span class="p">):</span>
+        <span class="n">table_id</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;table_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">table_button</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;&lt;span class=&quot;toggle-btn&quot; onclick=&quot;toggleTable(</span><span class="se">\&#39;</span><span class="si">{</span><span class="n">table_id</span><span class="si">}</span><span class="se">\&#39;</span><span class="s1">)&quot;&gt;View Table&lt;/span&gt;&#39;</span>
+            <span class="k">if</span> <span class="n">table</span>
+            <span class="k">else</span> <span class="s2">&quot;&quot;</span>
+        <span class="p">)</span>
+
+        <span class="n">html_template</span> <span class="o">+=</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s1">&#39;&lt;tr class=&quot;</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s1">&quot;&gt;&#39;</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;td&gt;</span><span class="si">{</span><span class="n">validity_check</span><span class="si">}</span><span class="s2">&lt;/td&gt;&quot;</span>
+            <span class="sa">f</span><span class="s1">&#39;&lt;td class=&quot;</span><span class="si">{</span><span class="n">category</span><span class="si">}</span><span class="s1">&quot;&gt;</span><span class="si">{</span><span class="n">category</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s1">&lt;/td&gt;&#39;</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;td&gt;</span><span class="si">{</span><span class="n">source</span><span class="si">}</span><span class="s2">&lt;/td&gt;&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;&lt;td&gt;</span><span class="si">{</span><span class="n">message</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">table_button</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">table</span><span class="p">:</span>
+            <span class="n">html_template</span> <span class="o">+=</span> <span class="p">(</span>
+                <span class="sa">f</span><span class="s1">&#39;&lt;div id=&quot;</span><span class="si">{</span><span class="n">table_id</span><span class="si">}</span><span class="s1">&quot; class=&quot;hidden-table&quot;&gt;&lt;pre&gt;</span><span class="si">{</span><span class="n">table</span><span class="si">}</span><span class="s1">&lt;/pre&gt;&lt;/div&gt;&#39;</span>
+            <span class="p">)</span>
+
+        <span class="n">html_template</span> <span class="o">+=</span> <span class="s2">&quot;&lt;/td&gt;&lt;/tr&gt;&quot;</span>
+
+    <span class="n">html_template</span> <span class="o">+=</span> <span class="s2">&quot;&lt;/table&gt;&lt;/body&gt;&lt;/html&gt;&quot;</span>
+
+    <span class="k">with</span> <span class="n">hl</span><span class="o">.</span><span class="n">hadoop_open</span><span class="p">(</span><span class="n">output_file</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">html_template</span><span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

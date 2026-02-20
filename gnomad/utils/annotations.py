@@ -2648,7 +2648,7 @@ def missing_struct_expr(
 def add_gks_vrs(
     input_locus: hl.Locus,
     input_vrs: hl.Struct,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Generate VRS Allele dictionaries from a given locus and struct of VRS information.
 
@@ -2671,7 +2671,7 @@ def add_gks_vrs(
     chrom_dict = VRS_CHROM_IDS[build_in]
     vrs_chrom_id = chrom_dict[chr_in]
 
-    def _build_vrs_allele(allele_index: int) -> dict:
+    def _build_vrs_allele(allele_index: int) -> Dict[str, Any]:
         vrs_id = input_vrs.VRS_Allele_IDs[allele_index]
         vrs_start_value = input_vrs.VRS_Starts[allele_index]
         vrs_end_value = input_vrs.VRS_Ends[allele_index]

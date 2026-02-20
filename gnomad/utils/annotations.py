@@ -2714,7 +2714,7 @@ def add_gks_vrs(
             "type": "Allele",
             "location": {
                 "type": "SequenceLocation",
-                "id": vrs_chrom_id,
+                "id": None,  # This gets computed below
                 "start": vrs_start_value,
                 "end": vrs_end_value,
                 "sequenceReference": {

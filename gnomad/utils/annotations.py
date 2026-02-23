@@ -2732,11 +2732,6 @@ def add_gks_vrs(
             end=vrs_end_value,
         )
         location_id = ga4gh_core.ga4gh_identify(seq_loc)
-
-        # Validate it is a valid Allele structure but do not renormalize.
-        # allele = ga4gh_vrs.models.Allele(**vrs_dict_out)
-        # return allele.model_dump_json(exclude_none=True)
-
         vrs_dict_out["location"]["id"] = location_id
         return vrs_dict_out
 

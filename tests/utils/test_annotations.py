@@ -9,6 +9,7 @@ import pytest
 
 from gnomad.utils.annotations import (
     VRS_CHROM_IDS,
+    add_gks_va,
     add_gks_vrs,
     annotate_downsamplings,
     fill_missing_key_combinations,
@@ -1597,3 +1598,115 @@ class TestAnnotateDownsamplings:
         for row in rows:
             assert "global_idx" in row.downsampling
             assert "gen_anc_idx" in row.downsampling
+
+
+class TestGksVaFunctions:
+    """Tests for GKS/VA helper functions."""
+
+    def test_add_gks_va_grpmax_faf_frequency(self) -> None:
+        """
+        Test `add_gks_va` output matches expectations for a minimal input struct.
+
+        This test validates:
+        - Top-level frequency fields (AC/AN/AF) are propagated from `freq[0]`.
+        - QC fields are derived from `filters`, `lcr`, `ab_hist_alt`, and `monoallelic`.
+        - `grpMaxFAF95` and `jointGrpMaxFAF95` store numeric FAF values in `frequency`
+          (and use the ancestry label only for the `groupId` suffix).
+        """
+        # Use a real-looking variant key with a long allele to exercise ID/groupId generation.
+        contig = "chr1"
+        position = 10108
+        ref = "C"
+        alt = "CAACCCTAACCCTAACCCTAACCCTAACCCTAACCCTAACCCT"
+        gnomad_id = f"{contig}-{position}-{ref}-{alt}"
+
+        # Construct a minimal Struct that satisfies the fields accessed by `add_gks_va`.
+        # Note: keep `filters` empty to avoid nondeterministic ordering from `list(set)`.
+        input_struct = hl.eval(
+            hl.struct(
+                locus=hl.locus(contig, position, reference_genome="GRCh38"),
+                alleles=[ref, alt],
+                freq=[
+                    hl.struct(
+                        AC=2,
+                        AF=1.98e-04,
+                        AN=10090,
+                        homozygote_count=0,
+                    )
+                ],
+                filters=hl.empty_set(hl.tstr),
+                lcr=False,
+                ab_hist_alt=hl.struct(
+                    # 20 bins -> 21 edges, matching the expectations in `add_gks_va`.
+                    bin_edges=hl.literal(
+                        [i / 20 for i in range(21)], hl.tarray(hl.tfloat64)
+                    ),
+                    # Put counts in the last two bins so the skewed AB count is non-zero.
+                    bin_freq=hl.literal([0] * 18 + [1, 2], hl.tarray(hl.tint64)),
+                    n_smaller=hl.int64(0),
+                    n_larger=hl.int64(0),
+                ),
+                in_autosome_or_par=True,
+                monoallelic=False,
+                grpMaxFAF95=hl.struct(grpmax=7.57e-05, grpmax_gen_anc="nfe"),
+                jointGrpMaxFAF95=hl.struct(grpmax=1.23e-04, grpmax_gen_anc="nfe"),
+            )
+        )
+
+        result = add_gks_va(input_struct=input_struct, label_version="4.1")
+
+        # Validate stable top-level fields derived from the input and label metadata.
+        assert result["type"] == "CohortAlleleFrequencyStudyResult"
+        assert result["id"] == f"gnomAD-4.1-{gnomad_id}"
+        assert result["name"] == f"Overall Cohort Allele Frequency for {gnomad_id}"
+        assert result["sourceDataSet"] == {
+            "id": "gnomAD4.1",
+            "type": "DataSet",
+            "name": "gnomAD v4.1",
+            "version": "4.1",
+        }
+        assert result["focusAllele"] == "#/focusAllele"
+        assert result["focusAlleleCount"] == 2
+        assert result["locusAlleleCount"] == 10090
+        assert result["focusAlleleFrequency"] == pytest.approx(1.98e-04)
+        assert result["cohort"] == {"id": "ALL", "type": "StudyGroup", "name": "ALL"}
+
+        # Validate ancillary results derived from the input.
+        ancillary = result["ancillaryResults"]
+        assert ancillary["homozygotes"] == 0
+        assert "hemizygotes" not in ancillary
+        assert set(ancillary.keys()) == {
+            "homozygotes",
+            "grpMaxFAF95",
+            "jointGrpMaxFAF95",
+        }
+
+        # grpMaxFAF95 should store the FAF value and constructed population label.
+        grpmax = ancillary["grpMaxFAF95"]
+        assert isinstance(grpmax["frequency"], float)
+        assert grpmax["frequency"] == pytest.approx(7.57e-05)
+        assert grpmax["confidenceInterval"] == 0.95
+        assert grpmax["groupId"] == f"{gnomad_id}.NFE"
+
+        # jointGrpMaxFAF95 should behave identically.
+        joint_grpmax = ancillary["jointGrpMaxFAF95"]
+        assert isinstance(joint_grpmax["frequency"], float)
+        assert joint_grpmax["frequency"] == pytest.approx(1.23e-04)
+        assert joint_grpmax["confidenceInterval"] == 0.95
+        assert joint_grpmax["groupId"] == f"{gnomad_id}.NFE"
+
+        # Validate QC fields derived from filters/LCR/AB histogram/monoallelic.
+        quality = result["qualityMeasures"]
+        assert quality["qcFilters"] == []
+        assert quality["lowComplexityRegion"] is False
+        assert quality["heterozygousSkewedAlleleCount"] == 3
+        assert quality["monoallelic"] is False
+        assert set(quality.keys()) == {
+            "qcFilters",
+            "lowComplexityRegion",
+            "heterozygousSkewedAlleleCount",
+            "monoallelic",
+        }
+
+        # No subcohort breakdown is expected unless `gen_anc_groups` was requested.
+        assert "subCohortFrequency" not in result

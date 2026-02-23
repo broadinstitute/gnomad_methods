@@ -703,9 +703,7 @@ def gnomad_gks(
         if custom_joint_ht:
             joint_ht = custom_joint_ht
         else:
-            joint_ht = hl.read_table(
-                public_release("joint").versions[version].path
-            )
+            joint_ht = hl.read_table(public_release("joint").versions[version].path)
         ht = ht.annotate(
             jointGrpMaxFAF95=hl.struct(
                 grpmax=joint_ht[ht.key].joint.fafmax.faf95_max,

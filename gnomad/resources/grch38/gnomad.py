@@ -633,6 +633,8 @@ def gnomad_gks(
     skip_checkpoint: bool = False,
     skip_coverage: bool = False,
     custom_coverage_ht: hl.Table = None,
+    skip_joint_metrics: bool = False,
+    custom_joint_ht: hl.Table = None,
 ) -> list:
     """
     Perform gnomad GKS annotations on a range of variants at once.
@@ -650,6 +652,8 @@ def gnomad_gks(
         (checkpointing may be desirable for large datasets by reducing data copies across the cluster).
     :param skip_coverage: Bool to pass to skip adding coverage statistics.
     :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table.
+    :param skip_joint_metrics: Bool to pass to skip adding joint FAF metrics from the joint table.
+    :param custom_joint_ht: Custom joint table to use instead of the public release joint table.
     :return: List of dictionaries containing VRS information
         (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
@@ -693,6 +697,21 @@ def gnomad_gks(
             )
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
+
+    # Join joint table to add joint FAF metrics if requested.
+    if not skip_joint_metrics:
+        if custom_joint_ht:
+            joint_ht = custom_joint_ht
+        else:
+            joint_ht = hl.read_table(
+                public_release("joint").versions[version].path
+            )
+        ht = ht.annotate(
+            jointGrpMaxFAF95=hl.struct(
+                grpmax=joint_ht[ht.key].joint.fafmax.faf95_max,
+                grpmax_gen_anc=joint_ht[ht.key].joint.fafmax.faf95_max_gen_anc,
+            )
+        )
 
     # Determine which genetic ancestry groups to include (list of group IDs).
     if by_gen_anc_group:

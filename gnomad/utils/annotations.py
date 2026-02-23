@@ -2930,9 +2930,12 @@ def add_gks_va(
         ancillaryResults["hemizygotes"] = hemizygote_count
 
     # Add group max FAF if it exists
-    if input_struct.grpMaxFAF95.grpmax_gen_anc is not None:
+    if (
+        input_struct.grpMaxFAF95.grpmax is not None
+        and input_struct.grpMaxFAF95.grpmax_gen_anc is not None
+    ):
         ancillaryResults["grpMaxFAF95"] = {
-            "frequency": input_struct.grpMaxFAF95.grpmax_gen_anc,
+            "frequency": input_struct.grpMaxFAF95.grpmax,
             "confidenceInterval": 0.95,
             "groupId": f"{gnomad_id}.{input_struct.grpMaxFAF95.grpmax_gen_anc.upper()}",
         }
@@ -2940,10 +2943,11 @@ def add_gks_va(
     # Add joint group max FAF if it exists.
     if (
         "jointGrpMaxFAF95" in input_struct
+        and input_struct.jointGrpMaxFAF95.grpmax is not None
         and input_struct.jointGrpMaxFAF95.grpmax_gen_anc is not None
     ):
         ancillaryResults["jointGrpMaxFAF95"] = {
-            "frequency": input_struct.jointGrpMaxFAF95.grpmax_gen_anc,
+            "frequency": input_struct.jointGrpMaxFAF95.grpmax,
             "confidenceInterval": 0.95,
             "groupId": (
                 f"{gnomad_id}.{input_struct.jointGrpMaxFAF95.grpmax_gen_anc.upper()}"

@@ -781,6 +781,8 @@ def gnomad_gks(
     # then return list
     outputs = []
     for variant in variant_list:
+        # After the update to ga4gh.vrs 2.2.0, we now return
+        # information for the reference as well as alternate allele
         vrs_variants = add_gks_vrs(variant.locus, variant.vrs)
 
         out = {

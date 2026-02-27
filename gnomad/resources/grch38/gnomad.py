@@ -604,8 +604,6 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
     """
     Add a grpMaxFAF95 struct with 'grpmax' and 'grpmax_gen_anc'.
 
-    Also includes a jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
-
     :param ht: Input hail table.
     :return: Annotated hail table.
     """
@@ -642,18 +640,18 @@ def gnomad_gks(
     :param locus_interval: Hail IntervalExpression of locus<reference_genome>.
         e.g. hl.locus_interval('chr1', 6424776, 6461367, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
-    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
-    :param by_gen_anc_group: Boolean to pass to obtain frequency information for each cohort.
-    :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex.
+    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired. Default is "genomes".
+    :param by_gen_anc_group: Boolean to pass to obtain frequency information for each cohort. Default is False.
+    :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex. Default is False.
     :param vrs_only: Boolean to pass for only VRS info to be returned
-        (will not include allele frequency information).
-    :param custom_ht: Table to use instead of what public_release() method would return for the version.
+        (will not include allele frequency information). Default is False.
+    :param custom_ht: Table to use instead of what public_release() method would return for the version. Default is None.
     :param skip_checkpoint: Bool to pass to skip checkpointing selected fields
-        (checkpointing may be desirable for large datasets by reducing data copies across the cluster).
-    :param skip_coverage: Bool to pass to skip adding coverage statistics.
-    :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table.
-    :param skip_joint_metrics: Bool to pass to skip adding joint FAF metrics from the joint table.
-    :param custom_joint_ht: Custom joint table to use instead of the public release joint table.
+        (checkpointing may be desirable for large datasets by reducing data copies across the cluster). Default is False.
+    :param skip_coverage: Bool to pass to skip adding coverage statistics. Default is False.
+    :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table. Default is None.
+    :param skip_joint_metrics: Bool to pass to skip adding joint FAF metrics from the joint table. Default is False.
+    :param custom_joint_ht: Custom joint table to use instead of the public release joint table. Default is None.
     :return: List of dictionaries containing VRS information
         (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
@@ -792,7 +790,7 @@ def gnomad_gks(
                 "reference_genome": variant.locus.reference_genome.name,
             },
             "alleles": variant.alleles,
-            "gks_vrs_variant": vrs_variants,
+            "gks_vrs_variants": vrs_variants,
         }
 
         if not vrs_only:

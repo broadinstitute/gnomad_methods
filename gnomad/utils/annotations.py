@@ -4,6 +4,8 @@ import itertools
 import logging
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
+import ga4gh.core as ga4gh_core
+import ga4gh.vrs as ga4gh_vrs
 import hail as hl
 
 import gnomad.utils.filtering as filter_utils
@@ -2660,11 +2662,6 @@ def add_gks_vrs(
     :param input_vrs: VRS struct (such as from a ht.info.vrs field).
     :return: List of Python dictionaries conforming to GA4GH GKS VRS Allele structure.
     """
-    # NOTE: The pinned ga4gh.vrs module breaks logging when this annotations module is
-    # imported. Importing ga4gh here to avoid this issue.
-    import ga4gh.core as ga4gh_core
-    import ga4gh.vrs as ga4gh_vrs
-
     build_in = input_locus.reference_genome.name
     chr_in = input_locus.contig
 

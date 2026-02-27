@@ -1612,7 +1612,7 @@ class TestGksVaFunctions:
         - Top-level frequency fields (AC/AN/AF) are propagated from `freq[0]`.
         - QC fields are derived from `filters`, `lcr`, `ab_hist_alt`, and `monoallelic`.
         - `grpMaxFAF95` and `jointGrpMaxFAF95` store numeric FAF values in `frequency`
-          (and use the ancestry label only for the `groupId` suffix).
+          (and use the genetic ancestry group label only for the `groupId` suffix).
         """
         # Use a real-looking variant key with a long allele to exercise ID/groupId generation.
         contig = "chr1"

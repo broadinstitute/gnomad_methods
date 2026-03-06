@@ -2743,7 +2743,7 @@ def add_gks_va(
     gen_anc_groups_dict: dict = None,
     by_sex: bool = False,
     freq_index_dict: dict = None,
-) -> dict:
+) -> Dict[str, Any]:
     """
     Generate Python dictionary containing GKS VA annotations.
 
@@ -2763,9 +2763,9 @@ def add_gks_va(
         Example: {'afr':'African/African American'}. Default is None.
     :param by_sex: Boolean to include breakdown of cohorts by inferred sex (XX and XY) as well.
         Default is None.
-    :freq_index_dict: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
+    :param freq_index_dict: Dict mapping groups to their index for freq info in ht.freq_index_dict[0].
         Default is None.
-    :return: Tuple containing a dictionary containing GKS VA frequency information,
+    :return: Dictionary containing GKS VA frequency information,
         (split by genetic ancestry groups and sex if desired) for the specified variant.
     """
     # Throw warnings if contradictory arguments passed.

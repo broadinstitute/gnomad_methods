@@ -633,7 +633,7 @@ def gnomad_gks(
     custom_coverage_ht: hl.Table = None,
     skip_joint_metrics: bool = False,
     custom_joint_ht: hl.Table = None,
-) -> list:
+) -> List[Dict[str, Any]]:
     """
     Perform gnomad GKS annotations on a range of variants at once.
 

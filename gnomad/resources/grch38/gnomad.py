@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import hail as hl
 

@@ -35,6 +35,7 @@ def parse_log_file(log_file):
         "validate_config_fields_in_ht": "general info",
         "log_field_validation_results": "general info",
         "check_fields_not_in_requirements": "general info",
+        "load_gnomad_data": "load gnomAD data",
     }
 
     with hl.hadoop_open(log_file, "r") as f:

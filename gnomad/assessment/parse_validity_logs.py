@@ -33,7 +33,7 @@ def parse_log_file(log_file):
         "check_globals_for_retired_terms": "globals check",
         "summarize_variant_filters": "variant summary",
         "validate_config_fields_in_ht": "general info",
-        "log_field_validation_results:": "general info",
+        "log_field_validation_results": "general info",
         "check_fields_not_in_requirements": "general info",
     }
 

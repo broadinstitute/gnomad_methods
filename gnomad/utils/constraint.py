@@ -1,12 +1,15 @@
 """Script containing generic constraint functions that may be used in the constraint pipeline."""
 
 import copy
+import functools
 import logging
+import operator
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
+from gnomad.assessment.summary_stats import generate_filter_combinations
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.vep import (
     add_most_severe_consequence_to_consequence,
@@ -27,6 +30,13 @@ Minimum median exome coverage differentiating high coverage sites from low cover
 
 Low coverage sites require an extra calibration when computing the proportion of expected variation.
 """
+
+CLASSIC_LOF_ANNOTATIONS = (
+    "stop_gained",
+    "splice_donor_variant",
+    "splice_acceptor_variant",
+)
+"""Classic loss-of-function VEP annotations."""
 
 
 def get_mu_annotation_expr(
@@ -334,6 +344,79 @@ def get_counts_agg_expr(
     agg_expr = {k: agg_expr[k][0] for k in agg_expr} if is_struct else agg_expr
 
     return hl.struct(**agg_expr)
+
+
+def build_constraint_consequence_groups(
+    csq_expr: hl.expr.StringExpression,
+    lof_modifier_expr: hl.expr.StringExpression,
+    classic_lof_annotations: Tuple[str, ...] = CLASSIC_LOF_ANNOTATIONS,
+    additional_groupings: Optional[
+        Dict[str, Dict[str, hl.expr.BooleanExpression]]
+    ] = None,
+    additional_grouping_combinations: Optional[List[List[str]]] = None,
+) -> Tuple[List[hl.expr.BooleanExpression], List[Dict[str, str]]]:
+    """
+    Build constraint consequence groups.
+
+    Builds constraint groups based on the consequence expression and LoF
+    modifier expression. By default, the following groups are built:
+
+        - csq_set: synonymous_variant, missense_variant
+        - lof: classic, hc_lc, hc
+
+    The resulting meta and corresponding constraint group filters are:
+
+        - {"csq_set": "syn"}: synonymous_variant
+        - {"csq_set": "mis"}: missense_variant
+        - {"lof": "classic"}: classic LoF annotations (stop_gained,
+          splice_donor_variant, splice_acceptor_variant)
+        - {"lof": "hc_lc"}: LOFTEE HC or LC modifier
+        - {"lof": "hc"}: LOFTEE HC modifier only
+
+    Additional groupings can be added via ``additional_groupings``, and
+    grouping combinations via ``additional_grouping_combinations``.
+
+    :param csq_expr: VEP most severe consequence expression (e.g.,
+        ``ht.most_severe_consequence``).
+    :param lof_modifier_expr: LOFTEE modifier expression (e.g., ``ht.modifier``).
+    :param classic_lof_annotations: Classic LoF annotations. Default is
+        ``("stop_gained", "splice_donor_variant", "splice_acceptor_variant")``.
+    :param additional_groupings: Additional groupings to add to the constraint
+        groups. Default is None.
+    :param additional_grouping_combinations: Additional grouping combinations to
+        add to the constraint groups. Default is None.
+    :return: Tuple of (constraint group filter expressions, meta dicts).
+    """
+    lof_classic_expr = hl.literal(set(classic_lof_annotations)).contains(csq_expr)
+    lof_hc_expr = lof_modifier_expr == "HC"
+    lof_hc_lc_expr = lof_hc_expr | (lof_modifier_expr == "LC")
+    annotation_dict = {
+        "csq_set": {
+            "syn": csq_expr == "synonymous_variant",
+            "mis": csq_expr == "missense_variant",
+        },
+        "lof": {
+            "classic": lof_classic_expr,
+            "hc_lc": lof_hc_lc_expr,
+            "hc": lof_hc_expr,
+        },
+    }
+
+    annotation_dict.update(additional_groupings or {})
+
+    grouping_combinations = [["csq_set"], ["lof"]]
+    grouping_combinations.extend(additional_grouping_combinations or [])
+
+    meta = generate_filter_combinations(
+        grouping_combinations,
+        {k: list(v.keys()) for k, v in annotation_dict.items()},
+    )
+    constraint_group_filters = [
+        functools.reduce(operator.ior, [annotation_dict[k][v] for k, v in m.items()])
+        for m in meta
+    ]
+
+    return constraint_group_filters, meta
 
 
 def count_observed_and_possible_by_group(
@@ -1182,6 +1265,34 @@ def assemble_constraint_context_ht(
     )
 
     return ht
+
+
+def calculate_gerp_cutoffs(
+    ht: hl.Table,
+    gerp_expr: Optional[hl.expr.Float64Expression] = None,
+    lower_percentile: float = 0.05,
+    upper_percentile: float = 0.95,
+) -> Tuple[float, float]:
+    """
+    Find GERP cutoffs at the given percentile thresholds.
+
+    .. note::
+
+        Uses ``hl.agg.approx_quantiles``, so results are approximate.
+
+    :param ht: Input Table.
+    :param gerp_expr: GERP score expression. Default is ``ht.gerp``.
+    :param lower_percentile: Lower percentile threshold (0-1). Default is 0.05.
+    :param upper_percentile: Upper percentile threshold (0-1). Default is 0.95.
+    :return: Tuple of (lower cutoff, upper cutoff) GERP scores.
+    """
+    if gerp_expr is None:
+        gerp_expr = ht.gerp
+
+    cutoffs = ht.aggregate(
+        hl.agg.approx_quantiles(gerp_expr, [lower_percentile, upper_percentile])
+    )
+    return cutoffs[0], cutoffs[1]
 
 
 def calibration_model_group_expr(
@@ -2251,37 +2362,22 @@ def compute_pli(
     return hl.struct(**{f"p{k}": pli_expr[k] / row_sum_expr for k in pi.keys()})
 
 
-def oe_confidence_interval(
+def _oe_ci_discretized_poisson(
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
     alpha: float = 0.05,
 ) -> hl.expr.StructExpression:
     """
-    Determine the confidence interval around the observed:expected ratio.
+    Compute OE confidence interval via discretized Poisson CDF.
 
-    For a given pair of observed (`obs_expr`) and expected (`exp_expr`) values, the
-    function computes the density of the Poisson distribution (performed using Hail's
-    `dpois` module) with fixed k (`x` in `dpois` is set to the observed number of
-    variants) over a range of lambda (`lamb` in `dpois`) values, which are given by the
-    expected number of variants times a varying parameter ranging between 0 and 2 (the
-    observed:expected ratio is typically between 0 and 1, so we want to extend the
-    upper bound of the confidence interval to capture this). The cumulative density
-    function of the Poisson distribution density is computed and the value of the
-    varying parameter is extracted at points corresponding to `alpha` (defaults to 5%)
-    and 1-`alpha` (defaults to 95%) to indicate the lower and upper bounds of the
-    confidence interval.
+    Sweeps the OE ratio parameter over [0, 2) in steps of 0.001, evaluates
+    ``dpois(obs, exp * x)`` at each point, normalises the cumulative sum, and
+    reads off the bounds at ``alpha`` and ``1 - alpha``.
 
-    The following annotations are in the output StructExpression:
-        - lower - the lower bound of confidence interval
-        - upper - the upper bound of confidence interval
-
-    :param obs_expr: Expression for the observed variant counts of pLoF, missense, or
-        synonymous variants in `ht`.
-    :param exp_expr: Expression for the expected variant counts of pLoF, missense, or
-        synonymous variants in `ht`.
-    :param alpha: The significance level used to compute the confidence interval.
-        Default is 0.05.
-    :return: StructExpression for the confidence interval lower and upper bounds.
+    :param obs_expr: Observed variant count expression.
+    :param exp_expr: Expected variant count expression.
+    :param alpha: Significance level. Default is 0.05.
+    :return: Struct with ``lower`` and ``upper`` bounds.
     """
     # Set up range between 0 and 2.
     range_expr = hl.range(0, 2000).map(lambda x: hl.float64(x) / 1000)
@@ -2303,6 +2399,62 @@ def oe_confidence_interval(
         lower=hl.if_else(obs_expr > 0, range_expr[lower_idx_expr], 0),
         upper=range_expr[upper_idx_expr],
     )
+
+
+def _oe_ci_gamma(
+    obs_expr: hl.expr.Int32Expression,
+    exp_expr: hl.expr.Float64Expression,
+    alpha: float = 0.05,
+) -> hl.expr.StructExpression:
+    """
+    Compute OE confidence interval using the Gamma distribution.
+
+    Uses Hail's ``hl.qgamma`` quantile function.
+
+    :param obs_expr: Observed variant count expression.
+    :param exp_expr: Expected variant count expression.
+    :param alpha: Significance level. Default is 0.05.
+    :return: Struct with ``lower`` and ``upper`` bounds.
+    """
+    shape = obs_expr + hl.literal(1.0)
+    scale = divide_null(hl.literal(1.0), exp_expr)
+    return hl.struct(
+        lower=hl.qgamma(hl.literal(alpha), shape, scale),
+        upper=hl.qgamma(hl.literal(1.0 - alpha), shape, scale),
+    )
+
+
+def oe_confidence_interval(
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
+    alpha: float = 0.05,
+    method: str = "gamma",
+) -> hl.expr.StructExpression:
+    """
+    Compute a confidence interval around the observed/expected ratio.
+
+    Two methods are available:
+
+    - ``"gamma"`` (default): uses ``hl.qgamma`` to compute exact quantiles of
+      the Gamma posterior. Fast and precise.
+    - ``"poisson"``: sweeps a discretized Poisson likelihood over the OE
+      parameter space [0, 2). Retained for backwards compatibility.
+
+    :param obs_expr: Observed variant count expression.
+    :param exp_expr: Expected variant count expression.
+    :param alpha: Significance level for the confidence interval. Default is
+        0.05 (90% CI).
+    :param method: CI method — ``"gamma"`` or ``"poisson"``. Default is
+        ``"gamma"``.
+    :return: Struct with ``lower`` and ``upper`` bounds.
+    :raises ValueError: If ``method`` is not ``"gamma"`` or ``"poisson"``.
+    """
+    if method == "gamma":
+        return _oe_ci_gamma(obs_expr, exp_expr, alpha)
+    elif method == "poisson":
+        return _oe_ci_discretized_poisson(obs_expr, exp_expr, alpha)
+    else:
+        raise ValueError(f"Unknown CI method: {method!r}. Use 'gamma' or 'poisson'.")
 
 
 def calculate_raw_z_score(
@@ -2499,3 +2651,96 @@ def add_gencode_transcript_annotations(
     ht = ht.annotate(**gencode_transcript_ht[ht.transcript])
 
     return ht
+
+
+def rank_and_assign_bins(
+    value_expr: hl.expr.Float64Expression,
+    bin_granularities: Optional[Dict[str, int]] = None,
+) -> hl.StructExpression:
+    """Rank rows by a numeric expression and assign bin labels.
+
+    Rows are ordered ascending by ``value_expr``. Each row is assigned a
+    0-based ``rank`` and a ``bin_{name}`` field for every entry in
+    ``bin_granularities``, computed as
+    ``hl.int(rank * multiplier / n_rows)``.
+
+    :param value_expr: Numeric expression to rank by (ascending).
+    :param bin_granularities: Mapping of bin name to multiplier. Each entry
+        produces a ``bin_{name}`` field. Default is
+        ``{"percentile": 100, "decile": 10, "sextile": 6}``.
+    :return: Struct with ``rank`` and ``bin_{name}`` fields for each entry in
+        ``bin_granularities``.
+    """
+    if bin_granularities is None:
+        bin_granularities = {"percentile": 100, "decile": 10, "sextile": 6}
+
+    ht = value_expr._indices.source
+    source_key = list(ht.key)
+    n_rows = ht.count()
+    ranked_ht = ht.select(_=value_expr).order_by("_").add_index("rank")
+    ranked_ht = ranked_ht.select(
+        *source_key,
+        "rank",
+        **{
+            f"bin_{name}": hl.int(ranked_ht.rank * multiplier / n_rows)
+            for name, multiplier in bin_granularities.items()
+        },
+    ).cache()
+
+    return ranked_ht.key_by(*source_key)[ht.key]
+
+
+def compute_oe_upper_percentile_thresholds(
+    ht: hl.Table,
+    metric_expr: hl.expr.Float64Expression,
+    outlier_expr: Optional[hl.expr.BooleanExpression] = None,
+    transcript_filter_expr: Optional[hl.expr.BooleanExpression] = None,
+    percentiles: Tuple[float, ...] = (1, 5, 10, 15, 25, 50, 75),
+    quantile_k: int = 1000,
+) -> Dict[float, float]:
+    """
+    Compute approximate percentile thresholds for a metric expression.
+
+    Optionally filters to a subset of rows (e.g., representative transcripts)
+    and excludes outliers, then computes approximate quantile thresholds at the
+    requested percentiles in a single aggregation pass.
+
+    .. note::
+
+        Uses ``hl.agg.approx_quantiles``, so results are approximate. Increase
+        ``quantile_k`` for higher accuracy.
+
+    :param ht: Input Table.
+    :param metric_expr: Float expression to compute thresholds for. Must be
+        defined on ``ht``.
+    :param outlier_expr: Optional boolean expression that is ``True`` for rows
+        to exclude. When ``None`` (default), no outlier filtering is applied.
+    :param transcript_filter_expr: Optional boolean expression that is ``True``
+        for rows to include. When ``None`` (default), all rows are included.
+    :param percentiles: Percentile values (0-100) at which to compute
+        thresholds. Default is (1, 5, 10, 15, 25, 50, 75).
+    :param quantile_k: Accuracy parameter for
+        :func:`hail.expr.aggregators.approx_quantiles`. Default is 1000.
+    :return: Dict mapping each percentile to its threshold value.
+    """
+    qs = [p / 100.0 for p in percentiles]
+    filter_expr = hl.is_defined(metric_expr)
+    if outlier_expr is not None:
+        filter_expr = filter_expr & ~outlier_expr
+    if transcript_filter_expr is not None:
+        filter_expr = filter_expr & transcript_filter_expr
+
+    result = ht.aggregate(
+        hl.struct(
+            thresholds=hl.agg.filter(
+                filter_expr, hl.agg.approx_quantiles(metric_expr, qs, k=quantile_k)
+            ),
+            n=hl.agg.count_where(filter_expr),
+        )
+    )
+    logger.info(
+        "Computed percentile thresholds on %d transcripts.",
+        result.n,
+    )
+
+    return dict(zip(percentiles, result.thresholds))

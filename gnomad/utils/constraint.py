@@ -2451,6 +2451,7 @@ def add_gencode_transcript_annotations(
     if remove_y_par:
         gencode_ht = gencode_ht.filter(
             ~gencode_ht.transcript_id_version.endswith("Y_PAR")
+            & ~gencode_ht.transcript_id_version.endswith("PAR_Y")
         )
 
     gencode_ht = gencode_ht.annotate(

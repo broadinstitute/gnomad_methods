@@ -5,6 +5,7 @@ import pytest
 
 from gnomad.utils.vep import (
     get_loftee_end_trunc_filter_expr,
+    mane_select_over_canonical_filter_expr,
     update_loftee_end_trunc_filter,
 )
 
@@ -256,3 +257,103 @@ class TestUpdateLofteeEndTruncFilter:
 
         assert results[1].updated_csq.lof_filter == "END_TRUNC"
         assert results[1].updated_csq.lof == "LC"
+
+
+class TestManeSelectOverCanonicalFilterExpr:
+    """Test the mane_select_over_canonical_filter_expr function."""
+
+    @pytest.fixture
+    def sample_table(self):
+        """Fixture to create a table with transcript/mane_select/canonical/gene_id fields."""
+        return hl.Table.parallelize(
+            [
+                # Gene A: has MANE Select transcript.
+                {
+                    "transcript": "ENST00001",
+                    "mane_select": True,
+                    "canonical": True,
+                    "gene_id": "ENSG_A",
+                },
+                {
+                    "transcript": "ENST00002",
+                    "mane_select": False,
+                    "canonical": True,
+                    "gene_id": "ENSG_A",
+                },
+                # Gene B: no MANE Select, only canonical.
+                {
+                    "transcript": "ENST00003",
+                    "mane_select": False,
+                    "canonical": True,
+                    "gene_id": "ENSG_B",
+                },
+                {
+                    "transcript": "ENST00004",
+                    "mane_select": False,
+                    "canonical": False,
+                    "gene_id": "ENSG_B",
+                },
+                # Gene C: non-ENST transcript should be excluded.
+                {
+                    "transcript": "NM_00001",
+                    "mane_select": True,
+                    "canonical": True,
+                    "gene_id": "ENSG_C",
+                },
+            ],
+            hl.tstruct(
+                transcript=hl.tstr,
+                mane_select=hl.tbool,
+                canonical=hl.tbool,
+                gene_id=hl.tstr,
+            ),
+        )
+
+    def test_mane_select_preferred_over_canonical(self, sample_table):
+        """Test that MANE Select is chosen when available for a gene."""
+        ht = sample_table.annotate(
+            selected=mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        results = ht.collect()
+
+        # Gene A: ENST00001 (MANE Select) should be selected, ENST00002 should not.
+        result_map = {r.transcript: r.selected for r in results}
+        assert result_map["ENST00001"] is True
+        assert result_map["ENST00002"] is False
+
+    def test_canonical_fallback_when_no_mane(self, sample_table):
+        """Test that canonical is used as fallback when no MANE Select exists."""
+        ht = sample_table.annotate(
+            selected=mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        results = ht.collect()
+
+        result_map = {r.transcript: r.selected for r in results}
+        # Gene B: ENST00003 (canonical) should be selected, ENST00004 should not.
+        assert result_map["ENST00003"] is True
+        assert result_map["ENST00004"] is False
+
+    def test_non_enst_excluded(self, sample_table):
+        """Test that non-ENST transcripts are excluded."""
+        ht = sample_table.annotate(
+            selected=mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        results = ht.collect()
+
+        result_map = {r.transcript: r.selected for r in results}
+        assert result_map["NM_00001"] is False

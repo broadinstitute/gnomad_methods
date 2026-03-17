@@ -188,7 +188,7 @@ def single_variant_count_expr(
             freq_expr = freq_expr[0]
 
     if singleton:
-        count_var = freq_expr.AC == 1, count_missing
+        count_var = freq_expr.AC == 1
     elif max_af:
         count_var = (freq_expr.AC > 0) & (freq_expr.AF <= max_af)
     elif freq_expr is not None:

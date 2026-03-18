@@ -237,7 +237,7 @@ def variant_observed_expr(
     return hl.int(hl.or_else(count_var, count_missing))
 
 
-def single_variant_observed_and_possible_expr(
+def variant_observed_and_possible_expr(
     freq_expr: hl.ArrayExpression,
     max_af: Optional[float] = None,
     use_possible_adj: bool = True,
@@ -278,7 +278,7 @@ def single_variant_observed_and_possible_expr(
     )
 
 
-def weighted_build_sum_agg_struct(
+def weighted_sum_agg_expr(
     expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
     weight_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
 ) -> Union[hl.expr.ArrayExpression, hl.expr.NumericExpression]:
@@ -496,7 +496,7 @@ def count_observed_and_possible_by_group(
     :param weight_exprs: Weighted sums of ``possible_expr`` to include. Pass
         field names (looked up on ``ht``) or a dict mapping output names to
         weight expressions. Each produces
-        ``weighted_build_sum_agg_struct(possible_expr, weight)``.
+        ``weighted_sum_agg_expr(possible_expr, weight)``.
     :param additional_agg_sum_exprs: Extra fields to sum alongside
         observed/possible. Pass field names (looked up on ``ht``) or a dict
         mapping output names to expressions. Arrays use
@@ -531,10 +531,7 @@ def count_observed_and_possible_by_group(
     # Update the possible variant count aggregation expression to include weighted sums
     # of possible variant counts.
     agg_expr.update(
-        {
-            k: weighted_build_sum_agg_struct(possible_expr, v)
-            for k, v in weight_exprs.items()
-        }
+        {k: weighted_sum_agg_expr(possible_expr, v) for k, v in weight_exprs.items()}
     )
 
     # Get sum aggregation expressions for requested fields.

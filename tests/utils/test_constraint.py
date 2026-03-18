@@ -13,6 +13,7 @@ from gnomad.utils.constraint import (
     get_constraint_grouping_expr,
     oe_confidence_interval,
     rank_and_assign_bins,
+    variant_observed_and_possible_expr,
     variant_observed_expr,
     weighted_sum_agg_expr,
 )
@@ -725,6 +726,95 @@ class TestSingleVariantCountExpr:
 
         assert results[0].count == 1
         assert results[1].count == 0
+
+
+class TestVariantObservedAndPossibleExpr:
+    """Test the variant_observed_and_possible_expr function."""
+
+    @pytest.fixture
+    def freq_table(self):
+        """Create a Table with a frequency array."""
+        return hl.Table.parallelize(
+            [
+                {"freq": [hl.Struct(AC=5, AF=0.001), hl.Struct(AC=3, AF=0.0005)]},
+                {"freq": [hl.Struct(AC=0, AF=0.0), hl.Struct(AC=0, AF=0.0)]},
+            ],
+            hl.tstruct(freq=hl.tarray(hl.tstruct(AC=hl.tint32, AF=hl.tfloat64))),
+        )
+
+    def test_observed_is_array(self, freq_table):
+        """Test that observed_variants is an array with one entry per freq element."""
+        ht = freq_table.annotate(**variant_observed_and_possible_expr(freq_table.freq))
+        result = ht.collect()[0]
+        assert len(result.observed_variants) == 2
+
+    def test_observed_variant_counted(self, freq_table):
+        """Test that a variant with AC > 0 has observed_variants of 1."""
+        ht = freq_table.annotate(**variant_observed_and_possible_expr(freq_table.freq))
+        result = ht.collect()[0]
+        assert result.observed_variants == [1, 1]
+
+    def test_unobserved_variant(self, freq_table):
+        """Test that a variant with AC == 0 has observed_variants of 0."""
+        ht = freq_table.annotate(**variant_observed_and_possible_expr(freq_table.freq))
+        result = ht.collect()[1]
+        assert result.observed_variants == [0, 0]
+
+    def test_possible_adj_is_scalar(self, freq_table):
+        """Test that possible_variants is a scalar when use_possible_adj is True."""
+        ht = freq_table.annotate(
+            **variant_observed_and_possible_expr(freq_table.freq, use_possible_adj=True)
+        )
+        result = ht.collect()[0]
+        assert isinstance(result.possible_variants, int)
+
+    def test_possible_adj_counts_observed(self, freq_table):
+        """Test that possible_variants is 1 for an observed variant."""
+        ht = freq_table.annotate(**variant_observed_and_possible_expr(freq_table.freq))
+        result = ht.collect()[0]
+        assert result.possible_variants == 1
+
+    def test_possible_adj_counts_unobserved(self, freq_table):
+        """Test that possible_variants is 0 for an unobserved variant with defined freq."""
+        ht = freq_table.annotate(**variant_observed_and_possible_expr(freq_table.freq))
+        result = ht.collect()[1]
+        # AC == 0 with defined freq: not possible (count_missing only counts None).
+        assert result.possible_variants == 0
+
+    def test_possible_no_adj_is_array(self, freq_table):
+        """Test that possible_variants is an array when use_possible_adj is False."""
+        ht = freq_table.annotate(
+            **variant_observed_and_possible_expr(
+                freq_table.freq, use_possible_adj=False
+            )
+        )
+        result = ht.collect()[0]
+        assert isinstance(result.possible_variants, list)
+        assert len(result.possible_variants) == 2
+
+    def test_possible_counts_missing_freq(self):
+        """Test that possible_variants is 1 when frequency is missing."""
+        ht = hl.Table.parallelize(
+            [{"freq": [None, hl.Struct(AC=3, AF=0.0005)]}],
+            hl.tstruct(freq=hl.tarray(hl.tstruct(AC=hl.tint32, AF=hl.tfloat64))),
+        )
+        ht = ht.annotate(
+            **variant_observed_and_possible_expr(ht.freq, use_possible_adj=False)
+        )
+        result = ht.collect()[0]
+        # Missing freq element should still count as possible.
+        assert result.possible_variants[0] == 1
+
+    def test_max_af_filters_observed(self):
+        """Test that max_af filters out variants with AF above threshold."""
+        ht = hl.Table.parallelize(
+            [{"freq": [hl.Struct(AC=5, AF=0.01), hl.Struct(AC=3, AF=0.0005)]}],
+            hl.tstruct(freq=hl.tarray(hl.tstruct(AC=hl.tint32, AF=hl.tfloat64))),
+        )
+        ht = ht.annotate(**variant_observed_and_possible_expr(ht.freq, max_af=0.001))
+        result = ht.collect()[0]
+        # First element AF=0.01 > max_af, second AF=0.0005 <= max_af.
+        assert result.observed_variants == [0, 1]
 
 
 class TestGetCountsAggExpr:

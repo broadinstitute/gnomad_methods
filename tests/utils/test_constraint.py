@@ -8,10 +8,13 @@ from gnomad.utils.constraint import (
     calculate_gerp_cutoffs,
     calculate_raw_z_score,
     compute_oe_upper_percentile_thresholds,
-    get_counts_agg_expr,
+    count_observed_and_possible_by_group,
+    counts_agg_expr,
+    get_constraint_grouping_expr,
     oe_confidence_interval,
     rank_and_assign_bins,
-    single_variant_count_expr,
+    variant_observed_expr,
+    weighted_sum_agg_expr,
 )
 
 
@@ -623,7 +626,7 @@ class TestRankVsThresholdBinning:
 
 
 class TestSingleVariantCountExpr:
-    """Test the single_variant_count_expr function."""
+    """Test the variant_observed_expr function."""
 
     def test_ac_positive_counts_as_one(self):
         """Test that a variant with AC > 0 counts as 1."""
@@ -631,7 +634,7 @@ class TestSingleVariantCountExpr:
             [{"freq": hl.Struct(AC=5, AF=0.01)}],
             hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
         )
-        ht = ht.annotate(count=single_variant_count_expr(freq_expr=ht.freq))
+        ht = ht.annotate(count=variant_observed_expr(freq_expr=ht.freq))
         result = ht.collect()[0]
 
         assert result.count == 1
@@ -642,7 +645,7 @@ class TestSingleVariantCountExpr:
             [{"freq": hl.Struct(AC=0, AF=0.0)}],
             hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
         )
-        ht = ht.annotate(count=single_variant_count_expr(freq_expr=ht.freq))
+        ht = ht.annotate(count=variant_observed_expr(freq_expr=ht.freq))
         result = ht.collect()[0]
 
         assert result.count == 0
@@ -656,9 +659,7 @@ class TestSingleVariantCountExpr:
             ],
             hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
         )
-        ht = ht.annotate(
-            count=single_variant_count_expr(freq_expr=ht.freq, singleton=True)
-        )
+        ht = ht.annotate(count=variant_observed_expr(freq_expr=ht.freq, singleton=True))
         results = ht.collect()
 
         assert results[0].count == 1
@@ -673,9 +674,7 @@ class TestSingleVariantCountExpr:
             ],
             hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
         )
-        ht = ht.annotate(
-            count=single_variant_count_expr(freq_expr=ht.freq, max_af=0.01)
-        )
+        ht = ht.annotate(count=variant_observed_expr(freq_expr=ht.freq, max_af=0.01))
         results = ht.collect()
 
         assert results[0].count == 1
@@ -687,7 +686,7 @@ class TestSingleVariantCountExpr:
             [{"x": 1}],
             hl.tstruct(x=hl.tint32),
         )
-        ht = ht.annotate(count=single_variant_count_expr(ht=ht))
+        ht = ht.annotate(count=variant_observed_expr(ht=ht))
         result = ht.collect()[0]
 
         assert result.count == 1
@@ -695,11 +694,41 @@ class TestSingleVariantCountExpr:
     def test_raises_when_no_ht_or_freq(self):
         """Test that ValueError is raised when neither ht nor freq_expr is given."""
         with pytest.raises(ValueError, match="Either `ht` or `freq_expr`"):
-            single_variant_count_expr()
+            variant_observed_expr()
+
+    def test_max_af_zero_filters_all(self):
+        """Test that max_af=0.0 filters out all variants (AF cannot be <= 0 with AC > 0)."""
+        ht = hl.Table.parallelize(
+            [
+                {"freq": hl.Struct(AC=1, AF=0.001)},
+                {"freq": hl.Struct(AC=5, AF=0.01)},
+            ],
+            hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
+        )
+        ht = ht.annotate(count=variant_observed_expr(freq_expr=ht.freq, max_af=0.0))
+        results = ht.collect()
+
+        assert results[0].count == 0
+        assert results[1].count == 0
+
+    def test_ht_fallback_to_freq_field(self):
+        """Test that passing ht without freq_expr falls back to ht.freq."""
+        ht = hl.Table.parallelize(
+            [
+                {"freq": hl.Struct(AC=1, AF=0.001)},
+                {"freq": hl.Struct(AC=0, AF=0.0)},
+            ],
+            hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
+        )
+        ht = ht.annotate(count=variant_observed_expr(ht=ht, max_af=0.01))
+        results = ht.collect()
+
+        assert results[0].count == 1
+        assert results[1].count == 0
 
 
 class TestGetCountsAggExpr:
-    """Test the get_counts_agg_expr function."""
+    """Test the counts_agg_expr function."""
 
     @pytest.fixture
     def sample_table(self):
@@ -716,9 +745,7 @@ class TestGetCountsAggExpr:
 
     def test_variant_count_no_filter(self, sample_table):
         """Test variant count with no filtering (AC > 0)."""
-        result = sample_table.aggregate(
-            get_counts_agg_expr(freq_expr=sample_table.freq)
-        )
+        result = sample_table.aggregate(counts_agg_expr(freq_expr=sample_table.freq))
 
         # 3 variants have AC > 0.
         assert result.variant_count == 3
@@ -726,7 +753,7 @@ class TestGetCountsAggExpr:
     def test_variant_count_with_max_af(self, sample_table):
         """Test variant count with max_af filter."""
         result = sample_table.aggregate(
-            get_counts_agg_expr(freq_expr=sample_table.freq, max_af=0.01)
+            counts_agg_expr(freq_expr=sample_table.freq, max_af=0.01)
         )
 
         # AC=1/AF=0.001 and AC=5/AF=0.01 pass the filter.
@@ -735,7 +762,7 @@ class TestGetCountsAggExpr:
     def test_singleton_count(self, sample_table):
         """Test that singleton count is returned when requested."""
         result = sample_table.aggregate(
-            get_counts_agg_expr(freq_expr=sample_table.freq, count_singletons=True)
+            counts_agg_expr(freq_expr=sample_table.freq, count_singletons=True)
         )
 
         assert result.singleton_count == 1
@@ -743,13 +770,399 @@ class TestGetCountsAggExpr:
 
     def test_no_singleton_key_by_default(self, sample_table):
         """Test that singleton_count is not present when not requested."""
-        result = sample_table.aggregate(
-            get_counts_agg_expr(freq_expr=sample_table.freq)
-        )
+        result = sample_table.aggregate(counts_agg_expr(freq_expr=sample_table.freq))
 
         assert not hasattr(result, "singleton_count")
 
     def test_raises_when_no_ht_or_freq(self):
         """Test that ValueError is raised when neither ht nor freq_expr is given."""
         with pytest.raises(ValueError, match="Either `ht` or `freq_expr`"):
-            get_counts_agg_expr(freq_expr=None, ht=None)
+            counts_agg_expr(freq_expr=None, ht=None)
+
+    def test_ht_only_no_freq_expr(self, sample_table):
+        """Test that passing ht without freq_expr falls back to ht.freq."""
+        result = sample_table.aggregate(counts_agg_expr(ht=sample_table))
+
+        # Same as test_variant_count_no_filter: 3 variants have AC > 0.
+        assert result.variant_count == 3
+
+    def test_max_af_zero_counts_none(self, sample_table):
+        """Test that max_af=0.0 counts no variants."""
+        result = sample_table.aggregate(
+            counts_agg_expr(freq_expr=sample_table.freq, max_af=0.0)
+        )
+
+        assert result.variant_count == 0
+
+
+class TestWeightedAggSumExpr:
+    """Test the weighted_sum_agg_expr function."""
+
+    def test_scalar_scalar(self):
+        """Test weighted sum with two scalar expressions."""
+        ht = hl.Table.parallelize(
+            [{"val": 2.0, "weight": 3.0}, {"val": 4.0, "weight": 5.0}],
+            hl.tstruct(val=hl.tfloat64, weight=hl.tfloat64),
+        )
+        result = ht.aggregate(weighted_sum_agg_expr(ht.val, ht.weight))
+
+        # 2*3 + 4*5 = 26
+        assert result == 26.0
+
+    def test_array_array(self):
+        """Test weighted sum with two array expressions (pairwise multiply)."""
+        ht = hl.Table.parallelize(
+            [
+                {"val": [1.0, 2.0], "weight": [3.0, 4.0]},
+                {"val": [5.0, 6.0], "weight": [7.0, 8.0]},
+            ],
+            hl.tstruct(val=hl.tarray(hl.tfloat64), weight=hl.tarray(hl.tfloat64)),
+        )
+        result = ht.aggregate(weighted_sum_agg_expr(ht.val, ht.weight))
+
+        # element 0: 1*3 + 5*7 = 38, element 1: 2*4 + 6*8 = 56
+        assert result == [38.0, 56.0]
+
+    def test_scalar_array_mixed(self):
+        """Test weighted sum with scalar expr and array weight (broadcast)."""
+        ht = hl.Table.parallelize(
+            [
+                {"val": 2.0, "weight": [1.0, 10.0]},
+                {"val": 3.0, "weight": [1.0, 10.0]},
+            ],
+            hl.tstruct(val=hl.tfloat64, weight=hl.tarray(hl.tfloat64)),
+        )
+        result = ht.aggregate(weighted_sum_agg_expr(ht.val, ht.weight))
+
+        # element 0: 2*1 + 3*1 = 5, element 1: 2*10 + 3*10 = 50
+        assert result == [5.0, 50.0]
+
+    def test_array_scalar_mixed(self):
+        """Test weighted sum with array expr and scalar weight (broadcast)."""
+        ht = hl.Table.parallelize(
+            [
+                {"val": [1.0, 2.0], "weight": 3.0},
+                {"val": [4.0, 5.0], "weight": 6.0},
+            ],
+            hl.tstruct(val=hl.tarray(hl.tfloat64), weight=hl.tfloat64),
+        )
+        result = ht.aggregate(weighted_sum_agg_expr(ht.val, ht.weight))
+
+        # element 0: 1*3 + 4*6 = 27, element 1: 2*3 + 5*6 = 36
+        assert result == [27.0, 36.0]
+
+    def test_single_row(self):
+        """Test weighted sum with a single row."""
+        ht = hl.Table.parallelize(
+            [{"val": 5.0, "weight": 2.0}],
+            hl.tstruct(val=hl.tfloat64, weight=hl.tfloat64),
+        )
+        result = ht.aggregate(weighted_sum_agg_expr(ht.val, ht.weight))
+
+        assert result == 10.0
+
+
+class TestCountObservedAndPossibleByGroup:
+    """Test the count_observed_and_possible_by_group function."""
+
+    @pytest.fixture
+    def sample_table(self):
+        """Fixture to create a table with context, ref, alt, and count fields."""
+        return hl.Table.parallelize(
+            [
+                {
+                    "context": "ACG",
+                    "ref": "C",
+                    "alt": "T",
+                    "methylation_level": 0,
+                    "obs": [1, 0],
+                    "poss": 1,
+                },
+                {
+                    "context": "ACG",
+                    "ref": "C",
+                    "alt": "T",
+                    "methylation_level": 0,
+                    "obs": [1, 1],
+                    "poss": 1,
+                },
+                {
+                    "context": "TCG",
+                    "ref": "C",
+                    "alt": "A",
+                    "methylation_level": 1,
+                    "obs": [0, 0],
+                    "poss": 1,
+                },
+            ],
+            hl.tstruct(
+                context=hl.tstr,
+                ref=hl.tstr,
+                alt=hl.tstr,
+                methylation_level=hl.tint32,
+                obs=hl.tarray(hl.tint32),
+                poss=hl.tint32,
+            ),
+        )
+
+    def test_basic_grouping(self, sample_table):
+        """Test that rows are grouped by context, ref, alt, methylation_level."""
+        result = count_observed_and_possible_by_group(
+            sample_table,
+            possible_expr=sample_table.poss,
+            observed_expr=sample_table.obs,
+        )
+        rows = result.collect()
+
+        # Two groups: (ACG, C, T, 0) and (TCG, C, A, 1).
+        assert len(rows) == 2
+
+    def test_observed_summed(self, sample_table):
+        """Test that observed arrays are summed within groups."""
+        result = count_observed_and_possible_by_group(
+            sample_table,
+            possible_expr=sample_table.poss,
+            observed_expr=sample_table.obs,
+        )
+        rows = {r.context: r for r in result.collect()}
+
+        # ACG group: [1,0] + [1,1] = [2,1]
+        assert rows["ACG"].observed_variants == [2, 1]
+        # TCG group: [0,0]
+        assert rows["TCG"].observed_variants == [0, 0]
+
+    def test_possible_summed(self, sample_table):
+        """Test that possible counts are summed within groups."""
+        result = count_observed_and_possible_by_group(
+            sample_table,
+            possible_expr=sample_table.poss,
+            observed_expr=sample_table.obs,
+        )
+        rows = {r.context: r for r in result.collect()}
+
+        assert rows["ACG"].possible_variants == 2
+        assert rows["TCG"].possible_variants == 1
+
+    def test_no_additional_grouping(self, sample_table):
+        """Test grouping without methylation_level."""
+        result = count_observed_and_possible_by_group(
+            sample_table,
+            possible_expr=sample_table.poss,
+            observed_expr=sample_table.obs,
+            additional_grouping=(),
+        )
+        rows = result.collect()
+
+        # Without methylation_level, still two groups because context/ref/alt differ.
+        assert len(rows) == 2
+
+    def test_weight_exprs_dict(self, sample_table):
+        """Test that weight_exprs produces a weighted sum field."""
+        sample_table = sample_table.annotate(mu=0.5)
+        result = count_observed_and_possible_by_group(
+            sample_table,
+            possible_expr=sample_table.poss,
+            observed_expr=sample_table.obs,
+            weight_exprs={"weighted_poss": sample_table.mu},
+        )
+        rows = {r.context: r for r in result.collect()}
+
+        # ACG: poss=1*0.5 + poss=1*0.5 = 1.0
+        assert abs(rows["ACG"].weighted_poss - 1.0) < 1e-6
+
+    def test_additional_agg_sum_exprs(self, sample_table):
+        """Test that additional_agg_sum_exprs sums extra fields."""
+        sample_table = sample_table.annotate(extra=1)
+        result = count_observed_and_possible_by_group(
+            sample_table,
+            possible_expr=sample_table.poss,
+            observed_expr=sample_table.obs,
+            additional_agg_sum_exprs={"extra": sample_table.extra},
+        )
+        rows = {r.context: r for r in result.collect()}
+
+        assert rows["ACG"].extra == 2
+        assert rows["TCG"].extra == 1
+
+
+class TestGetConstraintGroupingExpr:
+    """Test the get_constraint_grouping_expr function."""
+
+    @pytest.fixture
+    def vep_table(self):
+        """Fixture to create a table with VEP annotation struct."""
+        return hl.Table.parallelize(
+            [
+                {
+                    "vep": hl.Struct(
+                        most_severe_consequence="missense_variant",
+                        lof=None,
+                        polyphen_prediction="probably_damaging",
+                        gene_symbol="BRCA1",
+                        gene_id="ENSG00000012048",
+                        transcript_id="ENST00000357654",
+                        canonical=1,
+                        mane_select="NM_007294.4",
+                    ),
+                },
+                {
+                    "vep": hl.Struct(
+                        most_severe_consequence="stop_gained",
+                        lof="HC",
+                        polyphen_prediction=None,
+                        gene_symbol="TP53",
+                        gene_id="ENSG00000141510",
+                        transcript_id="ENST00000269305",
+                        canonical=0,
+                        mane_select=None,
+                    ),
+                },
+            ],
+            hl.tstruct(
+                vep=hl.tstruct(
+                    most_severe_consequence=hl.tstr,
+                    lof=hl.tstr,
+                    polyphen_prediction=hl.tstr,
+                    gene_symbol=hl.tstr,
+                    gene_id=hl.tstr,
+                    transcript_id=hl.tstr,
+                    canonical=hl.tint32,
+                    mane_select=hl.tstr,
+                ),
+            ),
+        )
+
+    def test_default_fields(self, vep_table):
+        """Test that default groupings include annotation, modifier, gene, gene_id, transcript, canonical."""
+        groupings = get_constraint_grouping_expr(vep_table.vep)
+
+        assert set(groupings.keys()) == {
+            "annotation",
+            "modifier",
+            "gene",
+            "gene_id",
+            "transcript",
+            "canonical",
+        }
+
+    def test_modifier_uses_lof_over_polyphen(self, vep_table):
+        """Test that modifier prefers lof when present, falls back to polyphen."""
+        vep_table = vep_table.annotate(**get_constraint_grouping_expr(vep_table.vep))
+        rows = vep_table.collect()
+
+        # Row 0: lof is None, polyphen is "probably_damaging"
+        assert rows[0].modifier == "probably_damaging"
+        # Row 1: lof is "HC"
+        assert rows[1].modifier == "HC"
+
+    def test_modifier_falls_back_to_none_string(self):
+        """Test that modifier is 'None' when both lof and polyphen are missing."""
+        ht = hl.Table.parallelize(
+            [
+                {
+                    "vep": hl.Struct(
+                        most_severe_consequence="synonymous_variant",
+                        lof=None,
+                        polyphen_prediction=None,
+                        gene_symbol="GENE1",
+                        gene_id="ENSG00000000001",
+                        transcript_id="ENST00000000001",
+                        canonical=1,
+                        mane_select=None,
+                    ),
+                },
+            ],
+            hl.tstruct(
+                vep=hl.tstruct(
+                    most_severe_consequence=hl.tstr,
+                    lof=hl.tstr,
+                    polyphen_prediction=hl.tstr,
+                    gene_symbol=hl.tstr,
+                    gene_id=hl.tstr,
+                    transcript_id=hl.tstr,
+                    canonical=hl.tint32,
+                    mane_select=hl.tstr,
+                ),
+            ),
+        )
+        ht = ht.annotate(**get_constraint_grouping_expr(ht.vep))
+        result = ht.collect()[0]
+
+        assert result.modifier == "None"
+
+    def test_canonical_is_boolean(self, vep_table):
+        """Test that canonical is converted to a boolean."""
+        vep_table = vep_table.annotate(**get_constraint_grouping_expr(vep_table.vep))
+        rows = vep_table.collect()
+
+        assert rows[0].canonical is True  # canonical=1
+        assert rows[1].canonical is False  # canonical=0
+
+    def test_include_mane_select(self, vep_table):
+        """Test that mane_select is included when requested."""
+        groupings = get_constraint_grouping_expr(
+            vep_table.vep, include_mane_select_group=True
+        )
+
+        assert "mane_select" in groupings
+
+        vep_table = vep_table.annotate(**groupings)
+        rows = vep_table.collect()
+
+        assert rows[0].mane_select is True  # has mane_select value
+        assert rows[1].mane_select is False  # mane_select is None
+
+    def test_exclude_transcript_and_canonical(self, vep_table):
+        """Test that transcript and canonical can be excluded."""
+        groupings = get_constraint_grouping_expr(
+            vep_table.vep,
+            include_transcript_group=False,
+            include_canonical_group=False,
+        )
+
+        assert "transcript" not in groupings
+        assert "canonical" not in groupings
+        assert set(groupings.keys()) == {"annotation", "modifier", "gene", "gene_id"}
+
+    def test_coverage_expr_included(self, vep_table):
+        """Test that coverage is included when coverage_expr is provided."""
+        vep_table = vep_table.annotate(cov=30)
+        groupings = get_constraint_grouping_expr(
+            vep_table.vep, coverage_expr=vep_table.cov
+        )
+
+        assert "coverage" in groupings
+
+    def test_polyphen_missing_from_struct(self):
+        """Test that missing polyphen_prediction field is handled gracefully."""
+        ht = hl.Table.parallelize(
+            [
+                {
+                    "vep": hl.Struct(
+                        most_severe_consequence="stop_gained",
+                        lof=None,
+                        gene_symbol="GENE1",
+                        gene_id="ENSG00000000001",
+                        transcript_id="ENST00000000001",
+                        canonical=1,
+                        mane_select=None,
+                    ),
+                },
+            ],
+            hl.tstruct(
+                vep=hl.tstruct(
+                    most_severe_consequence=hl.tstr,
+                    lof=hl.tstr,
+                    gene_symbol=hl.tstr,
+                    gene_id=hl.tstr,
+                    transcript_id=hl.tstr,
+                    canonical=hl.tint32,
+                    mane_select=hl.tstr,
+                ),
+            ),
+        )
+        ht = ht.annotate(**get_constraint_grouping_expr(ht.vep))
+        result = ht.collect()[0]
+
+        # lof is None, polyphen is missing from struct → modifier should be "None"
+        assert result.modifier == "None"

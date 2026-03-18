@@ -38,6 +38,27 @@ CLASSIC_LOF_ANNOTATIONS = (
 )
 """Classic loss-of-function VEP annotations."""
 
+DEFAULT_FIELDS_TO_SUM = (
+    "mu_snp",
+    "mu",
+    "observed_variants",
+    "possible_variants",
+    "predicted_proportion_observed",
+    "coverage_correction",
+    "expected_variants",
+)
+"""Default fields summed when aggregating expected variants by constraint group."""
+
+DEFAULT_GENCODE_ANNOTATIONS = (
+    "transcript_id_version",
+    "gene_id_version",
+    "level",
+    "transcript_type",
+    "start_position",
+    "end_position",
+)
+"""Default GENCODE annotations added to a Table by transcript id."""
+
 
 def get_mu_annotation_expr(
     ht: hl.Table,
@@ -102,94 +123,111 @@ def annotate_with_mu(
     )
 
 
-def _get_expression_for_annotation(
+def _resolve_annotation_expr(
     t: Optional[Union[hl.Table, hl.MatrixTable]] = None,
     annotation_name: Optional[str] = None,
     expr: Optional[hl.expr.Expression] = None,
     expr_param_name: Optional[str] = None,
 ) -> hl.expr.Expression:
     """
-    Get an annotation from a Table or MatrixTable.
+    Get an annotation from a Table/MatrixTable, or return a provided expression.
 
-    Either `t` and `annotation_name` or `expr` must be provided. If `expr` is not None,
-    it will be returned. Otherwise, the annotation with the name `annotation_name` will
-    be returned from the input Table or MatrixTable.
+    Provides a consistent pattern for functions that accept either an explicit
+    Hail expression or fall back to a well-known field on a Table. This avoids
+    duplicating "resolve expr or look it up on ht" logic across callers.
 
-    `expr_param_name` is an optional parameter that is only used in a logger message or
-    error message if `expr` is None.
+    If ``expr`` is provided it is returned directly. Otherwise, ``t`` and
+    ``annotation_name`` must both be supplied and the named field is looked up on
+    ``t``.
 
-    :param t: Optional Input Table or MatrixTable.
-    :param annotation_name: Optional Name of the annotation to get.
-    :param expr: Optional expression to return. Default is None.
-    :param expr_param_name: Optional name of the parameter that `expr` is associated
-        with. Default is None.
-    :return: Expression of the annotation.
+    Example usage inside a public function::
+
+        def my_function(
+            ht: hl.Table,
+            freq_expr: Optional[hl.expr.StructExpression] = None,
+        ) -> ...:
+            freq_expr = _resolve_annotation_expr(
+                t=ht,
+                annotation_name="freq",
+                expr=freq_expr,
+                expr_param_name="freq_expr",
+            )
+            # freq_expr is now guaranteed to be a valid expression —
+            # either the caller's explicit value or ht.freq.
+
+    :param t: Input Table or MatrixTable to look up ``annotation_name`` on. Required
+        when ``expr`` is None.
+    :param annotation_name: Name of the field to retrieve from ``t``. Required when
+        ``expr`` is None.
+    :param expr: Expression to return directly. When provided, ``t`` and
+        ``annotation_name`` are ignored.
+    :param expr_param_name: Human-readable name for ``expr``, used in log/error
+        messages. Defaults to "expr".
+    :return: The resolved Hail expression.
     """
-    if (t is None or annotation_name) and expr is None:
-        raise ValueError("Either `t` and `annotation_name` or `expr` must be provided.")
+    if expr is None and (t is None or annotation_name is None):
+        raise ValueError("Either t and annotation_name or expr must be provided.")
 
     expr_param_name = expr_param_name or "expr"
-    if expr is None and hasattr(t, annotation_name):
-        logger.warning(
-            f"{expr_param_name} was not provided, using '{annotation_name}'."
-        )
+    if expr is None and annotation_name in t.row:
+        logger.info(f"{expr_param_name} was not provided, using '{annotation_name}'.")
         expr = t[annotation_name]
     elif expr is None:
         raise ValueError(
-            f"{expr_param_name} was not provided and '{annotation_name}' annotation is "
-            f"not present in the input Table."
+            f"{expr_param_name} was not provided and '{annotation_name}' is "
+            f"not present in the input Table or MatrixTable."
         )
 
     return expr
 
 
-def single_variant_count_expr(
-    freq_expr: Optional[hl.expr.StructExpression] = None,
+def variant_observed_expr(
+    freq_expr: Optional[
+        Union[hl.expr.StructExpression, hl.expr.ArrayExpression]
+    ] = None,
     ht: Optional[hl.Table] = None,
     singleton: bool = False,
     max_af: Optional[float] = None,
     count_missing: bool = False,
-) -> Union[hl.Table, Any]:
+) -> hl.expr.Int32Expression:
     """
-    Get the expression for a single variant count based on specified criteria.
+    Return 1 if a variant meets frequency criteria, 0 otherwise.
 
-    One of `ht` or `freq_expr` must be provided. If `freq_expr` is not provided, the
-    function will use `ht.freq` if it exists.
+    One of ``ht`` or ``freq_expr`` must be provided. If ``freq_expr`` is not provided,
+    ``ht.freq`` is used. When ``freq_expr`` is an ArrayExpression, the first
+    element is used.
 
-    A single variant count can be 1 (variant meets criteria) or 0 (variant does not meet
-    criteria). The criteria are specified by `singleton` and `max_af`.
+    The returned count is 1 when:
 
-    The variant count will be 1 if:
-        - `singleton` is True and the variant is a singleton (`freq_expr.AC == 1`).
-        - `max_af` is not None and the variant has an allele frequency less than or
-          equal to `max_af` and has an allele count greater than 0 (`freq_expr.AF <=
-          max_af` and `freq_expr.AC > 0`).
-        - If `max_af` is None and `singleton` is False, and `freq_expr` is not None, the
-          variant count will be 1 if the variant has an allele count greater than 0
-          (`freq_expr.AC > 0`).
-        - If `max_af` is None and `singleton` is False, and `freq_expr` is None, the
-          variant count will be 1.
+        - ``singleton`` is True and ``freq_expr.AC == 1``.
+        - ``max_af`` is not None and ``freq_expr.AC > 0`` and
+          ``freq_expr.AF <= max_af``.
+        - Neither ``singleton`` nor ``max_af`` is set but ``freq_expr`` is
+          available: ``freq_expr.AC > 0``.
+        - Neither ``singleton`` nor ``max_af`` is set and no ``freq_expr`` is
+          available: unconditionally 1.
 
-    :param freq_expr: Optional StructExpression with 'AC' and 'AF' annotations. Default
-        is None.
-    :param ht: Optional Input Table. Default is None.
-    :param singleton: Whether to count singletons. Default is False.
-    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
-        applied.
-    :param count_missing: Whether to count missing frequency values. Default is False.
-    :return: Expression for a single variant count.
+    :param ht: Input Table. Used to look up ``freq`` when ``freq_expr`` is None.
+    :param freq_expr: StructExpression (or ArrayExpression of structs) with
+        ``AC`` and ``AF`` fields. When an array, ``freq_expr[0]`` is used.
+    :param singleton: Count only singletons (AC == 1). Default is False.
+    :param max_af: Maximum allele frequency threshold. Default is None (no
+        cutoff).
+    :param count_missing: Value to substitute when the count expression is
+        missing (e.g. frequency is None). Default is False (0).
+    :return: Int32Expression equal to 0 or 1.
     """
     if ht is None and freq_expr is None:
-        raise ValueError("Either `ht` or `freq_expr` must be provided.")
+        raise ValueError("Either ht or freq_expr must be provided.")
 
-    if max_af or singleton:
-        freq_expr = _get_expression_for_annotation(ht, "freq", freq_expr, "freq_expr")
+    if max_af is not None or singleton:
+        freq_expr = _resolve_annotation_expr(ht, "freq", freq_expr, "freq_expr")
         if isinstance(freq_expr, hl.expr.ArrayExpression):
             freq_expr = freq_expr[0]
 
     if singleton:
         count_var = freq_expr.AC == 1
-    elif max_af:
+    elif max_af is not None:
         count_var = (freq_expr.AC > 0) & (freq_expr.AF <= max_af)
     elif freq_expr is not None:
         count_var = freq_expr.AC > 0
@@ -205,52 +243,58 @@ def single_variant_observed_and_possible_expr(
     use_possible_adj: bool = True,
 ) -> hl.expr.StructExpression:
     """
-    Get the observed and possible variant annotations.
+    Return per-variant observed and possible count expressions.
 
-    The function returns a struct indicating whether the variant should be included in
-    the observed and possible variant counts. It uses `single_variant_count_expr`
-    to determine the observed and possible variant counts for the frequency array.
+    For each element of the frequency array, ``observed_variants`` is 1 when the
+    variant meets the frequency criteria (AC > 0, optionally AF <= ``max_af``) and
+    0 otherwise. ``possible_variants`` uses the same criteria but substitutes 1
+    for missing frequencies (i.e., the variant site is considered possible even
+    when frequency data is absent).
 
-    :param freq_expr: Frequency array expression.
-    :param max_af: Optional maximum allele frequency to consider a variant as observed.
-    :param use_possible_adj: Whether to use the full dataset high-quality genotypes
-        (adj) frequency for the possible count (first element in the array). Otherwise,
-        the possible count is calculated for all entries in the frequency array.
-        Default is True.
-    :return: Struct containing the observed and possible variant annotations.
+    When ``use_possible_adj`` is True (default), the possible count is a scalar
+    derived from the first (adj) element of the frequency array. When False, it
+    is an array with one entry per downsampling, matching the shape of
+    ``observed_variants``.
+
+    :param freq_expr: Array of frequency structs with ``AC`` and ``AF`` fields.
+    :param max_af: Maximum allele frequency threshold. Default is None (no
+        cutoff).
+    :param use_possible_adj: If True, compute possible count from only the adj
+        (first) frequency element. If False, compute per-downsampling. Default
+        is True.
+    :return: Struct with ``observed_variants`` (array of int) and
+        ``possible_variants`` (int if ``use_possible_adj``, else array of int).
     """
     pos_expr = hl.array([freq_expr[0]]) if use_possible_adj else freq_expr
     pos_expr = pos_expr.map(
-        lambda x: single_variant_count_expr(
-            freq_expr=x, max_af=max_af, count_missing=True
-        )
+        lambda x: variant_observed_expr(freq_expr=x, max_af=max_af, count_missing=True)
     )
     pos_expr = pos_expr[0] if use_possible_adj else pos_expr
     return hl.struct(
         observed_variants=freq_expr.map(
-            lambda x: single_variant_count_expr(freq_expr=x, max_af=max_af)
+            lambda x: variant_observed_expr(freq_expr=x, max_af=max_af)
         ),
         possible_variants=pos_expr,
     )
 
 
-def weighted_agg_sum_expr(
-    expr: Union[hl.ArrayExpression, hl.NumericExpression],
-    weight_expr: Union[hl.ArrayExpression, hl.NumericExpression],
-) -> Union[hl.ArrayExpression, hl.NumericExpression]:
+def weighted_build_sum_agg_struct(
+    expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
+    weight_expr: Union[hl.expr.ArrayNumericExpression, hl.expr.NumericExpression],
+) -> Union[hl.expr.ArrayExpression, hl.expr.NumericExpression]:
     """
-    Get the expression for a weighted aggregate sum.
+    Return the weighted aggregate sum of ``expr`` weighted by ``weight_expr``.
 
-    The function will return the sum of the product of `expr` and `weight_expr`.
+    Both parameters may be scalar or array numeric expressions:
 
-    The parameters `expr` and `weight_expr` can be either ArrayExpression or
-    NumericExpression. If both are ArrayExpression, each element of the arrays will be
-    multiplied together and summed. If one is ArrayNumericExpression and the other is
-    NumericExpression, the NumericExpression will be multiplied by each element
-    of the ArrayExpression and summed.
+        - Both arrays: elements are multiplied pairwise and summed per-element
+          across rows (``hl.agg.array_sum``).
+        - Both scalars: standard ``hl.agg.sum(expr * weight_expr)``.
+        - Mixed: the scalar is broadcast across the array elements and summed
+          per-element across rows.
 
-    :param expr: Expression to be weighted and summed.
-    :param weight_expr: Expression to weight `expr` by.
+    :param expr: Numeric expression (scalar or array) to be weighted.
+    :param weight_expr: Numeric expression (scalar or array) to weight by.
     :return: Weighted aggregate sum expression.
     """
     expr_is_array = isinstance(expr, hl.expr.ArrayNumericExpression)
@@ -263,65 +307,60 @@ def weighted_agg_sum_expr(
         return hl.agg.array_sum(expr * weight_expr)
 
 
-def get_counts_agg_expr(
-    freq_expr: Optional[Union[hl.expr.ArrayExpression, hl.expr.StructExpression]],
+def counts_agg_expr(
+    freq_expr: Optional[
+        Union[hl.expr.ArrayExpression, hl.expr.StructExpression]
+    ] = None,
     ht: Optional[hl.Table] = None,
     count_singletons: bool = False,
     max_af: Optional[float] = None,
     count_missing: bool = False,
 ) -> hl.expr.StructExpression:
     """
-    Get aggregation expression for counting variants based on specified criteria.
+    Return an aggregation expression for variant and singleton counts.
 
-    One of `ht` or `freq_expr` must be provided. If `freq_expr` is not provided, the
-    function will use `ht.freq` if it exists.
+    Aggregates per-variant counts (via ``variant_observed_expr``) across
+    rows. Each variant contributes 0 or 1 to the count based on its frequency
+    metadata (AC, AF). The result is a struct with ``variant_count`` and, when
+    ``count_singletons`` is True, ``singleton_count``.
 
-    The aggregation expression will return a StructExpression with 'variant_count' and
-    'singleton_count' annotations. 'variant_count' will be the count of variants that
-    meet the specified criteria. 'singleton_count' will be the count of singleton
-    variants if `count_singletons` is True.
+    One of ``freq_expr`` or ``ht`` must be provided. If ``freq_expr`` is not
+    provided, ``ht.freq`` is used as the fallback.
 
-    The criteria for counting variants are specified by `count_singletons` and `max_af`.
+    The shape of ``freq_expr`` controls whether the output counts are scalars or
+    arrays:
 
-    The variant count will be 1 if:
+        - **StructExpression** (single frequency entry with ``AC`` / ``AF``):
+          returns scalar ``variant_count`` and ``singleton_count``.
+        - **ArrayExpression** (array of frequency structs, e.g. one per
+          downsampling): returns array-valued counts where each element corresponds
+          to a position in the input array. Internally the array is mapped through
+          ``variant_observed_expr`` and summed element-wise with
+          ``hl.agg.array_sum``.
 
-        - `count_singletons` is True and the variant is a singleton
-          (`freq_expr.AC == 1`).
-        - `max_af` is not None and the variant has an allele frequency less than or
-          equal to `max_af` and has an allele count greater than 0
-          (`freq_expr.AF <= max_af` and `freq_expr.AC > 0`).
-        - If `max_af` is None and `count_singletons` is False, and `freq_expr` is not
-          None, the variant count will be 1 if the variant has an allele count greater
-          than 0 (`freq_expr.AC > 0`).
-        - If `max_af` is None and `count_singletons` is False, and `freq_expr` is None,
-          the variant count will be 1.
+    When ``max_af`` is set, only variants with ``AF <= max_af`` and ``AC > 0``
+    are counted. Singleton counting (``count_singletons=True``) counts only
+    variants with ``AC == 1``, independent of the ``max_af`` filter.
 
-    :param freq_expr: Optional ArrayExpression or StructExpression with 'AC' and 'AF'
-        annotations. Default is None.
-    :param ht: Optional Input Table. Default is None.
-    :param count_singletons: Whether to count singletons. Default is False.
-    :param max_af: Maximum variant allele frequency to keep. By default, no cutoff is
-        applied.
-    :param count_missing: Whether to count missing frequency values. Default is False.
-    :return: StructExpression with 'variant_count' and 'singleton_count' annotations.
+    :param freq_expr: Frequency expression — an ArrayExpression of structs or a
+        single StructExpression with ``AC`` and ``AF`` fields. If None, falls
+        back to ``ht.freq``.
+    :param ht: Input Table. Used to look up ``freq`` when ``freq_expr`` is None.
+    :param count_singletons: If True, include a ``singleton_count`` field in
+        the result. Default is False.
+    :param max_af: Maximum allele frequency threshold. Variants with
+        ``AF > max_af`` are excluded from ``variant_count``. Does not affect
+        ``singleton_count``. Default is None (no cutoff).
+    :param count_missing: Value to substitute when frequency is missing.
+        Default is False (0).
+    :return: Aggregation StructExpression with ``variant_count`` (and
+        optionally ``singleton_count``). Values are scalars when ``freq_expr`` is
+        a StructExpression, or arrays when it is an ArrayExpression.
     """
     if ht is None and freq_expr is None:
-        raise ValueError("Either `ht` or `freq_expr` must be provided.")
+        raise ValueError("Either ht or freq_expr must be provided.")
 
-    if max_af or count_singletons:
-        freq_expr = _get_expression_for_annotation(ht, "freq", freq_expr, "freq_expr")
-
-    if max_af:
-        logger.info(
-            "The maximum variant allele frequency to be included in "
-            "`variant_count` is %.3f.",
-            max_af,
-        )
-
-    if count_singletons:
-        logger.info(
-            "Counting singleton variants and adding as 'singleton_count' annotation."
-        )
+    freq_expr = _resolve_annotation_expr(ht, "freq", freq_expr, "freq_expr")
 
     params = {"variant_count": {"singleton": False, "max_af": max_af}}
     if count_singletons:
@@ -333,7 +372,7 @@ def get_counts_agg_expr(
 
     count_expr = {
         k: freq_expr.map(
-            lambda x: single_variant_count_expr(
+            lambda x: variant_observed_expr(
                 freq_expr=x, **p, count_missing=count_missing
             )
         )
@@ -423,7 +462,7 @@ def count_observed_and_possible_by_group(
     ht: hl.Table,
     possible_expr: hl.expr.Int32Expression,
     observed_expr: hl.expr.ArrayExpression,
-    additional_grouping: Union[List[str]] = ("methylation_level",),
+    additional_grouping: Union[List[str], Tuple[str, ...]] = ("methylation_level",),
     partition_hint: int = 100,
     weight_exprs: Optional[
         Union[
@@ -437,23 +476,33 @@ def count_observed_and_possible_by_group(
             Dict[str, Union[hl.expr.ArrayExpression, hl.expr.NumericExpression]],
         ]
     ] = None,
-) -> Union[hl.Table, Any]:
+) -> hl.Table:
     """
-    Count observed and possible variants by group.
+    Aggregate observed and possible variant counts by substitution context group.
 
-    Counts the number of observed and possible variants for each group defined by
-    `additional_grouping`. The groups are defined by the `context`, `ref`, and `alt`
-    annotations. If `additional_grouping` is provided, the groups are defined by the
-    `context`, `ref`, `alt`, and `additional_grouping` annotations.
+    Groups rows by ``context``, ``ref``, ``alt``, and any fields in
+    ``additional_grouping``, then sums observed and possible counts within each
+    group.
 
-    :param ht: Input Table.
-    :param possible_expr: Expression for the possible variant count.
-    :param observed_expr: Expression for the observed variant count.
-    :param additional_grouping: Additional grouping annotations.
-    :param partition_hint: Partition hint.
-    :param weight_exprs: Weight expressions.
-    :param additional_agg_sum_exprs: Additional aggregation sum expressions.
-    :return: Table with the observed and possible variant counts for each group.
+    :param ht: Input Table with ``context``, ``ref``, ``alt`` fields and any
+        fields named in ``additional_grouping``.
+    :param possible_expr: Per-variant possible count (scalar).
+    :param observed_expr: Per-variant observed count (array, one element per
+        downsampling).
+    :param additional_grouping: Field names to append to the base
+        ``(context, ref, alt)`` grouping. Default is ``("methylation_level",)``.
+    :param partition_hint: Target number of partitions for the ``group_by``.
+        Default is 100.
+    :param weight_exprs: Weighted sums of ``possible_expr`` to include. Pass
+        field names (looked up on ``ht``) or a dict mapping output names to
+        weight expressions. Each produces
+        ``weighted_build_sum_agg_struct(possible_expr, weight)``.
+    :param additional_agg_sum_exprs: Extra fields to sum alongside
+        observed/possible. Pass field names (looked up on ``ht``) or a dict
+        mapping output names to expressions. Arrays use
+        ``hl.agg.array_sum``; scalars use ``hl.agg.sum``.
+    :return: Grouped Table with ``observed_variants``, ``possible_variants``,
+        and any weighted/additional sum fields.
     """
     if isinstance(weight_exprs, list):
         weight_exprs = {k: ht[k] for k in weight_exprs}
@@ -482,7 +531,10 @@ def count_observed_and_possible_by_group(
     # Update the possible variant count aggregation expression to include weighted sums
     # of possible variant counts.
     agg_expr.update(
-        {k: weighted_agg_sum_expr(possible_expr, v) for k, v in weight_exprs.items()}
+        {
+            k: weighted_build_sum_agg_struct(possible_expr, v)
+            for k, v in weight_exprs.items()
+        }
     )
 
     # Get sum aggregation expressions for requested fields.
@@ -1362,7 +1414,7 @@ def calibration_model_group_expr(
     )
 
 
-def _sum_agg_expr(
+def _build_sum_agg_struct(
     fields_to_sum: Optional[List[str]] = None,
     exprs_to_sum: Optional[
         Union[hl.expr.StructExpression, Dict[str, hl.expr.NumericExpression]]
@@ -1409,7 +1461,7 @@ def build_models(
     ht: hl.Table,
     coverage_expr: hl.expr.Int32Expression,
     weighted: bool = False,
-    keys: Tuple[str] = (
+    keys: Tuple[str, ...] = (
         "context",
         "ref",
         "alt",
@@ -1420,8 +1472,8 @@ def build_models(
     upper_cov_cutoff: Optional[int] = None,
     skip_coverage_model: bool = False,
     log10_coverage: bool = True,
-    additional_grouping: Tuple[str] = (),
-):
+    additional_grouping: Tuple[str, ...] = (),
+) -> Tuple[Optional[hl.expr.StructExpression], hl.expr.DictExpression]:
     """
     Build coverage and plateau models.
 
@@ -1456,16 +1508,18 @@ def build_models(
 
         - x: groupings of exome coverage at low coverage sites (log10 transformed if
           requested)
-        - y: sum('observed_variants') / (`high_coverage_scale_factor` * sum('possible_variants' * 'mu_snp') at low coverage sites
+        - y: sum('observed_variants') / (``high_coverage_scale_factor`` *
+          sum('possible_variants' * 'mu_snp')) at low coverage sites
 
-    `high_coverage_scale_factor` = sum('observed_variants') / sum('possible_variants' * 'mu_snp') at high coverage sites
+    ``high_coverage_scale_factor`` = sum('observed_variants') /
+    sum('possible_variants' * 'mu_snp') at high coverage sites
 
     .. note::
 
         This function expects that the input Table (`ht`) contains only high quality
         synonymous variants below 0.1% frequency.
 
-    This function expects that the following fields are present in `coverage_ht`:
+    The following fields are expected in `ht`:
 
         - context: trinucleotide genomic context.
         - ref: the reference allele.
@@ -1485,20 +1539,21 @@ def build_models(
         model) by 'possible_variants'. Default is False.
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level").
-    :param model_group_expr: Optional Expression with `high_or_low_coverage` annotation
+    :param model_group_expr: Expression with ``high_or_low_coverage`` annotation
         to group variants into high or low coverage models. If not provided, the
-        `calibration_model_group_expr()` function is used to define the grouping.
+        ``calibration_model_group_expr`` function is used to define the grouping.
     :param high_cov_definition: Lower coverage cutoff. Sites with coverage above this
-        cutoff are considered well covered. Default is `COVERAGE_CUTOFF`.
+        cutoff are considered well covered. Default is ``COVERAGE_CUTOFF``.
     :param upper_cov_cutoff: Upper coverage cutoff. Sites with coverage above this
         cutoff are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set
         to True, None is returned instead of the coverage model. Default is False.
     :param log10_coverage: Whether to convert coverage sites with log10 when building
         the coverage model. Default is True.
-    :param additional_grouping: Optional Additional annotations to group by before
+    :param additional_grouping: Additional annotations to group by before
         counting the observed and possible variants. Default is ().
-    :return: Coverage model and plateau models.
+    :return: Tuple of (coverage model, plateau models). Coverage model is None
+        when ``skip_coverage_model`` is True.
     """
     if model_group_expr is None:
         # Define whether the variant should be included in the high or low coverage
@@ -1515,7 +1570,9 @@ def build_models(
 
     grouping = keys + additional_grouping
     mu_type_fields = ("cpg", "transition", "mutation_type", "mutation_type_model")
-    has_mu_type = all([x in ht.row for x in mu_type_fields])
+    # all() accepts a generator expression directly (no list needed) and
+    # short-circuits on the first False.
+    has_mu_type = all(x in ht.row for x in mu_type_fields)
     grouping += mu_type_fields if has_mu_type else ()
 
     grouping_exprs = {"build_model": model_group_expr}
@@ -1528,7 +1585,7 @@ def build_models(
         ht.group_by(*grouping, **grouping_exprs)
         .aggregate(
             mu_snp=hl.agg.take(ht.mu_snp, 1)[0],
-            **_sum_agg_expr(
+            **_build_sum_agg_struct(
                 fields_to_sum=["observed_variants", "possible_variants"], t=ht
             ),
         )
@@ -1614,43 +1671,43 @@ def build_plateau_models(
     weighted: bool = False,
     cpg_expr: Optional[hl.expr.BooleanExpression] = None,
     model_group_expr: Optional[hl.expr.StructExpression] = None,
-) -> hl.expr.DictExpression:
+) -> Union[hl.expr.DictExpression, hl.expr.ArrayExpression, hl.expr.StructExpression]:
     """
-    Build plateau models to calibrate mutation rate to compute predicted proportion observed value.
+    Build plateau models to calibrate mutation rate against proportion observed.
 
-    The x and y of the plateau models:
+    Fits a linear regression of ``observed_variants_expr / possible_variants_expr``
+    on ``mu_snp_expr``. When either observed or possible expressions are arrays
+    (e.g., one model per downsampling), the regression is applied element-wise
+    via ``hl.agg.array_agg``.
 
-        - x: `mu_snp_expr`
-        - y: `observed_variants_expr` / `possible_variants_expr`
-          or `pops_observed_variants_array_expr`[index] / `possible_variants_expr`
-          if `pops` is specified
+    When ``model_group_expr`` or ``cpg_expr`` is provided, the result is a
+    ``DictExpression`` keyed by the grouping struct. Otherwise the result is the
+    regression beta directly.
 
-    :param mu_snp_expr: Float64Expression of the mutation rate.
-    :param observed_variants_expr: ArrayExpression or Int64Expression of the observed
-        variant counts.
-    :param possible_variants_expr: ArrayExpression or Int64Expression of the possible
-        variant counts.
-    :param weighted: Whether to generalize the model to weighted least squares using
-        'possible_variants'. Default is False.
-    :return: DictExpression of the intercepts and slopes of the plateau models for each
-        group in `model_group_expr`.
-    :param cpg_expr: BooleanExpression noting whether a site is a CPG site.
-    :param model_group_expr: StructExpression to group by in the aggregation.
-
+    :param mu_snp_expr: Mutation rate expression.
+    :param observed_variants_expr: Observed variant counts (scalar or array).
+    :param possible_variants_expr: Possible variant counts (scalar or array).
+    :param weighted: If True, use weighted least squares with
+        ``possible_variants_expr`` as weights. Default is False.
+    :param cpg_expr: Boolean expression indicating CpG sites. When provided,
+        adds a ``cpg`` field to the grouping struct.
+    :param model_group_expr: Struct expression to group by in the aggregation.
+    :return: Regression betas, optionally grouped by ``model_group_expr``
+        (and/or ``cpg_expr``).
     """
     obs_is_array = isinstance(observed_variants_expr, hl.expr.ArrayExpression)
     pos_is_array = isinstance(possible_variants_expr, hl.expr.ArrayExpression)
 
     def _linreg(
-        o: hl.expr.Int64Expression = observed_variants_expr,
-        p: hl.expr.Int64Expression = possible_variants_expr,
+        o: hl.expr.NumericExpression,
+        p: hl.expr.NumericExpression,
     ) -> hl.expr.StructExpression:
         """
-        Compute the linear regression of the observed variant counts over the possible variant counts.
+        Run linear regression of observed/possible on mutation rate.
 
-        :param o: Int64Expression of the observed variant counts.
-        :param p: Int64Expression of the possible variant counts.
-        :return: StructExpression of the intercept and slope of the linear regression.
+        :param o: Observed variant count expression.
+        :param p: Possible variant count expression.
+        :return: Regression beta coefficients.
         """
         return hl.agg.linreg(
             o / p, [1, mu_snp_expr], weight=p if weighted else None
@@ -1662,11 +1719,15 @@ def build_plateau_models(
             hl.zip(observed_variants_expr, possible_variants_expr),
         )
     elif obs_is_array:
-        agg_expr = hl.agg.array_agg(lambda x: _linreg(o=x), observed_variants_expr)
+        agg_expr = hl.agg.array_agg(
+            lambda x: _linreg(x, possible_variants_expr), observed_variants_expr
+        )
     elif pos_is_array:
-        agg_expr = hl.agg.array_agg(lambda x: _linreg(p=x), possible_variants_expr)
+        agg_expr = hl.agg.array_agg(
+            lambda x: _linreg(observed_variants_expr, x), possible_variants_expr
+        )
     else:
-        agg_expr = _linreg()
+        agg_expr = _linreg(observed_variants_expr, possible_variants_expr)
 
     if model_group_expr is None and cpg_expr is None:
         return agg_expr
@@ -1758,51 +1819,56 @@ def get_all_gen_anc_lengths(
 
 
 def get_constraint_grouping_expr(
-    vep_annotation_expr: hl.StructExpression,
-    coverage_expr: Optional[hl.Int32Expression] = None,
+    vep_annotation_expr: hl.expr.StructExpression,
+    coverage_expr: Optional[hl.expr.Int32Expression] = None,
     include_transcript_group: bool = True,
     include_canonical_group: bool = True,
     include_mane_select_group: bool = False,
-) -> Dict[str, Union[hl.StringExpression, hl.Int32Expression, hl.BooleanExpression]]:
+) -> Dict[
+    str,
+    Union[hl.expr.StringExpression, hl.expr.Int32Expression, hl.expr.BooleanExpression],
+]:
     """
     Collect annotations used for constraint groupings.
 
     Function collects the following annotations:
-        - annotation - 'most_severe_consequence' annotation in `vep_annotation_expr`
-        - modifier - classic lof annotation from 'lof' annotation in
-            `vep_annotation_expr`, LOFTEE annotation from 'lof' annotation in
-            `vep_annotation_expr`, PolyPhen annotation from 'polyphen_prediction' in
-            `vep_annotation_expr`, or "None" if neither is defined
-        - gene - 'gene_symbol' annotation inside `vep_annotation_expr`
-        - coverage - exome coverage if `coverage_expr` is specified
-        - transcript - id from 'transcript_id' in `vep_annotation_expr` (added when
-            `include_transcript_group` is True)
-        - canonical from `vep_annotation_expr` (added when `include_canonical_group` is
-            True)
-        - mane_select from `vep_annotation_expr` (added when `include_mane_select_group` is
-            True)
+
+        - annotation - most_severe_consequence from ``vep_annotation_expr``
+        - modifier - first non-missing of lof or polyphen_prediction
+          from ``vep_annotation_expr``, or the literal "None"
+        - gene - gene_symbol from ``vep_annotation_expr``
+        - gene_id - gene_id from ``vep_annotation_expr``
+        - coverage - exome coverage if ``coverage_expr`` is specified
+        - transcript - transcript_id from ``vep_annotation_expr`` (added when
+          ``include_transcript_group`` is True)
+        - canonical - from ``vep_annotation_expr`` (added when
+          ``include_canonical_group`` is True)
+        - mane_select - from ``vep_annotation_expr`` (added when
+          ``include_mane_select_group`` is True)
 
     .. note::
+
         This function expects that the following fields are present in
-        `vep_annotation_expr`:
-        - lof
-        - polyphen_prediction
-        - most_severe_consequence
-        - gene_symbol
-        - transcript_id (if `include_transcript_group` is True)
-        - canonical (if `include_canonical_group` is True)
-        - mane_select (if `include_mane_select_group` is True)
+        ``vep_annotation_expr``:
+
+            - lof
+            - most_severe_consequence
+            - gene_symbol
+            - gene_id
+            - polyphen_prediction (optional; missing used if absent)
+            - transcript_id (if ``include_transcript_group`` is True)
+            - canonical (if ``include_canonical_group`` is True)
+            - mane_select (if ``include_mane_select_group`` is True)
 
     :param vep_annotation_expr: StructExpression of VEP annotation.
-    :param coverage_expr: Optional Int32Expression of exome coverage. Default is None.
+    :param coverage_expr: Int32Expression of exome coverage. Default is None.
     :param include_transcript_group: Whether to include the transcript annotation in the
         groupings. Default is True.
     :param include_canonical_group: Whether to include canonical annotation in the
         groupings. Default is True.
     :param include_mane_select_group: Whether to include mane_select annotation in the
         groupings. Default is False.
-    :return: A dictionary with keys as annotation names and values as actual
-        annotations.
+    :return: Dict mapping annotation names to Hail expressions.
     """
     lof_expr = vep_annotation_expr.lof
     if "polyphen_prediction" in vep_annotation_expr:
@@ -1826,53 +1892,55 @@ def get_constraint_grouping_expr(
     if include_canonical_group:
         groupings["canonical"] = hl.or_else(vep_annotation_expr.canonical == 1, False)
     if include_mane_select_group:
-        groupings["mane_select"] = hl.or_else(
-            hl.is_defined(vep_annotation_expr.mane_select), False
-        )
+        groupings["mane_select"] = hl.is_defined(vep_annotation_expr.mane_select)
 
     return groupings
 
 
 def annotate_exploded_vep_for_constraint_groupings(
     ht: hl.Table,
-    coverage_expr: hl.expr.Int32Expression = None,
+    coverage_expr: Optional[hl.expr.Int32Expression] = None,
     vep_annotation: str = "transcript_consequences",
     include_canonical_group: bool = True,
     include_mane_select_group: bool = False,
-) -> Tuple[Union[hl.Table, hl.MatrixTable], Tuple[str]]:
+) -> Tuple[hl.Table, Tuple[str, ...]]:
     """
-    Annotate Table with annotations used for constraint groupings.
+    Explode a VEP annotation and add constraint grouping fields.
 
-    Function explodes the specified VEP annotation (`vep_annotation`) and adds the following annotations:
-        - annotation -'most_severe_consequence' annotation in `vep_annotation`
-        - modifier - classic lof annotation from 'lof' annotation in
-            `vep_annotation`, LOFTEE annotation from 'lof' annotation in
-            `vep_annotation`, PolyPhen annotation from 'polyphen_prediction' in
-            `vep_annotation`, or "None" if neither is defined
-        - gene - 'gene_symbol' annotation inside `vep_annotation`
-        - transcript - id from 'transcript_id' in `vep_annotation` (added when
-            `include_transcript_group` is True)
-        - canonical from `vep_annotation` (added when `include_canonical_group` is
-            True)
-        - mane_select from `vep_annotation` (added when `include_mane_select_group` is
-            True)
+    Explodes the specified VEP annotation (``vep_annotation``) and adds the
+    following annotations via ``get_constraint_grouping_expr``:
+
+        - annotation - most_severe_consequence from ``vep_annotation``
+        - modifier - first non-missing of lof or polyphen_prediction
+          from ``vep_annotation``, or the literal "None"
+        - gene - gene_symbol from ``vep_annotation``
+        - gene_id - gene_id from ``vep_annotation``
+        - coverage - exome coverage if ``coverage_expr`` is specified
+        - transcript - transcript_id from ``vep_annotation`` (added when
+          ``vep_annotation`` is "transcript_consequences")
+        - canonical - from ``vep_annotation`` (added when
+          ``include_canonical_group`` is True)
+        - mane_select - from ``vep_annotation`` (added when
+          ``include_mane_select_group`` is True)
 
     .. note::
-        This function expects that the following annotations are present in `ht`:
-        - vep
-        - exome_coverage
 
-    :param ht: Input Table or MatrixTable.
-    :param coverage_expr: Expression that defines the coverage metric.
-    :param vep_annotation: Name of annotation in 'vep' annotation (one of
-        "transcript_consequences" and "worst_csq_by_gene") that will be used for
-        obtaining constraint annotations. Default is "transcript_consequences".
-    :param include_canonical_group: Whether to include 'canonical' annotation in the
-        groupings. Default is True. Ignored unless `vep_annotation` is  "transcript_consequences".
-    :param include_mane_select_group: Whether to include 'mane_select' annotation in the
-        groupings. Default is False. Ignored unless `vep_annotation` is  "transcript_consequences".
-    :return: A tuple of input Table or MatrixTable with grouping annotations added and
-        the names of added annotations.
+        This function expects that a ``vep`` annotation is present in ``ht``.
+
+    :param ht: Input Table.
+    :param coverage_expr: Expression that defines the coverage metric. Default
+        is None.
+    :param vep_annotation: Name of annotation in vep (one of
+        ``"transcript_consequences"`` and ``"worst_csq_by_gene"``) that will be
+        used for obtaining constraint annotations. Default is
+        ``"transcript_consequences"``.
+    :param include_canonical_group: Whether to include canonical annotation
+        in the groupings. Default is True. Ignored unless ``vep_annotation`` is
+        ``"transcript_consequences"``.
+    :param include_mane_select_group: Whether to include mane_select
+        annotation in the groupings. Default is False. Ignored unless
+        ``vep_annotation`` is ``"transcript_consequences"``.
+    :return: Tuple of (annotated Table, names of added grouping fields).
     """
     # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric'
     # before modifying ht.
@@ -2153,7 +2221,7 @@ def coverage_correction_expr(
 
 def apply_models(
     mu_expr: hl.expr.Float64Expression,
-    plateau_models_expr: hl.ArrayExpression,
+    plateau_models_expr: hl.expr.ArrayExpression,
     possible_variants_expr: hl.expr.Int64Expression,
     coverage_model: Optional[Tuple[float, float]] = None,
     coverage_expr: Optional[hl.expr.Int32Expression] = None,
@@ -2163,30 +2231,32 @@ def apply_models(
     log10_coverage: bool = True,
 ) -> hl.expr.StructExpression:
     """
-    Apply calibration models to compute predicted proportion observed ratio and expected variant counts.
+    Apply calibration models to compute expected variant counts.
+
+    Applies plateau and (optionally) coverage models to produce a struct with
+    ``mu``, ``predicted_proportion_observed``, ``expected_variants``, and
+    (when a coverage model is provided) ``coverage_correction``.
 
     :param mu_expr: Mutation rate expression.
-    :param plateau_models_expr: This can be either a single plateau model, where the
-        first element is the intercept and the second element is the slope, or an array
-        of plateau models.
-    :param possible_variants_expr: Int64Expression of possible variant counts to
-        multiply the predicted probability observed by. Default is None.
-    :param coverage_model: Tuple of the intercept and slope of the coverage model.
+    :param plateau_models_expr: Single plateau model (array of [intercept,
+        slope]) or an array of plateau models.
+    :param possible_variants_expr: Possible variant counts to multiply the
+        predicted proportion observed by.
+    :param coverage_model: Tuple of (intercept, slope) of the coverage model.
         Default is None.
-    :param coverage_expr: Optional Int32Expression of the coverage. Default is None.
-    :param cpg_expr: Optional BooleanExpression of whether the variant is a CpG site.
-        Default is None.
-    :param model_group_expr: Optional Expression with `high_or_low_coverage` annotation
-        to group variants into high or low coverage models. If not provided, the
-        `calibration_model_group_expr()` function is used to define the grouping.
-        Default is None.
-    :param high_cov_definition: Definition of high coverage. This is used to define
-        whether the site/group of sites is high or low coverage. Default is
-        `COVERAGE_CUTOFF`.
-    :param log10_coverage: Whether to convert coverage sites by log10 when applying the
-        coverage model. Default is True.
-    :return: A dictionary with predicted proportion observed ratio and expected variant
-        counts.
+    :param coverage_expr: Int32Expression of the coverage. Required when
+        ``coverage_model`` is provided or ``model_group_expr`` is None.
+    :param cpg_expr: BooleanExpression indicating CpG sites. Required when
+        ``model_group_expr`` is None.
+    :param model_group_expr: Expression with ``high_or_low_coverage``
+        annotation to group variants into high or low coverage models. If not
+        provided, ``calibration_model_group_expr`` is used. Default is None.
+    :param high_cov_definition: Coverage threshold for high/low classification.
+        Default is ``COVERAGE_CUTOFF``.
+    :param log10_coverage: Whether to log10-transform coverage when applying
+        the coverage model. Default is True.
+    :return: StructExpression with "mu", "predicted_proportion_observed",
+        "expected_variants", and optionally "coverage_correction".
     """
     if coverage_model is not None and coverage_expr is None:
         raise ValueError(
@@ -2232,41 +2302,26 @@ def apply_models(
     return apply_expr
 
 
-def aggregate_expected_variants_expr(
+def aggregate_constraint_metrics_expr(
     t: Union[hl.Table, hl.StructExpression],
-    fields_to_sum: List[str] = [
-        "mu_snp",
-        "mu",
-        "observed_variants",
-        "possible_variants",
-        "predicted_proportion_observed",
-        "coverage_correction",
-        "expected_variants",
-    ],
+    fields_to_sum: Union[List[str], Tuple[str, ...]] = DEFAULT_FIELDS_TO_SUM,
     additional_exprs_to_sum: Optional[Dict[str, hl.expr.Expression]] = None,
 ) -> hl.expr.StructExpression:
     """
     Get an aggregation expression for the sum of expected variants and other fields.
 
-    An aggregate sum or array sum is created for the following fields:
-
-        - mu_snp
-        - observed_variants
-        - possible_variants
-        - predicted_proportion_observed
-        - coverage_correction
-        - expected_variants
+    An aggregate sum or array sum is created for each field in ``fields_to_sum``.
 
     :param t: Input Table or StructExpression.
-    :param fields_to_sum: List of fields in `t` to get an aggregate sum expression for.
-        Default is the fields listed above.
-    :param additional_exprs_to_sum: Dictionary of additional expressions in `t` to get
+    :param fields_to_sum: Fields in ``t`` to get an aggregate sum expression for.
+        Default is ``DEFAULT_FIELDS_TO_SUM``.
+    :param additional_exprs_to_sum: Dictionary of additional expressions to get
         an aggregate sum expression for. Field names are the keys and expressions are
         the values. Default is None.
     :return: StructExpression with the sum of expected variants and other fields.
     """
-    return _sum_agg_expr(
-        fields_to_sum=fields_to_sum,
+    return _build_sum_agg_struct(
+        fields_to_sum=list(fields_to_sum),
         exprs_to_sum=additional_exprs_to_sum,
         t=t,
     )
@@ -2555,46 +2610,34 @@ def calculate_raw_z_score_sd(
 def add_gencode_transcript_annotations(
     ht: hl.Table,
     gencode_ht: hl.Table,
-    annotations: List[str] = [
-        "transcript_id_version",
-        "gene_id_version",
-        "level",
-        "transcript_type",
-        "start_position",
-        "end_position",
-    ],
+    annotations: Union[List[str], Tuple[str, ...]] = DEFAULT_GENCODE_ANNOTATIONS,
     remove_y_par: bool = True,
 ) -> hl.Table:
     """
     Add GENCODE annotations to Table based on transcript id.
 
-    .. note::
+    In addition to the annotations specified by ``annotations``, the following
+    computed annotations are always added:
 
-        Added annotations by default are:
-        - level
-        - transcript_type
-        - start_position (start of the transcript)
-        - end_position (end of the transcript)
-
-        Computed annotations are:
         - chromosome
         - cds_length
         - num_coding_exons
 
     :param ht: Input Table.
     :param gencode_ht: Table with GENCODE annotations.
-    :param annotations: List of GENCODE annotations to add. Default is
-        ["transcript_id_version", "gene_id_version", "level", "transcript_type",
-        "start_position", "end_position"].
+    :param annotations: GENCODE annotations to add. Default is
+        ``DEFAULT_GENCODE_ANNOTATIONS``.
     :param remove_y_par: Whether to remove features for the Y chromosome PAR regions.
         Default is True because the Y chromosome PAR regions are typically not included
         in the constraint calculations and both chrX and chrY will have the same
         'transcript_id' field for these regions. This parameter can only be True if
-        `gencode_ht` includes a 'transcript_id_version' field because Y_PAR is included
-        in the version of the transcript, which has been stripped from the
+        ``gencode_ht`` includes a 'transcript_id_version' field because Y_PAR is
+        included in the version of the transcript, which has been stripped from the
         'transcript_id' field.
     :return: Table with transcript annotations from GENCODE added.
     """
+    annotations = list(annotations)
+
     if remove_y_par and "transcript_id_version" not in gencode_ht.row:
         raise ValueError(
             "remove_y_par is True but 'transcript_id_version' is not in gencode_ht"
@@ -2714,9 +2757,9 @@ def compute_oe_upper_percentile_thresholds(
     :param metric_expr: Float expression to compute thresholds for. Must be
         defined on ``ht``.
     :param outlier_expr: Optional boolean expression that is ``True`` for rows
-        to exclude. When ``None`` (default), no outlier filtering is applied.
+        to exclude. When None (default), no outlier filtering is applied.
     :param transcript_filter_expr: Optional boolean expression that is ``True``
-        for rows to include. When ``None`` (default), all rows are included.
+        for rows to include. When None (default), all rows are included.
     :param percentiles: Percentile values (0-100) at which to compute
         thresholds. Default is (1, 5, 10, 15, 25, 50, 75).
     :param quantile_k: Accuracy parameter for

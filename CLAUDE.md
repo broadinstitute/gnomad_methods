@@ -219,6 +219,10 @@ from gnomad.utils.constraint import (
 )
 ```
 
+## Maintaining CLAUDE.md
+
+When working on any gnomAD repo that has a CLAUDE.md file, proactively add useful information you discover during development — gotchas, non-obvious API behavior, schema quirks, resource path conventions, or anything else that would save a future developer (or Claude session) time. Keep additions concise and placed in the appropriate section.
+
 ## CI/CD
 
 - **Pre-commit hooks**: black, autopep8, pydocstyle, isort (run automatically on commit)

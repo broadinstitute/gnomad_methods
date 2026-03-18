@@ -22,6 +22,9 @@ from gnomad.utils.constraint import (
 class TestOeConfidenceInterval:
     """Test the oe_confidence_interval function."""
 
+    @pytest.mark.skipif(
+        not hasattr(hl, "qgamma"), reason="hl.qgamma requires Hail >= 0.2.137"
+    )
     def test_gamma_returns_lower_and_upper(self):
         """Test that gamma method returns a struct with lower < upper."""
         ht = hl.Table.parallelize(
@@ -64,6 +67,9 @@ class TestOeConfidenceInterval:
         with pytest.raises(ValueError, match="Unknown CI method"):
             ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="invalid"))
 
+    @pytest.mark.skipif(
+        not hasattr(hl, "qgamma"), reason="hl.qgamma requires Hail >= 0.2.137"
+    )
     def test_gamma_and_poisson_give_similar_results(self):
         """Test that gamma and poisson methods give roughly similar CIs."""
         ht = hl.Table.parallelize(

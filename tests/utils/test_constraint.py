@@ -7,7 +7,7 @@ from gnomad.utils.constraint import (
     build_constraint_consequence_groups,
     calculate_gerp_cutoffs,
     calculate_raw_z_score,
-    compute_oe_upper_percentile_thresholds,
+    compute_percentile_thresholds,
     count_observed_and_possible_by_group,
     counts_agg_expr,
     get_constraint_grouping_expr,
@@ -348,7 +348,7 @@ class TestRankAndAssignBins:
 
 
 class TestComputeOeUpperPercentileThresholds:
-    """Test the compute_oe_upper_percentile_thresholds function."""
+    """Test the compute_percentile_thresholds function."""
 
     @pytest.fixture
     def sample_table(self):
@@ -360,7 +360,7 @@ class TestComputeOeUpperPercentileThresholds:
 
     def test_returns_dict_with_correct_keys(self, sample_table):
         """Test that the returned dict has keys matching requested percentiles."""
-        result = compute_oe_upper_percentile_thresholds(
+        result = compute_percentile_thresholds(
             sample_table, sample_table.metric, percentiles=(10, 50, 90)
         )
 
@@ -368,7 +368,7 @@ class TestComputeOeUpperPercentileThresholds:
 
     def test_thresholds_in_ascending_order(self, sample_table):
         """Test that thresholds are in ascending order for ascending percentiles."""
-        result = compute_oe_upper_percentile_thresholds(
+        result = compute_percentile_thresholds(
             sample_table, sample_table.metric, percentiles=(10, 25, 50, 75)
         )
 
@@ -377,7 +377,7 @@ class TestComputeOeUpperPercentileThresholds:
 
     def test_thresholds_within_data_range(self, sample_table):
         """Test that thresholds fall within the data range."""
-        result = compute_oe_upper_percentile_thresholds(
+        result = compute_percentile_thresholds(
             sample_table, sample_table.metric, percentiles=(10, 50, 90)
         )
 
@@ -391,7 +391,7 @@ class TestComputeOeUpperPercentileThresholds:
             hl.tstruct(metric=hl.tfloat64, is_outlier=hl.tbool),
         )
 
-        result = compute_oe_upper_percentile_thresholds(
+        result = compute_percentile_thresholds(
             ht, ht.metric, outlier_expr=ht.is_outlier, percentiles=(50,)
         )
 
@@ -410,7 +410,7 @@ class TestComputeOeUpperPercentileThresholds:
             hl.tstruct(metric=hl.tfloat64, include=hl.tbool),
         )
 
-        result = compute_oe_upper_percentile_thresholds(
+        result = compute_percentile_thresholds(
             ht,
             ht.metric,
             transcript_filter_expr=ht.include,
@@ -427,7 +427,7 @@ class TestComputeOeUpperPercentileThresholds:
             hl.tstruct(metric=hl.tfloat64),
         )
 
-        result = compute_oe_upper_percentile_thresholds(ht, ht.metric)
+        result = compute_percentile_thresholds(ht, ht.metric)
         assert set(result.keys()) == {1, 5, 10, 15, 25, 50, 75}
 
     def test_missing_metric_excluded(self):
@@ -442,9 +442,7 @@ class TestComputeOeUpperPercentileThresholds:
             hl.tstruct(metric=hl.tfloat64),
         )
 
-        result = compute_oe_upper_percentile_thresholds(
-            ht, ht.metric, percentiles=(50,)
-        )
+        result = compute_percentile_thresholds(ht, ht.metric, percentiles=(50,))
 
         # Only 0.1 and 0.2 are non-missing, median ~ 0.15.
         assert result[50] < 0.3
@@ -456,10 +454,8 @@ class TestComputeOeUpperPercentileThresholds:
             hl.tstruct(metric=hl.tfloat64),
         )
 
-        result_all = compute_oe_upper_percentile_thresholds(
-            ht, ht.metric, percentiles=(50,)
-        )
-        result_filtered = compute_oe_upper_percentile_thresholds(
+        result_all = compute_percentile_thresholds(ht, ht.metric, percentiles=(50,))
+        result_filtered = compute_percentile_thresholds(
             ht,
             ht.metric,
             outlier_expr=hl.literal(False),
@@ -481,7 +477,7 @@ class TestComputeOeUpperPercentileThresholds:
             hl.tstruct(metric=hl.tfloat64, include=hl.tbool, is_outlier=hl.tbool),
         )
 
-        result = compute_oe_upper_percentile_thresholds(
+        result = compute_percentile_thresholds(
             ht,
             ht.metric,
             outlier_expr=ht.is_outlier,
@@ -494,11 +490,11 @@ class TestComputeOeUpperPercentileThresholds:
 
 
 class TestRankVsThresholdBinning:
-    """Compare rank_and_assign_bins and compute_oe_upper_percentile_thresholds.
+    """Compare rank_and_assign_bins and compute_percentile_thresholds.
 
     rank_and_assign_bins assigns bins by exact row rank (deterministic for
     distinct values, arbitrary tie-breaking for duplicates).
-    compute_oe_upper_percentile_thresholds computes approximate quantile
+    compute_percentile_thresholds computes approximate quantile
     thresholds — binning by value comparison puts all tied rows in the same bin.
 
     These should agree when all values are distinct but can diverge when many
@@ -522,7 +518,7 @@ class TestRankVsThresholdBinning:
         rank_bins = {r.id: r.bins.bin_decile for r in rank_rows}
 
         # Threshold-based decile bins (boundaries at 10th, 20th, ..., 90th).
-        thresholds = compute_oe_upper_percentile_thresholds(
+        thresholds = compute_percentile_thresholds(
             ht, ht.val, percentiles=tuple(range(10, 100, 10))
         )
         threshold_list = [thresholds[p] for p in sorted(thresholds)]
@@ -550,9 +546,7 @@ class TestRankVsThresholdBinning:
         )
 
         # Threshold-based: all 0.1 rows must be in the same bin, all 0.9 in another.
-        thresholds = compute_oe_upper_percentile_thresholds(
-            ht, ht.val, percentiles=(50,)
-        )
+        thresholds = compute_percentile_thresholds(ht, ht.val, percentiles=(50,))
         rows = ht.collect()
         low_bins = set()
         high_bins = set()
@@ -602,9 +596,7 @@ class TestRankVsThresholdBinning:
         )
 
         # Threshold at the 50th percentile.
-        thresholds = compute_oe_upper_percentile_thresholds(
-            ht, ht.val, percentiles=(50,)
-        )
+        thresholds = compute_percentile_thresholds(ht, ht.val, percentiles=(50,))
         # The 50th pct threshold should be ~0.5 (the tied value), so all 0.5
         # rows fall at or above it → threshold bin 1, and the outlier also bin 1.
         # But with rank-based bins, about half the 0.5 rows are in bin 0 and
@@ -694,7 +686,7 @@ class TestSingleVariantCountExpr:
 
     def test_raises_when_no_ht_or_freq(self):
         """Test that ValueError is raised when neither ht nor freq_expr is given."""
-        with pytest.raises(ValueError, match="Either `ht` or `freq_expr`"):
+        with pytest.raises(ValueError, match="Either ht or freq_expr"):
             variant_observed_expr()
 
     def test_max_af_zero_filters_all(self):
@@ -866,7 +858,7 @@ class TestGetCountsAggExpr:
 
     def test_raises_when_no_ht_or_freq(self):
         """Test that ValueError is raised when neither ht nor freq_expr is given."""
-        with pytest.raises(ValueError, match="Either `ht` or `freq_expr`"):
+        with pytest.raises(ValueError, match="Either ht or freq_expr"):
             counts_agg_expr(freq_expr=None, ht=None)
 
     def test_ht_only_no_freq_expr(self, sample_table):

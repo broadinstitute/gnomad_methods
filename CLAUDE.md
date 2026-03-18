@@ -214,7 +214,8 @@ from gnomad.utils.constraint import (
     get_constraint_flags,
     # Ranking & binning
     rank_and_assign_bins,
-    compute_oe_upper_percentile_thresholds,
+    compute_percentile_thresholds,
+    annotate_bins_by_threshold,
 )
 ```
 

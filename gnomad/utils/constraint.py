@@ -2699,10 +2699,18 @@ def rank_and_assign_bins(
 ) -> hl.StructExpression:
     """Rank rows by a numeric expression and assign bin labels.
 
+    **Rank-based binning**: every row receives a unique position in the sorted
+    order, and bins are derived from that position. This differs from
+    threshold-based binning (see :func:`annotate_bins_by_threshold`), where
+    bins are assigned by comparing values against pre-computed boundary values.
+
     Rows are ordered ascending by ``value_expr``. Each row is assigned a
     0-based ``rank`` and a ``bin_{name}`` field for every entry in
     ``bin_granularities``, computed as
     ``hl.int(rank * multiplier / n_rows)``.
+
+    Used by :func:`rank_array_element_metrics` to rank metrics within array
+    elements.
 
     :param value_expr: Numeric expression to rank by (ascending).
     :param bin_granularities: Mapping of bin name to multiplier. Each entry
@@ -2730,7 +2738,7 @@ def rank_and_assign_bins(
     return ranked_ht.key_by(*source_key)[ht.key]
 
 
-def compute_oe_upper_percentile_thresholds(
+def compute_percentile_thresholds(
     ht: hl.Table,
     metric_expr: hl.expr.Float64Expression,
     outlier_expr: Optional[hl.expr.BooleanExpression] = None,
@@ -2738,12 +2746,21 @@ def compute_oe_upper_percentile_thresholds(
     percentiles: Tuple[float, ...] = (1, 5, 10, 15, 25, 50, 75),
     quantile_k: int = 1000,
 ) -> Dict[float, float]:
-    """
-    Compute approximate percentile thresholds for a metric expression.
+    """Compute approximate percentile thresholds for a metric expression.
 
-    Optionally filters to a subset of rows (e.g., representative transcripts)
-    and excludes outliers, then computes approximate quantile thresholds at the
-    requested percentiles in a single aggregation pass.
+    **Threshold-based binning, step 1**: computes the boundary values that
+    define bin edges. The returned dict is passed to
+    :func:`annotate_bins_by_threshold` (step 2) to assign each row to a bin.
+
+    This two-step approach differs from rank-based binning (see
+    :func:`rank_and_assign_bins`), where every row receives a unique position
+    in the sorted order. Threshold-based binning allows thresholds to be
+    computed on a filtered subset (e.g., representative transcripts) and then
+    applied to all rows, so multiple rows can share the same bin.
+
+    Optionally filters to a subset of rows and excludes outliers, then
+    computes approximate quantile thresholds at the requested percentiles in
+    a single aggregation pass.
 
     .. note::
 
@@ -2784,3 +2801,164 @@ def compute_oe_upper_percentile_thresholds(
     )
 
     return dict(zip(percentiles, result.thresholds))
+
+
+def annotate_bins_by_threshold(
+    ht: hl.Table,
+    metric_exprs: Dict[str, hl.expr.Float64Expression],
+    thresholds: Dict[Tuple[str, str], List[float]],
+    granularities: Union[List[str], Tuple[str, ...]],
+    field_name: str = "constraint_bins",
+) -> hl.Table:
+    """
+    Annotate rows with bin assignments using pre-computed thresholds.
+
+    **Threshold-based binning, step 2**: assigns each row to a bin by
+    comparing its metric value against boundary values produced by
+    :func:`compute_percentile_thresholds` (step 1). For each
+    ``(granularity, metric)`` pair, the bin equals the number of threshold
+    boundaries the value exceeds. Bin 0 is the most constrained (below all
+    thresholds); bin N means the value exceeds all N boundaries.
+
+    This differs from rank-based binning (see :func:`rank_and_assign_bins`),
+    where every row gets a unique position. Here, multiple rows can share a
+    bin, and the thresholds may have been derived from a different subset of
+    rows than those being annotated.
+
+    :param ht: Input Table.
+    :param metric_exprs: Mapping of metric name to the Float64Expression to
+        bin (e.g. ``{"lof": ht.lof_oe_upper, "mis": ht.mis_oe_upper}``).
+    :param thresholds: Mapping of ``(granularity, metric)`` to an ordered list
+        of threshold values, as produced by
+        :func:`compute_percentile_thresholds`.
+    :param granularities: Granularity names to iterate over (e.g.
+        ``["decile", "ventile"]``). Each must appear as the first element of
+        at least one key in ``thresholds``.
+    :param field_name: Name of the struct field to annotate on ``ht``.
+        Default is ``"constraint_bins"``.
+    :return: Table with an added struct field containing per-granularity,
+        per-metric bin assignments.
+    """
+    miss = hl.missing(hl.tint32)
+
+    def _bin_expr(
+        value_expr: hl.expr.Float64Expression,
+        threshold_list: List[float],
+    ) -> hl.expr.Int32Expression:
+        """Count how many thresholds a value exceeds.
+
+        :param value_expr: Metric value to bin.
+        :param threshold_list: Ordered list of boundary values.
+        :return: Number of boundaries exceeded (0 = below all thresholds).
+        """
+        arr = hl.literal(threshold_list)
+        return hl.sum(arr.map(lambda t: hl.int(value_expr >= t)))
+
+    granularities_expr = {
+        gran: hl.struct(
+            **{
+                metric: hl.if_else(
+                    hl.is_defined(metric_exprs[metric]),
+                    _bin_expr(metric_exprs[metric], thresholds[(gran, metric)]),
+                    miss,
+                )
+                for metric in metric_exprs
+            }
+        )
+        for gran in granularities
+    }
+
+    return ht.annotate(**{field_name: hl.struct(**granularities_expr)})
+
+
+def rank_array_element_metrics(
+    ht: hl.Table,
+    array_field: str,
+    element_value_fn: Callable[
+        [hl.expr.StructExpression], Dict[str, hl.expr.Float64Expression]
+    ],
+    filter_fn: Optional[Callable[[hl.Table], hl.expr.BooleanExpression]] = None,
+    bin_granularities: Optional[Dict[str, int]] = None,
+) -> hl.Table:
+    """
+    Rank metrics within array elements and annotate rank structs back.
+
+    **Rank-based binning for array fields**: applies
+    :func:`rank_and_assign_bins` independently to each element of an array
+    field. For each element, ``element_value_fn`` extracts named metric
+    values, which are ranked across rows (optionally on a filtered subset
+    via ``filter_fn``). Each array element is then annotated with
+    ``{metric_name}_rank`` structs containing rank and bin fields.
+
+    Rows not matching ``filter_fn`` get missing rank annotations.
+
+    This differs from threshold-based binning (see
+    :func:`compute_percentile_thresholds` and
+    :func:`annotate_bins_by_threshold`), where bins are assigned by
+    comparing values against pre-computed boundaries rather than sorted
+    position.
+
+    :param ht: Input Table.
+    :param array_field: Name of the array field on ``ht``.
+    :param element_value_fn: Function that takes an array element
+        (StructExpression) and returns a dict mapping metric names to
+        Float64Expressions to rank. Applied identically to every element.
+    :param filter_fn: Optional function that takes a Table and returns a
+        BooleanExpression to filter rows before ranking. When None, all
+        rows are ranked.
+    :param bin_granularities: Bin granularities passed to
+        :func:`rank_and_assign_bins`.
+    :return: Table with ``{metric_name}_rank`` structs added to each array
+        element. The table is returned keyed by an internal ``_rank_idx``
+        integer index.
+    """
+    ht = ht.add_index("_rank_idx").key_by("_rank_idx").cache()
+
+    subset_ht = ht.filter(filter_fn(ht)) if filter_fn is not None else ht
+
+    # Extract values to rank using element_value_fn applied via .map().
+    subset_ht = subset_ht.select(
+        _rank_values=subset_ht[array_field].map(
+            lambda elem: hl.struct(**element_value_fn(elem))
+        )
+    ).naive_coalesce(100)
+
+    # Determine element count and metric names from a sample row.
+    sample = subset_ht.take(1)[0]._rank_values
+    n_elements = len(sample)
+    metric_names = list(sample[0])
+
+    # Rank each metric within each array element.
+    subset_ht = subset_ht.annotate(
+        _rank_values=[
+            hl.struct(
+                **{
+                    name: rank_and_assign_bins(
+                        subset_ht._rank_values[i][name], bin_granularities
+                    )
+                    for name in metric_names
+                }
+            )
+            for i in range(n_elements)
+        ]
+    ).cache()
+
+    # Join ranks back to the original table.
+    rank_lookup = subset_ht[ht._rank_idx]
+    ht = ht.annotate(
+        **{
+            array_field: hl.if_else(
+                hl.is_defined(rank_lookup._rank_values),
+                hl.map(
+                    lambda elem, ranks: elem.annotate(
+                        **{f"{name}_rank": ranks[name] for name in metric_names}
+                    ),
+                    ht[array_field],
+                    rank_lookup._rank_values,
+                ),
+                ht[array_field],
+            )
+        }
+    )
+
+    return ht

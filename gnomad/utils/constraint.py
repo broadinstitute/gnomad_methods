@@ -170,7 +170,9 @@ def _resolve_annotation_expr(
 
     expr_param_name = expr_param_name or "expr"
     if expr is None and annotation_name in t.row:
-        logger.info(f"{expr_param_name} was not provided, using '{annotation_name}'.")
+        logger.info(
+            "%s was not provided, using '%s'.", expr_param_name, annotation_name
+        )
         expr = t[annotation_name]
     elif expr is None:
         raise ValueError(
@@ -2468,11 +2470,18 @@ def _oe_ci_gamma(
     :param alpha: Significance level. Default is 0.05.
     :return: Struct with ``lower`` and ``upper`` bounds.
     """
+    try:
+        qgamma = hl.qgamma
+    except AttributeError:
+        raise RuntimeError(
+            "_oe_ci_gamma requires hl.qgamma, available in Hail >= 0.2.137. "
+            "Use method='poisson' or upgrade Hail."
+        )
     shape = obs_expr + hl.literal(1.0)
     scale = divide_null(hl.literal(1.0), exp_expr)
     return hl.struct(
-        lower=hl.qgamma(hl.literal(alpha), shape, scale),
-        upper=hl.qgamma(hl.literal(1.0 - alpha), shape, scale),
+        lower=qgamma(hl.literal(alpha), shape, scale),
+        upper=qgamma(hl.literal(1.0 - alpha), shape, scale),
     )
 
 

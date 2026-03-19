@@ -2918,9 +2918,9 @@ def rank_array_element_metrics(
     :param bin_granularities: Bin granularities passed to
         :func:`rank_and_assign_bins`.
     :return: Table with ``{metric_name}_rank`` structs added to each array
-        element. The table is returned keyed by an internal ``_rank_idx``
-        integer index.
+        element. The table is returned with its original key restored.
     """
+    original_key = list(ht.key)
     ht = ht.add_index("_rank_idx").key_by("_rank_idx").cache()
 
     subset_ht = ht.filter(filter_fn(ht)) if filter_fn is not None else ht
@@ -2952,22 +2952,25 @@ def rank_array_element_metrics(
         ]
     ).cache()
 
-    # Join ranks back to the original table.
-    rank_lookup = subset_ht[ht._rank_idx]
+    # Join ranks back to the original table. Use or_missing so that
+    # unranked rows get correctly-typed missing rank annotations without
+    # needing a manually-constructed missing struct for if_else.
+    ht = ht.annotate(_ranks=subset_ht[ht._rank_idx]._rank_values)
     ht = ht.annotate(
         **{
-            array_field: hl.if_else(
-                hl.is_defined(rank_lookup._rank_values),
-                hl.map(
-                    lambda elem, ranks: elem.annotate(
-                        **{f"{name}_rank": ranks[name] for name in metric_names}
-                    ),
-                    ht[array_field],
-                    rank_lookup._rank_values,
-                ),
-                ht[array_field],
-            )
+            array_field: [
+                ht[array_field][i].annotate(
+                    **{
+                        f"{name}_rank": hl.or_missing(
+                            hl.is_defined(ht._ranks),
+                            ht._ranks[i][name],
+                        )
+                        for name in metric_names
+                    }
+                )
+                for i in range(n_elements)
+            ]
         }
-    )
+    ).drop("_ranks")
 
-    return ht
+    return ht.key_by(*original_key).drop("_rank_idx")

@@ -2937,7 +2937,7 @@ def rank_array_element_metrics(
         _rank_values=subset_ht[array_field].map(
             lambda elem: hl.struct(**element_value_fn(elem))
         )
-    )
+    ).cache()
 
     # Determine element count and metric names from a sample row.
     sample = subset_ht.take(1)[0]._rank_values

@@ -2705,6 +2705,7 @@ def add_gencode_transcript_annotations(
 def rank_and_assign_bins(
     value_expr: hl.expr.Float64Expression,
     bin_granularities: Optional[Dict[str, int]] = None,
+    prefix: str = "",
 ) -> hl.StructExpression:
     """Rank rows by a numeric expression and assign bin labels.
 
@@ -2714,8 +2715,8 @@ def rank_and_assign_bins(
     bins are assigned by comparing values against pre-computed boundary values.
 
     Rows are ordered ascending by ``value_expr``. Each row is assigned a
-    0-based ``rank`` and a ``bin_{name}`` field for every entry in
-    ``bin_granularities``, computed as
+    0-based ``{prefix}rank`` and a ``{prefix}bin_{name}`` field for every
+    entry in ``bin_granularities``, computed as
     ``hl.int(rank * multiplier / n_rows)``.
 
     Used by :func:`rank_array_element_metrics` to rank metrics within array
@@ -2723,10 +2724,12 @@ def rank_and_assign_bins(
 
     :param value_expr: Numeric expression to rank by (ascending).
     :param bin_granularities: Mapping of bin name to multiplier. Each entry
-        produces a ``bin_{name}`` field. Default is
+        produces a ``{prefix}bin_{name}`` field. Default is
         ``{"percentile": 100, "decile": 10, "sextile": 6}``.
-    :return: Struct with ``rank`` and ``bin_{name}`` fields for each entry in
-        ``bin_granularities``.
+    :param prefix: String prepended to ``rank`` and ``bin_{name}`` field
+        names. Default is ``""`` (no prefix).
+    :return: Struct with ``{prefix}rank`` and ``{prefix}bin_{name}`` fields
+        for each entry in ``bin_granularities``.
     """
     if bin_granularities is None:
         bin_granularities = {"percentile": 100, "decile": 10, "sextile": 6}
@@ -2737,9 +2740,9 @@ def rank_and_assign_bins(
     ranked_ht = ht.select(_=value_expr).order_by("_").add_index("rank")
     ranked_ht = ranked_ht.select(
         *source_key,
-        "rank",
+        **{f"{prefix}rank": ranked_ht.rank},
         **{
-            f"bin_{name}": hl.int(ranked_ht.rank * multiplier / n_rows)
+            f"{prefix}bin_{name}": hl.int(ranked_ht.rank * multiplier / n_rows)
             for name, multiplier in bin_granularities.items()
         },
     ).cache()
@@ -2888,6 +2891,7 @@ def rank_array_element_metrics(
     ],
     filter_fn: Optional[Callable[[hl.Table], hl.expr.BooleanExpression]] = None,
     bin_granularities: Optional[Dict[str, int]] = None,
+    rank_field_prefix: str = "",
 ) -> hl.Table:
     """
     Rank metrics within array elements and annotate rank structs back.
@@ -2917,6 +2921,9 @@ def rank_array_element_metrics(
         rows are ranked.
     :param bin_granularities: Bin granularities passed to
         :func:`rank_and_assign_bins`.
+    :param rank_field_prefix: Prefix for the ``rank`` and ``bin_{name}``
+        sub-fields within each rank struct. Passed through to
+        :func:`rank_and_assign_bins`. Default is ``""`` (no prefix).
     :return: Table with ``{metric_name}_rank`` structs added to each array
         element. The table is returned with its original key restored.
     """
@@ -2930,7 +2937,7 @@ def rank_array_element_metrics(
         _rank_values=subset_ht[array_field].map(
             lambda elem: hl.struct(**element_value_fn(elem))
         )
-    ).naive_coalesce(100)
+    )
 
     # Determine element count and metric names from a sample row.
     sample = subset_ht.take(1)[0]._rank_values
@@ -2943,7 +2950,9 @@ def rank_array_element_metrics(
             hl.struct(
                 **{
                     name: rank_and_assign_bins(
-                        subset_ht._rank_values[i][name], bin_granularities
+                        subset_ht._rank_values[i][name],
+                        bin_granularities,
+                        prefix=rank_field_prefix,
                     )
                     for name in metric_names
                 }

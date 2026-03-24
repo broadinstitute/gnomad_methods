@@ -47,7 +47,8 @@ GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
 EXOME_AN_RELEASES = ["4.1"]
 GENOME_AN_RELEASES = ["4.1"]
 
-CONSTRAINT_RELEASES = ["4.1", "4.1.1"]
+CONSTRAINT_RELEASES = ["4.0", "4.1", "4.1.1"]
+CONSTRAINT_MUTATION_RATE_RELEASES = ["4.1.1"]
 
 DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
@@ -426,7 +427,7 @@ def _public_constraint_ht_path(version: str) -> str:
     """
     Get public constraint table path.
 
-    :param version: One of the release versions of gnomAD on GRCh38.
+    :param version: One of the constraint release versions of gnomAD on GRCh38.
     :return: Path to gene constraint Table.
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
@@ -436,7 +437,7 @@ def _public_constraint_mutation_rate_ht_path(version: str) -> str:
     """
     Get public constraint mutation rate table path.
 
-    :param version: One of the constraint release versions of gnomAD on GRCh38.
+    :param version: One of the constraint mutation rate release versions of gnomAD on GRCh38.
     :return: Path to mutation rate Table.
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/model/gnomad.v{version}.mutation_rate.ht"
@@ -867,7 +868,7 @@ def constraint_mutation_rate() -> VersionedTableResource:
             release: GnomadPublicTableResource(
                 path=_public_constraint_mutation_rate_ht_path(release)
             )
-            for release in CONSTRAINT_RELEASES
+            for release in CONSTRAINT_MUTATION_RATE_RELEASES
         },
     )
 

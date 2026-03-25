@@ -1,7 +1,7 @@
 # noqa: D100
 
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import hail as hl
 
@@ -34,8 +34,12 @@ CURRENT_GENOME_COVERAGE_RELEASE = "3.0.1"
 CURRENT_EXOME_AN_RELEASE = "4.1"
 CURRENT_GENOME_AN_RELEASE = "4.1"
 
+
 EXOME_RELEASES = ["4.0", "4.1", "4.1.1"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2", "4.0", "4.1", "4.1.1"]
+
+CURRENT_CONSTRAINT_RELEASE = "4.1.1"
+
 JOINT_RELEASES = ["4.1"]
 BROWSER_RELEASES = ["4.1", "4.1.1"]
 
@@ -44,6 +48,9 @@ GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
 
 EXOME_AN_RELEASES = ["4.1"]
 GENOME_AN_RELEASES = ["4.1"]
+
+CONSTRAINT_RELEASES = ["4.0", "4.1", "4.1.1"]
+CONSTRAINT_MUTATION_RATE_RELEASES = ["4.1.1"]
 
 DATA_TYPES = ["exomes", "genomes", "joint"]
 MAJOR_RELEASES = ["v3", "v4"]
@@ -422,10 +429,20 @@ def _public_constraint_ht_path(version: str) -> str:
     """
     Get public constraint table path.
 
-    :param version: One of the release versions of gnomAD on GRCh38.
+    :param version: One of the constraint release versions of gnomAD on GRCh38.
     :return: Path to gene constraint Table.
     """
     return f"gs://gnomad-public-requester-pays/release/{version}/constraint/gnomad.v{version}.constraint_metrics.ht"
+
+
+def _public_constraint_mutation_rate_ht_path(version: str) -> str:
+    """
+    Get public constraint mutation rate table path.
+
+    :param version: One of the constraint mutation rate release versions of gnomAD on GRCh38.
+    :return: Path to mutation rate Table.
+    """
+    return f"gs://gnomad-public-requester-pays/release/{version}/constraint/model/gnomad.v{version}.mutation_rate.ht"
 
 
 def _public_browser_variant_ht_path(version: str) -> str:
@@ -604,8 +621,6 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
     """
     Add a grpMaxFAF95 struct with 'grpmax' and 'grpmax_gen_anc'.
 
-    Also includes a jointGrpMaxFAF95 annotation using the v4 fafmax and joint_fafmax structures.
-
     :param ht: Input hail table.
     :return: Annotated hail table.
     """
@@ -617,10 +632,6 @@ def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:
         grpMaxFAF95=hl.struct(
             grpmax=fafmax_field.faf95_max,
             grpmax_gen_anc=fafmax_field.faf95_max_gen_anc,
-        ),
-        jointGrpMaxFAF95=hl.struct(
-            grpmax=ht.joint_fafmax.faf95_max,
-            grpmax_gen_anc=ht.joint_fafmax.faf95_max_gen_anc,
         ),
     )
     return ht
@@ -637,23 +648,27 @@ def gnomad_gks(
     skip_checkpoint: bool = False,
     skip_coverage: bool = False,
     custom_coverage_ht: hl.Table = None,
-) -> list:
+    skip_joint_metrics: bool = False,
+    custom_joint_ht: hl.Table = None,
+) -> List[Dict[str, Any]]:
     """
     Perform gnomad GKS annotations on a range of variants at once.
 
     :param locus_interval: Hail IntervalExpression of locus<reference_genome>.
         e.g. hl.locus_interval('chr1', 6424776, 6461367, reference_genome="GRCh38")
     :param version: String of version of gnomAD release to use.
-    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired.
-    :param by_gen_anc_group: Boolean to pass to obtain frequency information for each cohort.
-    :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex.
+    :param data_type: String of either "exomes" or "genomes" for the type of reads that are desired. Default is "genomes".
+    :param by_gen_anc_group: Boolean to pass to obtain frequency information for each cohort. Default is False.
+    :param by_sex: Boolean to pass to return frequency information for each cohort split by chromosomal sex. Default is False.
     :param vrs_only: Boolean to pass for only VRS info to be returned
-        (will not include allele frequency information).
-    :param custom_ht: Table to use instead of what public_release() method would return for the version.
+        (will not include allele frequency information). Default is False.
+    :param custom_ht: Table to use instead of what public_release() method would return for the version. Default is None.
     :param skip_checkpoint: Bool to pass to skip checkpointing selected fields
-        (checkpointing may be desirable for large datasets by reducing data copies across the cluster).
-    :param skip_coverage: Bool to pass to skip adding coverage statistics.
-    :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table.
+        (checkpointing may be desirable for large datasets by reducing data copies across the cluster). Default is False.
+    :param skip_coverage: Bool to pass to skip adding coverage statistics. Default is False.
+    :param custom_coverage_ht: Custom table to use for coverage statistics instead of the release coverage table. Default is None.
+    :param skip_joint_metrics: Bool to pass to skip adding joint FAF metrics from the joint table. Default is False.
+    :param custom_joint_ht: Custom joint table to use instead of the public release joint table. Default is None.
     :return: List of dictionaries containing VRS information
         (and freq info split by ancestry groups and sex if desired) for specified variant.
     """
@@ -662,6 +677,11 @@ def gnomad_gks(
     if high_level_version != "v4":
         raise NotImplementedError(
             "gnomad_gks() is currently only implemented for gnomAD v4."
+        )
+
+    if data_type not in ["exomes", "genomes"]:
+        raise NotImplementedError(
+            "gnomad_gks() is currently only implemented for gnomAD exomes and genomes."
         )
 
     # Read public_release table if no custom table provided.
@@ -693,10 +713,28 @@ def gnomad_gks(
         ht = ht.annotate(mean_depth=coverage_ht[ht.locus].mean)
         ht = ht.annotate(fraction_cov_over_20=coverage_ht[ht.locus].over_20)
 
-    # Retrieve genetic ancestry groups from the imported GEN_ANC_NAMES dictionary.
-    grps_list = (
-        list(GEN_ANC_NAMES[high_level_version][data_type]) if by_gen_anc_group else None
-    )
+    # Join joint table to add joint FAF metrics if requested.
+    if not skip_joint_metrics:
+        if custom_joint_ht:
+            joint_ht = custom_joint_ht
+        else:
+            joint_ht = hl.read_table(public_release("joint").versions[version].path)
+        ht = ht.annotate(
+            jointGrpMaxFAF95=hl.struct(
+                grpmax=joint_ht[ht.key].joint.fafmax.faf95_max,
+                grpmax_gen_anc=joint_ht[ht.key].joint.fafmax.faf95_max_gen_anc,
+            )
+        )
+
+    # Determine which genetic ancestry groups to include (list of group IDs).
+    if by_gen_anc_group:
+        if data_type not in GEN_ANC_GROUPS[high_level_version]:
+            raise NotImplementedError(
+                f"No genetic ancestry group list configured for {high_level_version} {data_type}."
+            )
+        grps_list = list(GEN_ANC_GROUPS[high_level_version][data_type])
+    else:
+        grps_list = None
 
     # Throw warnings if contradictory arguments are passed.
     if by_gen_anc_group and vrs_only:
@@ -760,7 +798,9 @@ def gnomad_gks(
     # then return list
     outputs = []
     for variant in variant_list:
-        vrs_variant = add_gks_vrs(variant.locus, variant.vrs)
+        # After the update to ga4gh.vrs 2.2.0, we now return
+        # information for the reference as well as alternate allele
+        vrs_variants = add_gks_vrs(variant.locus, variant.vrs)
 
         out = {
             "locus": {
@@ -769,7 +809,7 @@ def gnomad_gks(
                 "reference_genome": variant.locus.reference_genome.name,
             },
             "alleles": variant.alleles,
-            "gks_vrs_variant": vrs_variant,
+            "gks_vrs_variants": vrs_variants,
         }
 
         if not vrs_only:
@@ -784,7 +824,7 @@ def gnomad_gks(
             )
 
             # Assign existing VRS information to "focusAllele" key
-            va_freq_dict["focusAllele"] = vrs_variant
+            va_freq_dict["focusAllele"] = vrs_variants[1]
             out["gks_va_freq"] = va_freq_dict
 
         # Append variant dictionary to list of outputs
@@ -810,10 +850,27 @@ def constraint() -> VersionedTableResource:
     :return: Gene constraint Table.
     """
     return VersionedTableResource(
-        CURRENT_EXOME_RELEASE,
+        CURRENT_CONSTRAINT_RELEASE,
         {
             release: GnomadPublicTableResource(path=_public_constraint_ht_path(release))
-            for release in EXOME_RELEASES
+            for release in CONSTRAINT_RELEASES
+        },
+    )
+
+
+def constraint_mutation_rate() -> VersionedTableResource:
+    """
+    Retrieve constraint mutation rate Table.
+
+    :return: Mutation rate Table.
+    """
+    return VersionedTableResource(
+        CURRENT_CONSTRAINT_RELEASE,
+        {
+            release: GnomadPublicTableResource(
+                path=_public_constraint_mutation_rate_ht_path(release)
+            )
+            for release in CONSTRAINT_MUTATION_RATE_RELEASES
         },
     )
 

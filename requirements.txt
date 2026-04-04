@@ -4,9 +4,6 @@ hail
 hdbscan
 ipywidgets
 networkx
-onnx>=1.18.0
-onnxruntime
 scikit-learn
-skl2onnx
 slackclient==2.5.0
 statsmodels

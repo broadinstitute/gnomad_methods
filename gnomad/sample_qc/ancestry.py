@@ -7,12 +7,8 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 import hail as hl
 import numpy as np
-import onnx
-import onnxruntime as rt
 import pandas as pd
 from hail.utils import new_temp_file
-from skl2onnx import convert_sklearn
-from skl2onnx.common.data_types import FloatTensorType
 
 from gnomad.utils.filtering import filter_to_autosomes
 
@@ -127,7 +123,7 @@ def pc_project(
 
 
 def apply_onnx_classification_model(
-    data_pd: pd.DataFrame, fit: onnx.ModelProto
+    data_pd: pd.DataFrame, fit: "onnx.ModelProto"
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """
     Apply an ONNX classification model `fit` to a pandas dataframe `data_pd`.
@@ -136,6 +132,9 @@ def apply_onnx_classification_model(
     :param fit: ONNX model to be applied.
     :return: Tuple of classification and probabilities.
     """
+    import onnx
+    import onnxruntime as rt
+
     if not isinstance(fit, onnx.ModelProto):
         raise TypeError("The model supplied is not an onnx model!")
 
@@ -183,7 +182,7 @@ def apply_sklearn_classification_model(
 
 def convert_sklearn_rf_to_onnx(
     fit: Any, target_opset: Optional[int] = None
-) -> onnx.ModelProto:
+) -> "onnx.ModelProto":
     """
     Convert a sklearn random forest model to ONNX.
 
@@ -191,6 +190,8 @@ def convert_sklearn_rf_to_onnx(
     :param target_opset: An optional target ONNX opset version to convert the model to.
     :return: ONNX model.
     """
+    from skl2onnx import convert_sklearn
+    from skl2onnx.common.data_types import FloatTensorType
     from sklearn.utils.validation import check_is_fitted
 
     try:

@@ -123,7 +123,7 @@ def pc_project(
 
 
 def apply_onnx_classification_model(
-    data_pd: pd.DataFrame, fit: "onnx.ModelProto"
+    data_pd: pd.DataFrame, fit: Any
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """
     Apply an ONNX classification model `fit` to a pandas dataframe `data_pd`.
@@ -180,9 +180,7 @@ def apply_sklearn_classification_model(
     return classification, probs
 
 
-def convert_sklearn_rf_to_onnx(
-    fit: Any, target_opset: Optional[int] = None
-) -> "onnx.ModelProto":
+def convert_sklearn_rf_to_onnx(fit: Any, target_opset: Optional[int] = None) -> Any:
     """
     Convert a sklearn random forest model to ONNX.
 

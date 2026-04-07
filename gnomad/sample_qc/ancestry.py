@@ -132,8 +132,8 @@ def apply_onnx_classification_model(
     :param fit: ONNX model to be applied.
     :return: Tuple of classification and probabilities.
     """
-    import onnx
-    import onnxruntime as rt
+    import onnx  # pylint: disable=import-error
+    import onnxruntime as rt  # pylint: disable=import-error
 
     if not isinstance(fit, onnx.ModelProto):
         raise TypeError("The model supplied is not an onnx model!")
@@ -190,8 +190,10 @@ def convert_sklearn_rf_to_onnx(
     :param target_opset: An optional target ONNX opset version to convert the model to.
     :return: ONNX model.
     """
-    from skl2onnx import convert_sklearn
-    from skl2onnx.common.data_types import FloatTensorType
+    from skl2onnx import convert_sklearn  # pylint: disable=import-error
+    from skl2onnx.common.data_types import (  # pylint: disable=import-error
+        FloatTensorType,
+    )
     from sklearn.utils.validation import check_is_fitted
 
     try:

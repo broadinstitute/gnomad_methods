@@ -467,7 +467,7 @@ def _public_browser_gene_ht_path() -> str:
 
     :return: Path to browser gene Table.
     """
-    return "gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.pext.ht"
+    return "gs://gnomad-public-requester-pays/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.pext.flags.ht"
 
 
 def public_release(data_type: str) -> VersionedTableResource:

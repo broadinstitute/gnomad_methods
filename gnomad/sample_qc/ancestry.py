@@ -7,12 +7,8 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 import hail as hl
 import numpy as np
-import onnx
-import onnxruntime as rt
 import pandas as pd
 from hail.utils import new_temp_file
-from skl2onnx import convert_sklearn
-from skl2onnx.common.data_types import FloatTensorType
 
 from gnomad.utils.filtering import filter_to_autosomes
 
@@ -127,15 +123,32 @@ def pc_project(
 
 
 def apply_onnx_classification_model(
-    data_pd: pd.DataFrame, fit: onnx.ModelProto
+    data_pd: pd.DataFrame, fit: Any
 ) -> Tuple[np.ndarray, pd.DataFrame]:
     """
     Apply an ONNX classification model `fit` to a pandas dataframe `data_pd`.
+
+    .. note::
+        This function requires the ``onnx`` and ``onnxruntime`` packages, which
+        are not included in the default gnomad_methods dependencies because they
+        conflict with hailctl's protobuf pin. Install them separately with
+        ``pip install onnx onnxruntime``.
 
     :param data_pd: Pandas dataframe containing the data to be classified.
     :param fit: ONNX model to be applied.
     :return: Tuple of classification and probabilities.
     """
+    try:
+        import onnx  # pylint: disable=import-error
+        import onnxruntime as rt  # pylint: disable=import-error
+    except ImportError as e:
+        raise ImportError(
+            "This function requires the 'onnx' and 'onnxruntime' packages, which"
+            " are not included in the default gnomad_methods dependencies because"
+            " they conflict with hailctl's protobuf pin. Install them with:"
+            " pip install onnx onnxruntime"
+        ) from e
+
     if not isinstance(fit, onnx.ModelProto):
         raise TypeError("The model supplied is not an onnx model!")
 
@@ -181,16 +194,32 @@ def apply_sklearn_classification_model(
     return classification, probs
 
 
-def convert_sklearn_rf_to_onnx(
-    fit: Any, target_opset: Optional[int] = None
-) -> onnx.ModelProto:
+def convert_sklearn_rf_to_onnx(fit: Any, target_opset: Optional[int] = None) -> Any:
     """
     Convert a sklearn random forest model to ONNX.
+
+    .. note::
+        This function requires the ``skl2onnx`` package, which is not included
+        in the default gnomad_methods dependencies because onnx packages conflict
+        with hailctl's protobuf pin. Install it separately with
+        ``pip install skl2onnx``.
 
     :param fit: Sklearn random forest model to be converted.
     :param target_opset: An optional target ONNX opset version to convert the model to.
     :return: ONNX model.
     """
+    try:
+        from skl2onnx import convert_sklearn  # pylint: disable=import-error
+        from skl2onnx.common.data_types import (  # pylint: disable=import-error
+            FloatTensorType,
+        )
+    except ImportError as e:
+        raise ImportError(
+            "This function requires the 'skl2onnx' package, which is not"
+            " included in the default gnomad_methods dependencies because onnx"
+            " packages conflict with hailctl's protobuf pin. Install it with:"
+            " pip install skl2onnx"
+        ) from e
     from sklearn.utils.validation import check_is_fitted
 
     try:

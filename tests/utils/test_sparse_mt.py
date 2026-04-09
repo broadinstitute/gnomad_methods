@@ -3,8 +3,12 @@
 import logging
 
 import hail as hl
+import pytest
 
-from gnomad.utils.sparse_mt import get_coverage_agg_func
+from gnomad.utils.sparse_mt import (
+    compute_allele_number_per_ref_site,
+    get_coverage_agg_func,
+)
 
 # Set up logger for tests.
 logger = logging.getLogger(__name__)
@@ -336,3 +340,159 @@ class TestGetCoverageAggFunc:
         assert result.mean == 27.5  # 275/10.
         # Values 35, 40, 45, 50 should be capped to 30, plus the original 30.
         assert result.coverage_counter.get(30, 0) == 5  # 4 capped + 1 original.
+
+
+class TestComputeAlleleNumberPerRefSiteReduceToMinimalGroups:
+    """Test that the reduce_to_minimal_groups optimization preserves AN values."""
+
+    @pytest.fixture
+    def synthetic_vds(self):
+        """Build a tiny VDS with 8 samples × 4 sites for AN testing.
+
+        The VDS has:
+          - 8 samples annotated with `gen_anc` (afr/nfe) and `sex` (XX/XY).
+          - 4 variant sites with explicit GT calls (some missing) for every
+            sample.
+          - A reference_data MT with 1-base ref blocks at the same loci, so
+            densification is essentially a no-op (we test the reduction
+            machinery, not the densification machinery).
+        """
+        samples = [
+            ("s1", "afr", "XX"),
+            ("s2", "afr", "XY"),
+            ("s3", "afr", "XX"),
+            ("s4", "afr", "XY"),
+            ("s5", "nfe", "XX"),
+            ("s6", "nfe", "XY"),
+            ("s7", "nfe", "XX"),
+            ("s8", "nfe", "XY"),
+        ]
+        positions = [1000, 2000, 3000, 4000]
+        variants = [
+            (hl.locus("chr1", p, reference_genome="GRCh38"), ["A", "T"])
+            for p in positions
+        ]
+        # Mix of called and missing genotypes so AN varies across sites and
+        # strata. Missing genotypes contribute 0 to AN; called diploid
+        # genotypes contribute 2.
+        gt_patterns = [
+            [(0, 0), (0, 1), (1, 1), (0, 1), (0, 0), (0, 1), (1, 1), (0, 1)],
+            [(0, 1), None, (0, 0), (0, 1), (0, 1), (1, 1), None, (0, 1)],
+            [None, (0, 0), (0, 1), (1, 1), (0, 0), (0, 0), (0, 1), (1, 1)],
+            [(1, 1), (0, 1), (0, 1), None, (1, 1), (0, 1), (0, 1), (0, 0)],
+        ]
+
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+        # Build the variant_data MT.
+        vd_entries = []
+        for v_idx, (locus, alleles) in enumerate(variants):
+            for s_idx, (sample_id, _, _) in enumerate(samples):
+                gt = gt_patterns[v_idx][s_idx]
+                vd_entries.append(
+                    {
+                        "locus": locus,
+                        "alleles": alleles,
+                        "s": sample_id,
+                        "GT": hl.call(*gt) if gt is not None else hl.missing(hl.tcall),
+                    }
+                )
+        vd = hl.Table.parallelize(
+            vd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(
+            gen_anc=sample_table[vd.s].gen_anc,
+            sex=sample_table[vd.s].sex,
+        )
+
+        # Build the reference_data MT: 1-base ref blocks at every variant
+        # locus. END = locus.position means the block covers exactly one
+        # position.
+        rd_entries = []
+        for locus, _ in variants:
+            for sample_id, _, _ in samples:
+                rd_entries.append(
+                    {
+                        "locus": locus,
+                        "s": sample_id,
+                        "END": locus.position,
+                        "LEN": 1,
+                    }
+                )
+        rd = hl.Table.parallelize(
+            rd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                END=hl.tint32,
+                LEN=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the four variant loci."""
+        positions = [1000, 2000, 3000, 4000]
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chr1", p, reference_genome="GRCh38")}
+                for p in positions
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    @staticmethod
+    def _index_an(ht):
+        """Return a dict mapping sorted strata items to lists of per-row AN."""
+        strata_meta = hl.eval(ht.strata_meta)
+        rows = ht.collect()
+        out = {}
+        for i, m in enumerate(strata_meta):
+            key = tuple(sorted(m.items()))
+            out[key] = [r.AN[i] for r in rows]
+        return out
+
+    def test_reduce_matches_full_with_gen_anc_and_sex(
+        self, synthetic_vds, reference_ht
+    ):
+        """compute_allele_number_per_ref_site(reduce=True) matches the full output."""
+        vd = synthetic_vds.variant_data
+        strata_expr = [
+            {"gen_anc": vd.gen_anc},
+            {"sex": vd.sex},
+            {"gen_anc": vd.gen_anc, "sex": vd.sex},
+        ]
+
+        full_ht = compute_allele_number_per_ref_site(
+            synthetic_vds, reference_ht, strata_expr=strata_expr
+        )
+        reduced_ht = compute_allele_number_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            strata_expr=strata_expr,
+            reduce_to_minimal_groups=True,
+        )
+
+        full_indexed = self._index_an(full_ht)
+        reduced_indexed = self._index_an(reduced_ht)
+
+        # The strata_meta key sets must match exactly — reduction is
+        # transparent to callers.
+        assert set(full_indexed.keys()) == set(reduced_indexed.keys())
+        # Sanity check: the parent {raw} entry must be present and was
+        # decomposed into the gen_anc-by-sex leaves.
+        assert (("group", "raw"),) in full_indexed
+
+        for key in full_indexed:
+            assert full_indexed[key] == reduced_indexed[key], key

@@ -12,8 +12,10 @@ from gnomad.utils.annotations import (
     add_gks_va,
     add_gks_vrs,
     annotate_downsamplings,
+    annotate_freq,
     check_annotation_missingness,
     fill_missing_key_combinations,
+    find_minimal_strata_groups,
     get_copy_state_by_sex,
     merge_array_expressions,
     merge_freq_arrays,
@@ -1614,7 +1616,8 @@ class TestGksVaFunctions:
         - `grpMaxFAF95` and `jointGrpMaxFAF95` store numeric FAF values in `frequency`
           (and use the genetic ancestry group label only for the `groupId` suffix).
         """
-        # Use a real-looking variant key with a long allele to exercise ID/groupId generation.
+        # Use a real-looking variant key with a long allele to exercise ID/groupId
+        # generation.
         contig = "chr1"
         position = 10108
         ref = "C"
@@ -1622,7 +1625,8 @@ class TestGksVaFunctions:
         gnomad_id = f"{contig}-{position}-{ref}-{alt}"
 
         # Construct a minimal Struct that satisfies the fields accessed by `add_gks_va`.
-        # Note: keep `filters` empty to avoid nondeterministic ordering from `list(set)`.
+        # Note: keep `filters` empty to avoid nondeterministic ordering from
+        # `list(set)`.
         input_struct = hl.eval(
             hl.struct(
                 locus=hl.locus(contig, position, reference_genome="GRCh38"),
@@ -1642,7 +1646,8 @@ class TestGksVaFunctions:
                     bin_edges=hl.literal(
                         [i / 20 for i in range(21)], hl.tarray(hl.tfloat64)
                     ),
-                    # Put counts in the last two bins so the skewed AB count is non-zero.
+                    # Put counts in the last two bins so the skewed AB count is
+                    # non-zero.
                     bin_freq=hl.literal([0] * 18 + [1, 2], hl.tarray(hl.tint64)),
                     n_smaller=hl.int64(0),
                     n_larger=hl.int64(0),
@@ -2046,3 +2051,309 @@ class TestCheckAnnotationMissingness:
         assert "field_a" in ht_result.row.dtype.fields
         assert "field_b" in ht_result.row.dtype.fields
         assert "field_c" in ht_result.row.dtype.fields
+
+
+class TestFindMinimalStrataGroups:
+    """Test the find_minimal_strata_groups function."""
+
+    def test_basic_adj_with_downsampling(self):
+        """Mixed adj/raw partition with gen_anc, sex, and downsampling axes."""
+        freq_meta = [
+            {"group": "adj"},
+            {"group": "raw"},
+            {"group": "adj", "gen_anc": "afr"},
+            {"group": "adj", "gen_anc": "nfe"},
+            {"group": "adj", "gen_anc": "afr", "sex": "XX"},
+            {"group": "adj", "gen_anc": "afr", "sex": "XY"},
+            {"group": "adj", "gen_anc": "nfe", "sex": "XX"},
+            {"group": "adj", "gen_anc": "nfe", "sex": "XY"},
+            {"group": "adj", "downsampling": "1000", "gen_anc": "afr"},
+            {"group": "adj", "downsampling": "1000", "gen_anc": "nfe"},
+            {
+                "group": "adj",
+                "downsampling": "1000",
+                "gen_anc": "afr",
+                "sex": "XX",
+            },
+            {
+                "group": "adj",
+                "downsampling": "1000",
+                "gen_anc": "afr",
+                "sex": "XY",
+            },
+            {
+                "group": "adj",
+                "downsampling": "1000",
+                "gen_anc": "nfe",
+                "sex": "XX",
+            },
+            {
+                "group": "adj",
+                "downsampling": "1000",
+                "gen_anc": "nfe",
+                "sex": "XY",
+            },
+        ]
+
+        leaves, decomp = find_minimal_strata_groups(freq_meta)
+
+        assert leaves == [1, 4, 5, 6, 7, 10, 11, 12, 13]
+        assert decomp == {
+            0: [4, 5, 6, 7],
+            2: [4, 5],
+            3: [6, 7],
+            8: [10, 11],
+            9: [12, 13],
+        }
+
+    def test_all_raw_partition(self):
+        """compute_stats_per_ref_site case: every entry has group='raw'."""
+        freq_meta = [
+            {"group": "raw"},
+            {"group": "raw", "gen_anc": "afr"},
+            {"group": "raw", "gen_anc": "nfe"},
+            {"group": "raw", "sex": "XX"},
+            {"group": "raw", "sex": "XY"},
+            {"group": "raw", "gen_anc": "afr", "sex": "XX"},
+            {"group": "raw", "gen_anc": "afr", "sex": "XY"},
+            {"group": "raw", "gen_anc": "nfe", "sex": "XX"},
+            {"group": "raw", "gen_anc": "nfe", "sex": "XY"},
+        ]
+
+        leaves, decomp = find_minimal_strata_groups(freq_meta)
+
+        assert leaves == [5, 6, 7, 8]
+        assert decomp == {
+            0: [5, 6, 7, 8],
+            1: [5, 6],
+            2: [7, 8],
+            3: [5, 7],
+            4: [6, 8],
+        }
+
+    def test_global_downsampling_stays_leaf(self):
+        """Downsampling-only entries stay leaves; the all-adj entry can't decompose into them."""
+        freq_meta = [
+            {"group": "adj"},
+            {"group": "adj", "downsampling": "1000", "gen_anc": "global"},
+            {"group": "adj", "downsampling": "1000", "gen_anc": "afr"},
+            {"group": "adj", "downsampling": "1000", "gen_anc": "nfe"},
+        ]
+
+        leaves, decomp = find_minimal_strata_groups(freq_meta)
+
+        # Every entry is a leaf:
+        # - {} has no matching leaves with non_summable=={}, so falls back to leaf.
+        # - downsampling entries are non-summable axes, so they stay as their own leaves.
+        assert leaves == [0, 1, 2, 3]
+        assert decomp == {}
+
+    def test_no_summable_axes(self):
+        """Trivial case: only adj/raw entries, no strata to reduce."""
+        freq_meta = [{"group": "adj"}, {"group": "raw"}]
+        leaves, decomp = find_minimal_strata_groups(freq_meta)
+
+        assert leaves == [0, 1]
+        assert decomp == {}
+
+    def test_partial_strata_falls_back_to_leaf(self):
+        """A parent that can't be fully decomposed still falls back to a single leaf match."""
+        freq_meta = [
+            {"group": "adj"},
+            {"group": "adj", "gen_anc": "afr"},
+            {"group": "adj", "gen_anc": "afr", "sex": "XX"},
+        ]
+
+        leaves, decomp = find_minimal_strata_groups(freq_meta)
+
+        # Maximal axis set is {gen_anc, sex} -> only entry 2 is a leaf.
+        # Entry 0 has e_keys={} so it matches entry 2 (single leaf in partition).
+        # Entry 1 has gen_anc=afr, also matches entry 2.
+        assert leaves == [2]
+        assert decomp == {0: [2], 1: [2]}
+
+    def test_custom_non_summable_axes(self):
+        """Custom non_summable_axes treats the named axis as non-summable."""
+        freq_meta = [
+            {"group": "adj"},
+            {"group": "adj", "cohort": "A"},
+            {"group": "adj", "cohort": "B"},
+        ]
+
+        # With cohort treated as a normal summable axis, entry 0 decomposes
+        # into entries 1 and 2.
+        leaves, decomp = find_minimal_strata_groups(freq_meta, non_summable_axes=set())
+        assert leaves == [1, 2]
+        assert decomp == {0: [1, 2]}
+
+        # With cohort treated as non-summable, no decomposition is possible
+        # (entries 1 and 2 are leaves because their non_summable axes don't
+        # match entry 0's empty non_summable axes).
+        leaves, decomp = find_minimal_strata_groups(
+            freq_meta, non_summable_axes={"cohort"}
+        )
+        assert leaves == [0, 1, 2]
+        assert decomp == {}
+
+
+class TestAnnotateFreqReduceToMinimalGroups:
+    """Test that annotate_freq with reduce_to_minimal_groups=True matches the full output."""
+
+    @pytest.fixture
+    def sample_mt(self):
+        """8 samples × 4 sites with gen_anc, sex, and per-sample-per-site adj flags."""
+        samples = [
+            ("s1", "afr", "XX"),
+            ("s2", "afr", "XY"),
+            ("s3", "afr", "XX"),
+            ("s4", "afr", "XY"),
+            ("s5", "nfe", "XX"),
+            ("s6", "nfe", "XY"),
+            ("s7", "nfe", "XX"),
+            ("s8", "nfe", "XY"),
+        ]
+        variants = [
+            (hl.locus("chr1", 1000, reference_genome="GRCh38"), ["A", "T"]),
+            (hl.locus("chr1", 2000, reference_genome="GRCh38"), ["C", "G"]),
+            (hl.locus("chr1", 3000, reference_genome="GRCh38"), ["G", "A"]),
+            (hl.locus("chr1", 4000, reference_genome="GRCh38"), ["T", "C"]),
+        ]
+        # Cycle through a few genotype patterns so we get nontrivial AC/AN.
+        gt_patterns = [
+            [(0, 0), (0, 1), (1, 1), (0, 1), (0, 0), (0, 1), (1, 1), (0, 1)],
+            [(0, 1), (1, 1), (0, 0), (0, 1), (0, 1), (1, 1), (0, 0), (0, 1)],
+            [(0, 0), (0, 0), (0, 1), (1, 1), (0, 0), (0, 0), (0, 1), (1, 1)],
+            [(1, 1), (0, 1), (0, 1), (0, 0), (1, 1), (0, 1), (0, 1), (0, 0)],
+        ]
+
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+        entries = []
+        for v_idx, (locus, alleles) in enumerate(variants):
+            for s_idx, (sample_id, _, _) in enumerate(samples):
+                a, b = gt_patterns[v_idx][s_idx]
+                entries.append(
+                    {
+                        "locus": locus,
+                        "alleles": alleles,
+                        "s": sample_id,
+                        "GT": hl.call(a, b),
+                        # Make every other genotype "non-adj" to exercise the
+                        # adj/raw distinction.
+                        "adj": (s_idx + v_idx) % 2 == 0,
+                    }
+                )
+        mt = hl.Table.parallelize(
+            entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                adj=hl.tbool,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        mt = mt.annotate_cols(
+            gen_anc=sample_table[mt.s].gen_anc,
+            sex=sample_table[mt.s].sex,
+        )
+        return mt
+
+    def _run_and_index_freq(self, mt):
+        """Run annotate_freq and return a dict mapping freq_meta key tuples to per-row freq dicts."""
+        freq_meta = hl.eval(mt.freq_meta)
+        freq_meta_sample_count = hl.eval(mt.freq_meta_sample_count)
+        rows = mt.rows().select("freq").collect()
+        # Build a stable representation: list of (sorted_meta_items_tuple,
+        # [per_row_freq_dict])
+        per_meta = {}
+        for i, m in enumerate(freq_meta):
+            key = tuple(sorted(m.items()))
+            per_meta[key] = {
+                "sample_count": freq_meta_sample_count[i],
+                "freqs": [
+                    {
+                        "AC": r.freq[i].AC,
+                        "AN": r.freq[i].AN,
+                        "homozygote_count": r.freq[i].homozygote_count,
+                    }
+                    for r in rows
+                ],
+            }
+        return per_meta
+
+    def test_reduce_matches_full_with_gen_anc_and_sex(self, sample_mt):
+        """annotate_freq(reduce=True) and annotate_freq(reduce=False) match exactly."""
+        full_mt = annotate_freq(
+            sample_mt,
+            sex_expr=sample_mt.sex,
+            gen_anc_expr=sample_mt.gen_anc,
+        )
+        reduced_mt = annotate_freq(
+            sample_mt,
+            sex_expr=sample_mt.sex,
+            gen_anc_expr=sample_mt.gen_anc,
+            reduce_to_minimal_groups=True,
+        )
+
+        full_indexed = self._run_and_index_freq(full_mt)
+        reduced_indexed = self._run_and_index_freq(reduced_mt)
+
+        assert set(full_indexed.keys()) == set(reduced_indexed.keys())
+        for key in full_indexed:
+            assert (
+                full_indexed[key]["sample_count"]
+                == reduced_indexed[key]["sample_count"]
+            ), key
+            assert full_indexed[key]["freqs"] == reduced_indexed[key]["freqs"], key
+
+    def test_reduce_matches_full_with_downsampling(self, sample_mt):
+        """annotate_freq(reduce=True) matches the full output when downsamplings are used.
+
+        Downsamplings use a randomized rank, so we pre-compute the downsampling
+        annotations once via annotate_downsamplings and pass them as
+        downsampling_expr to both annotate_freq calls. This guarantees that
+        both runs see exactly the same per-sample downsampling assignments.
+        """
+        ds_mt = annotate_downsamplings(sample_mt, [4], gen_anc_expr=sample_mt.gen_anc)
+        downsamplings = hl.eval(ds_mt.downsamplings)
+        ds_gen_anc_counts = hl.eval(ds_mt.ds_gen_anc_counts)
+
+        full_mt = annotate_freq(
+            ds_mt,
+            sex_expr=ds_mt.sex,
+            gen_anc_expr=ds_mt.gen_anc,
+            downsamplings=downsamplings,
+            downsampling_expr=ds_mt.downsampling,
+            ds_gen_anc_counts=ds_gen_anc_counts,
+        )
+        reduced_mt = annotate_freq(
+            ds_mt,
+            sex_expr=ds_mt.sex,
+            gen_anc_expr=ds_mt.gen_anc,
+            downsamplings=downsamplings,
+            downsampling_expr=ds_mt.downsampling,
+            ds_gen_anc_counts=ds_gen_anc_counts,
+            reduce_to_minimal_groups=True,
+        )
+
+        full_indexed = self._run_and_index_freq(full_mt)
+        reduced_indexed = self._run_and_index_freq(reduced_mt)
+
+        # The freq_meta key sets must match exactly. In particular, the
+        # downsampling-stratified entries must survive the reduction as
+        # leaves and not be folded into other parents.
+        assert set(full_indexed.keys()) == set(reduced_indexed.keys())
+        # Sanity check: at least one downsampling-stratified group exists.
+        ds_groups = [k for k in full_indexed if any(p[0] == "downsampling" for p in k)]
+        assert ds_groups, "expected at least one downsampling-stratified group"
+
+        for key in full_indexed:
+            assert (
+                full_indexed[key]["sample_count"]
+                == reduced_indexed[key]["sample_count"]
+            ), key
+            assert full_indexed[key]["freqs"] == reduced_indexed[key]["freqs"], key

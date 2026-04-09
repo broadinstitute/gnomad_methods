@@ -9,6 +9,7 @@ from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.utils.annotations import (
     agg_by_strata,
     annotate_adj,
+    expand_strata_array_from_leaves,
     fs_from_sb,
     generate_freq_group_membership_array,
     get_adj_expr,
@@ -1072,9 +1073,35 @@ def compute_stats_per_ref_site(
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
     sex_karyotype_field: Optional[str] = None,
+    reduce_to_minimal_groups: bool = False,
+    non_summable_axes: Optional[Set[str]] = None,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
+
+    .. rubric:: The `reduce_to_minimal_groups` parameter
+
+    When True, the per-strata aggregation runs only on a minimal "leaf"
+    subset of stratification groups (those that cannot be derived by summing
+    other groups). The remaining groups are reconstructed by element-wise
+    summation of leaves as a cheap post-processing step, so the returned
+    `strata_meta` and per-site arrays are identical to the
+    `reduce_to_minimal_groups=False` output. This is purely a cost
+    optimization for large stratifications. The reduction **assumes every
+    annotation produced by `entry_agg_funcs` is summable** (integers or
+    struct-of-integers). Do **not** enable this when `entry_agg_funcs`
+    returns non-summable values such as means or medians (e.g., it must not
+    be used with `compute_coverage_stats`'s default coverage aggregation).
+
+    Reduction is supported on both supplied paths:
+        - When `strata_expr` is provided, the leaf reduction is performed
+          inside the in-function call to `generate_freq_group_membership_array`.
+        - When a pre-built `group_membership_ht` is supplied, this function
+          honors any reduction that was already performed on it (detected by
+          the presence of the `freq_meta_full`, `freq_leaf_indices`, and
+          `freq_group_decomposition` globals on `group_membership_ht`).
+          Setting `reduce_to_minimal_groups=True` while passing a
+          non-reduced `group_membership_ht` is a no-op.
 
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.
@@ -1106,6 +1133,11 @@ def compute_stats_per_ref_site(
         the columns of `mtds` (variant_data MT if `mtds` is a VDS) and use "XX" and
         "XY" as values. If not provided, no sex karyotype adjustment is performed.
         Default is None.
+    :param reduce_to_minimal_groups: Whether to compute stats only on the
+        minimal leaf set of stratification groups and reconstruct the rest
+        by element-wise summation. See the rubric above. Default is False.
+    :param non_summable_axes: Axis names that should never be summed across
+        when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1206,17 +1238,36 @@ def compute_stats_per_ref_site(
         # as "adj" since it was built for frequency computation, but for the coverage
         # computation we don't want to do any filtering.
         group_membership_ht = generate_freq_group_membership_array(
-            ht, strata_expr, no_raw_group=True
+            ht,
+            strata_expr,
+            no_raw_group=True,
+            reduce_to_minimal_groups=reduce_to_minimal_groups,
+            non_summable_axes=non_summable_axes,
         )
-        group_membership_ht = group_membership_ht.annotate_globals(
-            freq_meta=group_membership_ht.freq_meta.map(
+        # Rewrite all `freq_meta` entries' "group" key to "raw" because
+        # `generate_freq_group_membership_array` always labels them "adj"
+        # (it was built for frequency computation), but for the per-ref-site
+        # stats path we don't do any genotype-level filtering. Apply the
+        # same rewrite to the full freq_meta when reduction is in effect, so
+        # the post-aggregation expansion uses consistent labels.
+        rewrite_globals = {
+            "freq_meta": group_membership_ht.freq_meta.map(
                 lambda x: hl.dict(
                     x.items().map(
                         lambda m: hl.if_else(m[0] == "group", ("group", "raw"), m)
                     )
                 )
             )
-        )
+        }
+        if reduce_to_minimal_groups:
+            rewrite_globals["freq_meta_full"] = group_membership_ht.freq_meta_full.map(
+                lambda x: hl.dict(
+                    x.items().map(
+                        lambda m: hl.if_else(m[0] == "group", ("group", "raw"), m)
+                    )
+                )
+            )
+        group_membership_ht = group_membership_ht.annotate_globals(**rewrite_globals)
 
     if is_vds:
         rmt = mtds.reference_data
@@ -1264,6 +1315,41 @@ def compute_stats_per_ref_site(
     ht = ht.select_globals().checkpoint(hl.utils.new_temp_file("agg_stats", "ht"))
 
     group_globals = group_membership_ht.index_globals()
+
+    # Detect whether the upstream group_membership_ht has reduction metadata
+    # attached. If so, expand each per-strata aggregation back to the full
+    # set of groups by element-wise summation of the leaf positions.
+    membership_globals = group_membership_ht.globals
+    is_reduced = (
+        "freq_meta_full" in membership_globals
+        and "freq_leaf_indices" in membership_globals
+        and "freq_group_decomposition" in membership_globals
+    )
+
+    if is_reduced:
+        leaf_indices = hl.eval(group_globals.freq_leaf_indices)
+        decomposition_serialized = hl.eval(group_globals.freq_group_decomposition)
+        full_meta = hl.eval(group_globals.freq_meta_full)
+        full_sample_count = hl.eval(group_globals.freq_meta_sample_count_full)
+        n_full = len(full_meta)
+        decomposition = {
+            i: list(children)
+            for i, children in enumerate(decomposition_serialized)
+            if children
+        }
+        ht = ht.annotate(
+            **{
+                ann: expand_strata_array_from_leaves(
+                    ht[ann],
+                    leaf_indices,
+                    decomposition,
+                    n_full,
+                    is_freq_struct=False,
+                )
+                for ann in entry_agg_funcs
+            }
+        )
+
     global_expr = {}
     if no_strata:
         # If there was no stratification, move aggregated annotations to the top
@@ -1271,10 +1357,16 @@ def compute_stats_per_ref_site(
         ht = ht.select(**{ann: ht[ann][0] for ann in entry_agg_funcs})
         global_expr["sample_count"] = group_globals.freq_meta_sample_count[0]
     else:
-        # If there was stratification, add the metadata and sample count info for the
-        # stratification to the globals.
-        global_expr["strata_meta"] = group_globals.freq_meta
-        global_expr["strata_sample_count"] = group_globals.freq_meta_sample_count
+        # If there was stratification, add the metadata and sample count info for
+        # the stratification to the globals. When reduction was applied above,
+        # use the original (full) freq_meta and sample counts so the output is
+        # indistinguishable from a non-reduced run.
+        if is_reduced:
+            global_expr["strata_meta"] = full_meta
+            global_expr["strata_sample_count"] = full_sample_count
+        else:
+            global_expr["strata_meta"] = group_globals.freq_meta
+            global_expr["strata_sample_count"] = group_globals.freq_meta_sample_count
 
     ht = ht.annotate_globals(**global_expr)
 
@@ -1453,6 +1545,15 @@ def compute_allele_number_per_ref_site(
 ) -> hl.Table:
     """
     Compute the allele number per reference site.
+
+    .. note::
+
+        This function supports the `reduce_to_minimal_groups` cost
+        optimization (forwarded via `**kwargs` to
+        `compute_stats_per_ref_site`). AN is a sum of per-sample integer
+        ploidies, which is summable across stratification groups, so the
+        optimization produces output identical to a non-reduced run. See
+        `compute_stats_per_ref_site` for details.
 
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.

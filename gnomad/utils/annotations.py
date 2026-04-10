@@ -2154,9 +2154,9 @@ def find_minimal_strata_groups(
     :param non_summable_axes: Axis names that should never be summed across.
         Default is `{"downsampling"}`.
     :return: Tuple of `(leaf_indices, decomposition)` where `leaf_indices` is
-        a sorted list of indices into `freq_meta` marking the leaves, and
-        `decomposition` maps each non-leaf index to the list of leaf indices
-        that sum to it.
+        a list of indices into `freq_meta` marking the leaves, in ascending
+        order, and `decomposition` maps each non-leaf index to the list of
+        leaf indices that sum to it.
     """
     if non_summable_axes is None:
         non_summable_axes = {"downsampling"}
@@ -2210,6 +2210,12 @@ def find_minimal_strata_groups(
             else:
                 # Cannot decompose — keep as a leaf so the result is still
                 # computed directly.
+                logger.info(
+                    "Non-leaf entry at index %d (%s) could not be decomposed;"
+                    " promoting to leaf.",
+                    i,
+                    freq_meta[i],
+                )
                 is_leaf[i] = True
 
     leaf_indices = [i for i, leaf in enumerate(is_leaf) if leaf]

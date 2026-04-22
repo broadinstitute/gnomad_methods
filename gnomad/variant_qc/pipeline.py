@@ -30,6 +30,29 @@ logger.setLevel(logging.INFO)
 
 INBREEDING_COEFF_HARD_CUTOFF = -0.3
 
+INFO_FEATURES = [
+    "AS_MQRankSum",
+    "AS_pab_max",
+    "AS_MQ",
+    "AS_QD",
+    "AS_ReadPosRankSum",
+    "AS_SOR",
+    "AS_FS",
+]
+"""List of features info to be used for variant QC."""
+
+NON_INFO_FEATURES = [
+    "variant_type",
+    "allele_type",
+    "n_alt_alleles",
+    "was_mixed",
+    "has_star",
+]
+"""List of features to be used for variant QC that are not in the info field."""
+
+TRUTH_DATA = ["hapmap", "omni", "mills", "kgp_phase1_hc"]
+"""List of truth datasets to be used for variant QC."""
+
 
 def create_binned_ht(
     ht: hl.Table,

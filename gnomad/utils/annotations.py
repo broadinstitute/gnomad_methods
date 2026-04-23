@@ -2246,6 +2246,13 @@ def expand_strata_array_from_leaves(
     inspected: integer arrays are summed with `_sum_or_diff_values`, and
     struct arrays have each int field summed independently.
 
+    The expansion is encoded as a compact Hail IR operation
+    (`hl.range(n_full).map(...)`) with lookup tables for leaf positions and
+    child-index lists, so the serialized IR size is O(n_full) regardless of
+    how many groups there are. This avoids Jackson's JSON string-length limit
+    that would be hit if each group's expression were inlined as a separate
+    Python-side Hail expression literal.
+
     :param leaf_array: Hail array expression of length `len(leaf_indices)`
         produced by aggregating only the leaf groups.
     :param leaf_indices: Original-`freq_meta` indices of the leaves, in the
@@ -2271,51 +2278,60 @@ def expand_strata_array_from_leaves(
     else:
         struct_fields = None
 
-    def _select_struct(elem: hl.expr.Expression) -> hl.expr.Expression:
-        """Project a struct element down to the fields used for summation.
-
-        For freq structs, this drops `AF` (it will be recomputed at the
-        end). For other struct types, it's a no-op.
-        """
-        if struct_fields is None:
-            return elem
-        return elem.select(*struct_fields)
-
-    def _sum_elements(positions: List[int]) -> hl.expr.Expression:
-        """Element-wise sum of leaf_array at the given reduced positions."""
-        first = _select_struct(leaf_array[positions[0]])
-        if struct_fields is None:
-            acc = first
-            for p in positions[1:]:
-                acc = _sum_or_diff_values(acc, leaf_array[p], "sum")
-            return acc
-        # Struct path: sum each numeric field independently.
-        acc_fields = {f: first[f] for f in struct_fields}
-        for p in positions[1:]:
-            nxt = leaf_array[p]
-            acc_fields = {
-                f: _sum_or_diff_values(acc_fields[f], nxt[f], "sum")
-                for f in struct_fields
-            }
-        return hl.struct(**acc_fields)
-
-    full = []
+    # Build a Hail-side lookup: for each position in the full array, store
+    # the list of leaf-array positions whose values should be summed. For
+    # leaves this is a single-element list; for non-leaves it's the list of
+    # child positions in the leaf array.
+    children_per_group: List[List[int]] = []
     for i in range(n_full):
         if i in leaf_pos:
-            # Project leaf elements to the same field shape as the summed
-            # non-leaf elements so the resulting array has a uniform element
-            # type (Hail's `hl.array` requires this).
-            full.append(_select_struct(leaf_array[leaf_pos[i]]))
+            children_per_group.append([leaf_pos[i]])
         elif i in decomposition:
-            child_positions = [leaf_pos[j] for j in decomposition[i]]
-            full.append(_sum_elements(child_positions))
+            children_per_group.append([leaf_pos[j] for j in decomposition[i]])
         else:
-            # Should not happen — every non-leaf must be in `decomposition`.
             raise ValueError(
                 f"Index {i} is neither a leaf nor in the decomposition map."
             )
 
-    expanded = hl.array(full)
+    # Encode as a Hail literal: array<array<int32>>.
+    hl_children = hl.literal(children_per_group)
+
+    # If we need to drop fields (e.g. AF from freq structs) before summing,
+    # project the leaf_array once up front so every element has the same type.
+    if struct_fields is not None:
+        projected = leaf_array.map(lambda x: x.select(*struct_fields))
+    else:
+        projected = leaf_array
+
+    # Build the expanded array via a single Hail-side map. For each group
+    # position, look up its child indices and fold-sum over them.
+    if struct_fields is not None:
+
+        def _sum_struct_children(child_indices):
+            return child_indices[1:].fold(
+                lambda acc, idx: acc.annotate(
+                    **{
+                        f: hl.or_else(acc[f], 0) + hl.or_else(projected[idx][f], 0)
+                        for f in struct_fields
+                    }
+                ),
+                projected[child_indices[0]],
+            )
+
+        expanded = hl_children.map(
+            lambda child_indices: _sum_struct_children(child_indices)
+        )
+    else:
+
+        def _sum_scalar_children(child_indices):
+            return child_indices[1:].fold(
+                lambda acc, idx: hl.or_else(acc, 0) + hl.or_else(projected[idx], 0),
+                projected[child_indices[0]],
+            )
+
+        expanded = hl_children.map(
+            lambda child_indices: _sum_scalar_children(child_indices)
+        )
 
     if is_freq_struct:
         # Recompute AF from the summed AC/AN, and select the canonical field

@@ -39,7 +39,7 @@ INFO_FEATURES = [
     "AS_SOR",
     "AS_FS",
 ]
-"""List of features info to be used for variant QC."""
+"""List of features to be used for variant QC that are in the info field."""
 
 NON_INFO_FEATURES = [
     "variant_type",

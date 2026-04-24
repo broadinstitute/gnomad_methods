@@ -40,11 +40,14 @@ class TestExplodeIntervalsToLoci:
     @pytest.fixture
     def sample_interval_expr(self):
         """Fixture to create a sample interval expression."""
-        return hl.Interval(
-            start=hl.Locus("chr1", 100, "GRCh38"),
-            end=hl.Locus("chr1", 105, "GRCh38"),
-            includes_start=True,
-            includes_end=True,
+        return hl.literal(
+            hl.Interval(
+                start=hl.Locus("chr1", 100, "GRCh38"),
+                end=hl.Locus("chr1", 105, "GRCh38"),
+                includes_start=True,
+                includes_end=True,
+            ),
+            dtype=hl.tinterval(hl.tlocus("GRCh38")),
         )
 
     def test_explode_table_with_includes_start_and_end(
@@ -99,7 +102,7 @@ class TestExplodeIntervalsToLoci:
         assert all(hasattr(row, "interval") for row in result)
 
         # Verify that the locus field is present.
-        assert "locus" in result_ht.row_key
+        assert "locus" in result_ht.key
         assert all(hasattr(row, "locus") for row in result)
 
     def test_explode_table_without_keep_intervals(
@@ -153,11 +156,14 @@ class TestExplodeIntervalsToLoci:
 
         :return: None.
         """
-        interval = hl.Interval(
-            start=hl.Locus("chr1", 100, "GRCh38"),
-            end=hl.Locus("chr1", 105, "GRCh38"),
-            includes_start=False,
-            includes_end=True,
+        interval = hl.literal(
+            hl.Interval(
+                start=hl.Locus("chr1", 100, "GRCh38"),
+                end=hl.Locus("chr1", 105, "GRCh38"),
+                includes_start=False,
+                includes_end=True,
+            ),
+            dtype=hl.tinterval(hl.tlocus("GRCh38")),
         )
 
         # Explode the interval expression.
@@ -178,11 +184,14 @@ class TestExplodeIntervalsToLoci:
 
         :return: None.
         """
-        interval = hl.Interval(
-            start=hl.Locus("chr1", 100, "GRCh38"),
-            end=hl.Locus("chr1", 105, "GRCh38"),
-            includes_start=True,
-            includes_end=False,
+        interval = hl.literal(
+            hl.Interval(
+                start=hl.Locus("chr1", 100, "GRCh38"),
+                end=hl.Locus("chr1", 105, "GRCh38"),
+                includes_start=True,
+                includes_end=False,
+            ),
+            dtype=hl.tinterval(hl.tlocus("GRCh38")),
         )
 
         # Explode the interval expression.
@@ -203,11 +212,14 @@ class TestExplodeIntervalsToLoci:
 
         :return: None.
         """
-        interval = hl.Interval(
-            start=hl.Locus("chr1", 100, "GRCh38"),
-            end=hl.Locus("chr1", 105, "GRCh38"),
-            includes_start=False,
-            includes_end=False,
+        interval = hl.literal(
+            hl.Interval(
+                start=hl.Locus("chr1", 100, "GRCh38"),
+                end=hl.Locus("chr1", 105, "GRCh38"),
+                includes_start=False,
+                includes_end=False,
+            ),
+            dtype=hl.tinterval(hl.tlocus("GRCh38")),
         )
 
         # Explode the interval expression.

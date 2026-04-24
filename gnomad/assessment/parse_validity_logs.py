@@ -32,6 +32,10 @@ def parse_log_file(log_file):
         "compare_subset_freqs": "subset freqs",
         "check_globals_for_retired_terms": "globals check",
         "summarize_variant_filters": "variant summary",
+        "validate_config_fields_in_ht": "general info",
+        "log_field_validation_results": "general info",
+        "check_fields_not_in_requirements": "general info",
+        "load_gnomad_data": "load gnomAD data",
     }
 
     with hl.hadoop_open(log_file, "r") as f:
@@ -86,6 +90,9 @@ def parse_log_file(log_file):
                 current_table.append(line.strip())  # Add table row.
             elif current_table:  # If already collecting a table.
                 current_table.append(line.strip())
+            elif current_message and current_metadata:
+                # Preserve multiline log message content in a single parsed entry.
+                current_message += "\n" + line.rstrip("\n")
 
         # Store last log if it had a table.
         if current_message and current_metadata:
@@ -136,6 +143,13 @@ def generate_html_report(parsed_logs, output_file):
                 display: block;
                 color: black; /* Ensure table text is plain black */
                 font-weight: normal; /* Ensure no bolding */
+            }
+            .log-message {
+                text-align: left;
+                white-space: pre-wrap;
+                font-family: inherit;
+                font-size: inherit;
+                direction: ltr;
             }
         </style>
         <script>
@@ -211,6 +225,7 @@ def generate_html_report(parsed_logs, output_file):
         <select id="functionFilter" onchange="filterTable()">
             <option value="all">All</option>
     """
+    import html
 
     validity_checks = set()
     statuses = set()
@@ -260,16 +275,14 @@ def generate_html_report(parsed_logs, output_file):
 
         html_template += (
             f'<tr class="{category}">'
-            f"<td>{validity_check}</td>"
+            f"<td>{html.escape(validity_check)}</td>"
             f'<td class="{category}">{category.upper()}</td>'
-            f"<td>{source}</td>"
-            f"<td>{message} {table_button}"
+            f"<td>{html.escape(source)}</td>"
+            f'<td><div class="log-message">{html.escape(message)}</div>{table_button}'
         )
 
         if table:
-            html_template += (
-                f'<div id="{table_id}" class="hidden-table"><pre>{table}</pre></div>'
-            )
+            html_template += f'<div id="{table_id}" class="hidden-table"><pre>{html.escape(table)}</pre></div>'
 
         html_template += "</td></tr>"
 

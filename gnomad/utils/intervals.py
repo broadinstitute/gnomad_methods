@@ -168,25 +168,25 @@ def explode_intervals_to_loci(
     )
     if isinstance(intervals, hl.Table):
         intervals = intervals.annotate(
-            pos=hl.range(intervals_start_expr, intervals_end_expr)
-        ).explode("pos")
+            _pos=hl.range(intervals_start_expr, intervals_end_expr)
+        ).explode("_pos")
         intervals = intervals.key_by(
             locus=hl.locus(
                 intervals[interval_field].start.contig,
-                intervals.pos,
+                intervals._pos,
                 reference_genome=get_reference_genome(intervals[interval_field]),
             )
         )
 
-        fields_to_drop = ["pos"]
+        fields_to_drop = ["_pos"]
         if not keep_intervals:
             fields_to_drop.append(interval_field)
 
         return intervals.drop(*fields_to_drop)
 
-    logger.warning(
+    logger.info(
         "Input is an IntervalExpression, so function will return ArrayExpression of"
-        " positions  within input intervals. To fully explode intervals to loci, we"
+        " positions within input intervals. To fully explode intervals to loci, we"
         " recommend annotating your dataset with the returned ArrayExpression,"
         " exploding the array, and converting the positions to loci!"
     )

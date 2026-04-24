@@ -132,7 +132,7 @@ def explode_intervals_to_loci(
     """
     Expand intervals to loci and key by loci, or return loci range expression.
 
-    :param intervals: Hail Table or Interval Expression.
+    :param intervals: Table or IntervalExpression.
     :param interval_field: Name of the interval field. Only required if input is a Hail Table. Default is None.
     :param keep_intervals: If True, keep the original intervals as a column in output. Only applies if input is a Hail Table. Default is False.
     :return: If input is a Hail Table, returns exploded Table keyed by locus. If input is an IntervalExpression, returns position array expression.

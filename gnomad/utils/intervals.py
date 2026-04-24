@@ -147,9 +147,10 @@ def explode_intervals_to_loci(
         raise ValueError(
             "`interval_field` and `keep_intervals` must be defined if input is a Table!"
         )
-    assert (
-        interval_field in intervals.row
-    ), "`interval_field` must be an annotation present on input Table!"
+    if isinstance(intervals, hl.Table):
+        assert (
+            interval_field in intervals.row
+        ), "`interval_field` must be an annotation present on input Table!"
     intervals_expr = (
         intervals
         if isinstance(intervals, hl.expr.IntervalExpression)

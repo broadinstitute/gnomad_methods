@@ -233,9 +233,7 @@ class TestExplodeIntervalsToLoci:
         self, sample_interval_table: hl.Table
     ) -> None:
         """Test that an error is raised when interval_field is not present in the Table."""
-        with pytest.raises(
-            AssertionError, match="`interval_field` must be an annotation"
-        ):
+        with pytest.raises(ValueError, match="`interval_field` must be an annotation"):
             explode_intervals_to_loci(
                 sample_interval_table,
                 interval_field="nonexistent_field",
@@ -311,7 +309,11 @@ class TestExplodeIntervalsToLoci:
     def test_explode_invalid_input_type_raises_error(self) -> None:
         """Test that an AssertionError is raised when input is an unsupported type."""
         with pytest.raises(
-            AssertionError, match="Input must be a Table or IntervalExpression"
+            AssertionError,
+            match=(
+                "Input must be a Table, IntervalExpression, or list of"
+                " IntervalExpressions"
+            ),
         ):
             explode_intervals_to_loci("invalid_input")
 
@@ -519,8 +521,11 @@ class TestExplodeIntervalsToLoci:
         # Duplicate loci are present: positions 101 and 102 each appear twice.
         result_loci = [row.locus for row in result_ht.collect()]
         assert (
-            len(result_loci) == 7
-        )  # 3 from GENE1 + 3 from GENE2, positions 101-102 duplicated
+            len(result_loci)
+            == 6
+            # 3 from GENE1 (100,101,102) + 3 from GENE2 (101,102,103), positions
+            # 101-102 duplicated
+        )
 
     def test_explode_list_overlapping_intervals_deduplicates(self) -> None:
         """Test that overlapping intervals in a list are deduplicated when deduplicate=True."""
@@ -576,6 +581,6 @@ class TestExplodeIntervalsToLoci:
         )
         positions = hl.eval(result)
         # Positions 101 and 102 appear twice due to overlap.
-        assert len(positions) == 7
+        assert len(positions) == 6  # [100,101,102] + [101,102,103]
         assert positions.count(101) == 2
         assert positions.count(102) == 2

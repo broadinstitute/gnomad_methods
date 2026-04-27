@@ -136,6 +136,7 @@ def explode_intervals_to_loci(
     Expand interval(s) to loci.
 
     If input is a Table, function will expand intervals to loci and key Table by loci.
+
     If input is an IntervalExpression or a list of IntervalExpressions, function will return an ArrayExpression containing all loci within the input interval(s).
 
     .. warning::
@@ -143,13 +144,12 @@ def explode_intervals_to_loci(
         - When ``keep_intervals=True`` on a Table input, deduplication is not possible because duplicate rows with different interval annotations may exist; a warning is displayed instead.
         - Caution when using this function on very larg intervals (e.g. whole chromosomes), as it will create extremely large arrays, which may cause performance issues.
 
-    NOTE: Intervals that cross chromosomes is currently not supported.
+    Note that Intervals that cross chromosomes is currently not supported.
 
     :param intervals: Table, IntervalExpression, or list of IntervalExpressions.
     :param interval_field: Name of the interval field. Only required if input is a Hail Table. Default is None.
     :param keep_intervals: If True, keep the original intervals as a column in output. Only applies if input is a Hail Table. Default is False.
-    :param deduplicate: If True, remove duplicate loci produced by overlapping intervals. For Table input with ``keep_intervals=True``, deduplication is skipped with a warning.
-    For a list of IntervalExpressions, the returned ArrayExpression will have duplicate positions removed. Default is True.
+    :param deduplicate: If True, remove duplicate loci produced by overlapping intervals. For Table input with ``keep_intervals=True``, deduplication is skipped with a warning. For a list of IntervalExpressions, the returned ArrayExpression will have duplicate positions removed. Default is True.
     :return: If input is a Hail Table, returns exploded Table keyed by locus. If input is an IntervalExpression or list of IntervalExpressions, returns ArrayExpression containing loci within input interval(s).
     """
     assert (

@@ -142,9 +142,9 @@ def explode_intervals_to_loci(
     .. warning::
         - Overlapping intervals will produce duplicate loci. Use ``deduplicate=True`` (the default) to remove them.
         - When ``keep_intervals=True`` on a Table input, deduplication is not possible because duplicate rows with different interval annotations may exist; a warning is displayed instead.
-        - Caution when using this function on very larg intervals (e.g. whole chromosomes), as it will create extremely large arrays, which may cause performance issues.
+        - Caution when using this function on very large intervals (e.g., whole chromosomes), as it will create extremely large arrays, which may cause performance issues.
 
-    Note that Intervals that cross chromosomes is currently not supported.
+    Note that Intervals that cross chromosomes are currently not supported.
 
     :param intervals: Table, IntervalExpression, or list of IntervalExpressions.
     :param interval_field: Name of the interval field. Only required if input is a Hail Table. Default is None.

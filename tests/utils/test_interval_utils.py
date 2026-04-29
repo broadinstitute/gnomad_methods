@@ -51,24 +51,16 @@ class TestExplodeIntervalsToLoci:
         self, sample_interval_table: hl.Table
     ) -> None:
         """Test exploding a table with intervals that include both start and end positions."""
-        # Explode the intervals to loci.
         result_ht = explode_intervals_to_loci(
             sample_interval_table, interval_field="interval", keep_intervals=False
         )
 
-        # Collect results.
         result = result_ht.collect()
-
-        # Expected loci for the first interval (100-105, both inclusive).
+        
         expected_loci_1 = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
-        # Expected loci for the second interval (200-203, start inclusive, end
-        # exclusive).
         expected_loci_2 = [hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)]
 
-        # Get the loci from the result.
         result_loci = [row.locus for row in result]
-
-        # Verify the result contains the expected loci.
         assert len(result_loci) == len(expected_loci_1) + len(expected_loci_2)
         assert all(locus in result_loci for locus in expected_loci_1)
         assert all(locus in result_loci for locus in expected_loci_2)

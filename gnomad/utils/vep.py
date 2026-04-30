@@ -1202,3 +1202,42 @@ def update_loftee_end_trunc_filter(
         return csq_expr.annotate(**_update_csq_struct(csq_expr))
     else:
         return csq_expr.map(lambda x: x.annotate(**_update_csq_struct(x)))
+
+
+def mane_select_over_canonical_filter_expr(
+    transcript_expr: hl.expr.StringExpression,
+    mane_select_expr: hl.expr.BooleanExpression,
+    canonical_expr: hl.expr.BooleanExpression,
+    gene_id_expr: hl.expr.StringExpression,
+) -> hl.expr.BooleanExpression:
+    """
+    Return a boolean expression selecting MANE Select transcripts with canonical fallback.
+
+    For each gene, selects the MANE Select transcript if one exists; otherwise
+    falls back to the canonical transcript. Only Ensembl transcripts (ENST
+    prefix) are considered.
+
+    .. note::
+
+        In VEP 105 (used for gnomAD v4), all MANE Select transcripts are also
+        annotated as canonical. As a result, this function produces the same set
+        of transcripts as a simple canonical filter for v4 data.
+
+    :param transcript_expr: Transcript ID expression (e.g., ``ht.transcript``).
+    :param mane_select_expr: Boolean expression indicating MANE Select status.
+    :param canonical_expr: Boolean expression indicating canonical status.
+    :param gene_id_expr: Gene ID expression used to group transcripts per gene.
+    :return: Boolean expression that is ``True`` for the selected transcripts.
+    """
+    ht = transcript_expr._indices.source
+    genes = ht.group_by(gene_id=gene_id_expr).aggregate(
+        mane_present=hl.agg.any(mane_select_expr),
+        canonical_present=hl.agg.any(canonical_expr),
+    )
+    genes = genes.annotate(only_canonical=~genes.mane_present & genes.canonical_present)
+    gene_info = genes[gene_id_expr]
+
+    return transcript_expr.startswith("ENST") & (
+        (gene_info.mane_present & mane_select_expr)
+        | (gene_info.only_canonical & canonical_expr)
+    )

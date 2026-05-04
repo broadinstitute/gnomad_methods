@@ -5,7 +5,7 @@ import logging
 import hail as hl
 import pytest
 
-from gnomad.utils.intervals import explode_intervals_to_loci, interval_to_pos_range
+from gnomad.utils.intervals import explode_intervals_to_loci
 
 
 class TestExplodeIntervalsToLoci:
@@ -599,8 +599,6 @@ class TestExplodeIntervalsToLoci:
         self, caplog
     ) -> None:
         """Test that a warning is emitted and duplicates are present when deduplicate=False with overlapping list intervals."""
-        import logging
-
         intervals = [
             hl.interval(
                 hl.locus("chr1", 100, "GRCh38"),

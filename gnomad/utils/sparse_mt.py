@@ -1076,6 +1076,7 @@ def compute_stats_per_ref_site(
     sex_karyotype_field: Optional[str] = None,
     reduce_to_minimal_groups: bool = False,
     non_summable_strata: Optional[Set[str]] = None,
+    reducible_aggs: Optional[Set[str]] = None,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
@@ -1090,11 +1091,22 @@ def compute_stats_per_ref_site(
     `reduce_to_minimal_groups=False` output. This is purely a cost
     optimization for large stratifications.
 
-    The reduction assumes every annotation produced by `entry_agg_funcs`
-    is summable (integers or struct-of-integers). Do not enable when
-    `entry_agg_funcs` returns non-summable values such as means or
-    medians (e.g., it must not be used with `compute_coverage_stats`'s
-    default coverage aggregation).
+    The reduction assumes that the annotations subject to leaf expansion
+    are summable (integers or struct-of-integers). By default every
+    annotation in `entry_agg_funcs` is treated as reducible. Pass
+    `reducible_aggs={...}` to opt only specific annotations into the
+    expansion; the others must be narrowed via
+    `entry_agg_group_membership` (otherwise their per-row arrays would
+    have leaf shape, inconsistent with the full `strata_meta` global
+    that the function emits). When leaf reduction is in effect, every
+    entry in `entry_agg_funcs` must therefore appear in either
+    `reducible_aggs` or as a key of `entry_agg_group_membership` —
+    `compute_stats_per_ref_site` raises `ValueError` early in that case
+    so no aggregation cost is wasted on a call whose output would be
+    shape-inconsistent. This split lets a single call mix summable
+    aggregations (e.g., AN) with non-summable ones (e.g., a coverage
+    mean or a qual histogram restricted to a single global group via
+    `entry_agg_group_membership`).
 
     Reduction is supported on both supplied paths:
 
@@ -1144,6 +1156,12 @@ def compute_stats_per_ref_site(
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
         Default is `{"downsampling"}`.
+    :param reducible_aggs: Optional set of annotation names from
+        `entry_agg_funcs` that are summable and should be expanded from
+        leaf shape to full shape via element-wise summation when leaf
+        reduction is in effect. Defaults to all of `entry_agg_funcs`.
+        Must be disjoint from the keys of `entry_agg_group_membership`.
+        Ignored when no leaf reduction is in effect.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1169,6 +1187,77 @@ def compute_stats_per_ref_site(
             "The 'freq_meta' annotation must be present in 'group_membership_ht' if "
             "'entry_agg_group_membership' is specified."
         )
+
+    # Determine reduction status from inputs so we can validate the
+    # shape of `entry_agg_funcs` before any aggregation runs. Both
+    # signals are inspectable without densify or aggregation:
+    #   - When `group_membership_ht` is supplied, reduction is recorded
+    #     by `generate_freq_group_membership_array` as the
+    #     `freq_reduced` global on that table.
+    #   - When `strata_expr` is supplied, the table is built later in
+    #     this function with `reduce_to_minimal_groups` forwarded into
+    #     `generate_freq_group_membership_array`, so the parameter
+    #     directly determines reduction status. The pre-built case's
+    #     "no-op when flag set but table not reduced" carve-out applies
+    #     only to the supplied-table path.
+    if group_membership_ht is not None:
+        is_reduced = "freq_reduced" in group_membership_ht.globals and hl.eval(
+            group_membership_ht.freq_reduced
+        )
+    else:
+        is_reduced = reduce_to_minimal_groups
+
+    if reducible_aggs is not None:
+        if not reducible_aggs:
+            raise ValueError(
+                "`reducible_aggs` is empty; pass `None` to default to all of "
+                "`entry_agg_funcs` or list at least one annotation."
+            )
+        unknown = set(reducible_aggs) - set(entry_agg_funcs)
+        if unknown:
+            raise ValueError(
+                "`reducible_aggs` contains names not in `entry_agg_funcs`: "
+                f"{sorted(unknown)}."
+            )
+        if entry_agg_group_membership is not None:
+            overlap = set(reducible_aggs) & set(entry_agg_group_membership)
+            if overlap:
+                raise ValueError(
+                    "`reducible_aggs` and `entry_agg_group_membership` must"
+                    f" be disjoint; got overlap: {sorted(overlap)}. A"
+                    " reducible annotation is computed on the leaf set and"
+                    " reconstructed by summation, while"
+                    " `entry_agg_group_membership` narrows an annotation to"
+                    " a specific subset; the two are mutually exclusive for"
+                    " the same annotation."
+                )
+
+    # When leaf reduction is in effect every annotation in
+    # `entry_agg_funcs` must be accounted for: either it is reducible
+    # (gets expanded leaf -> full post-aggregation) or it is narrowed
+    # via `entry_agg_group_membership` to a specific subset of strata.
+    # Anything in neither bucket would silently emit a leaf-shape
+    # array against a full-shape `strata_meta` global, which is a
+    # latent shape mismatch in downstream consumers; raise so the
+    # caller fixes the call before paying the densify+aggregation cost.
+    if is_reduced:
+        accounted_for = (
+            set(entry_agg_funcs) if reducible_aggs is None else set(reducible_aggs)
+        )
+        if entry_agg_group_membership is not None:
+            accounted_for |= set(entry_agg_group_membership)
+        unaccounted = set(entry_agg_funcs) - accounted_for
+        if unaccounted:
+            raise ValueError(
+                "Leaf reduction is in effect but the following entries of"
+                f" `entry_agg_funcs` have no shape designation:"
+                f" {sorted(unaccounted)}. Each annotation must be either"
+                " (a) listed in `reducible_aggs` if its values are summable"
+                " across strata, or (b) a key of"
+                " `entry_agg_group_membership` to restrict it to a specific"
+                " subset of groups; otherwise its per-row array would have"
+                " leaf shape while `strata_meta` is emitted at full shape."
+            )
 
     # Determine if the adj annotation is needed. It is only needed if "adj_groups" is
     # in the globals of the group_membership_ht and any entry is True, or "freq_meta"
@@ -1293,21 +1382,20 @@ def compute_stats_per_ref_site(
 
     group_globals = group_membership_ht.index_globals()
 
-    # Detect whether the upstream group_membership_ht was built with the
-    # leaf-only reduction. If so, expand each per-strata aggregation back to
-    # the full set of groups by element-wise summation of the leaf positions.
-    is_reduced = "freq_reduced" in group_membership_ht.globals and hl.eval(
-        group_globals.freq_reduced
-    )
-
+    # `is_reduced` was determined from the inputs above. If True, expand
+    # each reducible per-strata aggregation back to the full set of
+    # groups by element-wise summation of the leaf positions.
     if is_reduced:
         r = _read_reduction_globals(group_globals)
+        anns_to_expand = (
+            set(entry_agg_funcs) if reducible_aggs is None else set(reducible_aggs)
+        )
         ht = ht.annotate(
             **{
                 ann: expand_strata_array_from_leaves(
                     ht[ann], r["leaf_indices"], r["decomposition"], r["n_full"]
                 )
-                for ann in entry_agg_funcs
+                for ann in anns_to_expand
             }
         )
 

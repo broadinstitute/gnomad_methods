@@ -2773,8 +2773,12 @@ def agg_by_strata(
         of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
         the corresponding entry aggregation function. If provided, 'freq_meta' must be
         present in `group_membership_ht` or `mt` and represent the same strata as those
-        in 'group_membership'. If not provided, all entries of the 'group_membership'
-        annotation will have the entry aggregation functions applied to them.
+        in 'group_membership'. Under leaf reduction (when `freq_reduced=True` is set on
+        the supplied globals), targets may also reference non-leaf parents present in
+        `freq_meta_full`; their sample-sets are reconstructed by flattening the
+        `s_indices` of their leaf-children listed in `freq_group_decomposition`. If not
+        provided, all entries of the 'group_membership' annotation will have the entry
+        aggregation functions applied to them.
     :return: Table with annotations of stratified aggregations.
     """
     if group_membership_ht is None and "group_membership" not in mt.col:
@@ -2832,10 +2836,75 @@ def agg_by_strata(
         )
 
     entry_agg_group_membership = entry_agg_group_membership or {}
-    entry_agg_group_membership = {
-        ann: [group_globals["freq_meta"].index(s) for s in strata]
-        for ann, strata in entry_agg_group_membership.items()
-    }
+
+    # Resolve each `entry_agg_group_membership` target to either a leaf
+    # position in the (possibly reduced) `freq_meta`, or — if the target
+    # is a non-leaf parent under reduction — the list of leaf positions
+    # whose disjoint sample-sets sum to it. Resolution happens in
+    # Python because the metadata is small (~100s of entries) and we
+    # need the leaf-vs-parent decision before building the per-target
+    # aggregation expression.
+    if entry_agg_group_membership:
+        freq_meta_py = [dict(m) for m in hl.eval(group_globals["freq_meta"])]
+        is_reduced_for_lookup = "freq_reduced" in group_globals and hl.eval(
+            group_globals.freq_reduced
+        )
+        if is_reduced_for_lookup:
+            freq_meta_full_py = [dict(m) for m in hl.eval(group_globals.freq_meta_full)]
+            decomposition_py = list(hl.eval(group_globals.freq_group_decomposition))
+            leaf_indices_py = list(hl.eval(group_globals.freq_leaf_indices))
+            full_to_leaf_pos = {f_i: lp for lp, f_i in enumerate(leaf_indices_py)}
+        else:
+            freq_meta_full_py = freq_meta_py
+            decomposition_py = [[] for _ in freq_meta_py]
+            full_to_leaf_pos = {i: i for i in range(len(freq_meta_py))}
+
+        def _resolve_target(target_dict):
+            target = dict(target_dict)
+            for i, m in enumerate(freq_meta_py):
+                if m == target:
+                    return ("leaf", i, target.get("group", "NA") == "adj")
+            if not is_reduced_for_lookup:
+                raise ValueError(
+                    f"`entry_agg_group_membership` target {target} is not in"
+                    " `freq_meta`."
+                )
+            for i, m in enumerate(freq_meta_full_py):
+                if m == target:
+                    children_full = list(decomposition_py[i])
+                    if not children_full:
+                        raise ValueError(
+                            f"`entry_agg_group_membership` target {target} is in"
+                            " `freq_meta_full` but has empty decomposition; under"
+                            " reduction this means it is neither a leaf nor a"
+                            " summable parent (likely spans `non_summable_strata`"
+                            " in a way that prevents decomposition)."
+                        )
+                    try:
+                        children_leaf_pos = [
+                            full_to_leaf_pos[ci] for ci in children_full
+                        ]
+                    except KeyError as e:
+                        raise ValueError(
+                            f"`entry_agg_group_membership` target {target}"
+                            f" decomposes to a non-leaf at full index {e.args[0]};"
+                            " decomposition is expected to map each non-leaf"
+                            " directly to leaves."
+                        )
+                    return (
+                        "parent",
+                        children_leaf_pos,
+                        target.get("group", "NA") == "adj",
+                    )
+            raise ValueError(
+                f"`entry_agg_group_membership` target {target} is not in"
+                " `freq_meta` or `freq_meta_full`."
+            )
+
+        entry_agg_group_membership = {
+            ann: [_resolve_target(t) for t in targets]
+            for ann, targets in entry_agg_group_membership.items()
+        }
 
     n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
     if n_adj_groups != n_groups:
@@ -2903,23 +2972,49 @@ def agg_by_strata(
             adj_groups_expr,
         )
 
+    # Build per-target (s_indices, adj) arrays for each annotation in
+    # `entry_agg_group_membership`. Leaf targets reuse the
+    # `indices_by_group` / `adj_groups` slots directly; non-leaf parent
+    # targets synthesize their `s_indices` as the flatten of their
+    # leaf-children's index arrays (safe — the leaves of a parent's
+    # decomposition are pairwise disjoint, enforced by the sample-count
+    # check in `find_minimal_strata_groups`). The parent's adj flag is
+    # taken from its own `group` key, equivalent to any leaf-child's
+    # adj because a parent's leaf-set shares the same `group` value.
+    def _per_target_indices_and_adj(target_resolutions):
+        s_indices_per_target = []
+        adj_per_target = []
+        for kind, payload, adj in target_resolutions:
+            if kind == "leaf":
+                s_indices_per_target.append(ht.indices_by_group[payload])
+                adj_per_target.append(ht.adj_groups[payload])
+            else:  # parent
+                s_indices_per_target.append(
+                    hl.flatten(hl.array([ht.indices_by_group[lp] for lp in payload]))
+                )
+                adj_per_target.append(hl.literal(adj))
+        return hl.array(s_indices_per_target), hl.array(adj_per_target)
+
     # Add annotations for any supplied entry transform and aggregation functions.
     # Filter groups to only those in entry_agg_group_membership if specified.
     # If there are no specific entry group indices for an annotation, use ht[g]
     # to consider all groups without filtering.
+    def _agg_for(ann, f):
+        if ann in entry_agg_group_membership:
+            s_indices, adjs = _per_target_indices_and_adj(
+                entry_agg_group_membership[ann]
+            )
+            return _agg_by_group(s_indices, adjs, agg_func=f[1], ann_expr=ht[ann])
+        return _agg_by_group(
+            ht.indices_by_group,
+            ht.adj_groups,
+            agg_func=f[1],
+            ann_expr=ht[ann],
+        )
+
     ht = ht.select(
         *select_fields,
-        **{
-            ann: _agg_by_group(
-                *[
-                    [ht[g][i] for i in entry_agg_group_membership.get(ann, [])] or ht[g]
-                    for g in ["indices_by_group", "adj_groups"]
-                ],
-                agg_func=f[1],
-                ann_expr=ht[ann],
-            )
-            for ann, f in entry_agg_funcs.items()
-        },
+        **{ann: _agg_for(ann, f) for ann, f in entry_agg_funcs.items()},
     )
 
     return ht.drop("cols")

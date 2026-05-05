@@ -7,6 +7,7 @@ import hail as hl
 
 from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.utils.annotations import (
+    _read_reduction_globals,
     agg_by_strata,
     annotate_adj,
     expand_strata_array_from_leaves,
@@ -1098,10 +1099,9 @@ def compute_stats_per_ref_site(
           inside the in-function call to `generate_freq_group_membership_array`.
         - When a pre-built `group_membership_ht` is supplied, this function
           honors any reduction that was already performed on it (detected by
-          the presence of the `freq_meta_full`, `freq_leaf_indices`, and
-          `freq_group_decomposition` globals on `group_membership_ht`).
-          Setting `reduce_to_minimal_groups=True` while passing a
-          non-reduced `group_membership_ht` is a no-op.
+          the `freq_reduced=True` global on `group_membership_ht`). Setting
+          `reduce_to_minimal_groups=True` while passing a non-reduced
+          `group_membership_ht` is a no-op.
 
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.
@@ -1227,47 +1227,18 @@ def compute_stats_per_ref_site(
 
         # Use 'generate_freq_group_membership_array' to create a group_membership Table
         # that gives stratification group membership info based on 'strata_expr'. The
-        # returned Table has the following annotations: 'freq_meta',
-        # 'freq_meta_sample_count', and 'group_membership'. By default, this
-        # function returns annotations where the second element is a placeholder for the
-        # "raw" frequency of all samples, where the first 2 elements are the same sample
-        # set, but 'freq_meta' starts with [{"group": "adj", "group": "raw", ...]. Use
-        # `no_raw_group` to exclude the "raw" group so there is a single annotation
-        # representing the full samples set. Update all 'freq_meta' entries' "group"
-        # to "raw" because `generate_freq_group_membership_array` will return them all
-        # as "adj" since it was built for frequency computation, but for the coverage
-        # computation we don't want to do any filtering.
+        # The per-ref-site stats path does no genotype-level filtering, so
+        # label every freq_meta entry as "raw" rather than the default "adj".
+        # `no_raw_group=True` skips the inserted raw-only entry; the
+        # remaining entries cover all samples.
         group_membership_ht = generate_freq_group_membership_array(
             ht,
             strata_expr,
             no_raw_group=True,
             reduce_to_minimal_groups=reduce_to_minimal_groups,
             non_summable_axes=non_summable_axes,
+            group_label="raw",
         )
-        # Rewrite all `freq_meta` entries' "group" key to "raw" because
-        # `generate_freq_group_membership_array` always labels them "adj"
-        # (it was built for frequency computation), but for the per-ref-site
-        # stats path we don't do any genotype-level filtering. Apply the
-        # same rewrite to the full freq_meta when reduction is in effect, so
-        # the post-aggregation expansion uses consistent labels.
-        rewrite_globals = {
-            "freq_meta": group_membership_ht.freq_meta.map(
-                lambda x: hl.dict(
-                    x.items().map(
-                        lambda m: hl.if_else(m[0] == "group", ("group", "raw"), m)
-                    )
-                )
-            )
-        }
-        if reduce_to_minimal_groups:
-            rewrite_globals["freq_meta_full"] = group_membership_ht.freq_meta_full.map(
-                lambda x: hl.dict(
-                    x.items().map(
-                        lambda m: hl.if_else(m[0] == "group", ("group", "raw"), m)
-                    )
-                )
-            )
-        group_membership_ht = group_membership_ht.annotate_globals(**rewrite_globals)
 
     if is_vds:
         rmt = mtds.reference_data
@@ -1316,35 +1287,19 @@ def compute_stats_per_ref_site(
 
     group_globals = group_membership_ht.index_globals()
 
-    # Detect whether the upstream group_membership_ht has reduction metadata
-    # attached. If so, expand each per-strata aggregation back to the full
-    # set of groups by element-wise summation of the leaf positions.
-    membership_globals = group_membership_ht.globals
-    is_reduced = (
-        "freq_meta_full" in membership_globals
-        and "freq_leaf_indices" in membership_globals
-        and "freq_group_decomposition" in membership_globals
+    # Detect whether the upstream group_membership_ht was built with the
+    # leaf-only reduction. If so, expand each per-strata aggregation back to
+    # the full set of groups by element-wise summation of the leaf positions.
+    is_reduced = "freq_reduced" in group_membership_ht.globals and hl.eval(
+        group_globals.freq_reduced
     )
 
     if is_reduced:
-        leaf_indices = hl.eval(group_globals.freq_leaf_indices)
-        decomposition_serialized = hl.eval(group_globals.freq_group_decomposition)
-        full_meta = hl.eval(group_globals.freq_meta_full)
-        full_sample_count = hl.eval(group_globals.freq_meta_sample_count_full)
-        n_full = len(full_meta)
-        decomposition = {
-            i: list(children)
-            for i, children in enumerate(decomposition_serialized)
-            if children
-        }
+        r = _read_reduction_globals(group_globals)
         ht = ht.annotate(
             **{
                 ann: expand_strata_array_from_leaves(
-                    ht[ann],
-                    leaf_indices,
-                    decomposition,
-                    n_full,
-                    is_freq_struct=False,
+                    ht[ann], r["leaf_indices"], r["decomposition"], r["n_full"]
                 )
                 for ann in entry_agg_funcs
             }
@@ -1356,17 +1311,14 @@ def compute_stats_per_ref_site(
         # level.
         ht = ht.select(**{ann: ht[ann][0] for ann in entry_agg_funcs})
         global_expr["sample_count"] = group_globals.freq_meta_sample_count[0]
-    else:
-        # If there was stratification, add the metadata and sample count info for
-        # the stratification to the globals. When reduction was applied above,
-        # use the original (full) freq_meta and sample counts so the output is
+    elif is_reduced:
+        # Use the original (full) freq_meta/sample counts so the output is
         # indistinguishable from a non-reduced run.
-        if is_reduced:
-            global_expr["strata_meta"] = full_meta
-            global_expr["strata_sample_count"] = full_sample_count
-        else:
-            global_expr["strata_meta"] = group_globals.freq_meta
-            global_expr["strata_sample_count"] = group_globals.freq_meta_sample_count
+        global_expr["strata_meta"] = r["freq_meta_full"]
+        global_expr["strata_sample_count"] = r["freq_meta_sample_count_full"]
+    else:
+        global_expr["strata_meta"] = group_globals.freq_meta
+        global_expr["strata_sample_count"] = group_globals.freq_meta_sample_count
 
     ht = ht.annotate_globals(**global_expr)
 

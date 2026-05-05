@@ -2094,8 +2094,11 @@ class TestFindMinimalStrataGroups:
                 "sex": "XY",
             },
         ]
+        # 100 samples total: 40 afr (20 XX, 20 XY) + 60 nfe (30 XX, 30 XY).
+        # 13 in the downsampling=1000 cohort: 5 afr (2 XX, 3 XY) + 8 nfe (4 XX, 4 XY).
+        sample_count = [100, 100, 40, 60, 20, 20, 30, 30, 5, 8, 2, 3, 4, 4]
 
-        leaves, decomp = find_minimal_strata_groups(freq_meta)
+        leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
 
         assert leaves == [1, 4, 5, 6, 7, 10, 11, 12, 13]
         assert decomp == {
@@ -2119,8 +2122,9 @@ class TestFindMinimalStrataGroups:
             {"group": "raw", "gen_anc": "nfe", "sex": "XX"},
             {"group": "raw", "gen_anc": "nfe", "sex": "XY"},
         ]
+        sample_count = [100, 40, 60, 50, 50, 20, 20, 30, 30]
 
-        leaves, decomp = find_minimal_strata_groups(freq_meta)
+        leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
 
         assert leaves == [5, 6, 7, 8]
         assert decomp == {
@@ -2139,8 +2143,9 @@ class TestFindMinimalStrataGroups:
             {"group": "adj", "downsampling": "1000", "gen_anc": "afr"},
             {"group": "adj", "downsampling": "1000", "gen_anc": "nfe"},
         ]
+        sample_count = [100, 13, 5, 8]
 
-        leaves, decomp = find_minimal_strata_groups(freq_meta)
+        leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
 
         # Every entry is a leaf:
         # - {} has no matching leaves with non_summable=={}, so falls back to leaf.
@@ -2151,26 +2156,79 @@ class TestFindMinimalStrataGroups:
     def test_no_summable_axes(self):
         """Trivial case: only adj/raw entries, no strata to reduce."""
         freq_meta = [{"group": "adj"}, {"group": "raw"}]
-        leaves, decomp = find_minimal_strata_groups(freq_meta)
+        leaves, decomp = find_minimal_strata_groups(freq_meta, [100, 100])
 
         assert leaves == [0, 1]
         assert decomp == {}
 
-    def test_partial_strata_falls_back_to_leaf(self):
-        """A parent that can't be fully decomposed still falls back to a single leaf match."""
+    def test_partial_strata_promotes_uncoverable_parents_to_leaves(self):
+        """When the only candidate decomposition's sample counts don't sum to the parent's, promote to leaf."""
         freq_meta = [
             {"group": "adj"},
             {"group": "adj", "gen_anc": "afr"},
             {"group": "adj", "gen_anc": "afr", "sex": "XX"},
         ]
+        # All-adj=100, afr=40, afr-XX=20. The {gen_anc, sex} family is the only
+        # leaf family; entry 2 alone doesn't cover entry 0 (20 ≠ 100) or
+        # entry 1 (20 ≠ 40), so both must be promoted to leaves.
+        sample_count = [100, 40, 20]
 
-        leaves, decomp = find_minimal_strata_groups(freq_meta)
+        leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
 
-        # Maximal axis set is {gen_anc, sex} -> only entry 2 is a leaf.
-        # Entry 0 has e_keys={} so it matches entry 2 (single leaf in partition).
-        # Entry 1 has gen_anc=afr, also matches entry 2.
-        assert leaves == [2]
-        assert decomp == {0: [2], 1: [2]}
+        assert leaves == [0, 1, 2]
+        assert decomp == {}
+
+    def test_multi_axis_family_uses_sample_count_validation(self):
+        """Mirrors the v4 generate_freq pipeline: gen_anc/sex alongside gatk_version/gen_anc.
+
+        Both families have axis set {gen_anc, sex} and {gatk_version, gen_anc}
+        respectively — neither is a subset of the other, so both are leaf
+        families. Without sample-count validation, parents like the all-adj
+        entry would silently sum across both families and double-count
+        samples. With validation, each non-leaf is decomposed against exactly
+        one family.
+        """
+        freq_meta = [
+            {"group": "adj"},
+            {"group": "adj", "gen_anc": "afr"},
+            {"group": "adj", "gen_anc": "nfe"},
+            {"group": "adj", "sex": "XX"},
+            {"group": "adj", "sex": "XY"},
+            {"group": "adj", "gen_anc": "afr", "sex": "XX"},
+            {"group": "adj", "gen_anc": "afr", "sex": "XY"},
+            {"group": "adj", "gen_anc": "nfe", "sex": "XX"},
+            {"group": "adj", "gen_anc": "nfe", "sex": "XY"},
+            {"group": "adj", "gatk_version": "v1"},
+            {"group": "adj", "gatk_version": "v2"},
+            {"group": "adj", "gatk_version": "v1", "gen_anc": "afr"},
+            {"group": "adj", "gatk_version": "v1", "gen_anc": "nfe"},
+            {"group": "adj", "gatk_version": "v2", "gen_anc": "afr"},
+            {"group": "adj", "gatk_version": "v2", "gen_anc": "nfe"},
+        ]
+        # 100 samples: 40 afr (20 XX, 20 XY) + 60 nfe (30 XX, 30 XY).
+        # gatk_version split: v1=30 (15 afr + 15 nfe), v2=70 (25 afr + 45 nfe).
+        sample_count = [100, 40, 60, 50, 50, 20, 20, 30, 30, 30, 70, 15, 15, 25, 45]
+
+        leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
+
+        # Both maximal axis-sets {gen_anc, sex} and {gatk_version, gen_anc}
+        # contribute leaves.
+        assert leaves == [5, 6, 7, 8, 11, 12, 13, 14]
+
+        # Sex parents (3, 4) only match the {gen_anc, sex} family. gatk
+        # parents (9, 10) only match the {gatk_version, gen_anc} family. For
+        # parents 0/1/2 both families would sum correctly; the smaller
+        # candidate wins, with insertion order breaking ties — the
+        # {gen_anc, sex} family is encountered first.
+        assert decomp == {
+            0: [5, 6, 7, 8],
+            1: [5, 6],
+            2: [7, 8],
+            3: [5, 7],
+            4: [6, 8],
+            9: [11, 12],
+            10: [13, 14],
+        }
 
     def test_custom_non_summable_axes(self):
         """Custom non_summable_axes treats the named axis as non-summable."""
@@ -2179,10 +2237,14 @@ class TestFindMinimalStrataGroups:
             {"group": "adj", "cohort": "A"},
             {"group": "adj", "cohort": "B"},
         ]
+        # 100 total: cohort A=40, cohort B=60.
+        sample_count = [100, 40, 60]
 
         # With cohort treated as a normal summable axis, entry 0 decomposes
-        # into entries 1 and 2.
-        leaves, decomp = find_minimal_strata_groups(freq_meta, non_summable_axes=set())
+        # into entries 1 and 2 (40+60 == 100).
+        leaves, decomp = find_minimal_strata_groups(
+            freq_meta, sample_count, non_summable_axes=set()
+        )
         assert leaves == [1, 2]
         assert decomp == {0: [1, 2]}
 
@@ -2190,10 +2252,15 @@ class TestFindMinimalStrataGroups:
         # (entries 1 and 2 are leaves because their non_summable axes don't
         # match entry 0's empty non_summable axes).
         leaves, decomp = find_minimal_strata_groups(
-            freq_meta, non_summable_axes={"cohort"}
+            freq_meta, sample_count, non_summable_axes={"cohort"}
         )
         assert leaves == [0, 1, 2]
         assert decomp == {}
+
+    def test_misaligned_sample_count_raises(self):
+        """Length-mismatched sample_count is a programmer error."""
+        with pytest.raises(ValueError, match="aligned"):
+            find_minimal_strata_groups([{"group": "adj"}], [1, 2])
 
 
 class TestAnnotateFreqReduceToMinimalGroups:

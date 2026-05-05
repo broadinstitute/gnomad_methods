@@ -3,8 +3,14 @@
 import logging
 
 import hail as hl
+import pytest
 
-from gnomad.utils.sparse_mt import get_coverage_agg_func
+from gnomad.utils.annotations import generate_freq_group_membership_array
+from gnomad.utils.sparse_mt import (
+    compute_allele_number_per_ref_site,
+    compute_stats_per_ref_site,
+    get_coverage_agg_func,
+)
 
 # Set up logger for tests.
 logger = logging.getLogger(__name__)
@@ -336,3 +342,451 @@ class TestGetCoverageAggFunc:
         assert result.mean == 27.5  # 275/10.
         # Values 35, 40, 45, 50 should be capped to 30, plus the original 30.
         assert result.coverage_counter.get(30, 0) == 5  # 4 capped + 1 original.
+
+
+class TestComputeAlleleNumberPerRefSiteReduceToMinimalGroups:
+    """Test that the reduce_to_minimal_groups optimization preserves AN values."""
+
+    @pytest.fixture
+    def synthetic_vds(self):
+        """Build a tiny VDS with 8 samples × 4 sites for AN testing.
+
+        The VDS has:
+          - 8 samples annotated with `gen_anc` (afr/nfe) and `sex` (XX/XY).
+          - 4 variant sites with explicit GT calls (some missing) for every
+            sample.
+          - A reference_data MT with 1-base ref blocks at the same loci, so
+            densification is essentially a no-op (we test the reduction
+            machinery, not the densification machinery).
+        """
+        samples = [
+            ("s1", "afr", "XX"),
+            ("s2", "afr", "XY"),
+            ("s3", "afr", "XX"),
+            ("s4", "afr", "XY"),
+            ("s5", "nfe", "XX"),
+            ("s6", "nfe", "XY"),
+            ("s7", "nfe", "XX"),
+            ("s8", "nfe", "XY"),
+        ]
+        positions = [1000, 2000, 3000, 4000]
+        variants = [
+            (hl.locus("chr1", p, reference_genome="GRCh38"), ["A", "T"])
+            for p in positions
+        ]
+        # Mix of called and missing genotypes so AN varies across sites and
+        # strata. Missing genotypes contribute 0 to AN; called diploid
+        # genotypes contribute 2.
+        gt_patterns = [
+            [(0, 0), (0, 1), (1, 1), (0, 1), (0, 0), (0, 1), (1, 1), (0, 1)],
+            [(0, 1), None, (0, 0), (0, 1), (0, 1), (1, 1), None, (0, 1)],
+            [None, (0, 0), (0, 1), (1, 1), (0, 0), (0, 0), (0, 1), (1, 1)],
+            [(1, 1), (0, 1), (0, 1), None, (1, 1), (0, 1), (0, 1), (0, 0)],
+        ]
+
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+        # Build the variant_data MT.
+        vd_entries = []
+        for v_idx, (locus, alleles) in enumerate(variants):
+            for s_idx, (sample_id, _, _) in enumerate(samples):
+                gt = gt_patterns[v_idx][s_idx]
+                vd_entries.append(
+                    {
+                        "locus": locus,
+                        "alleles": alleles,
+                        "s": sample_id,
+                        "GT": hl.call(*gt) if gt is not None else hl.missing(hl.tcall),
+                    }
+                )
+        vd = hl.Table.parallelize(
+            vd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(
+            gen_anc=sample_table[vd.s].gen_anc,
+            sex=sample_table[vd.s].sex,
+        )
+
+        # Build the reference_data MT: 1-base ref blocks at every variant
+        # locus. END = locus.position means the block covers exactly one
+        # position.
+        rd_entries = []
+        for locus, _ in variants:
+            for sample_id, _, _ in samples:
+                rd_entries.append(
+                    {
+                        "locus": locus,
+                        "s": sample_id,
+                        "END": locus.position,
+                        "LEN": 1,
+                    }
+                )
+        rd = hl.Table.parallelize(
+            rd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                END=hl.tint32,
+                LEN=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the four variant loci."""
+        positions = [1000, 2000, 3000, 4000]
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chr1", p, reference_genome="GRCh38")}
+                for p in positions
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    @staticmethod
+    def _index_an(ht):
+        """Return a dict mapping sorted strata items to lists of per-row AN."""
+        strata_meta = hl.eval(ht.strata_meta)
+        rows = ht.collect()
+        out = {}
+        for i, m in enumerate(strata_meta):
+            key = tuple(sorted(m.items()))
+            out[key] = [r.AN[i] for r in rows]
+        return out
+
+    def test_reduce_matches_full_with_gen_anc_and_sex(
+        self, synthetic_vds, reference_ht
+    ):
+        """compute_allele_number_per_ref_site(reduce=True) matches the full output."""
+        vd = synthetic_vds.variant_data
+        strata_expr = [
+            {"gen_anc": vd.gen_anc},
+            {"sex": vd.sex},
+            {"gen_anc": vd.gen_anc, "sex": vd.sex},
+        ]
+
+        full_ht = compute_allele_number_per_ref_site(
+            synthetic_vds, reference_ht, strata_expr=strata_expr
+        )
+        reduced_ht = compute_allele_number_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            strata_expr=strata_expr,
+            reduce_to_minimal_groups=True,
+        )
+
+        full_indexed = self._index_an(full_ht)
+        reduced_indexed = self._index_an(reduced_ht)
+
+        # The strata_meta key sets must match exactly — reduction is
+        # transparent to callers.
+        assert set(full_indexed.keys()) == set(reduced_indexed.keys())
+        # Sanity check: the parent {raw} entry must be present and was
+        # decomposed into the gen_anc-by-sex leaves.
+        assert (("group", "raw"),) in full_indexed
+
+        for key in full_indexed:
+            assert full_indexed[key] == reduced_indexed[key], key
+
+
+class TestComputeStatsPerRefSiteReducibleAggs:
+    """Test `reducible_aggs` mixes summable and non-summable aggregations under leaf reduction."""
+
+    @pytest.fixture
+    def synthetic_vds(self):
+        """8 samples × 4 sites VDS — same shape as the AN reduction test."""
+        samples = [
+            ("s1", "afr", "XX"),
+            ("s2", "afr", "XY"),
+            ("s3", "afr", "XX"),
+            ("s4", "afr", "XY"),
+            ("s5", "nfe", "XX"),
+            ("s6", "nfe", "XY"),
+            ("s7", "nfe", "XX"),
+            ("s8", "nfe", "XY"),
+        ]
+        positions = [1000, 2000, 3000, 4000]
+        variants = [
+            (hl.locus("chr1", p, reference_genome="GRCh38"), ["A", "T"])
+            for p in positions
+        ]
+        gt_patterns = [
+            [(0, 0), (0, 1), (1, 1), (0, 1), (0, 0), (0, 1), (1, 1), (0, 1)],
+            [(0, 1), None, (0, 0), (0, 1), (0, 1), (1, 1), None, (0, 1)],
+            [None, (0, 0), (0, 1), (1, 1), (0, 0), (0, 0), (0, 1), (1, 1)],
+            [(1, 1), (0, 1), (0, 1), None, (1, 1), (0, 1), (0, 1), (0, 0)],
+        ]
+
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+        vd_entries = []
+        for v_idx, (locus, alleles) in enumerate(variants):
+            for s_idx, (sample_id, _, _) in enumerate(samples):
+                gt = gt_patterns[v_idx][s_idx]
+                vd_entries.append(
+                    {
+                        "locus": locus,
+                        "alleles": alleles,
+                        "s": sample_id,
+                        "GT": hl.call(*gt) if gt is not None else hl.missing(hl.tcall),
+                        # `adj=True` for every (variant, sample) so we can build
+                        # group_membership_hts with `group_label="adj"` (the
+                        # default) and exercise non-leaf parent targets like
+                        # `{"group": "adj"}` without needing the AD/DP/GQ
+                        # fields the auto-adj path would otherwise demand.
+                        "adj": True,
+                    }
+                )
+        vd = hl.Table.parallelize(
+            vd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                adj=hl.tbool,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(
+            gen_anc=sample_table[vd.s].gen_anc,
+            sex=sample_table[vd.s].sex,
+        )
+
+        rd_entries = []
+        for locus, _ in variants:
+            for sample_id, _, _ in samples:
+                rd_entries.append(
+                    {"locus": locus, "s": sample_id, "END": locus.position, "LEN": 1}
+                )
+        rd = hl.Table.parallelize(
+            rd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                END=hl.tint32,
+                LEN=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the four variant loci."""
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chr1", p, reference_genome="GRCh38")}
+                for p in [1000, 2000, 3000, 4000]
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    @staticmethod
+    def _index(ht, ann):
+        meta = hl.eval(ht.strata_meta)
+        rows = ht.collect()
+        return {
+            tuple(sorted(m.items())): [r[ann][i] for r in rows]
+            for i, m in enumerate(meta)
+        }
+
+    def _build_group_membership_ht(self, vd, *, reduce: bool):
+        """Pre-build a group_membership_ht with `group_label="raw"` and `no_raw_group=True` to match the per-ref-site internal pattern (no adj filtering needed on entries — the test fixture's variant_data only has GT)."""
+        cols_ht = vd.cols()
+        strata_expr = [
+            {"gen_anc": cols_ht.gen_anc},
+            {"sex": cols_ht.sex},
+            {"gen_anc": cols_ht.gen_anc, "sex": cols_ht.sex},
+        ]
+        return generate_freq_group_membership_array(
+            cols_ht,
+            strata_expr,
+            no_raw_group=True,
+            reduce_to_minimal_groups=reduce,
+            group_label="raw",
+        )
+
+    # A fully-stratified leaf — survives reduction, so the
+    # `freq_meta.index(...)` lookup in agg_by_strata works against
+    # both the un-reduced and reduced freq_meta.
+    LEAF_TARGET = {"group": "raw", "gen_anc": "afr", "sex": "XX"}
+
+    def test_mixed_reducible_and_restricted_aggs_match_full(
+        self, synthetic_vds, reference_ht
+    ):
+        """AN goes through the leaf reduction; max_called is restricted to a leaf via entry_agg_group_membership; both match the full-fanout baseline.
+
+        The restriction target is a fully-stratified leaf so the
+        `freq_meta.index(...)` lookup succeeds against both the
+        un-reduced and the reduced `freq_meta`. Restricting a
+        non-summable aggregation to a non-leaf parent (e.g.
+        `{"group": "adj"}` against a gen_anc×sex stratification) is a
+        separate limitation of `agg_by_strata`'s lookup against the
+        reduced `freq_meta` — independent of the `reducible_aggs`
+        plumbing under test here.
+        """
+        vd = synthetic_vds.variant_data
+        full_gmh = self._build_group_membership_ht(vd, reduce=False)
+        reduced_gmh = self._build_group_membership_ht(vd, reduce=True)
+
+        entry_agg_funcs = {
+            "AN": (lambda t: t.GT.ploidy, hl.agg.sum),
+            "max_called": (lambda t: hl.int32(hl.is_defined(t.GT)), hl.agg.max),
+        }
+
+        full_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=full_gmh,
+            entry_agg_group_membership={"max_called": [self.LEAF_TARGET]},
+        )
+        reduced_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=reduced_gmh,
+            reducible_aggs={"AN"},
+            entry_agg_group_membership={"max_called": [self.LEAF_TARGET]},
+        )
+
+        full_an = self._index(full_ht, "AN")
+        reduced_an = self._index(reduced_ht, "AN")
+        assert set(full_an) == set(reduced_an)
+        for k in full_an:
+            assert full_an[k] == reduced_an[k], k
+
+        # max_called: same target leaf on both runs, so per-row length-1
+        # arrays should match element-for-element.
+        full_max = [r.max_called for r in full_ht.collect()]
+        reduced_max = [r.max_called for r in reduced_ht.collect()]
+        assert all(len(v) == 1 for v in full_max)
+        assert all(len(v) == 1 for v in reduced_max)
+        assert full_max == reduced_max
+
+    def test_reducible_aggs_overlap_with_entry_agg_group_membership_raises(
+        self, synthetic_vds, reference_ht
+    ):
+        """An annotation in BOTH reducible_aggs and entry_agg_group_membership raises."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_group_membership_ht(vd, reduce=True)
+        with pytest.raises(ValueError, match="disjoint"):
+            compute_stats_per_ref_site(
+                synthetic_vds,
+                reference_ht,
+                {"AN": (lambda t: t.GT.ploidy, hl.agg.sum)},
+                group_membership_ht=gmh,
+                reducible_aggs={"AN"},
+                entry_agg_group_membership={"AN": [self.LEAF_TARGET]},
+            )
+
+    def test_unaccounted_annotation_under_reduction_raises(
+        self, synthetic_vds, reference_ht
+    ):
+        """An annotation that is neither reducible nor restricted via entry_agg_group_membership raises when reduction is in effect."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_group_membership_ht(vd, reduce=True)
+        entry_agg_funcs = {
+            "AN": (lambda t: t.GT.ploidy, hl.agg.sum),
+            "max_called": (lambda t: hl.int32(hl.is_defined(t.GT)), hl.agg.max),
+        }
+        with pytest.raises(ValueError, match="no shape designation"):
+            compute_stats_per_ref_site(
+                synthetic_vds,
+                reference_ht,
+                entry_agg_funcs,
+                group_membership_ht=gmh,
+                reducible_aggs={"AN"},
+                # `max_called` is missing from BOTH reducible_aggs and
+                # entry_agg_group_membership — the guard should fire.
+            )
+
+    def _build_group_membership_ht_with_adj(self, vd, *, reduce: bool):
+        """Like `_build_group_membership_ht` but with `group_label='adj'` (the default) so freq_meta entries carry `group:adj` and a non-leaf parent like `{group:adj}` exists in `freq_meta_full`. Requires the variant_data MT to have an `adj` field."""
+        cols_ht = vd.cols()
+        strata_expr = [
+            {"gen_anc": cols_ht.gen_anc},
+            {"sex": cols_ht.sex},
+            {"gen_anc": cols_ht.gen_anc, "sex": cols_ht.sex},
+        ]
+        return generate_freq_group_membership_array(
+            cols_ht,
+            strata_expr,
+            reduce_to_minimal_groups=reduce,
+        )
+
+    def test_non_leaf_parent_target_under_reduction_matches_full(
+        self, synthetic_vds, reference_ht
+    ):
+        """`entry_agg_group_membership` target `{"group": "adj"}` is a non-leaf parent under reduction; the parent-resolution path in `agg_by_strata` synthesizes its sample-set as the union of its leaf-children and produces the same per-row values as the un-reduced run.
+
+        This is the gnomad_qc compute_coverage.py call shape: AN goes
+        through the reducible-aggs path; a non-summable annotation
+        (here `max_called`) is restricted to the global adj group via
+        `entry_agg_group_membership`. Under reduction the parent
+        `{"group": "adj"}` lives only in `freq_meta_full`; the
+        decomposition reconstructs its sample-set from the
+        gen_anc-by-sex leaves.
+        """
+        vd = synthetic_vds.variant_data
+        full_gmh = self._build_group_membership_ht_with_adj(vd, reduce=False)
+        reduced_gmh = self._build_group_membership_ht_with_adj(vd, reduce=True)
+
+        # Sanity-check the structural shape so a future regression in
+        # find_minimal_strata_groups (e.g., promoting the root to a
+        # leaf) is caught here rather than as a silent value mismatch.
+        reduced_freq_meta = hl.eval(reduced_gmh.freq_meta)
+        reduced_freq_meta_full = hl.eval(reduced_gmh.freq_meta_full)
+        assert {"group": "adj"} in [dict(m) for m in reduced_freq_meta_full]
+        assert {"group": "adj"} not in [dict(m) for m in reduced_freq_meta]
+
+        entry_agg_funcs = {
+            "AN": (lambda t: t.GT.ploidy, hl.agg.sum),
+            "max_called": (lambda t: hl.int32(hl.is_defined(t.GT)), hl.agg.max),
+        }
+        adj_target = {"group": "adj"}
+
+        full_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=full_gmh,
+            entry_agg_group_membership={"max_called": [adj_target]},
+        )
+        reduced_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=reduced_gmh,
+            reducible_aggs={"AN"},
+            entry_agg_group_membership={"max_called": [adj_target]},
+        )
+
+        # AN: full strata_meta and per-strata values match.
+        full_an = self._index(full_ht, "AN")
+        reduced_an = self._index(reduced_ht, "AN")
+        assert set(full_an) == set(reduced_an)
+        for k in full_an:
+            assert full_an[k] == reduced_an[k], k
+
+        # max_called: a single value per row, matching the {group:adj}
+        # entry from the un-reduced run.
+        full_max = [r.max_called for r in full_ht.collect()]
+        reduced_max = [r.max_called for r in reduced_ht.collect()]
+        assert all(len(v) == 1 for v in full_max)
+        assert all(len(v) == 1 for v in reduced_max)
+        assert full_max == reduced_max

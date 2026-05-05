@@ -7,8 +7,10 @@ import hail as hl
 
 from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.utils.annotations import (
+    _read_reduction_globals,
     agg_by_strata,
     annotate_adj,
+    expand_strata_array_from_leaves,
     fs_from_sb,
     generate_freq_group_membership_array,
     get_adj_expr,
@@ -1072,9 +1074,51 @@ def compute_stats_per_ref_site(
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
     sex_karyotype_field: Optional[str] = None,
+    reduce_to_minimal_groups: bool = False,
+    non_summable_strata: Optional[Set[str]] = None,
+    reducible_aggs: Optional[Set[str]] = None,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
+
+    .. rubric:: The `reduce_to_minimal_groups` parameter
+
+    When True, the per-strata aggregation runs only on the "leaf"
+    stratification groups (those that cannot be derived by summing other
+    groups). The remaining groups are reconstructed by element-wise
+    summation of leaves as a cheap post-processing step, so the returned
+    `strata_meta` and per-site arrays are identical to the
+    `reduce_to_minimal_groups=False` output. This is purely a cost
+    optimization for large stratifications.
+
+    The reduction assumes that the annotations subject to leaf expansion
+    are summable (integers or struct-of-integers). By default every
+    annotation in `entry_agg_funcs` is treated as reducible. Pass
+    `reducible_aggs={...}` to opt only specific annotations into the
+    expansion; the others must be narrowed via
+    `entry_agg_group_membership` (otherwise their per-row arrays would
+    have leaf shape, inconsistent with the full `strata_meta` global
+    that the function emits). When leaf reduction is in effect, every
+    entry in `entry_agg_funcs` must therefore appear in either
+    `reducible_aggs` or as a key of `entry_agg_group_membership` —
+    `compute_stats_per_ref_site` raises `ValueError` early in that case
+    so no aggregation cost is wasted on a call whose output would be
+    shape-inconsistent. This split lets a single call mix summable
+    aggregations (e.g., AN) with non-summable ones (e.g., a coverage
+    mean or a qual histogram restricted to a single global group via
+    `entry_agg_group_membership`).
+
+    Reduction is supported on both supplied paths:
+
+        - When `strata_expr` is provided, the leaf reduction is performed
+          inside the in-function call to
+          `generate_freq_group_membership_array`.
+        - When a pre-built `group_membership_ht` is supplied, this
+          function honors any reduction already performed on it
+          (detected by the `freq_reduced=True` global on
+          `group_membership_ht`). Setting
+          `reduce_to_minimal_groups=True` while passing a non-reduced
+          `group_membership_ht` is a no-op.
 
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.
@@ -1106,6 +1150,18 @@ def compute_stats_per_ref_site(
         the columns of `mtds` (variant_data MT if `mtds` is a VDS) and use "XX" and
         "XY" as values. If not provided, no sex karyotype adjustment is performed.
         Default is None.
+    :param reduce_to_minimal_groups: Whether to compute stats only on the
+        leaf set of stratification groups and reconstruct the rest by
+        element-wise summation. See the rubric above. Default is False.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values when `reduce_to_minimal_groups` is True.
+        Default is `{"downsampling"}`.
+    :param reducible_aggs: Optional set of annotation names from
+        `entry_agg_funcs` that are summable and should be expanded from
+        leaf shape to full shape via element-wise summation when leaf
+        reduction is in effect. Defaults to all of `entry_agg_funcs`.
+        Must be disjoint from the keys of `entry_agg_group_membership`.
+        Ignored when no leaf reduction is in effect.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1131,6 +1187,77 @@ def compute_stats_per_ref_site(
             "The 'freq_meta' annotation must be present in 'group_membership_ht' if "
             "'entry_agg_group_membership' is specified."
         )
+
+    # Determine reduction status from inputs so we can validate the
+    # shape of `entry_agg_funcs` before any aggregation runs. Both
+    # signals are inspectable without densify or aggregation:
+    #   - When `group_membership_ht` is supplied, reduction is recorded
+    #     by `generate_freq_group_membership_array` as the
+    #     `freq_reduced` global on that table.
+    #   - When `strata_expr` is supplied, the table is built later in
+    #     this function with `reduce_to_minimal_groups` forwarded into
+    #     `generate_freq_group_membership_array`, so the parameter
+    #     directly determines reduction status. The pre-built case's
+    #     "no-op when flag set but table not reduced" carve-out applies
+    #     only to the supplied-table path.
+    if group_membership_ht is not None:
+        is_reduced = "freq_reduced" in group_membership_ht.globals and hl.eval(
+            group_membership_ht.freq_reduced
+        )
+    else:
+        is_reduced = reduce_to_minimal_groups
+
+    if reducible_aggs is not None:
+        if not reducible_aggs:
+            raise ValueError(
+                "`reducible_aggs` is empty; pass `None` to default to all of "
+                "`entry_agg_funcs` or list at least one annotation."
+            )
+        unknown = set(reducible_aggs) - set(entry_agg_funcs)
+        if unknown:
+            raise ValueError(
+                "`reducible_aggs` contains names not in `entry_agg_funcs`: "
+                f"{sorted(unknown)}."
+            )
+        if entry_agg_group_membership is not None:
+            overlap = set(reducible_aggs) & set(entry_agg_group_membership)
+            if overlap:
+                raise ValueError(
+                    "`reducible_aggs` and `entry_agg_group_membership` must"
+                    f" be disjoint; got overlap: {sorted(overlap)}. A"
+                    " reducible annotation is computed on the leaf set and"
+                    " reconstructed by summation, while"
+                    " `entry_agg_group_membership` narrows an annotation to"
+                    " a specific subset; the two are mutually exclusive for"
+                    " the same annotation."
+                )
+
+    # When leaf reduction is in effect every annotation in
+    # `entry_agg_funcs` must be accounted for: either it is reducible
+    # (gets expanded leaf -> full post-aggregation) or it is narrowed
+    # via `entry_agg_group_membership` to a specific subset of strata.
+    # Anything in neither bucket would silently emit a leaf-shape
+    # array against a full-shape `strata_meta` global, which is a
+    # latent shape mismatch in downstream consumers; raise so the
+    # caller fixes the call before paying the densify+aggregation cost.
+    if is_reduced:
+        accounted_for = (
+            set(entry_agg_funcs) if reducible_aggs is None else set(reducible_aggs)
+        )
+        if entry_agg_group_membership is not None:
+            accounted_for |= set(entry_agg_group_membership)
+        unaccounted = set(entry_agg_funcs) - accounted_for
+        if unaccounted:
+            raise ValueError(
+                "Leaf reduction is in effect but the following entries of"
+                f" `entry_agg_funcs` have no shape designation:"
+                f" {sorted(unaccounted)}. Each annotation must be either"
+                " (a) listed in `reducible_aggs` if its values are summable"
+                " across strata, or (b) a key of"
+                " `entry_agg_group_membership` to restrict it to a specific"
+                " subset of groups; otherwise its per-row array would have"
+                " leaf shape while `strata_meta` is emitted at full shape."
+            )
 
     # Determine if the adj annotation is needed. It is only needed if "adj_groups" is
     # in the globals of the group_membership_ht and any entry is True, or "freq_meta"
@@ -1195,27 +1322,17 @@ def compute_stats_per_ref_site(
 
         # Use 'generate_freq_group_membership_array' to create a group_membership Table
         # that gives stratification group membership info based on 'strata_expr'. The
-        # returned Table has the following annotations: 'freq_meta',
-        # 'freq_meta_sample_count', and 'group_membership'. By default, this
-        # function returns annotations where the second element is a placeholder for the
-        # "raw" frequency of all samples, where the first 2 elements are the same sample
-        # set, but 'freq_meta' starts with [{"group": "adj", "group": "raw", ...]. Use
-        # `no_raw_group` to exclude the "raw" group so there is a single annotation
-        # representing the full samples set. Update all 'freq_meta' entries' "group"
-        # to "raw" because `generate_freq_group_membership_array` will return them all
-        # as "adj" since it was built for frequency computation, but for the coverage
-        # computation we don't want to do any filtering.
+        # The per-ref-site stats path does no genotype-level filtering, so
+        # label every freq_meta entry as "raw" rather than the default "adj".
+        # `no_raw_group=True` skips the inserted raw-only entry; the
+        # remaining entries cover all samples.
         group_membership_ht = generate_freq_group_membership_array(
-            ht, strata_expr, no_raw_group=True
-        )
-        group_membership_ht = group_membership_ht.annotate_globals(
-            freq_meta=group_membership_ht.freq_meta.map(
-                lambda x: hl.dict(
-                    x.items().map(
-                        lambda m: hl.if_else(m[0] == "group", ("group", "raw"), m)
-                    )
-                )
-            )
+            ht,
+            strata_expr,
+            no_raw_group=True,
+            reduce_to_minimal_groups=reduce_to_minimal_groups,
+            non_summable_strata=non_summable_strata,
+            group_label="raw",
         )
 
     if is_vds:
@@ -1264,15 +1381,36 @@ def compute_stats_per_ref_site(
     ht = ht.select_globals().checkpoint(hl.utils.new_temp_file("agg_stats", "ht"))
 
     group_globals = group_membership_ht.index_globals()
+
+    # `is_reduced` was determined from the inputs above. If True, expand
+    # each reducible per-strata aggregation back to the full set of
+    # groups by element-wise summation of the leaf positions.
+    if is_reduced:
+        r = _read_reduction_globals(group_globals)
+        anns_to_expand = (
+            set(entry_agg_funcs) if reducible_aggs is None else set(reducible_aggs)
+        )
+        ht = ht.annotate(
+            **{
+                ann: expand_strata_array_from_leaves(
+                    ht[ann], r["leaf_indices"], r["decomposition"], r["n_full"]
+                )
+                for ann in anns_to_expand
+            }
+        )
+
     global_expr = {}
     if no_strata:
         # If there was no stratification, move aggregated annotations to the top
         # level.
         ht = ht.select(**{ann: ht[ann][0] for ann in entry_agg_funcs})
         global_expr["sample_count"] = group_globals.freq_meta_sample_count[0]
+    elif is_reduced:
+        # Use the original (full) freq_meta/sample counts so the output is
+        # indistinguishable from a non-reduced run.
+        global_expr["strata_meta"] = r["freq_meta_full"]
+        global_expr["strata_sample_count"] = r["freq_meta_sample_count_full"]
     else:
-        # If there was stratification, add the metadata and sample count info for the
-        # stratification to the globals.
         global_expr["strata_meta"] = group_globals.freq_meta
         global_expr["strata_sample_count"] = group_globals.freq_meta_sample_count
 
@@ -1453,6 +1591,15 @@ def compute_allele_number_per_ref_site(
 ) -> hl.Table:
     """
     Compute the allele number per reference site.
+
+    .. note::
+
+        This function supports the `reduce_to_minimal_groups` cost
+        optimization (forwarded via `**kwargs` to
+        `compute_stats_per_ref_site`). AN is summable across
+        stratification groups (it is a sum of per-sample integer
+        ploidies), so the optimization produces output identical to a
+        non-reduced run. See `compute_stats_per_ref_site` for details.
 
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.

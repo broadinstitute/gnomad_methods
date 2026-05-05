@@ -1700,6 +1700,8 @@ def annotate_freq(
     ds_gen_anc_counts: Optional[Dict[str, int]] = None,
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
     annotate_mt: bool = True,
+    reduce_to_minimal_groups: bool = False,
+    non_summable_strata: Optional[Set[str]] = None,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Annotate `mt` with stratified allele frequencies.
@@ -1817,6 +1819,21 @@ def annotate_freq(
         output from the first function.
     :param annotate_mt: Whether to return the full MatrixTable with annotations added
         instead of only a Table with `freq` and other annotations. Default is True.
+    :param reduce_to_minimal_groups: Whether to compute per-variant call
+        statistics only on the "leaf" stratification groups (those that
+        cannot be derived by summing other groups in `freq_meta`) and
+        reconstruct the rest by element-wise summation as a cheap
+        post-processing step. The returned `freq`, `freq_meta`, and
+        `freq_meta_sample_count` are identical to the
+        `reduce_to_minimal_groups=False` output. This is a pure cost
+        optimization for large stratifications. Any annotations produced
+        by `entry_agg_funcs` are also expanded by element-wise summation,
+        so their values must be summable (integers or
+        struct-of-integers). Do not enable when `entry_agg_funcs` returns
+        non-summable values such as means or medians. Default is False.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values when `reduce_to_minimal_groups` is True.
+        Default is `{"downsampling"}`.
     :return: MatrixTable or Table with `freq` annotation.
     """
     errors = []
@@ -1865,13 +1882,53 @@ def annotate_freq(
         strata_expr,
         downsamplings=downsamplings,
         ds_gen_anc_counts=ds_gen_anc_counts,
+        reduce_to_minimal_groups=reduce_to_minimal_groups,
+        non_summable_strata=non_summable_strata,
     )
 
+    # Forward `freq_meta` onto the MT's globals so `compute_freq_by_strata`
+    # always derives `adj_groups` from it. This is required when reducing
+    # (where the leaf-only group_membership no longer follows the historical
+    # "index 0 = first adj, index 1 = raw" layout) and harmless otherwise.
+    mt_with_membership = mt.annotate_cols(
+        group_membership=ht[mt.col_key].group_membership
+    ).annotate_globals(freq_meta=ht.index_globals().freq_meta)
+
     freq_ht = compute_freq_by_strata(
-        mt.annotate_cols(group_membership=ht[mt.col_key].group_membership),
+        mt_with_membership,
         entry_agg_funcs=entry_agg_funcs,
     )
     freq_ht = freq_ht.annotate_globals(**ht.index_globals())
+
+    if reduce_to_minimal_groups:
+        # Expand the leaf-only per-strata annotations back to full length
+        # using the decomposition map stored on the group-membership Table.
+        r = _read_reduction_globals(freq_ht.globals)
+        annotation_names = ["freq"] + (
+            list(entry_agg_funcs) if entry_agg_funcs is not None else []
+        )
+        freq_ht = freq_ht.annotate(
+            **{
+                ann: expand_strata_array_from_leaves(
+                    freq_ht[ann], r["leaf_indices"], r["decomposition"], r["n_full"]
+                )
+                for ann in annotation_names
+            }
+        )
+
+        # Restore the original full freq_meta / freq_meta_sample_count and
+        # drop the now-redundant reduction-tracking globals.
+        freq_ht = freq_ht.annotate_globals(
+            freq_meta=r["freq_meta_full"],
+            freq_meta_sample_count=r["freq_meta_sample_count_full"],
+        )
+        freq_ht = freq_ht.drop(
+            "freq_meta_full",
+            "freq_meta_sample_count_full",
+            "freq_leaf_indices",
+            "freq_group_decomposition",
+            "freq_reduced",
+        )
 
     if annotate_mt:
         mt = mt.annotate_rows(**freq_ht[mt.row_key])
@@ -2033,6 +2090,291 @@ def build_freq_stratification_list(
     return strata_expr
 
 
+def _read_reduction_globals(
+    globals_source: hl.expr.StructExpression,
+) -> Dict[str, Any]:
+    """
+    Materialize the reduction-tracking globals into Python in a single round-trip.
+
+    Used by both `annotate_freq` and `compute_stats_per_ref_site` to recover
+    the leaf-decomposition information needed to expand leaf-only
+    per-strata arrays back to full length.
+
+    :param globals_source: Hail globals struct expected to contain
+        `freq_leaf_indices`, `freq_group_decomposition`, `freq_meta_full`,
+        and `freq_meta_sample_count_full`.
+    :return: Dict with keys `leaf_indices`, `decomposition`,
+        `freq_meta_full`, `freq_meta_sample_count_full`, and `n_full`.
+    """
+    g = hl.eval(
+        globals_source.select(
+            "freq_leaf_indices",
+            "freq_group_decomposition",
+            "freq_meta_full",
+            "freq_meta_sample_count_full",
+        )
+    )
+    return {
+        "leaf_indices": list(g.freq_leaf_indices),
+        "decomposition": {
+            i: list(c) for i, c in enumerate(g.freq_group_decomposition) if c
+        },
+        "freq_meta_full": list(g.freq_meta_full),
+        "freq_meta_sample_count_full": list(g.freq_meta_sample_count_full),
+        "n_full": len(g.freq_meta_full),
+    }
+
+
+def find_minimal_strata_groups(
+    freq_meta: List[Dict[str, str]],
+    freq_meta_sample_count: List[int],
+    non_summable_strata: Optional[Set[str]] = None,
+) -> Tuple[List[int], Dict[int, List[int]]]:
+    """
+    Identify the minimal "leaf" set of stratification groups in a `freq_meta`.
+
+    A "leaf" group is one that cannot be derived by summing other groups in
+    `freq_meta`. The remaining ("non-leaf") groups can be reconstructed by
+    element-wise summation of leaves whose sample counts partition the
+    parent's sample count. This supports an opt-in optimization that
+    computes per-variant call stats only on the leaves and reconstructs the
+    rest by summation as a cheap post-processing step (see
+    `expand_strata_array_from_leaves`).
+
+    The algorithm partitions `freq_meta` by the value of the `"group"` key
+    (typically `"adj"` and `"raw"`) and runs leaf detection independently
+    in each partition. `adj` and `raw` are genotype-level filters and never
+    sum into each other, so both `annotate_freq` (which produces a mix of
+    `adj` and `raw` entries) and `compute_stats_per_ref_site` (which
+    produces only `raw` entries) are handled correctly.
+
+    Within each partition, an entry's "summable strata" are the keys of its
+    metadata dict excluding `"group"` and excluding any stratum listed in
+    `non_summable_strata`. The leaves are the entries whose summable-strata
+    set is maximal-by-inclusion within the partition.
+
+    For each non-leaf, candidate leaves (those with the same non-summable
+    strata and agreeing on every key the parent has) are grouped by their
+    full summable-strata set so each candidate decomposition lives in a
+    single strata-family. A candidate is valid when its leaves' sample
+    counts sum to the parent's sample count. If multiple candidates are
+    valid, the candidate with the fewest leaves is chosen. If none are
+    valid, the parent is promoted to a leaf and computed directly.
+
+    The sample-count check is what makes this safe when `freq_meta`
+    contains multiple non-comparable strata families (e.g., `{gen_anc,
+    sex}` and `{gatk_version, gen_anc}`). Without it, a parent like the
+    all-adj entry would silently sum across both families and double-count
+    samples.
+
+    `non_summable_strata` defaults to `{"downsampling"}` because gnomAD's
+    `{downsampling: N, gen_anc: X}` groups select the first N samples of
+    the given gen_anc using a randomized rank. These groups are disjoint
+    from `{downsampling: N, gen_anc: Y}` and never sum into a global
+    `{downsampling: N}` entry.
+
+    :param freq_meta: List of `freq_meta` dicts as produced by
+        `generate_freq_group_membership_array`.
+    :param freq_meta_sample_count: Per-entry sample counts aligned with
+        `freq_meta`. Used to validate candidate decompositions.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values. Default is `{"downsampling"}`.
+    :return: Tuple of `(leaf_indices, decomposition)`. `leaf_indices` is a
+        list of indices into `freq_meta` marking the leaves, in ascending
+        order. `decomposition` maps each non-leaf index to the list of
+        leaf indices that sum to it.
+    """
+    if len(freq_meta_sample_count) != len(freq_meta):
+        raise ValueError(
+            "freq_meta_sample_count must be aligned with freq_meta "
+            f"(got {len(freq_meta_sample_count)} vs {len(freq_meta)})."
+        )
+
+    if non_summable_strata is None:
+        non_summable_strata = {"downsampling"}
+    else:
+        non_summable_strata = set(non_summable_strata)
+
+    def summable_strata_of(e: Dict[str, str]) -> frozenset:
+        return frozenset(
+            k for k in e.keys() if k != "group" and k not in non_summable_strata
+        )
+
+    def non_summable_strata_of(e: Dict[str, str]) -> frozenset:
+        return frozenset(
+            k for k in e.keys() if k != "group" and k in non_summable_strata
+        )
+
+    # Partition indices by group value (e.g., "adj" vs "raw").
+    partitions: Dict[Optional[str], List[int]] = {}
+    for i, e in enumerate(freq_meta):
+        partitions.setdefault(e.get("group"), []).append(i)
+
+    is_leaf = [False] * len(freq_meta)
+    decomposition: Dict[int, List[int]] = {}
+
+    for indices in partitions.values():
+        # Within this partition, determine the maximal-by-inclusion summable
+        # strata sets — those are the leaf strata sets.
+        strata_sets = {summable_strata_of(freq_meta[i]) for i in indices}
+        leaf_strata_sets = {
+            s for s in strata_sets if not any(s < s2 for s2 in strata_sets)
+        }
+
+        for i in indices:
+            if summable_strata_of(freq_meta[i]) in leaf_strata_sets:
+                is_leaf[i] = True
+
+        # Decompose non-leaves using only same-partition leaves.
+        leaf_indices_in_partition = [i for i in indices if is_leaf[i]]
+        for i in indices:
+            if is_leaf[i]:
+                continue
+            e = freq_meta[i]
+            e_keys = {k: v for k, v in e.items() if k != "group"}
+            e_non_summable = non_summable_strata_of(e)
+            parent_count = freq_meta_sample_count[i]
+
+            # Group candidate leaves by their full summable-strata set so
+            # each candidate decomposition lives in a single strata-family.
+            by_strata: Dict[frozenset, List[int]] = {}
+            for j in leaf_indices_in_partition:
+                f = freq_meta[j]
+                if non_summable_strata_of(f) != e_non_summable:
+                    continue
+                if any(f.get(k) != v for k, v in e_keys.items()):
+                    continue
+                by_strata.setdefault(summable_strata_of(f), []).append(j)
+
+            valid = [
+                cand
+                for cand in by_strata.values()
+                if sum(freq_meta_sample_count[j] for j in cand) == parent_count
+            ]
+            if valid:
+                decomposition[i] = min(valid, key=len)
+            else:
+                # No candidate strata-family fully covers the parent — compute
+                # this entry directly to keep the output correct.
+                logger.info(
+                    "Non-leaf entry at index %d (%s) has no sample-count-valid "
+                    "decomposition; promoting to leaf.",
+                    i,
+                    freq_meta[i],
+                )
+                is_leaf[i] = True
+
+    leaf_indices = [i for i, leaf in enumerate(is_leaf) if leaf]
+    return leaf_indices, decomposition
+
+
+def expand_strata_array_from_leaves(
+    leaf_array: hl.expr.ArrayExpression,
+    leaf_indices: List[int],
+    decomposition: Dict[int, List[int]],
+    n_full: int,
+) -> hl.expr.ArrayExpression:
+    """
+    Reconstruct a full-length per-strata array from a leaf-only array.
+
+    This is the post-processing companion to `find_minimal_strata_groups`.
+    For each position `i` in the full (original) `freq_meta`:
+
+        - If `i` is a leaf, the corresponding value in `leaf_array` is
+          used directly.
+        - Otherwise, the `leaf_array` values at the positions identified
+          by `decomposition[i]` are summed element-wise.
+
+    The element type is inspected to decide how to sum: integers are
+    summed directly, and structs have each numeric field summed
+    independently. Struct elements with an `"AF"` field are treated as
+    freq structs: `AF` is dropped before summing and recomputed at the
+    end as `or_missing(AN > 0, AC / AN)`.
+
+    The expansion is encoded as a compact Hail IR operation
+    (`hl_children.map(...)`) with lookup tables for leaf positions and
+    child-index lists. The serialized IR size is therefore O(n_full)
+    regardless of how many groups there are. This avoids Jackson's JSON
+    string-length limit that would otherwise be hit if each group's
+    expression were inlined as a separate Python-side Hail expression
+    literal.
+
+    :param leaf_array: Hail array expression of length `len(leaf_indices)`
+        produced by aggregating only the leaf groups.
+    :param leaf_indices: Indices into the original `freq_meta` marking the
+        leaves, in the same order as `leaf_array`.
+    :param decomposition: Map from non-leaf original index to the list of
+        original leaf indices that sum to it.
+    :param n_full: Length of the original (full) `freq_meta`.
+    :return: Hail array expression of length `n_full` whose element type
+        matches `leaf_array`'s.
+    """
+    # Map original-freq_meta index → position in the reduced leaf_array.
+    leaf_pos = {orig_idx: pos for pos, orig_idx in enumerate(leaf_indices)}
+
+    element_type = leaf_array.dtype.element_type
+    is_struct = isinstance(element_type, hl.tstruct)
+    is_freq_struct = is_struct and "AF" in element_type.fields
+    if is_freq_struct:
+        struct_fields = ["AC", "AN", "homozygote_count"]
+    elif is_struct:
+        struct_fields = list(element_type.fields)
+    else:
+        struct_fields = None
+
+    # Build a Hail-side lookup: for each position in the full array, store
+    # the list of leaf-array positions whose values should be summed. For
+    # leaves this is a single-element list; for non-leaves it's the list of
+    # child positions in the leaf array.
+    children_per_group: List[List[int]] = []
+    for i in range(n_full):
+        if i in leaf_pos:
+            children_per_group.append([leaf_pos[i]])
+        elif i in decomposition:
+            children_per_group.append([leaf_pos[j] for j in decomposition[i]])
+        else:
+            raise ValueError(
+                f"Index {i} is neither a leaf nor in the decomposition map."
+            )
+
+    hl_children = hl.literal(children_per_group)
+
+    # Drop AF before summing so every element has the same numeric-only type;
+    # AF is recomputed below from the summed AC/AN.
+    if is_freq_struct:
+        projected = leaf_array.map(lambda x: x.select(*struct_fields))
+    else:
+        projected = leaf_array
+
+    if struct_fields is not None:
+
+        def _sum_at(child_indices):
+            return hl.struct(
+                **{
+                    f: hl.sum(
+                        child_indices.map(lambda idx: hl.or_else(projected[idx][f], 0))
+                    )
+                    for f in struct_fields
+                }
+            )
+
+    else:
+
+        def _sum_at(child_indices):
+            return hl.sum(child_indices.map(lambda idx: hl.or_else(projected[idx], 0)))
+
+    expanded = hl_children.map(_sum_at)
+
+    if is_freq_struct:
+        expanded = expanded.map(
+            lambda x: x.annotate(AF=hl.or_missing(x.AN > 0, x.AC / x.AN)).select(
+                "AC", "AF", "AN", "homozygote_count"
+            )
+        )
+
+    return expanded
+
+
 def generate_freq_group_membership_array(
     ht: hl.Table,
     strata_expr: List[Dict[str, hl.expr.StringExpression]],
@@ -2040,6 +2382,9 @@ def generate_freq_group_membership_array(
     ds_gen_anc_counts: Optional[Dict[str, int]] = None,
     remove_zero_sample_groups: bool = False,
     no_raw_group: bool = False,
+    reduce_to_minimal_groups: bool = False,
+    non_summable_strata: Optional[Set[str]] = None,
+    group_label: str = "adj",
 ) -> hl.Table:
     """
     Generate a Table with a 'group_membership' array for each sample indicating whether the sample belongs to specific stratification groups.
@@ -2060,6 +2405,30 @@ def generate_freq_group_membership_array(
     sample belongs to specific stratification groups. All possible value combinations
     are determined for each stratification grouping in the `strata_expr` list.
 
+    .. rubric:: The `reduce_to_minimal_groups` parameter
+
+    When `reduce_to_minimal_groups` is True, the returned
+    `group_membership`, `freq_meta`, and `freq_meta_sample_count` are
+    reduced to only the "leaf" groups (those that cannot be derived by
+    summing other groups in `freq_meta`). The original full versions are
+    preserved as additional globals so a downstream caller can
+    reconstruct the full per-strata arrays after its (cheaper) leaf-only
+    aggregation:
+
+        - `freq_meta_full`: original full `freq_meta` before reduction.
+        - `freq_meta_sample_count_full`: original full sample counts.
+        - `freq_leaf_indices`: indices into `freq_meta_full` marking the
+          leaves, in the same order as the reduced `freq_meta`.
+        - `freq_group_decomposition`: list of length
+          `len(freq_meta_full)` where each element is the list of
+          `freq_meta_full` indices that sum to that position. Leaves get
+          an empty list.
+        - `freq_reduced`: True, signalling that the reduction has been
+          applied.
+
+    See `find_minimal_strata_groups` for the leaf-detection algorithm and
+    `expand_strata_array_from_leaves` for the reconstruction step.
+
     :param ht: Input Table that contains Expressions specified by `strata_expr`.
     :param strata_expr: List of dictionaries specifying stratification groups where
         the keys of each dictionary are strings and the values are corresponding
@@ -2071,6 +2440,20 @@ def generate_freq_group_membership_array(
     :param no_raw_group: Whether to remove the raw group from the 'group_membership'
         annotation and the 'freq_meta' and 'freq_meta_sample_count' global annotations.
         Default is False.
+    :param reduce_to_minimal_groups: Whether to reduce the returned
+        `group_membership`, `freq_meta`, and `freq_meta_sample_count` to
+        only the leaf groups whose call stats cannot be derived by summing
+        other groups. The full versions and the leaf-decomposition map
+        are stored as additional globals so a downstream caller (e.g.,
+        `annotate_freq`) can reconstruct the full per-strata array after
+        aggregation. Default is False.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values when `reduce_to_minimal_groups` is True.
+        Default is `{"downsampling"}`.
+    :param group_label: Value to use for the `"group"` key on every
+        constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
+        for callers that don't apply any genotype-level filtering (e.g.,
+        `compute_stats_per_ref_site`).
     :return: Table with the 'group_membership' array annotation.
     """
     errors = []
@@ -2187,7 +2570,8 @@ def generate_freq_group_membership_array(
 
     # Create and annotate global expression with meta and sample count information.
     freq_meta = [
-        dict(**sample_group[0], group="adj") for sample_group in sample_group_filters
+        dict(**sample_group[0], group=group_label)
+        for sample_group in sample_group_filters
     ]
 
     if not no_raw_group:
@@ -2208,6 +2592,51 @@ def generate_freq_group_membership_array(
         "freq_meta": freq_meta,
         "freq_meta_sample_count": freq_meta_sample_count,
     }
+
+    if reduce_to_minimal_groups:
+        # `freq_meta_sample_count` may be a Hail expression at this point (it
+        # is wrapped in `hl.array(...).extend(...)` above when raw is
+        # prepended). Materialize it back to a Python list so we can slice
+        # both arrays in Python.
+        if isinstance(freq_meta_sample_count, list):
+            freq_meta_sample_count_full = list(freq_meta_sample_count)
+        else:
+            freq_meta_sample_count_full = list(hl.eval(freq_meta_sample_count))
+
+        freq_meta_full = [dict(m) for m in freq_meta]
+        leaf_indices, decomposition = find_minimal_strata_groups(
+            freq_meta_full,
+            freq_meta_sample_count_full,
+            non_summable_strata=non_summable_strata,
+        )
+
+        n_full = len(freq_meta_full)
+        # Serialize the decomposition as a list of length `n_full`, indexed
+        # by the original freq_meta position. Leaves get an empty list.
+        freq_group_decomposition = [decomposition.get(i, []) for i in range(n_full)]
+
+        logger.info(
+            "Reducing freq_meta from %d to %d groups (leaf-only).",
+            n_full,
+            len(leaf_indices),
+        )
+
+        # Slice freq_meta and sample counts down to the leaves.
+        freq_meta = [freq_meta_full[i] for i in leaf_indices]
+        freq_meta_sample_count = [freq_meta_sample_count_full[i] for i in leaf_indices]
+
+        # Slice the per-sample group_membership array to the leaf positions.
+        ht = ht.annotate(
+            group_membership=hl.array([ht.group_membership[i] for i in leaf_indices])
+        )
+
+        global_expr["freq_meta"] = freq_meta
+        global_expr["freq_meta_sample_count"] = freq_meta_sample_count
+        global_expr["freq_meta_full"] = freq_meta_full
+        global_expr["freq_meta_sample_count_full"] = freq_meta_sample_count_full
+        global_expr["freq_leaf_indices"] = leaf_indices
+        global_expr["freq_group_decomposition"] = freq_group_decomposition
+        global_expr["freq_reduced"] = True
 
     if downsamplings is not None:
         global_expr["downsamplings"] = downsamplings
@@ -2268,13 +2697,22 @@ def compute_freq_by_strata(
             )
         )
 
-    # Add adj_groups global annotation indicating that the second element in
-    # group_membership is 'raw' and all others are 'adj'.
-    mt = mt.annotate_globals(
-        adj_groups=hl.range(hl.len(mt.group_membership.take(1)[0])).map(
-            lambda x: x != 1
+    # Determine the adj_groups global annotation. If `freq_meta` is present
+    # in the input MT globals (e.g., when called from `annotate_freq` with a
+    # reduced/leaf-only group_membership where the layout is no longer
+    # "index 0 = first adj, index 1 = raw"), derive adj_groups from
+    # freq_meta directly. Otherwise, fall back to the historical assumption
+    # that index 1 is the 'raw' group and all other indices are 'adj'.
+    if "freq_meta" in mt.globals:
+        mt = mt.annotate_globals(
+            adj_groups=mt.freq_meta.map(lambda x: x.get("group", "NA") == "adj")
         )
-    )
+    else:
+        mt = mt.annotate_globals(
+            adj_groups=hl.range(hl.len(mt.group_membership.take(1)[0])).map(
+                lambda x: x != 1
+            )
+        )
 
     if entry_agg_funcs is None:
         entry_agg_funcs = {}
@@ -2335,8 +2773,12 @@ def agg_by_strata(
         of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
         the corresponding entry aggregation function. If provided, 'freq_meta' must be
         present in `group_membership_ht` or `mt` and represent the same strata as those
-        in 'group_membership'. If not provided, all entries of the 'group_membership'
-        annotation will have the entry aggregation functions applied to them.
+        in 'group_membership'. Under leaf reduction (when `freq_reduced=True` is set on
+        the supplied globals), targets may also reference non-leaf parents present in
+        `freq_meta_full`; their sample-sets are reconstructed by flattening the
+        `s_indices` of their leaf-children listed in `freq_group_decomposition`. If not
+        provided, all entries of the 'group_membership' annotation will have the entry
+        aggregation functions applied to them.
     :return: Table with annotations of stratified aggregations.
     """
     if group_membership_ht is None and "group_membership" not in mt.col:
@@ -2394,10 +2836,75 @@ def agg_by_strata(
         )
 
     entry_agg_group_membership = entry_agg_group_membership or {}
-    entry_agg_group_membership = {
-        ann: [group_globals["freq_meta"].index(s) for s in strata]
-        for ann, strata in entry_agg_group_membership.items()
-    }
+
+    # Resolve each `entry_agg_group_membership` target to either a leaf
+    # position in the (possibly reduced) `freq_meta`, or — if the target
+    # is a non-leaf parent under reduction — the list of leaf positions
+    # whose disjoint sample-sets sum to it. Resolution happens in
+    # Python because the metadata is small (~100s of entries) and we
+    # need the leaf-vs-parent decision before building the per-target
+    # aggregation expression.
+    if entry_agg_group_membership:
+        freq_meta_py = [dict(m) for m in hl.eval(group_globals["freq_meta"])]
+        is_reduced_for_lookup = "freq_reduced" in group_globals and hl.eval(
+            group_globals.freq_reduced
+        )
+        if is_reduced_for_lookup:
+            freq_meta_full_py = [dict(m) for m in hl.eval(group_globals.freq_meta_full)]
+            decomposition_py = list(hl.eval(group_globals.freq_group_decomposition))
+            leaf_indices_py = list(hl.eval(group_globals.freq_leaf_indices))
+            full_to_leaf_pos = {f_i: lp for lp, f_i in enumerate(leaf_indices_py)}
+        else:
+            freq_meta_full_py = freq_meta_py
+            decomposition_py = [[] for _ in freq_meta_py]
+            full_to_leaf_pos = {i: i for i in range(len(freq_meta_py))}
+
+        def _resolve_target(target_dict):
+            target = dict(target_dict)
+            for i, m in enumerate(freq_meta_py):
+                if m == target:
+                    return ("leaf", i, target.get("group", "NA") == "adj")
+            if not is_reduced_for_lookup:
+                raise ValueError(
+                    f"`entry_agg_group_membership` target {target} is not in"
+                    " `freq_meta`."
+                )
+            for i, m in enumerate(freq_meta_full_py):
+                if m == target:
+                    children_full = list(decomposition_py[i])
+                    if not children_full:
+                        raise ValueError(
+                            f"`entry_agg_group_membership` target {target} is in"
+                            " `freq_meta_full` but has empty decomposition; under"
+                            " reduction this means it is neither a leaf nor a"
+                            " summable parent (likely spans `non_summable_strata`"
+                            " in a way that prevents decomposition)."
+                        )
+                    try:
+                        children_leaf_pos = [
+                            full_to_leaf_pos[ci] for ci in children_full
+                        ]
+                    except KeyError as e:
+                        raise ValueError(
+                            f"`entry_agg_group_membership` target {target}"
+                            f" decomposes to a non-leaf at full index {e.args[0]};"
+                            " decomposition is expected to map each non-leaf"
+                            " directly to leaves."
+                        )
+                    return (
+                        "parent",
+                        children_leaf_pos,
+                        target.get("group", "NA") == "adj",
+                    )
+            raise ValueError(
+                f"`entry_agg_group_membership` target {target} is not in"
+                " `freq_meta` or `freq_meta_full`."
+            )
+
+        entry_agg_group_membership = {
+            ann: [_resolve_target(t) for t in targets]
+            for ann, targets in entry_agg_group_membership.items()
+        }
 
     n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
     if n_adj_groups != n_groups:
@@ -2465,23 +2972,49 @@ def agg_by_strata(
             adj_groups_expr,
         )
 
+    # Build per-target (s_indices, adj) arrays for each annotation in
+    # `entry_agg_group_membership`. Leaf targets reuse the
+    # `indices_by_group` / `adj_groups` slots directly; non-leaf parent
+    # targets synthesize their `s_indices` as the flatten of their
+    # leaf-children's index arrays (safe — the leaves of a parent's
+    # decomposition are pairwise disjoint, enforced by the sample-count
+    # check in `find_minimal_strata_groups`). The parent's adj flag is
+    # taken from its own `group` key, equivalent to any leaf-child's
+    # adj because a parent's leaf-set shares the same `group` value.
+    def _per_target_indices_and_adj(target_resolutions):
+        s_indices_per_target = []
+        adj_per_target = []
+        for kind, payload, adj in target_resolutions:
+            if kind == "leaf":
+                s_indices_per_target.append(ht.indices_by_group[payload])
+                adj_per_target.append(ht.adj_groups[payload])
+            else:  # parent
+                s_indices_per_target.append(
+                    hl.flatten(hl.array([ht.indices_by_group[lp] for lp in payload]))
+                )
+                adj_per_target.append(hl.literal(adj))
+        return hl.array(s_indices_per_target), hl.array(adj_per_target)
+
     # Add annotations for any supplied entry transform and aggregation functions.
     # Filter groups to only those in entry_agg_group_membership if specified.
     # If there are no specific entry group indices for an annotation, use ht[g]
     # to consider all groups without filtering.
+    def _agg_for(ann, f):
+        if ann in entry_agg_group_membership:
+            s_indices, adjs = _per_target_indices_and_adj(
+                entry_agg_group_membership[ann]
+            )
+            return _agg_by_group(s_indices, adjs, agg_func=f[1], ann_expr=ht[ann])
+        return _agg_by_group(
+            ht.indices_by_group,
+            ht.adj_groups,
+            agg_func=f[1],
+            ann_expr=ht[ann],
+        )
+
     ht = ht.select(
         *select_fields,
-        **{
-            ann: _agg_by_group(
-                *[
-                    [ht[g][i] for i in entry_agg_group_membership.get(ann, [])] or ht[g]
-                    for g in ["indices_by_group", "adj_groups"]
-                ],
-                agg_func=f[1],
-                ann_expr=ht[ann],
-            )
-            for ann, f in entry_agg_funcs.items()
-        },
+        **{ann: _agg_for(ann, f) for ann, f in entry_agg_funcs.items()},
     )
 
     return ht.drop("cols")

@@ -2424,3 +2424,69 @@ class TestAnnotateFreqReduceToMinimalGroups:
                 == reduced_indexed[key]["sample_count"]
             ), key
             assert full_indexed[key]["freqs"] == reduced_indexed[key]["freqs"], key
+
+    def test_reduce_matches_full_with_multi_family_strata(self, sample_mt):
+        """annotate_freq(reduce=True) matches the full output when freq_meta has multiple non-comparable strata families.
+
+        Mirrors the v4 generate_freq pipeline shape: a `gen_anc/sex` family
+        (from `build_freq_stratification_list`) and a `platform/gen_anc`
+        family (from `additional_strata_expr`). Both are maximal-by-inclusion
+        leaf-strata sets, and both validly decompose parents like the
+        all-adj entry. Without sample-count validation in
+        `find_minimal_strata_groups`, the parent would silently sum across
+        both families and double-count samples; this test locks that fix in.
+        """
+        # Mix platforms across gen_anc and sex so neither family perfectly
+        # correlates with the other. With this assignment, every parent
+        # entry has at least one valid single-family decomposition.
+        platforms = {
+            "s1": "A",
+            "s2": "A",
+            "s3": "B",
+            "s4": "B",
+            "s5": "A",
+            "s6": "B",
+            "s7": "A",
+            "s8": "B",
+        }
+        platform_table = hl.Table.parallelize(
+            [{"s": s, "platform": p} for s, p in platforms.items()],
+            hl.tstruct(s=hl.tstr, platform=hl.tstr),
+        ).key_by("s")
+        mt = sample_mt.annotate_cols(platform=platform_table[sample_mt.s].platform)
+
+        additional = [
+            {"platform": mt.platform},
+            {"platform": mt.platform, "gen_anc": mt.gen_anc},
+        ]
+        full_mt = annotate_freq(
+            mt,
+            sex_expr=mt.sex,
+            gen_anc_expr=mt.gen_anc,
+            additional_strata_expr=additional,
+        )
+        reduced_mt = annotate_freq(
+            mt,
+            sex_expr=mt.sex,
+            gen_anc_expr=mt.gen_anc,
+            additional_strata_expr=additional,
+            reduce_to_minimal_groups=True,
+        )
+
+        full_indexed = self._run_and_index_freq(full_mt)
+        reduced_indexed = self._run_and_index_freq(reduced_mt)
+
+        assert set(full_indexed.keys()) == set(reduced_indexed.keys())
+        # Sanity check: both families are represented, otherwise the
+        # multi-family scenario isn't actually being exercised.
+        platform_groups = [
+            k for k in full_indexed if any(p[0] == "platform" for p in k)
+        ]
+        assert platform_groups, "expected at least one platform-stratified group"
+
+        for key in full_indexed:
+            assert (
+                full_indexed[key]["sample_count"]
+                == reduced_indexed[key]["sample_count"]
+            ), key
+            assert full_indexed[key]["freqs"] == reduced_indexed[key]["freqs"], key

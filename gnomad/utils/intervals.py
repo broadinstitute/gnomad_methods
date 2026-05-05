@@ -215,16 +215,16 @@ def explode_intervals_to_loci(
                 " the returned ArrayExpression. Set `deduplicate=True` to remove them."
             )
 
-        loci_arrays = [
-            interval_to_pos_range(i).map(
-                lambda pos, _i=i: hl.locus(
-                    _i.start.contig,
+        def _make_loci_array(interval_expr):
+            return interval_to_pos_range(interval_expr).map(
+                lambda pos: hl.locus(
+                    interval_expr.start.contig,
                     pos,
-                    reference_genome=_i.start.dtype.reference_genome,
+                    reference_genome=interval_expr.start.dtype.reference_genome,
                 )
             )
-            for i in intervals
-        ]
+
+        loci_arrays = [_make_loci_array(i) for i in intervals]
         if not flatten:
             return hl.array(loci_arrays)
         result = hl.flatten(hl.array(loci_arrays))

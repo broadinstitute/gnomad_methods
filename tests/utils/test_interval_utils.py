@@ -59,8 +59,8 @@ class TestExplodeIntervalsToLoci:
 
         result = result_ht.collect()
 
-        expected_loci_1 = [hl.locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
-        expected_loci_2 = [hl.locus("chr2", pos, "GRCh38") for pos in range(200, 203)]
+        expected_loci_1 = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
+        expected_loci_2 = [hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)]
 
         result_loci = [row.locus for row in result]
         assert len(result_loci) == len(expected_loci_1) + len(expected_loci_2)
@@ -117,7 +117,7 @@ class TestExplodeIntervalsToLoci:
         loci = hl.eval(result)
 
         # Expected loci (chr1:100-105, both inclusive).
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
 
         # Verify the result.
         assert loci == expected_loci
@@ -138,7 +138,7 @@ class TestExplodeIntervalsToLoci:
         loci = hl.eval(result)
 
         # Expected loci (chr1:101-105, start excluded, end included).
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(101, 106)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 106)]
 
         # Verify the result.
         assert loci == expected_loci
@@ -159,7 +159,7 @@ class TestExplodeIntervalsToLoci:
         loci = hl.eval(result)
 
         # Expected loci (chr1:100-104, start included, end excluded).
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(100, 105)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 105)]
 
         # Verify the result.
         assert loci == expected_loci
@@ -180,7 +180,7 @@ class TestExplodeIntervalsToLoci:
         loci = hl.eval(result)
 
         # Expected loci (chr1:101-104, both excluded).
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(101, 105)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 105)]
 
         # Verify the result.
         assert loci == expected_loci
@@ -212,7 +212,7 @@ class TestExplodeIntervalsToLoci:
 
         # Expected: single locus at position 100.
         assert len(result) == 1
-        assert result[0].locus == hl.locus("chr1", 100, "GRCh38")
+        assert result[0].locus == hl.Locus("chr1", 100, "GRCh38")
 
     def test_explode_table_missing_interval_field_raises_error(
         self, sample_interval_table: hl.Table
@@ -271,7 +271,7 @@ class TestExplodeIntervalsToLoci:
         result = result_ht.collect()
 
         # Expected loci (1000-1003, both inclusive).
-        expected_loci = [hl.locus("1", pos, "GRCh37") for pos in range(1000, 1004)]
+        expected_loci = [hl.Locus("1", pos, "GRCh37") for pos in range(1000, 1004)]
 
         # Get the loci from the result.
         result_loci = [row.locus for row in result]
@@ -375,7 +375,7 @@ class TestExplodeIntervalsToLoci:
         )
         result_loci = [row.locus for row in result_ht.collect()]
 
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(101, 106)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 106)]
         assert len(result_loci) == len(expected_loci)
         assert all(locus in result_loci for locus in expected_loci)
 
@@ -398,7 +398,7 @@ class TestExplodeIntervalsToLoci:
         )
         result_loci = [row.locus for row in result_ht.collect()]
 
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(100, 105)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 105)]
         assert len(result_loci) == len(expected_loci)
         assert all(locus in result_loci for locus in expected_loci)
 
@@ -421,7 +421,7 @@ class TestExplodeIntervalsToLoci:
         )
         result_loci = [row.locus for row in result_ht.collect()]
 
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(101, 105)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 105)]
         assert len(result_loci) == len(expected_loci)
         assert all(locus in result_loci for locus in expected_loci)
 
@@ -446,11 +446,11 @@ class TestExplodeIntervalsToLoci:
         loci = hl.eval(result)
 
         expected_loci = {
-            hl.locus("chr1", 100, "GRCh38"),
-            hl.locus("chr1", 101, "GRCh38"),
-            hl.locus("chr1", 102, "GRCh38"),
-            hl.locus("chr2", 200, "GRCh38"),
-            hl.locus("chr2", 201, "GRCh38"),
+            hl.Locus("chr1", 100, "GRCh38"),
+            hl.Locus("chr1", 101, "GRCh38"),
+            hl.Locus("chr1", 102, "GRCh38"),
+            hl.Locus("chr2", 200, "GRCh38"),
+            hl.Locus("chr2", 201, "GRCh38"),
         }
         assert set(loci) == expected_loci
 
@@ -486,7 +486,7 @@ class TestExplodeIntervalsToLoci:
         )
         result_loci = [row.locus for row in result_ht.collect()]
 
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(100, 109)]
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 109)]
         assert len(result_loci) == len(expected_loci)
         assert all(locus in result_loci for locus in expected_loci)
 
@@ -592,7 +592,7 @@ class TestExplodeIntervalsToLoci:
         result = explode_intervals_to_loci(intervals, deduplicate=True)
         loci = hl.eval(result)
 
-        expected_loci = {hl.locus("chr1", pos, "GRCh38") for pos in range(100, 109)}
+        expected_loci = {hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 109)}
         assert set(loci) == expected_loci
 
     def test_explode_list_overlapping_intervals_no_deduplicate_warns(
@@ -624,8 +624,8 @@ class TestExplodeIntervalsToLoci:
         loci = hl.eval(result)
         # Loci at chr1:101 and chr1:102 appear twice due to overlap.
         assert len(loci) == 6
-        assert loci.count(hl.locus("chr1", 101, "GRCh38")) == 2
-        assert loci.count(hl.locus("chr1", 102, "GRCh38")) == 2
+        assert loci.count(hl.Locus("chr1", 101, "GRCh38")) == 2
+        assert loci.count(hl.Locus("chr1", 102, "GRCh38")) == 2
 
     def test_explode_empty_list_raises_type_error(self) -> None:
         """Test that passing an empty Python list raises a TypeError.
@@ -666,8 +666,8 @@ class TestExplodeIntervalsToLoci:
         result = explode_intervals_to_loci(intervals, deduplicate=True)
         loci = hl.eval(result)
 
-        expected_loci = [hl.locus("chr1", pos, "GRCh38") for pos in range(100, 103)] + [
-            hl.locus("chr2", pos, "GRCh38") for pos in range(100, 103)
+        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 103)] + [
+            hl.Locus("chr2", pos, "GRCh38") for pos in range(100, 103)
         ]
         assert len(loci) == 6
         assert set(loci) == set(expected_loci)

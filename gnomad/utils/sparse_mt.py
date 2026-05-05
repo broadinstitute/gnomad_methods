@@ -1082,24 +1082,29 @@ def compute_stats_per_ref_site(
 
     .. rubric:: The `reduce_to_minimal_groups` parameter
 
-    When True, the per-strata aggregation runs only on a minimal "leaf"
-    subset of stratification groups (those that cannot be derived by summing
-    other groups). The remaining groups are reconstructed by element-wise
+    When True, the per-strata aggregation runs only on the "leaf"
+    stratification groups (those that cannot be derived by summing other
+    groups). The remaining groups are reconstructed by element-wise
     summation of leaves as a cheap post-processing step, so the returned
     `strata_meta` and per-site arrays are identical to the
     `reduce_to_minimal_groups=False` output. This is purely a cost
-    optimization for large stratifications. The reduction **assumes every
-    annotation produced by `entry_agg_funcs` is summable** (integers or
-    struct-of-integers). Do **not** enable this when `entry_agg_funcs`
-    returns non-summable values such as means or medians (e.g., it must not
-    be used with `compute_coverage_stats`'s default coverage aggregation).
+    optimization for large stratifications.
+
+    The reduction assumes every annotation produced by `entry_agg_funcs`
+    is summable (integers or struct-of-integers). Do not enable when
+    `entry_agg_funcs` returns non-summable values such as means or
+    medians (e.g., it must not be used with `compute_coverage_stats`'s
+    default coverage aggregation).
 
     Reduction is supported on both supplied paths:
+
         - When `strata_expr` is provided, the leaf reduction is performed
-          inside the in-function call to `generate_freq_group_membership_array`.
-        - When a pre-built `group_membership_ht` is supplied, this function
-          honors any reduction that was already performed on it (detected by
-          the `freq_reduced=True` global on `group_membership_ht`). Setting
+          inside the in-function call to
+          `generate_freq_group_membership_array`.
+        - When a pre-built `group_membership_ht` is supplied, this
+          function honors any reduction already performed on it
+          (detected by the `freq_reduced=True` global on
+          `group_membership_ht`). Setting
           `reduce_to_minimal_groups=True` while passing a non-reduced
           `group_membership_ht` is a no-op.
 
@@ -1134,10 +1139,11 @@ def compute_stats_per_ref_site(
         "XY" as values. If not provided, no sex karyotype adjustment is performed.
         Default is None.
     :param reduce_to_minimal_groups: Whether to compute stats only on the
-        minimal leaf set of stratification groups and reconstruct the rest
-        by element-wise summation. See the rubric above. Default is False.
-    :param non_summable_strata: Strata names that should never be summed across
-        when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
+        leaf set of stratification groups and reconstruct the rest by
+        element-wise summation. See the rubric above. Default is False.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values when `reduce_to_minimal_groups` is True.
+        Default is `{"downsampling"}`.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1502,10 +1508,10 @@ def compute_allele_number_per_ref_site(
 
         This function supports the `reduce_to_minimal_groups` cost
         optimization (forwarded via `**kwargs` to
-        `compute_stats_per_ref_site`). AN is a sum of per-sample integer
-        ploidies, which is summable across stratification groups, so the
-        optimization produces output identical to a non-reduced run. See
-        `compute_stats_per_ref_site` for details.
+        `compute_stats_per_ref_site`). AN is summable across
+        stratification groups (it is a sum of per-sample integer
+        ploidies), so the optimization produces output identical to a
+        non-reduced run. See `compute_stats_per_ref_site` for details.
 
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.

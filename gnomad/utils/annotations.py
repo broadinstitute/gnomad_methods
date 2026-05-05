@@ -1819,20 +1819,21 @@ def annotate_freq(
         output from the first function.
     :param annotate_mt: Whether to return the full MatrixTable with annotations added
         instead of only a Table with `freq` and other annotations. Default is True.
-    :param reduce_to_minimal_groups: When True, per-variant call statistics are
-        computed only on a minimal "leaf" subset of stratification groups (those
-        that cannot be derived by summing other groups in `freq_meta`). The
-        remaining groups are reconstructed by element-wise summation of leaves
-        as a cheap post-processing step, so the returned `freq` /
-        `freq_meta` / `freq_meta_sample_count` are identical to the
+    :param reduce_to_minimal_groups: Whether to compute per-variant call
+        statistics only on the "leaf" stratification groups (those that
+        cannot be derived by summing other groups in `freq_meta`) and
+        reconstruct the rest by element-wise summation as a cheap
+        post-processing step. The returned `freq`, `freq_meta`, and
+        `freq_meta_sample_count` are identical to the
         `reduce_to_minimal_groups=False` output. This is a pure cost
-        optimization for large stratifications. Any annotations produced by
-        `entry_agg_funcs` are also expanded by element-wise summation, which
-        assumes the values are summable (integers or struct-of-integers); do
-        **not** enable this when `entry_agg_funcs` returns non-summable
-        values such as means or medians. Default is False.
-    :param non_summable_strata: Strata names that should never be summed across
-        when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
+        optimization for large stratifications. Any annotations produced
+        by `entry_agg_funcs` are also expanded by element-wise summation,
+        so their values must be summable (integers or
+        struct-of-integers). Do not enable when `entry_agg_funcs` returns
+        non-summable values such as means or medians. Default is False.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values when `reduce_to_minimal_groups` is True.
+        Default is `{"downsampling"}`.
     :return: MatrixTable or Table with `freq` annotation.
     """
     errors = []
@@ -2093,17 +2094,17 @@ def _read_reduction_globals(
     globals_source: hl.expr.StructExpression,
 ) -> Dict[str, Any]:
     """
-    Eval the four reduction-tracking globals and build a Python decomposition map.
+    Materialize the reduction-tracking globals into Python in a single round-trip.
 
     Used by both `annotate_freq` and `compute_stats_per_ref_site` to recover
-    the leaf-decomposition information from a `group_membership_ht` (or a
-    Table that has it on its globals) in a single round-trip.
+    the leaf-decomposition information needed to expand leaf-only
+    per-strata arrays back to full length.
 
-    :param globals_source: Hail globals struct that contains
-        `freq_leaf_indices`, `freq_group_decomposition`, `freq_meta_full`, and
-        `freq_meta_sample_count_full`.
-    :return: Dict with keys `leaf_indices`, `decomposition`, `freq_meta_full`,
-        `freq_meta_sample_count_full`, and `n_full`.
+    :param globals_source: Hail globals struct expected to contain
+        `freq_leaf_indices`, `freq_group_decomposition`, `freq_meta_full`,
+        and `freq_meta_sample_count_full`.
+    :return: Dict with keys `leaf_indices`, `decomposition`,
+        `freq_meta_full`, `freq_meta_sample_count_full`, and `n_full`.
     """
     g = hl.eval(
         globals_source.select(
@@ -2135,41 +2136,41 @@ def find_minimal_strata_groups(
     A "leaf" group is one that cannot be derived by summing other groups in
     `freq_meta`. The remaining ("non-leaf") groups can be reconstructed by
     element-wise summation of leaves whose sample counts partition the
-    parent's. This is the basis for an opt-in optimization that computes
-    per-variant call stats only on the leaves and reconstructs the rest by
-    summation in a cheap post-processing step (see
+    parent's sample count. This supports an opt-in optimization that
+    computes per-variant call stats only on the leaves and reconstructs the
+    rest by summation as a cheap post-processing step (see
     `expand_strata_array_from_leaves`).
 
     The algorithm partitions `freq_meta` by the value of the `"group"` key
-    (typically `"adj"` and `"raw"`) and runs leaf detection independently in
-    each partition. This is required because `adj` and `raw` are
-    *genotype-level* filters and never sum into each other; both `annotate_freq`
-    (which produces a mix of `adj` and `raw` entries) and
-    `compute_stats_per_ref_site` (which produces only `raw` entries) are
-    handled correctly.
+    (typically `"adj"` and `"raw"`) and runs leaf detection independently
+    in each partition. `adj` and `raw` are genotype-level filters and never
+    sum into each other, so both `annotate_freq` (which produces a mix of
+    `adj` and `raw` entries) and `compute_stats_per_ref_site` (which
+    produces only `raw` entries) are handled correctly.
 
     Within each partition, an entry's "summable strata" are the keys of its
-    metadata dict excluding `"group"` and excluding any name listed in
+    metadata dict excluding `"group"` and excluding any stratum listed in
     `non_summable_strata`. The leaves are the entries whose summable-strata
     set is maximal-by-inclusion within the partition.
 
-    For each non-leaf, candidate leaves (same non-summable strata, agreeing
-    on every key the parent has) are grouped by their full summable-strata
-    set so that each candidate decomposition lives in a single
-    strata-family. A candidate is *valid* iff its leaves' sample counts sum
-    to the parent's. If multiple candidates are valid, the smallest (fewest
-    leaves) is chosen. If none are valid, the parent is promoted to a leaf
-    and computed directly.
+    For each non-leaf, candidate leaves (those with the same non-summable
+    strata and agreeing on every key the parent has) are grouped by their
+    full summable-strata set so each candidate decomposition lives in a
+    single strata-family. A candidate is valid when its leaves' sample
+    counts sum to the parent's sample count. If multiple candidates are
+    valid, the candidate with the fewest leaves is chosen. If none are
+    valid, the parent is promoted to a leaf and computed directly.
 
-    The sample-count check is what makes this safe when `freq_meta` has
-    multiple non-comparable strata families (e.g., `{gen_anc, sex}` and
-    `{gatk_version, gen_anc}`): without it, a parent like the all-adj entry
-    would silently sum across both families and double-count samples.
+    The sample-count check is what makes this safe when `freq_meta`
+    contains multiple non-comparable strata families (e.g., `{gen_anc,
+    sex}` and `{gatk_version, gen_anc}`). Without it, a parent like the
+    all-adj entry would silently sum across both families and double-count
+    samples.
 
     `non_summable_strata` defaults to `{"downsampling"}` because gnomAD's
-    `{downsampling: N, gen_anc: X}` groups select the first N samples of the
-    given gen_anc using a randomized rank — they are disjoint from
-    `{downsampling: N, gen_anc: Y}` and never sum into a global
+    `{downsampling: N, gen_anc: X}` groups select the first N samples of
+    the given gen_anc using a randomized rank. These groups are disjoint
+    from `{downsampling: N, gen_anc: Y}` and never sum into a global
     `{downsampling: N}` entry.
 
     :param freq_meta: List of `freq_meta` dicts as produced by
@@ -2177,10 +2178,10 @@ def find_minimal_strata_groups(
     :param freq_meta_sample_count: Per-entry sample counts aligned with
         `freq_meta`. Used to validate candidate decompositions.
     :param non_summable_strata: Strata names that should never be summed
-        across. Default is `{"downsampling"}`.
-    :return: Tuple of `(leaf_indices, decomposition)` where `leaf_indices` is
-        a list of indices into `freq_meta` marking the leaves, in ascending
-        order, and `decomposition` maps each non-leaf index to the list of
+        across their values. Default is `{"downsampling"}`.
+    :return: Tuple of `(leaf_indices, decomposition)`. `leaf_indices` is a
+        list of indices into `freq_meta` marking the leaves, in ascending
+        order. `decomposition` maps each non-leaf index to the list of
         leaf indices that sum to it.
     """
     if len(freq_meta_sample_count) != len(freq_meta):
@@ -2276,35 +2277,37 @@ def expand_strata_array_from_leaves(
     """
     Reconstruct a full-length per-strata array from a leaf-only array.
 
-    This is the post-processing companion to `find_minimal_strata_groups`. For
-    each position `i` in the full (original) `freq_meta`:
+    This is the post-processing companion to `find_minimal_strata_groups`.
+    For each position `i` in the full (original) `freq_meta`:
 
-      - If `i` is a leaf, the value at `leaf_array[leaf_pos[i]]` is used
-        directly.
-      - Otherwise, the values at the positions corresponding to
-        `decomposition[i]` are summed element-wise.
+        - If `i` is a leaf, the corresponding value in `leaf_array` is
+          used directly.
+        - Otherwise, the `leaf_array` values at the positions identified
+          by `decomposition[i]` are summed element-wise.
 
-    The element type is inspected to decide how to sum: integers are summed
-    directly, and structs have each numeric field summed independently. As a
-    special case, struct elements with an `"AF"` field are treated as freq
-    structs — `AF` is dropped before summing and recomputed at the end as
-    `or_missing(AN > 0, AC / AN)`.
+    The element type is inspected to decide how to sum: integers are
+    summed directly, and structs have each numeric field summed
+    independently. Struct elements with an `"AF"` field are treated as
+    freq structs: `AF` is dropped before summing and recomputed at the
+    end as `or_missing(AN > 0, AC / AN)`.
 
     The expansion is encoded as a compact Hail IR operation
     (`hl_children.map(...)`) with lookup tables for leaf positions and
-    child-index lists, so the serialized IR size is O(n_full) regardless of
-    how many groups there are. This avoids Jackson's JSON string-length limit
-    that would be hit if each group's expression were inlined as a separate
-    Python-side Hail expression literal.
+    child-index lists. The serialized IR size is therefore O(n_full)
+    regardless of how many groups there are. This avoids Jackson's JSON
+    string-length limit that would otherwise be hit if each group's
+    expression were inlined as a separate Python-side Hail expression
+    literal.
 
     :param leaf_array: Hail array expression of length `len(leaf_indices)`
         produced by aggregating only the leaf groups.
-    :param leaf_indices: Original-`freq_meta` indices of the leaves, in the
-        same order as `leaf_array`.
-    :param decomposition: Map from non-leaf original index to list of original
-        leaf indices that sum to it.
+    :param leaf_indices: Indices into the original `freq_meta` marking the
+        leaves, in the same order as `leaf_array`.
+    :param decomposition: Map from non-leaf original index to the list of
+        original leaf indices that sum to it.
     :param n_full: Length of the original (full) `freq_meta`.
-    :return: Hail array expression of length `n_full`.
+    :return: Hail array expression of length `n_full` whose element type
+        matches `leaf_array`'s.
     """
     # Map original-freq_meta index → position in the reduced leaf_array.
     leaf_pos = {orig_idx: pos for pos, orig_idx in enumerate(leaf_indices)}
@@ -2404,20 +2407,24 @@ def generate_freq_group_membership_array(
 
     .. rubric:: The `reduce_to_minimal_groups` parameter
 
-    When `reduce_to_minimal_groups` is True, the returned `group_membership`,
-    `freq_meta`, and `freq_meta_sample_count` are reduced to only the "leaf"
-    groups (those that cannot be derived by summing other groups in
-    `freq_meta`). The original full versions are preserved as additional
-    globals so that downstream callers can reconstruct the full per-strata
-    arrays after their (cheaper) leaf-only aggregation:
+    When `reduce_to_minimal_groups` is True, the returned
+    `group_membership`, `freq_meta`, and `freq_meta_sample_count` are
+    reduced to only the "leaf" groups (those that cannot be derived by
+    summing other groups in `freq_meta`). The original full versions are
+    preserved as additional globals so a downstream caller can
+    reconstruct the full per-strata arrays after its (cheaper) leaf-only
+    aggregation:
 
-        - freq_meta_full: original full freq_meta before reduction.
-        - freq_meta_sample_count_full: original full sample counts.
-        - freq_leaf_indices: indices into freq_meta_full marking the leaves
-          (in the same order as the reduced freq_meta).
-        - freq_group_decomposition: list of length len(freq_meta_full) where
-          each element is the list of freq_meta_full indices whose stats sum
-          to that position. Leaves get an empty list.
+        - `freq_meta_full`: original full `freq_meta` before reduction.
+        - `freq_meta_sample_count_full`: original full sample counts.
+        - `freq_leaf_indices`: indices into `freq_meta_full` marking the
+          leaves, in the same order as the reduced `freq_meta`.
+        - `freq_group_decomposition`: list of length
+          `len(freq_meta_full)` where each element is the list of
+          `freq_meta_full` indices that sum to that position. Leaves get
+          an empty list.
+        - `freq_reduced`: True, signalling that the reduction has been
+          applied.
 
     See `find_minimal_strata_groups` for the leaf-detection algorithm and
     `expand_strata_array_from_leaves` for the reconstruction step.
@@ -2434,17 +2441,18 @@ def generate_freq_group_membership_array(
         annotation and the 'freq_meta' and 'freq_meta_sample_count' global annotations.
         Default is False.
     :param reduce_to_minimal_groups: Whether to reduce the returned
-        `group_membership`/`freq_meta`/`freq_meta_sample_count` to only the
-        leaf groups whose call stats cannot be derived by summing other
-        groups. The full versions and the leaf-decomposition map are stored
-        as additional globals so a downstream caller (e.g., `annotate_freq`)
-        can reconstruct the full per-strata array after aggregation. Default
-        is False.
-    :param non_summable_strata: Strata names that should never be summed across
-        when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
-    :param group_label: Value to use for the `"group"` key on every constructed
-        freq_meta entry. Default is `"adj"`. Set to `"raw"` for callers that
-        don't apply any genotype-level filtering (e.g.,
+        `group_membership`, `freq_meta`, and `freq_meta_sample_count` to
+        only the leaf groups whose call stats cannot be derived by summing
+        other groups. The full versions and the leaf-decomposition map
+        are stored as additional globals so a downstream caller (e.g.,
+        `annotate_freq`) can reconstruct the full per-strata array after
+        aggregation. Default is False.
+    :param non_summable_strata: Strata names that should never be summed
+        across their values when `reduce_to_minimal_groups` is True.
+        Default is `{"downsampling"}`.
+    :param group_label: Value to use for the `"group"` key on every
+        constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
+        for callers that don't apply any genotype-level filtering (e.g.,
         `compute_stats_per_ref_site`).
     :return: Table with the 'group_membership' array annotation.
     """

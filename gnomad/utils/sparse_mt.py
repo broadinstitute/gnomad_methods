@@ -1075,7 +1075,7 @@ def compute_stats_per_ref_site(
     group_membership_ht: Optional[hl.Table] = None,
     sex_karyotype_field: Optional[str] = None,
     reduce_to_minimal_groups: bool = False,
-    non_summable_axes: Optional[Set[str]] = None,
+    non_summable_strata: Optional[Set[str]] = None,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
@@ -1136,7 +1136,7 @@ def compute_stats_per_ref_site(
     :param reduce_to_minimal_groups: Whether to compute stats only on the
         minimal leaf set of stratification groups and reconstruct the rest
         by element-wise summation. See the rubric above. Default is False.
-    :param non_summable_axes: Axis names that should never be summed across
+    :param non_summable_strata: Strata names that should never be summed across
         when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
     :return: Table of stats per site.
     """
@@ -1236,7 +1236,7 @@ def compute_stats_per_ref_site(
             strata_expr,
             no_raw_group=True,
             reduce_to_minimal_groups=reduce_to_minimal_groups,
-            non_summable_axes=non_summable_axes,
+            non_summable_strata=non_summable_strata,
             group_label="raw",
         )
 

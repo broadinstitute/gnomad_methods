@@ -1701,7 +1701,7 @@ def annotate_freq(
     entry_agg_funcs: Optional[Dict[str, Tuple[Callable, Callable]]] = None,
     annotate_mt: bool = True,
     reduce_to_minimal_groups: bool = False,
-    non_summable_axes: Optional[Set[str]] = None,
+    non_summable_strata: Optional[Set[str]] = None,
 ) -> Union[hl.Table, hl.MatrixTable]:
     """
     Annotate `mt` with stratified allele frequencies.
@@ -1831,7 +1831,7 @@ def annotate_freq(
         assumes the values are summable (integers or struct-of-integers); do
         **not** enable this when `entry_agg_funcs` returns non-summable
         values such as means or medians. Default is False.
-    :param non_summable_axes: Axis names that should never be summed across
+    :param non_summable_strata: Strata names that should never be summed across
         when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
     :return: MatrixTable or Table with `freq` annotation.
     """
@@ -1882,7 +1882,7 @@ def annotate_freq(
         downsamplings=downsamplings,
         ds_gen_anc_counts=ds_gen_anc_counts,
         reduce_to_minimal_groups=reduce_to_minimal_groups,
-        non_summable_axes=non_summable_axes,
+        non_summable_strata=non_summable_strata,
     )
 
     # Forward `freq_meta` onto the MT's globals so `compute_freq_by_strata`
@@ -2127,7 +2127,7 @@ def _read_reduction_globals(
 def find_minimal_strata_groups(
     freq_meta: List[Dict[str, str]],
     freq_meta_sample_count: List[int],
-    non_summable_axes: Optional[Set[str]] = None,
+    non_summable_strata: Optional[Set[str]] = None,
 ) -> Tuple[List[int], Dict[int, List[int]]]:
     """
     Identify the minimal "leaf" set of stratification groups in a `freq_meta`.
@@ -2148,25 +2148,25 @@ def find_minimal_strata_groups(
     `compute_stats_per_ref_site` (which produces only `raw` entries) are
     handled correctly.
 
-    Within each partition, an entry's "summable axes" are the keys of its
-    metadata dict excluding `"group"` and excluding any axis listed in
-    `non_summable_axes`. The leaves are the entries whose summable-axes set is
-    maximal-by-inclusion within the partition.
+    Within each partition, an entry's "summable strata" are the keys of its
+    metadata dict excluding `"group"` and excluding any name listed in
+    `non_summable_strata`. The leaves are the entries whose summable-strata
+    set is maximal-by-inclusion within the partition.
 
-    For each non-leaf, candidate leaves (same non-summable axes, agreeing on
-    every key the parent has) are grouped by their full summable-axes set so
-    that each candidate decomposition lives in a single axis-family. A
-    candidate is *valid* iff its leaves' sample counts sum to the parent's.
-    If multiple candidates are valid, the smallest (fewest leaves) is chosen.
-    If none are valid, the parent is promoted to a leaf and computed
-    directly.
+    For each non-leaf, candidate leaves (same non-summable strata, agreeing
+    on every key the parent has) are grouped by their full summable-strata
+    set so that each candidate decomposition lives in a single
+    strata-family. A candidate is *valid* iff its leaves' sample counts sum
+    to the parent's. If multiple candidates are valid, the smallest (fewest
+    leaves) is chosen. If none are valid, the parent is promoted to a leaf
+    and computed directly.
 
     The sample-count check is what makes this safe when `freq_meta` has
-    multiple non-comparable axis families (e.g., `{gen_anc, sex}` and
+    multiple non-comparable strata families (e.g., `{gen_anc, sex}` and
     `{gatk_version, gen_anc}`): without it, a parent like the all-adj entry
     would silently sum across both families and double-count samples.
 
-    `non_summable_axes` defaults to `{"downsampling"}` because gnomAD's
+    `non_summable_strata` defaults to `{"downsampling"}` because gnomAD's
     `{downsampling: N, gen_anc: X}` groups select the first N samples of the
     given gen_anc using a randomized rank — they are disjoint from
     `{downsampling: N, gen_anc: Y}` and never sum into a global
@@ -2176,8 +2176,8 @@ def find_minimal_strata_groups(
         `generate_freq_group_membership_array`.
     :param freq_meta_sample_count: Per-entry sample counts aligned with
         `freq_meta`. Used to validate candidate decompositions.
-    :param non_summable_axes: Axis names that should never be summed across.
-        Default is `{"downsampling"}`.
+    :param non_summable_strata: Strata names that should never be summed
+        across. Default is `{"downsampling"}`.
     :return: Tuple of `(leaf_indices, decomposition)` where `leaf_indices` is
         a list of indices into `freq_meta` marking the leaves, in ascending
         order, and `decomposition` maps each non-leaf index to the list of
@@ -2189,18 +2189,20 @@ def find_minimal_strata_groups(
             f"(got {len(freq_meta_sample_count)} vs {len(freq_meta)})."
         )
 
-    if non_summable_axes is None:
-        non_summable_axes = {"downsampling"}
+    if non_summable_strata is None:
+        non_summable_strata = {"downsampling"}
     else:
-        non_summable_axes = set(non_summable_axes)
+        non_summable_strata = set(non_summable_strata)
 
-    def summable_axes_of(e: Dict[str, str]) -> frozenset:
+    def summable_strata_of(e: Dict[str, str]) -> frozenset:
         return frozenset(
-            k for k in e.keys() if k != "group" and k not in non_summable_axes
+            k for k in e.keys() if k != "group" and k not in non_summable_strata
         )
 
-    def non_summable_of(e: Dict[str, str]) -> frozenset:
-        return frozenset(k for k in e.keys() if k != "group" and k in non_summable_axes)
+    def non_summable_strata_of(e: Dict[str, str]) -> frozenset:
+        return frozenset(
+            k for k in e.keys() if k != "group" and k in non_summable_strata
+        )
 
     # Partition indices by group value (e.g., "adj" vs "raw").
     partitions: Dict[Optional[str], List[int]] = {}
@@ -2212,12 +2214,14 @@ def find_minimal_strata_groups(
 
     for indices in partitions.values():
         # Within this partition, determine the maximal-by-inclusion summable
-        # axis sets — those are the leaf axis sets.
-        axis_sets = {summable_axes_of(freq_meta[i]) for i in indices}
-        leaf_axis_sets = {s for s in axis_sets if not any(s < s2 for s2 in axis_sets)}
+        # strata sets — those are the leaf strata sets.
+        strata_sets = {summable_strata_of(freq_meta[i]) for i in indices}
+        leaf_strata_sets = {
+            s for s in strata_sets if not any(s < s2 for s2 in strata_sets)
+        }
 
         for i in indices:
-            if summable_axes_of(freq_meta[i]) in leaf_axis_sets:
+            if summable_strata_of(freq_meta[i]) in leaf_strata_sets:
                 is_leaf[i] = True
 
         # Decompose non-leaves using only same-partition leaves.
@@ -2227,29 +2231,29 @@ def find_minimal_strata_groups(
                 continue
             e = freq_meta[i]
             e_keys = {k: v for k, v in e.items() if k != "group"}
-            e_non_summable = non_summable_of(e)
+            e_non_summable = non_summable_strata_of(e)
             parent_count = freq_meta_sample_count[i]
 
-            # Group candidate leaves by their full summable-axes set so each
-            # candidate decomposition lives in a single axis-family.
-            by_axis: Dict[frozenset, List[int]] = {}
+            # Group candidate leaves by their full summable-strata set so
+            # each candidate decomposition lives in a single strata-family.
+            by_strata: Dict[frozenset, List[int]] = {}
             for j in leaf_indices_in_partition:
                 f = freq_meta[j]
-                if non_summable_of(f) != e_non_summable:
+                if non_summable_strata_of(f) != e_non_summable:
                     continue
                 if any(f.get(k) != v for k, v in e_keys.items()):
                     continue
-                by_axis.setdefault(summable_axes_of(f), []).append(j)
+                by_strata.setdefault(summable_strata_of(f), []).append(j)
 
             valid = [
                 cand
-                for cand in by_axis.values()
+                for cand in by_strata.values()
                 if sum(freq_meta_sample_count[j] for j in cand) == parent_count
             ]
             if valid:
                 decomposition[i] = min(valid, key=len)
             else:
-                # No candidate axis-family fully covers the parent — compute
+                # No candidate strata-family fully covers the parent — compute
                 # this entry directly to keep the output correct.
                 logger.info(
                     "Non-leaf entry at index %d (%s) has no sample-count-valid "
@@ -2376,7 +2380,7 @@ def generate_freq_group_membership_array(
     remove_zero_sample_groups: bool = False,
     no_raw_group: bool = False,
     reduce_to_minimal_groups: bool = False,
-    non_summable_axes: Optional[Set[str]] = None,
+    non_summable_strata: Optional[Set[str]] = None,
     group_label: str = "adj",
 ) -> hl.Table:
     """
@@ -2436,7 +2440,7 @@ def generate_freq_group_membership_array(
         as additional globals so a downstream caller (e.g., `annotate_freq`)
         can reconstruct the full per-strata array after aggregation. Default
         is False.
-    :param non_summable_axes: Axis names that should never be summed across
+    :param non_summable_strata: Strata names that should never be summed across
         when `reduce_to_minimal_groups` is True. Default is `{"downsampling"}`.
     :param group_label: Value to use for the `"group"` key on every constructed
         freq_meta entry. Default is `"adj"`. Set to `"raw"` for callers that
@@ -2595,7 +2599,7 @@ def generate_freq_group_membership_array(
         leaf_indices, decomposition = find_minimal_strata_groups(
             freq_meta_full,
             freq_meta_sample_count_full,
-            non_summable_axes=non_summable_axes,
+            non_summable_strata=non_summable_strata,
         )
 
         n_full = len(freq_meta_full)

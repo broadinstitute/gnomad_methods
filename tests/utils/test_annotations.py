@@ -2057,7 +2057,7 @@ class TestFindMinimalStrataGroups:
     """Test the find_minimal_strata_groups function."""
 
     def test_basic_adj_with_downsampling(self):
-        """Mixed adj/raw partition with gen_anc, sex, and downsampling axes."""
+        """Mixed adj/raw partition with gen_anc, sex, and downsampling strata."""
         freq_meta = [
             {"group": "adj"},
             {"group": "raw"},
@@ -2149,11 +2149,11 @@ class TestFindMinimalStrataGroups:
 
         # Every entry is a leaf:
         # - {} has no matching leaves with non_summable=={}, so falls back to leaf.
-        # - downsampling entries are non-summable axes, so they stay as their own leaves.
+        # - downsampling entries are non-summable strata, so they stay as their own leaves.
         assert leaves == [0, 1, 2, 3]
         assert decomp == {}
 
-    def test_no_summable_axes(self):
+    def test_no_summable_strata(self):
         """Trivial case: only adj/raw entries, no strata to reduce."""
         freq_meta = [{"group": "adj"}, {"group": "raw"}]
         leaves, decomp = find_minimal_strata_groups(freq_meta, [100, 100])
@@ -2178,10 +2178,10 @@ class TestFindMinimalStrataGroups:
         assert leaves == [0, 1, 2]
         assert decomp == {}
 
-    def test_multi_axis_family_uses_sample_count_validation(self):
+    def test_multi_strata_family_uses_sample_count_validation(self):
         """Mirrors the v4 generate_freq pipeline: gen_anc/sex alongside gatk_version/gen_anc.
 
-        Both families have axis set {gen_anc, sex} and {gatk_version, gen_anc}
+        Both families have strata set {gen_anc, sex} and {gatk_version, gen_anc}
         respectively — neither is a subset of the other, so both are leaf
         families. Without sample-count validation, parents like the all-adj
         entry would silently sum across both families and double-count
@@ -2211,7 +2211,7 @@ class TestFindMinimalStrataGroups:
 
         leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
 
-        # Both maximal axis-sets {gen_anc, sex} and {gatk_version, gen_anc}
+        # Both maximal strata-sets {gen_anc, sex} and {gatk_version, gen_anc}
         # contribute leaves.
         assert leaves == [5, 6, 7, 8, 11, 12, 13, 14]
 
@@ -2230,8 +2230,8 @@ class TestFindMinimalStrataGroups:
             10: [13, 14],
         }
 
-    def test_custom_non_summable_axes(self):
-        """Custom non_summable_axes treats the named axis as non-summable."""
+    def test_custom_non_summable_strata(self):
+        """Custom non_summable_strata treats the named stratum as non-summable."""
         freq_meta = [
             {"group": "adj"},
             {"group": "adj", "cohort": "A"},
@@ -2240,19 +2240,19 @@ class TestFindMinimalStrataGroups:
         # 100 total: cohort A=40, cohort B=60.
         sample_count = [100, 40, 60]
 
-        # With cohort treated as a normal summable axis, entry 0 decomposes
+        # With cohort treated as a normal summable stratum, entry 0 decomposes
         # into entries 1 and 2 (40+60 == 100).
         leaves, decomp = find_minimal_strata_groups(
-            freq_meta, sample_count, non_summable_axes=set()
+            freq_meta, sample_count, non_summable_strata=set()
         )
         assert leaves == [1, 2]
         assert decomp == {0: [1, 2]}
 
         # With cohort treated as non-summable, no decomposition is possible
-        # (entries 1 and 2 are leaves because their non_summable axes don't
-        # match entry 0's empty non_summable axes).
+        # (entries 1 and 2 are leaves because their non-summable strata don't
+        # match entry 0's empty non-summable strata).
         leaves, decomp = find_minimal_strata_groups(
-            freq_meta, sample_count, non_summable_axes={"cohort"}
+            freq_meta, sample_count, non_summable_strata={"cohort"}
         )
         assert leaves == [0, 1, 2]
         assert decomp == {}

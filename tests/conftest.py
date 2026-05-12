@@ -29,7 +29,7 @@ os.environ.setdefault("HAIL_QUERY_BACKEND", "spark")
 # was at process start. Verified empirically: removing this block causes
 # `sparkDriver` startup to fail with a Py4JJavaError BindException.
 _SPARK_BIND_ARGS = (
-    "--conf spark.driver.bindAddress=127.0.0.1 " "--conf spark.driver.host=127.0.0.1"
+    "--conf spark.driver.bindAddress=127.0.0.1" + " --conf spark.driver.host=127.0.0.1"
 )
 _existing_args = os.environ.get("PYSPARK_SUBMIT_ARGS", "")
 if "spark.driver.bindAddress" not in _existing_args:

@@ -2093,16 +2093,22 @@ class TestFindMinimalStrataGroups:
                 "gen_anc": "nfe",
                 "sex": "XY",
             },
+            # Extra raw entries so the raw partition is non-trivial: the
+            # bare {"group": "raw"} parent decomposes into the per-gen_anc
+            # raw leaves, exercising the adj/raw partition boundary.
+            {"group": "raw", "gen_anc": "afr"},
+            {"group": "raw", "gen_anc": "nfe"},
         ]
         # 100 samples total: 40 afr (20 XX, 20 XY) + 60 nfe (30 XX, 30 XY).
         # 13 in the downsampling=1000 cohort: 5 afr (2 XX, 3 XY) + 8 nfe (4 XX, 4 XY).
-        sample_count = [100, 100, 40, 60, 20, 20, 30, 30, 5, 8, 2, 3, 4, 4]
+        sample_count = [100, 100, 40, 60, 20, 20, 30, 30, 5, 8, 2, 3, 4, 4, 40, 60]
 
         leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
 
-        assert leaves == [1, 4, 5, 6, 7, 10, 11, 12, 13]
+        assert leaves == [4, 5, 6, 7, 10, 11, 12, 13, 14, 15]
         assert decomp == {
             0: [4, 5, 6, 7],
+            1: [14, 15],
             2: [4, 5],
             3: [6, 7],
             8: [10, 11],
@@ -2229,6 +2235,37 @@ class TestFindMinimalStrataGroups:
             9: [11, 12],
             10: [13, 14],
         }
+
+    def test_fewest_leaves_wins_when_multiple_decompositions_valid(self):
+        """When multiple strata families validly cover a parent, the one with the fewest leaves is chosen.
+
+        Two non-comparable leaf families both sum to the parent's sample count:
+        `{sex, gatk_version}` with 4 leaves and `{gen_anc}` with 2 leaves. The
+        4-leaf family is inserted first, so an insertion-order policy would
+        pick it; `min(valid, key=len)` picks the 2-leaf family instead.
+        """
+        freq_meta = [
+            {"group": "adj"},
+            # {sex, gatk_version} family — inserted first into the candidate
+            # map because its entries have lower indices than the {gen_anc}
+            # entries below.
+            {"group": "adj", "sex": "XX", "gatk_version": "v1"},
+            {"group": "adj", "sex": "XX", "gatk_version": "v2"},
+            {"group": "adj", "sex": "XY", "gatk_version": "v1"},
+            {"group": "adj", "sex": "XY", "gatk_version": "v2"},
+            # {gen_anc} family — fewer leaves, should win.
+            {"group": "adj", "gen_anc": "afr"},
+            {"group": "adj", "gen_anc": "nfe"},
+        ]
+        # 100 total. {sex, gatk_version}: 23+27+25+25=100. {gen_anc}: 40+60=100.
+        sample_count = [100, 23, 27, 25, 25, 40, 60]
+
+        leaves, decomp = find_minimal_strata_groups(freq_meta, sample_count)
+
+        # Both families are leaves (neither set is a subset of the other).
+        assert leaves == [1, 2, 3, 4, 5, 6]
+        # The 2-leaf {gen_anc} family wins despite being inserted second.
+        assert decomp == {0: [5, 6]}
 
     def test_custom_non_summable_strata(self):
         """Custom non_summable_strata treats the named stratum as non-summable."""

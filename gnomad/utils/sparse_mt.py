@@ -1155,7 +1155,7 @@ def compute_stats_per_ref_site(
         element-wise summation. See the rubric above. Default is False.
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
-        Default is None which resolves to `{"downsampling"}`.
+        Default is None, which resolves to `{"downsampling"}`.
     :param reducible_aggs: Optional set of annotation names from
         `entry_agg_funcs` that are summable and should be expanded from
         leaf shape to full shape via element-wise summation when leaf
@@ -1241,12 +1241,13 @@ def compute_stats_per_ref_site(
     # latent shape mismatch in downstream consumers; raise so the
     # caller fixes the call before paying the densify+aggregation cost.
     if is_reduced:
-        accounted_for = (
-            set(entry_agg_funcs) if reducible_aggs is None else set(reducible_aggs)
+        reducible = (
+            set(reducible_aggs) if reducible_aggs is not None else set(entry_agg_funcs)
         )
-        if entry_agg_group_membership is not None:
-            accounted_for |= set(entry_agg_group_membership)
-        unaccounted = set(entry_agg_funcs) - accounted_for
+        grouped = (
+            set(entry_agg_group_membership) if entry_agg_group_membership else set()
+        )
+        unaccounted = set(entry_agg_funcs) - (reducible | grouped)
         if unaccounted:
             raise ValueError(
                 "Leaf reduction is in effect but the following entries of"

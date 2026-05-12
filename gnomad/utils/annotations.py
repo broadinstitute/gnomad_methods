@@ -2196,76 +2196,91 @@ def find_minimal_strata_groups(
     else:
         non_summable_strata = set(non_summable_strata)
 
-    def summable_strata_of(e: Dict[str, str]) -> frozenset:
+    def summable_strata_of(entry: Dict[str, str]) -> frozenset:
         return frozenset(
-            k for k in e.keys() if k != "group" and k not in non_summable_strata
+            k for k in entry.keys() if k != "group" and k not in non_summable_strata
         )
 
-    def non_summable_strata_of(e: Dict[str, str]) -> frozenset:
+    def non_summable_strata_of(entry: Dict[str, str]) -> frozenset:
         return frozenset(
-            k for k in e.keys() if k != "group" and k in non_summable_strata
+            k for k in entry.keys() if k != "group" and k in non_summable_strata
         )
 
     # Partition indices by group value (e.g., "adj" vs "raw").
     partitions: Dict[Optional[str], List[int]] = {}
-    for i, e in enumerate(freq_meta):
-        partitions.setdefault(e.get("group"), []).append(i)
+    for idx, entry in enumerate(freq_meta):
+        partitions.setdefault(entry.get("group"), []).append(idx)
 
     is_leaf = [False] * len(freq_meta)
     decomposition: Dict[int, List[int]] = {}
 
-    for indices in partitions.values():
+    for partition_indices in partitions.values():
         # Within this partition, determine the maximal-by-inclusion summable
         # strata sets — those are the leaf strata sets.
-        strata_sets = {summable_strata_of(freq_meta[i]) for i in indices}
+        all_strata_sets = {
+            summable_strata_of(freq_meta[idx]) for idx in partition_indices
+        }
         leaf_strata_sets = {
-            s for s in strata_sets if not any(s < s2 for s2 in strata_sets)
+            strata_set
+            for strata_set in all_strata_sets
+            if not any(strata_set < other for other in all_strata_sets)
         }
 
-        for i in indices:
-            if summable_strata_of(freq_meta[i]) in leaf_strata_sets:
-                is_leaf[i] = True
+        for idx in partition_indices:
+            if summable_strata_of(freq_meta[idx]) in leaf_strata_sets:
+                is_leaf[idx] = True
 
         # Decompose non-leaves using only same-partition leaves.
-        leaf_indices_in_partition = [i for i in indices if is_leaf[i]]
-        for i in indices:
-            if is_leaf[i]:
+        leaf_indices_in_partition = [idx for idx in partition_indices if is_leaf[idx]]
+        for parent_idx in partition_indices:
+            if is_leaf[parent_idx]:
                 continue
-            e = freq_meta[i]
-            e_keys = {k: v for k, v in e.items() if k != "group"}
-            e_non_summable = non_summable_strata_of(e)
-            parent_count = freq_meta_sample_count[i]
+
+            parent_entry = freq_meta[parent_idx]
+            parent_keys = {k: v for k, v in parent_entry.items() if k != "group"}
+            parent_non_summable = non_summable_strata_of(parent_entry)
+            parent_count = freq_meta_sample_count[parent_idx]
 
             # Group candidate leaves by their full summable-strata set so
             # each candidate decomposition lives in a single strata-family.
-            by_strata: Dict[frozenset, List[int]] = {}
-            for j in leaf_indices_in_partition:
-                f = freq_meta[j]
-                if non_summable_strata_of(f) != e_non_summable:
-                    continue
-                if any(f.get(k) != v for k, v in e_keys.items()):
-                    continue
-                by_strata.setdefault(summable_strata_of(f), []).append(j)
+            candidates_by_strata_family: Dict[frozenset, List[int]] = {}
+            for leaf_idx in leaf_indices_in_partition:
+                leaf_entry = freq_meta[leaf_idx]
 
-            valid = [
-                cand
-                for cand in by_strata.values()
-                if sum(freq_meta_sample_count[j] for j in cand) == parent_count
+                # Non-summable strata must match exactly (e.g. same downsampling
+                # cohort) — never sum across them.
+                if non_summable_strata_of(leaf_entry) != parent_non_summable:
+                    continue
+
+                # Leaf must be a specialisation of the parent — it must agree on
+                # every key the parent carries.
+                if any(leaf_entry.get(k) != v for k, v in parent_keys.items()):
+                    continue
+
+                candidates_by_strata_family.setdefault(
+                    summable_strata_of(leaf_entry), []
+                ).append(leaf_idx)
+
+            valid_decompositions = [
+                leaf_group
+                for leaf_group in candidates_by_strata_family.values()
+                if sum(freq_meta_sample_count[leaf_idx] for leaf_idx in leaf_group)
+                == parent_count
             ]
-            if valid:
-                decomposition[i] = min(valid, key=len)
+            if valid_decompositions:
+                decomposition[parent_idx] = min(valid_decompositions, key=len)
             else:
                 # No candidate strata-family fully covers the parent — compute
                 # this entry directly to keep the output correct.
                 logger.info(
                     "Non-leaf entry at index %d (%s) has no sample-count-valid "
                     "decomposition; promoting to leaf.",
-                    i,
-                    freq_meta[i],
+                    parent_idx,
+                    freq_meta[parent_idx],
                 )
-                is_leaf[i] = True
+                is_leaf[parent_idx] = True
 
-    leaf_indices = [i for i, leaf in enumerate(is_leaf) if leaf]
+    leaf_indices = [idx for idx, leaf in enumerate(is_leaf) if leaf]
     return leaf_indices, decomposition
 
 
@@ -2450,7 +2465,7 @@ def generate_freq_group_membership_array(
         aggregation. Default is False.
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
-        Default is None, which resolves to`{"downsampling"}`.
+        Default is None, which resolves to `{"downsampling"}`.
     :param group_label: Value to use for the `"group"` key on every
         constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
         for callers that don't apply any genotype-level filtering (e.g.,
@@ -2631,13 +2646,20 @@ def generate_freq_group_membership_array(
             group_membership=hl.array([ht.group_membership[i] for i in leaf_indices])
         )
 
+        # Replace freq_meta and sample counts with their leaf-only versions.
         global_expr["freq_meta"] = freq_meta
         global_expr["freq_meta_sample_count"] = freq_meta_sample_count
-        global_expr["freq_meta_full"] = freq_meta_full
-        global_expr["freq_meta_sample_count_full"] = freq_meta_sample_count_full
-        global_expr["freq_leaf_indices"] = leaf_indices
-        global_expr["freq_group_decomposition"] = freq_group_decomposition
-        global_expr["freq_reduced"] = True
+
+        # Add reduction-tracking globals for later restoration and expansion.
+        global_expr.update(
+            {
+                "freq_meta_full": freq_meta_full,
+                "freq_meta_sample_count_full": freq_meta_sample_count_full,
+                "freq_leaf_indices": leaf_indices,
+                "freq_group_decomposition": freq_group_decomposition,
+                "freq_reduced": True,
+            }
+        )
 
     if downsamplings is not None:
         global_expr["downsamplings"] = downsamplings
@@ -2864,7 +2886,7 @@ def agg_by_strata(
             target = dict(target_dict)
             for i, m in enumerate(freq_meta_py):
                 if m == target:
-                    return ("leaf", i, target.get("group", "NA") == "adj")
+                    return ("leaf", i, target.get("group") == "adj")
             if not is_reduced_for_lookup:
                 raise ValueError(
                     f"`entry_agg_group_membership` target {target} is not in"
@@ -2895,7 +2917,7 @@ def agg_by_strata(
                     return (
                         "parent",
                         children_leaf_pos,
-                        target.get("group", "NA") == "adj",
+                        target.get("group") == "adj",
                     )
             raise ValueError(
                 f"`entry_agg_group_membership` target {target} is not in"

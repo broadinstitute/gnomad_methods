@@ -499,6 +499,17 @@ class TestComputeAlleleNumberPerRefSiteReduceToMinimalGroups:
         for key in full_indexed:
             assert full_indexed[key] == reduced_indexed[key], key
 
+        # Direct invariant check: the all-samples AN must equal the
+        # element-wise sum of the gen_anc-by-sex leaf ANs. This catches
+        # the case where both the full and reduced paths agree but the
+        # underlying math is wrong.
+        leaf_keys = [
+            k for k in full_indexed if "gen_anc" in dict(k) and "sex" in dict(k)
+        ]
+        leaf_values = [full_indexed[k] for k in leaf_keys]
+        leaf_sums = [sum(vals) for vals in zip(*leaf_values)]
+        assert full_indexed[(("group", "raw"),)] == leaf_sums
+
 
 class TestComputeStatsPerRefSiteReducibleAggs:
     """Test `reducible_aggs` mixes summable and non-summable aggregations under leaf reduction."""

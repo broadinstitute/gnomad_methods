@@ -681,7 +681,7 @@ class TestComputeStatsPerRefSiteReducibleAggs:
     def test_reducible_aggs_overlap_with_entry_agg_group_membership_raises(
         self, synthetic_vds, reference_ht
     ):
-        """An annotation in BOTH reducible_aggs and entry_agg_group_membership raises."""
+        """An annotation in BOTH reducible_aggs and entry_agg_group_membership raises ValueError."""
         vd = synthetic_vds.variant_data
         gmh = self._build_group_membership_ht(vd, reduce=True)
         with pytest.raises(ValueError, match="disjoint"):

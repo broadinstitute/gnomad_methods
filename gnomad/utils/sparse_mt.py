@@ -1155,7 +1155,7 @@ def compute_stats_per_ref_site(
         element-wise summation. See the rubric above. Default is False.
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
-        Default is `{"downsampling"}`.
+        Default is None which resolves to `{"downsampling"}`.
     :param reducible_aggs: Optional set of annotation names from
         `entry_agg_funcs` that are summable and should be expanded from
         leaf shape to full shape via element-wise summation when leaf
@@ -1321,7 +1321,7 @@ def compute_stats_per_ref_site(
         strata_expr = [{k: ht[k] for k in d} for d in strata_expr]
 
         # Use 'generate_freq_group_membership_array' to create a group_membership Table
-        # that gives stratification group membership info based on 'strata_expr'. The
+        # that gives stratification group membership info based on 'strata_expr'.
         # The per-ref-site stats path does no genotype-level filtering, so
         # label every freq_meta entry as "raw" rather than the default "adj".
         # `no_raw_group=True` skips the inserted raw-only entry; the

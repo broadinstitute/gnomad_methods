@@ -1833,7 +1833,7 @@ def annotate_freq(
         non-summable values such as means or medians. Default is False.
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
-        Default is `{"downsampling"}`.
+        Default is None, which resolves to `{"downsampling"}`.
     :return: MatrixTable or Table with `freq` annotation.
     """
     errors = []
@@ -2094,7 +2094,7 @@ def _read_reduction_globals(
     globals_source: hl.expr.StructExpression,
 ) -> Dict[str, Any]:
     """
-    Materialize the reduction-tracking globals into Python in a single round-trip.
+    Materialize the reduction-tracking globals into Python in a single hl.eval call.
 
     Used by both `annotate_freq` and `compute_stats_per_ref_site` to recover
     the leaf-decomposition information needed to expand leaf-only
@@ -2116,6 +2116,9 @@ def _read_reduction_globals(
     )
     return {
         "leaf_indices": list(g.freq_leaf_indices),
+        # freq_group_decomposition is stored as a dense array indexed by
+        # original group position, with empty lists for leaves. Convert back
+        # to the sparse {parent_idx: child_indices} representation.
         "decomposition": {
             i: list(c) for i, c in enumerate(g.freq_group_decomposition) if c
         },
@@ -2449,7 +2452,7 @@ def generate_freq_group_membership_array(
         aggregation. Default is False.
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
-        Default is `{"downsampling"}`.
+        Default is None, which resolves to`{"downsampling"}`.
     :param group_label: Value to use for the `"group"` key on every
         constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
         for callers that don't apply any genotype-level filtering (e.g.,

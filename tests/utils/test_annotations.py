@@ -14,6 +14,7 @@ from gnomad.utils.annotations import (
     annotate_downsamplings,
     annotate_freq,
     check_annotation_missingness,
+    expand_strata_array_from_leaves,
     fill_missing_key_combinations,
     find_minimal_strata_groups,
     get_copy_state_by_sex,
@@ -2298,6 +2299,125 @@ class TestFindMinimalStrataGroups:
         """Length-mismatched sample_count is a programmer error."""
         with pytest.raises(ValueError, match="aligned"):
             find_minimal_strata_groups([{"group": "adj"}], [1, 2])
+
+
+class TestExpandStrataArrayFromLeaves:
+    """Test the expand_strata_array_from_leaves function directly.
+
+    These cover the per-element-type paths and edge cases that the
+    integration tests in `TestAnnotateFreqReduceToMinimalGroups` and
+    `TestComputeAlleleNumberPerRefSiteReduceToMinimalGroups` exercise
+    only transitively.
+    """
+
+    def test_scalar_array_expands_leaves_and_sums_parents(self):
+        """Scalar leaf values pass through; parents sum their leaves element-wise."""
+        # Original freq_meta has 6 positions; indices 1, 2, 4, 5 are leaves
+        # and 0 and 3 are non-leaves with explicit decompositions.
+        leaf_array = hl.literal([10, 20, 30, 40], dtype=hl.tarray(hl.tint32))
+        leaf_indices = [1, 2, 4, 5]
+        decomposition = {0: [1, 2, 4, 5], 3: [4, 5]}
+        n_full = 6
+
+        result = hl.eval(
+            expand_strata_array_from_leaves(
+                leaf_array, leaf_indices, decomposition, n_full
+            )
+        )
+        # 0: all four leaves summed; 1,2,4,5: leaves pass through;
+        # 3: leaves at original indices 4 and 5 summed.
+        assert result == [100, 10, 20, 70, 30, 40]
+
+    def test_plain_struct_sums_each_field_independently(self):
+        """Multi-field structs without AF sum each numeric field independently."""
+        element_type = hl.tstruct(x=hl.tint32, y=hl.tint32)
+        leaf_array = hl.literal(
+            [{"x": 1, "y": 10}, {"x": 2, "y": 20}, {"x": 3, "y": 30}],
+            dtype=hl.tarray(element_type),
+        )
+        leaf_indices = [0, 1, 2]
+        decomposition = {3: [0, 1, 2]}
+        n_full = 4
+
+        result = hl.eval(
+            expand_strata_array_from_leaves(
+                leaf_array, leaf_indices, decomposition, n_full
+            )
+        )
+        assert result == [
+            hl.Struct(x=1, y=10),
+            hl.Struct(x=2, y=20),
+            hl.Struct(x=3, y=30),
+            hl.Struct(x=6, y=60),
+        ]
+
+    def test_freq_struct_drops_and_recomputes_af(self):
+        """Freq structs (with AF) drop AF before summing and recompute AF=AC/AN."""
+        freq_type = hl.tstruct(
+            AC=hl.tint32, AF=hl.tfloat64, AN=hl.tint32, homozygote_count=hl.tint32
+        )
+        leaf_array = hl.literal(
+            [
+                {"AC": 2, "AF": 0.04, "AN": 50, "homozygote_count": 0},
+                {"AC": 3, "AF": 0.06, "AN": 50, "homozygote_count": 1},
+                # Zero-sample leaves: AN=0 must produce missing AF after expand.
+                {"AC": 0, "AF": None, "AN": 0, "homozygote_count": 0},
+                {"AC": 0, "AF": None, "AN": 0, "homozygote_count": 0},
+            ],
+            dtype=hl.tarray(freq_type),
+        )
+        leaf_indices = [1, 2, 4, 5]
+        # Parent 0 sums two AN>0 leaves; parent 3 sums two AN=0 leaves.
+        decomposition = {0: [1, 2], 3: [4, 5]}
+        n_full = 6
+
+        result = hl.eval(
+            expand_strata_array_from_leaves(
+                leaf_array, leaf_indices, decomposition, n_full
+            )
+        )
+        # Parent of AN>0 leaves: AC=5, AN=100, AF recomputed to 5/100.
+        assert result[0] == hl.Struct(AC=5, AF=0.05, AN=100, homozygote_count=1)
+        # Leaves with AN>0 are passed through with AF recomputed from AC/AN.
+        assert result[1] == hl.Struct(AC=2, AF=0.04, AN=50, homozygote_count=0)
+        assert result[2] == hl.Struct(AC=3, AF=0.06, AN=50, homozygote_count=1)
+        # Parent of AN=0 leaves: AF must be missing, not divide-by-zero.
+        assert result[3] == hl.Struct(AC=0, AF=None, AN=0, homozygote_count=0)
+        # Zero-sample leaves: AF stays missing after recompute.
+        assert result[4] == hl.Struct(AC=0, AF=None, AN=0, homozygote_count=0)
+        assert result[5] == hl.Struct(AC=0, AF=None, AN=0, homozygote_count=0)
+        # Field order must match the contract: AC, AF, AN, homozygote_count.
+        assert list(result[0].keys()) == ["AC", "AF", "AN", "homozygote_count"]
+
+    def test_missing_leaf_values_treated_as_zero(self):
+        """`hl.or_else(..., 0)` zeros out missing leaf values before summing."""
+        leaf_array = hl.literal([10, None, 30], dtype=hl.tarray(hl.tint32))
+        leaf_indices = [0, 1, 2]
+        decomposition = {3: [0, 1, 2]}
+        n_full = 4
+
+        result = hl.eval(
+            expand_strata_array_from_leaves(
+                leaf_array, leaf_indices, decomposition, n_full
+            )
+        )
+        # Leaf position 1 is missing — passes through as 0 because the
+        # single-element sum path also applies `or_else(..., 0)`. Parent at
+        # position 3 sums 10 + 0 + 30 = 40.
+        assert result == [10, 0, 30, 40]
+
+    def test_unaccounted_index_raises(self):
+        """Any full-array index that's neither a leaf nor in `decomposition` raises ValueError."""
+        leaf_array = hl.literal([1, 2], dtype=hl.tarray(hl.tint32))
+        leaf_indices = [0, 1]
+        decomposition = {2: [0, 1]}
+        # Index 3 is neither in `leaf_indices` nor in `decomposition`.
+        n_full = 4
+
+        with pytest.raises(ValueError, match="neither a leaf nor in the decomposition"):
+            expand_strata_array_from_leaves(
+                leaf_array, leaf_indices, decomposition, n_full
+            )
 
 
 class TestAnnotateFreqReduceToMinimalGroups:

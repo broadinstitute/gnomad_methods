@@ -2302,7 +2302,7 @@ class TestFindMinimalStrataGroups:
 
 
 class TestExpandStrataArrayFromLeaves:
-    """Test the expand_strata_array_from_leaves function directly.
+    """Test the expand_strata_array_from_leaves function.
 
     These cover the per-element-type paths and edge cases that the
     integration tests in `TestAnnotateFreqReduceToMinimalGroups` and
@@ -2329,7 +2329,7 @@ class TestExpandStrataArrayFromLeaves:
         assert result == [100, 10, 20, 70, 30, 40]
 
     def test_plain_struct_sums_each_field_independently(self):
-        """Multi-field structs without AF sum each numeric field independently."""
+        """Multi-field structs sum each numeric field independently."""
         element_type = hl.tstruct(x=hl.tint32, y=hl.tint32)
         leaf_array = hl.literal(
             [{"x": 1, "y": 10}, {"x": 2, "y": 20}, {"x": 3, "y": 30}],

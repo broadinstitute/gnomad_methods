@@ -169,7 +169,7 @@ def explode_intervals_to_loci(
         - When ``keep_intervals=True`` on a Table input, deduplication is not possible because duplicate rows with different interval annotations may exist; a warning is displayed instead.
         - Caution when using this function on very large intervals (e.g., whole chromosomes), as it will create extremely large arrays, which may cause performance issues.
 
-    Note that Intervals that cross chromosomes are currently not supported.
+    Note that intervals that cross chromosomes are currently not supported.
 
     :param intervals: Table, IntervalExpression, or list of IntervalExpressions.
     :param interval_field: Name of the interval field. Only required if input is a Hail Table. Default is None.
@@ -200,8 +200,8 @@ def explode_intervals_to_loci(
             )
         if not isinstance(intervals[interval_field], hl.expr.IntervalExpression):
             raise ValueError(
-                f"`interval_field` '{interval_field}' must be a hail interval"
-                " expression in the input Table!"
+                f"`interval_field` '{interval_field}' must be an IntervalExpression"
+                " in the input Table!"
             )
 
     if isinstance(intervals, list):

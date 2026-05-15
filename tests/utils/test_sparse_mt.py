@@ -5,11 +5,21 @@ import logging
 import hail as hl
 import pytest
 
-from gnomad.utils.annotations import generate_freq_group_membership_array
+from gnomad.utils.annotations import (
+    generate_freq_group_membership_array,
+    qual_hist_expr,
+)
 from gnomad.utils.sparse_mt import (
     compute_allele_number_per_ref_site,
+    compute_allele_number_per_ref_site_sparse,
     compute_stats_per_ref_site,
+    compute_stats_per_ref_site_sparse,
+    get_allele_number_agg_func,
     get_coverage_agg_func,
+    get_coverage_agg_func_sparse,
+    merge_coverage_stats_array_expression,
+    merge_qual_hists_array_expression,
+    merge_sum_array_expression,
 )
 
 # Set up logger for tests.
@@ -801,3 +811,676 @@ class TestComputeStatsPerRefSiteReducibleAggs:
         assert all(len(v) == 1 for v in full_max)
         assert all(len(v) == 1 for v in reduced_max)
         assert full_max == reduced_max
+
+
+class TestComputeAlleleNumberPerRefSiteSparse:
+    """Test the sparse-aware AN aggregation that avoids a full VDS densify."""
+
+    # At each locus, every sample is in exactly one of `variant_data` or
+    # `reference_data` (VDS invariant). The dense path
+    # (`compute_allele_number_per_ref_site`) and the sparse path
+    # (`compute_allele_number_per_ref_site_sparse(include_variant_data=True)`)
+    # must produce identical AN per (locus, stratum) when this invariant holds.
+    # Format: 4 loci × 4 samples; each cell is either `"R"` (ref block, ploidy
+    # 2) or `("V", gt_tuple_or_None)` (variant_data row with the given GT).
+    _ASSIGNMENT = [
+        # locus 1000 (autosomal): s1=ref, s2=ref, s3=var(0/1), s4=var(1/1)
+        ["R", "R", ("V", (0, 1)), ("V", (1, 1))],
+        # locus 2000 (autosomal): s1=ref, s2=var(missing), s3=ref, s4=var(0/1)
+        ["R", ("V", None), "R", ("V", (0, 1))],
+        # locus 3000 (autosomal): all ref — exercises the no-variant_data-row case
+        ["R", "R", "R", "R"],
+        # locus 4000 (autosomal): s1=var(0/1), s2=ref, s3=var(missing), s4=ref
+        [("V", (0, 1)), "R", ("V", None), "R"],
+    ]
+
+    _SAMPLES = [
+        ("s1", "afr", "XX"),
+        ("s2", "afr", "XY"),
+        ("s3", "nfe", "XX"),
+        ("s4", "nfe", "XY"),
+    ]
+
+    @staticmethod
+    def _build_vds(assignment, samples, positions, contig="chr1"):
+        """Build a VDS from a (sample, locus) -> {"R" | ("V", gt)} assignment.
+
+        Respects the VDS invariant: each (sample, locus) is in exactly one
+        of `reference_data` or `variant_data`.
+        """
+        loci = [hl.locus(contig, p, reference_genome="GRCh38") for p in positions]
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+        vd_entries = []
+        rd_entries = []
+        for l_idx, locus in enumerate(loci):
+            for s_idx, (sample_id, _, _) in enumerate(samples):
+                cell = assignment[l_idx][s_idx]
+                if cell == "R":
+                    rd_entries.append(
+                        {
+                            "locus": locus,
+                            "s": sample_id,
+                            # Real VDS reference blocks always carry LGT=0/0
+                            # (diploid hom-ref); ploidy is what feeds the AN
+                            # aggregation in `get_allele_number_agg_func`.
+                            "LGT": hl.call(0, 0),
+                            "END": locus.position,
+                            "LEN": 1,
+                        }
+                    )
+                else:
+                    _, gt = cell
+                    vd_entries.append(
+                        {
+                            "locus": locus,
+                            "alleles": ["A", "T"],
+                            "s": sample_id,
+                            # Real VDSs carry GT in variant_data and LGT in
+                            # reference_data — `hl.vds.to_dense_mt` relies on
+                            # the field names differing to disambiguate.
+                            "GT": (
+                                hl.call(*gt) if gt is not None else hl.missing(hl.tcall)
+                            ),
+                        }
+                    )
+
+        vd = hl.Table.parallelize(
+            vd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(
+            gen_anc=sample_table[vd.s].gen_anc, sex=sample_table[vd.s].sex
+        )
+
+        rd = hl.Table.parallelize(
+            rd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                LGT=hl.tcall,
+                END=hl.tint32,
+                LEN=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        rd = rd.annotate_cols(
+            gen_anc=sample_table[rd.s].gen_anc, sex=sample_table[rd.s].sex
+        )
+
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def synthetic_vds(self):
+        """4 samples × 4 autosomal loci VDS respecting the VDS invariant."""
+        return self._build_vds(
+            self._ASSIGNMENT, self._SAMPLES, [1000, 2000, 3000, 4000]
+        )
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the four autosomal loci."""
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chr1", p, reference_genome="GRCh38")}
+                for p in [1000, 2000, 3000, 4000]
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    @staticmethod
+    def _index_an(ht):
+        """Return {sorted-meta-tuple: [per-row AN]} for an array-shaped output."""
+        strata_meta = hl.eval(ht.strata_meta)
+        rows = ht.collect()
+        out = {}
+        for i, m in enumerate(strata_meta):
+            key = tuple(sorted(m.items()))
+            out[key] = [r.AN[i] for r in rows]
+        return out
+
+    def _build_gmh(self, vd, *, reduce=False):
+        cols_ht = vd.cols()
+        strata_expr = [
+            {"gen_anc": cols_ht.gen_anc},
+            {"sex": cols_ht.sex},
+            {"gen_anc": cols_ht.gen_anc, "sex": cols_ht.sex},
+        ]
+        return generate_freq_group_membership_array(
+            cols_ht,
+            strata_expr,
+            no_raw_group=True,
+            reduce_to_minimal_groups=reduce,
+            group_label="raw",
+        )
+
+    def test_rejects_non_vds_input(self, reference_ht):
+        """A non-VDS input raises ValueError."""
+        mt = hl.utils.range_matrix_table(2, 2)
+        with pytest.raises(ValueError, match="VariantDataset"):
+            compute_allele_number_per_ref_site_sparse(mt, reference_ht)
+
+    def test_rejects_both_strata_args(self, synthetic_vds, reference_ht):
+        """Supplying both `strata_expr` and `group_membership_ht` raises."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+        with pytest.raises(ValueError, match="Only one"):
+            compute_allele_number_per_ref_site_sparse(
+                synthetic_vds,
+                reference_ht,
+                strata_expr=[{"sex": vd.sex}],
+                group_membership_ht=gmh,
+            )
+
+    def test_include_variant_data_requires_strata(self, synthetic_vds, reference_ht):
+        """`include_variant_data=True` without strata raises (strata indices must align for the merge)."""
+        with pytest.raises(ValueError, match="include_variant_data"):
+            compute_allele_number_per_ref_site_sparse(
+                synthetic_vds, reference_ht, include_variant_data=True
+            )
+
+    def test_ref_only_matches_hand_computed(self, synthetic_vds, reference_ht):
+        """Default (ref-only) path: per-locus AN equals 2 × #samples with a ref block at that locus."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+        ht = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds, reference_ht, group_membership_ht=gmh
+        )
+        an_by_strata = self._index_an(ht)
+        # All-samples "raw" group (the no_raw_group=True call drops the
+        # default raw entry; the all-samples entry is the entry whose meta
+        # has only `{group: raw}` — i.e., no gen_anc/sex keys).
+        all_key = (("group", "raw"),)
+        # Hand-computed ref-only AN per locus (ordered by locus, ascending):
+        # L1000: s1, s2 → 4. L2000: s1, s3 → 4. L3000: all → 8. L4000: s2, s4 → 4.
+        assert an_by_strata[all_key] == [4, 4, 8, 4]
+
+    def test_include_variant_data_matches_dense_path(self, synthetic_vds, reference_ht):
+        """`include_variant_data=True` output matches the dense densify-based path on a VDS-invariant-respecting fixture."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+        sparse_ht = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            include_variant_data=True,
+            group_membership_ht=gmh,
+        )
+        dense_ht = compute_allele_number_per_ref_site(
+            synthetic_vds, reference_ht, group_membership_ht=gmh
+        )
+        sparse_indexed = self._index_an(sparse_ht)
+        dense_indexed = self._index_an(dense_ht)
+        assert set(sparse_indexed) == set(dense_indexed)
+        for k in sparse_indexed:
+            assert sparse_indexed[k] == dense_indexed[k], k
+
+    def test_strata_expr_path_builds_group_membership(
+        self, synthetic_vds, reference_ht
+    ):
+        """When only `strata_expr` is supplied (no pre-built `group_membership_ht`), the function builds one internally and the output matches the pre-built path."""
+        vd = synthetic_vds.variant_data
+        strata_expr = [
+            {"gen_anc": vd.gen_anc},
+            {"sex": vd.sex},
+            {"gen_anc": vd.gen_anc, "sex": vd.sex},
+        ]
+        sparse_ht_via_strata = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            include_variant_data=True,
+            strata_expr=strata_expr,
+        )
+        gmh = self._build_gmh(vd)
+        sparse_ht_via_gmh = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            include_variant_data=True,
+            group_membership_ht=gmh,
+        )
+        a = self._index_an(sparse_ht_via_strata)
+        b = self._index_an(sparse_ht_via_gmh)
+        assert set(a) == set(b)
+        for k in a:
+            assert a[k] == b[k], k
+
+    def test_reduce_to_minimal_groups_matches_full(self, synthetic_vds, reference_ht):
+        """`reduce_to_minimal_groups=True` produces identical per-locus AN to the un-reduced path."""
+        vd = synthetic_vds.variant_data
+        full_gmh = self._build_gmh(vd, reduce=False)
+        reduced_gmh = self._build_gmh(vd, reduce=True)
+        full_ht = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            include_variant_data=True,
+            group_membership_ht=full_gmh,
+        )
+        reduced_ht = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            include_variant_data=True,
+            group_membership_ht=reduced_gmh,
+        )
+        full_indexed = self._index_an(full_ht)
+        reduced_indexed = self._index_an(reduced_ht)
+        assert set(full_indexed) == set(reduced_indexed)
+        for k in full_indexed:
+            assert full_indexed[k] == reduced_indexed[k], k
+
+    def test_sex_karyotype_adjusts_ploidy_on_chrx_nonpar(self):
+        """On chrX non-PAR, XY samples contribute ploidy 1 (not 2) on both the ref and variant paths; XX samples are unchanged."""
+        samples = [
+            ("s1", "afr", "XX"),
+            ("s2", "afr", "XY"),
+            ("s3", "nfe", "XX"),
+            ("s4", "nfe", "XY"),
+        ]
+        # chrX non-PAR positions on GRCh38 (PAR1 ends at ~2.78M, PAR2 starts at
+        # ~155.7M; pick anything in between). Two loci exercise both paths:
+        #   - First locus: all samples in ref blocks → ref-only AN contributes.
+        #   - Second locus: all samples have variant calls → variant-data AN
+        #     contributes. Both should give AN = 2 + 1 + 2 + 1 = 6 after
+        #     ploidy adjustment.
+        positions = [50_000_000, 60_000_000]
+        assignment = [
+            ["R", "R", "R", "R"],
+            [
+                ("V", (0, 0)),
+                ("V", (0, 0)),
+                ("V", (0, 0)),
+                ("V", (0, 0)),
+            ],
+        ]
+        vds = self._build_vds(assignment, samples, positions, contig="chrX")
+        ref_ht = hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chrX", p, reference_genome="GRCh38")}
+                for p in positions
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+        cols_ht = vds.variant_data.cols()
+        gmh = generate_freq_group_membership_array(
+            cols_ht,
+            [{"sex": cols_ht.sex}],
+            no_raw_group=True,
+            group_label="raw",
+        )
+        # Annotate sex_karyotype on variant_data cols (the function
+        # propagates it to reference_data cols).
+        vmt = vds.variant_data.annotate_cols(sex_karyotype=vds.variant_data.sex)
+        vds = hl.vds.VariantDataset(vds.reference_data, vmt)
+
+        ht = compute_allele_number_per_ref_site_sparse(
+            vds,
+            ref_ht,
+            include_variant_data=True,
+            group_membership_ht=gmh,
+            sex_karyotype_field="sex_karyotype",
+        )
+        an_by_strata = self._index_an(ht)
+        all_key = (("group", "raw"),)
+        # 2 (s1 XX) + 1 (s2 XY) + 2 (s3 XX) + 1 (s4 XY) = 6 at each locus.
+        assert an_by_strata[all_key] == [6, 6]
+
+
+class TestComputeStatsPerRefSiteSparse:
+    """Test the generic sparse-aware stats aggregation (AN + coverage + hists)."""
+
+    _SAMPLES = [
+        ("s1", "afr", "XX"),
+        ("s2", "afr", "XY"),
+        ("s3", "nfe", "XX"),
+        ("s4", "nfe", "XY"),
+    ]
+
+    # (sample, locus) -> "R" (ref block) or ("V", gt) — VDS invariant: each
+    # cell is in exactly one path. The DP and GQ values below are deterministic
+    # and chosen so the dense and sparse paths are easy to compare by hand.
+    _ASSIGNMENT = [
+        # locus 1000: s1=R, s2=R, s3=V(0/1), s4=V(1/1)
+        ["R", "R", ("V", (0, 1)), ("V", (1, 1))],
+        # locus 2000: s1=R, s2=V(missing), s3=R, s4=V(0/1)
+        ["R", ("V", None), "R", ("V", (0, 1))],
+        # locus 3000: all ref
+        ["R", "R", "R", "R"],
+        # locus 4000: s1=V(0/1), s2=R, s3=V(missing), s4=R
+        [("V", (0, 1)), "R", ("V", None), "R"],
+    ]
+
+    # Per-sample DP value across all loci where the sample has any data.
+    _DP_BY_SAMPLE = {"s1": 20, "s2": 30, "s3": 40, "s4": 50}
+    # Per-sample GQ value across all loci where the sample has any data.
+    _GQ_BY_SAMPLE = {"s1": 60, "s2": 70, "s3": 80, "s4": 90}
+    # adj flag for variant-data entries; ref entries have adj=True by
+    # construction below.
+    _ADJ_BY_SAMPLE = {"s1": True, "s2": True, "s3": True, "s4": True}
+
+    @classmethod
+    def _build_vds(cls, assignment, samples, positions, contig="chr1"):
+        loci = [hl.locus(contig, p, reference_genome="GRCh38") for p in positions]
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+        vd_entries = []
+        rd_entries = []
+        for l_idx, locus in enumerate(loci):
+            for s_idx, (sample_id, _, _) in enumerate(samples):
+                cell = assignment[l_idx][s_idx]
+                dp = cls._DP_BY_SAMPLE[sample_id]
+                gq = cls._GQ_BY_SAMPLE[sample_id]
+                if cell == "R":
+                    rd_entries.append(
+                        {
+                            "locus": locus,
+                            "s": sample_id,
+                            "LGT": hl.call(0, 0),
+                            "DP": dp,
+                            "GQ": gq,
+                            "adj": True,
+                            "END": locus.position,
+                            "LEN": 1,
+                        }
+                    )
+                else:
+                    _, gt = cell
+                    vd_entries.append(
+                        {
+                            "locus": locus,
+                            "alleles": ["A", "T"],
+                            "s": sample_id,
+                            "GT": (
+                                hl.call(*gt) if gt is not None else hl.missing(hl.tcall)
+                            ),
+                            "DP": dp,
+                            "GQ": gq,
+                            "adj": cls._ADJ_BY_SAMPLE[sample_id],
+                        }
+                    )
+
+        vd = hl.Table.parallelize(
+            vd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                DP=hl.tint32,
+                GQ=hl.tint32,
+                adj=hl.tbool,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(
+            gen_anc=sample_table[vd.s].gen_anc, sex=sample_table[vd.s].sex
+        )
+
+        rd = hl.Table.parallelize(
+            rd_entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                LGT=hl.tcall,
+                DP=hl.tint32,
+                GQ=hl.tint32,
+                adj=hl.tbool,
+                END=hl.tint32,
+                LEN=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        rd = rd.annotate_cols(
+            gen_anc=sample_table[rd.s].gen_anc, sex=sample_table[rd.s].sex
+        )
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def synthetic_vds(self):
+        """Return a small VDS-invariant-respecting VDS for stats aggregation tests."""
+        return self._build_vds(
+            self._ASSIGNMENT, self._SAMPLES, [1000, 2000, 3000, 4000]
+        )
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the four autosomal loci."""
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chr1", p, reference_genome="GRCh38")}
+                for p in [1000, 2000, 3000, 4000]
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    def _build_gmh(self, vd):
+        cols_ht = vd.cols()
+        return generate_freq_group_membership_array(
+            cols_ht,
+            [{"gen_anc": cols_ht.gen_anc}, {"sex": cols_ht.sex}],
+            no_raw_group=True,
+            group_label="raw",
+        )
+
+    def test_an_via_generic_matches_thin_wrapper(self, synthetic_vds, reference_ht):
+        """The generic function called with AN-only entry_agg_funcs produces the same result as `compute_allele_number_per_ref_site_sparse`."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+        an_transform = lambda mt: (mt.GT if "GT" in mt.entry else mt.LGT).ploidy
+        generic_ht = compute_stats_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs={"AN": (an_transform, hl.agg.sum)},
+            include_variant_data=True,
+            merge_funcs={"AN": merge_sum_array_expression},
+            group_membership_ht=gmh,
+        )
+        wrapper_ht = compute_allele_number_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            include_variant_data=True,
+            group_membership_ht=gmh,
+        )
+        # Same row count, same per-locus AN per stratum.
+        g = generic_ht.collect()
+        w = wrapper_ht.collect()
+        assert len(g) == len(w)
+        for gr, wr in zip(g, w):
+            assert gr.AN == wr.AN, (gr, wr)
+
+    def test_coverage_stats_merge_matches_hand_computed(
+        self, synthetic_vds, reference_ht
+    ):
+        """coverage_stats merged across the two sparse paths matches hand-computed dense-equivalent values for counter, total_DP, mean, and exact-from-counter median.
+
+        Note: the dense path's `compute_stats_per_ref_site` with
+        `get_coverage_agg_func` (which uses `hl.agg.approx_median`)
+        triggers an IR-level CSE bug on small synthetic fixtures
+        (`NoSuchElementException: key not found: __cse_*`), so this test
+        validates the sparse path against hand-computed dense-equivalent
+        expectations rather than against the dense path's output.
+        """
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+        sparse_dp_agg = get_coverage_agg_func_sparse(dp_field="DP", max_cov_bin=100)
+        coverage_target = [{"group": "raw", "gen_anc": "afr"}]
+        sparse_ht = compute_stats_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs={"coverage_stats": sparse_dp_agg},
+            entry_agg_group_membership={"coverage_stats": coverage_target},
+            include_variant_data=True,
+            merge_funcs={"coverage_stats": merge_coverage_stats_array_expression},
+            group_membership_ht=gmh,
+            entry_keep_fields=["DP"],
+        )
+
+        # Hand-compute dense-equivalent values for the {gen_anc: afr}
+        # target. afr samples are s1 and s2; the sparse path filters
+        # samples by `hl.is_defined(gt_field)`, so a sample with a
+        # variant-data entry but a missing GT is treated as no-data at
+        # that locus (and contributes to counter[0] via n_no_data).
+        #
+        # Per the assignment + DP map (s1=20, s2=30):
+        #   - locus 1000: s1=R(20), s2=R(30)                → DPs=[20,30]
+        #   - locus 2000: s1=R(20), s2=V(GT=missing)        → DPs=[20]; one no-data
+        #   - locus 3000: s1=R(20), s2=R(30)                → DPs=[20,30]
+        #   - locus 4000: s1=V(GT=defined,20), s2=R(30)     → DPs=[20,30]
+        expected_per_locus = {
+            1000: [20, 30],
+            2000: [20],
+            3000: [20, 30],
+            4000: [20, 30],
+        }
+        n_total_afr = 2
+        rows = sparse_ht.collect()
+        assert len(rows) == 4
+        for r in rows:
+            cs = r.coverage_stats[0]
+            dps = expected_per_locus[r.locus.position]
+            expected_counter = {}
+            for dp in dps:
+                expected_counter[dp] = expected_counter.get(dp, 0) + 1
+            # Add the (0, n_no_data) entry only when there's actually a
+            # no-data sample in this group at this locus.
+            n_no_data = n_total_afr - len(dps)
+            if n_no_data > 0:
+                expected_counter[0] = expected_counter.get(0, 0) + n_no_data
+            assert dict(cs.coverage_counter) == expected_counter, (
+                r.locus,
+                cs.coverage_counter,
+                expected_counter,
+            )
+            assert cs.total_DP == sum(dps)
+            # mean = total_DP / n_total (no_data samples count toward
+            # the denominator with DP=0, matching dense semantics).
+            assert cs.mean == pytest.approx(sum(dps) / n_total_afr)
+            # Exact median over the FULL counter (including 0 entries).
+            # For n_total=2, half_pos = (2+1)//2 = 1 (1-indexed): the
+            # smallest DP value whose cumulative count reaches 1.
+            sorted_full = sorted(expected_counter.items(), key=lambda kv: kv[0])
+            cum = 0
+            expected_median = 0
+            for dp, count in sorted_full:
+                if cum < 1 and (cum + count) >= 1:
+                    expected_median = dp
+                    break
+                cum += count
+            assert cs.median_approx == expected_median
+
+    def test_qual_hists_merge_produces_summed_bin_counts(
+        self, synthetic_vds, reference_ht
+    ):
+        """qual_hists merged across the two paths matches the hand-computed sum of per-path bin counts (which is exactly the dense path's semantic for histograms since they skip missing values)."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+
+        def _hists_agg(qual_expr):
+            return qual_hist_expr(
+                gq_expr=qual_expr[0],
+                dp_expr=qual_expr[1],
+                adj_expr=qual_expr[2] == 1,
+                split_adj_and_raw=True,
+            )
+
+        entry_agg_funcs = {
+            "qual_hists": (lambda t: [t.GQ, t.DP, t.adj], _hists_agg),
+        }
+        target = [{"group": "raw", "gen_anc": "afr"}]
+        sparse_ht = compute_stats_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs=entry_agg_funcs,
+            entry_agg_group_membership={"qual_hists": target},
+            include_variant_data=True,
+            merge_funcs={"qual_hists": merge_qual_hists_array_expression},
+            group_membership_ht=gmh,
+            entry_keep_fields=["GQ", "DP", "adj"],
+        )
+        rows = sparse_ht.collect()
+        assert len(rows) == 4
+        # afr group is s1 and s2. The sparse path's auto-wrap filters
+        # samples by `hl.is_defined(gt_field)`, so s2 at locus 2000
+        # (variant_data entry with GT=missing) is excluded from the
+        # histogram. Expected sample count per locus per histogram:
+        #   - locus 1000, 3000, 4000: both s1 and s2 contribute → 2
+        #   - locus 2000: only s1 contributes → 1
+        expected_count_by_locus = {1000: 2, 2000: 1, 3000: 2, 4000: 2}
+        for r in rows:
+            qh = r.qual_hists[0]
+            expected_n = expected_count_by_locus[r.locus.position]
+            for path in ("raw_qual_hists", "qual_hists"):
+                gq_hist = qh[path]["gq_hist_all"]
+                dp_hist = qh[path]["dp_hist_all"]
+                assert sum(gq_hist.bin_freq) == expected_n, (
+                    r.locus,
+                    path,
+                    gq_hist.bin_freq,
+                    expected_n,
+                )
+                assert sum(dp_hist.bin_freq) == expected_n
+                # GQ values 60, 70 and DP values 20, 30 are all in
+                # [0..100], so n_smaller/n_larger should be zero.
+                assert gq_hist.n_smaller == 0
+                assert gq_hist.n_larger == 0
+                assert dp_hist.n_smaller == 0
+                assert dp_hist.n_larger == 0
+
+    def test_all_three_annotations_together(self, synthetic_vds, reference_ht):
+        """End-to-end: AN + coverage_stats + qual_hists in a single sparse call, mirroring `compute_coverage.py`'s entry_agg_funcs shape."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_gmh(vd)
+
+        def _hists_agg(qual_expr):
+            return qual_hist_expr(
+                gq_expr=qual_expr[0],
+                dp_expr=qual_expr[1],
+                adj_expr=qual_expr[2] == 1,
+                split_adj_and_raw=True,
+            )
+
+        an_transform = lambda mt: (mt.GT if "GT" in mt.entry else mt.LGT).ploidy
+        entry_agg_funcs = {
+            "AN": (an_transform, hl.agg.sum),
+            # Sparse-aware coverage agg (placeholder median; recomputed
+            # at merge time).
+            "coverage_stats": get_coverage_agg_func_sparse(
+                dp_field="DP", max_cov_bin=100
+            ),
+            "qual_hists": (lambda t: [t.GQ, t.DP, t.adj], _hists_agg),
+        }
+        entry_agg_group_membership = {
+            "coverage_stats": [{"group": "raw", "gen_anc": "afr"}],
+            "qual_hists": [{"group": "raw", "gen_anc": "afr"}],
+        }
+        merge_funcs = {
+            "AN": merge_sum_array_expression,
+            "coverage_stats": merge_coverage_stats_array_expression,
+            "qual_hists": merge_qual_hists_array_expression,
+        }
+        ht = compute_stats_per_ref_site_sparse(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs=entry_agg_funcs,
+            entry_agg_group_membership=entry_agg_group_membership,
+            include_variant_data=True,
+            merge_funcs=merge_funcs,
+            group_membership_ht=gmh,
+            entry_keep_fields=["DP", "GQ", "adj"],
+        )
+        # Smoke check: all three fields are present and shaped as expected.
+        rows = ht.collect()
+        assert len(rows) == 4
+        strata_meta = hl.eval(ht.strata_meta)
+        n_full = len(strata_meta)
+        for r in rows:
+            assert len(r.AN) == n_full
+            # Narrowed to a single target.
+            assert len(r.coverage_stats) == 1
+            assert len(r.qual_hists) == 1

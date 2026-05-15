@@ -15,6 +15,8 @@ from gnomad.utils.annotations import (
     generate_freq_group_membership_array,
     get_adj_expr,
     get_lowqual_expr,
+    merge_array_expressions,
+    merge_histograms,
     pab_max_expr,
     sor_from_sb,
 )
@@ -1450,6 +1452,48 @@ def get_coverage_agg_func(
     )
 
 
+def get_coverage_agg_func_sparse(
+    dp_field: str = "DP", max_cov_bin: int = 100
+) -> Tuple[Callable, Callable]:
+    """
+    Sparse-path-compatible variant of `get_coverage_agg_func`.
+
+    Returns a (transform, agg) pair with the same output schema as
+    `get_coverage_agg_func`, but with `median_approx` set to a constant
+    placeholder (``hl.int32(0)``). The exact median is recomputed at merge
+    time by `merge_coverage_stats_array_expression` from the combined
+    `coverage_counter`, so the placeholder value is never observed by callers.
+
+    Why this exists: `hl.agg.approx_median` triggers an IR-level
+    `NoSuchElementException: key not found: __cse_*` error when used inside
+    `hl.experimental.densify`'s scan-densified context (the sparse path's
+    densify), and there's no public Hail API for merging two
+    `approx_median` sketches after aggregation. The standard
+    `get_coverage_agg_func` continues to work on the dense path
+    (`compute_stats_per_ref_site` with a VDS input) — use it there.
+
+    :param dp_field: Depth field to use for computing coverage. Default 'DP'.
+    :param max_cov_bin: Maximum coverage bin. Default 100.
+    :return: ``(transform_fn, agg_fn)`` tuple. The output struct schema
+        matches `get_coverage_agg_func`'s; use with
+        `merge_coverage_stats_array_expression` to merge the ref-only and
+        variant-only paths.
+    """
+    transform, _ = get_coverage_agg_func(dp_field, max_cov_bin)
+    return (
+        transform,
+        lambda dp: hl.struct(
+            coverage_counter=hl.agg.counter(hl.min(max_cov_bin, dp)),
+            mean=hl.bind(
+                lambda mean_dp: hl.if_else(hl.is_nan(mean_dp), 0, mean_dp),
+                hl.agg.mean(dp),
+            ),
+            median_approx=hl.int32(0),
+            total_DP=hl.agg.sum(dp),
+        ),
+    )
+
+
 def compute_coverage_stats(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
@@ -1624,6 +1668,779 @@ def compute_allele_number_per_ref_site(
     entry_agg_funcs = {"AN": get_allele_number_agg_func(gt_field.pop())}
 
     return compute_stats_per_ref_site(mtds, reference_ht, entry_agg_funcs, **kwargs)
+
+
+def merge_sum_array_expression(
+    ref_arr: hl.expr.ArrayExpression,
+    var_arr: hl.expr.ArrayExpression,
+    sample_counts: hl.expr.ArrayExpression,
+) -> hl.expr.ArrayExpression:
+    """
+    Merge two per-stratum arrays via element-wise sum.
+
+    Suitable for any annotation whose dense-path aggregation is a sum (e.g.,
+    AN, raw counts). `var_arr` may be missing (no variant_data row at the
+    locus); treated as a zeros array. `sample_counts` is accepted for API
+    uniformity with the other merge helpers and is not used here — element-
+    wise sum needs no per-stratum sample-count context.
+
+    :param ref_arr: Per-stratum array from the reference-data aggregation.
+    :param var_arr: Per-stratum array from the variant-data aggregation; may be
+        missing if the locus has no variant_data row.
+    :param sample_counts: Per-stratum sample counts; unused.
+    :return: Element-wise sum array.
+    """
+    del sample_counts  # API uniformity.
+    # Zeros array of the same per-element type as `ref_arr` — `x - x` is the
+    # idiomatic way to produce a zero of arbitrary numeric type in Hail.
+    zeros = ref_arr.map(lambda x: x - x)
+    var_arr = hl.coalesce(var_arr, zeros)
+    return hl.zip(ref_arr, var_arr).map(lambda x: x[0] + x[1])
+
+
+def _median_from_counter(
+    counter: hl.expr.DictExpression, n_total: hl.expr.NumericExpression
+) -> hl.expr.Int32Expression:
+    """
+    Return the integer median DP value from a binned coverage_counter histogram.
+
+    The counter maps DP value to sample count at that DP. The median is the
+    smallest DP whose cumulative count from below reaches ``ceil(n_total / 2)``
+    (the lower median for even n_total). Returns 0 when the counter is empty
+    or n_total is 0.
+    """
+    half = (hl.int64(n_total) + 1) // 2
+    sorted_items = hl.sorted(counter.items(), key=lambda kv: kv[0])
+    result = hl.fold(
+        lambda acc, item: hl.struct(
+            cum=acc.cum + item[1],
+            median=hl.if_else(
+                hl.is_missing(acc.median) & ((acc.cum + item[1]) >= half),
+                item[0],
+                acc.median,
+            ),
+        ),
+        hl.struct(cum=hl.int64(0), median=hl.missing(hl.tint32)),
+        sorted_items,
+    )
+    return hl.or_else(result.median, hl.int32(0))
+
+
+def _merge_one_coverage_stats(
+    ref_cs: hl.expr.StructExpression,
+    var_cs: hl.expr.StructExpression,
+    n_total: hl.expr.NumericExpression,
+) -> hl.expr.StructExpression:
+    """
+    Merge a single pair of ``coverage_stats`` structs into the dense-equivalent.
+
+    Implements the per-stratum merge for `merge_coverage_stats_array_expression`;
+    see that function's docstring for the full semantic model and trade-offs.
+    """
+    ref_counter = ref_cs.coverage_counter
+    var_counter = var_cs.coverage_counter
+    n_data = hl.sum(ref_counter.values()) + hl.sum(var_counter.values())
+    n_no_data = hl.int64(n_total) - n_data
+
+    # Sum non-zero keys directly; rebuild the (0, count) entry with the
+    # contribution from samples that had no entry in either path (they
+    # contribute DP=0 in the dense path via the missing→0 transform).
+    # `set.map` returns a set, but we need an array to append the (0, count)
+    # entry — explicitly convert via `hl.array(...)`.
+    non_zero_keys = hl.array(ref_counter.key_set().union(var_counter.key_set())).filter(
+        lambda k: k != 0
+    )
+    non_zero_kv = non_zero_keys.map(
+        lambda k: (
+            k,
+            ref_counter.get(k, hl.int64(0)) + var_counter.get(k, hl.int64(0)),
+        )
+    )
+    zero_count = (
+        ref_counter.get(0, hl.int64(0)) + var_counter.get(0, hl.int64(0)) + n_no_data
+    )
+    # Only include the (0, zero_count) entry when it's actually populated —
+    # the dense path's counter doesn't carry a 0 key when no sample has DP=0.
+    merged_counter = hl.dict(
+        hl.if_else(
+            zero_count > 0,
+            non_zero_kv.append((hl.int32(0), zero_count)),
+            non_zero_kv,
+        )
+    )
+
+    total_dp = ref_cs.total_DP + var_cs.total_DP
+    mean = hl.if_else(
+        hl.int64(n_total) > 0,
+        hl.float64(total_dp) / hl.float64(n_total),
+        hl.float64(0),
+    )
+    median = _median_from_counter(merged_counter, n_total)
+
+    return hl.struct(
+        coverage_counter=merged_counter,
+        mean=mean,
+        median_approx=median,
+        total_DP=total_dp,
+    )
+
+
+def merge_coverage_stats_array_expression(
+    ref_arr: hl.expr.ArrayExpression,
+    var_arr: hl.expr.ArrayExpression,
+    sample_counts: hl.expr.ArrayExpression,
+) -> hl.expr.ArrayExpression:
+    """
+    Merge two per-stratum arrays of ``coverage_stats`` structs.
+
+    The dense path's coverage_stats struct has fields ``coverage_counter``,
+    ``mean``, ``median_approx``, and ``total_DP``. Merging the ref-only and
+    variant-only aggregations into the dense-equivalent requires care because
+    the dense aggregation iterates over *every* sample at each locus (no-data
+    samples have missing entries → DP transformed to 0), while the sparse
+    paths each only iterate over samples present in that path.
+
+    Per-stratum merge logic:
+        - ``coverage_counter``: element-wise sum of the two counter dicts, then
+          add ``n_no_data = n_total − n_ref − n_var`` to the count at key 0,
+          where ``n_ref`` and ``n_var`` are recovered as
+          ``sum(counter_ref.values())`` and ``sum(counter_var.values())``.
+          This restores the no-data samples' DP=0 contributions that the dense
+          path's missing→0 transform would have produced.
+        - ``total_DP``: simple sum (no-data samples contribute 0).
+        - ``mean``: recomputed as ``total_DP / n_total`` (matches the dense
+          semantic; no-data samples contribute 0 to total_DP).
+        - ``median_approx``: exact median over the merged counter (which now
+          fully represents the dense per-sample DP distribution). This is a
+          semantic shift from the dense path's ``hl.agg.approx_median``
+          (a non-deterministic streaming estimator), but on the same binned
+          input the two are equivalent up to approximation noise.
+
+    `var_arr` may be missing (no variant_data row at the locus); treated as an
+    array of zero-coverage_stats structs.
+
+    :param ref_arr: Per-stratum coverage_stats array from the ref-data path.
+    :param var_arr: Per-stratum coverage_stats array from the variant-data
+        path; may be missing.
+    :param sample_counts: Per-stratum total sample counts. Must align with the
+        index space of `ref_arr` / `var_arr`. Used to derive ``n_no_data`` per
+        stratum and to recompute ``mean``.
+    :return: Per-stratum merged coverage_stats array.
+    """
+    elem_type = ref_arr.dtype.element_type
+    zero_cs = hl.struct(
+        coverage_counter=hl.empty_dict(
+            elem_type["coverage_counter"].key_type,
+            elem_type["coverage_counter"].value_type,
+        ),
+        mean=hl.float64(0),
+        median_approx=hl.int32(0),
+        total_DP=hl.int64(0),
+    )
+    n_groups = hl.len(ref_arr)
+    var_arr = hl.coalesce(var_arr, hl.range(n_groups).map(lambda _: zero_cs))
+    return hl.zip(ref_arr, var_arr, sample_counts).map(
+        lambda x: _merge_one_coverage_stats(x[0], x[1], x[2])
+    )
+
+
+def _merge_qual_hists_struct(
+    ref_struct: hl.expr.StructExpression,
+    var_struct: hl.expr.StructExpression,
+) -> hl.expr.StructExpression:
+    """
+    Recursively merge two nested histogram structs.
+
+    A "histogram leaf" is any struct with fields {bin_edges, bin_freq,
+    n_smaller, n_larger} — the shape produced by `hl.agg.hist`. Leaves merge
+    via `merge_histograms` with `operation="sum"`. Other structs recurse into
+    their fields. This shape mirrors the nested layout produced by
+    `qual_hist_expr` (with `split_adj_and_raw=True`, which wraps adj/raw under
+    `qual_hists` and `raw_qual_hists` sub-structs).
+    """
+    fields = list(ref_struct.dtype.fields)
+    if {"bin_edges", "bin_freq", "n_smaller", "n_larger"}.issubset(set(fields)):
+        return merge_histograms([ref_struct, var_struct], operation="sum")
+    return hl.struct(
+        **{f: _merge_qual_hists_struct(ref_struct[f], var_struct[f]) for f in fields}
+    )
+
+
+def _zero_qual_hists_struct(struct_type: hl.expr.types.HailType):
+    """
+    Build a zero-value struct mirroring `struct_type`'s nested histogram shape.
+
+    For histogram leaves, both array-valued fields (`bin_edges`, `bin_freq`)
+    are emitted as missing so `merge_histograms` falls back to the non-missing
+    side via its built-in `or_else` handling. Counters (`n_smaller`,
+    `n_larger`) are zeroed.
+    """
+    fields = list(struct_type.fields)
+    if {"bin_edges", "bin_freq", "n_smaller", "n_larger"}.issubset(set(fields)):
+        return hl.struct(
+            bin_edges=hl.missing(struct_type["bin_edges"]),
+            bin_freq=hl.missing(struct_type["bin_freq"]),
+            n_smaller=hl.int64(0),
+            n_larger=hl.int64(0),
+        )
+    return hl.struct(**{f: _zero_qual_hists_struct(struct_type[f]) for f in fields})
+
+
+def merge_qual_hists_array_expression(
+    ref_arr: hl.expr.ArrayExpression,
+    var_arr: hl.expr.ArrayExpression,
+    sample_counts: hl.expr.ArrayExpression,
+) -> hl.expr.ArrayExpression:
+    """
+    Merge two per-stratum arrays of nested histogram structs.
+
+    Used for `qual_hists`-style annotations (e.g., the struct returned by
+    `qual_hist_expr`). Histograms naturally exclude missing values, so no-data
+    samples don't appear in either path and the merge is a simple element-wise
+    sum of bin counts (delegated to `merge_histograms`). `sample_counts` is
+    accepted for API uniformity and unused.
+
+    :param ref_arr: Per-stratum nested-histogram array from the ref-data path.
+    :param var_arr: Per-stratum nested-histogram array from the variant-data
+        path; may be missing.
+    :param sample_counts: Unused; present for API uniformity.
+    :return: Per-stratum merged nested-histogram array.
+    """
+    del sample_counts
+    elem_type = ref_arr.dtype.element_type
+    zero_struct = _zero_qual_hists_struct(elem_type)
+    n_groups = hl.len(ref_arr)
+    var_arr = hl.coalesce(var_arr, hl.range(n_groups).map(lambda _: zero_struct))
+    return hl.zip(ref_arr, var_arr).map(lambda x: _merge_qual_hists_struct(x[0], x[1]))
+
+
+def _wrap_transforms_for_sparse_path(
+    entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
+    gt_field: str,
+) -> Dict[str, Tuple[Callable, Callable]]:
+    """
+    Wrap each (transform, agg) so the aggregation runs only over present samples.
+
+    The sparse paths each iterate over only the samples present in that path
+    (variant_data or reference_data). Each (transform, agg) pair gets a
+    Boolean-filtered wrapper applied at the aggregation level:
+
+        - The transform is wrapped to return missing when the entry's genotype
+          field is missing (marking a sample not in this path).
+        - The agg is wrapped in `hl.agg.filter(hl.is_defined(expr), agg(expr))`
+          so the aggregator only consumes values from samples in this path.
+
+    Wrapping at the agg level — not just the transform — is required because
+    user-supplied transforms (e.g., `get_coverage_agg_func`'s missing→0 rule)
+    can map a missing input to a non-missing constant, and some downstream
+    Hail builders (e.g., `hl.min`) treat one missing argument as the other's
+    value, which would let no-data samples leak into the counter at the
+    `max_cov_bin` key.
+
+    For transforms that already return missing for no-data samples (e.g., the
+    AN transform ``t.GT.ploidy``), the transform wrap is a no-op, and the
+    agg-level `hl.agg.filter` retains the same set of samples that hail
+    aggregators would skip on their own.
+    """
+
+    def _wrap(transform, agg):
+        def transform_wrapped(t):
+            return hl.or_missing(hl.is_defined(t[gt_field]), transform(t))
+
+        def agg_wrapped(expr):
+            return hl.agg.filter(hl.is_defined(expr), agg(expr))
+
+        return (transform_wrapped, agg_wrapped)
+
+    return {
+        ann: _wrap(transform, agg) for ann, (transform, agg) in entry_agg_funcs.items()
+    }
+
+
+def _aggregate_stats_on_variant_data(
+    vmt: hl.MatrixTable,
+    reference_ht: hl.Table,
+    entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
+    group_membership_ht: hl.Table,
+    sex_karyotype_field: Optional[str] = None,
+    entry_keep_fields: Optional[Set[str]] = None,
+    entry_agg_group_membership: Optional[Dict[str, List[dict]]] = None,
+) -> hl.Table:
+    """
+    Aggregate `entry_agg_funcs` on `variant_data` only — no densification.
+
+    variant_data carries rows only at variant-call sites, so the function
+    simply filters to `reference_ht` loci, optionally adjusts ploidy on
+    chrX/chrY non-PAR for XY samples, optionally annotates `adj`, and then
+    runs `agg_by_strata` per (locus, alleles). The transforms in
+    `entry_agg_funcs` are wrapped to return missing for undefined-entry
+    samples (see `_wrap_transforms_for_sparse_path`).
+
+    Caller must ensure the VDS is not split-multiallelic. In a split VDS a
+    heterozygous multi-allelic call appears in two rows at the same locus and
+    would be double-counted at the per-locus rekeying step below.
+
+    :param vmt: `variant_data` MatrixTable of a VDS.
+    :param reference_ht: Reference sites Table; the output is filtered to
+        these loci.
+    :param entry_agg_funcs: As in `compute_stats_per_ref_site`.
+    :param group_membership_ht: Pre-built group membership Table — must be
+        the same one used for the ref-data path so strata indices align.
+    :param sex_karyotype_field: Optional sex-karyotype col-field on `vmt`.
+    :param entry_keep_fields: Entry fields to retain on `vmt` for the
+        aggregation. The genotype field (GT/LGT) and `adj` (if needed) are
+        added automatically.
+    :param entry_agg_group_membership: Optional per-annotation narrowing —
+        forwarded to `agg_by_strata`.
+    :return: Table keyed by `locus` with one column per annotation in
+        `entry_agg_funcs`. The (locus, alleles) row key from `vmt` is
+        collapsed to locus assuming one row per locus (unsplit VDS).
+    """
+    en = set(vmt.entry)
+    gt_field_set = en & {"GT"} or en & {"LGT"}
+    if not gt_field_set:
+        raise ValueError(
+            "`variant_data` has no GT or LGT entry field; cannot aggregate."
+        )
+    gt_field = next(iter(gt_field_set))
+
+    if sex_karyotype_field is not None:
+        vmt = vmt.annotate_entries(
+            **{
+                gt_field: adjusted_sex_ploidy_expr(
+                    vmt.locus, vmt[gt_field], vmt[sex_karyotype_field]
+                )
+            }
+        )
+
+    # Determine if `adj` is needed (mirrors `compute_stats_per_ref_site`'s
+    # detection logic).
+    g = group_membership_ht.index_globals()
+    adj_needed = hl.eval(
+        hl.any(g.get("adj_groups", hl.empty_array("bool")))
+        | hl.any(
+            g.get("freq_meta", hl.empty_array("dict<str, str>")).map(
+                lambda x: x.get("group", "NA") == "adj"
+            )
+        )
+    )
+    if adj_needed and "adj" not in vmt.entry:
+        vmt = annotate_adj(vmt)
+
+    entry_keep = set(entry_keep_fields or set()) | {gt_field}
+    if adj_needed:
+        entry_keep |= {"adj"}
+    entry_keep &= set(vmt.entry)
+    vmt = vmt.select_entries(*entry_keep)
+    vmt = vmt.filter_rows(hl.is_defined(reference_ht[vmt.locus]))
+
+    wrapped_funcs = _wrap_transforms_for_sparse_path(entry_agg_funcs, gt_field)
+    per_row_ht = agg_by_strata(
+        vmt,
+        wrapped_funcs,
+        group_membership_ht=group_membership_ht,
+        entry_agg_group_membership=entry_agg_group_membership,
+    )
+
+    # Re-key by locus only. For an unsplit VDS there is at most one row per
+    # locus in variant_data, so dropping `alleles` collapses cleanly.
+    per_row_ht = per_row_ht.key_by("locus")
+    if "alleles" in per_row_ht.row:
+        per_row_ht = per_row_ht.drop("alleles")
+    return per_row_ht
+
+
+def _resolve_sample_counts_for_annotation(
+    ann: str,
+    entry_agg_group_membership: Optional[Dict[str, List[dict]]],
+    strata_meta_full: List[Dict[str, str]],
+    strata_sample_count_full: List[int],
+    reduction_globals: Optional[Dict[str, object]],
+) -> List[int]:
+    """
+    Compute the per-stratum sample counts that align with an annotation's array.
+
+    For an annotation NOT narrowed via `entry_agg_group_membership`, the
+    returned list is the full `strata_sample_count`. For a narrowed annotation
+    each entry in `entry_agg_group_membership[ann]` is resolved to one or more
+    indices in the (full) `strata_meta`; the sample count for that target is
+    the leaf entry's count, or the SUM of its leaf children's counts when the
+    target is a non-leaf parent under reduction.
+    """
+    if not entry_agg_group_membership or ann not in entry_agg_group_membership:
+        return list(strata_sample_count_full)
+
+    decomposition = reduction_globals["decomposition"] if reduction_globals else {}
+    counts = []
+    for target in entry_agg_group_membership[ann]:
+        target_dict = dict(target)
+        found = False
+        for i, m in enumerate(strata_meta_full):
+            if dict(m) == target_dict:
+                if i in decomposition and decomposition[i]:
+                    counts.append(
+                        sum(strata_sample_count_full[c] for c in decomposition[i])
+                    )
+                else:
+                    counts.append(strata_sample_count_full[i])
+                found = True
+                break
+        if not found:
+            raise ValueError(
+                f"`entry_agg_group_membership[{ann!r}]` target {target} is"
+                " not in `strata_meta` (or `freq_meta_full` under reduction)."
+            )
+    return counts
+
+
+def compute_stats_per_ref_site_sparse(
+    vds: hl.vds.VariantDataset,
+    reference_ht: hl.Table,
+    entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
+    include_variant_data: bool = False,
+    merge_funcs: Optional[Dict[str, Callable]] = None,
+    row_key_fields: Union[Tuple[str], List[str]] = ("locus",),
+    interval_ht: Optional[hl.Table] = None,
+    entry_keep_fields: Union[Tuple[str], List[str], Set[str]] = None,
+    row_keep_fields: Union[Tuple[str], List[str], Set[str]] = None,
+    entry_agg_group_membership: Optional[Dict[str, List[dict]]] = None,
+    strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
+    group_membership_ht: Optional[hl.Table] = None,
+    sex_karyotype_field: Optional[str] = None,
+    reduce_to_minimal_groups: bool = False,
+    non_summable_strata: Optional[Set[str]] = None,
+    reducible_aggs: Optional[Set[str]] = None,
+) -> hl.Table:
+    """
+    Compute per-reference-site stats from a VDS without a full densify.
+
+    Sparse-aware counterpart to `compute_stats_per_ref_site` for VDS inputs.
+    The standard function densifies the VDS via `hl.vds.to_dense_mt`, which
+    performs a row union of `variant_data`, `reference_data`, and
+    `reference_ht` and is the dominant cost when aggregating across a large
+    reference panel. This function instead aggregates on `reference_data`
+    alone via `hl.experimental.densify` (which uses `hl.scan._densify`
+    internally) and — optionally, via `include_variant_data=True` — also
+    aggregates directly on `variant_data` (no densify needed there because
+    `variant_data` only has rows at variant-call sites) and merges the two
+    results per annotation.
+
+    .. rubric:: Annotation transforms run in "sparse mode"
+
+    Each transform in `entry_agg_funcs` is wrapped to return missing for
+    samples whose entry has an undefined genotype (GT/LGT) — i.e., samples
+    that are NOT in the current path. Hail aggregators skip missing inputs by
+    standard semantics, so each path's aggregation naturally restricts to the
+    samples present in that path. This is required for correctness when the
+    user's transform converts missing values to a non-missing constant (e.g.,
+    `get_coverage_agg_func`'s `missing→0` rule, which would otherwise double-
+    count "other path" samples as DP=0 contributions). For transforms that
+    already return missing for no-data samples (e.g., AN's `t.GT.ploidy`),
+    the wrap is a no-op.
+
+    .. rubric:: Merging the two paths
+
+    When `include_variant_data=True`, `merge_funcs` must supply a callable
+    `(ref_arr, var_arr, sample_counts) -> merged_arr` for every annotation
+    in `entry_agg_funcs`. Three helpers are provided for the gnomAD use
+    cases:
+
+        - `merge_sum_array_expression`: element-wise sum (AN-style).
+        - `merge_coverage_stats_array_expression`: per-stratum merge of the
+          `coverage_stats` struct produced by `get_coverage_agg_func`.
+        - `merge_qual_hists_array_expression`: recursive element-wise sum of
+          nested histogram structs (e.g., from `qual_hist_expr`).
+
+    `sample_counts` passed to each merge function is the per-stratum
+    sample-count array that aligns with that annotation's per-row array
+    shape — full `strata_sample_count` for non-narrowed annotations, and
+    the resolved counts for annotations narrowed via
+    `entry_agg_group_membership`.
+
+    .. rubric:: Constraints
+
+    - `vds.variant_data` must be unsplit (one row per locus). In a split VDS
+      a multi-allelic call lands on multiple rows at the same locus and would
+      be double-counted by the per-locus rekeying step.
+    - When `include_variant_data=True`, either `strata_expr` or
+      `group_membership_ht` must be supplied so the two intermediate arrays
+      share aligned strata indices.
+
+    :param vds: Input `hl.vds.VariantDataset`.
+    :param reference_ht: Table of reference sites.
+    :param entry_agg_funcs: As in `compute_stats_per_ref_site` — dict of
+        ``ann_name -> (transform_fn, agg_fn)``.
+    :param include_variant_data: When True, also aggregate on `variant_data`
+        and merge the two paths per annotation using `merge_funcs`. Default
+        False (ref-only path; cheapest but undercounts at variant-called
+        samples).
+    :param merge_funcs: Required when `include_variant_data=True`; dict of
+        ``ann_name -> Callable[[ref_arr, var_arr, sample_counts], merged_arr]``.
+        See the three helpers exported alongside this function.
+    :param row_key_fields: Forwarded to the inner aggregation calls.
+    :param interval_ht: Optional interval Table. When supplied, the VDS is
+        filtered with `hl.vds.filter_intervals(split_reference_blocks=False)`
+        and `reference_ht` is filtered to the same intervals up front.
+    :param entry_keep_fields: Forwarded to the inner aggregation calls.
+    :param row_keep_fields: Forwarded to the inner aggregation calls.
+    :param entry_agg_group_membership: Per-annotation narrowing dict
+        (forwarded to both paths' inner aggregations).
+    :param strata_expr: Mutually exclusive with `group_membership_ht`. When
+        supplied, a single `group_membership_ht` is built up front and used
+        for both paths.
+    :param group_membership_ht: Pre-built group membership Table. Mutually
+        exclusive with `strata_expr`.
+    :param sex_karyotype_field: Optional sex-karyotype col-field on
+        `variant_data`. Propagated to `reference_data.cols()` automatically.
+    :param reduce_to_minimal_groups: Forwarded to the ref-data path. When
+        True under `include_variant_data=True`, the variant-data path's
+        leaf-shape per-row arrays are expanded back to full shape via
+        `expand_strata_array_from_leaves` so the merge sees aligned full-
+        shape arrays on both sides.
+    :param non_summable_strata: Forwarded.
+    :param reducible_aggs: Forwarded to the ref-data path. Controls which
+        annotations are leaf-expanded on the variant-data path as well.
+    :return: Table keyed by `row_key_fields` with one column per annotation
+        in `entry_agg_funcs` and `strata_meta` / `strata_sample_count`
+        globals matching `compute_stats_per_ref_site`'s output.
+    """
+    if not isinstance(vds, hl.vds.VariantDataset):
+        raise ValueError("`vds` must be a `hl.vds.VariantDataset`.")
+    if strata_expr is not None and group_membership_ht is not None:
+        raise ValueError(
+            "Only one of `strata_expr` or `group_membership_ht` can be" " specified."
+        )
+    if include_variant_data:
+        if strata_expr is None and group_membership_ht is None:
+            raise ValueError(
+                "When `include_variant_data=True`, one of `strata_expr` or"
+                " `group_membership_ht` must be supplied so the two"
+                " intermediate per-stratum arrays share aligned indices for"
+                " the merge."
+            )
+        if merge_funcs is None:
+            raise ValueError(
+                "When `include_variant_data=True`, `merge_funcs` must be"
+                " supplied with one merge callable per annotation in"
+                " `entry_agg_funcs`."
+            )
+        missing = set(entry_agg_funcs) - set(merge_funcs)
+        if missing:
+            raise ValueError(
+                "`merge_funcs` is missing entries for:"
+                f" {sorted(missing)}. Each annotation in `entry_agg_funcs`"
+                " needs a merge callable."
+            )
+
+    if interval_ht is not None:
+        vds = hl.vds.filter_intervals(vds, interval_ht, split_reference_blocks=False)
+        reference_ht = reference_ht.filter(
+            hl.is_defined(interval_ht[reference_ht.locus])
+        )
+
+    rmt = vds.reference_data
+    vmt = vds.variant_data
+
+    if sex_karyotype_field is not None:
+        if sex_karyotype_field not in vmt.col:
+            raise ValueError(
+                f"`sex_karyotype_field` {sex_karyotype_field!r} not found"
+                " in `variant_data` cols."
+            )
+        if sex_karyotype_field not in rmt.col:
+            sex_ht = vmt.cols().select(sex_karyotype_field)
+            rmt = rmt.annotate_cols(
+                **{sex_karyotype_field: sex_ht[rmt.col_key][sex_karyotype_field]}
+            )
+
+    # Build a single group_membership_ht from strata_expr up front so both
+    # paths share the same group set. Resolve expressions against vmt.cols
+    # (rmt and vmt share the same sample set by construction).
+    if strata_expr is not None:
+        cols_ht = vmt.annotate_cols(
+            **{k: v for d in strata_expr for k, v in d.items()}
+        ).cols()
+        strata_resolved = [{k: cols_ht[k] for k in d} for d in strata_expr]
+        group_membership_ht = generate_freq_group_membership_array(
+            cols_ht,
+            strata_resolved,
+            no_raw_group=True,
+            reduce_to_minimal_groups=reduce_to_minimal_groups,
+            non_summable_strata=non_summable_strata,
+            group_label="raw",
+        )
+        strata_expr = None
+
+    # Determine the genotype field on the reference_data MT for the auto-wrap.
+    rmt_en = set(rmt.entry)
+    rmt_gt_field_set = rmt_en & {"GT"} or rmt_en & {"LGT"}
+    if not rmt_gt_field_set:
+        raise ValueError(
+            "`vds.reference_data` has no GT or LGT entry field; cannot" " aggregate."
+        )
+    rmt_gt_field = next(iter(rmt_gt_field_set))
+
+    # Step 1: Aggregate on reference_data via the sparse-MT path.
+    ref_ht_out = compute_stats_per_ref_site(
+        rmt,
+        reference_ht,
+        _wrap_transforms_for_sparse_path(entry_agg_funcs, rmt_gt_field),
+        row_key_fields=row_key_fields,
+        entry_keep_fields=entry_keep_fields,
+        row_keep_fields=row_keep_fields,
+        entry_agg_group_membership=entry_agg_group_membership,
+        strata_expr=None,
+        group_membership_ht=group_membership_ht,
+        sex_karyotype_field=sex_karyotype_field,
+        reducible_aggs=reducible_aggs,
+        # Reduction is already applied (or not) in the supplied
+        # group_membership_ht; forward False and rely on the supplied table's
+        # `freq_reduced` global for detection.
+        reduce_to_minimal_groups=False,
+        non_summable_strata=non_summable_strata,
+    )
+
+    if not include_variant_data:
+        return ref_ht_out
+
+    # Step 2: Aggregate on variant_data directly (no densify).
+    var_ht_out = _aggregate_stats_on_variant_data(
+        vmt,
+        reference_ht,
+        entry_agg_funcs,
+        group_membership_ht=group_membership_ht,
+        sex_karyotype_field=sex_karyotype_field,
+        entry_keep_fields=set(entry_keep_fields or set()),
+        entry_agg_group_membership=entry_agg_group_membership,
+    )
+
+    # Under reduction, the variant-data path emits leaf-shape arrays for the
+    # reducible annotations; expand them to full shape so the merge sees
+    # aligned arrays on both sides. Narrowed annotations (those listed in
+    # `entry_agg_group_membership`) are already at their final length-k shape
+    # on both sides and need no expansion.
+    g = group_membership_ht.index_globals()
+    is_reduced = "freq_reduced" in group_membership_ht.globals and hl.eval(
+        g.freq_reduced
+    )
+    if is_reduced:
+        r = _read_reduction_globals(g)
+        grouped = (
+            set(entry_agg_group_membership) if entry_agg_group_membership else set()
+        )
+        if reducible_aggs is None:
+            anns_to_expand = set(entry_agg_funcs) - grouped
+        else:
+            anns_to_expand = set(reducible_aggs)
+        var_ht_out = var_ht_out.annotate(
+            **{
+                ann: expand_strata_array_from_leaves(
+                    var_ht_out[ann],
+                    r["leaf_indices"],
+                    r["decomposition"],
+                    r["n_full"],
+                )
+                for ann in anns_to_expand
+            }
+        )
+
+    # Step 3: Merge per annotation.
+    strata_meta_full = hl.eval(ref_ht_out.strata_meta)
+    strata_sample_count_full = hl.eval(ref_ht_out.strata_sample_count)
+    reduction_info = _read_reduction_globals(g) if is_reduced else None
+
+    var_indexed = var_ht_out[ref_ht_out[row_key_fields[0]]]
+    merged_annotations = {}
+    for ann in entry_agg_funcs:
+        per_ann_counts = _resolve_sample_counts_for_annotation(
+            ann,
+            entry_agg_group_membership,
+            strata_meta_full,
+            strata_sample_count_full,
+            reduction_info,
+        )
+        sample_counts_expr = hl.array([hl.int64(c) for c in per_ann_counts])
+        merged_annotations[ann] = merge_funcs[ann](
+            ref_ht_out[ann],
+            var_indexed[ann],
+            sample_counts_expr,
+        )
+    return ref_ht_out.annotate(**merged_annotations)
+
+
+def compute_allele_number_per_ref_site_sparse(
+    vds: hl.vds.VariantDataset,
+    reference_ht: hl.Table,
+    include_variant_data: bool = False,
+    strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
+    group_membership_ht: Optional[hl.Table] = None,
+    sex_karyotype_field: Optional[str] = None,
+    interval_ht: Optional[hl.Table] = None,
+    row_key_fields: Union[Tuple[str], List[str]] = ("locus",),
+    row_keep_fields: Union[Tuple[str], List[str], Set[str]] = None,
+    entry_keep_fields: Union[Tuple[str], List[str], Set[str]] = None,
+    reduce_to_minimal_groups: bool = False,
+    non_summable_strata: Optional[Set[str]] = None,
+) -> hl.Table:
+    """
+    Compute AN per reference site without a full VDS densify.
+
+    Thin wrapper around `compute_stats_per_ref_site_sparse` for the common
+    AN-only case. Uses `merge_sum_array_expression` to merge the ref-only
+    and variant-only paths when `include_variant_data=True`. See
+    `compute_stats_per_ref_site_sparse` for the full semantic model.
+
+    :param vds: Input VDS.
+    :param reference_ht: Table of reference sites.
+    :param include_variant_data: If True, also aggregate AN from
+        `variant_data` (no densify) and merge via element-wise sum to
+        recover the full AN matching the dense-path output.
+    :param strata_expr: Mutually exclusive with `group_membership_ht`.
+    :param group_membership_ht: Pre-built group membership Table. Mutually
+        exclusive with `strata_expr`.
+    :param sex_karyotype_field: Optional sex-karyotype col-field; applied to
+        both paths.
+    :param interval_ht: Optional interval filter Table.
+    :param row_key_fields: Forwarded.
+    :param row_keep_fields: Forwarded.
+    :param entry_keep_fields: Forwarded.
+    :param reduce_to_minimal_groups: Forwarded.
+    :param non_summable_strata: Forwarded.
+    :return: Table keyed by `row_key_fields` with an `AN` array per stratum
+        and `strata_meta` / `strata_sample_count` globals.
+    """
+    if not isinstance(vds, hl.vds.VariantDataset):
+        raise ValueError("`vds` must be a `hl.vds.VariantDataset`.")
+
+    # The generic function dispatches the same `entry_agg_funcs` to both the
+    # ref-data and variant-data paths. In VDSs where the two halves use
+    # different genotype field names (e.g., test fixtures with LGT on
+    # reference_data and GT on variant_data), a hardcoded field name in the
+    # transform would fail on one side. Inspect the MT at expression-build
+    # time and pick whichever of GT/LGT is present.
+    def _an_transform(mt):
+        gt = "GT" if "GT" in mt.entry else "LGT"
+        return mt[gt].ploidy
+
+    entry_agg_funcs = {"AN": (_an_transform, hl.agg.sum)}
+    merge_funcs = {"AN": merge_sum_array_expression} if include_variant_data else None
+    return compute_stats_per_ref_site_sparse(
+        vds,
+        reference_ht,
+        entry_agg_funcs,
+        include_variant_data=include_variant_data,
+        merge_funcs=merge_funcs,
+        row_key_fields=row_key_fields,
+        interval_ht=interval_ht,
+        entry_keep_fields=entry_keep_fields,
+        row_keep_fields=row_keep_fields,
+        strata_expr=strata_expr,
+        group_membership_ht=group_membership_ht,
+        sex_karyotype_field=sex_karyotype_field,
+        reduce_to_minimal_groups=reduce_to_minimal_groups,
+        non_summable_strata=non_summable_strata,
+        reducible_aggs={"AN"} if include_variant_data else None,
+    )
 
 
 def filter_ref_blocks(

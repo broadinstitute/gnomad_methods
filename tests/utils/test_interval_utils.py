@@ -238,7 +238,7 @@ class TestExplodeIntervalsToLoci:
         self, sample_interval_table: hl.Table
     ) -> None:
         """Test that a ValueError is raised when interval_field refers to a non-interval field."""
-        with pytest.raises(ValueError, match="must refer to an interval field"):
+        with pytest.raises(ValueError, match="must be a hail interval"):
             explode_intervals_to_loci(
                 sample_interval_table,
                 interval_field="gene",

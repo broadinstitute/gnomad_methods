@@ -200,8 +200,8 @@ def explode_intervals_to_loci(
             )
         if not isinstance(intervals[interval_field], hl.expr.IntervalExpression):
             raise ValueError(
-                f"`interval_field` '{interval_field}' must be a hail interval expression"
-                " in the input Table!"
+                f"`interval_field` '{interval_field}' must be a hail interval"
+                " expression in the input Table!"
             )
 
     if isinstance(intervals, list):

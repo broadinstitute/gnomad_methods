@@ -316,7 +316,7 @@ class TestExplodeIntervalsToLoci:
         with pytest.raises(
             AssertionError,
             match=(
-                "Input must be a Table, IntervalExpression, or list of"
+                "Input must be a Table, IntervalExpression, or ArrayExpression of"
                 " IntervalExpressions"
             ),
         ):
@@ -426,21 +426,23 @@ class TestExplodeIntervalsToLoci:
         assert all(locus in result_loci for locus in expected_loci)
 
     def test_explode_list_of_interval_expressions(self) -> None:
-        """Test exploding a list of non-overlapping IntervalExpressions returns all expected loci."""
-        intervals = [
-            hl.interval(
-                hl.locus("chr1", 100, "GRCh38"),
-                hl.locus("chr1", 102, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                hl.locus("chr2", 200, "GRCh38"),
-                hl.locus("chr2", 202, "GRCh38"),
-                includes_start=True,
-                includes_end=False,
-            ),
-        ]
+        """Test exploding an ArrayExpression of non-overlapping IntervalExpressions returns all expected loci."""
+        intervals = hl.array(
+            [
+                hl.interval(
+                    hl.locus("chr1", 100, "GRCh38"),
+                    hl.locus("chr1", 102, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+                hl.interval(
+                    hl.locus("chr2", 200, "GRCh38"),
+                    hl.locus("chr2", 202, "GRCh38"),
+                    includes_start=True,
+                    includes_end=False,
+                ),
+            ]
+        )
 
         result = explode_intervals_to_loci(intervals)
         loci = hl.eval(result)
@@ -456,7 +458,7 @@ class TestExplodeIntervalsToLoci:
 
     def test_explode_table_overlapping_intervals_deduplicates(self) -> None:
         """Test that overlapping table intervals produce deduplicated loci when deduplicate=True."""
-        # chr1:100-105 and chr1:103-108, both inclusive → without dedup: 12 rows
+        # chr1:100-105 and chr1:103-108, both inclusive -> without dedup: 12 rows
         # with deduplicate=True (default): 9 distinct loci [100..108]
         intervals = [
             hl.interval(
@@ -571,23 +573,25 @@ class TestExplodeIntervalsToLoci:
         )
 
     def test_explode_list_overlapping_intervals_deduplicates(self) -> None:
-        """Test that overlapping intervals in a list are deduplicated when deduplicate=True."""
+        """Test that overlapping intervals in an ArrayExpression are deduplicated when deduplicate=True."""
         # Two overlapping intervals; deduplicate=True (default) removes duplicate
         # positions.
-        intervals = [
-            hl.interval(
-                hl.locus("chr1", 100, "GRCh38"),
-                hl.locus("chr1", 105, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                hl.locus("chr1", 103, "GRCh38"),
-                hl.locus("chr1", 108, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-        ]
+        intervals = hl.array(
+            [
+                hl.interval(
+                    hl.locus("chr1", 100, "GRCh38"),
+                    hl.locus("chr1", 105, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+                hl.interval(
+                    hl.locus("chr1", 103, "GRCh38"),
+                    hl.locus("chr1", 108, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+            ]
+        )
 
         result = explode_intervals_to_loci(intervals, deduplicate=True)
         loci = hl.eval(result)
@@ -598,27 +602,29 @@ class TestExplodeIntervalsToLoci:
     def test_explode_list_overlapping_intervals_no_deduplicate_warns(
         self, caplog
     ) -> None:
-        """Test that a warning is emitted and duplicates are present when deduplicate=False with overlapping list intervals."""
-        intervals = [
-            hl.interval(
-                hl.locus("chr1", 100, "GRCh38"),
-                hl.locus("chr1", 102, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                hl.locus("chr1", 101, "GRCh38"),
-                hl.locus("chr1", 103, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-        ]
+        """Test that a warning is emitted and duplicates are present when deduplicate=False with overlapping array intervals."""
+        intervals = hl.array(
+            [
+                hl.interval(
+                    hl.locus("chr1", 100, "GRCh38"),
+                    hl.locus("chr1", 102, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+                hl.interval(
+                    hl.locus("chr1", 101, "GRCh38"),
+                    hl.locus("chr1", 103, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+            ]
+        )
 
         with caplog.at_level(logging.WARNING):
             result = explode_intervals_to_loci(intervals, deduplicate=False)
 
         assert (
-            "Overlapping intervals in the input list may produce duplicate loci"
+            "Overlapping intervals in the input array may produce duplicate loci"
             in caplog.text
         )
         loci = hl.eval(result)
@@ -627,16 +633,15 @@ class TestExplodeIntervalsToLoci:
         assert loci.count(hl.Locus("chr1", 101, "GRCh38")) == 2
         assert loci.count(hl.Locus("chr1", 102, "GRCh38")) == 2
 
-    def test_explode_empty_list_raises_type_error(self) -> None:
-        """Test that passing an empty Python list raises a TypeError.
+    def test_explode_plain_list_raises_assertion_error(self) -> None:
+        """Test that passing a plain Python list raises an AssertionError.
 
-        Hail cannot infer the element type of an empty Python list, so
-        ``hl.array([])`` (called internally) raises a TypeError. This is distinct
-        from passing a Hail-typed empty array expression, which would instead
-        fail the input-type assertion because ``ArrayExpression`` is not a
-        supported input type.
+        The API now requires a Hail ``ArrayExpression`` instead of a Python list.
+        Passing a Python list (including an empty one) fails the input-type
+        assertion. For an empty typed array use
+        ``hl.literal([], hl.tarray(hl.tinterval(hl.tlocus(...))))``).
         """
-        with pytest.raises(TypeError):
+        with pytest.raises(AssertionError):
             explode_intervals_to_loci([])
 
     def test_explode_list_cross_chromosome_same_position_deduplicates_correctly(
@@ -648,20 +653,22 @@ class TestExplodeIntervalsToLoci:
         distinct loci. Locus-based deduplication must preserve all 6 loci; a
         position-only deduplication strategy would incorrectly collapse them to 3.
         """
-        intervals = [
-            hl.interval(
-                hl.locus("chr1", 100, "GRCh38"),
-                hl.locus("chr1", 102, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                hl.locus("chr2", 100, "GRCh38"),
-                hl.locus("chr2", 102, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-        ]
+        intervals = hl.array(
+            [
+                hl.interval(
+                    hl.locus("chr1", 100, "GRCh38"),
+                    hl.locus("chr1", 102, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+                hl.interval(
+                    hl.locus("chr2", 100, "GRCh38"),
+                    hl.locus("chr2", 102, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+            ]
+        )
 
         result = explode_intervals_to_loci(intervals, deduplicate=True)
         loci = hl.eval(result)

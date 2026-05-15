@@ -5,8 +5,6 @@ from typing import List, Optional, Union
 
 import hail as hl
 
-from gnomad.utils.reference_genome import get_reference_genome
-
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
@@ -149,9 +147,7 @@ def interval_to_pos_range(
 
 
 def explode_intervals_to_loci(
-    intervals: Union[
-        hl.Table, hl.expr.IntervalExpression, List[hl.expr.IntervalExpression]
-    ],
+    intervals: Union[hl.Table, hl.expr.IntervalExpression, hl.expr.ArrayExpression],
     interval_field: Optional[str] = None,
     keep_intervals: Optional[bool] = False,
     deduplicate: bool = True,
@@ -162,30 +158,50 @@ def explode_intervals_to_loci(
 
     If input is a Table, function will expand intervals to loci and key Table by loci.
 
-    If input is an IntervalExpression or a list of IntervalExpressions, function will return an ArrayExpression containing all loci within the input interval(s).
+    If input is an IntervalExpression or an ArrayExpression of IntervalExpressions,
+    function will return an ArrayExpression containing all loci within the input
+    interval(s).
 
     .. warning::
-        - Overlapping intervals will produce duplicate loci. Use ``deduplicate=True`` (the default) to remove them.
-        - When ``keep_intervals=True`` on a Table input, deduplication is not possible because duplicate rows with different interval annotations may exist; a warning is displayed instead.
-        - Caution when using this function on very large intervals (e.g., whole chromosomes), as it will create extremely large arrays, which may cause performance issues.
+        - Overlapping intervals will produce duplicate loci. Use ``deduplicate=True``
+          (default) to remove them.
+        - When ``keep_intervals=True`` on a Table input, deduplication is not possible
+          because duplicate rows with different interval annotations may exist; a warning
+          is displayed instead.
+        - Caution when using this function on very large intervals (e.g., whole
+          chromosomes), as it will create extremely large arrays, which may cause
+          performance issues.
 
     Note that intervals that cross chromosomes are currently not supported.
 
-    :param intervals: Table, IntervalExpression, or list of IntervalExpressions.
-    :param interval_field: Name of the interval field. Only required if input is a Hail Table. Default is None.
-    :param keep_intervals: If True, keep the original intervals as a column in output. Only applies if input is a Hail Table. Default is False.
-    :param deduplicate: If True, remove duplicate loci produced by overlapping intervals. For Table input with ``keep_intervals=True``, deduplication is skipped with a warning. For a list of IntervalExpressions, the returned ArrayExpression will have duplicate loci removed. Has no effect when ``flatten=False``. Default is True.
-    :param flatten: If True, flatten the per-interval loci arrays into a single ArrayExpression. Only applies when input is a list of IntervalExpressions. Default is True.
-    :return: If input is a Hail Table, returns exploded Table keyed by locus. If input is an IntervalExpression or list of IntervalExpressions, returns ArrayExpression containing loci within input interval(s). If input is a list and ``flatten=False``, returns a nested ArrayExpression of per-interval loci arrays.
+    :param intervals: Table, IntervalExpression, or ArrayExpression of
+        IntervalExpressions.
+    :param interval_field: Name of the interval field. Only required if input is a Hail
+        Table. Default is None.
+    :param keep_intervals: If True, keep the original intervals as a column in output.
+        Only applies if input is a Hail Table. Default is False.
+    :param deduplicate: If True, remove duplicate loci produced by overlapping
+        intervals. For Table input with ``keep_intervals=True``, deduplication is
+        skipped with a warning. For an ArrayExpression of IntervalExpressions, the
+        returned ArrayExpression will have duplicate loci removed. Has no effect when
+        ``flatten=False``. Default is True.
+    :param flatten: If True, flatten the per-interval loci arrays into a single
+        ArrayExpression. Only applies when input is an ArrayExpression of
+        IntervalExpressions. Default is True.
+    :return: If input is a Hail Table, returns exploded Table keyed by locus. If input
+        is an IntervalExpression or ArrayExpression of IntervalExpressions, returns
+        ArrayExpression containing loci within input interval(s). If input is an
+        ArrayExpression and ``flatten=False``, returns a nested ArrayExpression of
+        per-interval loci arrays.
     """
     assert (
         isinstance(intervals, hl.Table)
         or isinstance(intervals, hl.expr.IntervalExpression)
-        or (
-            isinstance(intervals, list)
-            and all(isinstance(i, hl.expr.IntervalExpression) for i in intervals)
-        )
-    ), "Input must be a Table, IntervalExpression, or list of IntervalExpressions!"
+        or isinstance(intervals, hl.expr.ArrayExpression)
+    ), (
+        "Input must be a Table, IntervalExpression, or ArrayExpression of"
+        " IntervalExpressions!"
+    )
 
     if isinstance(intervals, hl.Table) and (
         not interval_field or keep_intervals is None
@@ -204,52 +220,49 @@ def explode_intervals_to_loci(
                 " in the input Table!"
             )
 
-    if isinstance(intervals, list):
+    def _make_loci_array(interval_expr):
+        return interval_to_pos_range(interval_expr).map(
+            lambda pos: hl.locus(
+                interval_expr.start.contig,
+                pos,
+                reference_genome=interval_expr.start.dtype.reference_genome,
+            )
+        )
+
+    if isinstance(intervals, hl.expr.ArrayExpression):
         logger.info(
-            "Input is a list of IntervalExpressions, so function will return an"
-            " ArrayExpression of loci within all input intervals."
+            "Input is an ArrayExpression of IntervalExpressions, so function will"
+            " return an ArrayExpression of loci within all input intervals."
         )
         if not deduplicate and flatten:
             logger.warning(
-                "Overlapping intervals in the input list may produce duplicate loci in"
-                " the returned ArrayExpression. Set `deduplicate=True` to remove them."
+                "Overlapping intervals in the input array may produce duplicate loci"
+                " in the returned ArrayExpression. Set `deduplicate=True` to remove"
+                " them."
             )
 
-        def _make_loci_array(interval_expr):
-            return interval_to_pos_range(interval_expr).map(
-                lambda pos: hl.locus(
-                    interval_expr.start.contig,
-                    pos,
-                    reference_genome=interval_expr.start.dtype.reference_genome,
-                )
-            )
-
-        loci_arrays = [_make_loci_array(i) for i in intervals]
-        if not flatten:
-            return hl.array(loci_arrays)
-        result = hl.flatten(hl.array(loci_arrays))
-        if deduplicate:
-            result = hl.array(hl.set(result))
-        return result
+        loci_arrays = intervals.map(lambda i: _make_loci_array(i))
+        if flatten:
+            result = hl.flatten(loci_arrays)
+            if deduplicate:
+                result = hl.array(hl.set(result))
+            result = hl.sorted(result)
+            return result
+        else:
+            return loci_arrays
 
     intervals_expr = (
         intervals
         if isinstance(intervals, hl.expr.IntervalExpression)
         else intervals[interval_field]
     )
-    if isinstance(intervals, hl.Table):
-        intervals = intervals.annotate(
-            _pos=interval_to_pos_range(intervals_expr)
-        ).explode("_pos")
-        intervals = intervals.key_by(
-            locus=hl.locus(
-                intervals[interval_field].start.contig,
-                intervals._pos,
-                reference_genome=get_reference_genome(intervals[interval_field]),
-            )
-        )
+    loci_array = _make_loci_array(intervals_expr)
 
-        fields_to_drop = ["_pos"]
+    if isinstance(intervals, hl.Table):
+        intervals = intervals.annotate(_loci=loci_array).explode("_loci")
+        intervals = intervals.key_by(locus=intervals._loci)
+
+        fields_to_drop = ["_loci"]
         if not keep_intervals:
             fields_to_drop.append(interval_field)
 
@@ -265,6 +278,12 @@ def explode_intervals_to_loci(
                 )
             else:
                 intervals = intervals.distinct()
+                logger.warning(
+                    "The `distinct()` call will arbitrarily select one row for each"
+                    " duplicated locus. If the input table has annotations such as gene"
+                    " or transcript ID, the values retained for duplicated loci are not"
+                    " deterministic."
+                )
 
         return intervals
 
@@ -272,10 +291,4 @@ def explode_intervals_to_loci(
         "Input is an IntervalExpression, so function will return an ArrayExpression of"
         " loci within the input interval."
     )
-    return interval_to_pos_range(intervals_expr).map(
-        lambda pos: hl.locus(
-            intervals_expr.start.contig,
-            pos,
-            reference_genome=intervals_expr.start.dtype.reference_genome,
-        )
-    )
+    return loci_array

@@ -643,12 +643,10 @@ class TestComputeStatsPerRefSiteReducibleAggs:
 
         The restriction target is a fully-stratified leaf so the
         `freq_meta.index(...)` lookup succeeds against both the
-        un-reduced and the reduced `freq_meta`. Restricting a
-        non-summable aggregation to a non-leaf parent (e.g.
-        `{"group": "adj"}` against a gen_anc×sex stratification) is a
-        separate limitation of `agg_by_strata`'s lookup against the
-        reduced `freq_meta` — independent of the `reducible_aggs`
-        plumbing under test here.
+        un-reduced and the reduced `freq_meta`. The non-leaf parent
+        target case (e.g. `{"group": "raw", "gen_anc": "afr"}` against a
+        gen_anc×sex stratification) is covered separately by
+        `test_hist_restricted_to_nonleaf_parent_matches_full`.
         """
         vd = synthetic_vds.variant_data
         full_gmh = self._build_group_membership_ht(vd, reduce=False)
@@ -688,6 +686,71 @@ class TestComputeStatsPerRefSiteReducibleAggs:
         assert all(len(v) == 1 for v in full_max)
         assert all(len(v) == 1 for v in reduced_max)
         assert full_max == reduced_max
+
+    # A non-leaf parent under the gen_anc×sex stratification: it
+    # decomposes to the {afr,XX} and {afr,XY} leaves. Exercises the
+    # parent-reconstruction path in agg_by_strata that previously
+    # produced an un-lowerable IR for `hl.agg.hist`.
+    PARENT_TARGET = {"group": "raw", "gen_anc": "afr"}
+
+    def test_hist_restricted_to_nonleaf_parent_matches_full(
+        self, synthetic_vds, reference_ht
+    ):
+        """A `hl.agg.hist` non-reducible agg pinned to a non-leaf parent target matches the full-fanout baseline under leaf reduction.
+
+        Regression test for the Hail lowering failure where a parent
+        target's sample set was reconstructed as a flattened
+        array-of-index-arrays; `hl.agg.hist` over that form failed to
+        lower. The parent set is now built as a single flat index array
+        (OR of its disjoint leaf-children's membership), matching the
+        leaf path's shape.
+        """
+        vd = synthetic_vds.variant_data
+        full_gmh = self._build_group_membership_ht(vd, reduce=False)
+        reduced_gmh = self._build_group_membership_ht(vd, reduce=True)
+
+        entry_agg_funcs = {
+            "AN": (lambda t: t.GT.ploidy, hl.agg.sum),
+            "alt_hist": (
+                lambda t: t.GT.n_alt_alleles(),
+                lambda x: hl.agg.hist(x, 0, 2, 2),
+            ),
+        }
+
+        full_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=full_gmh,
+            entry_agg_group_membership={"alt_hist": [self.PARENT_TARGET]},
+        )
+        reduced_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=reduced_gmh,
+            reducible_aggs={"AN"},
+            entry_agg_group_membership={"alt_hist": [self.PARENT_TARGET]},
+        )
+
+        full_an = self._index(full_ht, "AN")
+        reduced_an = self._index(reduced_ht, "AN")
+        assert set(full_an) == set(reduced_an)
+        for k in full_an:
+            assert full_an[k] == reduced_an[k], k
+
+        # The parent-restricted hist must be identical between the
+        # full-fanout and reduced runs (same afr sample set, same bins).
+        full_hist = [r.alt_hist for r in full_ht.collect()]
+        reduced_hist = [r.alt_hist for r in reduced_ht.collect()]
+        assert all(len(v) == 1 for v in full_hist)
+        assert all(len(v) == 1 for v in reduced_hist)
+        for f_row, r_row in zip(full_hist, reduced_hist):
+            f, r = f_row[0], r_row[0]
+            assert f.bin_edges == r.bin_edges
+            assert f.bin_freq == r.bin_freq
+            assert f.n_smaller == r.n_smaller
+            assert f.n_larger == r.n_larger
 
     def test_reducible_aggs_overlap_with_entry_agg_group_membership_raises(
         self, synthetic_vds, reference_ht

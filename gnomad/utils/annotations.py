@@ -3012,8 +3012,20 @@ def agg_by_strata(
                 s_indices_per_target.append(ht.indices_by_group[payload])
                 adj_per_target.append(ht.adj_groups[payload])
             else:  # parent
+                # Reconstruct the parent's sample set as a single flat
+                # index array (OR of its disjoint leaf-children's
+                # per-sample membership) instead of flattening an
+                # array-of-index-arrays. The flat form matches the leaf
+                # path's shape, so aggregators like `hl.agg.hist` lower
+                # correctly; the array-of-arrays flatten does not.
                 s_indices_per_target.append(
-                    hl.flatten(hl.array([ht.indices_by_group[lp] for lp in payload]))
+                    hl.range(hl.len(ht.cols)).filter(
+                        lambda s_i: hl.any(
+                            hl.array(
+                                [ht.cols[s_i].group_membership[lp] for lp in payload]
+                            )
+                        )
+                    )
                 )
                 adj_per_target.append(hl.literal(adj))
         return hl.array(s_indices_per_target), hl.array(adj_per_target)

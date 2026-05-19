@@ -2130,6 +2130,7 @@ def find_minimal_strata_groups(
     freq_meta: List[Dict[str, str]],
     freq_meta_sample_count: List[int],
     non_summable_strata: Optional[Set[str]] = None,
+    force_leaf_groups: Optional[List[Dict[str, str]]] = None,
 ) -> Tuple[List[int], Dict[int, List[int]]]:
     """
     Identify the minimal "leaf" set of stratification groups in a `freq_meta`.
@@ -2180,6 +2181,16 @@ def find_minimal_strata_groups(
         `freq_meta`. Used to validate candidate decompositions.
     :param non_summable_strata: Strata names that should never be summed
         across their values. Default is `{"downsampling"}`.
+    :param force_leaf_groups: Optional list of `freq_meta` dicts to retain
+        as leaves even if they would otherwise be reconstructed as the
+        sum of other groups. Use this for groups that a downstream caller
+        pins a non-reducible aggregation to (via
+        `entry_agg_group_membership`): keeping them as leaves means they
+        are computed directly (a cheap index lookup) rather than rebuilt
+        per row from their leaf-children, which both avoids the
+        reconstruction cost and keeps the aggregation lowerable. Matched
+        by exact dict equality against `freq_meta` entries. Default is
+        None (no forced leaves).
     :return: Tuple of `(leaf_indices, decomposition)`. `leaf_indices` is a
         list of indices into `freq_meta` marking the leaves, in ascending
         order. `decomposition` maps each non-leaf index to the list of
@@ -2195,6 +2206,8 @@ def find_minimal_strata_groups(
         non_summable_strata = {"downsampling"}
     else:
         non_summable_strata = set(non_summable_strata)
+
+    force_leaf_set = {frozenset(d.items()) for d in (force_leaf_groups or [])}
 
     def summable_strata_of(entry: Dict[str, str]) -> frozenset:
         return frozenset(
@@ -2229,6 +2242,13 @@ def find_minimal_strata_groups(
         for idx in partition_indices:
             if summable_strata_of(freq_meta[idx]) in leaf_strata_sets:
                 is_leaf[idx] = True
+
+        # Retain caller-requested groups as leaves so they are computed
+        # directly instead of reconstructed from their leaf-children.
+        if force_leaf_set:
+            for idx in partition_indices:
+                if frozenset(freq_meta[idx].items()) in force_leaf_set:
+                    is_leaf[idx] = True
 
         # Decompose non-leaves using only same-partition leaves.
         leaf_indices_in_partition = [idx for idx in partition_indices if is_leaf[idx]]
@@ -2400,6 +2420,7 @@ def generate_freq_group_membership_array(
     no_raw_group: bool = False,
     reduce_to_minimal_groups: bool = False,
     non_summable_strata: Optional[Set[str]] = None,
+    force_leaf_groups: Optional[List[Dict[str, str]]] = None,
     group_label: str = "adj",
 ) -> hl.Table:
     """
@@ -2466,6 +2487,11 @@ def generate_freq_group_membership_array(
     :param non_summable_strata: Strata names that should never be summed
         across their values when `reduce_to_minimal_groups` is True.
         Default is None, which resolves to `{"downsampling"}`.
+    :param force_leaf_groups: Optional list of `freq_meta` dicts to keep
+        as leaves under `reduce_to_minimal_groups` (see
+        `find_minimal_strata_groups`). Pass the groups a downstream caller
+        pins non-reducible aggregations to so they stay directly computed
+        rather than reconstructed per row. Default is None.
     :param group_label: Value to use for the `"group"` key on every
         constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
         for callers that don't apply any genotype-level filtering (e.g.,
@@ -2624,6 +2650,7 @@ def generate_freq_group_membership_array(
             freq_meta_full,
             freq_meta_sample_count_full,
             non_summable_strata=non_summable_strata,
+            force_leaf_groups=force_leaf_groups,
         )
 
         n_full = len(freq_meta_full)
@@ -3012,8 +3039,20 @@ def agg_by_strata(
                 s_indices_per_target.append(ht.indices_by_group[payload])
                 adj_per_target.append(ht.adj_groups[payload])
             else:  # parent
+                # Reconstruct the parent's sample set as a single flat
+                # index array (OR of its disjoint leaf-children's
+                # per-sample membership) instead of flattening an
+                # array-of-index-arrays. The flat form matches the leaf
+                # path's shape, so aggregators like `hl.agg.hist` lower
+                # correctly; the array-of-arrays flatten does not.
                 s_indices_per_target.append(
-                    hl.flatten(hl.array([ht.indices_by_group[lp] for lp in payload]))
+                    hl.range(hl.len(ht.cols)).filter(
+                        lambda s_i: hl.any(
+                            hl.array(
+                                [ht.cols[s_i].group_membership[lp] for lp in payload]
+                            )
+                        )
+                    )
                 )
                 adj_per_target.append(hl.literal(adj))
         return hl.array(s_indices_per_target), hl.array(adj_per_target)

@@ -2142,6 +2142,44 @@ class TestFindMinimalStrataGroups:
             4: [6, 8],
         }
 
+    def test_force_leaf_groups_retains_pinned_overall_group(self):
+        """A group in force_leaf_groups stays a leaf instead of being decomposed.
+
+        Without force_leaf_groups the bare {"group": "raw"} entry (index
+        0) is a parent that decomposes into the gen_anc×sex leaves (see
+        test_all_raw_partition). Pinning it via force_leaf_groups keeps
+        it directly computed — what compute_coverage needs so its
+        coverage_stats/qual_hists targets stay cheap index lookups under
+        leaf reduction instead of per-row parent reconstruction.
+        """
+        freq_meta = [
+            {"group": "raw"},
+            {"group": "raw", "gen_anc": "afr"},
+            {"group": "raw", "gen_anc": "nfe"},
+            {"group": "raw", "sex": "XX"},
+            {"group": "raw", "sex": "XY"},
+            {"group": "raw", "gen_anc": "afr", "sex": "XX"},
+            {"group": "raw", "gen_anc": "afr", "sex": "XY"},
+            {"group": "raw", "gen_anc": "nfe", "sex": "XX"},
+            {"group": "raw", "gen_anc": "nfe", "sex": "XY"},
+        ]
+        sample_count = [100, 40, 60, 50, 50, 20, 20, 30, 30]
+
+        leaves, decomp = find_minimal_strata_groups(
+            freq_meta, sample_count, force_leaf_groups=[{"group": "raw"}]
+        )
+
+        # Index 0 is now a leaf and absent from the decomposition; the
+        # other parents decompose exactly as before.
+        assert leaves == [0, 5, 6, 7, 8]
+        assert 0 not in decomp
+        assert decomp == {
+            1: [5, 6],
+            2: [7, 8],
+            3: [5, 7],
+            4: [6, 8],
+        }
+
     def test_global_downsampling_stays_leaf(self):
         """Downsampling-only entries stay leaves; the all-adj entry can't decompose into them."""
         freq_meta = [

@@ -2489,9 +2489,9 @@ def generate_freq_group_membership_array(
         Default is None, which resolves to `{"downsampling"}`.
     :param force_leaf_groups: Optional list of `freq_meta` dicts to keep
         as leaves under `reduce_to_minimal_groups` (see
-        `find_minimal_strata_groups`). Pass the groups a downstream caller
-        pins non-reducible aggregations to so they stay directly computed
-        rather than reconstructed per row. Default is None.
+        `find_minimal_strata_groups`). Use this for groups that downstream
+    code accesses directly, so they remain explicitly computed instead
+    of being reconstructed per row from child groups
     :param group_label: Value to use for the `"group"` key on every
         constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
         for callers that don't apply any genotype-level filtering (e.g.,

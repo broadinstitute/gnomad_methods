@@ -3039,12 +3039,14 @@ def agg_by_strata(
                 s_indices_per_target.append(ht.indices_by_group[payload])
                 adj_per_target.append(ht.adj_groups[payload])
             else:  # parent
-                # Reconstruct the parent's sample set as a single flat
-                # index array (OR of its disjoint leaf-children's
-                # per-sample membership) instead of flattening an
-                # array-of-index-arrays. The flat form matches the leaf
-                # path's shape, so aggregators like `hl.agg.hist` lower
-                # correctly; the array-of-arrays flatten does not.
+# Reconstruct the parent's sample set as a single flat
+# index array (OR of its disjoint leaf-children's
+# per-sample membership) instead of flattening an
+# array-of-index-arrays. The flat form matches the IR shape of
+# the leaf path, which lets aggregators like `hl.agg.hist` lower
+# correctly. The previous approach — hl.flatten(array of per-leaf
+# index arrays) — has the same values but a different IR shape
+# that Hail cannot lower for these aggregators.
                 s_indices_per_target.append(
                     hl.range(hl.len(ht.cols)).filter(
                         lambda s_i: hl.any(

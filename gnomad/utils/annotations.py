@@ -2181,16 +2181,15 @@ def find_minimal_strata_groups(
         `freq_meta`. Used to validate candidate decompositions.
     :param non_summable_strata: Strata names that should never be summed
         across their values. Default is `{"downsampling"}`.
-    :param force_leaf_groups: Optional list of `freq_meta` dicts to retain
-        as leaves even if they would otherwise be reconstructed as the
-        sum of other groups. Use this for groups that a downstream caller
-        pins a non-reducible aggregation to (via
-        `entry_agg_group_membership`): keeping them as leaves means they
-        are computed directly (a cheap index lookup) rather than rebuilt
-        per row from their leaf-children, which both avoids the
-        reconstruction cost and keeps the aggregation lowerable. Matched
-        by exact dict equality against `freq_meta` entries. Default is
-        None (no forced leaves).
+    :param force_leaf_groups: :param force_leaf_groups: Optional list of `freq_meta` dicts to retain
+    as leaf groups even if they would otherwise be reconstructed from
+    other groups under `reduce_to_minimal_groups`. Use this for groups
+    that downstream code accesses directly via
+    `entry_agg_group_membership`, so they remain directly materialized
+    instead of being rebuilt per row from their leaf children. This
+    avoids repeated reconstruction overhead for frequently accessed
+    groups. Entries are matched by exact dict equality against
+    `freq_meta` entries. Default is None (no forced leaves).
     :return: Tuple of `(leaf_indices, decomposition)`. `leaf_indices` is a
         list of indices into `freq_meta` marking the leaves, in ascending
         order. `decomposition` maps each non-leaf index to the list of

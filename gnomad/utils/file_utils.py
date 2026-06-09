@@ -197,31 +197,59 @@ def read_list_data(input_file_path: str) -> List[str]:
 
 
 def repartition_for_join(
-    ht_path: str,
+    ht: Union[str, hl.Table],
     new_partition_percent: float = 1.1,
-) -> List[hl.expr.IntervalExpression]:
+    n_partitions: Optional[int] = None,
+    locus_intervals: bool = False,
+) -> List[hl.utils.Interval]:
     """
-    Calculate new partition intervals using input Table.
+    Calculate new partition intervals from a Table for co-partitioned joins.
 
-    Reading in all Tables using the same partition intervals (via
-    `_intervals`) before they are joined makes the joins much more efficient.
-    For more information, see:
+    Reading all Tables (and VDSes) with the same partition intervals (via
+    `_intervals` / `hl.vds.read_vds(intervals=...)`) before they are joined makes
+    the joins much more efficient. For more information, see:
     https://discuss.hail.is/t/room-for-improvement-when-joining-multiple-hts/2278/8
 
-    :param ht_path: Path to Table to use for interval partition calculation.
-    :param new_partition_percent: Percent of initial dataset partitions to use.
-        Value should be greater than 1 so that input Table will have more
-        partitions for the join. Defaults to 1.1.
-    :return: List of IntervalExpressions calculated over new set of partitions
-        (number of partitions in HT * desired percent increase).
+    The number of intervals is either `n_partitions` (when provided) or
+    `ht.n_partitions() * new_partition_percent`.
+
+    :param ht: Table, or path to a Table, to use for interval partition
+        calculation. A path is read with `hl.read_table`; an in-memory Table
+        (e.g. a partition-filtered VDS `reference_data.rows()`) is used directly.
+    :param new_partition_percent: Percent of the input Table's partitions to use
+        when `n_partitions` is not given. Value should be greater than 1 so the
+        input has more partitions for the join. Defaults to 1.1. Ignored when
+        `n_partitions` is provided.
+    :param n_partitions: Explicit number of partitions/intervals to calculate.
+        Overrides `new_partition_percent` when set (e.g. to subdivide into a
+        fixed, finer-grained number than the input has).
+    :param locus_intervals: If True, return bare-`hl.Locus` intervals instead of
+        the default key-struct intervals. Use this when passing the intervals to
+        `hl.vds.read_vds(intervals=...)`, whose reader expects locus intervals.
+        Requires the input Table to be keyed by `locus`.
+    :return: List of `hl.Interval` objects over the calculated partitions.
     """
-    ht = hl.read_table(ht_path)
-    if new_partition_percent < 1:
-        logger.warning(
-            "new_partition_percent value is less than 1! The new HT will have fewer"
-            " partitions than the original HT!"
-        )
-    return ht._calculate_new_partitions(ht.n_partitions() * new_partition_percent)
+    if isinstance(ht, str):
+        ht = hl.read_table(ht)
+    if n_partitions is None:
+        if new_partition_percent < 1:
+            logger.warning(
+                "new_partition_percent value is less than 1! The new HT will have"
+                " fewer partitions than the original HT!"
+            )
+        n_partitions = int(ht.n_partitions() * new_partition_percent)
+    intervals = ht._calculate_new_partitions(n_partitions)
+    if locus_intervals:
+        intervals = [
+            hl.Interval(
+                interval.start["locus"],
+                interval.end["locus"],
+                includes_start=interval.includes_start,
+                includes_end=interval.includes_end,
+            )
+            for interval in intervals
+        ]
+    return intervals
 
 
 def create_vds(

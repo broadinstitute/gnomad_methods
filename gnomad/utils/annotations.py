@@ -89,6 +89,8 @@ VRS_CHROM_IDS = {
     },
 }
 
+COVERAGE_OVER_X_BINS = (1, 5, 10, 15, 20, 25, 30, 50, 100)
+
 
 def _sum_or_diff_values(
     val_1_expr: hl.expr.Expression, val_2_expr: hl.expr.Expression, operation: str

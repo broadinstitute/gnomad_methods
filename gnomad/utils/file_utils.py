@@ -221,7 +221,7 @@ def repartition_for_join(
         input has more partitions for the join. Defaults to 1.1. Ignored when
         `n_partitions` is provided.
     :param n_partitions: Explicit number of partitions/intervals to calculate.
-        Overrides `new_partition_percent` when set (e.g. to subdivide into a
+        Overrides `new_partition_percent` when set (e.g., to subdivide into a
         fixed, finer-grained number than the input has).
     :param locus_intervals: If True, return bare-`hl.Locus` intervals instead of
         the default key-struct intervals. Use this when passing the intervals to

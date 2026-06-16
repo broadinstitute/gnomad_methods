@@ -205,9 +205,10 @@ def repartition_for_join(
     """
     Calculate new partition intervals from a Table for co-partitioned joins.
 
-    Reading all Tables (and VDSes) with the same partition intervals (via
-    `_intervals` / `hl.vds.read_vds(intervals=...)`) before they are joined makes
-    the joins much more efficient. For more information, see:
+    Reading all Tables, MatrixTables, and VDSes with the same partition intervals
+    (via `_intervals` for Tables and MatrixTables,
+    `hl.vds.read_vds(intervals=...)` for VDS) before they are joined makes the
+    joins much more efficient. For more information, see:
     https://discuss.hail.is/t/room-for-improvement-when-joining-multiple-hts/2278/8
 
     The number of intervals is either `n_partitions` (when provided) or

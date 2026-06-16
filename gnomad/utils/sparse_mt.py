@@ -1,12 +1,13 @@
 # noqa: D100
 
 import logging
-from typing import Callable, Dict, List, Optional, Set, Tuple, Union
+from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import hail as hl
 
 from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
 from gnomad.utils.annotations import (
+    COVERAGE_OVER_X_BINS,
     _read_reduction_globals,
     agg_by_strata,
     annotate_adj,
@@ -932,11 +933,13 @@ def impute_sex_ploidy(
                 )
             return chr_mt.select_cols(
                 **{
-                    f"{chrom}_mean_dp": hl.agg.filter(
-                        chr_mt.LGT.is_non_ref(),
-                        hl.agg.sum(chr_mt.DP),
+                    f"{chrom}_mean_dp": (
+                        hl.agg.filter(
+                            chr_mt.LGT.is_non_ref(),
+                            hl.agg.sum(chr_mt.DP),
+                        )
+                        / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
                     )
-                    / hl.agg.filter(chr_mt.LGT.is_non_ref(), hl.agg.count())
                 }
             ).cols()
         else:
@@ -966,10 +969,12 @@ def impute_sex_ploidy(
 
     return ht.annotate(
         **{
-            f"{chr_x}_ploidy": ht[f"{chr_x}_mean_dp"]
-            / (ht[f"{normalization_contig}_mean_dp"] / 2),
-            f"{chr_y}_ploidy": ht[f"{chr_y}_mean_dp"]
-            / (ht[f"{normalization_contig}_mean_dp"] / 2),
+            f"{chr_x}_ploidy": (
+                ht[f"{chr_x}_mean_dp"] / (ht[f"{normalization_contig}_mean_dp"] / 2)
+            ),
+            f"{chr_y}_ploidy": (
+                ht[f"{chr_y}_mean_dp"] / (ht[f"{normalization_contig}_mean_dp"] / 2)
+            ),
         }
     )
 
@@ -1454,7 +1459,7 @@ def compute_coverage_stats(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
     interval_ht: Optional[hl.Table] = None,
-    coverage_over_x_bins: List[int] = [1, 5, 10, 15, 20, 25, 30, 50, 100],
+    coverage_over_x_bins: Sequence[int] = COVERAGE_OVER_X_BINS,
     row_key_fields: List[str] = ["locus"],
     strata_expr: Optional[List[Dict[str, hl.expr.StringExpression]]] = None,
     group_membership_ht: Optional[hl.Table] = None,
@@ -1476,7 +1481,7 @@ def compute_coverage_stats(
     :param mtds: Input sparse MT or VDS.
     :param reference_ht: Input reference HT.
     :param interval_ht: Optional Table containing intervals to filter to.
-    :param coverage_over_x_bins: List of boundaries for computing samples over X.
+    :param coverage_over_x_bins: Sequence of boundaries for computing samples over X.
     :param row_key_fields: List of row key fields to use for joining `mtds` with
         `reference_ht`.
     :param strata_expr: Optional list of dicts containing expressions to stratify the

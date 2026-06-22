@@ -1603,6 +1603,57 @@ class TestAnnotateDownsamplings:
             assert "global_idx" in row.downsampling
             assert "gen_anc_idx" in row.downsampling
 
+    @pytest.fixture
+    def gen_anc_sized_table(self):
+        """Create a Table with distinct gen-anc group sizes (AFR=5, EUR=4, SAS=3)."""
+        rows = (
+            [{"s": f"a{i}", "gen_anc": "AFR"} for i in range(5)]
+            + [{"s": f"e{i}", "gen_anc": "EUR"} for i in range(4)]
+            + [{"s": f"x{i}", "gen_anc": "SAS"} for i in range(3)]
+        )
+        return hl.Table.parallelize(
+            rows, hl.tstruct(s=hl.tstr, gen_anc=hl.tstr)
+        ).key_by("s")
+
+    def test_gen_anc_group_sizes_added_dynamically(self, gen_anc_sized_table):
+        """Test that per-group sizes are appended to the downsamplings list.
+
+        The input list holds only a "global" size (6); each genetic ancestry
+        group's sample count (AFR=5, EUR=4, SAS=3) is added dynamically. This is
+        why the hardcoded per-group sizes were removed from the DOWNSAMPLINGS
+        constant: passing `gen_anc_expr` regenerates them from the data.
+        """
+        result = annotate_downsamplings(
+            gen_anc_sized_table, [6], gen_anc_expr=gen_anc_sized_table.gen_anc
+        )
+
+        # None of the group sizes (3, 4, 5) were in the input list yet all appear.
+        assert hl.eval(result.downsamplings) == [3, 4, 5, 6]
+        assert hl.eval(result.ds_gen_anc_counts) == {"AFR": 5, "EUR": 4, "SAS": 3}
+
+    def test_gen_ancs_to_downsample_restricts_added_groups(self, gen_anc_sized_table):
+        """Test that `gen_ancs_to_downsample` limits which group sizes are added."""
+        result = annotate_downsamplings(
+            gen_anc_sized_table,
+            [6],
+            gen_anc_expr=gen_anc_sized_table.gen_anc,
+            gen_ancs_to_downsample=["AFR", "SAS"],
+        )
+
+        # EUR is excluded, so its size (4) is neither added to the list nor
+        # counted; AFR (5) and SAS (3) are.
+        assert hl.eval(result.downsamplings) == [3, 5, 6]
+        assert hl.eval(result.ds_gen_anc_counts) == {"AFR": 5, "SAS": 3}
+
+    def test_downsamplings_exceeding_total_are_dropped(self, gen_anc_sized_table):
+        """Test that requested sizes larger than the sample total are dropped."""
+        result = annotate_downsamplings(
+            gen_anc_sized_table, [6, 100], gen_anc_expr=gen_anc_sized_table.gen_anc
+        )
+
+        # 100 > 12 total samples, so it is dropped; the dynamic group sizes remain.
+        assert hl.eval(result.downsamplings) == [3, 4, 5, 6]
+
 
 class TestGksVaFunctions:
     """Tests for GKS/VA helper functions."""

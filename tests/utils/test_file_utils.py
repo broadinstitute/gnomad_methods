@@ -123,24 +123,19 @@ class TestRepartitionForJoin:
         # (int(10 * 5.0) == 50).
         assert len(intervals) == 3
 
-    def test_new_partition_percent_default(self, int_keyed_ht):
-        """Test the interval count derived from the default `new_partition_percent`."""
+    # None passes through the default (1.1); a value exercises a custom percent.
+    @pytest.mark.parametrize("percent", [None, 2.0])
+    def test_new_partition_percent_controls_count(self, int_keyed_ht, percent):
+        """Test the interval count derived from `new_partition_percent`."""
         orig = int_keyed_ht.n_partitions()
-        intervals = repartition_for_join(int_keyed_ht)
+        kwargs = {} if percent is None else {"new_partition_percent": percent}
+        intervals = repartition_for_join(int_keyed_ht, **kwargs)
 
         # `_calculate_new_partitions` is not guaranteed to return exactly the
-        # requested count (int(orig * 1.1)). With a percent > 1 the result is
+        # requested count (int(orig * percent)). With a percent > 1 the result is
         # between the original partition count and the requested count.
-        assert orig <= len(intervals) <= int(orig * 1.1)
-
-    def test_new_partition_percent_custom(self, int_keyed_ht):
-        """Test the interval count derived from a custom `new_partition_percent`."""
-        orig = int_keyed_ht.n_partitions()
-        intervals = repartition_for_join(int_keyed_ht, new_partition_percent=2.0)
-
-        # As above, the count falls between the original partition count and the
-        # requested int(orig * 2.0).
-        assert orig <= len(intervals) <= int(orig * 2.0)
+        requested = int(orig * (percent if percent is not None else 1.1))
+        assert orig <= len(intervals) <= requested
 
     def test_percent_less_than_one_warns(self, int_keyed_ht, caplog):
         """Test that a `new_partition_percent` below 1 logs a warning."""

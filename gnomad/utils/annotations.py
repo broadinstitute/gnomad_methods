@@ -1943,6 +1943,7 @@ def annotate_downsamplings(
     t: Union[hl.MatrixTable, hl.Table],
     downsamplings: List[int],
     gen_anc_expr: Optional[hl.expr.StringExpression] = None,
+    gen_ancs_to_downsample: Optional[List[str]] = None,
 ) -> Union[hl.MatrixTable, hl.Table]:
     """
     Annotate MatrixTable or Table with downsampling groups.
@@ -1951,6 +1952,10 @@ def annotate_downsamplings(
     :param downsamplings: List of downsampling sizes.
     :param gen_anc_expr: Optional expression for genetic ancestry group. When provided, genetic ancestry group
         downsamplings will be computed for each genetic ancestry group.
+    :param gen_ancs_to_downsample: Optional list of genetic ancestry groups to
+        generate per-group downsamplings for. When None (default), every genetic
+        ancestry group present is downsampled. Only used when `gen_anc_expr` is
+        provided.
     :return: MatrixTable or Table with downsampling annotations.
     """
     if isinstance(t, hl.MatrixTable):
@@ -1975,6 +1980,14 @@ def annotate_downsamplings(
         gen_anc_counts = ht.aggregate(
             hl.agg.filter(hl.is_defined(ht.gen_anc), hl.agg.counter(ht.gen_anc))
         )
+        # Optionally restrict the per-group downsamplings to the requested genetic
+        # ancestry groups (default: every present group). Groups left out still get
+        # a per-group index but no per-group downsampling; the global downsamplings
+        # continue to cover all samples.
+        if gen_ancs_to_downsample is not None:
+            gen_anc_counts = {
+                k: v for k, v in gen_anc_counts.items() if k in gen_ancs_to_downsample
+            }
         downsamplings = [x for x in downsamplings if x <= sum(gen_anc_counts.values())]
         downsamplings = sorted(set(downsamplings + list(gen_anc_counts.values())))
         # Add an index by gen_anc for use in computing frequencies, or other aggregate stats
@@ -2577,9 +2590,15 @@ def generate_freq_group_membership_array(
             downsampling_idx = "global_idx"
             if ds is not None:
                 if gen_anc is not None and gen_anc != "global":
-                    # Don't include genetic ancestry group downsamplings where the downsampling is
-                    # larger than the number of samples in the genetic ancestry group.
-                    if ds > ds_gen_anc_counts[gen_anc]:
+                    # Skip a genetic ancestry group downsampling when the group was
+                    # not downsampled at all (absent from ds_gen_anc_counts; see
+                    # annotate_downsamplings' gen_ancs_to_downsample) or when the
+                    # downsampling is larger than the number of samples in the group.
+                    # In both cases no per-group downsampling stratum is created.
+                    if (
+                        gen_anc not in ds_gen_anc_counts
+                        or ds > ds_gen_anc_counts[gen_anc]
+                    ):
                         continue
                     downsampling_idx = "gen_anc_idx"
 

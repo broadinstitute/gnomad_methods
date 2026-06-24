@@ -349,14 +349,17 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:  # noqa: D103
     return Tabs(tabs=panels)
 
 
-def _ls(path: str) -> List[dict]:
-    """List `path` via hailtop.fs, mirroring the deprecated `hl.hadoop_ls`.
+def _ls(path: str) -> List[Dict]:
+    """
+    List a path via `hailtop.fs`, mirroring the deprecated `hl.hadoop_ls`.
 
     Unlike `hl.hadoop_ls`, `hfs.ls` lists hidden files (e.g. the local
     filesystem's `.crc` checksum files). Hidden entries (basename starting with
     `.`) are dropped so downstream `part-*` parsing matches the prior behavior.
-    The returned dicts use the legacy `hl.hadoop_ls` schema (`path`,
-    `size_bytes`, `modification_time`, ...).
+
+    :param path: Path to list.
+    :return: List of legacy `hl.hadoop_ls`-style dicts (with `path`,
+        `size_bytes`, `modification_time`, etc.) for non-hidden entries.
     """
     return [
         entry.to_legacy_dict()

@@ -38,9 +38,10 @@ class TestFileExists:
 
         assert file_exists(path) is False
 
+    # No network needed for mock gs:// paths
     @patch("gnomad.utils.file_utils.hfs.exists")
     def test_gcs_hail_table_checks_success_path(self, mock_exists):
-        """Test the `_SUCCESS` path built for a gs:// Hail Table (no network)."""
+        """Test the `_SUCCESS` path built for a gs:// Hail Table."""
         mock_exists.return_value = True
 
         assert file_exists("gs://my-bucket/t.ht") is True

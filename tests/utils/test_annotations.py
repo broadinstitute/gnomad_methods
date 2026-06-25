@@ -1928,6 +1928,81 @@ class TestGenerateFreqGroupMembershipArray:
         with pytest.raises(ValueError, match=match):
             generate_freq_group_membership_array(strata_table, strata, **kwargs)
 
+    def test_global_downsamplings_without_gen_anc(self):
+        """Test downsampling strata without gen_anc use the global ranking.
+
+        A `downsampling` stratum with no `gen_anc` produces global downsampling
+        groups whose sample counts equal the requested sizes (`global_idx` < size).
+        """
+        ht = hl.Table.parallelize(
+            [{"s": f"s{i}"} for i in range(6)], hl.tstruct(s=hl.tstr)
+        ).key_by("s")
+        ds = annotate_downsamplings(ht, [2, 4])
+
+        result = generate_freq_group_membership_array(
+            ds, [{"downsampling": ds.downsampling}], downsamplings=[2, 4]
+        )
+        freq_meta = hl.eval(result.freq_meta)
+        counts = hl.eval(result.freq_meta_sample_count)
+
+        by_group = {frozenset(m.items()): c for m, c in zip(freq_meta, counts)}
+        # Global downsampling groups hold exactly the requested number of samples.
+        assert by_group[frozenset({("downsampling", "2"), ("group", "adj")})] == 2
+        assert by_group[frozenset({("downsampling", "4"), ("group", "adj")})] == 4
+
+    def test_group_label_sets_group_key(self):
+        """Test that `group_label` sets the 'group' key on every constructed entry."""
+        ht = hl.Table.parallelize(
+            [{"s": "a", "gen_anc": "AFR"}, {"s": "b", "gen_anc": "EUR"}],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr),
+        ).key_by("s")
+
+        result = generate_freq_group_membership_array(
+            ht, [{"gen_anc": ht.gen_anc}], group_label="raw", no_raw_group=True
+        )
+        freq_meta = hl.eval(result.freq_meta)
+
+        assert all(m["group"] == "raw" for m in freq_meta)
+
+    def test_downsampling_group_sample_counts(self):
+        """Test that downsampling groups hold the requested number of samples.
+
+        Per-gen_anc downsampling groups select `gen_anc_idx < size` samples from
+        the group, and global downsampling groups select `global_idx < size`
+        across all samples, so each group's sample count equals the (capped) size.
+        """
+        rows = [{"s": f"a{i}", "gen_anc": "AFR"} for i in range(5)] + [
+            {"s": f"e{i}", "gen_anc": "EUR"} for i in range(4)
+        ]
+        ht = hl.Table.parallelize(rows, hl.tstruct(s=hl.tstr, gen_anc=hl.tstr)).key_by(
+            "s"
+        )
+        ds = annotate_downsamplings(ht, [3], gen_anc_expr=ht.gen_anc)
+        downsamplings = hl.eval(ds.downsamplings)  # [3, 4, 5]
+        ds_gen_anc_counts = hl.eval(ds.ds_gen_anc_counts)  # {AFR: 5, EUR: 4}
+
+        result = generate_freq_group_membership_array(
+            ds,
+            [{"gen_anc": ds.gen_anc, "downsampling": ds.downsampling}],
+            downsamplings=downsamplings,
+            ds_gen_anc_counts=ds_gen_anc_counts,
+        )
+        freq_meta = hl.eval(result.freq_meta)
+        counts = hl.eval(result.freq_meta_sample_count)
+        by_group = {frozenset(m.items()): c for m, c in zip(freq_meta, counts)}
+
+        def ds_count(**kw):
+            return by_group[frozenset({**kw, "group": "adj"}.items())]
+
+        # Per-gen_anc: a size below the group count selects exactly that many; a
+        # size equal to the group count selects the whole group.
+        assert ds_count(gen_anc="AFR", downsampling="3") == 3
+        assert ds_count(gen_anc="AFR", downsampling="5") == 5
+        assert ds_count(gen_anc="EUR", downsampling="4") == 4
+        # Global downsampling groups span all samples.
+        assert ds_count(gen_anc="global", downsampling="3") == 3
+        assert ds_count(gen_anc="global", downsampling="5") == 5
+
 
 class TestGksVaFunctions:
     """Tests for GKS/VA helper functions."""

@@ -353,9 +353,12 @@ def _ls(path: str) -> List[Dict]:
     """
     List a path via `hailtop.fs`, mirroring the deprecated `hl.hadoop_ls`.
 
-    Unlike `hl.hadoop_ls`, `hfs.ls` lists hidden files (e.g. the local
-    filesystem's `.crc` checksum files). Hidden entries (basename starting with
-    `.`) are dropped so downstream `part-*` parsing matches the prior behavior.
+    Hidden entries (basename starting with `.`) are dropped as a defensive
+    measure so downstream `part-*` parsing matches the prior behavior. In
+    practice this chiefly affects the local filesystem's `.crc` checksum files,
+    which the Spark backend's JVM Hadoop FS hides from `hl.hadoop_ls` but
+    `hfs.ls` does not. For GCS paths (and on the Batch backend, where
+    `hl.hadoop_ls` and `hfs.ls` share the same filesystem) this is a no-op.
 
     :param path: Path to list.
     :return: List of legacy `hl.hadoop_ls`-style dicts (with `path`,

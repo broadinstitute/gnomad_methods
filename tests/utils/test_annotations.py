@@ -1826,6 +1826,108 @@ class TestGenerateFreqGroupMembershipArray:
         # EUR is absent from ds_gen_anc_counts, so it gets no per-group stratum.
         assert not any(m.get("gen_anc") == "EUR" for m in freq_meta)
 
+    @pytest.fixture
+    def strata_table(self):
+        """Return a 3-sample Table (AFR/XX, AFR/XY, EUR/XX) with gen_anc and sex.
+
+        EUR/XY is intentionally absent so a gen_anc x sex cross-product yields a
+        zero-sample group.
+        """
+        return hl.Table.parallelize(
+            [
+                {"s": "s1", "gen_anc": "AFR", "sex": "XX"},
+                {"s": "s2", "gen_anc": "AFR", "sex": "XY"},
+                {"s": "s3", "gen_anc": "EUR", "sex": "XX"},
+            ],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+        ).key_by("s")
+
+    def test_raw_group_added_by_default(self, strata_table):
+        """Test that a 'raw' group (all samples) is inserted at index 1 by default."""
+        result = generate_freq_group_membership_array(
+            strata_table, [{"gen_anc": strata_table.gen_anc}]
+        )
+        freq_meta = hl.eval(result.freq_meta)
+        counts = hl.eval(result.freq_meta_sample_count)
+
+        # Index 0 is the all-sample adj group, index 1 is the raw group; both
+        # cover every sample.
+        assert freq_meta[0] == {"group": "adj"}
+        assert freq_meta[1] == {"group": "raw"}
+        assert counts[0] == counts[1] == strata_table.count()
+
+    def test_no_raw_group_omits_raw(self, strata_table):
+        """Test that `no_raw_group=True` omits the raw group entirely."""
+        result = generate_freq_group_membership_array(
+            strata_table, [{"gen_anc": strata_table.gen_anc}], no_raw_group=True
+        )
+        freq_meta = hl.eval(result.freq_meta)
+
+        assert freq_meta[0] == {"group": "adj"}
+        assert not any(m.get("group") == "raw" for m in freq_meta)
+
+    def test_remove_zero_sample_groups(self, strata_table):
+        """Test that `remove_zero_sample_groups` drops groups with no samples."""
+        strata = [
+            {"gen_anc": strata_table.gen_anc},
+            {"sex": strata_table.sex},
+            {"gen_anc": strata_table.gen_anc, "sex": strata_table.sex},
+        ]
+
+        kept = generate_freq_group_membership_array(strata_table, strata)
+        removed = generate_freq_group_membership_array(
+            strata_table, strata, remove_zero_sample_groups=True
+        )
+
+        # EUR/XY has no samples: kept by default, dropped when requested.
+        assert 0 in hl.eval(kept.freq_meta_sample_count)
+        assert 0 not in hl.eval(removed.freq_meta_sample_count)
+        assert not any(
+            m.get("gen_anc") == "EUR" and m.get("sex") == "XY"
+            for m in hl.eval(removed.freq_meta)
+        )
+
+    def test_multiple_strata_combinations(self, strata_table):
+        """Test the cross-product of strata and their sample counts."""
+        strata = [
+            {"gen_anc": strata_table.gen_anc},
+            {"sex": strata_table.sex},
+            {"gen_anc": strata_table.gen_anc, "sex": strata_table.sex},
+        ]
+
+        result = generate_freq_group_membership_array(strata_table, strata)
+        freq_meta = hl.eval(result.freq_meta)
+        counts = hl.eval(result.freq_meta_sample_count)
+
+        # Map each stratification group to its sample count (order-independent).
+        by_group = {frozenset(m.items()): c for m, c in zip(freq_meta, counts)}
+        assert by_group == {
+            frozenset({("group", "adj")}): 3,
+            frozenset({("group", "raw")}): 3,
+            frozenset({("gen_anc", "AFR"), ("group", "adj")}): 2,
+            frozenset({("gen_anc", "EUR"), ("group", "adj")}): 1,
+            frozenset({("sex", "XX"), ("group", "adj")}): 2,
+            frozenset({("sex", "XY"), ("group", "adj")}): 1,
+            frozenset({("gen_anc", "AFR"), ("sex", "XX"), ("group", "adj")}): 1,
+            frozenset({("gen_anc", "AFR"), ("sex", "XY"), ("group", "adj")}): 1,
+            frozenset({("gen_anc", "EUR"), ("sex", "XX"), ("group", "adj")}): 1,
+            frozenset({("gen_anc", "EUR"), ("sex", "XY"), ("group", "adj")}): 0,
+        }
+
+    @pytest.mark.parametrize(
+        "kwargs, match",
+        [
+            ({"downsamplings": [2]}, "downsampling expression"),
+            ({"ds_gen_anc_counts": {"AFR": 1}}, "genetic ancestry group expression"),
+        ],
+    )
+    def test_validation_errors(self, strata_table, kwargs, match):
+        """Test that mismatched downsampling/gen-anc inputs raise a ValueError."""
+        # Strata lack a `downsampling`/`gen_anc` expression for the given input.
+        strata = [{"sex": strata_table.sex}]
+        with pytest.raises(ValueError, match=match):
+            generate_freq_group_membership_array(strata_table, strata, **kwargs)
+
 
 class TestGksVaFunctions:
     """Tests for GKS/VA helper functions."""

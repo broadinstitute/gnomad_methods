@@ -1633,25 +1633,17 @@ class TestAnnotateDownsamplings:
         assert hl.eval(result.ds_gen_anc_counts) == {"AFR": 5, "EUR": 4, "SAS": 3}
 
     def test_gen_ancs_to_downsample_restricts_added_groups(self, gen_anc_sized_table):
-        """Test that `gen_ancs_to_downsample` limits which group sizes are added.
-
-        Also guards that a global size larger than the restricted subset's total
-        but valid for the full dataset is retained (filtered against the full
-        dataset, not just the requested groups).
-        """
-        # Restrict to AFR (5) + SAS (3), subset total 8; the full dataset has 12.
-        # The global size 9 exceeds the subset total but is valid for the full
-        # dataset, so it must be kept.
+        """Test that `gen_ancs_to_downsample` limits which group sizes are added."""
         result = annotate_downsamplings(
             gen_anc_sized_table,
-            [6, 9],
+            [6],
             gen_anc_expr=gen_anc_sized_table.gen_anc,
             gen_ancs_to_downsample=["AFR", "SAS"],
         )
 
         # EUR is excluded, so its size (4) is neither added to the list nor
-        # counted; AFR (5), SAS (3), and the global sizes (6, 9) are kept.
-        assert hl.eval(result.downsamplings) == [3, 5, 6, 9]
+        # counted; AFR (5) and SAS (3) are.
+        assert hl.eval(result.downsamplings) == [3, 5, 6]
         assert hl.eval(result.ds_gen_anc_counts) == {"AFR": 5, "SAS": 3}
 
     def test_downsamplings_exceeding_total_are_dropped(self, gen_anc_sized_table):
@@ -1662,6 +1654,27 @@ class TestAnnotateDownsamplings:
 
         # 100 > 12 total samples, so it is dropped; the dynamic group sizes remain.
         assert hl.eval(result.downsamplings) == [3, 4, 5, 6]
+
+    def test_global_downsampling_kept_when_no_group_reaches_it(
+        self, gen_anc_sized_table
+    ):
+        """Test that a global downsampling is filtered against the full dataset.
+
+        A global downsampling larger than every individual genetic ancestry group
+        (and larger than the restricted `gen_ancs_to_downsample` subset total) is
+        retained as long as it does not exceed the full dataset. Guards the
+        `total_gen_anc_counts` filtering fix.
+        """
+        # Groups AFR=5, EUR=4, SAS=3 (full total 12). 9 exceeds every group and
+        # the AFR+SAS subset total (8), but is <= 12, so it must be kept.
+        result = annotate_downsamplings(
+            gen_anc_sized_table,
+            [9],
+            gen_anc_expr=gen_anc_sized_table.gen_anc,
+            gen_ancs_to_downsample=["AFR", "SAS"],
+        )
+
+        assert hl.eval(result.downsamplings) == [3, 5, 9]
 
     def test_gen_ancs_to_downsample_unknown_group_raises(self, gen_anc_sized_table):
         """Test that requesting a group absent from the data raises a ValueError."""

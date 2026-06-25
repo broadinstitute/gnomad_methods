@@ -17,6 +17,7 @@ from gnomad.utils.annotations import (
     expand_strata_array_from_leaves,
     fill_missing_key_combinations,
     find_minimal_strata_groups,
+    generate_freq_group_membership_array,
     get_copy_state_by_sex,
     merge_array_expressions,
     merge_freq_arrays,
@@ -1619,9 +1620,9 @@ class TestAnnotateDownsamplings:
         """Test that per-group sizes are appended to the downsamplings list.
 
         The input list holds only a "global" size (6); each genetic ancestry
-        group's sample count (AFR=5, EUR=4, SAS=3) is added dynamically. This is
-        why the hardcoded per-group sizes were removed from the DOWNSAMPLINGS
-        constant: passing `gen_anc_expr` regenerates them from the data.
+        group's sample count (AFR=5, EUR=4, SAS=3) is added dynamically by passing
+        `gen_anc_expr` to the function so per-group sizes do not need to be included
+        in the DOWNSAMPLINGS constant.
         """
         result = annotate_downsamplings(
             gen_anc_sized_table, [6], gen_anc_expr=gen_anc_sized_table.gen_anc
@@ -1632,17 +1633,25 @@ class TestAnnotateDownsamplings:
         assert hl.eval(result.ds_gen_anc_counts) == {"AFR": 5, "EUR": 4, "SAS": 3}
 
     def test_gen_ancs_to_downsample_restricts_added_groups(self, gen_anc_sized_table):
-        """Test that `gen_ancs_to_downsample` limits which group sizes are added."""
+        """Test that `gen_ancs_to_downsample` limits which group sizes are added.
+
+        Also guards that a global size larger than the restricted subset's total
+        but valid for the full dataset is retained (filtered against the full
+        dataset, not just the requested groups).
+        """
+        # Restrict to AFR (5) + SAS (3), subset total 8; the full dataset has 12.
+        # The global size 9 exceeds the subset total but is valid for the full
+        # dataset, so it must be kept.
         result = annotate_downsamplings(
             gen_anc_sized_table,
-            [6],
+            [6, 9],
             gen_anc_expr=gen_anc_sized_table.gen_anc,
             gen_ancs_to_downsample=["AFR", "SAS"],
         )
 
         # EUR is excluded, so its size (4) is neither added to the list nor
-        # counted; AFR (5) and SAS (3) are.
-        assert hl.eval(result.downsamplings) == [3, 5, 6]
+        # counted; AFR (5), SAS (3), and the global sizes (6, 9) are kept.
+        assert hl.eval(result.downsamplings) == [3, 5, 6, 9]
         assert hl.eval(result.ds_gen_anc_counts) == {"AFR": 5, "SAS": 3}
 
     def test_downsamplings_exceeding_total_are_dropped(self, gen_anc_sized_table):
@@ -1653,6 +1662,169 @@ class TestAnnotateDownsamplings:
 
         # 100 > 12 total samples, so it is dropped; the dynamic group sizes remain.
         assert hl.eval(result.downsamplings) == [3, 4, 5, 6]
+
+    def test_gen_ancs_to_downsample_unknown_group_raises(self, gen_anc_sized_table):
+        """Test that requesting a group absent from the data raises a ValueError."""
+        with pytest.raises(ValueError, match="not present in the data"):
+            annotate_downsamplings(
+                gen_anc_sized_table,
+                [6],
+                gen_anc_expr=gen_anc_sized_table.gen_anc,
+                gen_ancs_to_downsample=["AFR", "TYPO"],
+            )
+
+    def test_gen_ancs_to_downsample_requires_gen_anc_expr(self, gen_anc_sized_table):
+        """Test that `gen_ancs_to_downsample` without `gen_anc_expr` raises."""
+        with pytest.raises(ValueError, match="requires `gen_anc_expr`"):
+            annotate_downsamplings(
+                gen_anc_sized_table, [6], gen_ancs_to_downsample=["AFR"]
+            )
+
+    def test_global_idx_is_unique_ranking(self, gen_anc_sized_table):
+        """Test that `global_idx` assigns each sample a unique rank 0..n-1."""
+        result = annotate_downsamplings(gen_anc_sized_table, [2, 3])
+
+        global_idxs = sorted(r.downsampling.global_idx for r in result.collect())
+        # 12 samples get the ranks 0..11 exactly once each.
+        assert global_idxs == list(range(gen_anc_sized_table.count()))
+
+    def test_gen_anc_idx_is_per_group_ranking(self, gen_anc_sized_table):
+        """Test that `gen_anc_idx` ranks samples 0..(group_size-1) within a group."""
+        result = annotate_downsamplings(
+            gen_anc_sized_table, [2], gen_anc_expr=gen_anc_sized_table.gen_anc
+        )
+
+        per_group = {}
+        for r in result.collect():
+            per_group.setdefault(r.gen_anc, []).append(r.downsampling.gen_anc_idx)
+
+        # Each group's indices are a contiguous 0..(size-1) ranking.
+        assert {g: sorted(v) for g, v in per_group.items()} == {
+            "AFR": [0, 1, 2, 3, 4],
+            "EUR": [0, 1, 2, 3],
+            "SAS": [0, 1, 2],
+        }
+
+    def test_downsamplings_deduplicated_and_sorted_with_gen_anc(
+        self, gen_anc_sized_table
+    ):
+        """Test that duplicate/unsorted downsamplings are normalized with gen_anc."""
+        result = annotate_downsamplings(
+            gen_anc_sized_table,
+            [3, 2, 2, 3],
+            gen_anc_expr=gen_anc_sized_table.gen_anc,
+        )
+
+        # Input deduped to {2, 3} and merged with the sorted group sizes {3, 4, 5}.
+        assert hl.eval(result.downsamplings) == [2, 3, 4, 5]
+
+    def test_downsamplings_not_normalized_without_gen_anc(self, gen_anc_sized_table):
+        """Document that without `gen_anc_expr` the downsamplings list is used as-is.
+
+        Unlike the `gen_anc_expr` path (which dedupes, sorts, and drops sizes
+        larger than the dataset), the no-gen_anc path returns `downsamplings`
+        verbatim. This is a characterization test of current behavior.
+        """
+        # Duplicates and unsorted order are preserved, and 1000 (> 12 samples) is
+        # not dropped.
+        result = annotate_downsamplings(gen_anc_sized_table, [3, 2, 2, 1000])
+        assert hl.eval(result.downsamplings) == [3, 2, 2, 1000]
+
+    def test_downsampling_struct_fields(self, gen_anc_sized_table):
+        """Test the per-sample downsampling struct fields and completeness."""
+        no_gen_anc = annotate_downsamplings(gen_anc_sized_table, [2, 3])
+        assert set(no_gen_anc.downsampling.dtype) == {"global_idx"}
+
+        with_gen_anc = annotate_downsamplings(
+            gen_anc_sized_table, [2, 3], gen_anc_expr=gen_anc_sized_table.gen_anc
+        )
+        assert set(with_gen_anc.downsampling.dtype) == {"global_idx", "gen_anc_idx"}
+        # Every sample is annotated with both indices (none missing).
+        assert all(
+            r.downsampling.global_idx is not None
+            and r.downsampling.gen_anc_idx is not None
+            for r in with_gen_anc.collect()
+        )
+
+
+class TestGenerateFreqGroupMembershipArray:
+    """Test the generate_freq_group_membership_array function."""
+
+    def test_basic_strata_group_membership(self):
+        """Test freq_meta and group_membership shape for simple gen-anc strata."""
+        rows = [{"s": f"a{i}", "gen_anc": "AFR"} for i in range(3)] + [
+            {"s": f"e{i}", "gen_anc": "EUR"} for i in range(2)
+        ]
+        ht = hl.Table.parallelize(rows, hl.tstruct(s=hl.tstr, gen_anc=hl.tstr)).key_by(
+            "s"
+        )
+
+        result = generate_freq_group_membership_array(ht, [{"gen_anc": ht.gen_anc}])
+        freq_meta = hl.eval(result.freq_meta)
+
+        # Both genetic ancestry groups get a stratum.
+        assert {m["gen_anc"] for m in freq_meta if "gen_anc" in m} == {"AFR", "EUR"}
+        # group_membership has one boolean per freq_meta entry.
+        assert all(len(r.group_membership) == len(freq_meta) for r in result.collect())
+
+    @pytest.fixture
+    def downsampling_ht(self):
+        """Return a Table with per-group downsamplings (AFR=5, EUR=4, SAS=3).
+
+        Built via `annotate_downsamplings` restricted to AFR and SAS so that EUR
+        is present in the data but absent from `ds_gen_anc_counts`.
+        """
+        rows = (
+            [{"s": f"a{i}", "gen_anc": "AFR"} for i in range(5)]
+            + [{"s": f"e{i}", "gen_anc": "EUR"} for i in range(4)]
+            + [{"s": f"x{i}", "gen_anc": "SAS"} for i in range(3)]
+        )
+        ht = hl.Table.parallelize(rows, hl.tstruct(s=hl.tstr, gen_anc=hl.tstr)).key_by(
+            "s"
+        )
+        return annotate_downsamplings(
+            ht, [6], gen_anc_expr=ht.gen_anc, gen_ancs_to_downsample=["AFR", "SAS"]
+        )
+
+    def test_per_group_downsampling_skipped_when_excluded_or_oversized(
+        self, downsampling_ht
+    ):
+        """Test that per-group downsampling strata are skipped appropriately.
+
+        A per-group downsampling stratum is created only when the group is in
+        `ds_gen_anc_counts` and the size does not exceed the group's sample count.
+        With downsamplings [3, 5, 6] and counts {AFR: 5, SAS: 3}:
+          - EUR is excluded entirely (absent from `ds_gen_anc_counts`),
+          - AFR keeps 3 and 5 but skips 6 (> 5),
+          - SAS keeps only 3 (5 and 6 > 3).
+        """
+        downsamplings = hl.eval(downsampling_ht.downsamplings)
+        ds_gen_anc_counts = hl.eval(downsampling_ht.ds_gen_anc_counts)
+        strata_expr = [
+            {
+                "gen_anc": downsampling_ht.gen_anc,
+                "downsampling": downsampling_ht.downsampling,
+            }
+        ]
+
+        result = generate_freq_group_membership_array(
+            downsampling_ht,
+            strata_expr,
+            downsamplings=downsamplings,
+            ds_gen_anc_counts=ds_gen_anc_counts,
+        )
+        freq_meta = hl.eval(result.freq_meta)
+
+        # Per-group (non-"global") downsampling strata that were created.
+        per_group = sorted(
+            (m["gen_anc"], int(m["downsampling"]))
+            for m in freq_meta
+            if "downsampling" in m and m.get("gen_anc") not in (None, "global")
+        )
+
+        assert per_group == [("AFR", 3), ("AFR", 5), ("SAS", 3)]
+        # EUR is absent from ds_gen_anc_counts, so it gets no per-group stratum.
+        assert not any(m.get("gen_anc") == "EUR" for m in freq_meta)
 
 
 class TestGksVaFunctions:

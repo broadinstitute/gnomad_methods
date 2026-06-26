@@ -27,6 +27,21 @@ def _mock_open_returning(content):
     return MagicMock(return_value=ctx)
 
 
+def _fake_vep_context(default_version, versions):
+    """Build a fake VEP context resource standing in for `get_vep_context`.
+
+    `versions` maps a version string to the context Hail Table that its
+    `.ht()` should return; `default_version` is exposed as `.default_version`.
+    """
+    context = MagicMock()
+    context.default_version = default_version
+    context.versions = {
+        version: MagicMock(ht=MagicMock(return_value=ht))
+        for version, ht in versions.items()
+    }
+    return context
+
+
 class TestGetLofteeEndTruncFilterExpr:
     """Test the get_loftee_end_trunc_filter_expr function."""
 
@@ -320,3 +335,105 @@ class TestVepOrLookupVep:
                     vep_or_lookup_vep(
                         None, reference="hg99", vep_config_path="gs://bucket/vep.json"
                     )
+
+    def test_falls_back_to_full_vep_when_version_unavailable(self):
+        """Test that a missing context version VEPs all variants via `hl.vep`.
+
+        When the requested VEP version has no context Table, the function should
+        warn and return ``hl.vep(ht, vep_config_path)`` directly. ``hl.vep`` is
+        mocked so no VEP process is launched.
+        """
+        ht = hl.utils.range_table(1)
+        sentinel = hl.utils.range_table(2)
+        # default_version is set but `versions` is empty, so it is never found.
+        context = _fake_vep_context("105", {})
+        with patch("gnomad.utils.vep.get_vep_help", return_value="help"):
+            with patch("gnomad.utils.vep.hfs.open", _mock_open_returning("config")):
+                with patch("gnomad.utils.vep.get_vep_context", return_value=context):
+                    with patch(
+                        "gnomad.utils.vep.hl.vep", return_value=sentinel
+                    ) as mock_vep:
+                        result = vep_or_lookup_vep(
+                            ht,
+                            reference="GRCh38",
+                            vep_config_path="gs://bucket/vep.json",
+                        )
+
+        # The full-VEP fallback result is returned unchanged.
+        assert result is sentinel
+        mock_vep.assert_called_once_with(ht, "gs://bucket/vep.json")
+
+    def test_raises_on_vep_help_mismatch(self):
+        """Test that a VEP version mismatch between config and context HT raises."""
+        context_ht = hl.utils.range_table(1).annotate_globals(
+            vep_help="CONTEXT_HELP", vep_config="CONTEXT_CONFIG"
+        )
+        context = _fake_vep_context("105", {"105": context_ht})
+        with patch("gnomad.utils.vep.get_vep_help", return_value="DIFFERENT_HELP"):
+            with patch(
+                "gnomad.utils.vep.hfs.open", _mock_open_returning("CONTEXT_CONFIG")
+            ):
+                with patch("gnomad.utils.vep.get_vep_context", return_value=context):
+                    with pytest.raises(AssertionError, match="does not match"):
+                        vep_or_lookup_vep(
+                            hl.utils.range_table(1),
+                            reference="GRCh38",
+                            vep_config_path="gs://bucket/vep.json",
+                        )
+
+    def test_raises_on_vep_config_mismatch(self):
+        """Test that a VEP config mismatch between config file and context HT raises."""
+        context_ht = hl.utils.range_table(1).annotate_globals(
+            vep_help="CONTEXT_HELP", vep_config="CONTEXT_CONFIG"
+        )
+        context = _fake_vep_context("105", {"105": context_ht})
+        # Help matches so the first assert passes; the config read does not.
+        with patch("gnomad.utils.vep.get_vep_help", return_value="CONTEXT_HELP"):
+            with patch(
+                "gnomad.utils.vep.hfs.open", _mock_open_returning("DIFFERENT_CONFIG")
+            ):
+                with patch("gnomad.utils.vep.get_vep_context", return_value=context):
+                    with pytest.raises(AssertionError, match="configuration does"):
+                        vep_or_lookup_vep(
+                            hl.utils.range_table(1),
+                            reference="GRCh38",
+                            vep_config_path="gs://bucket/vep.json",
+                        )
+
+    def test_uses_context_ht_when_all_variants_present(self):
+        """Test the lookup path: variants found in the context HT are not re-VEPed.
+
+        All input keys exist in the context Table, so the re-VEP subset is empty
+        and the returned Table carries the context's annotations plus the VEP
+        version/help/config globals. ``hl.vep`` is mocked to an identity so no
+        VEP process is launched, and it is only applied to the (empty) subset.
+        """
+        context_ht = hl.utils.range_table(3).annotate(vep=hl.struct(found=True))
+        context_ht = context_ht.annotate_globals(
+            vep_help="CONTEXT_HELP", vep_config="CONTEXT_CONFIG"
+        )
+        context = _fake_vep_context("105", {"105": context_ht})
+        ht = hl.utils.range_table(3)
+        with patch("gnomad.utils.vep.get_vep_help", return_value="CONTEXT_HELP"):
+            with patch(
+                "gnomad.utils.vep.hfs.open", _mock_open_returning("CONTEXT_CONFIG")
+            ):
+                with patch("gnomad.utils.vep.get_vep_context", return_value=context):
+                    with patch(
+                        "gnomad.utils.vep.hl.vep", side_effect=lambda t, p: t
+                    ) as mock_vep:
+                        result = vep_or_lookup_vep(
+                            ht,
+                            reference="GRCh38",
+                            vep_config_path="gs://bucket/vep.json",
+                        )
+
+        # Every variant was annotated from the context HT.
+        assert result.count() == 3
+        assert result.aggregate(hl.agg.all(result.vep.found))
+        # Globals reflect the resolved version and the matched help/config.
+        assert hl.eval(result.vep_version) == "v105"
+        assert hl.eval(result.vep_help) == "CONTEXT_HELP"
+        assert hl.eval(result.vep_config) == "CONTEXT_CONFIG"
+        # hl.vep was only ever applied to the (empty) re-VEP subset, never skipped.
+        mock_vep.assert_called_once()

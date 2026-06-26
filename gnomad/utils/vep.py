@@ -9,6 +9,7 @@ import subprocess
 from typing import Callable, List, Optional, Union
 
 import hail as hl
+import hailtop.fs as hfs
 
 from gnomad.resources.resource_utils import VersionedTableResource
 
@@ -188,7 +189,7 @@ def get_vep_help(vep_config_path: Optional[str] = None):
     if vep_config_path is None:
         vep_config_path = os.environ["VEP_CONFIG_URI"]
 
-    with hl.hadoop_open(vep_config_path) as vep_config_file:
+    with hfs.open(vep_config_path) as vep_config_file:
         vep_config = json.load(vep_config_file)
         vep_command = vep_config["command"]
         vep_help = subprocess.check_output([vep_command[0]]).decode("utf-8")
@@ -242,7 +243,7 @@ def vep_or_lookup_vep(
 
     vep_help = get_vep_help(vep_config_path)
 
-    with hl.hadoop_open(vep_config_path) as vep_config_file:
+    with hfs.open(vep_config_path) as vep_config_file:
         vep_config = vep_config_file.read()
 
     if reference_vep_ht is None:

@@ -1,11 +1,14 @@
 # noqa: D100
 
+import gzip
 import json
 import logging
+import os
 from typing import Callable, Dict, List, Optional, Union
 
 import bokeh
 import hail as hl
+import hailtop.fs as hfs
 import numpy as np
 import pandas as pd
 from bokeh.layouts import gridplot
@@ -346,6 +349,30 @@ def linear_and_log_tabs(plot_func: Callable, **kwargs) -> Tabs:  # noqa: D103
     return Tabs(tabs=panels)
 
 
+def _ls(path: str) -> List[Dict]:
+    """
+    List a path via `hailtop.fs`, mirroring the deprecated `hl.hadoop_ls`.
+
+    `.crc` checksum files are dropped so downstream `part-*` parsing matches the
+    prior behavior. On the Spark backend's JVM Hadoop FS, `hl.hadoop_ls` lists
+    other hidden dotfiles but hides `.crc` checksum files, whereas `hfs.ls`
+    lists `.crc` files too; dropping only `.crc` here mirrors the old behavior.
+    For GCS paths (and on the Batch backend, where `hl.hadoop_ls` and `hfs.ls`
+    share the same filesystem) there are no `.crc` files, so this is a no-op.
+
+    See https://github.com/hail-is/hail/pull/15182 for the deprecation.
+
+    :param path: Path to list.
+    :return: List of legacy `hl.hadoop_ls`-style dicts (with `path`,
+        `size_bytes`, `modification_time`, etc.), excluding `.crc` files.
+    """
+    return [
+        entry.to_legacy_dict()
+        for entry in hfs.ls(path)
+        if not os.path.basename(entry.path).endswith(".crc")
+    ]
+
+
 def plot_hail_file_metadata(
     t_path: str,
 ) -> Optional[Union[Grid, Tabs, bokeh.plotting.figure]]:
@@ -358,7 +385,7 @@ def plot_hail_file_metadata(
     panel_size = 600
     subpanel_size = 150
 
-    files = hl.hadoop_ls(t_path)
+    files = _ls(t_path)
     rows_file = [x["path"] for x in files if x["path"].endswith("rows")]
     entries_file = [x["path"] for x in files if x["path"].endswith("entries")]
     # cols_file = [x['path'] for x in files if x['path'].endswith('cols')]
@@ -373,19 +400,22 @@ def plot_hail_file_metadata(
         logger.warning("No metadata file found. Exiting...")
         return None
 
-    with hl.hadoop_open(metadata_file[0], "rb") as f:
+    # `hfs.open` does not auto-decompress gzipped files (unlike the deprecated
+    # `hl.hadoop_open`), so decompress the gzipped metadata explicitly. See
+    # https://github.com/hail-is/hail/pull/15182 for the deprecation.
+    with hfs.open(metadata_file[0], "rb") as raw_f, gzip.open(raw_f) as f:
         overall_meta = json.loads(f.read())
         rows_per_partition = overall_meta["components"]["partition_counts"]["counts"]
 
     if not rows_file:
         logger.warning("No rows directory found. Exiting...")
         return None
-    rows_files = hl.hadoop_ls(rows_file[0])
+    rows_files = _ls(rows_file[0])
 
     if entries_file:
         data_type = "MatrixTable"
         rows_file = [x["path"] for x in rows_files if x["path"].endswith("rows")]
-        rows_files = hl.hadoop_ls(rows_file[0])
+        rows_files = _ls(rows_file[0])
     row_partition_bounds, row_file_sizes = get_rows_data(rows_files)
 
     total_file_size, row_file_sizes, row_scale = scale_file_sizes(row_file_sizes)
@@ -425,12 +455,12 @@ def plot_hail_file_metadata(
     }
 
     if entries_file:
-        entries_rows_files = hl.hadoop_ls(entries_file[0])
+        entries_rows_files = _ls(entries_file[0])
         entries_rows_file = [
             x["path"] for x in entries_rows_files if x["path"].endswith("rows")
         ]
         if entries_rows_file:
-            entries_files = hl.hadoop_ls(entries_rows_file[0])
+            entries_files = _ls(entries_rows_file[0])
             entry_partition_bounds, entry_file_sizes = get_rows_data(entries_files)
             total_entry_file_size, entry_file_sizes, entry_scale = scale_file_sizes(
                 entry_file_sizes
@@ -611,7 +641,7 @@ def get_rows_data(rows_files):  # noqa: D103
     partition_bounds = []
     parts_file = [x["path"] for x in rows_files if x["path"].endswith("parts")]
     if parts_file:
-        parts = hl.hadoop_ls(parts_file[0])
+        parts = _ls(parts_file[0])
         for i, x in enumerate(parts):
             index = x["path"].split(f"{parts_file[0]}/part-")[1].split("-")[0]
             if i < len(parts) - 1:
@@ -627,7 +657,9 @@ def get_rows_data(rows_files):  # noqa: D103
         x["path"] for x in rows_files if x["path"].endswith("metadata.json.gz")
     ]
     if metadata_file:
-        with hl.hadoop_open(metadata_file[0], "rb") as f:
+        # `hfs.open` does not auto-decompress gzipped files, so decompress here.
+        # See https://github.com/hail-is/hail/pull/15182 for the deprecation.
+        with hfs.open(metadata_file[0], "rb") as raw_f, gzip.open(raw_f) as f:
             rows_meta = json.loads(f.read())
             try:
                 partition_bounds = [

@@ -2,7 +2,7 @@
 
 import re
 
-import hail as hl
+import hailtop.fs as hfs
 
 
 def parse_log_file(log_file):
@@ -38,7 +38,7 @@ def parse_log_file(log_file):
         "load_gnomad_data": "load gnomAD data",
     }
 
-    with hl.hadoop_open(log_file, "r") as f:
+    with hfs.open(log_file, "r") as f:
         current_message = ""
         current_table = []
         current_metadata = None  # Stores log metadata before a table appears.
@@ -288,5 +288,5 @@ def generate_html_report(parsed_logs, output_file):
 
     html_template += "</table></body></html>"
 
-    with hl.hadoop_open(output_file, "w") as f:
+    with hfs.open(output_file, "w") as f:
         f.write(html_template)

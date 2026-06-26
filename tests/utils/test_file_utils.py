@@ -1,5 +1,6 @@
 """Tests for the file_utils utility module."""
 
+import gzip
 import os
 from unittest.mock import patch
 
@@ -87,6 +88,14 @@ class TestReadListData:
         """Test that each line is read into a list with whitespace stripped."""
         path = str(tmp_path / "list.txt")
         with open(path, "w", encoding="utf-8") as f:
+            f.write("a\nb \n c\n")
+
+        assert read_list_data(path) == ["a", "b", "c"]
+
+    def test_reads_gzipped_lines_stripped(self, tmp_path):
+        """Test that a .gz file is read in text mode with whitespace stripped."""
+        path = str(tmp_path / "list.txt.gz")
+        with gzip.open(path, mode="wt", encoding="utf-8") as f:
             f.write("a\nb \n c\n")
 
         assert read_list_data(path) == ["a", "b", "c"]

@@ -437,3 +437,50 @@ class TestVepOrLookupVep:
         assert hl.eval(result.vep_config) == "CONTEXT_CONFIG"
         # hl.vep was only ever applied to the (empty) re-VEP subset, never skipped.
         mock_vep.assert_called_once()
+
+    def test_unions_context_lookup_with_revep_of_missing_variants(self):
+        """Test the hybrid path: missing variants are re-VEPed and unioned back.
+
+        The context Table covers only a subset of the input keys, so the
+        variants absent from it must be VEPed via ``hl.vep`` and unioned with
+        the looked-up variants. ``hl.vep`` is mocked to an identity so no VEP
+        process is launched; this exercises the non-empty re-VEP/union branch
+        that ``test_uses_context_ht_when_all_variants_present`` deliberately
+        does not.
+        """
+        # Context HT holds keys {0, 1}; input has keys {0, 1, 2}, so key 2 is
+        # absent from the context and must be re-VEPed.
+        context_ht = hl.utils.range_table(2).annotate(vep=hl.struct(found=True))
+        context_ht = context_ht.annotate_globals(
+            vep_help="CONTEXT_HELP", vep_config="CONTEXT_CONFIG"
+        )
+        context = _fake_vep_context("105", {"105": context_ht})
+        ht = hl.utils.range_table(3)
+        with patch("gnomad.utils.vep.get_vep_help", return_value="CONTEXT_HELP"):
+            with patch(
+                "gnomad.utils.vep.hfs.open", _mock_open_returning("CONTEXT_CONFIG")
+            ):
+                with patch("gnomad.utils.vep.get_vep_context", return_value=context):
+                    with patch(
+                        "gnomad.utils.vep.hl.vep", side_effect=lambda t, p: t
+                    ) as mock_vep:
+                        result = vep_or_lookup_vep(
+                            ht,
+                            reference="GRCh38",
+                            vep_config_path="gs://bucket/vep.json",
+                        )
+
+        # Looked-up and re-VEPed variants are unioned back into one Table.
+        assert result.count() == 3
+        # Only the 2 context-matched variants carry the context annotation; the
+        # re-VEPed key 2 keeps a missing vep (identity-mocked hl.vep adds none).
+        assert result.aggregate(hl.agg.count_where(result.vep.found)) == 2
+        # hl.vep ran exactly once, on the single missing variant, with the config.
+        mock_vep.assert_called_once()
+        revep_subset, passed_path = mock_vep.call_args[0]
+        assert revep_subset.count() == 1
+        assert passed_path == "gs://bucket/vep.json"
+        # Globals survive the union and reflect the resolved version/help/config.
+        assert hl.eval(result.vep_version) == "v105"
+        assert hl.eval(result.vep_help) == "CONTEXT_HELP"
+        assert hl.eval(result.vep_config) == "CONTEXT_CONFIG"

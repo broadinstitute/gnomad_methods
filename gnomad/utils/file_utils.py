@@ -9,6 +9,7 @@ import uuid
 from typing import List, Optional, Tuple, Union
 
 import hail as hl
+import hailtop.fs as hfs
 
 from gnomad.resources.resource_utils import DataException
 
@@ -36,14 +37,8 @@ def file_exists(fname: str) -> bool:
     else:
         paths = [fname]
 
-    if fname.startswith("gs://"):
-        exists_func = hl.hadoop_exists
-    else:
-        exists_func = os.path.isfile
-
-    exists = all([exists_func(p) for p in paths])
-
-    return exists
+    # hfs.exists handles local, gs://, and other cloud schemes uniformly.
+    return all(hfs.exists(p) for p in paths)
 
 
 def check_file_exists_raise_error(
@@ -177,7 +172,7 @@ def read_list_data(input_file_path: str) -> List[str]:
     :return: List of lines
     """
     if input_file_path.startswith("gs://"):
-        hl.hadoop_copy(input_file_path, "file:///" + input_file_path.split("/")[-1])
+        hfs.copy(input_file_path, "file:///" + input_file_path.split("/")[-1])
         f = (
             gzip.open("/" + os.path.basename(input_file_path), encoding="utf-8")
             if input_file_path.endswith("gz")

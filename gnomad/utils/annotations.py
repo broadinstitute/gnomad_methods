@@ -1839,9 +1839,11 @@ def annotate_freq(
         Default is None, which resolves to `{"downsampling"}`.
     :param gen_ancs_to_downsample: Optional list of genetic ancestry groups to
         generate per-group downsamplings for. When None (default), every genetic
-        ancestry group present is downsampled. Only used when `gen_anc_expr` is
-        supplied and `annotate_freq` generates the downsamplings (i.e. when
-        `downsamplings` is set and `downsampling_expr` is not).
+        ancestry group present is downsampled; an empty list generates no
+        per-group downsamplings (only the global downsamplings are used). Only
+        used when `gen_anc_expr` is supplied and `annotate_freq` generates the
+        downsamplings (i.e. when `downsamplings` is set and `downsampling_expr`
+        is not).
     :return: MatrixTable or Table with `freq` annotation.
     """
     errors = []
@@ -1881,7 +1883,15 @@ def annotate_freq(
             gen_ancs_to_downsample=gen_ancs_to_downsample,
         ).cols()
         downsamplings = hl.eval(ds_ht.downsamplings)
-        ds_gen_anc_counts = hl.eval(ds_ht.ds_gen_anc_counts)
+        # `ds_gen_anc_counts` is only present when per-genetic-ancestry-group
+        # downsamplings were generated, i.e. when `gen_anc_expr` is supplied and
+        # `gen_ancs_to_downsample` is not an empty list. When absent (global-only
+        # downsamplings), leave it as None so only global downsamplings are used.
+        ds_gen_anc_counts = (
+            hl.eval(ds_ht.ds_gen_anc_counts)
+            if "ds_gen_anc_counts" in ds_ht.globals
+            else None
+        )
         downsampling_expr = ds_ht[mt.col_key].downsampling
 
     # Build list of all stratification groups to be used in the frequency calculation.
@@ -2649,7 +2659,8 @@ def generate_freq_group_membership_array(
                     # downsampling is larger than the number of samples in the group.
                     # In both cases no per-group downsampling stratum is created.
                     if (
-                        gen_anc not in ds_gen_anc_counts
+                        ds_gen_anc_counts is None
+                        or gen_anc not in ds_gen_anc_counts
                         or ds > ds_gen_anc_counts[gen_anc]
                     ):
                         continue

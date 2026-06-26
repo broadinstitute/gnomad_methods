@@ -10,13 +10,24 @@ from gnomad.utils.plotting import _ls, get_rows_data
 class TestLs:
     """Test the _ls helper, which mirrors the deprecated hl.hadoop_ls."""
 
-    def test_excludes_hidden_dotfiles(self, tmp_path):
-        """Test that dot-prefixed files (e.g. local `.crc`) are excluded.
+    def test_excludes_crc_keeps_other_entries(self, tmp_path):
+        """Test that only `.crc` files are dropped, mirroring `hl.hadoop_ls`.
 
-        `hfs.ls` lists hidden files that `hl.hadoop_ls` did not; writing a Hail
-        Table on the local filesystem creates `.crc` checksum files, which must
-        not leak through `_ls`.
+        On the Spark backend, `hl.hadoop_ls` hides `.crc` checksum files but
+        still lists other hidden dotfiles; `hfs.ls` lists `.crc` files too.
+        `_ls` drops only `.crc` so its output matches the old behavior, so
+        non-`.crc` dotfiles and `_SUCCESS` must be retained.
         """
+        for name in ["part-0", ".part-0.crc", ".foo.crc", ".hidden", "_SUCCESS"]:
+            with open(os.path.join(tmp_path, name), "w", encoding="utf-8") as fh:
+                fh.write("x")
+
+        names = {os.path.basename(e["path"]) for e in _ls(str(tmp_path))}
+
+        assert names == {"part-0", ".hidden", "_SUCCESS"}
+
+    def test_excludes_crc_from_hail_table(self, tmp_path):
+        """Test that the `.crc` files a local Hail Table write creates are dropped."""
         path = str(tmp_path / "t.ht")
         hl.utils.range_table(50, n_partitions=3).write(path)
         parts = os.path.join(path, "rows", "parts")
@@ -24,7 +35,6 @@ class TestLs:
         names = [os.path.basename(e["path"]) for e in _ls(parts)]
 
         assert names, "expected part files to be listed"
-        assert all(not n.startswith(".") for n in names)
         assert not any(n.endswith(".crc") for n in names)
 
     def test_keeps_underscore_success(self, tmp_path):

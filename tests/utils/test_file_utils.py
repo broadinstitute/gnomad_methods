@@ -4,8 +4,14 @@ import os
 from unittest.mock import patch
 
 import hail as hl
+import pytest
 
-from gnomad.utils.file_utils import file_exists, read_list_data
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import (
+    check_file_exists_raise_error,
+    file_exists,
+    read_list_data,
+)
 
 
 class TestFileExists:
@@ -84,3 +90,76 @@ class TestReadListData:
             f.write("a\nb \n c\n")
 
         assert read_list_data(path) == ["a", "b", "c"]
+
+
+class TestCheckFileExistsRaiseError:
+    """Test the check_file_exists_raise_error function."""
+
+    @patch("gnomad.utils.file_utils.file_exists")
+    def test_returns_all_exist_without_error_flags(self, mock_exists):
+        """Test the all-exist boolean is returned (and a str path is one file)."""
+        mock_exists.return_value = True
+        assert check_file_exists_raise_error("a.ht") is True
+
+        mock_exists.return_value = False
+        assert check_file_exists_raise_error(["a.ht", "b.ht"]) is False
+
+    @patch("gnomad.utils.file_utils.file_exists")
+    def test_raises_when_existing_file_and_error_if_exists(self, mock_exists):
+        """Test that an existing file raises, naming only the offending file."""
+        mock_exists.side_effect = lambda f: f == "exists.ht"
+        with pytest.raises(DataException, match="already exist") as exc_info:
+            check_file_exists_raise_error(
+                ["exists.ht", "missing.ht"], error_if_exists=True
+            )
+        assert "exists.ht" in str(exc_info.value)
+        assert "missing.ht" not in str(exc_info.value)
+
+    @patch("gnomad.utils.file_utils.file_exists")
+    def test_raises_when_missing_file_and_error_if_not_exists(self, mock_exists):
+        """Test that a missing file raises when error_if_not_exists is set."""
+        mock_exists.return_value = False
+        with pytest.raises(DataException, match="do not exist.*a.ht"):
+            check_file_exists_raise_error("a.ht", error_if_not_exists=True)
+
+    @patch("gnomad.utils.file_utils.file_exists")
+    def test_raises_with_both_messages_when_both_flags_set(self, mock_exists):
+        """Test that both flags together report existing and missing files in one error."""
+        mock_exists.side_effect = lambda f: f == "exists.ht"
+        with pytest.raises(DataException) as exc_info:
+            check_file_exists_raise_error(
+                ["exists.ht", "missing.ht"],
+                error_if_exists=True,
+                error_if_not_exists=True,
+            )
+        msg = str(exc_info.value)
+        # Both halves of the combined message are present, each naming its file.
+        assert "already exist" in msg and "exists.ht" in msg
+        assert "do not exist" in msg and "missing.ht" in msg
+
+    @patch("gnomad.utils.file_utils.file_exists")
+    def test_no_raise_when_flag_set_but_condition_not_met(self, mock_exists):
+        """Test that a set flag only raises when its condition is actually triggered."""
+        # error_if_exists is set but nothing exists: no raise, returns False.
+        mock_exists.return_value = False
+        assert (
+            check_file_exists_raise_error(["a.ht", "b.ht"], error_if_exists=True)
+            is False
+        )
+        # error_if_not_exists is set but everything exists: no raise, returns True.
+        mock_exists.return_value = True
+        assert (
+            check_file_exists_raise_error(["a.ht", "b.ht"], error_if_not_exists=True)
+            is True
+        )
+
+    @patch("gnomad.utils.file_utils.file_exists")
+    def test_custom_error_messages_are_used(self, mock_exists):
+        """Test that caller-supplied error message prefixes are honored."""
+        mock_exists.return_value = True
+        with pytest.raises(DataException, match="CUSTOM EXISTS: a.ht"):
+            check_file_exists_raise_error(
+                "a.ht",
+                error_if_exists=True,
+                error_if_exists_msg="CUSTOM EXISTS: ",
+            )

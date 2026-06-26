@@ -353,21 +353,23 @@ def _ls(path: str) -> List[Dict]:
     """
     List a path via `hailtop.fs`, mirroring the deprecated `hl.hadoop_ls`.
 
-    Hidden entries (basename starting with `.`) are dropped as a defensive
-    measure so downstream `part-*` parsing matches the prior behavior. In
-    practice this chiefly affects the local filesystem's `.crc` checksum files,
-    which the Spark backend's JVM Hadoop FS hides from `hl.hadoop_ls` but
-    `hfs.ls` does not. For GCS paths (and on the Batch backend, where
-    `hl.hadoop_ls` and `hfs.ls` share the same filesystem) this is a no-op.
+    `.crc` checksum files are dropped so downstream `part-*` parsing matches the
+    prior behavior. On the Spark backend's JVM Hadoop FS, `hl.hadoop_ls` lists
+    other hidden dotfiles but hides `.crc` checksum files, whereas `hfs.ls`
+    lists `.crc` files too; dropping only `.crc` here mirrors the old behavior.
+    For GCS paths (and on the Batch backend, where `hl.hadoop_ls` and `hfs.ls`
+    share the same filesystem) there are no `.crc` files, so this is a no-op.
+
+    See https://github.com/hail-is/hail/pull/15182 for the deprecation.
 
     :param path: Path to list.
     :return: List of legacy `hl.hadoop_ls`-style dicts (with `path`,
-        `size_bytes`, `modification_time`, etc.) for non-hidden entries.
+        `size_bytes`, `modification_time`, etc.), excluding `.crc` files.
     """
     return [
         entry.to_legacy_dict()
         for entry in hfs.ls(path)
-        if not os.path.basename(entry.path).startswith(".")
+        if not os.path.basename(entry.path).endswith(".crc")
     ]
 
 
@@ -399,7 +401,8 @@ def plot_hail_file_metadata(
         return None
 
     # `hfs.open` does not auto-decompress gzipped files (unlike the deprecated
-    # `hl.hadoop_open`), so decompress the gzipped metadata explicitly.
+    # `hl.hadoop_open`), so decompress the gzipped metadata explicitly. See
+    # https://github.com/hail-is/hail/pull/15182 for the deprecation.
     with hfs.open(metadata_file[0], "rb") as raw_f, gzip.open(raw_f) as f:
         overall_meta = json.loads(f.read())
         rows_per_partition = overall_meta["components"]["partition_counts"]["counts"]
@@ -655,6 +658,7 @@ def get_rows_data(rows_files):  # noqa: D103
     ]
     if metadata_file:
         # `hfs.open` does not auto-decompress gzipped files, so decompress here.
+        # See https://github.com/hail-is/hail/pull/15182 for the deprecation.
         with hfs.open(metadata_file[0], "rb") as raw_f, gzip.open(raw_f) as f:
             rows_meta = json.loads(f.read())
             try:

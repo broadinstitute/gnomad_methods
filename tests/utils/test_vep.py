@@ -1,12 +1,30 @@
 """Tests for the VEP utility module."""
 
+import io
+import json
+from unittest.mock import MagicMock, patch
+
 import hail as hl
 import pytest
 
 from gnomad.utils.vep import (
     get_loftee_end_trunc_filter_expr,
+    get_vep_help,
     update_loftee_end_trunc_filter,
+    vep_or_lookup_vep,
 )
+
+
+def _mock_open_returning(content):
+    """Build a mock for `hfs.open` whose context manager yields `content`.
+
+    `content` is wrapped in a `StringIO` so both `json.load(f)` and `f.read()`
+    work against it.
+    """
+    ctx = MagicMock()
+    ctx.__enter__.return_value = io.StringIO(content)
+    ctx.__exit__.return_value = False
+    return MagicMock(return_value=ctx)
 
 
 class TestGetLofteeEndTruncFilterExpr:
@@ -256,3 +274,49 @@ class TestUpdateLofteeEndTruncFilter:
 
         assert results[1].updated_csq.lof_filter == "END_TRUNC"
         assert results[1].updated_csq.lof == "LC"
+
+
+class TestGetVepHelp:
+    """Test the get_vep_help function."""
+
+    def test_uses_explicit_path_and_returns_help(self):
+        """Test that the given config is read and `vep --help` output returned."""
+        config = json.dumps({"command": ["/path/to/vep", "--offline"]})
+        with patch(
+            "gnomad.utils.vep.hfs.open", _mock_open_returning(config)
+        ) as mock_open:
+            with patch(
+                "gnomad.utils.vep.subprocess.check_output",
+                return_value=b"ensembl-vep 110",
+            ) as mock_check_output:
+                result = get_vep_help("gs://bucket/vep.json")
+
+        assert result == "ensembl-vep 110"
+        mock_open.assert_called_once_with("gs://bucket/vep.json")
+        # Only the command itself is invoked, not its config flags.
+        mock_check_output.assert_called_once_with(["/path/to/vep"])
+
+    def test_falls_back_to_env_var(self, monkeypatch):
+        """Test that VEP_CONFIG_URI is used when no path is supplied."""
+        monkeypatch.setenv("VEP_CONFIG_URI", "gs://env/vep.json")
+        config = json.dumps({"command": ["/path/to/vep"]})
+        with patch(
+            "gnomad.utils.vep.hfs.open", _mock_open_returning(config)
+        ) as mock_open:
+            with patch("gnomad.utils.vep.subprocess.check_output", return_value=b"vep"):
+                get_vep_help()
+
+        mock_open.assert_called_once_with("gs://env/vep.json")
+
+
+class TestVepOrLookupVep:
+    """Test the vep_or_lookup_vep function."""
+
+    def test_invalid_reference_raises(self):
+        """Test that an unrecognized reference build raises a ValueError."""
+        with patch("gnomad.utils.vep.get_vep_help", return_value="help"):
+            with patch("gnomad.utils.vep.hfs.open", _mock_open_returning("config")):
+                with pytest.raises(ValueError, match="Expected one of"):
+                    vep_or_lookup_vep(
+                        None, reference="hg99", vep_config_path="gs://bucket/vep.json"
+                    )

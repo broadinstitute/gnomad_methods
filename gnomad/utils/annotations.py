@@ -1992,10 +1992,8 @@ def annotate_downsamplings(
     :param gen_ancs_to_downsample: Optional list of genetic ancestry groups to
         generate per-group downsamplings for. When None (default), every genetic
         ancestry group present is downsampled; an empty list generates no
-        per-group downsamplings (only the global downsamplings are used). Only
-        used when `gen_anc_expr` is supplied and `annotate_freq` generates the
-        downsamplings (i.e. when `downsamplings` is set and `downsampling_expr`
-        is not).
+        per-group downsamplings (only the global downsamplings are used).
+        Requires `gen_anc_expr`.
     :return: MatrixTable or Table with downsampling annotations.
     """
     if gen_ancs_to_downsample is not None and gen_anc_expr is None:

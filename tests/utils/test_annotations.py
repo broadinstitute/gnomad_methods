@@ -2938,6 +2938,43 @@ class TestAnnotateFreq:
             sex=sample_table[mt.s].sex,
         )
 
+    @pytest.fixture
+    def gen_anc_downsample_mt(self):
+        """7 samples (afr=4, nfe=3) x 1 variant, all adj, with gen_anc annotated.
+
+        The unequal group sizes let downsampling tests distinguish a
+        per-group downsampling stratum (afr) from one that is excluded (nfe).
+        """
+        samples = [("a%i" % i, "afr") for i in range(4)] + [
+            ("n%i" % i, "nfe") for i in range(3)
+        ]
+        sample_table = hl.Table.parallelize(
+            [{"s": s, "gen_anc": g} for s, g in samples],
+            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr),
+        ).key_by("s")
+        variant = (hl.locus("chr1", 1000, reference_genome="GRCh38"), ["A", "T"])
+        entries = [
+            {
+                "locus": variant[0],
+                "alleles": variant[1],
+                "s": s,
+                "GT": hl.call(0, 1),
+                "adj": True,
+            }
+            for s, _ in samples
+        ]
+        mt = hl.Table.parallelize(
+            entries,
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                adj=hl.tbool,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        return mt.annotate_cols(gen_anc=sample_table[mt.s].gen_anc)
+
     @staticmethod
     def _meta_index(freq_obj):
         """Map each freq_meta entry (as a frozenset of items) to its index."""
@@ -3041,46 +3078,18 @@ class TestAnnotateFreq:
         v1 = self._freq_by_row(result)[1000]
         assert (v1[adj].AC, v1[adj].AN) == (3, 6)
 
-    def test_gen_ancs_to_downsample_restricts_downsampling_groups(self):
+    def test_gen_ancs_to_downsample_restricts_downsampling_groups(
+        self, gen_anc_downsample_mt
+    ):
         """`gen_ancs_to_downsample` limits which per-group downsampling strata appear.
 
         With afr=4 and nfe=3 samples and a requested downsampling of 2,
         restricting to ['afr'] should produce per-group downsampling strata
         for afr only (sizes 2 and 4); nfe gets no per-group downsampling.
         """
-        samples = [("a%i" % i, "afr") for i in range(4)] + [
-            ("n%i" % i, "nfe") for i in range(3)
-        ]
-        sample_table = hl.Table.parallelize(
-            [{"s": s, "gen_anc": g} for s, g in samples],
-            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr),
-        ).key_by("s")
-        variant = (hl.locus("chr1", 1000, reference_genome="GRCh38"), ["A", "T"])
-        entries = [
-            {
-                "locus": variant[0],
-                "alleles": variant[1],
-                "s": s,
-                "GT": hl.call(0, 1),
-                "adj": True,
-            }
-            for s, _ in samples
-        ]
-        mt = hl.Table.parallelize(
-            entries,
-            hl.tstruct(
-                locus=hl.tlocus("GRCh38"),
-                alleles=hl.tarray(hl.tstr),
-                s=hl.tstr,
-                GT=hl.tcall,
-                adj=hl.tbool,
-            ),
-        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
-        mt = mt.annotate_cols(gen_anc=sample_table[mt.s].gen_anc)
-
         mt = annotate_freq(
-            mt,
-            gen_anc_expr=mt.gen_anc,
+            gen_anc_downsample_mt,
+            gen_anc_expr=gen_anc_downsample_mt.gen_anc,
             downsamplings=[2],
             gen_ancs_to_downsample=["afr"],
         )
@@ -3100,46 +3109,18 @@ class TestAnnotateFreq:
             m.get("gen_anc") == "nfe" and "downsampling" in m for m in freq_meta
         )
 
-    def test_empty_gen_ancs_to_downsample_skips_per_group_downsampling(self):
+    def test_empty_gen_ancs_to_downsample_skips_per_group_downsampling(
+        self, gen_anc_downsample_mt
+    ):
         """An empty `gen_ancs_to_downsample` yields only global downsamplings.
 
         Passing `[]` (as opposed to None) means "no per-genetic-ancestry-group
         downsamplings". The function must not fail when no per-group counts are
         produced; it should still generate the global downsampling strata.
         """
-        samples = [("a%i" % i, "afr") for i in range(4)] + [
-            ("n%i" % i, "nfe") for i in range(3)
-        ]
-        sample_table = hl.Table.parallelize(
-            [{"s": s, "gen_anc": g} for s, g in samples],
-            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr),
-        ).key_by("s")
-        variant = (hl.locus("chr1", 1000, reference_genome="GRCh38"), ["A", "T"])
-        entries = [
-            {
-                "locus": variant[0],
-                "alleles": variant[1],
-                "s": s,
-                "GT": hl.call(0, 1),
-                "adj": True,
-            }
-            for s, _ in samples
-        ]
-        mt = hl.Table.parallelize(
-            entries,
-            hl.tstruct(
-                locus=hl.tlocus("GRCh38"),
-                alleles=hl.tarray(hl.tstr),
-                s=hl.tstr,
-                GT=hl.tcall,
-                adj=hl.tbool,
-            ),
-        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
-        mt = mt.annotate_cols(gen_anc=sample_table[mt.s].gen_anc)
-
         mt = annotate_freq(
-            mt,
-            gen_anc_expr=mt.gen_anc,
+            gen_anc_downsample_mt,
+            gen_anc_expr=gen_anc_downsample_mt.gen_anc,
             downsamplings=[2],
             gen_ancs_to_downsample=[],
         )

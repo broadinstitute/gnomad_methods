@@ -14,5 +14,6 @@ Contents
    Getting Started <getting_started>
    Examples <examples/index>
    API Reference <api_reference/index>
+   gnomAD & Hail Knowledge <knowledge/README>
    Resource Sources <resource_sources>
    Change Log <https://github.com/broadinstitute/gnomad_methods/releases>

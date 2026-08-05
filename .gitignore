@@ -106,3 +106,6 @@ ENV/
 
 # tokens
 slack_creds.py
+
+# Per-developer Claude notes (machine-specific paths, cluster names)
+CLAUDE.local.md

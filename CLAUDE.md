@@ -113,8 +113,7 @@ check that it is compatible with the versions already pinned in
 Hail, pandas, and numpy pins are the ones that usually conflict. If a new
 library needs a pin loosened or bumped, **make that dependency update part of
 the same pull request**, and say so in the PR description so reviewers know the
-install surface changed. Prefer an existing dependency, or a few lines of code,
-over a new one.
+install surface changed.
 
 ## Pull Requests
 

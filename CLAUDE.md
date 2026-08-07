@@ -15,20 +15,6 @@ Public-API changes ripple through every consuming repo, so prefer additive
 changes (new functions, new optional parameters with safe defaults) over
 breaking renames.
 
-**Check every change against `gnomad_qc`.** Before finishing a change to a
-public function — signature, return schema, field names, defaults — grep
-`gnomad_qc` for callers and report what breaks. **Flag incompatible call sites
-for the user rather than fixing them silently**; the fix belongs in a
-coordinated `gnomad_qc` PR, and the user decides what that looks like. Breaking
-legacy code (e.g. v2 pipelines that are no longer run) is acceptable, so say
-which version a broken caller belongs to.
-
-CI catches only a subset of this: the `gnomad_qc` job installs this branch and
-runs `pylint --disable=R,C,W` against `gnomad_qc` **main**, so it reports errors
-only (missing names, bad attributes) and cannot see runtime breakage such as a
-changed return schema or a reordered positional argument. A green CI run is not
-evidence that downstream code still works.
-
 **This is a public repo of genomic utility functions**, and the point of it is
 reusability: future gnomAD team members and external users need to find and
 understand code they can reuse. External groups have repeatedly asked the gnomAD
@@ -124,6 +110,15 @@ multiple models and cross-validates the findings. Work through what it reports,
 and note in the PR description that it was run and what you did or did not act
 on. Human review time is the scarce resource here — don't spend it on things the
 skill would have caught.
+
+**Check every change against `gnomad_qc`.** Before finishing a change to a public
+function — signature, return schema, field names, defaults — grep `gnomad_qc` for
+callers and report what breaks. **Flag incompatible call sites for the user
+rather than fixing them silently**; the fix belongs in a coordinated `gnomad_qc`
+PR, and the user decides what that looks like. Breaking legacy code (e.g. v2
+pipelines that are no longer run) is acceptable, so say which version a broken
+caller belongs to. Don't rely on CI for this — see the `gnomad_qc` job under
+CI/CD for what it can and can't see.
 
 **If a change alters the structure of the repo, update the repo layout table in
 the README in the same pull request.** Adding, removing, renaming, or moving a
@@ -236,8 +231,8 @@ def my_function(
   private by convention — follow that when adding to those modules. Never make a
   function private that `gnomad_qc` or another repo already calls.
 - **Don't break downstream**: renaming or removing a public function is a
-  breaking change for `gnomad_qc` and other consumers. See the Project Overview
-  for what CI does and does not catch — coordinate renames with downstream PRs.
+  breaking change for `gnomad_qc` and other consumers. Coordinate renames with
+  downstream PRs; see Pull Requests for the check to run before you finish.
 
 ## Testing
 
@@ -378,8 +373,12 @@ copy of the data that resolves to and who pays for it.
   2. Docs job: builds Sphinx docs with `-W` (docstring RST errors fail the
      build); publishes to GitHub Pages on push to main.
   3. `gnomad_qc` job: installs this branch and runs `pylint --disable=R,C,W`
-     over `gnomad_qc` — catches breaking API changes, with the limits described
-     in the Project Overview.
+     over `gnomad_qc` — catches breaking API changes, but only a subset of them.
+     It runs against `gnomad_qc` **main** and reports errors only (missing names,
+     bad attributes), so it cannot see runtime breakage such as a changed return
+     schema or a reordered positional argument. **A green CI run is not evidence
+     that downstream code still works** — do the check described under Pull
+     Requests.
 - **Releases**: see CONTRIBUTING.md.
 
 ## Maintaining CLAUDE.md

@@ -5,15 +5,29 @@
 Shared Hail utility library for gnomAD pipelines, published to PyPI as the
 `gnomad` package. Provides reusable functions for variant QC, sample QC,
 constraint analysis, Ensembl VEP processing, resource management, and general
-genomics operations. Used as a dependency by `gnomad_qc`, `gnomad_constraint`,
+genomics operations. Used as a dependency by `gnomad_qc`, `gnomad-constraint`,
 and other gnomAD repos — treat the public API as something downstream code
-depends on.
+depends on. See the README for the list of sibling repos.
 
 **This is a library, not a pipeline.** It exposes APIs that other repos import;
 it has no `__main__` entry point and is not run via Dataproc directly.
 Public-API changes ripple through every consuming repo, so prefer additive
 changes (new functions, new optional parameters with safe defaults) over
 breaking renames.
+
+**Check every change against `gnomad_qc`.** Before finishing a change to a
+public function — signature, return schema, field names, defaults — grep
+`gnomad_qc` for callers and report what breaks. **Flag incompatible call sites
+for the user rather than fixing them silently**; the fix belongs in a
+coordinated `gnomad_qc` PR, and the user decides what that looks like. Breaking
+legacy code (e.g. v2 pipelines that are no longer run) is acceptable, so say
+which version a broken caller belongs to.
+
+CI catches only a subset of this: the `gnomad_qc` job installs this branch and
+runs `pylint --disable=R,C,W` against `gnomad_qc` **main**, so it reports errors
+only (missing names, bad attributes) and cannot see runtime breakage such as a
+changed return schema or a reordered positional argument. A green CI run is not
+evidence that downstream code still works.
 
 **This is a public repo of genomic utility functions**, and the point of it is
 reusability: future gnomAD team members and external users need to find and
@@ -24,18 +38,10 @@ docstrings — not for cleverness.
 
 ## Repo Layout
 
-Stable subpackage-level map (do not list individual functions here — they
-change; see "Finding code" below):
-
-| Directory | Purpose |
-|-----------|---------|
-| `gnomad/utils/` | General-purpose utilities: annotations, filtering, Ensembl VEP, constraint, sparse MTs, liftover, VCF export, etc. One module per topic. |
-| `gnomad/resources/` | Resource classes (`resource_utils.py`), resource source config (`config.py`), and per-build resource definitions (`grch37/`, `grch38/`). |
-| `gnomad/sample_qc/` | Sample QC: genetic ancestry, relatedness, sex inference, platform inference, filtering. |
-| `gnomad/variant_qc/` | Variant QC: random forest, training, evaluation, LD. |
-| `gnomad/assessment/` | Release assessment: summary stats, validity checks. |
-| `tests/` | Pytest suite, mirroring the `gnomad/` layout. |
-| `docs/` | Sphinx docs; API reference is auto-generated from docstrings. |
+**The repo layout lives in the README**, along with the list of related gnomAD
+repos — read it there rather than duplicating it here. If a change adds,
+removes, or moves a subpackage, update the layout table in the README as part of
+the same pull request.
 
 ### What belongs here vs. in gnomad_qc
 
@@ -43,11 +49,12 @@ Generalized, reusable functions belong in gnomad_methods; gnomAD release
 pipeline code belongs in `gnomad_qc`. Thin wrapper functions are acceptable
 here.
 
-The boundary is genuinely confusing in practice, and newcomers routinely search
-both repos to find one thing. It is also not always clean: in places
-gnomad_methods calls into `gnomad_qc`, where that `gnomad_qc` function is itself
-mostly a wrapper around a gnomad_methods function. Trace the call chain before
-assuming which repo owns a behavior.
+The dependency runs one way only: `gnomad_qc` imports gnomad_methods, and
+gnomad_methods never imports `gnomad_qc`. The boundary is still confusing in
+practice, though, and newcomers routinely search both repos to find one thing —
+partly because a `gnomad_qc` function is often a thin wrapper around a
+gnomad_methods function of a similar name. Trace the call chain before assuming
+which repo owns a behavior.
 
 ## Finding Code
 
@@ -71,8 +78,9 @@ win you haven't measured.
   place before diving into functions.
 - **Tests show intended usage**: `tests/` mirrors the package layout; a test
   file is often the best usage example for a function.
-- **Downstream usage**: sibling repos (e.g. `../gnomad_qc`) show how functions
-  are used in real pipelines. Check there before changing a signature.
+- **Downstream usage**: the sibling repos listed in the README (most usefully
+  `gnomad_qc`, often checked out at `../gnomad_qc`) show how functions are used
+  in real pipelines. Check there before changing a signature.
 - **Generated docs**: https://broadinstitute.github.io/gnomad_methods/ — built
   from docstrings, so the docstring in the source is always authoritative.
 
@@ -95,6 +103,35 @@ python -m pytest tests/utils/test_vep.py  # one file
 Formatting config lives in `pyproject.toml`, `.pydocstylerc`, `.pylintrc`, and
 `.pre-commit-config.yaml`. Black runs in preview mode with the default
 88-character line length.
+
+### Dependencies
+
+Adding a new third-party library is a change to the package's install
+requirements, and every consuming repo inherits it. Before introducing one,
+check that it is compatible with the versions already pinned in
+`requirements.txt` (and `requirements-dev.txt` for test-only libraries) — the
+Hail, pandas, and numpy pins are the ones that usually conflict. If a new
+library needs a pin loosened or bumped, **make that dependency update part of
+the same pull request**, and say so in the PR description so reviewers know the
+install surface changed. Prefer an existing dependency, or a few lines of code,
+over a new one.
+
+## Pull Requests
+
+**Run the `/review` skill on every pull request before requesting review from a
+team member** (Ben Weisburd's skill:
+https://github.com/bw2/claude-code-review-skill). It reviews the diff under
+multiple models and cross-validates the findings. Work through what it reports,
+and note in the PR description that it was run and what you did or did not act
+on. Human review time is the scarce resource here — don't spend it on things the
+skill would have caught.
+
+**If a change alters the structure of the repo, update the repo layout table in
+the README in the same pull request.** Adding, removing, renaming, or moving a
+subpackage all count. The README is the single source of truth for the layout —
+it is what new contributors and external users read first, and a table that has
+drifted from the tree is worse than no table. This applies to new dependencies
+too: if `requirements.txt` changed, say so in the PR description.
 
 ## Code Style
 
@@ -157,6 +194,9 @@ def my_function(
   element).
 - Never use mutable defaults — use `None` and assign inside the body.
 - Always wrap nullable params in `Optional[...]`.
+- **Check optional numeric params with `is not None`, never truthiness.**
+  `if max_af:` silently skips `max_af=0.0`, and `0.0` is a meaningful cutoff.
+  Same for `0`, and for empty lists that a caller passed deliberately.
 
 ### Function Design
 
@@ -171,20 +211,46 @@ def my_function(
   a shuffle or an evaluation is being triggered.
 - **Single Table param named `ht`**: use descriptive names only when a
   function takes multiple Tables (e.g. `mutation_ht`, `gencode_ht`).
-- **Pure transformations**: utility functions should be HTs in / HTs out. File
-  I/O (read, write, checkpoint) belongs in pipeline scripts, not utilities.
-  Historical exceptions exist; don't add new ones.
-- **No lazy imports**: top-level imports only, unless resolving a circular
-  import.
+- **No file I/O in utilities**: reading, writing, and checkpointing belong in
+  pipeline scripts, not here. A utility transforms what it is handed and returns
+  the result. Historical exceptions exist; don't add new ones. Checkpointing in
+  particular is not free and is not yours to spend: a caller has no idea a
+  library function is checkpointing on their behalf, so a checkpoint buried in a
+  utility quietly consumes their storage and compute. If a function genuinely
+  needs one — a table about to be joined several ways, or an expensive
+  computation that must be forced once — take a path or a flag from the caller
+  rather than deciding for them.
+- **Lazy imports are the exception, not the rule.** Use top-level imports.
+  Three cases justify an import inside a function, and they are all already
+  present in the repo: resolving a circular import; an optional or heavy
+  dependency that shouldn't be required to import the package (`skl2onnx`,
+  `ga4gh`); and picking a build-specific resource module at runtime (importing
+  `grch37` vs `grch38` reference data based on a reference-genome argument).
+  Anything else goes at the top of the file.
+- **Private functions (`_name`)**: the leading underscore means "not part of the
+  public API" — [docs/directives.py](docs/directives.py) skips private members,
+  so a `_name` function does **not** appear in the generated API reference.
+  Use it only for helpers that are implementation details of their own module,
+  and default to public otherwise: this library exists to be reused, and a
+  function that is private is a function nobody outside the repo can find. In
+  `gnomad/resources/`, path-construction helpers and `_import_*` functions are
+  private by convention — follow that when adding to those modules. Never make a
+  function private that `gnomad_qc` or another repo already calls.
 - **Don't break downstream**: renaming or removing a public function is a
-  breaking change for `gnomad_qc` and other consumers. CI installs your branch
-  and pylints `gnomad_qc` against it — coordinate renames with downstream PRs.
+  breaking change for `gnomad_qc` and other consumers. See the Project Overview
+  for what CI does and does not catch — coordinate renames with downstream PRs.
 
 ## Testing
 
 - **Policy**: any new or modified function in a PR must have tests.
 - **Format**: class-based pytest, one test class per function, docstrings on
-  both classes and methods.
+  both classes and methods, and type annotations on test methods (`-> None`)
+  and fixtures like anywhere else.
+- **Don't over-document tests**: the docstring says what case the test covers
+  and, if it isn't obvious, why that case matters. Don't narrate the body —
+  `# create a test table` above `hl.Table.parallelize(...)` is noise. If a
+  literal in the test data is doing real work (a boundary value, a deliberate
+  missing field), a short comment on *that* earns its place.
 - **Each test must earn its place**: before adding a test, read the existing
   ones for that function and cover a case they don't. Near-duplicate tests cost
   runtime (Hail init is slow) and add no signal.
@@ -208,7 +274,7 @@ def my_function(
 class TestMyFunction:
     """Test the my_function function."""
 
-    def test_basic_case(self):
+    def test_basic_case(self) -> None:
         """Test that basic input produces expected output."""
         ht = hl.Table.parallelize(
             [{"x": 1, "y": 2.0}],
@@ -217,140 +283,6 @@ class TestMyFunction:
         result = ht.annotate(z=my_function(ht.x, ht.y)).collect()[0]
         assert result.z == 3.0
 ```
-
-## Hail Best Practices
-
-### Lazy evaluation is the root of most surprises
-
-Hail builds a query plan and executes nothing until something forces it. **Any
-operation that converts Hail data into Python forces evaluation of the entire
-upstream plan** — `.count()`, `.collect()`, `hl.eval()`, `.show()`,
-`.aggregate()`, `.take()`. Before adding one of these, know what it will cause
-to re-execute.
-
-The most common mistake this produces: filter, then `.count()` for a log
-message, then write. That runs the whole upstream computation twice. **Write or
-checkpoint first, then log against the materialized result** — after a
-checkpoint or write, `.count()` reads materialized metadata and is cheap.
-
-### checkpoint vs cache
-
-- **`checkpoint(new_temp_file(...))`**: for intermediate results feeding
-  multiple downstream operations or following expensive computations (joins,
-  aggregations). Materializes to disk and breaks the query plan so Hail won't
-  re-execute the upstream DAG.
-- **`.cache()`**: for small results reused immediately; doesn't break the
-  query plan as reliably.
-- **After a checkpoint, `.count()` is free** — it reads materialized metadata.
-
-**Checkpoints are not free.** They cost compute and storage, and on gnomAD-scale
-data that I/O is expensive. Callers of a library function generally don't know it
-is checkpointing on their behalf, so a checkpoint buried in a utility can quietly
-consume their storage. Look for places where a large function would genuinely
-benefit — tables being joined, or several expensive computations that should be
-forced once — and add checkpoints there, not everywhere. If a function needs a
-`.count()` or another validity check that forces evaluation, place it after a
-checkpoint when the upstream computation is expensive.
-
-### Avoid `.count()` for logging
-
-Never call `.count()` just to log row counts — on large tables it forces full
-materialization and can cause Spark shuffle failures. Only count when the
-result is needed for computation.
-
-### Avoid shuffles
-
-Shuffles are expensive, and shuffle failures are hard to diagnose because the
-stack trace rarely points at the operation that caused them. Know which
-operations shuffle — **re-keying a table shuffles it** — and avoid them where the
-same result is reachable another way.
-
-### Partitioning: `naive_coalesce` only, never `repartition`
-
-Partitioning is an unsolved pain point in Hail. Rules of thumb:
-
-- Large datasets need many partitions; small datasets do not.
-- Joins benefit from more partitions. Joining a table with many partitions to
-  one with few is pathologically slow — match them up first.
-- Filtering a large table to a small subset leaves most partitions empty,
-  causing shuffle skew in downstream `group_by` aggregations. Use
-  `.naive_coalesce(N)` after the filter to rebalance.
-
-**Never use `repartition()`** — neither to reduce nor to increase partition
-count. To reduce, use `naive_coalesce()` (it avoids a shuffle). To increase,
-repartition on read instead (e.g. the `_n_partitions` / `min_partitions`
-argument on the read call), not on an in-memory dataset.
-
-> **Caveat on `naive_coalesce` in pipelines**: in gnomAD pipelines
-> `naive_coalesce` often runs **very** early, which means a large dataset gets
-> collapsed into a small number of partitions up front and every downstream step
-> pays for it. `naive_coalesce` is the right tool immediately after an aggressive
-> filter; it is the wrong tool as a blanket early-pipeline call. Check where in
-> the data flow the call actually lands before adding one.
-
-### Aggregations are costly
-
-Each aggregation pass over a large dataset costs real money. If a function needs
-many aggregations, build a **single aggregator expression** (one `hl.struct` of
-`hl.agg.*` expressions) and do one pass, rather than aggregating repeatedly.
-
-### Always set the reference genome explicitly
-
-Hail still defaults to **GRCh37**. gnomAD v3+ work is GRCh38. Set the reference
-genome explicitly on `hl.init()` / locus construction / import calls rather than
-relying on the default.
-
-### `ht.aggregate(..., _localize=False)`
-
-`_localize=False` keeps an aggregation result as a Hail expression instead of
-returning it to Python, which avoids a round trip when the result feeds directly
-into another expression.
-
-Use it with caution: it is a private argument, it has been used in gnomAD code,
-but the Hail team has advised against relying on it. **Confirm the current
-recommendation with the Hail team before introducing new uses**, and prefer
-supported alternatives where one exists.
-
-### Missingness helpers
-
-- `hl.or_else(expr, default)`: substitute `default` when `expr` is missing.
-- `hl.or_missing(condition, expr)`: `expr` when condition is True, else
-  missing.
-- `hl.is_defined(expr)`: returns True/False, never missing — no `hl.or_else`
-  wrapper needed.
-- `divide_null(num, denom)` (from `hail.utils.misc`): safe division, null when
-  denominator is 0.
-
-### Field existence checks
-
-Use `field_name in ht.row` — Hail Tables have no `.get()`.
-
-### Falsy value gotchas
-
-Check optional numeric params with `is not None`, never truthiness:
-`if max_af:` silently skips `max_af=0.0`.
-
-### Array schema uniformity
-
-All elements of a Hail array field must share an identical struct schema. You
-can't annotate only `array[0]` with extra fields — Hail rejects the mixed
-schema. Promote such metadata to the parent struct.
-
-### Rank assignment with `order_by`
-
-`ht.order_by(expr)` destroys the key. To rejoin ranked results:
-`ht.add_index("_rank_idx")` before ordering, `key_by("_rank_idx")` after, and
-use `hl.scan.count()` for 0-based ascending ranks.
-
-### `approx_quantiles` is approximate
-
-`hl.agg.approx_quantiles` uses t-digest and returns approximate percentiles —
-document this with a `.. note::` when using it.
-
-### Small table reconstruction
-
-`hl.Table.parallelize(hl.eval(ht.my_array_global), schema=...)` rebuilds a
-small Table from a global array without re-running jobs.
 
 ## Execution and Infrastructure
 
@@ -369,34 +301,48 @@ on Google Cloud Dataproc**, and that assumption is baked into much of the code.
 Functions should nonetheless work across backends and environments; don't add
 code that only works on one.
 
+### Buckets and requester-pays
+
+Released gnomAD data exists in more than one place, and which copy you read
+determines who pays:
+
+- `gs://gcp-public-data--gnomad` — the free public mirror, hosted by Google
+  Cloud Public Datasets. **Read from here.** No requester-pays, no project
+  billing for the read.
+- `gs://gnomad-public-requester-pays` — where the gnomAD Production Team
+  *writes* release data, which then syncs to the mirror above. It is public but
+  **requester-pays**: reading it bills the requester's project. Don't hardcode
+  paths into this bucket in examples, tests, or docstrings.
+- `gs://gnomad` and other internal buckets — not public; internal work only.
+
+**Prefer the resource classes over any literal path.** `gnomad/resources/` picks
+the source for you (see `config.py`: it defaults to Google Cloud Public Datasets
+and can be pointed elsewhere with `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`), so
+`some_resource.ht()` reads the free copy without the caller having to know any
+of the above. Note that the literal paths stored in `gnomad/resources/grch37/`
+and `grch38/` are `gnomad-public-requester-pays` URLs — that is the write
+location, and the source config rewrites them on read. Copying one of those
+strings out of the source and using it directly bypasses the rewrite and incurs
+charges.
+
 ### Cost and cluster conventions
 
 - Run small tests **locally** with Hail's Spark backend in local mode. Data can
   be streamed directly from GCS via the GCS storage connector — no cluster
   needed.
-- **Always read from the public gnomAD buckets where possible** to avoid
-  requester-pays and egress charges.
-- Use **us-central1-b**.
-- Prefer **autoscaling** clusters.
-- Prefer **preemptible** workers for initial job runs.
+- Use region **us-central1** (that's where the data lives — reading it from
+  another region incurs egress charges). The zone within it is flexible:
+  `us-central1-a`, `-b`, `-c`, and `-f` are all fine, and switching zones is a
+  reasonable response to a capacity error.
+- **Always autoscale, and always use preemptible workers**, unless you have hit
+  a problem that requires otherwise. The usual reason to fall back to
+  non-preemptible workers is a job that keeps dying in a shuffle: preemption
+  during a large shuffle forces recomputation and can turn into a job that never
+  finishes.
 
-### Version and configuration hazards
-
-- **Hail files are backwards-compatible, not forwards-compatible.** Data written
-  by a newer Hail version cannot be read by an older one. Check the Hail version
-  before assuming a path is readable, and don't casually bump the version used to
-  write shared data.
-- **Hail performance differs between versions.** There was a major performance
-  regression from 0.2.130 to 0.2.131. Some work legitimately requires a newer
-  version for new features — weigh the tradeoff rather than assuming newest is
-  best.
-- **GCP/GCS argument conventions change between versions, sometimes with large
-  cost consequences.** A past change to how requester-pays buckets are specified
-  caused egress fees to be charged on *all* writes, not just those actually
-  touching a requester-pays bucket. Treat cloud configuration changes as
-  cost-affecting until proven otherwise.
-- An apparent bug in this library is sometimes a Hail version mismatch in the
-  local environment. Check the installed version before debugging deeply.
+Treat any change to cloud configuration as cost-affecting until proven
+otherwise, and check the installed Hail version before concluding that something
+in this library is broken.
 
 ## Never Do This
 
@@ -404,7 +350,9 @@ code that only works on one.
   to a new temp path; do not overwrite an existing Table/MatrixTable.
 - **Never remove code without asking first**, and never delete files that are
   referenced or built by the repo.
-- **Never use `repartition()`** — see the partitioning section above.
+- **Never add a bare `repartition(n)` to a large dataset** — it defaults to
+  `shuffle=True` and forces a full shuffle. Set the partition count at read time
+  (`_n_partitions` on the read call) or use `naive_coalesce()` to reduce it.
 - **Never claim a performance improvement you have not measured.**
 
 ## Resources
@@ -419,9 +367,10 @@ Build-specific resource definitions live in `gnomad/resources/grch37/` and
 Public resources can be read from multiple cloud sources (gnomAD GCS buckets,
 Google Cloud Public Datasets, AWS Open Data); the source is auto-detected or
 overridden via the `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE` env var — see
-`gnomad/resources/config.py`.
+`gnomad/resources/config.py`, and "Buckets and requester-pays" above for which
+copy of the data that resolves to and who pays for it.
 
-## CI/CD & Releases
+## CI/CD
 
 - **Pre-commit hooks**: black, autopep8, pydocstyle, isort (plus yaml/
   whitespace checks).
@@ -430,17 +379,17 @@ overridden via the `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE` env var — see
   2. Docs job: builds Sphinx docs with `-W` (docstring RST errors fail the
      build); publishes to GitHub Pages on push to main.
   3. `gnomad_qc` job: installs this branch and runs `pylint --disable=R,C,W`
-     over `gnomad_qc` — catches breaking API changes.
-- **Releases**: bump `version` in `setup.py` (semver, based on changes since
-  the last release), merge to main, then push a `v<X.Y.Z>` tag.
-  `.github/workflows/publish.yml` validates the tag matches `setup.py` and
-  publishes to PyPI. See CONTRIBUTING.md for details.
+     over `gnomad_qc` — catches breaking API changes, with the limits described
+     in the Project Overview.
+- **Releases**: see CONTRIBUTING.md.
 
 ## Maintaining CLAUDE.md
 
-When working in this repo, proactively add useful discoveries — gotchas,
-non-obvious Hail behavior, schema quirks, conventions — to the appropriate
-section. Keep it durable and lean:
+Watch for useful discoveries while working here — gotchas, non-obvious Hail
+behavior, schema quirks, conventions — and **propose them to the user rather
+than adding them unilaterally**. Say what you learned and which section it
+belongs in; let the user decide whether it is durable enough to write down. Keep
+this file lean:
 
 - **No function inventories or import lists** — they go stale when functions
   are renamed or moved. Reference directories or modules at most, and prefer

@@ -1312,97 +1312,11 @@ def calculate_de_novo_post_prob(
     hemi_y_expr: hl.expr.BooleanExpression,
     freq_prior_expr: hl.expr.Float64Expression,
     min_pop_prior: Optional[float] = 100 / 3e7,
-    de_novo_prior: Optional[float] = 1 / 3e7,
+    mother_de_novo_prior: Optional[float] = 1 / 1e8,
+    father_de_novo_prior: Optional[float] = 1 / 2.5e7,
 ) -> hl.expr.Float64Expression:
     r"""
     Calculate the posterior probability of a *de novo* mutation.
-
-    This function computes the posterior probability of a *de novo* mutation (`P_dn`)
-    based on the genotype likelihoods of the proband and parents, along with the
-    population frequency prior for the variant. The method is adapted from Kaitlin
-    Samocha's `de novo caller <https://github.com/ksamocha/de_novo_scripts>`_
-    and Hail's `de_novo <https://hail.is/docs/0.2/methods/genetics.html#hail.methods.de_novo>`_ function.
-    However, neither approach explicitly documented how to compute *de novo*
-    probabilities for hemizygous genotypes in XY individuals. To address this,
-    we provide the full set of equations in this docstring.
-
-    The posterior probability of an event being truly *de novo* vs. the probability it was a missed heterozygote call in one of the two parents is:
-
-    .. math::
-
-        P_{dn} = \frac{P(DN \mid \text{data})}{P(DN \mid \text{data}) + P(\text{missed het in parent(s)} \mid \text{data})}
-
-    The terms are defined as follows:
-
-    - :math:`P(DN \mid \text{data})` is the probability that the variant is *de novo*, given the observed genotype data.
-
-    - :math:`P(\text{missed het in parent(s)} \mid \text{data})` is the probability that the heterozygous variant was **missed in at least one parent**.
-
-    Applying Bayesian Theorem to the numerator and denominator yields:
-
-    .. math::
-
-        P_{dn} = \frac{P(\text{data} \mid DN) \cdot P(DN)}{P(\text{data} \mid DN) \cdot P(DN) + P(\text{data} \mid \text{missed het in parent(s)}) \cdot P(\text{missed het in parent(s)})}
-
-    where:
-
-    - :math:`P(\text{data} \mid DN)`: Probability of observing the data under the assumption of a *de novo* mutation.
-
-      - **Autosomes and PAR regions**:
-
-        .. math::
-
-            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \cdot P(\text{hom_ref in mother}) \cdot P(\text{het in proband})
-
-      Probability of a observing a *de novo* mutation given the data specifically for hemizygous calls in XY individuals
-
-          Note that hemizygous calls in XY individuals will be reported as homozygous alternate without any sex ploidy adjustments, which is why the formulas below use `P(hom_alt in proband)`
-
-      - **X non-PAR regions (XY only)**:
-
-        .. math::
-
-            P(\text{data} \mid DN) = P(\text{hom_ref in mother}) \cdot P(\text{hom_alt in proband})
-
-      - **Y non-PAR regions (XY only)**:
-
-        .. math::
-
-            P(\text{data} \mid DN) = P(\text{hom_ref in father}) \cdot P(\text{hom_alt in proband})
-
-    - :math:`P(DN)`: The prior probability of a *de novo* mutation from literature, defined as:
-
-      .. math::
-
-          P(DN) = \frac{1}{3 \times 10^7}
-
-    - :math:`P(\text{data} \mid \text{missed het in parent(s)})`: Probability of observing the data under the assumption of a missed het in a parent.
-
-      - **Autosomes and PAR regions**:
-
-        .. math::
-
-            P(\text{data} \mid \text{missed het in parents}) = ( P(\text{het in father}) \cdot P(\text{hom_ref in mother}) + P(\text{hom_ref in father}) \cdot P(\text{het in mother})) \cdot P(\text{het in proband})
-
-      - **X non-PAR regions (XY only)**:
-
-        .. math::
-
-            P(\text{data} \mid \text{missed het in mother}) = (P(\text{het in mother}) + P(\text{hom_alt in mother})) \cdot P(\text{hom_alt in proband})
-
-      - **Y non-PAR regions (XY only)**:
-
-        .. math::
-
-            P(\text{data} \mid \text{missed het in father}) = (P(\text{het in father}) + P(\text{hom_alt in father})) \cdot P(\text{hom_alt in proband})
-
-    - :math:`P(\text{missed het in parent(s)}`: Prior that at least one parent is heterozygous. Depends on alternate allele frequency:
-
-    .. math::
-
-        P(\text{het in one parent}) = 1 - (1 - \text{freq_prior})^4
-
-    where :math:`\text{freq_prior}` is the population frequency prior for the variant.
 
     :param proband_pl_expr: Phred-scaled genotype likelihoods for the proband.
     :param father_pl_expr: Phred-scaled genotype likelihoods for the father.
@@ -1412,7 +1326,8 @@ def calculate_de_novo_post_prob(
     :param hemi_y_expr: Boolean expression indicating a hemizygous genotype on the Y chromosome.
     :param freq_prior_expr: Population frequency prior for the variant.
     :param min_pop_prior: Minimum population frequency prior (default: :math:`\text{100/3e7}`).
-    :param de_novo_prior: Prior probability of a *de novo* mutation (default: :math:`\text{1/3e7}`).
+    :param mother_de_novo_prior: Prior probability of a *de novo* mutation (default: :math:`\text{1/1e8}`).
+    :param father_de_novo_prior: Prior probability of a *de novo* mutation (default: :math:`\text{1/2.5e7}`).
     :return: Posterior probability of a *de novo* mutation (`P_dn`).
     """
 
@@ -1469,46 +1384,94 @@ def calculate_de_novo_post_prob(
         for pl in [proband_pl_expr, father_pl_expr, mother_pl_expr]
     ]
 
-    # Compute `P(data | DN)`
-    prob_data_given_dn_expr = (
-        hl.case()
-        .when(hemi_x_expr, mother_pp_expr[0] * proband_pp_expr[2])
-        .when(hemi_y_expr, father_pp_expr[0] * proband_pp_expr[2])
-        .when(diploid_expr, father_pp_expr[0] * mother_pp_expr[0] * proband_pp_expr[1])
-        .or_missing()
-    )
-
-    # Compute `P(data | missed het in parent(s))`
-    prob_data_missed_het_expr = (
+    # Calculate the posterior probability of a *de novo* mutation from the
+    # parent(s) to the proband
+    prob_dn_given_data_expr = (
         hl.case()
         .when(
             hemi_x_expr,
-            (mother_pp_expr[1] + mother_pp_expr[2])
-            * proband_pp_expr[2]
-            * prior_one_parent_het,
+            (mother_pp_expr[0] * proband_pp_expr[2])
+            * (((1 - freq_prior_expr) ** 2) * mother_de_novo_prior),
         )
         .when(
             hemi_y_expr,
-            (father_pp_expr[1] + father_pp_expr[2])
-            * proband_pp_expr[2]
-            * prior_one_parent_het,
+            (father_pp_expr[0] * proband_pp_expr[2])
+            * ((1 - freq_prior_expr) * father_de_novo_prior),
+        )
+        .when(
+            diploid_expr,
+            (father_pp_expr[0] * mother_pp_expr[0] * proband_pp_expr[1])
+            * (
+                (
+                    ((1 - freq_prior_expr) ** 4)
+                    * mother_de_novo_prior
+                    * (1 - father_de_novo_prior)
+                )
+                + (
+                    ((1 - freq_prior_expr) ** 4)
+                    * father_de_novo_prior
+                    * (1 - mother_de_novo_prior)
+                )
+            ),
+        )
+        .or_missing()
+    )
+
+    # Calculate the posterior probability of inheriting an alternate allele from
+    # the parent given the data
+    prob_alt_given_data_expr = (
+        hl.case()
+        .when(
+            hemi_x_expr,
+            (mother_pp_expr[1] * proband_pp_expr[2])
+            * (freq_prior_expr * (1 - freq_prior_expr) * (1 - mother_de_novo_prior)),
+        )
+        .when(
+            hemi_y_expr,
+            (father_pp_expr[2] * proband_pp_expr[2])
+            * (freq_prior_expr * (1 - father_de_novo_prior)),
         )
         .when(
             diploid_expr,
             (
-                father_pp_expr[1] * mother_pp_expr[0]
-                + father_pp_expr[0] * mother_pp_expr[1]
+                father_pp_expr[1] * mother_pp_expr[0] * proband_pp_expr[1]
+                + father_pp_expr[0] * mother_pp_expr[1] * proband_pp_expr[1]
             )
-            * proband_pp_expr[1]
-            * prior_one_parent_het,
+            * freq_prior_expr
+            * ((1 - freq_prior_expr) ** 3)
+            * (1 - mother_de_novo_prior)
+            * (1 - father_de_novo_prior),
+        )
+        .or_missing()
+    )
+
+    prob_no_alt_given_data_expr = (
+        hl.case()
+        .when(
+            hemi_x_expr,
+            (mother_pp_expr[0] * proband_pp_expr[0])
+            * (((1 - freq_prior_expr) ** 2) * (1 - mother_de_novo_prior)),
+        )
+        .when(
+            hemi_y_expr,
+            (father_pp_expr[0] * proband_pp_expr[0])
+            * ((1 - freq_prior_expr) * (1 - father_de_novo_prior)),
+        )
+        .when(
+            diploid_expr,
+            (father_pp_expr[0] * mother_pp_expr[0] * proband_pp_expr[0])
+            * (
+                ((1 - freq_prior_expr) ** 4)
+                * (1 - mother_de_novo_prior)
+                * (1 - father_de_novo_prior)
+            ),
         )
         .or_missing()
     )
 
     # Calculate posterior probability of *de novo* mutation
-    prob_dn_given_data_expr = prob_data_given_dn_expr * de_novo_prior
     p_dn_expr = prob_dn_given_data_expr / (
-        prob_dn_given_data_expr + prob_data_missed_het_expr
+        prob_dn_given_data_expr + prob_alt_given_data_expr + prob_no_alt_given_data_expr
     )
     return p_dn_expr
 
@@ -1522,7 +1485,8 @@ def default_get_de_novo_expr(
     is_xx_expr: hl.expr.BooleanExpression,
     freq_prior_expr: hl.expr.Float64Expression,
     min_pop_prior: float = 100 / 3e7,
-    de_novo_prior: float = 1 / 3e7,
+    mother_de_novo_prior: float = 1 / 1e8,
+    father_de_novo_prior: float = 1 / 2.5e7,
     min_dp_ratio: float = 0.1,
     min_gq: int = 20,
     min_proband_ab: float = 0.2,
@@ -1646,7 +1610,8 @@ def default_get_de_novo_expr(
         hemi_y_expr,
         freq_prior_expr,
         min_pop_prior=min_pop_prior,
-        de_novo_prior=de_novo_prior,
+        mother_de_novo_prior=mother_de_novo_prior,
+        father_de_novo_prior=father_de_novo_prior,
     )
 
     # Calculate DP ratio

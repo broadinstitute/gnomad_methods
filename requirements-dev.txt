@@ -8,7 +8,7 @@ astroid==3.0.1
     # via pylint
 autopep8==2.0.2
     # via -r requirements-dev.in
-black==24.3.0
+black==26.3.1
     # via -r requirements-dev.in
 cfgv==3.4.0
     # via pre-commit
@@ -38,7 +38,7 @@ packaging==23.2
     # via
     #   black
     #   pytest
-pathspec==0.11.2
+pathspec==1.0.4
     # via black
 platformdirs==3.11.0
     # via
@@ -57,6 +57,8 @@ pylint==3.0.2
     # via -r requirements-dev.in
 pytest==7.4.3
     # via -r requirements-dev.in
+pytokens==0.4.1
+    # via black
 pyyaml==6.0.1
     # via pre-commit
 snowballstemmer==2.2.0

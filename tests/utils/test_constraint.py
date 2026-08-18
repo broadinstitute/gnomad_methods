@@ -352,6 +352,30 @@ class TestRankAndAssignBins:
         assert rows[0].bins.rank == 0
         assert rows[9].bins.rank == 9
 
+    def test_missing_values_excluded_from_ranking(self):
+        """Test that rows with a missing value do not affect the bins."""
+        # 10 rows with a defined value and 10 with a missing value.
+        ht = hl.Table.parallelize(
+            [{"id": i, "val": float(i) if i < 10 else None} for i in range(20)],
+            hl.tstruct(id=hl.tint32, val=hl.tfloat64),
+            key="id",
+        )
+        result = ht.annotate(bins=rank_and_assign_bins(ht.val))
+        rows = result.order_by("id").collect()
+
+        defined = [r for r in rows if r.val is not None]
+        missing = [r for r in rows if r.val is None]
+
+        # Rows with a missing value are dropped before ranking, so the join
+        # leaves their whole rank struct missing.
+        assert all(r.bins is None for r in missing)
+
+        # The denominator is the number of defined values (10), not the total
+        # row count (20), so every decile is populated. Counting all 20 rows
+        # would cap the bins at 4 and leave deciles 5-9 empty.
+        assert [r.bins.rank for r in defined] == list(range(10))
+        assert [r.bins.bin_decile for r in defined] == list(range(10))
+
 
 class TestComputeOeUpperPercentileThresholds:
     """Test the compute_percentile_thresholds function."""

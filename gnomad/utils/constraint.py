@@ -2719,6 +2719,11 @@ def rank_and_assign_bins(
     entry in ``bin_granularities``, computed as
     ``hl.int(rank * multiplier / n_rows)``.
 
+    Rows where ``value_expr`` is missing are excluded from the ranking and
+    receive missing rank and bin annotations. ``n_rows`` is therefore the
+    number of rows with a defined ``value_expr``, so bins are evenly sized
+    and the full range of bins is populated.
+
     Used by :func:`rank_array_element_metrics` to rank metrics within array
     elements.
 
@@ -2736,8 +2741,17 @@ def rank_and_assign_bins(
 
     ht = value_expr._indices.source
     source_key = list(ht.key)
-    n_rows = ht.count()
-    ranked_ht = ht.select(_=value_expr).order_by("_").add_index("rank")
+    ranked_ht = ht.select(_=value_expr)
+
+    # Rank only rows with a defined value. `order_by` sorts missing values after
+    # non-missing ones, so retaining them would assign them the highest ranks and
+    # inflate the denominator, shifting every row into a lower bin and leaving the
+    # top bins empty. Rows dropped here get missing rank/bin fields from the join.
+    # Cache before counting so the filter is not recomputed when ranking below.
+    ranked_ht = ranked_ht.filter(hl.is_defined(ranked_ht._)).cache()
+    n_rows = ranked_ht.count()
+
+    ranked_ht = ranked_ht.order_by("_").add_index("rank")
     ranked_ht = ranked_ht.select(
         *source_key,
         **{f"{prefix}rank": ranked_ht.rank},

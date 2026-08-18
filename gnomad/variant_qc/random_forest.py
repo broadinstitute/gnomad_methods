@@ -7,6 +7,7 @@ from pprint import pformat
 from typing import Dict, List, Optional, Tuple
 
 import hail as hl
+import hailtop.fs as hfs
 import pandas as pd
 import pyspark.sql
 from pyspark.ml import Pipeline
@@ -525,7 +526,7 @@ def get_rf_runs(rf_json_fp: str) -> Dict:
     :return: Dictionary containing the content of the JSON file, or an empty dictionary if the file wasn't found.
     """
     if file_exists(rf_json_fp):
-        with hl.hadoop_open(rf_json_fp) as f:
+        with hfs.open(rf_json_fp) as f:
             return json.load(f)
     else:
         logger.warning(

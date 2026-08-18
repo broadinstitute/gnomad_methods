@@ -113,11 +113,11 @@ def test_check_missingness_of_struct(
 
     # Define expected missingness results.
     expected_result = {
-        "s.a": 0.0,
-        "s.b": 0.2,
-        "s.c.d": 0.6,
-        "s.c.e": 0.4,
-        "s.c.f": 0.6,
+        "s.a": 0,
+        "s.b": 1,
+        "s.c.d": 3,
+        "s.c.e": 2,
+        "s.c.f": 3,
     }
 
     # Compare the results with the expected values.

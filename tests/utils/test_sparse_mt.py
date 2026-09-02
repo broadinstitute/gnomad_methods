@@ -511,89 +511,93 @@ class TestComputeAlleleNumberPerRefSiteReduceToMinimalGroups:
         assert full_indexed[(("group", "raw"),)] == leaf_sums
 
 
+def _synthetic_8x4_vds() -> hl.vds.VariantDataset:
+    """Build an 8 samples × 4 sites VDS with `gen_anc`/`sex` column annotations and `adj=True` on every variant entry."""
+    samples = [
+        ("s1", "afr", "XX"),
+        ("s2", "afr", "XY"),
+        ("s3", "afr", "XX"),
+        ("s4", "afr", "XY"),
+        ("s5", "nfe", "XX"),
+        ("s6", "nfe", "XY"),
+        ("s7", "nfe", "XX"),
+        ("s8", "nfe", "XY"),
+    ]
+    positions = [1000, 2000, 3000, 4000]
+    variants = [
+        (hl.locus("chr1", p, reference_genome="GRCh38"), ["A", "T"]) for p in positions
+    ]
+    gt_patterns = [
+        [(0, 0), (0, 1), (1, 1), (0, 1), (0, 0), (0, 1), (1, 1), (0, 1)],
+        [(0, 1), None, (0, 0), (0, 1), (0, 1), (1, 1), None, (0, 1)],
+        [None, (0, 0), (0, 1), (1, 1), (0, 0), (0, 0), (0, 1), (1, 1)],
+        [(1, 1), (0, 1), (0, 1), None, (1, 1), (0, 1), (0, 1), (0, 0)],
+    ]
+
+    sample_table = hl.Table.parallelize(
+        [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
+        hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
+    ).key_by("s")
+
+    vd_entries = []
+    for v_idx, (locus, alleles) in enumerate(variants):
+        for s_idx, (sample_id, _, _) in enumerate(samples):
+            gt = gt_patterns[v_idx][s_idx]
+            vd_entries.append(
+                {
+                    "locus": locus,
+                    "alleles": alleles,
+                    "s": sample_id,
+                    "GT": hl.call(*gt) if gt is not None else hl.missing(hl.tcall),
+                    # `adj=True` for every (variant, sample) so we can build
+                    # group_membership_hts with `group_label="adj"` (the
+                    # default) and exercise non-leaf parent targets like
+                    # `{"group": "adj"}` without needing the AD/DP/GQ
+                    # fields the auto-adj path would otherwise demand.
+                    "adj": True,
+                }
+            )
+    vd = hl.Table.parallelize(
+        vd_entries,
+        hl.tstruct(
+            locus=hl.tlocus("GRCh38"),
+            alleles=hl.tarray(hl.tstr),
+            s=hl.tstr,
+            GT=hl.tcall,
+            adj=hl.tbool,
+        ),
+    ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+    vd = vd.annotate_cols(
+        gen_anc=sample_table[vd.s].gen_anc,
+        sex=sample_table[vd.s].sex,
+    )
+
+    rd_entries = []
+    for locus, _ in variants:
+        for sample_id, _, _ in samples:
+            rd_entries.append(
+                {"locus": locus, "s": sample_id, "END": locus.position, "LEN": 1}
+            )
+    rd = hl.Table.parallelize(
+        rd_entries,
+        hl.tstruct(
+            locus=hl.tlocus("GRCh38"),
+            s=hl.tstr,
+            END=hl.tint32,
+            LEN=hl.tint32,
+        ),
+    ).to_matrix_table(row_key=["locus"], col_key=["s"])
+
+    return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+
 class TestComputeStatsPerRefSiteReducibleAggs:
     """Test `reducible_aggs` mixes summable and non-summable aggregations under leaf reduction."""
 
     @pytest.fixture
     def synthetic_vds(self):
         """8 samples × 4 sites VDS — same shape as the AN reduction test."""
-        samples = [
-            ("s1", "afr", "XX"),
-            ("s2", "afr", "XY"),
-            ("s3", "afr", "XX"),
-            ("s4", "afr", "XY"),
-            ("s5", "nfe", "XX"),
-            ("s6", "nfe", "XY"),
-            ("s7", "nfe", "XX"),
-            ("s8", "nfe", "XY"),
-        ]
-        positions = [1000, 2000, 3000, 4000]
-        variants = [
-            (hl.locus("chr1", p, reference_genome="GRCh38"), ["A", "T"])
-            for p in positions
-        ]
-        gt_patterns = [
-            [(0, 0), (0, 1), (1, 1), (0, 1), (0, 0), (0, 1), (1, 1), (0, 1)],
-            [(0, 1), None, (0, 0), (0, 1), (0, 1), (1, 1), None, (0, 1)],
-            [None, (0, 0), (0, 1), (1, 1), (0, 0), (0, 0), (0, 1), (1, 1)],
-            [(1, 1), (0, 1), (0, 1), None, (1, 1), (0, 1), (0, 1), (0, 0)],
-        ]
-
-        sample_table = hl.Table.parallelize(
-            [{"s": s, "gen_anc": g, "sex": x} for s, g, x in samples],
-            hl.tstruct(s=hl.tstr, gen_anc=hl.tstr, sex=hl.tstr),
-        ).key_by("s")
-
-        vd_entries = []
-        for v_idx, (locus, alleles) in enumerate(variants):
-            for s_idx, (sample_id, _, _) in enumerate(samples):
-                gt = gt_patterns[v_idx][s_idx]
-                vd_entries.append(
-                    {
-                        "locus": locus,
-                        "alleles": alleles,
-                        "s": sample_id,
-                        "GT": hl.call(*gt) if gt is not None else hl.missing(hl.tcall),
-                        # `adj=True` for every (variant, sample) so we can build
-                        # group_membership_hts with `group_label="adj"` (the
-                        # default) and exercise non-leaf parent targets like
-                        # `{"group": "adj"}` without needing the AD/DP/GQ
-                        # fields the auto-adj path would otherwise demand.
-                        "adj": True,
-                    }
-                )
-        vd = hl.Table.parallelize(
-            vd_entries,
-            hl.tstruct(
-                locus=hl.tlocus("GRCh38"),
-                alleles=hl.tarray(hl.tstr),
-                s=hl.tstr,
-                GT=hl.tcall,
-                adj=hl.tbool,
-            ),
-        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
-        vd = vd.annotate_cols(
-            gen_anc=sample_table[vd.s].gen_anc,
-            sex=sample_table[vd.s].sex,
-        )
-
-        rd_entries = []
-        for locus, _ in variants:
-            for sample_id, _, _ in samples:
-                rd_entries.append(
-                    {"locus": locus, "s": sample_id, "END": locus.position, "LEN": 1}
-                )
-        rd = hl.Table.parallelize(
-            rd_entries,
-            hl.tstruct(
-                locus=hl.tlocus("GRCh38"),
-                s=hl.tstr,
-                END=hl.tint32,
-                LEN=hl.tint32,
-            ),
-        ).to_matrix_table(row_key=["locus"], col_key=["s"])
-
-        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+        return _synthetic_8x4_vds()
 
     @pytest.fixture
     def reference_ht(self):
@@ -864,6 +868,169 @@ class TestComputeStatsPerRefSiteReducibleAggs:
         assert all(len(v) == 1 for v in full_max)
         assert all(len(v) == 1 for v in reduced_max)
         assert full_max == reduced_max
+
+
+class TestComputeStatsPerRefSiteReduceToCells:
+    """Test that the cell-based reduction (`reduce_to_cells`) preserves every per-strata value, downsamplings included."""
+
+    @pytest.fixture
+    def synthetic_vds(self):
+        """8 samples × 4 sites VDS with per-sample downsampling ranks (global and per gen_anc)."""
+        vds = _synthetic_8x4_vds()
+        vd = vds.variant_data
+        # Ranks are a fixed permutation so the downsampling groups are neither
+        # nested in nor aligned with the gen_anc/sex groups.
+        ranks = hl.literal(
+            {
+                "s1": (5, 3),
+                "s2": (0, 0),
+                "s3": (7, 2),
+                "s4": (2, 1),
+                "s5": (1, 0),
+                "s6": (6, 3),
+                "s7": (3, 1),
+                "s8": (4, 2),
+            }
+        )
+        vd = vd.annotate_cols(
+            downsampling=hl.struct(
+                global_idx=ranks[vd.s][0], gen_anc_idx=ranks[vd.s][1]
+            )
+        )
+        return hl.vds.VariantDataset(reference_data=vds.reference_data, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the four variant loci."""
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus("chr1", p, reference_genome="GRCh38")}
+                for p in [1000, 2000, 3000, 4000]
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    @staticmethod
+    def _index(ht, ann):
+        meta = hl.eval(ht.strata_meta)
+        rows = ht.collect()
+        return {
+            tuple(sorted(m.items())): [r[ann][i] for r in rows]
+            for i, m in enumerate(meta)
+        }
+
+    def _build_group_membership_ht(self, vd, **kwargs):
+        """Build a group_membership_ht with gen_anc, sex, gen_anc×sex, and global + per-gen_anc downsampling strata (adj label, raw group kept)."""
+        cols_ht = vd.cols()
+        strata_expr = [
+            {"gen_anc": cols_ht.gen_anc},
+            {"sex": cols_ht.sex},
+            {"gen_anc": cols_ht.gen_anc, "sex": cols_ht.sex},
+            {"downsampling": cols_ht.downsampling, "gen_anc": cols_ht.gen_anc},
+        ]
+        return generate_freq_group_membership_array(
+            cols_ht,
+            strata_expr,
+            downsamplings=[2, 4, 6],
+            ds_gen_anc_counts={"afr": 4, "nfe": 4},
+            **kwargs,
+        )
+
+    def test_cells_match_full_and_expose_cell_globals(
+        self, synthetic_vds, reference_ht
+    ):
+        """Cell-reduced AN equals the un-reduced AN for every group, including the downsampling groups leaf reduction has to compute directly; the reduced `freq_meta` holds only cells and the raw group resolves to one cell."""
+        vd = synthetic_vds.variant_data
+        full_gmh = self._build_group_membership_ht(vd)
+        cells_gmh = self._build_group_membership_ht(vd, reduce_to_cells=True)
+
+        full_meta = [dict(m) for m in hl.eval(full_gmh.freq_meta)]
+        cells_meta = [dict(m) for m in hl.eval(cells_gmh.freq_meta)]
+        n_full = len(full_meta)
+        assert [dict(m) for m in hl.eval(cells_gmh.freq_meta_full)] == full_meta
+        assert all(set(m) == {"group", "cell"} for m in cells_meta)
+        assert [m for m in cells_meta if m["group"] == "raw"] == [
+            {"group": "raw", "cell": "0"}
+        ]
+        # Every cell leaf is synthetic and every full group decomposes into cells.
+        leaf_indices = list(hl.eval(cells_gmh.freq_leaf_indices))
+        assert leaf_indices == list(range(n_full, n_full + len(cells_meta)))
+        decomposition = [list(c) for c in hl.eval(cells_gmh.freq_group_decomposition)]
+        assert all(decomposition)
+        # Cells partition the samples within each label, and the cell sample
+        # counts sum to each group's full sample count.
+        cell_counts = list(hl.eval(cells_gmh.freq_meta_sample_count))
+        full_counts = list(hl.eval(cells_gmh.freq_meta_sample_count_full))
+        for i, children in enumerate(decomposition):
+            assert (
+                sum(cell_counts[c - n_full] for c in children) == full_counts[i]
+            ), full_meta[i]
+        assert (
+            sum(c for c, m in zip(cell_counts, cells_meta) if m["group"] == "adj") == 8
+        )
+        membership = cells_gmh.group_membership.collect()
+        # Each sample is in exactly one adj cell and the raw cell.
+        assert all(sum(m) == 2 for m in membership)
+
+        entry_agg_funcs = {
+            "AN": (lambda t: t.GT.ploidy, hl.agg.sum),
+            "max_called": (lambda t: hl.int32(hl.is_defined(t.GT)), hl.agg.max),
+        }
+        raw_target = {"group": "raw"}
+        full_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=full_gmh,
+            entry_agg_group_membership={"max_called": [raw_target]},
+        )
+        cells_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=cells_gmh,
+            reducible_aggs={"AN"},
+            entry_agg_group_membership={"max_called": [raw_target]},
+        )
+
+        assert hl.eval(cells_ht.strata_meta) == hl.eval(full_ht.strata_meta)
+        assert hl.eval(cells_ht.strata_sample_count) == hl.eval(
+            full_ht.strata_sample_count
+        )
+        full_an = self._index(full_ht, "AN")
+        cells_an = self._index(cells_ht, "AN")
+        assert set(full_an) == set(cells_an)
+        assert any("downsampling" in dict(k) for k in full_an)
+        for k in full_an:
+            assert full_an[k] == cells_an[k], k
+
+        full_max = [r.max_called for r in full_ht.collect()]
+        cells_max = [r.max_called for r in cells_ht.collect()]
+        assert all(len(v) == 1 for v in cells_max)
+        assert full_max == cells_max
+
+    def test_force_leaf_groups_kept_as_real_leaves(self, synthetic_vds):
+        """A forced leaf keeps its own `freq_meta` index ahead of the cells and is not decomposed."""
+        vd = synthetic_vds.variant_data
+        gmh = self._build_group_membership_ht(
+            vd, reduce_to_cells=True, force_leaf_groups=[{"group": "raw"}]
+        )
+        full_meta = [dict(m) for m in hl.eval(gmh.freq_meta_full)]
+        raw_idx = full_meta.index({"group": "raw"})
+        leaf_indices = list(hl.eval(gmh.freq_leaf_indices))
+        assert leaf_indices[0] == raw_idx
+        assert dict(hl.eval(gmh.freq_meta)[0]) == {"group": "raw"}
+        decomposition = [list(c) for c in hl.eval(gmh.freq_group_decomposition)]
+        assert decomposition[raw_idx] == []
+        assert all(c for i, c in enumerate(decomposition) if i != raw_idx)
+
+    def test_reduce_modes_are_mutually_exclusive(self, synthetic_vds):
+        """Requesting both leaf and cell reduction raises."""
+        vd = synthetic_vds.variant_data
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            self._build_group_membership_ht(
+                vd, reduce_to_cells=True, reduce_to_minimal_groups=True
+            )
 
 
 class TestComputeStatsPerRefSiteSexKaryotype:

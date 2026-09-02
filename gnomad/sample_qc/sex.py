@@ -17,6 +17,40 @@ logger.setLevel(logging.INFO)
 SEXES = {"XY": "XY", "XX": "XX"}
 
 
+def _sex_ploidy_case_expr(
+    gt_expr: hl.expr.CallExpression,
+    col_flags: hl.expr.StructExpression,
+    row_flags: hl.expr.StructExpression,
+) -> hl.expr.CallExpression:
+    """
+    Build the sex-ploidy genotype adjustment from precomputed sample and locus flags.
+
+    :param gt_expr: Genotype expression.
+    :param col_flags: Struct with per-sample booleans ``xy`` and ``xx``.
+    :param row_flags: Struct with per-locus booleans ``in_autosome``,
+        ``in_non_par``, ``x_nonpar``, ``y_par`` and ``y_nonpar``.
+    :return: Genotype adjusted for sex ploidy.
+    """
+    return (
+        hl.case(missing_false=True)
+        # Added to reduce the checks by entry.
+        .when(row_flags.in_autosome, gt_expr)
+        .when(
+            (row_flags.y_par | row_flags.y_nonpar) & col_flags.xx, hl.missing(hl.tcall)
+        )
+        .when(~row_flags.in_non_par, gt_expr)
+        .when(
+            (row_flags.x_nonpar | row_flags.y_nonpar) & col_flags.xy & gt_expr.is_het(),
+            hl.missing(hl.tcall),
+        )
+        .when(
+            (row_flags.x_nonpar | row_flags.y_nonpar) & col_flags.xy,
+            hl.call(gt_expr[0], phased=False),
+        )
+        .default(gt_expr)
+    )
+
+
 def adjusted_sex_ploidy_expr(
     locus_expr: hl.expr.LocusExpression,
     gt_expr: hl.expr.CallExpression,
@@ -26,6 +60,15 @@ def adjusted_sex_ploidy_expr(
 ) -> hl.expr.CallExpression:
     """
     Create an entry expression to convert XY to haploid on non-PAR X/Y and XX to missing on Y.
+
+    .. note::
+
+        The per-sample and per-locus flags are indexed back from the source
+        MatrixTable's ``cols()`` and ``rows()`` (see
+        `annotate_and_index_source_mt_for_sex_ploidy`). Hail evaluates those
+        self-joins as a second pass over the source MatrixTable's upstream
+        pipeline, so when the source is expensive to compute (e.g. a densified
+        MatrixTable) use `adjust_sex_ploidy`, which annotates the flags in place.
 
     :param locus_expr: Locus expression.
     :param gt_expr: Genotype expression.
@@ -40,22 +83,7 @@ def adjusted_sex_ploidy_expr(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )
 
-    return (
-        hl.case(missing_false=True)
-        # Added to reduce the checks by entry.
-        .when(row_idx.in_autosome, gt_expr)
-        .when((row_idx.y_par | row_idx.y_nonpar) & col_idx.xx, hl.missing(hl.tcall))
-        .when(~row_idx.in_non_par, gt_expr)
-        .when(
-            (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy & gt_expr.is_het(),
-            hl.missing(hl.tcall),
-        )
-        .when(
-            (row_idx.x_nonpar | row_idx.y_nonpar) & col_idx.xy,
-            hl.call(gt_expr[0], phased=False),
-        )
-        .default(gt_expr)
-    )
+    return _sex_ploidy_case_expr(gt_expr, col_idx, row_idx)
 
 
 def adjust_sex_ploidy(
@@ -63,19 +91,46 @@ def adjust_sex_ploidy(
     sex_expr: hl.expr.StringExpression,
     xy_str: str = "XY",
     xx_str: str = "XX",
+    gt_field: str = "GT",
 ) -> hl.MatrixTable:
     """
     Convert XY to haploid on non-PAR X/Y, sets XX to missing on Y.
+
+    The per-sample (``xy``/``xx``) and per-locus (PAR/non-PAR) flags are
+    annotated directly onto `mt`'s columns and rows and dropped again after the
+    genotype adjustment, so `mt`'s upstream pipeline is evaluated once. This is
+    the same adjustment as `adjusted_sex_ploidy_expr` without that function's
+    ``cols()``/``rows()`` self-joins.
 
     :param mt: Input MatrixTable
     :param sex_expr: Expression pointing to sex in MT (if not xy_str or xx_str, no change)
     :param xy_str: String for XY (default 'XY')
     :param xx_str: String for XX (default 'XX')
+    :param gt_field: Name of the genotype entry field to adjust. Default is "GT".
     :return: MatrixTable with fixed ploidy for sex chromosomes
     """
-    return mt.annotate_entries(
-        GT=adjusted_sex_ploidy_expr(mt.locus, mt.GT, sex_expr, xy_str, xx_str)
+    mt = mt.annotate_cols(
+        _sex_ploidy_col=hl.struct(
+            xy=sex_expr.upper() == xy_str, xx=sex_expr.upper() == xx_str
+        )
     )
+    mt = mt.annotate_rows(
+        _sex_ploidy_row=hl.struct(
+            in_non_par=~mt.locus.in_autosome_or_par(),
+            in_autosome=mt.locus.in_autosome(),
+            x_nonpar=mt.locus.in_x_nonpar(),
+            y_par=mt.locus.in_y_par(),
+            y_nonpar=mt.locus.in_y_nonpar(),
+        )
+    )
+    mt = mt.annotate_entries(
+        **{
+            gt_field: _sex_ploidy_case_expr(
+                mt[gt_field], mt._sex_ploidy_col, mt._sex_ploidy_row
+            )
+        }
+    )
+    return mt.drop("_sex_ploidy_col", "_sex_ploidy_row")
 
 
 def gaussian_mixture_model_karyotype_assignment(

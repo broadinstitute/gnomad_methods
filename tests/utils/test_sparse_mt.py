@@ -864,3 +864,86 @@ class TestComputeStatsPerRefSiteReducibleAggs:
         assert all(len(v) == 1 for v in full_max)
         assert all(len(v) == 1 for v in reduced_max)
         assert full_max == reduced_max
+
+
+class TestComputeStatsPerRefSiteSexKaryotype:
+    """Test the `sex_karyotype_field` genotype ploidy adjustment."""
+
+    @pytest.fixture
+    def sex_chrom_vds(self):
+        """
+        Build a VDS of 4 samples (2 XX, 2 XY) at chrX PAR1, chrX non-PAR and chrY non-PAR.
+
+        Every sample carries a called het genotype at every site (the
+        variant_data covers each locus, so the 1-base ref blocks are not
+        needed for densification), giving diploid AN = 2 per sample before
+        the ploidy adjustment.
+        """
+        samples = [("s1", "XX"), ("s2", "XX"), ("s3", "XY"), ("s4", "XY")]
+        loci = [
+            hl.locus("chrX", 20000, reference_genome="GRCh38"),
+            hl.locus("chrX", 5000000, reference_genome="GRCh38"),
+            hl.locus("chrY", 5000000, reference_genome="GRCh38"),
+        ]
+        vd = hl.Table.parallelize(
+            [
+                {"locus": l, "alleles": ["A", "T"], "s": s, "GT": hl.call(0, 1)}
+                for l in loci
+                for s, _ in samples
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        karyotype = hl.literal(dict(samples), hl.tdict(hl.tstr, hl.tstr))
+        vd = vd.annotate_cols(sex_karyotype=karyotype.get(vd.s))
+        rd = hl.Table.parallelize(
+            [
+                {"locus": l, "s": s, "END": l.position, "LEN": 1}
+                for l in loci
+                for s, _ in samples
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"), s=hl.tstr, END=hl.tint32, LEN=hl.tint32
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT covering the three sex-chromosome loci."""
+        return hl.Table.parallelize(
+            [
+                {"locus": hl.locus(c, p, reference_genome="GRCh38")}
+                for c, p in [("chrX", 20000), ("chrX", 5000000), ("chrY", 5000000)]
+            ],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    def test_an_adjusted_for_sex_karyotype(self, sex_chrom_vds, reference_ht):
+        """XY het calls on non-PAR X/Y become missing and XX calls on Y are dropped."""
+        an_agg = (
+            lambda t: t.GT,
+            lambda gt: hl.agg.sum(gt.ploidy),
+        )
+        ht = compute_stats_per_ref_site(
+            sex_chrom_vds,
+            reference_ht,
+            {"AN": an_agg},
+            sex_karyotype_field="sex_karyotype",
+        )
+        an = {(r.locus.contig, r.locus.position): r.AN for r in ht.collect()}
+        # PAR: all 4 samples stay diploid.
+        assert an[("chrX", 20000)] == 8
+        # Non-PAR X: XX diploid (2 x 2); XY hets are set to missing.
+        assert an[("chrX", 5000000)] == 4
+        # Non-PAR Y: XX set to missing; XY hets set to missing.
+        assert an[("chrY", 5000000)] == 0
+
+        unadjusted = compute_stats_per_ref_site(
+            sex_chrom_vds, reference_ht, {"AN": an_agg}
+        )
+        assert all(r.AN == 8 for r in unadjusted.collect())

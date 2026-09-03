@@ -979,15 +979,269 @@ def impute_sex_ploidy(
     )
 
 
+def get_densify_lead_in_intervals(
+    intervals: List[hl.Interval], ref_block_max_length: int
+) -> List[hl.Interval]:
+    """
+    Get the closed "lead-in" interval that precedes each partition interval.
+
+    Used with :func:`get_densify_seed_ht` for a partition-local densify. The
+    lead-in for an interval starting at locus `s` is
+    ``[s - (ref_block_max_length - 1), s]`` (clamped to position 1). Every reference
+    block that starts before `s` and still covers `s` starts inside that lead-in,
+    so reading the sparse data restricted to the lead-ins is enough to find, for
+    each sample, the block that must be carried into the partition.
+
+    Hail rejects overlapping read intervals, so every interval in `intervals` must
+    be at least `ref_block_max_length` bp wide (merge narrower ones with a
+    neighbor first); a `ValueError` is raised otherwise.
+
+    :param intervals: Partition intervals (as passed to `_intervals`/`intervals` on
+        the read), sorted, non-overlapping, each within a single contig.
+    :param ref_block_max_length: Maximum reference block length in the dataset
+        (the `ref_block_max_length` global of a VDS reference MatrixTable).
+    :return: One closed locus interval per input interval, in the same order.
+    """
+    lead_ins = []
+    prev_end = None
+    for i in intervals:
+        start = i.start
+        lead_in_start = max(1, start.position - (ref_block_max_length - 1))
+        if (
+            prev_end is not None
+            and prev_end.contig == start.contig
+            and prev_end.position >= lead_in_start
+        ):
+            raise ValueError(
+                f"Interval starting at {start} is closer than ref_block_max_length "
+                f"({ref_block_max_length} bp) to the previous interval start; lead-in "
+                "intervals would overlap."
+            )
+        lead_ins.append(
+            hl.Interval(
+                hl.Locus(start.contig, lead_in_start, start.reference_genome),
+                start,
+                includes_start=True,
+                includes_end=True,
+            )
+        )
+        prev_end = start
+
+    return lead_ins
+
+
+def get_densify_seed_ht(
+    sparse_mt: hl.MatrixTable,
+    partition_intervals: List[hl.Interval],
+    entry_keep_fields: Union[Tuple[str], List[str], Set[str]] = ("GT",),
+    checkpoint_path: Optional[str] = None,
+) -> hl.Table:
+    """
+    Compute the per-partition seeds for a partition-local densify.
+
+    :func:`densify_all_reference_sites` densifies with a genome-wide scan, which
+    Hail runs as a distributed sort plus a driver-side pass over every partition's
+    scan state. When the sparse data is read with one partition per interval, the
+    only information a partition is missing for a purely local scan is the set of
+    reference blocks that start before its interval and extend into it. This
+    function computes that set: one row per interval start locus, whose `__entries`
+    array holds, for each sample, the last reference block that starts at or before
+    the interval start and ends at or after it (missing when there is none).
+
+    `sparse_mt` must be built exactly like the sparse MatrixTable that will be
+    densified (same samples in the same order, same entry fields, e.g. the same
+    :func:`hl.vds.to_merged_sparse_mt` call), but from data read with exactly one
+    partition per lead-in interval from :func:`get_densify_lead_in_intervals`, in
+    the order of `partition_intervals`. Its entries must carry `END`. Building it
+    the same way matters because a variant call at a block's start locus replaces
+    the block in a merged sparse MatrixTable, and the seeds must see the same
+    entries the densify does.
+
+    The seeds are written to `checkpoint_path` and read back partitioned on
+    `partition_intervals`, so that joining them onto the sparse data read on the
+    same intervals leaves that partitioning unchanged (an outer join of differently
+    partitioned Tables re-partitions on the union of both sets of bounds, which
+    would split a partition away from its seed).
+
+    :param sparse_mt: Sparse MatrixTable read on the lead-in intervals.
+    :param partition_intervals: Intervals the sparse data is partitioned on (as
+        passed to `_intervals`/`intervals` on the read), sorted, non-overlapping.
+    :param entry_keep_fields: Entry fields to keep in the seeds, matching the
+        `entry_keep_fields` of the densify call. `END` is always kept.
+    :param checkpoint_path: Optional path to write the seeds to. Default is a new
+        Hail temporary file.
+    :return: Table keyed by `locus` with one row per interval in
+        `partition_intervals` and an `__entries` array field.
+    """
+    starts = [i.start for i in partition_intervals]
+    n_partitions = sparse_mt.n_partitions()
+    if n_partitions != len(starts):
+        raise ValueError(
+            f"'sparse_mt' has {n_partitions} partitions but {len(starts)} "
+            "partition intervals were given; read it with one partition per lead-in "
+            "interval."
+        )
+
+    entry_keep_fields = set(entry_keep_fields) | {"END"}
+    mt = sparse_mt.select_entries(*entry_keep_fields).select_cols().select_rows()
+    n_samples = mt.count_cols()
+    ht = mt._localize_entries("__entries", "__cols").key_by("locus")
+    entry_type = ht.__entries.dtype.element_type
+    starts_expr = hl.literal(starts, hl.tarray(ht.locus.dtype))
+
+    def _seed_partition(rows: hl.expr.StreamExpression) -> hl.expr.StreamExpression:
+        # One row per lead-in partition: the last block of each sample, then only
+        # those blocks that still cover the partition start. The aggregate is
+        # bound once because Hail requires a single pass over the partition.
+        agg = rows.aggregate(
+            lambda r: hl.struct(
+                last_locus=hl.agg._prev_nonnull(r.locus),
+                entries=hl.agg._densify(
+                    n_samples,
+                    r.__entries.map(lambda e: hl.or_missing(hl.is_defined(e.END), e)),
+                ),
+            )
+        )
+
+        def _seed(agg):
+            start = hl.find(
+                lambda s: (s.contig == agg.last_locus.contig)
+                & (s.position >= agg.last_locus.position),
+                starts_expr,
+            )
+            seed = hl.struct(
+                locus=start,
+                __entries=agg.entries.map(
+                    lambda e: hl.or_missing(e.END >= start.position, e)
+                ),
+            )
+            return hl.if_else(
+                hl.is_defined(agg.last_locus),
+                hl.array([seed]),
+                hl.empty_array(seed.dtype),
+            )
+
+        return hl.bind(_seed, agg)._to_stream()
+
+    seed_ht = ht._map_partitions(_seed_partition)
+
+    # Emit a seed for every partition start, all-missing where the lead-in has no
+    # reference blocks, so the densify can rely on one seed row per partition.
+    starts_ht = hl.Table.parallelize(
+        [hl.Struct(locus=s) for s in starts],
+        hl.tstruct(locus=ht.locus.dtype),
+        key="locus",
+    )
+    seed_ht = starts_ht.annotate(
+        __entries=hl.or_else(
+            seed_ht[starts_ht.locus].__entries,
+            hl.range(n_samples).map(lambda x: hl.missing(entry_type)),
+        )
+    )
+
+    if checkpoint_path is None:
+        checkpoint_path = hl.utils.new_temp_file("densify_seeds", "ht")
+    seed_ht.write(checkpoint_path, overwrite=True)
+
+    return hl.read_table(checkpoint_path, _intervals=partition_intervals)
+
+
+def _densify_partition_local(
+    ht: hl.Table, n_samples: int, entry_type: hl.tstruct
+) -> hl.Table:
+    """
+    Densify localized entries with a per-partition scan seeded at partition starts.
+
+    `ht` is keyed by `locus` and has `__entries` (the sparse entries, missing
+    filled) and `__seed` (the :func:`get_densify_seed_ht` entries, defined only on
+    seed rows). Every partition must begin with a seed row; the scan raises an
+    error otherwise, since the fill would silently be wrong.
+
+    At a seed row the scan state is reset: each sample carries forward its block
+    starting at that locus if there is one, otherwise the seed block, otherwise a
+    sentinel that can never fill (END = -1). Between seed rows the fill follows
+    :func:`hl.experimental.densify`: an entry that is missing takes the sample's
+    previous reference block when that block's END reaches the current position.
+
+    :param ht: Localized-entries Table as described above.
+    :param n_samples: Number of samples (length of `__entries`).
+    :param entry_type: Element type of `__entries`.
+    :return: Table with `__entries` densified and `__seed` dropped.
+    """
+    sentinel = (
+        hl.struct(**{f: hl.missing(t) for f, t in entry_type.items()})
+        .annotate(END=hl.int32(-1))
+        .select(*entry_type)
+    )
+
+    def _scan_input(r):
+        return hl.if_else(
+            hl.is_defined(r.__seed),
+            hl._zip_func(
+                r.__entries,
+                r.__seed,
+                f=lambda e, s: hl.if_else(
+                    hl.is_defined(e.END), e, hl.coalesce(s, sentinel)
+                ),
+            ),
+            r.__entries.map(lambda e: hl.or_missing(hl.is_defined(e.END), e)),
+        )
+
+    def _densify_row(r):
+        prev = hl.scan._densify(n_samples, _scan_input(r))
+        entries = hl.if_else(
+            hl.is_defined(r.__seed),
+            hl._zip_func(r.__entries, r.__seed, f=lambda e, s: hl.coalesce(e, s)),
+            r.__entries,
+        )
+        dense = hl.rbind(
+            r.locus.position,
+            lambda pos: hl._zip_func(
+                prev,
+                entries,
+                f=lambda p, e: hl.if_else(
+                    hl.is_missing(e) & hl.is_defined(p) & (p.END >= pos), p, e
+                ),
+            ),
+        )
+        return (
+            hl.case()
+            .when((hl.scan.count() > 0) | hl.is_defined(r.__seed), dense)
+            .or_error(
+                "Partition-local densify: partition does not start with a seed row "
+                "at " + hl.str(r.locus) + "; the data must be partitioned on the "
+                "seed intervals."
+            )
+        )
+
+    return ht._map_partitions(
+        lambda rows: rows._aggregate_scan(
+            lambda r: r.annotate(__entries=_densify_row(r)).drop("__seed")
+        )
+    )
+
+
 def densify_all_reference_sites(
     mtds: Union[hl.MatrixTable, hl.vds.VariantDataset],
     reference_ht: hl.Table,
     interval_ht: Optional[hl.Table] = None,
     row_key_fields: Union[Tuple[str], List[str], Set[str]] = ("locus",),
     entry_keep_fields: Union[Tuple[str], List[str], Set[str]] = ("GT",),
+    densify_seed_ht: Optional[hl.Table] = None,
 ) -> hl.MatrixTable:
     """
     Densify a VariantDataset or Sparse MatrixTable at all sites in a reference Table.
+
+    .. rubric:: Partition-local densify
+
+    By default the densify is a genome-wide scan over the sparse rows, which Hail
+    runs as a distributed sort followed by a driver-side pass over every
+    partition's scan state. When `densify_seed_ht` is supplied (see
+    :func:`get_densify_seed_ht`), `mtds` must be a sparse MatrixTable keyed by
+    `locus` first and read with one partition per seed interval; the densify then
+    runs as an independent scan within each partition, started from that
+    partition's seed, with no sort and no driver-side state. `row_key_fields` must
+    be ``("locus",)`` in that case.
 
     :param mtds: Input sparse MatrixTable or VariantDataset.
     :param reference_ht: Table of reference sites.
@@ -995,9 +1249,24 @@ def densify_all_reference_sites(
     :param row_key_fields: Fields to use as row key. Defaults to locus.
     :param entry_keep_fields: Fields to keep in entries before performing the
         densification. Defaults to GT.
+    :param densify_seed_ht: Optional seed Table from :func:`get_densify_seed_ht`
+        that switches to the partition-local densify described above. Default is
+        None.
     :return: Densified MatrixTable.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
+
+    if densify_seed_ht is not None:
+        if is_vds:
+            raise NotImplementedError(
+                "A partition-local densify ('densify_seed_ht') is only supported for "
+                "a sparse MatrixTable."
+            )
+        if tuple(row_key_fields) != ("locus",):
+            raise ValueError(
+                "A partition-local densify ('densify_seed_ht') requires "
+                "row_key_fields=('locus',)."
+            )
 
     if interval_ht is not None and not is_vds:
         raise NotImplementedError(
@@ -1031,23 +1300,45 @@ def densify_all_reference_sites(
     ht = ht._localize_entries("__entries", "__cols")
     ht = ht.key_by(*row_key_fields)
     ht = ht.join(reference_ht.key_by(*row_key_fields).select(_in_ref=True), how="outer")
-    ht = ht.key_by(*mt_row_key_fields)
+    entry_type = ht.__entries.dtype.element_type
+
+    if densify_seed_ht is not None:
+        # Keep the locus key: re-keying by the full row key is what forces the
+        # distributed sort, and the partition-local scan below does not need it.
+        seed_entry_fields = list(densify_seed_ht.__entries.dtype.element_type)
+        missing_fields = [f for f in entry_type if f not in seed_entry_fields]
+        if missing_fields:
+            raise ValueError(
+                "'densify_seed_ht' entries are missing the entry fields "
+                f"{missing_fields} kept for the densify."
+            )
+        ht = ht.join(
+            densify_seed_ht.select(
+                __seed=densify_seed_ht.__entries.map(lambda e: e.select(*entry_type))
+            ),
+            how="outer",
+        )
+    else:
+        ht = ht.key_by(*mt_row_key_fields)
 
     # Fill in missing entries with missing values for each entry field.
     ht = ht.annotate(
         __entries=hl.or_else(
             ht.__entries,
-            hl.range(n_samples).map(
-                lambda x: hl.missing(ht.__entries.dtype.element_type)
-            ),
+            hl.range(n_samples).map(lambda x: hl.missing(entry_type)),
         )
     )
+
+    if densify_seed_ht is not None:
+        ht = _densify_partition_local(ht, n_samples, entry_type)
 
     # Unlocalize entries to turn the HT back to a MT.
     mt = ht._unlocalize_entries("__entries", "__cols", mt_col_key_fields)
 
     # Densify VDS/sparse MT at all sites.
-    if is_vds:
+    if densify_seed_ht is not None:
+        mt = mt.drop("END")
+    elif is_vds:
         mt = hl.vds.to_dense_mt(
             hl.vds.VariantDataset(mtds.reference_data.select_cols().select_rows(), mt)
         )
@@ -1082,6 +1373,7 @@ def compute_stats_per_ref_site(
     reduce_to_minimal_groups: bool = False,
     non_summable_strata: Optional[Set[str]] = None,
     reducible_aggs: Optional[Set[str]] = None,
+    densify_seed_ht: Optional[hl.Table] = None,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
@@ -1167,6 +1459,11 @@ def compute_stats_per_ref_site(
         reduction is in effect. Defaults to all of `entry_agg_funcs`.
         Must be disjoint from the keys of `entry_agg_group_membership`.
         Ignored when no leaf reduction is in effect.
+    :param densify_seed_ht: Optional seed Table from :func:`get_densify_seed_ht`
+        to run the densify partition-locally; see
+        :func:`densify_all_reference_sites`. Requires a sparse MatrixTable `mtds`
+        read with one partition per seed interval and
+        `row_key_fields=("locus",)`. Default is None.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1356,6 +1653,7 @@ def compute_stats_per_ref_site(
         interval_ht,
         row_key_fields,
         entry_keep_fields=entry_keep_fields,
+        densify_seed_ht=densify_seed_ht,
     )
 
     if sex_karyotype_ht is not None:

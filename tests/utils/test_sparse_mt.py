@@ -9,7 +9,10 @@ from gnomad.utils.annotations import generate_freq_group_membership_array
 from gnomad.utils.sparse_mt import (
     compute_allele_number_per_ref_site,
     compute_stats_per_ref_site,
+    densify_all_reference_sites,
     get_coverage_agg_func,
+    get_densify_lead_in_intervals,
+    get_densify_seed_ht,
 )
 
 # Set up logger for tests.
@@ -1114,3 +1117,252 @@ class TestComputeStatsPerRefSiteSexKaryotype:
             sex_chrom_vds, reference_ht, {"AN": an_agg}
         )
         assert all(r.AN == 8 for r in unadjusted.collect())
+
+
+class TestPartitionLocalDensify:
+    """Test the seeded partition-local path of `densify_all_reference_sites`."""
+
+    RG = "GRCh38"
+    N_SAMPLES = 4
+    REF_BLOCK_MAX_LENGTH = 20
+    REGION_END = 600
+
+    @pytest.fixture(scope="class")
+    def synthetic_paths(self, tmp_path_factory):
+        """
+        Write a small VDS with variable-length reference blocks and a sites HT.
+
+        Blocks are up to `REF_BLOCK_MAX_LENGTH` bp long with random gaps, so
+        many straddle the partition boundaries used below; variant calls are
+        placed at random loci, including at block starts, where a merged sparse
+        MatrixTable keeps the call and drops the block.
+        """
+        import random
+
+        rnd = random.Random(7)
+        n, region_end, max_len = (
+            self.N_SAMPLES,
+            self.REGION_END,
+            self.REF_BLOCK_MAX_LENGTH,
+        )
+        blocks = {}
+        for j in range(n):
+            pos = rnd.randint(1, 10)
+            while pos <= region_end:
+                end = pos + rnd.choice([0, 1, rnd.randint(0, max_len - 1), max_len - 1])
+                blocks.setdefault(pos, {})[j] = (end, rnd.choice([10, 20, 30]))
+                pos = end + 1 + (rnd.randint(1, 15) if rnd.random() < 0.2 else 0)
+        var_loci = sorted(rnd.sample(range(1, region_end + 1), 25))
+        variants = {
+            pos: {j: rnd.choice([5, 25]) for j in range(n) if rnd.random() < 0.5}
+            for pos in var_loci
+        }
+
+        def _locus(pos):
+            return hl.Locus("chr1", pos, self.RG)
+
+        rd = hl.Table.parallelize(
+            [
+                hl.Struct(
+                    locus=_locus(pos), s=f"s{j}", END=end, LEN=end - pos + 1, GQ=gq
+                )
+                for pos, per_sample in blocks.items()
+                for j, (end, gq) in per_sample.items()
+            ],
+            hl.tstruct(
+                locus=hl.tlocus(self.RG),
+                s=hl.tstr,
+                END=hl.tint32,
+                LEN=hl.tint32,
+                GQ=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        rd = rd.annotate_globals(ref_block_max_length=max_len)
+        vd = hl.Table.parallelize(
+            [
+                hl.Struct(
+                    locus=_locus(pos),
+                    alleles=["A", "T"],
+                    s=f"s{j}",
+                    GT=hl.Call([0, 1]),
+                    GQ=gq,
+                    adj=True,
+                )
+                for pos, per_sample in variants.items()
+                for j, gq in per_sample.items()
+            ],
+            hl.tstruct(
+                locus=hl.tlocus(self.RG),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                GQ=hl.tint32,
+                adj=hl.tbool,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        tmp = tmp_path_factory.mktemp("pld")
+        vds_path = str(tmp / "synthetic.vds")
+        hl.vds.VariantDataset(rd, vd).write(vds_path)
+        sites_path = str(tmp / "sites.ht")
+        hl.Table.parallelize(
+            [
+                hl.Struct(locus=_locus(p))
+                for p in sorted(rnd.sample(range(1, region_end + 1), 400))
+            ],
+            hl.tstruct(locus=hl.tlocus(self.RG)),
+            key="locus",
+        ).write(sites_path)
+        return vds_path, sites_path, str(tmp)
+
+    @pytest.fixture(scope="class")
+    def sub_intervals(self):
+        """Uneven partition intervals covering the region, all wider than a block."""
+        bounds = [1, 45, 200, 220, 333, 480, self.REGION_END + 1]
+        return [
+            hl.Interval(
+                hl.Locus("chr1", a, self.RG), hl.Locus("chr1", b, self.RG), True, False
+            )
+            for a, b in zip(bounds[:-1], bounds[1:])
+        ]
+
+    @staticmethod
+    def _merged(vds):
+        rd = vds.reference_data.annotate_entries(adj=True)
+        mt = hl.vds.to_merged_sparse_mt(
+            hl.vds.VariantDataset(rd, vds.variant_data),
+            ref_allele_function=lambda locus: hl.missing("str"),
+        )
+        return mt.select_entries("GT", "GQ", "adj", "END")
+
+    @staticmethod
+    def _entries_by_locus(mt):
+        ht = mt.annotate_rows(
+            e=hl.agg.collect(hl.struct(GT=mt.GT, GQ=mt.GQ, adj=mt.adj))
+        ).rows()
+        return {r.locus.position: r.e for r in ht.collect()}
+
+    def _seeds(
+        self, vds_path, sub_intervals, tmp, entry_keep_fields=("GT", "GQ", "adj")
+    ):
+        lead_ins = get_densify_lead_in_intervals(
+            sub_intervals, self.REF_BLOCK_MAX_LENGTH
+        )
+        lead_in_mt = self._merged(hl.vds.read_vds(vds_path, intervals=lead_ins))
+        return get_densify_seed_ht(
+            lead_in_mt,
+            sub_intervals,
+            entry_keep_fields=entry_keep_fields,
+            checkpoint_path=f"{tmp}/seeds_{len(sub_intervals)}.ht",
+        )
+
+    def test_lead_in_intervals(self, sub_intervals):
+        """Lead-ins are closed, end at each start, span max block length, clamp at 1."""
+        lead_ins = get_densify_lead_in_intervals(
+            sub_intervals, self.REF_BLOCK_MAX_LENGTH
+        )
+        assert [(i.start.position, i.end.position) for i in lead_ins] == [
+            (1, 1),
+            (26, 45),
+            (181, 200),
+            (201, 220),
+            (314, 333),
+            (461, 480),
+        ]
+        assert all(i.includes_start and i.includes_end for i in lead_ins)
+        with pytest.raises(ValueError, match="closer than ref_block_max_length"):
+            get_densify_lead_in_intervals(sub_intervals, 21)
+
+    def test_seeded_matches_global_densify(self, synthetic_paths, sub_intervals):
+        """Interval read + seeds is field-exact vs a full read + global densify."""
+        vds_path, sites_path, tmp = synthetic_paths
+        expected = densify_all_reference_sites(
+            self._merged(hl.vds.read_vds(vds_path)),
+            hl.read_table(sites_path),
+            entry_keep_fields=["GT", "GQ", "adj"],
+        )
+        seed_ht = self._seeds(vds_path, sub_intervals, tmp)
+        assert seed_ht.count() == len(sub_intervals)
+        actual = densify_all_reference_sites(
+            self._merged(hl.vds.read_vds(vds_path, intervals=sub_intervals)),
+            hl.read_table(sites_path, _intervals=sub_intervals),
+            entry_keep_fields=["GT", "GQ", "adj"],
+            densify_seed_ht=seed_ht,
+        )
+        assert "END" not in actual.entry
+        exp, act = self._entries_by_locus(expected), self._entries_by_locus(actual)
+        assert len(exp) == 400
+        assert act == exp
+        # The fixture must actually exercise blocks that straddle a boundary:
+        # with the seeds blanked, the partition-local scan densifies differently.
+        blank_seed_ht = seed_ht.annotate(
+            **{"__entries": seed_ht["__entries"].map(lambda e: hl.missing(e.dtype))}
+        )
+        unseeded = densify_all_reference_sites(
+            self._merged(hl.vds.read_vds(vds_path, intervals=sub_intervals)),
+            hl.read_table(sites_path, _intervals=sub_intervals),
+            entry_keep_fields=["GT", "GQ", "adj"],
+            densify_seed_ht=blank_seed_ht,
+        )
+        assert self._entries_by_locus(unseeded) != exp
+
+    def test_stats_per_ref_site_with_seeds(self, synthetic_paths, sub_intervals):
+        """`compute_stats_per_ref_site` gives the same AN through the seeded path."""
+        vds_path, sites_path, tmp = synthetic_paths
+        an_agg = {"AN": (lambda t: t.GT, lambda gt: hl.agg.sum(gt.ploidy))}
+        expected = compute_stats_per_ref_site(
+            self._merged(hl.vds.read_vds(vds_path)), hl.read_table(sites_path), an_agg
+        )
+        actual = compute_stats_per_ref_site(
+            self._merged(hl.vds.read_vds(vds_path, intervals=sub_intervals)),
+            hl.read_table(sites_path, _intervals=sub_intervals),
+            an_agg,
+            densify_seed_ht=self._seeds(
+                vds_path, sub_intervals, tmp, entry_keep_fields=("GT",)
+            ),
+        )
+        exp = {r.locus.position: r.AN for r in expected.collect()}
+        act = {r.locus.position: r.AN for r in actual.collect()}
+        assert act == exp
+        assert any(v > 0 for v in exp.values())
+
+    def test_partition_without_seed_raises(self, synthetic_paths, sub_intervals):
+        """A partition whose first row is not a seed row fails loudly."""
+        vds_path, sites_path, tmp = synthetic_paths
+        seed_ht = self._seeds(vds_path, sub_intervals[::2], tmp)
+        mt = densify_all_reference_sites(
+            self._merged(hl.vds.read_vds(vds_path, intervals=sub_intervals)),
+            hl.read_table(sites_path, _intervals=sub_intervals),
+            entry_keep_fields=["GT", "GQ", "adj"],
+            densify_seed_ht=seed_ht,
+        )
+        with pytest.raises(Exception, match="does not start with a seed row"):
+            mt.rows()._force_count()
+
+    def test_seed_input_validation(self, synthetic_paths, sub_intervals):
+        """Partition-count and argument mismatches are rejected before any work."""
+        vds_path, sites_path, tmp = synthetic_paths
+        lead_ins = get_densify_lead_in_intervals(
+            sub_intervals, self.REF_BLOCK_MAX_LENGTH
+        )
+        lead_in_mt = self._merged(hl.vds.read_vds(vds_path, intervals=lead_ins))
+        with pytest.raises(ValueError, match="partition intervals were given"):
+            get_densify_seed_ht(lead_in_mt, sub_intervals[:-1])
+        seed_ht = self._seeds(vds_path, sub_intervals, tmp, entry_keep_fields=("GT",))
+        sites = hl.read_table(sites_path, _intervals=sub_intervals)
+        vds = hl.vds.read_vds(vds_path, intervals=sub_intervals)
+        with pytest.raises(NotImplementedError, match="only supported for a sparse"):
+            densify_all_reference_sites(vds, sites, densify_seed_ht=seed_ht)
+        with pytest.raises(ValueError, match="requires row_key_fields"):
+            densify_all_reference_sites(
+                self._merged(vds),
+                sites,
+                row_key_fields=("locus", "alleles"),
+                densify_seed_ht=seed_ht,
+            )
+        with pytest.raises(ValueError, match="missing the entry fields"):
+            densify_all_reference_sites(
+                self._merged(vds),
+                sites,
+                entry_keep_fields=["GT", "GQ"],
+                densify_seed_ht=seed_ht,
+            )

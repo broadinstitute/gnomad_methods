@@ -1132,6 +1132,18 @@ def get_densify_seed_ht(
         hl.tstruct(locus=ht.locus.dtype),
         key="locus",
     )
+    # Re-read the starts as one single-locus partition each, so the join below
+    # runs one task per lead-in partition. `parallelize` gives a handful of
+    # partitions, and each of those would read every lead-in partition in its
+    # key range serially.
+    starts_path = hl.utils.new_temp_file("densify_seed_starts", "ht")
+    starts_ht.write(starts_path, overwrite=True)
+    starts_ht = hl.read_table(
+        starts_path,
+        _intervals=[
+            hl.Interval(s, s, includes_start=True, includes_end=True) for s in starts
+        ],
+    )
     seed_ht = starts_ht.annotate(
         __entries=hl.or_else(
             seed_ht[starts_ht.locus].__entries,

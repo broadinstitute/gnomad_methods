@@ -1024,6 +1024,49 @@ class TestComputeStatsPerRefSiteReduceToCells:
         assert decomposition[raw_idx] == []
         assert all(c for i, c in enumerate(decomposition) if i != raw_idx)
 
+    def test_zero_sample_group_kept_as_real_leaf(self, synthetic_vds, reference_ht):
+        """A gen_anc×sex group with no samples is kept as a real leaf (no cell covers it) and still expands to AN 0."""
+        vds = synthetic_vds
+        # Make every afr sample XX so the afr×XY group has zero samples.
+        vd = vds.variant_data
+        vd = vd.annotate_cols(sex=hl.if_else(vd.gen_anc == "afr", "XX", vd.sex))
+        vds = hl.vds.VariantDataset(vds.reference_data, vd)
+        full_gmh = self._build_group_membership_ht(vd)
+        cells_gmh = self._build_group_membership_ht(vd, reduce_to_cells=True)
+
+        full_meta = [dict(m) for m in hl.eval(cells_gmh.freq_meta_full)]
+        zero_idx = full_meta.index({"group": "adj", "gen_anc": "afr", "sex": "XY"})
+        assert list(hl.eval(cells_gmh.freq_meta_sample_count_full))[zero_idx] == 0
+        leaf_indices = list(hl.eval(cells_gmh.freq_leaf_indices))
+        assert zero_idx in leaf_indices
+        leaf_pos = leaf_indices.index(zero_idx)
+        assert dict(hl.eval(cells_gmh.freq_meta)[leaf_pos]) == full_meta[zero_idx]
+        assert list(hl.eval(cells_gmh.freq_meta_sample_count))[leaf_pos] == 0
+        decomposition = [list(c) for c in hl.eval(cells_gmh.freq_group_decomposition)]
+        assert decomposition[zero_idx] == []
+        assert all(c for i, c in enumerate(decomposition) if i != zero_idx)
+        assert not any(m[leaf_pos] for m in cells_gmh.group_membership.collect())
+
+        entry_agg_funcs = {"AN": (lambda t: t.GT.ploidy, hl.agg.sum)}
+        full_ht = compute_stats_per_ref_site(
+            vds, reference_ht, entry_agg_funcs, group_membership_ht=full_gmh
+        )
+        cells_ht = compute_stats_per_ref_site(
+            vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=cells_gmh,
+            reducible_aggs={"AN"},
+        )
+        assert hl.eval(cells_ht.strata_meta) == hl.eval(full_ht.strata_meta)
+        full_an = self._index(full_ht, "AN")
+        cells_an = self._index(cells_ht, "AN")
+        assert set(full_an) == set(cells_an)
+        for k in full_an:
+            assert full_an[k] == cells_an[k], k
+        zero_key = tuple(sorted(full_meta[zero_idx].items()))
+        assert cells_an[zero_key] == [0, 0, 0, 0]
+
     def test_reduce_modes_are_mutually_exclusive(self, synthetic_vds):
         """Requesting both leaf and cell reduction raises."""
         vd = synthetic_vds.variant_data

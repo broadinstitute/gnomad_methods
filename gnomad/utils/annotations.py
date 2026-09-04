@@ -2413,7 +2413,9 @@ def find_strata_cells(
     `expand_strata_array_from_leaves` and `agg_by_strata`, with their metadata
     (`{"group": <label>, "cell": "<k>"}`) carried only in the reduced
     `freq_meta`. Groups listed in `force_leaf_groups` are kept as real leaves
-    (their own `freq_meta` index) ahead of the cells.
+    (their own `freq_meta` index) ahead of the cells. A group with no samples
+    has no cell to be built from, so it is also kept as a real leaf (after its
+    label's cells) rather than left without a decomposition.
 
     Samples that belong to no group of a label (an all-False pattern) do not
     form a cell; no group needs them.
@@ -2479,6 +2481,7 @@ def find_strata_cells(
             leaf_indices.append(cell_leaf[p])
             leaf_meta.append({"group": label, "cell": str(k)})
             leaf_sample_count.append(counts_by_label[label][p])
+        zero_sample = []
         for pos, i in enumerate(idxs):
             if i in forced:
                 continue
@@ -2489,6 +2492,9 @@ def find_strata_cells(
                     f"Cells of group {freq_meta[i]} sum to {n_children} samples,"
                     f" expected {freq_meta_sample_count[i]}."
                 )
+            if not children:
+                zero_sample.append(i)
+                continue
             decomposition[i] = children
         if cells:
             cell_of_sample = hl.literal({p: k for k, p in enumerate(cells)}).get(
@@ -2498,6 +2504,14 @@ def find_strata_cells(
                 hl.coalesce(cell_of_sample == k, False) for k in range(len(cells))
             )
         next_leaf += len(cells)
+        # No cell covers a group with no samples, so it would otherwise be
+        # neither a leaf nor decomposable. Keep it as a real leaf with its own
+        # (all-False) membership; aggregating it directly costs nothing.
+        for i in zero_sample:
+            leaf_indices.append(i)
+            leaf_meta.append(dict(freq_meta[i]))
+            leaf_sample_count.append(0)
+            membership_exprs.append(ht.group_membership[i])
 
     logger.info(
         "Reducing freq_meta from %d groups to %d cells (%s) plus %d forced leaves.",
@@ -2706,10 +2720,11 @@ def generate_freq_group_membership_array(
         across their values when `reduce_to_minimal_groups` is True.
         Default is None, which resolves to `{"downsampling"}`.
     :param force_leaf_groups: Optional list of `freq_meta` dicts to keep
-        as leaves under `reduce_to_minimal_groups` (see
-        `find_minimal_strata_groups`). Use this for groups that downstream
-        code accesses directly, so they remain explicitly computed instead
-        of being reconstructed per row from child groups.
+        as leaves under either reduction mode (see
+        `find_minimal_strata_groups` and `find_strata_cells`). Use this for
+        groups that downstream code accesses directly, so they remain
+        explicitly computed instead of being reconstructed per row from
+        child groups or cells.
     :param group_label: Value to use for the `"group"` key on every
         constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
         for callers that don't apply any genotype-level filtering (e.g.,
@@ -2721,7 +2736,7 @@ def generate_freq_group_membership_array(
         reconstructed by summing its cells, so each sample is aggregated once
         per label. The same reduction-tracking globals are written. Mutually
         exclusive with `reduce_to_minimal_groups`; `non_summable_strata` is
-        unused. Default is False.
+        unused, but `force_leaf_groups` is still applied. Default is False.
     :return: Table with the 'group_membership' array annotation.
     """
     if reduce_to_minimal_groups and reduce_to_cells:

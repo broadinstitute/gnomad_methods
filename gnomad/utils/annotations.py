@@ -2469,7 +2469,13 @@ def find_strata_cells(
     leaf_meta = [dict(freq_meta[i]) for i in forced]
     leaf_sample_count = [freq_meta_sample_count[i] for i in forced]
     decomposition: Dict[int, List[int]] = {}
-    membership_exprs = [ht.group_membership[i] for i in forced]
+    # Leaf-only membership is assembled from array-valued parts, in leaf order:
+    # forced leaves, then per label its cells followed by its zero-sample
+    # leaves. Each label's cell flags come from a single bound lookup so the IR
+    # stays linear in the number of cells (see below).
+    membership_parts: List[hl.expr.ArrayExpression] = []
+    if forced:
+        membership_parts.append(hl.array([ht.group_membership[i] for i in forced]))
 
     next_leaf = n_full
     for label in labels:
@@ -2497,11 +2503,21 @@ def find_strata_cells(
                 continue
             decomposition[i] = children
         if cells:
+            # Look the sample's cell up once and derive every cell flag from
+            # that bound value. Reusing the lookup expression in one comparison
+            # per cell would re-embed the literal dict and the pattern
+            # expression in each, making the IR quadratic in the cell count.
+            n_cells = len(cells)
             cell_of_sample = hl.literal({p: k for k, p in enumerate(cells)}).get(
                 _pattern_expr(label)
             )
-            membership_exprs.extend(
-                hl.coalesce(cell_of_sample == k, False) for k in range(len(cells))
+            membership_parts.append(
+                hl.bind(
+                    lambda c: hl.range(n_cells).map(
+                        lambda k: hl.coalesce(c == k, False)
+                    ),
+                    cell_of_sample,
+                )
             )
         next_leaf += len(cells)
         # No cell covers a group with no samples, so it would otherwise be
@@ -2511,7 +2527,10 @@ def find_strata_cells(
             leaf_indices.append(i)
             leaf_meta.append(dict(freq_meta[i]))
             leaf_sample_count.append(0)
-            membership_exprs.append(ht.group_membership[i])
+        if zero_sample:
+            membership_parts.append(
+                hl.array([ht.group_membership[i] for i in zero_sample])
+            )
 
     logger.info(
         "Reducing freq_meta from %d groups to %d cells (%s) plus %d forced leaves.",
@@ -2526,7 +2545,11 @@ def find_strata_cells(
         decomposition,
         leaf_meta,
         leaf_sample_count,
-        hl.array(membership_exprs),
+        (
+            hl.flatten(hl.array(membership_parts))
+            if membership_parts
+            else hl.empty_array(hl.tbool)
+        ),
     )
 
 

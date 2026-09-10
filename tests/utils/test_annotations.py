@@ -17,6 +17,7 @@ from gnomad.utils.annotations import (
     expand_strata_array_from_leaves,
     fill_missing_key_combinations,
     find_minimal_strata_groups,
+    find_strata_cells,
     generate_freq_group_membership_array,
     get_copy_state_by_sex,
     merge_array_expressions,
@@ -2750,6 +2751,71 @@ class TestFindMinimalStrataGroups:
         """Length-mismatched sample_count is a programmer error."""
         with pytest.raises(ValueError, match="aligned"):
             find_minimal_strata_groups([{"group": "adj"}], [1, 2])
+
+
+class TestFindStrataCells:
+    """Test the find_strata_cells function."""
+
+    @staticmethod
+    def _membership_ht(n_samples: int, n_downsamplings: int = 3) -> hl.Table:
+        """Return a Table with a full ``group_membership`` array for `n_samples` samples spread over gen_anc, sex, and `n_downsamplings` downsampling thresholds on a per-sample rank."""
+        ht = hl.utils.range_table(n_samples)
+        ht = ht.annotate(
+            gen_anc=hl.array(["afr", "nfe", "eas"])[ht.idx % 3],
+            sex=hl.array(["XX", "XY"])[ht.idx % 2],
+            rank=(ht.idx * 7) % n_samples,
+        )
+        ds = [n_samples * (d + 1) // n_downsamplings for d in range(n_downsamplings)]
+        freq_meta = [{"group": "adj"}, {"group": "raw"}]
+        exprs = [hl.literal(True), hl.literal(True)]
+        for ga in ["afr", "nfe", "eas"]:
+            for sx in ["XX", "XY"]:
+                freq_meta.append({"group": "adj", "gen_anc": ga, "sex": sx})
+                exprs.append((ht.gen_anc == ga) & (ht.sex == sx))
+        for d in ds:
+            freq_meta.append({"group": "adj", "downsampling": str(d)})
+            exprs.append(ht.rank < d)
+        ht = ht.annotate(group_membership=hl.array(exprs))
+        counts = ht.aggregate(
+            hl.agg.array_agg(lambda x: hl.agg.count_where(x), ht.group_membership)
+        )
+        return ht.annotate_globals(freq_meta=freq_meta, freq_meta_sample_count=counts)
+
+    def test_cells_partition_samples_and_rebuild_groups(self) -> None:
+        """Every sample lands in exactly one cell per label and each group's cells sum to its sample count."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        leaves, decomp, leaf_meta, leaf_counts, membership = find_strata_cells(
+            ht, freq_meta, counts
+        )
+        assert leaves == list(range(len(freq_meta), len(freq_meta) + len(leaf_meta)))
+        rows = ht.annotate(m=membership).m.collect()
+        assert all(len(m) == len(leaf_meta) for m in rows)
+        # One adj cell and the single raw cell per sample.
+        assert all(sum(m) == 2 for m in rows)
+        assert sum(leaf_counts) == 2 * 48
+        for i, children in decomp.items():
+            assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
+
+    def test_membership_ir_is_linear_in_cell_count(self) -> None:
+        """The returned membership expression embeds each label's cell lookup once, so its IR grows linearly with the number of cells rather than quadratically."""
+        sizes = {}
+        for n_ds in (2, 10):
+            ht = self._membership_ht(96, n_downsamplings=n_ds)
+            freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+            counts = list(hl.eval(ht.freq_meta_sample_count))
+            _, _, leaf_meta, _, membership = find_strata_cells(ht, freq_meta, counts)
+            ir = str(membership._ir)
+            # Every cell key is a distinct 0/1 pattern; the adj lookup dict must
+            # appear exactly once, not once per cell.
+            n_adj_cells = sum(m["group"] == "adj" for m in leaf_meta)
+            assert n_adj_cells > 1
+            sizes[n_ds] = (n_adj_cells, len(ir))
+        (c_small, ir_small), (c_large, ir_large) = sizes[2], sizes[10]
+        assert c_large > c_small
+        # Quadratic growth would scale the IR by roughly (c_large / c_small) ** 2.
+        assert ir_large / ir_small < 2 * (c_large / c_small)
 
 
 class TestExpandStrataArrayFromLeaves:

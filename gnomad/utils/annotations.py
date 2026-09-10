@@ -2454,10 +2454,18 @@ def find_strata_cells(
         idx_by_label[label].append(i)
 
     # One pass over the sample Table: per label, count samples per membership
-    # pattern, encoded as a "0"/"1" string so it can key a literal dict.
+    # pattern, encoded as a "0"/"1" string so it can key a literal dict. A
+    # membership bit is missing when a sample lacks a stratification value;
+    # the group aggregations (`hl.agg.filter`) and `freq_meta_sample_count`
+    # (`hl.agg.count_where`) both treat that as not a member, so the pattern
+    # must too (`hl.delimit` would otherwise render it as "null" and shift
+    # every later position).
     def _pattern_expr(label: str) -> hl.expr.StringExpression:
         return hl.delimit(
-            [hl.if_else(ht.group_membership[i], "1", "0") for i in idx_by_label[label]],
+            [
+                hl.if_else(hl.coalesce(ht.group_membership[i], False), "1", "0")
+                for i in idx_by_label[label]
+            ],
             "",
         )
 
@@ -2475,7 +2483,9 @@ def find_strata_cells(
     # stays linear in the number of cells (see below).
     membership_parts: List[hl.expr.ArrayExpression] = []
     if forced:
-        membership_parts.append(hl.array([ht.group_membership[i] for i in forced]))
+        membership_parts.append(
+            hl.array([hl.coalesce(ht.group_membership[i], False) for i in forced])
+        )
 
     next_leaf = n_full
     for label in labels:
@@ -2529,7 +2539,9 @@ def find_strata_cells(
             leaf_sample_count.append(0)
         if zero_sample:
             membership_parts.append(
-                hl.array([ht.group_membership[i] for i in zero_sample])
+                hl.array(
+                    [hl.coalesce(ht.group_membership[i], False) for i in zero_sample]
+                )
             )
 
     logger.info(

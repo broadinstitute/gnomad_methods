@@ -2798,6 +2798,34 @@ class TestFindStrataCells:
         for i, children in decomp.items():
             assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
 
+    def test_missing_membership_bit_means_not_a_member(self) -> None:
+        """A missing membership bit (a sample without a stratification value) is treated as False, matching `count_where` and `agg.filter` semantics."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        # Blank the gen_anc/sex bits for every afr sample, as an `hl.all([...])`
+        # over a missing strata value would. That also empties both afr groups,
+        # so the zero-sample leaf path sees missing bits too.
+        ht = ht.annotate(
+            group_membership=hl.enumerate(ht.group_membership).map(
+                lambda x: hl.if_else(
+                    (x[0] >= 2) & (x[0] < 8) & (ht.idx % 3 == 0),
+                    hl.missing(hl.tbool),
+                    x[1],
+                )
+            )
+        )
+        counts = ht.aggregate(
+            hl.agg.array_agg(lambda x: hl.agg.count_where(x), ht.group_membership)
+        )
+        leaves, decomp, leaf_meta, leaf_counts, membership = find_strata_cells(
+            ht, freq_meta, counts
+        )
+        rows = ht.annotate(m=membership).m.collect()
+        assert all(None not in m for m in rows)
+        assert all(sum(m) == 2 for m in rows)
+        for i, children in decomp.items():
+            assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
+
     def test_membership_ir_is_linear_in_cell_count(self) -> None:
         """The returned membership expression embeds each label's cell lookup once, so its IR grows linearly with the number of cells rather than quadratically."""
         sizes = {}

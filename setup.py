@@ -1,15 +1,22 @@
 """Setup script."""
 
+import re
+
 import setuptools
 
 
 with open("README.md", "r") as readme_file:
     long_description = readme_file.read()
 
+# Hail is deliberately excluded from install_requires: users install the Hail
+# version that matches their cluster. Match the name only so that a version
+# specifier on the requirements.txt line (e.g. ``hail!=0.2.139``) is still excluded.
 install_requires = []
 with open("requirements.txt", "r") as requirements_file:
     for req in (line.strip() for line in requirements_file):
-        if req != "hail":
+        if not req or req.startswith("#"):
+            continue
+        if re.split(r"[<>=!~\[; ]", req, maxsplit=1)[0] != "hail":
             install_requires.append(req)
 
 

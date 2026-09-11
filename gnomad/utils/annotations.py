@@ -2381,6 +2381,194 @@ def find_minimal_strata_groups(
     return leaf_indices, decomposition
 
 
+def find_strata_cells(
+    ht: hl.Table,
+    freq_meta: List[Dict[str, str]],
+    freq_meta_sample_count: List[int],
+    force_leaf_groups: Optional[List[Dict[str, str]]] = None,
+) -> Tuple[
+    List[int],
+    Dict[int, List[int]],
+    List[Dict[str, str]],
+    List[int],
+    hl.expr.ArrayExpression,
+]:
+    """
+    Reduce `freq_meta` to its "cells": the distinct per-sample membership patterns.
+
+    This is an alternative to `find_minimal_strata_groups` that does not reason
+    about strata names at all. Within each `"group"` label (typically `adj` and
+    `raw`), two samples fall in the same cell when they belong to exactly the
+    same set of `freq_meta` groups. Cells are disjoint by construction and every
+    group is the exact union of the cells whose pattern includes it, so every
+    group's call stats can be reconstructed by summing its cells with
+    `expand_strata_array_from_leaves`. Because the cells partition the samples,
+    aggregating once per cell visits each sample once per label, however many
+    (overlapping) groups `freq_meta` contains -- including groups that
+    `find_minimal_strata_groups` cannot decompose, such as downsamplings.
+
+    Cells are synthetic leaves: they are not entries of `freq_meta`. They are
+    numbered from `len(freq_meta)` onward so they fit the same
+    `(leaf_indices, decomposition)` encoding consumed by
+    `expand_strata_array_from_leaves` and `agg_by_strata`, with their metadata
+    (`{"group": <label>, "cell": "<k>"}`) carried only in the reduced
+    `freq_meta`. Groups listed in `force_leaf_groups` are kept as real leaves
+    (their own `freq_meta` index) ahead of the cells. A group with no samples
+    has no cell to be built from, so it is also kept as a real leaf (after its
+    label's cells) rather than left without a decomposition.
+
+    Samples that belong to no group of a label (an all-False pattern) do not
+    form a cell; no group needs them.
+
+    :param ht: Table with the full-length per-sample `group_membership` array.
+    :param freq_meta: Full `freq_meta` list aligned with `ht.group_membership`.
+    :param freq_meta_sample_count: Per-group sample counts aligned with
+        `freq_meta`; each group's cells are checked to sum to it.
+    :param force_leaf_groups: Optional `freq_meta` dicts to keep as real leaves
+        rather than reconstructing them from cells.
+    :return: Tuple of `(leaf_indices, decomposition, leaf_meta,
+        leaf_sample_count, leaf_membership_expr)`: the leaf encoding as for
+        `find_minimal_strata_groups` (cell leaves are indices >=
+        `len(freq_meta)`), the reduced `freq_meta` and sample counts, and the
+        per-sample leaf-only `group_membership` expression on `ht`.
+    """
+    n_full = len(freq_meta)
+    force_leaf_groups = force_leaf_groups or []
+    forced = []
+    for target in force_leaf_groups:
+        matches = [i for i, m in enumerate(freq_meta) if m == target]
+        if not matches:
+            raise ValueError(
+                f"`force_leaf_groups` entry {target} is not in `freq_meta`."
+            )
+        forced.extend(matches)
+
+    # Group the non-forced positions by label, preserving first-seen label
+    # order. Forced groups are aggregated directly, so they neither split a
+    # label's cells nor need any; a label whose groups are all forced gets no
+    # cells at all (a cell nothing decomposes into would be aggregated and
+    # then discarded).
+    labels: List[str] = []
+    idx_by_label: Dict[str, List[int]] = {}
+    for i, m in enumerate(freq_meta):
+        if i in forced:
+            continue
+        label = m.get("group")
+        if label not in idx_by_label:
+            labels.append(label)
+            idx_by_label[label] = []
+        idx_by_label[label].append(i)
+
+    # One pass over the sample Table: per label, count samples per membership
+    # pattern, encoded as a "0"/"1" string so it can key a literal dict. A
+    # membership bit is missing when a sample lacks a stratification value;
+    # the group aggregations (`hl.agg.filter`) and `freq_meta_sample_count`
+    # (`hl.agg.count_where`) both treat that as not a member, so the pattern
+    # must too (`hl.delimit` would otherwise render it as "null" and shift
+    # every later position).
+    def _pattern_expr(label: str) -> hl.expr.StringExpression:
+        return hl.delimit(
+            [
+                hl.if_else(hl.coalesce(ht.group_membership[i], False), "1", "0")
+                for i in idx_by_label[label]
+            ],
+            "",
+        )
+
+    counts_by_label = ht.aggregate(
+        hl.struct(**{label: hl.agg.counter(_pattern_expr(label)) for label in labels})
+    )
+
+    leaf_indices = list(forced)
+    leaf_meta = [dict(freq_meta[i]) for i in forced]
+    leaf_sample_count = [freq_meta_sample_count[i] for i in forced]
+    decomposition: Dict[int, List[int]] = {}
+    # Leaf-only membership is assembled from array-valued parts, in leaf order:
+    # forced leaves, then per label its cells followed by its zero-sample
+    # leaves. Each label's cell flags come from a single bound lookup so the IR
+    # stays linear in the number of cells (see below).
+    membership_parts: List[hl.expr.ArrayExpression] = []
+    if forced:
+        membership_parts.append(
+            hl.array([hl.coalesce(ht.group_membership[i], False) for i in forced])
+        )
+
+    next_leaf = n_full
+    for label in labels:
+        idxs = idx_by_label[label]
+        # Skip the all-False pattern; sort the rest so numbering is stable.
+        cells = sorted(p for p in counts_by_label[label] if "1" in p)
+        cell_leaf = {p: next_leaf + k for k, p in enumerate(cells)}
+        for k, p in enumerate(cells):
+            leaf_indices.append(cell_leaf[p])
+            leaf_meta.append({"group": label, "cell": str(k)})
+            leaf_sample_count.append(counts_by_label[label][p])
+        zero_sample = []
+        for pos, i in enumerate(idxs):
+            children = [cell_leaf[p] for p in cells if p[pos] == "1"]
+            n_children = sum(counts_by_label[label][p] for p in cells if p[pos] == "1")
+            if n_children != freq_meta_sample_count[i]:
+                raise ValueError(
+                    f"Cells of group {freq_meta[i]} sum to {n_children} samples,"
+                    f" expected {freq_meta_sample_count[i]}."
+                )
+            if not children:
+                zero_sample.append(i)
+                continue
+            decomposition[i] = children
+        if cells:
+            # Look the sample's cell up once and derive every cell flag from
+            # that bound value. Reusing the lookup expression in one comparison
+            # per cell would re-embed the literal dict and the pattern
+            # expression in each, making the IR quadratic in the cell count.
+            n_cells = len(cells)
+            cell_of_sample = hl.literal({p: k for k, p in enumerate(cells)}).get(
+                _pattern_expr(label)
+            )
+            membership_parts.append(
+                hl.bind(
+                    lambda c: hl.range(n_cells).map(
+                        lambda k: hl.coalesce(c == k, False)
+                    ),
+                    cell_of_sample,
+                )
+            )
+        next_leaf += len(cells)
+        # No cell covers a group with no samples, so it would otherwise be
+        # neither a leaf nor decomposable. Keep it as a real leaf with its own
+        # (all-False) membership; aggregating it directly costs nothing.
+        for i in zero_sample:
+            leaf_indices.append(i)
+            leaf_meta.append(dict(freq_meta[i]))
+            leaf_sample_count.append(0)
+        if zero_sample:
+            membership_parts.append(
+                hl.array(
+                    [hl.coalesce(ht.group_membership[i], False) for i in zero_sample]
+                )
+            )
+
+    logger.info(
+        "Reducing freq_meta from %d groups to %d cells (%s) plus %d forced leaves.",
+        n_full,
+        next_leaf - n_full,
+        ", ".join(f"{label}: {len(idx_by_label[label])} groups" for label in labels),
+        len(forced),
+    )
+
+    return (
+        leaf_indices,
+        decomposition,
+        leaf_meta,
+        leaf_sample_count,
+        (
+            hl.flatten(hl.array(membership_parts))
+            if membership_parts
+            else hl.empty_array(hl.tbool)
+        ),
+    )
+
+
 def expand_strata_array_from_leaves(
     leaf_array: hl.expr.ArrayExpression,
     leaf_indices: List[int],
@@ -2406,16 +2594,22 @@ def expand_strata_array_from_leaves(
 
     The expansion is encoded as a compact Hail IR operation
     (`hl_children.map(...)`) with lookup tables for leaf positions and
-    child-index lists. The serialized IR size is therefore O(n_full)
-    regardless of how many groups there are. This avoids Jackson's JSON
-    string-length limit that would otherwise be hit if each group's
-    expression were inlined as a separate Python-side Hail expression
-    literal.
+    child-index lists. The serialized IR size is therefore proportional to
+    the total number of (group, child) pairs in `decomposition` rather than
+    to the number of inlined expressions: O(n_full) under
+    `find_minimal_strata_groups`, where each group has a handful of children,
+    and up to O(n_full x n_cells) under `find_strata_cells`, where a broad
+    group (e.g. the all-samples group) decomposes into every cell of its
+    label. This avoids Jackson's JSON string-length limit that would
+    otherwise be hit if each group's expression were inlined as a separate
+    Python-side Hail expression literal.
 
     :param leaf_array: Hail array expression of length `len(leaf_indices)`
         produced by aggregating only the leaf groups.
     :param leaf_indices: Indices into the original `freq_meta` marking the
-        leaves, in the same order as `leaf_array`.
+        leaves, in the same order as `leaf_array`. Synthetic leaves (cells
+        from `find_strata_cells`) use indices >= `n_full`; they only ever
+        appear as children in `decomposition`.
     :param decomposition: Map from non-leaf original index to the list of
         original leaf indices that sum to it.
     :param n_full: Length of the original (full) `freq_meta`.
@@ -2499,6 +2693,7 @@ def generate_freq_group_membership_array(
     non_summable_strata: Optional[Set[str]] = None,
     force_leaf_groups: Optional[List[Dict[str, str]]] = None,
     group_label: str = "adj",
+    reduce_to_cells: bool = False,
 ) -> hl.Table:
     """
     Generate a Table with a 'group_membership' array for each sample indicating whether the sample belongs to specific stratification groups.
@@ -2532,15 +2727,18 @@ def generate_freq_group_membership_array(
         - `freq_meta_full`: original full `freq_meta` before reduction.
         - `freq_meta_sample_count_full`: original full sample counts.
         - `freq_leaf_indices`: indices into `freq_meta_full` marking the
-          leaves, in the same order as the reduced `freq_meta`.
+          leaves, in the same order as the reduced `freq_meta`. Under
+          `reduce_to_cells`, cell leaves are synthetic and numbered from
+          `len(freq_meta_full)` onward; their metadata exists only in the
+          reduced `freq_meta`.
         - `freq_group_decomposition`: list of length
-          `len(freq_meta_full)` where each element is the list of
-          `freq_meta_full` indices that sum to that position. Leaves get
-          an empty list.
+          `len(freq_meta_full)` where each element is the list of leaf
+          indices that sum to that position. Leaves get an empty list.
         - `freq_reduced`: True, signalling that the reduction has been
           applied.
 
-    See `find_minimal_strata_groups` for the leaf-detection algorithm and
+    See `find_minimal_strata_groups` for the leaf-detection algorithm,
+    `find_strata_cells` for the cell-based alternative, and
     `expand_strata_array_from_leaves` for the reconstruction step.
 
     :param ht: Input Table that contains Expressions specified by `strata_expr`.
@@ -2565,16 +2763,29 @@ def generate_freq_group_membership_array(
         across their values when `reduce_to_minimal_groups` is True.
         Default is None, which resolves to `{"downsampling"}`.
     :param force_leaf_groups: Optional list of `freq_meta` dicts to keep
-        as leaves under `reduce_to_minimal_groups` (see
-        `find_minimal_strata_groups`). Use this for groups that downstream
-        code accesses directly, so they remain explicitly computed instead
-        of being reconstructed per row from child groups.
+        as leaves under either reduction mode (see
+        `find_minimal_strata_groups` and `find_strata_cells`). Use this for
+        groups that downstream code accesses directly, so they remain
+        explicitly computed instead of being reconstructed per row from
+        child groups or cells.
     :param group_label: Value to use for the `"group"` key on every
         constructed `freq_meta` entry. Default is `"adj"`. Set to `"raw"`
         for callers that don't apply any genotype-level filtering (e.g.,
         `compute_stats_per_ref_site`).
+    :param reduce_to_cells: Whether to reduce to "cells" -- the distinct
+        per-sample membership patterns within each `"group"` label -- instead
+        of leaf groups (see `find_strata_cells`). Every group, including the
+        downsampling groups that leaf reduction must compute directly, is then
+        reconstructed by summing its cells, so each sample is aggregated once
+        per label. The same reduction-tracking globals are written. Mutually
+        exclusive with `reduce_to_minimal_groups`; `non_summable_strata` is
+        unused, but `force_leaf_groups` is still applied. Default is False.
     :return: Table with the 'group_membership' array annotation.
     """
+    if reduce_to_minimal_groups and reduce_to_cells:
+        raise ValueError(
+            "`reduce_to_minimal_groups` and `reduce_to_cells` are mutually exclusive."
+        )
     errors = []
     ds_in_strata = any("downsampling" in s for s in strata_expr)
     global_idx_in_ds_expr = any(
@@ -2719,7 +2930,7 @@ def generate_freq_group_membership_array(
         "freq_meta_sample_count": freq_meta_sample_count,
     }
 
-    if reduce_to_minimal_groups:
+    if reduce_to_minimal_groups or reduce_to_cells:
         # `freq_meta_sample_count` may be a Hail expression at this point (it
         # is wrapped in `hl.array(...).extend(...)` above when raw is
         # prepended). Materialize it back to a Python list so we can slice
@@ -2730,32 +2941,45 @@ def generate_freq_group_membership_array(
             freq_meta_sample_count_full = list(hl.eval(freq_meta_sample_count))
 
         freq_meta_full = [dict(m) for m in freq_meta]
-        leaf_indices, decomposition = find_minimal_strata_groups(
-            freq_meta_full,
-            freq_meta_sample_count_full,
-            non_summable_strata=non_summable_strata,
-            force_leaf_groups=force_leaf_groups,
-        )
-
         n_full = len(freq_meta_full)
+        if reduce_to_cells:
+            (
+                leaf_indices,
+                decomposition,
+                freq_meta,
+                freq_meta_sample_count,
+                leaf_membership,
+            ) = find_strata_cells(
+                ht,
+                freq_meta_full,
+                freq_meta_sample_count_full,
+                force_leaf_groups=force_leaf_groups,
+            )
+        else:
+            leaf_indices, decomposition = find_minimal_strata_groups(
+                freq_meta_full,
+                freq_meta_sample_count_full,
+                non_summable_strata=non_summable_strata,
+                force_leaf_groups=force_leaf_groups,
+            )
+            logger.info(
+                "Reducing freq_meta from %d to %d groups (leaf-only).",
+                n_full,
+                len(leaf_indices),
+            )
+            # Slice freq_meta, sample counts, and the per-sample
+            # group_membership array down to the leaves.
+            freq_meta = [freq_meta_full[i] for i in leaf_indices]
+            freq_meta_sample_count = [
+                freq_meta_sample_count_full[i] for i in leaf_indices
+            ]
+            leaf_membership = hl.array([ht.group_membership[i] for i in leaf_indices])
+
         # Serialize the decomposition as a list of length `n_full`, indexed
         # by the original freq_meta position. Leaves get an empty list.
         freq_group_decomposition = [decomposition.get(i, []) for i in range(n_full)]
 
-        logger.info(
-            "Reducing freq_meta from %d to %d groups (leaf-only).",
-            n_full,
-            len(leaf_indices),
-        )
-
-        # Slice freq_meta and sample counts down to the leaves.
-        freq_meta = [freq_meta_full[i] for i in leaf_indices]
-        freq_meta_sample_count = [freq_meta_sample_count_full[i] for i in leaf_indices]
-
-        # Slice the per-sample group_membership array to the leaf positions.
-        ht = ht.annotate(
-            group_membership=hl.array([ht.group_membership[i] for i in leaf_indices])
-        )
+        ht = ht.annotate(group_membership=leaf_membership)
 
         # Replace freq_meta and sample counts with their leaf-only versions.
         global_expr["freq_meta"] = freq_meta

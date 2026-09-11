@@ -1010,7 +1010,7 @@ class TestComputeStatsPerRefSiteReduceToCells:
         assert full_max == cells_max
 
     def test_force_leaf_groups_kept_as_real_leaves(self, synthetic_vds):
-        """A forced leaf keeps its own `freq_meta` index ahead of the cells and is not decomposed."""
+        """A forced leaf keeps its own `freq_meta` index ahead of the cells, is not decomposed, and leaves no orphan cell behind for its label."""
         vd = synthetic_vds.variant_data
         gmh = self._build_group_membership_ht(
             vd, reduce_to_cells=True, force_leaf_groups=[{"group": "raw"}]
@@ -1019,10 +1019,17 @@ class TestComputeStatsPerRefSiteReduceToCells:
         raw_idx = full_meta.index({"group": "raw"})
         leaf_indices = list(hl.eval(gmh.freq_leaf_indices))
         assert leaf_indices[0] == raw_idx
-        assert dict(hl.eval(gmh.freq_meta)[0]) == {"group": "raw"}
+        leaf_meta = [dict(m) for m in hl.eval(gmh.freq_meta)]
+        assert leaf_meta[0] == {"group": "raw"}
         decomposition = [list(c) for c in hl.eval(gmh.freq_group_decomposition)]
         assert decomposition[raw_idx] == []
         assert all(c for i, c in enumerate(decomposition) if i != raw_idx)
+        # The raw label's only group is forced, so it must not also get a
+        # cell: every leaf is either the forced leaf or an adj cell, and every
+        # cell is referenced by some decomposition.
+        assert all(m["group"] == "adj" for m in leaf_meta[1:])
+        referenced = {c for children in decomposition for c in children}
+        assert set(leaf_indices[1:]) == referenced
 
     def test_zero_sample_group_kept_as_real_leaf(self, synthetic_vds, reference_ht):
         """A gen_anc×sex group with no samples is kept as a real leaf (no cell covers it) and still expands to AN 0."""

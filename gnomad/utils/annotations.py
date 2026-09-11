@@ -2443,10 +2443,16 @@ def find_strata_cells(
             )
         forced.extend(matches)
 
-    # Group positions by label, preserving first-seen label order.
+    # Group the non-forced positions by label, preserving first-seen label
+    # order. Forced groups are aggregated directly, so they neither split a
+    # label's cells nor need any; a label whose groups are all forced gets no
+    # cells at all (a cell nothing decomposes into would be aggregated and
+    # then discarded).
     labels: List[str] = []
     idx_by_label: Dict[str, List[int]] = {}
     for i, m in enumerate(freq_meta):
+        if i in forced:
+            continue
         label = m.get("group")
         if label not in idx_by_label:
             labels.append(label)
@@ -2499,8 +2505,6 @@ def find_strata_cells(
             leaf_sample_count.append(counts_by_label[label][p])
         zero_sample = []
         for pos, i in enumerate(idxs):
-            if i in forced:
-                continue
             children = [cell_leaf[p] for p in cells if p[pos] == "1"]
             n_children = sum(counts_by_label[label][p] for p in cells if p[pos] == "1")
             if n_children != freq_meta_sample_count[i]:
@@ -2590,11 +2594,15 @@ def expand_strata_array_from_leaves(
 
     The expansion is encoded as a compact Hail IR operation
     (`hl_children.map(...)`) with lookup tables for leaf positions and
-    child-index lists. The serialized IR size is therefore O(n_full)
-    regardless of how many groups there are. This avoids Jackson's JSON
-    string-length limit that would otherwise be hit if each group's
-    expression were inlined as a separate Python-side Hail expression
-    literal.
+    child-index lists. The serialized IR size is therefore proportional to
+    the total number of (group, child) pairs in `decomposition` rather than
+    to the number of inlined expressions: O(n_full) under
+    `find_minimal_strata_groups`, where each group has a handful of children,
+    and up to O(n_full x n_cells) under `find_strata_cells`, where a broad
+    group (e.g. the all-samples group) decomposes into every cell of its
+    label. This avoids Jackson's JSON string-length limit that would
+    otherwise be hit if each group's expression were inlined as a separate
+    Python-side Hail expression literal.
 
     :param leaf_array: Hail array expression of length `len(leaf_indices)`
         produced by aggregating only the leaf groups.

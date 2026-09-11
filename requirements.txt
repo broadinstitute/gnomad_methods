@@ -1,6 +1,11 @@
 annoy
 ga4gh.vrs==2.2.0
-hail
+# TODO: Remove this exclusion once Hail fixes the 0.2.139 memory regression where
+# an array literal's .contains() inside a Table filter (e.g. filter_gencode_ht)
+# leaks region memory, OOMs the driver, and hangs pytest. This pin lifts itself
+# on 0.2.140; check that release's change log for the fix, and if the tests
+# hang again in test_transcript_annotation.py, exclude 0.2.140 too.
+hail!=0.2.139
 hdbscan
 ipywidgets
 networkx

@@ -2578,7 +2578,7 @@ def expand_strata_array_from_leaves(
     """
     Reconstruct a full-length per-strata array from a leaf-only array.
 
-    This is the post-processing companion to `find_minimal_strata_groups`.
+    This is the post-processing companion to `find_minimal_strata_groups` or `find_strata_cells`.
     For each position `i` in the full (original) `freq_meta`:
 
         - If `i` is a leaf, the corresponding value in `leaf_array` is

@@ -797,7 +797,7 @@ def annotate_and_index_source_mt_for_sex_ploidy(
     return mt, mt[col_field], mt[row_field]
 
 
-def _index_sex_ploidy_flags(
+def index_sex_ploidy_flags(
     locus_expr: hl.expr.LocusExpression,
     karyotype_expr: hl.expr.StringExpression,
     xy_karyotype_str: str = "XY",
@@ -806,11 +806,12 @@ def _index_sex_ploidy_flags(
     """
     Index the sex-ploidy flags back onto `locus_expr`'s source MatrixTable.
 
-    Used by the expression-returning `adjusted_sex_ploidy_expr` and
-    `get_is_haploid_expr`, which cannot annotate the caller's MatrixTable
-    themselves. The flags are computed on ``cols()`` and ``rows()`` of the
-    source and indexed back by key, which Hail evaluates as a second pass over
-    the source's upstream pipeline; prefer
+    This is the expression-level counterpart of
+    `annotate_and_index_source_mt_for_sex_ploidy`, for callers that only hold
+    expressions (`adjusted_sex_ploidy_expr`, `get_is_haploid_expr`) and so
+    cannot annotate the caller's MatrixTable themselves. The flags are computed
+    on ``cols()`` and ``rows()`` of the source and indexed back by key, which
+    Hail evaluates as a second pass over the source's upstream pipeline; prefer
     `annotate_and_index_source_mt_for_sex_ploidy` when the MatrixTable is in
     hand.
 
@@ -865,7 +866,7 @@ def get_is_haploid_expr(
             "Both 'locus_expr' and 'karyotype_expr' are required if no 'gt_expr' is "
             "supplied."
         )
-    col_idx, row_idx = _index_sex_ploidy_flags(
+    col_idx, row_idx = index_sex_ploidy_flags(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )
 

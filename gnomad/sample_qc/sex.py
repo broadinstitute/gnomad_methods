@@ -9,8 +9,8 @@ import pandas as pd
 from sklearn.mixture import GaussianMixture
 
 from gnomad.utils.annotations import (
-    _index_sex_ploidy_flags,
     annotate_and_index_source_mt_for_sex_ploidy,
+    index_sex_ploidy_flags,
 )
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
@@ -78,7 +78,7 @@ def adjusted_sex_ploidy_expr(
     :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
     :return: Genotype adjusted for sex ploidy.
     """
-    col_idx, row_idx = _index_sex_ploidy_flags(
+    col_idx, row_idx = index_sex_ploidy_flags(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )
 

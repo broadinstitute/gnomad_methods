@@ -2845,6 +2845,82 @@ class TestFindStrataCells:
         # Quadratic growth would scale the IR by roughly (c_large / c_small) ** 2.
         assert ir_large / ir_small < 2 * (c_large / c_small)
 
+    def test_force_leaf_groups_kept_as_real_leaves(self) -> None:
+        """A forced group is a real leaf ahead of the cells with its own membership, is never decomposed, no longer splits its label's cells, and is forced once however often it is listed."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        # The middle downsampling: its bit splits the gen_anc/sex cells, unlike
+        # the largest one, which every sample belongs to.
+        forced_idx = len(freq_meta) - 2
+        target = freq_meta[forced_idx]
+        leaves, decomp, leaf_meta, leaf_counts, membership = find_strata_cells(
+            ht, freq_meta, counts, force_leaf_groups=[target, target]
+        )
+        assert leaves[0] == forced_idx
+        assert leaves.count(forced_idx) == 1
+        assert forced_idx not in decomp
+        assert leaf_meta[0] == target
+        assert leaf_counts[0] == counts[forced_idx]
+        _, _, unforced_meta, _, _ = find_strata_cells(ht, freq_meta, counts)
+        assert sum("cell" in m for m in leaf_meta) < sum(
+            "cell" in m for m in unforced_meta
+        )
+        rows = ht.annotate(m=membership).m.collect()
+        full = ht.group_membership.collect()
+        assert [m[0] for m in rows] == [f[forced_idx] for f in full]
+        for i, children in decomp.items():
+            assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
+        with pytest.raises(ValueError, match="not in `freq_meta`"):
+            find_strata_cells(
+                ht, freq_meta, counts, force_leaf_groups=[{"group": "adj", "x": "y"}]
+            )
+
+    def test_missing_group_key_raises(self) -> None:
+        """A `freq_meta` entry without a ``group`` key is rejected up front rather than failing inside the aggregation."""
+        ht = self._membership_ht(12)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        del freq_meta[2]["group"]
+        with pytest.raises(ValueError, match="has no 'group' key"):
+            find_strata_cells(ht, freq_meta, counts)
+
+    def test_reconstruction_matches_minimal_groups_and_full(self) -> None:
+        """Aggregating only the leaves and expanding gives the same per-group result under `find_strata_cells` as under `find_minimal_strata_groups` and as aggregating every group directly."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        n_full = len(freq_meta)
+
+        def _per_group_rank_sum(membership: hl.expr.ArrayExpression) -> List[int]:
+            return ht.aggregate(
+                hl.agg.array_agg(
+                    lambda x: hl.agg.filter(hl.coalesce(x, False), hl.agg.sum(ht.rank)),
+                    membership,
+                )
+            )
+
+        def _expand(leaf_values, leaves, decomp) -> List[int]:
+            return hl.eval(
+                expand_strata_array_from_leaves(
+                    hl.literal(leaf_values, hl.tarray(hl.tint64)),
+                    leaves,
+                    decomp,
+                    n_full,
+                )
+            )
+
+        full = _per_group_rank_sum(ht.group_membership)
+        c_leaves, c_decomp, _, _, c_membership = find_strata_cells(
+            ht, freq_meta, counts
+        )
+        m_leaves, m_decomp = find_minimal_strata_groups(freq_meta, counts)
+        m_membership = hl.array([ht.group_membership[i] for i in m_leaves])
+        from_cells = _expand(_per_group_rank_sum(c_membership), c_leaves, c_decomp)
+        from_minimal = _expand(_per_group_rank_sum(m_membership), m_leaves, m_decomp)
+        assert from_cells == full
+        assert from_minimal == full
+
 
 class TestExpandStrataArrayFromLeaves:
     """Test the expand_strata_array_from_leaves function.

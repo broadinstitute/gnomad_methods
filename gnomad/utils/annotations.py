@@ -2434,30 +2434,33 @@ def find_strata_cells(
     """
     n_full = len(freq_meta)
     force_leaf_groups = force_leaf_groups or []
-    forced = []
-    for target in force_leaf_groups:
-        matches = [i for i, m in enumerate(freq_meta) if m == target]
-        if not matches:
-            raise ValueError(
-                f"`force_leaf_groups` entry {target} is not in `freq_meta`."
-            )
-        forced.extend(matches)
 
-    # Group the non-forced positions by label, preserving first-seen label
-    # order. Forced groups are aggregated directly, so they neither split a
-    # label's cells nor need any; a label whose groups are all forced gets no
-    # cells at all (a cell nothing decomposes into would be aggregated and
-    # then discarded).
+    # One pass over `freq_meta`: forced groups become leaves and the rest are
+    # grouped by label, preserving first-seen label order. Forced groups are
+    # aggregated directly, so they neither split a label's cells nor need any;
+    # a label whose groups are all forced gets no cells at all (a cell nothing
+    # decomposes into would be aggregated and then discarded). Each index is
+    # visited once, so a target listed twice in `force_leaf_groups` is forced
+    # once.
+    forced: List[int] = []
     labels: List[str] = []
     idx_by_label: Dict[str, List[int]] = {}
     for i, m in enumerate(freq_meta):
-        if i in forced:
+        if m in force_leaf_groups:
+            forced.append(i)
             continue
         label = m.get("group")
+        if label is None:
+            raise ValueError(f"`freq_meta` entry {m} (index {i}) has no 'group' key.")
         if label not in idx_by_label:
             labels.append(label)
             idx_by_label[label] = []
         idx_by_label[label].append(i)
+    unmatched = [t for t in force_leaf_groups if t not in freq_meta]
+    if unmatched:
+        raise ValueError(
+            f"`force_leaf_groups` entries {unmatched} are not in `freq_meta`."
+        )
 
     # One pass over the sample Table: per label, count samples per membership
     # pattern, encoded as a "0"/"1" string so it can key a literal dict. A
@@ -2466,12 +2469,16 @@ def find_strata_cells(
     # (`hl.agg.count_where`) both treat that as not a member, so the pattern
     # must too (`hl.delimit` would otherwise render it as "null" and shift
     # every later position).
+    # Mapping over a literal index array keeps this expression's IR to one
+    # array literal rather than one array-ref node per group; it is embedded
+    # twice per label (the counter below and the cell lookup further down).
     def _pattern_expr(label: str) -> hl.expr.StringExpression:
         return hl.delimit(
-            [
-                hl.if_else(hl.coalesce(ht.group_membership[i], False), "1", "0")
-                for i in idx_by_label[label]
-            ],
+            hl.literal(idx_by_label[label]).map(
+                lambda i: hl.if_else(
+                    hl.coalesce(ht.group_membership[i], False), "1", "0"
+                )
+            ),
             "",
         )
 
@@ -2505,8 +2512,12 @@ def find_strata_cells(
             leaf_sample_count.append(counts_by_label[label][p])
         zero_sample = []
         for pos, i in enumerate(idxs):
-            children = [cell_leaf[p] for p in cells if p[pos] == "1"]
-            n_children = sum(counts_by_label[label][p] for p in cells if p[pos] == "1")
+            children = []
+            n_children = 0
+            for p in cells:
+                if p[pos] == "1":
+                    children.append(cell_leaf[p])
+                    n_children += counts_by_label[label][p]
             if n_children != freq_meta_sample_count[i]:
                 raise ValueError(
                     f"Cells of group {freq_meta[i]} sum to {n_children} samples,"
@@ -2578,7 +2589,8 @@ def expand_strata_array_from_leaves(
     """
     Reconstruct a full-length per-strata array from a leaf-only array.
 
-    This is the post-processing companion to `find_minimal_strata_groups` or `find_strata_cells`.
+    This is the post-processing companion to `find_minimal_strata_groups` or
+    `find_strata_cells`.
     For each position `i` in the full (original) `freq_meta`:
 
         - If `i` is a leaf, the corresponding value in `leaf_array` is

@@ -33,7 +33,6 @@ def _sex_ploidy_case_expr(
     """
     return (
         hl.case(missing_false=True)
-        # Added to reduce the checks by entry.
         .when(row_flags.in_autosome, gt_expr)
         .when(
             (row_flags.y_par | row_flags.y_nonpar) & col_flags.xx, hl.missing(hl.tcall)
@@ -109,28 +108,37 @@ def adjust_sex_ploidy(
     :param gt_field: Name of the genotype entry field to adjust. Default is "GT".
     :return: MatrixTable with fixed ploidy for sex chromosomes
     """
+    # The temporary flag fields must not collide with (and then drop) a field
+    # the caller already has, so extend each name until it is unused on its axis.
+    col_field = "_sex_ploidy_col"
+    while col_field in mt.col:
+        col_field += "_"
+    row_field = "_sex_ploidy_row"
+    while row_field in mt.row:
+        row_field += "_"
+
     mt = mt.annotate_cols(
-        _sex_ploidy_col=hl.struct(
-            xy=sex_expr.upper() == xy_str, xx=sex_expr.upper() == xx_str
-        )
-    )
-    mt = mt.annotate_rows(
-        _sex_ploidy_row=hl.struct(
-            in_non_par=~mt.locus.in_autosome_or_par(),
-            in_autosome=mt.locus.in_autosome(),
-            x_nonpar=mt.locus.in_x_nonpar(),
-            y_par=mt.locus.in_y_par(),
-            y_nonpar=mt.locus.in_y_nonpar(),
-        )
-    )
-    mt = mt.annotate_entries(
         **{
-            gt_field: _sex_ploidy_case_expr(
-                mt[gt_field], mt._sex_ploidy_col, mt._sex_ploidy_row
+            col_field: hl.struct(
+                xy=sex_expr.upper() == xy_str, xx=sex_expr.upper() == xx_str
             )
         }
     )
-    return mt.drop("_sex_ploidy_col", "_sex_ploidy_row")
+    mt = mt.annotate_rows(
+        **{
+            row_field: hl.struct(
+                in_non_par=~mt.locus.in_autosome_or_par(),
+                in_autosome=mt.locus.in_autosome(),
+                x_nonpar=mt.locus.in_x_nonpar(),
+                y_par=mt.locus.in_y_par(),
+                y_nonpar=mt.locus.in_y_nonpar(),
+            )
+        }
+    )
+    mt = mt.annotate_entries(
+        **{gt_field: _sex_ploidy_case_expr(mt[gt_field], mt[col_field], mt[row_field])}
+    )
+    return mt.drop(col_field, row_field)
 
 
 def gaussian_mixture_model_karyotype_assignment(

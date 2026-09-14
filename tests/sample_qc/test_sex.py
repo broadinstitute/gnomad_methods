@@ -76,9 +76,11 @@ class TestAdjustSexPloidy:
         actual = self._entries(adjust_sex_ploidy(mt, mt.sex_karyotype), "GT")
         by_key = {(c, p, s): gt for c, p, s, gt in actual}
         # Genotype of sample s_idx at locus l_idx is gts[(l_idx + s_idx) % 4].
-        # Autosome and PAR genotypes are untouched (XY, PAR1 and PAR2).
+        # Autosome and PAR genotypes are untouched for XY, including a het on
+        # chrY PAR1 (only XX is blanked on chrY).
         assert by_key[("chr1", 1000, "s2")] == hl.Call([0, 1])
         assert by_key[("chrX", 20000, "s2")] == hl.Call([1, 1])
+        assert by_key[("chrY", 20000, "s2")] == hl.Call([0, 1])
         assert by_key[("chrX", 155800000, "s3")] == hl.Call([0, 0])
         # XY on non-PAR X/Y: het -> missing, hom -> haploid, missing stays missing.
         assert by_key[("chrX", 100000000, "s3")] is None  # het, lowercase "xy"
@@ -91,6 +93,20 @@ class TestAdjustSexPloidy:
         # Unrecognized or missing karyotypes are left alone.
         assert by_key[("chrX", 5000000, "s4")] == hl.Call([0, 1])
         assert by_key[("chrY", 5000000, "s5")] == hl.Call([0, 1])
+
+    def test_existing_fields_named_like_temp_fields_survive(self, mt):
+        """Caller fields that share the temporary flag field names are neither overwritten nor dropped."""
+        mt = mt.annotate_cols(_sex_ploidy_col="keep")
+        mt = mt.annotate_rows(_sex_ploidy_row=7)
+        expected = mt.annotate_entries(
+            GT=adjusted_sex_ploidy_expr(mt.locus, mt.GT, mt.sex_karyotype)
+        )
+        actual = adjust_sex_ploidy(mt, mt.sex_karyotype)
+        assert set(actual.col) == set(mt.col)
+        assert set(actual.row) == set(mt.row)
+        assert actual.aggregate_cols(hl.agg.all(actual._sex_ploidy_col == "keep"))
+        assert actual.aggregate_rows(hl.agg.all(actual._sex_ploidy_row == 7))
+        assert self._entries(actual, "GT") == self._entries(expected, "GT")
 
     def test_gt_field(self, mt):
         """`gt_field` selects a non-default genotype entry field."""

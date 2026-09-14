@@ -694,53 +694,141 @@ def create_frequency_bins_expr(
     return bin_expr
 
 
+def get_sex_ploidy_col_flags_expr(
+    karyotype_expr: hl.expr.StringExpression,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
+) -> hl.expr.StructExpression:
+    """
+    Build the per-sample flags used by the sex-ploidy adjustments.
+
+    Together with `get_sex_ploidy_row_flags_expr` this is the single definition
+    of those flags; `annotate_and_index_source_mt_for_sex_ploidy` attaches them
+    to a MatrixTable and `adjusted_sex_ploidy_expr` and `get_is_haploid_expr`
+    consume them.
+
+    :param karyotype_expr: Sex karyotype expression.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Struct with booleans ``xy`` and ``xx``.
+    """
+    return hl.struct(
+        xy=karyotype_expr.upper() == xy_karyotype_str,
+        xx=karyotype_expr.upper() == xx_karyotype_str,
+    )
+
+
+def get_sex_ploidy_row_flags_expr(
+    locus_expr: hl.expr.LocusExpression,
+) -> hl.expr.StructExpression:
+    """
+    Build the per-locus flags used by the sex-ploidy adjustments.
+
+    See `get_sex_ploidy_col_flags_expr` for the per-sample half.
+
+    :param locus_expr: Locus expression.
+    :return: Struct with booleans ``in_non_par``, ``in_autosome``, ``x_nonpar``,
+        ``y_par`` and ``y_nonpar``.
+    """
+    return hl.struct(
+        in_non_par=~locus_expr.in_autosome_or_par(),
+        in_autosome=locus_expr.in_autosome(),
+        x_nonpar=locus_expr.in_x_nonpar(),
+        y_par=locus_expr.in_y_par(),
+        y_nonpar=locus_expr.in_y_nonpar(),
+    )
+
+
 def annotate_and_index_source_mt_for_sex_ploidy(
+    mt: hl.MatrixTable,
+    karyotype_expr: hl.expr.StringExpression,
+    xy_karyotype_str: str = "XY",
+    xx_karyotype_str: str = "XX",
+) -> Tuple[hl.MatrixTable, hl.expr.StructExpression, hl.expr.StructExpression]:
+    """
+    Annotate `mt` with the sex-ploidy flags and return them as column and row structs.
+
+    The flags (see `get_sex_ploidy_col_flags_expr` and
+    `get_sex_ploidy_row_flags_expr`) are computed once per sample
+    and once per locus as fields of `mt`, so an entry expression built from the
+    returned structs never recomputes them per entry and never re-evaluates
+    `mt`'s upstream pipeline through a ``cols()``/``rows()`` self-join. The
+    returned structs are top-level fields of the returned MatrixTable, bound to
+    it: build entry expressions on that MatrixTable, then drop the two added
+    fields when done (see `adjust_sex_ploidy` for the pattern). Their names
+    start with ``_sex_ploidy_col`` and ``_sex_ploidy_row`` and are extended
+    with underscores if `mt` already has fields of those names.
+
+    .. note::
+
+        Prior versions took a locus expression, recovered its source
+        MatrixTable and indexed the flags back in from ``cols()`` and
+        ``rows()``. That self-join re-evaluated the source's upstream pipeline,
+        which is prohibitively expensive when the source is, for example, a
+        densified MatrixTable.
+
+    :param mt: MatrixTable keyed by ``locus`` with `karyotype_expr` on its columns.
+    :param karyotype_expr: Sex karyotype column expression on `mt`.
+    :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
+    :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
+    :return: Tuple of the annotated MatrixTable, its column flag struct and its
+        row flag struct.
+    """
+    # The temporary flag fields must not collide with (and later drop) a field
+    # the caller already has, so extend each name until it is unused on its axis.
+    col_field = "_sex_ploidy_col"
+    while col_field in mt.col:
+        col_field += "_"
+    row_field = "_sex_ploidy_row"
+    while row_field in mt.row:
+        row_field += "_"
+
+    # `karyotype_expr` is bound to the input MT, so annotate the columns first;
+    # the row flags are then built from the locus of the MT that results.
+    mt = mt.annotate_cols(
+        **{
+            col_field: get_sex_ploidy_col_flags_expr(
+                karyotype_expr, xy_karyotype_str, xx_karyotype_str
+            )
+        }
+    )
+    mt = mt.annotate_rows(**{row_field: get_sex_ploidy_row_flags_expr(mt.locus)})
+
+    return mt, mt[col_field], mt[row_field]
+
+
+def _index_sex_ploidy_flags(
     locus_expr: hl.expr.LocusExpression,
     karyotype_expr: hl.expr.StringExpression,
     xy_karyotype_str: str = "XY",
     xx_karyotype_str: str = "XX",
 ) -> Tuple[hl.expr.StructExpression, hl.expr.StructExpression]:
     """
-    Prepare relevant ploidy annotations for downstream calculations on a matrix table.
+    Index the sex-ploidy flags back onto `locus_expr`'s source MatrixTable.
 
-    This method is used as an optimization for the `get_is_haploid_expr` and
-    `adjusted_sex_ploidy_expr` methods.
-
-    This method annotates the `locus_expr` source matrix table with the following
-    fields:
-
-        - `xy`: Boolean indicating if the sample is XY.
-        - `xx`: Boolean indicating if the sample is XX.
-        - `in_non_par`: Boolean indicating if the locus is in a non-PAR region.
-        - `x_nonpar`: Boolean indicating if the locus is in a non-PAR region of the X
-          chromosome.
-        - `y_par`: Boolean indicating if the locus is in a PAR region of the Y
-          chromosome.
-        - `y_nonpar`: Boolean indicating if the locus is in a non-PAR region of the Y
-          chromosome.
+    Used by the expression-returning `adjusted_sex_ploidy_expr` and
+    `get_is_haploid_expr`, which cannot annotate the caller's MatrixTable
+    themselves. The flags are computed on ``cols()`` and ``rows()`` of the
+    source and indexed back by key, which Hail evaluates as a second pass over
+    the source's upstream pipeline; prefer
+    `annotate_and_index_source_mt_for_sex_ploidy` when the MatrixTable is in
+    hand.
 
     :param locus_expr: Locus expression.
-    :param karyotype_expr: Karyotype expression.
+    :param karyotype_expr: Sex karyotype expression.
     :param xy_karyotype_str: String representing XY karyotype. Default is "XY".
     :param xx_karyotype_str: String representing XX karyotype. Default is "XX".
-    :return: Tuple of index expressions for columns and rows.
+    :return: Tuple of column and row flag structs indexed onto the source.
     """
     source_mt = locus_expr._indices.source
     col_ht = source_mt.annotate_cols(
-        xy=karyotype_expr.upper() == xy_karyotype_str,
-        xx=karyotype_expr.upper() == xx_karyotype_str,
+        **get_sex_ploidy_col_flags_expr(
+            karyotype_expr, xy_karyotype_str, xx_karyotype_str
+        )
     ).cols()
-    row_ht = source_mt.annotate_rows(
-        in_non_par=~locus_expr.in_autosome_or_par(),
-        in_autosome=locus_expr.in_autosome(),
-        x_nonpar=locus_expr.in_x_nonpar(),
-        y_par=locus_expr.in_y_par(),
-        y_nonpar=locus_expr.in_y_nonpar(),
-    ).rows()
-    col_idx = col_ht[source_mt.col_key]
-    row_idx = row_ht[source_mt.row_key]
+    row_ht = source_mt.annotate_rows(**get_sex_ploidy_row_flags_expr(locus_expr)).rows()
 
-    return col_idx, row_idx
+    return col_ht[source_mt.col_key], row_ht[source_mt.row_key]
 
 
 def get_is_haploid_expr(
@@ -777,9 +865,7 @@ def get_is_haploid_expr(
             "Both 'locus_expr' and 'karyotype_expr' are required if no 'gt_expr' is "
             "supplied."
         )
-    # An optimization that annotates the locus's matrix table with the
-    # fields in the case statements below as an optimization step
-    col_idx, row_idx = annotate_and_index_source_mt_for_sex_ploidy(
+    col_idx, row_idx = _index_sex_ploidy_flags(
         locus_expr, karyotype_expr, xy_karyotype_str, xx_karyotype_str
     )
 

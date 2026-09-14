@@ -11,6 +11,7 @@ from gnomad.utils.annotations import (
     VRS_CHROM_IDS,
     add_gks_va,
     add_gks_vrs,
+    annotate_and_index_source_mt_for_sex_ploidy,
     annotate_downsamplings,
     annotate_freq,
     check_annotation_missingness,
@@ -2751,6 +2752,61 @@ class TestFindMinimalStrataGroups:
         """Length-mismatched sample_count is a programmer error."""
         with pytest.raises(ValueError, match="aligned"):
             find_minimal_strata_groups([{"group": "adj"}], [1, 2])
+
+
+class TestAnnotateAndIndexSourceMtForSexPloidy:
+    """Test the annotate_and_index_source_mt_for_sex_ploidy function."""
+
+    @pytest.fixture
+    def mt(self) -> hl.MatrixTable:
+        """Two samples (XX, lowercase xy) by an autosome, chrX PAR1, chrX non-PAR and chrY non-PAR locus."""
+        loci = [
+            hl.locus("chr1", 1000, reference_genome="GRCh38"),
+            hl.locus("chrX", 20000, reference_genome="GRCh38"),
+            hl.locus("chrX", 5000000, reference_genome="GRCh38"),
+            hl.locus("chrY", 5000000, reference_genome="GRCh38"),
+        ]
+        entries = [
+            {"locus": locus, "s": s, "GT": hl.call(0, 1)}
+            for locus in loci
+            for s in ("s1", "s2")
+        ]
+        mt = hl.Table.parallelize(
+            entries, hl.tstruct(locus=hl.tlocus("GRCh38"), s=hl.tstr, GT=hl.tcall)
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        return mt.annotate_cols(sex_karyotype=hl.if_else(mt.s == "s1", "XX", "xy"))
+
+    def test_flags_are_fields_of_returned_mt(self, mt: hl.MatrixTable) -> None:
+        """The returned structs are plain fields of the returned MT with the expected per-sample and per-locus values, and dropping them restores the input schema."""
+        out, col_flags, row_flags = annotate_and_index_source_mt_for_sex_ploidy(
+            mt, mt.sex_karyotype
+        )
+        assert col_flags._indices.source is out
+        assert row_flags._indices.source is out
+        cols = {r.s: r for r in out.annotate_cols(f=col_flags).cols().collect()}
+        assert (cols["s1"].f.xy, cols["s1"].f.xx) == (False, True)
+        assert (cols["s2"].f.xy, cols["s2"].f.xx) == (True, False)
+        rows = {
+            (r.locus.contig, r.locus.position): r.f
+            for r in out.annotate_rows(f=row_flags).rows().collect()
+        }
+        assert rows[("chr1", 1000)].in_autosome and not rows[("chr1", 1000)].in_non_par
+        assert not rows[("chrX", 20000)].in_non_par
+        assert rows[("chrX", 5000000)].x_nonpar and rows[("chrX", 5000000)].in_non_par
+        assert rows[("chrY", 5000000)].y_nonpar and not rows[("chrY", 5000000)].y_par
+        dropped = out.drop(col_flags, row_flags)
+        assert set(dropped.col) == set(mt.col)
+        assert set(dropped.row) == set(mt.row)
+
+    def test_flag_field_names_avoid_collisions(self, mt: hl.MatrixTable) -> None:
+        """Caller fields that share the default flag field names are left untouched."""
+        mt = mt.annotate_cols(_sex_ploidy_col=1).annotate_rows(_sex_ploidy_row=2)
+        out, col_flags, row_flags = annotate_and_index_source_mt_for_sex_ploidy(
+            mt, mt.sex_karyotype
+        )
+        assert out.aggregate_cols(hl.agg.all(out._sex_ploidy_col == 1))
+        assert out.aggregate_rows(hl.agg.all(out._sex_ploidy_row == 2))
+        assert "xy" in col_flags and "in_non_par" in row_flags
 
 
 class TestFindStrataCells:

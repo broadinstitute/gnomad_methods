@@ -121,6 +121,28 @@ def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
     return ref
 
 
+def get_primary_contigs(
+    build: str = "GRCh38", include_sex: bool = True, include_mt: bool = False
+) -> List[str]:
+    """
+    Get the primary contigs (autosomes, optionally sex chromosomes and MT) for a build.
+
+    Requires an initialized Hail context.
+
+    :param build: Reference genome build. Default is "GRCh38".
+    :param include_sex: Whether to include the X and Y contigs. Default is True.
+    :param include_mt: Whether to include the MT contig. Default is False.
+    :return: List of contig names in reference order.
+    """
+    rg = hl.get_reference(build)
+    contigs = list(rg.contigs[:22])
+    if include_sex:
+        contigs += rg.x_contigs + rg.y_contigs
+    if include_mt:
+        contigs += rg.mt_contigs
+    return contigs
+
+
 def get_reference_genome(
     locus: Union[hl.expr.LocusExpression, hl.expr.IntervalExpression],
     add_sequence: bool = False,

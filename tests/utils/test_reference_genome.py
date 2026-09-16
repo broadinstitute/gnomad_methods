@@ -14,7 +14,7 @@ class TestGetPrimaryContigs:
     """Test the get_primary_contigs function."""
 
     @pytest.mark.parametrize(
-        "build, include_sex, include_mt, expected",
+        "build, include_sex, keep_chrM, expected",
         [
             ("GRCh38", True, False, GRCH38_AUTOSOMES + ["chrX", "chrY"]),
             ("GRCh38", False, False, GRCH38_AUTOSOMES),
@@ -26,10 +26,10 @@ class TestGetPrimaryContigs:
         ],
     )
     def test_get_primary_contigs(
-        self, build: str, include_sex: bool, include_mt: bool, expected: List[str]
+        self, build: str, include_sex: bool, keep_chrM: bool, expected: List[str]
     ) -> None:
         """Test that the expected contigs are returned in reference order."""
-        assert get_primary_contigs(build, include_sex, include_mt) == expected
+        assert get_primary_contigs(build, include_sex, keep_chrM) == expected
 
     def test_default_build_is_grch38(self) -> None:
         """Test that the default build is GRCh38 with sex contigs and no MT."""
@@ -37,4 +37,9 @@ class TestGetPrimaryContigs:
 
     def test_no_alt_contigs(self) -> None:
         """Test that alt/decoy contigs are never included."""
-        assert all("_" not in c for c in get_primary_contigs("GRCh38", include_mt=True))
+        assert all("_" not in c for c in get_primary_contigs("GRCh38", keep_chrM=True))
+
+    def test_unsupported_build_raises(self) -> None:
+        """Test that non-human builds raise instead of returning positional contigs."""
+        with pytest.raises(NotImplementedError, match="GRCm38"):
+            get_primary_contigs("GRCm38")

@@ -8,6 +8,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.sample_qc.ancestry import GEN_ANC_NAMES
+from gnomad.utils.reference_genome import get_primary_contigs
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -1487,7 +1488,7 @@ def set_xx_y_metrics_to_na(
 def build_vcf_export_reference(
     name: str,
     build: str = "GRCh38",
-    keep_contigs: List[str] = [f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"],
+    keep_contigs: Optional[List[str]] = None,
     keep_chrM: bool = True,
 ) -> hl.ReferenceGenome:
     """
@@ -1499,12 +1500,17 @@ def build_vcf_export_reference(
 
     :param name: Name to use for new reference.
     :param build: Reference genome build to use as starting reference genome.
-    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is autosomes and sex chromosomes.
+    :param keep_contigs: Contigs to keep from reference genome defined by `build`. Default is None, which uses autosomes and sex chromosomes.
     :param keep_chrM: Whether to keep chrM. Default is True.
     :return: Reference genome for VCF export containing only contigs in `keep_contigs`.
     """
     ref = hl.get_reference(build)
     ref_args = {}
+
+    if keep_contigs is None:
+        keep_contigs = get_primary_contigs(build)
+    else:
+        keep_contigs = list(keep_contigs)
 
     if keep_chrM:
         keep_contigs.extend(ref.mt_contigs)

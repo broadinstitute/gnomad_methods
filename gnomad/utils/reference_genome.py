@@ -122,23 +122,28 @@ def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
 
 
 def get_primary_contigs(
-    build: str = "GRCh38", include_sex: bool = True, include_mt: bool = False
+    build: str = "GRCh38", include_sex: bool = True, keep_chrM: bool = False
 ) -> List[str]:
     """
     Get the primary contigs (autosomes, optionally sex chromosomes and MT) for a build.
 
-    Requires an initialized Hail context.
+    Requires an initialized Hail context. Only GRCh37 and GRCh38 are supported, since
+    autosomes are taken positionally as the first 22 contigs.
 
     :param build: Reference genome build. Default is "GRCh38".
     :param include_sex: Whether to include the X and Y contigs. Default is True.
-    :param include_mt: Whether to include the MT contig. Default is False.
+    :param keep_chrM: Whether to include the MT contig. Default is False.
     :return: List of contig names in reference order.
     """
+    if build not in ("GRCh37", "GRCh38"):
+        raise NotImplementedError(
+            f"Build {build} not supported. Only GRCh37 and GRCh38 are supported."
+        )
     rg = hl.get_reference(build)
     contigs = list(rg.contigs[:22])
     if include_sex:
         contigs += rg.x_contigs + rg.y_contigs
-    if include_mt:
+    if keep_chrM:
         contigs += rg.mt_contigs
     return contigs
 

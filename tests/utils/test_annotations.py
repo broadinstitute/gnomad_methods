@@ -11,14 +11,18 @@ from gnomad.utils.annotations import (
     VRS_CHROM_IDS,
     add_gks_va,
     add_gks_vrs,
+    annotate_and_index_source_mt_for_sex_ploidy,
     annotate_downsamplings,
     annotate_freq,
     check_annotation_missingness,
     expand_strata_array_from_leaves,
     fill_missing_key_combinations,
     find_minimal_strata_groups,
+    find_strata_cells,
     generate_freq_group_membership_array,
     get_copy_state_by_sex,
+    get_is_haploid_expr,
+    index_sex_ploidy_flags,
     merge_array_expressions,
     merge_freq_arrays,
     merge_histograms,
@@ -2750,6 +2754,333 @@ class TestFindMinimalStrataGroups:
         """Length-mismatched sample_count is a programmer error."""
         with pytest.raises(ValueError, match="aligned"):
             find_minimal_strata_groups([{"group": "adj"}], [1, 2])
+
+
+@pytest.fixture
+def sex_ploidy_mt() -> hl.MatrixTable:
+    """Two samples (XX, lowercase xy) by an autosome, chrX PAR1, chrX non-PAR and chrY non-PAR locus."""
+    loci = [
+        hl.locus("chr1", 1000, reference_genome="GRCh38"),
+        hl.locus("chrX", 20000, reference_genome="GRCh38"),
+        hl.locus("chrX", 5000000, reference_genome="GRCh38"),
+        hl.locus("chrY", 5000000, reference_genome="GRCh38"),
+    ]
+    entries = [
+        {"locus": locus, "s": s, "GT": hl.call(0, 1)}
+        for locus in loci
+        for s in ("s1", "s2")
+    ]
+    mt = hl.Table.parallelize(
+        entries, hl.tstruct(locus=hl.tlocus("GRCh38"), s=hl.tstr, GT=hl.tcall)
+    ).to_matrix_table(row_key=["locus"], col_key=["s"])
+    return mt.annotate_cols(sex_karyotype=hl.if_else(mt.s == "s1", "XX", "xy"))
+
+
+class TestAnnotateAndIndexSourceMtForSexPloidy:
+    """Test the annotate_and_index_source_mt_for_sex_ploidy function."""
+
+    @pytest.fixture
+    def mt(self, sex_ploidy_mt: hl.MatrixTable) -> hl.MatrixTable:
+        """Alias the shared sex-ploidy MatrixTable fixture."""
+        return sex_ploidy_mt
+
+    def test_flags_are_fields_of_returned_mt(self, mt: hl.MatrixTable) -> None:
+        """The returned structs are plain fields of the returned MT with the expected per-sample and per-locus values, and dropping them restores the input schema."""
+        out, col_flags, row_flags = annotate_and_index_source_mt_for_sex_ploidy(
+            mt, mt.sex_karyotype
+        )
+        assert col_flags._indices.source is out
+        assert row_flags._indices.source is out
+        cols = {r.s: r for r in out.annotate_cols(f=col_flags).cols().collect()}
+        assert (cols["s1"].f.xy, cols["s1"].f.xx) == (False, True)
+        assert (cols["s2"].f.xy, cols["s2"].f.xx) == (True, False)
+        rows = {
+            (r.locus.contig, r.locus.position): r.f
+            for r in out.annotate_rows(f=row_flags).rows().collect()
+        }
+        assert rows[("chr1", 1000)].in_autosome and not rows[("chr1", 1000)].in_non_par
+        assert not rows[("chrX", 20000)].in_non_par
+        assert rows[("chrX", 5000000)].x_nonpar and rows[("chrX", 5000000)].in_non_par
+        assert rows[("chrY", 5000000)].y_nonpar and not rows[("chrY", 5000000)].y_par
+        dropped = out.drop(col_flags, row_flags)
+        assert set(dropped.col) == set(mt.col)
+        assert set(dropped.row) == set(mt.row)
+
+    def test_flag_field_names_avoid_collisions(self, mt: hl.MatrixTable) -> None:
+        """Caller fields that share the default flag field names are left untouched."""
+        mt = mt.annotate_cols(_sex_ploidy_col=1).annotate_rows(_sex_ploidy_row=2)
+        out, col_flags, row_flags = annotate_and_index_source_mt_for_sex_ploidy(
+            mt, mt.sex_karyotype
+        )
+        assert out.aggregate_cols(hl.agg.all(out._sex_ploidy_col == 1))
+        assert out.aggregate_rows(hl.agg.all(out._sex_ploidy_row == 2))
+        assert "xy" in col_flags and "in_non_par" in row_flags
+
+
+class TestIndexSexPloidyFlags:
+    """Test the index_sex_ploidy_flags function."""
+
+    def test_flags_index_onto_source_and_match_in_place_annotation(
+        self, sex_ploidy_mt: hl.MatrixTable
+    ) -> None:
+        """The returned structs are usable as entry expressions on the source MatrixTable and hold the same per-sample and per-locus values as `annotate_and_index_source_mt_for_sex_ploidy`."""
+        mt = sex_ploidy_mt
+        col_idx, row_idx = index_sex_ploidy_flags(mt.locus, mt.sex_karyotype)
+        # Indexed expressions are bound to the source MT (not to its cols()/rows()
+        # Tables), so they can be combined in an entry expression without a join.
+        indexed = mt.annotate_entries(col_flags=col_idx, row_flags=row_idx).entries()
+        annotated, col_flags, row_flags = annotate_and_index_source_mt_for_sex_ploidy(
+            mt, mt.sex_karyotype
+        )
+        in_place = annotated.annotate_entries(
+            col_flags=col_flags, row_flags=row_flags
+        ).entries()
+        got = {
+            (e.locus.contig, e.locus.position, e.s): (e.col_flags, e.row_flags)
+            for e in indexed.collect()
+        }
+        expected = {
+            (e.locus.contig, e.locus.position, e.s): (e.col_flags, e.row_flags)
+            for e in in_place.collect()
+        }
+        assert got == expected
+        assert len(got) == mt.count_rows() * mt.count_cols()
+        # Spot-check the values themselves so the test does not pass on two
+        # matching-but-wrong implementations.
+        xy_flags, locus_flags = got[("chrX", 5000000, "s2")]
+        assert (xy_flags.xy, xy_flags.xx) == (True, False)
+        assert locus_flags.x_nonpar and locus_flags.in_non_par
+        assert not locus_flags.in_autosome
+        xx_flags, _ = got[("chrX", 5000000, "s1")]
+        assert (xx_flags.xy, xx_flags.xx) == (False, True)
+
+    def test_custom_karyotype_strings(self, sex_ploidy_mt: hl.MatrixTable) -> None:
+        """Alternate karyotype labels are matched case-insensitively and the defaults are then not recognised."""
+        mt = sex_ploidy_mt.annotate_cols(
+            label=hl.if_else(sex_ploidy_mt.s == "s1", "Female", "MALE")
+        )
+        col_idx, _ = index_sex_ploidy_flags(
+            mt.locus, mt.label, xy_karyotype_str="MALE", xx_karyotype_str="FEMALE"
+        )
+        cols = {r.s: r.f for r in mt.annotate_cols(f=col_idx).cols().collect()}
+        assert (cols["s1"].xy, cols["s1"].xx) == (False, True)
+        assert (cols["s2"].xy, cols["s2"].xx) == (True, False)
+        default_idx, _ = index_sex_ploidy_flags(mt.locus, mt.label)
+        cols = {r.s: r.f for r in mt.annotate_cols(f=default_idx).cols().collect()}
+        assert all((c.xy, c.xx) == (False, False) for c in cols.values())
+
+
+class TestGetIsHaploidExpr:
+    """Test the get_is_haploid_expr function."""
+
+    def test_gt_expr_path(self) -> None:
+        """With a genotype the result is that call's ploidy check, missing for a missing call."""
+        assert hl.eval(get_is_haploid_expr(gt_expr=hl.call(0))) is True
+        assert hl.eval(get_is_haploid_expr(gt_expr=hl.call(0, 1))) is False
+        assert hl.eval(get_is_haploid_expr(gt_expr=hl.missing(hl.tcall))) is None
+
+    def test_locus_and_karyotype_path(self, sex_ploidy_mt: hl.MatrixTable) -> None:
+        """Per-locus, per-sample haploid flags for an XX and an XY sample across an autosome, chrX PAR, chrX non-PAR and chrY non-PAR."""
+        mt = sex_ploidy_mt
+        out = mt.annotate_entries(
+            h=get_is_haploid_expr(locus_expr=mt.locus, karyotype_expr=mt.sex_karyotype)
+        )
+        got = {
+            (e.locus.contig, e.locus.position, e.s): e.h
+            for e in out.entries().collect()
+        }
+        # s1 is XX, s2 is xy (matched case-insensitively). XX on chrY non-PAR
+        # is missing rather than False: the call itself should be missing there.
+        expected = {
+            ("chr1", 1000, "s1"): False,
+            ("chr1", 1000, "s2"): False,
+            ("chrX", 20000, "s1"): False,
+            ("chrX", 20000, "s2"): False,
+            ("chrX", 5000000, "s1"): False,
+            ("chrX", 5000000, "s2"): True,
+            ("chrY", 5000000, "s1"): None,
+            ("chrY", 5000000, "s2"): True,
+        }
+        assert got == expected
+
+    def test_missing_arguments_raise(self, sex_ploidy_mt: hl.MatrixTable) -> None:
+        """No arguments, or a locus or karyotype on its own, is rejected."""
+        mt = sex_ploidy_mt
+        with pytest.raises(ValueError, match="is required"):
+            get_is_haploid_expr()
+        with pytest.raises(ValueError, match="Both"):
+            get_is_haploid_expr(locus_expr=mt.locus)
+        with pytest.raises(ValueError, match="Both"):
+            get_is_haploid_expr(karyotype_expr=mt.sex_karyotype)
+
+
+class TestFindStrataCells:
+    """Test the find_strata_cells function."""
+
+    @staticmethod
+    def _membership_ht(n_samples: int, n_downsamplings: int = 3) -> hl.Table:
+        """Return a Table with a full ``group_membership`` array for `n_samples` samples spread over gen_anc, sex, and `n_downsamplings` downsampling thresholds on a per-sample rank."""
+        ht = hl.utils.range_table(n_samples)
+        ht = ht.annotate(
+            gen_anc=hl.array(["afr", "nfe", "eas"])[ht.idx % 3],
+            sex=hl.array(["XX", "XY"])[ht.idx % 2],
+            rank=(ht.idx * 7) % n_samples,
+        )
+        ds = [n_samples * (d + 1) // n_downsamplings for d in range(n_downsamplings)]
+        freq_meta = [{"group": "adj"}, {"group": "raw"}]
+        exprs = [hl.literal(True), hl.literal(True)]
+        for ga in ["afr", "nfe", "eas"]:
+            for sx in ["XX", "XY"]:
+                freq_meta.append({"group": "adj", "gen_anc": ga, "sex": sx})
+                exprs.append((ht.gen_anc == ga) & (ht.sex == sx))
+        for d in ds:
+            freq_meta.append({"group": "adj", "downsampling": str(d)})
+            exprs.append(ht.rank < d)
+        ht = ht.annotate(group_membership=hl.array(exprs))
+        counts = ht.aggregate(
+            hl.agg.array_agg(lambda x: hl.agg.count_where(x), ht.group_membership)
+        )
+        return ht.annotate_globals(freq_meta=freq_meta, freq_meta_sample_count=counts)
+
+    def test_cells_partition_samples_and_rebuild_groups(self) -> None:
+        """Every sample lands in exactly one cell per label and each group's cells sum to its sample count."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        leaves, decomp, leaf_meta, leaf_counts, membership = find_strata_cells(
+            ht, freq_meta, counts
+        )
+        assert leaves == list(range(len(freq_meta), len(freq_meta) + len(leaf_meta)))
+        rows = ht.annotate(m=membership).m.collect()
+        assert all(len(m) == len(leaf_meta) for m in rows)
+        # One adj cell and the single raw cell per sample.
+        assert all(sum(m) == 2 for m in rows)
+        assert sum(leaf_counts) == 2 * 48
+        for i, children in decomp.items():
+            assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
+
+    def test_missing_membership_bit_means_not_a_member(self) -> None:
+        """A missing membership bit (a sample without a stratification value) is treated as False, matching `count_where` and `agg.filter` semantics."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        # Blank the gen_anc/sex bits for every afr sample, as an `hl.all([...])`
+        # over a missing strata value would. That also empties both afr groups,
+        # so the zero-sample leaf path sees missing bits too.
+        ht = ht.annotate(
+            group_membership=hl.enumerate(ht.group_membership).map(
+                lambda x: hl.if_else(
+                    (x[0] >= 2) & (x[0] < 8) & (ht.idx % 3 == 0),
+                    hl.missing(hl.tbool),
+                    x[1],
+                )
+            )
+        )
+        counts = ht.aggregate(
+            hl.agg.array_agg(lambda x: hl.agg.count_where(x), ht.group_membership)
+        )
+        leaves, decomp, leaf_meta, leaf_counts, membership = find_strata_cells(
+            ht, freq_meta, counts
+        )
+        rows = ht.annotate(m=membership).m.collect()
+        assert all(None not in m for m in rows)
+        assert all(sum(m) == 2 for m in rows)
+        for i, children in decomp.items():
+            assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
+
+    def test_membership_ir_is_linear_in_cell_count(self) -> None:
+        """The returned membership expression embeds each label's cell lookup once, so its IR grows linearly with the number of cells rather than quadratically."""
+        sizes = {}
+        for n_ds in (2, 10):
+            ht = self._membership_ht(96, n_downsamplings=n_ds)
+            freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+            counts = list(hl.eval(ht.freq_meta_sample_count))
+            _, _, leaf_meta, _, membership = find_strata_cells(ht, freq_meta, counts)
+            ir = str(membership._ir)
+            # Every cell key is a distinct 0/1 pattern; the adj lookup dict must
+            # appear exactly once, not once per cell.
+            n_adj_cells = sum(m["group"] == "adj" for m in leaf_meta)
+            assert n_adj_cells > 1
+            sizes[n_ds] = (n_adj_cells, len(ir))
+        (c_small, ir_small), (c_large, ir_large) = sizes[2], sizes[10]
+        assert c_large > c_small
+        # Quadratic growth would scale the IR by roughly (c_large / c_small) ** 2.
+        assert ir_large / ir_small < 2 * (c_large / c_small)
+
+    def test_force_leaf_groups_kept_as_real_leaves(self) -> None:
+        """A forced group is a real leaf ahead of the cells with its own membership, is never decomposed, no longer splits its label's cells, and is forced once however often it is listed."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        # The middle downsampling: its bit splits the gen_anc/sex cells, unlike
+        # the largest one, which every sample belongs to.
+        forced_idx = len(freq_meta) - 2
+        target = freq_meta[forced_idx]
+        leaves, decomp, leaf_meta, leaf_counts, membership = find_strata_cells(
+            ht, freq_meta, counts, force_leaf_groups=[target, target]
+        )
+        assert leaves[0] == forced_idx
+        assert leaves.count(forced_idx) == 1
+        assert forced_idx not in decomp
+        assert leaf_meta[0] == target
+        assert leaf_counts[0] == counts[forced_idx]
+        _, _, unforced_meta, _, _ = find_strata_cells(ht, freq_meta, counts)
+        assert sum("cell" in m for m in leaf_meta) < sum(
+            "cell" in m for m in unforced_meta
+        )
+        rows = ht.annotate(m=membership).m.collect()
+        full = ht.group_membership.collect()
+        assert [m[0] for m in rows] == [f[forced_idx] for f in full]
+        for i, children in decomp.items():
+            assert sum(leaf_counts[leaves.index(c)] for c in children) == counts[i]
+        with pytest.raises(ValueError, match="not in `freq_meta`"):
+            find_strata_cells(
+                ht, freq_meta, counts, force_leaf_groups=[{"group": "adj", "x": "y"}]
+            )
+
+    def test_missing_group_key_raises(self) -> None:
+        """A `freq_meta` entry without a ``group`` key is rejected up front rather than failing inside the aggregation."""
+        ht = self._membership_ht(12)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        del freq_meta[2]["group"]
+        with pytest.raises(ValueError, match="has no 'group' key"):
+            find_strata_cells(ht, freq_meta, counts)
+
+    def test_reconstruction_matches_minimal_groups_and_full(self) -> None:
+        """Aggregating only the leaves and expanding gives the same per-group result under `find_strata_cells` as under `find_minimal_strata_groups` and as aggregating every group directly."""
+        ht = self._membership_ht(48)
+        freq_meta = [dict(m) for m in hl.eval(ht.freq_meta)]
+        counts = list(hl.eval(ht.freq_meta_sample_count))
+        n_full = len(freq_meta)
+
+        def _per_group_rank_sum(membership: hl.expr.ArrayExpression) -> List[int]:
+            return ht.aggregate(
+                hl.agg.array_agg(
+                    lambda x: hl.agg.filter(hl.coalesce(x, False), hl.agg.sum(ht.rank)),
+                    membership,
+                )
+            )
+
+        def _expand(leaf_values, leaves, decomp) -> List[int]:
+            return hl.eval(
+                expand_strata_array_from_leaves(
+                    hl.literal(leaf_values, hl.tarray(hl.tint64)),
+                    leaves,
+                    decomp,
+                    n_full,
+                )
+            )
+
+        full = _per_group_rank_sum(ht.group_membership)
+        c_leaves, c_decomp, _, _, c_membership = find_strata_cells(
+            ht, freq_meta, counts
+        )
+        m_leaves, m_decomp = find_minimal_strata_groups(freq_meta, counts)
+        m_membership = hl.array([ht.group_membership[i] for i in m_leaves])
+        from_cells = _expand(_per_group_rank_sum(c_membership), c_leaves, c_decomp)
+        from_minimal = _expand(_per_group_rank_sum(m_membership), m_leaves, m_decomp)
+        assert from_cells == full
+        assert from_minimal == full
 
 
 class TestExpandStrataArrayFromLeaves:

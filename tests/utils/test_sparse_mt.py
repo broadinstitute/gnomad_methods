@@ -1009,6 +1009,85 @@ class TestComputeStatsPerRefSiteReduceToCells:
         assert all(len(v) == 1 for v in cells_max)
         assert full_max == cells_max
 
+    def test_pinned_parent_with_many_cells_matches_full(
+        self, synthetic_vds, reference_ht
+    ):
+        """Non-summable aggs pinned via `entry_agg_group_membership` to parents that decompose into several cells match the un-reduced run.
+
+        This is the production coverage shape: `coverage_stats` is pinned to
+        `{"group": "adj"}`, which under cells is never a leaf but the union
+        of every adj cell (the raw pin in
+        `test_cells_match_full_and_expose_cell_globals` collapses to one
+        cell, so it never exercises the multi-child parent path). A second
+        pin to `{"group": "adj", "gen_anc": "afr"}` covers a parent whose
+        cells are a strict subset of the label's.
+        """
+        vd = synthetic_vds.variant_data
+        full_gmh = self._build_group_membership_ht(vd)
+        cells_gmh = self._build_group_membership_ht(vd, reduce_to_cells=True)
+
+        full_meta = [dict(m) for m in hl.eval(cells_gmh.freq_meta_full)]
+        cells_meta = [dict(m) for m in hl.eval(cells_gmh.freq_meta)]
+        decomposition = [list(c) for c in hl.eval(cells_gmh.freq_group_decomposition)]
+        adj_target = {"group": "adj"}
+        afr_target = {"group": "adj", "gen_anc": "afr"}
+        n_adj_children = len(decomposition[full_meta.index(adj_target)])
+        n_afr_children = len(decomposition[full_meta.index(afr_target)])
+        # The adj pin must decompose into every adj cell and the afr pin into
+        # several but not all of them, or this test is not covering what it
+        # claims.
+        assert n_adj_children == sum(m["group"] == "adj" for m in cells_meta) > 1
+        assert 1 < n_afr_children < n_adj_children
+
+        entry_agg_funcs = {
+            "AN": (lambda t: t.GT.ploidy, hl.agg.sum),
+            "max_called": (lambda t: hl.int32(hl.is_defined(t.GT)), hl.agg.max),
+            "alt_hist": (
+                lambda t: t.GT.n_alt_alleles(),
+                lambda x: hl.agg.hist(x, 0, 2, 2),
+            ),
+        }
+        pins = {
+            "max_called": [adj_target, afr_target],
+            "alt_hist": [adj_target, afr_target],
+        }
+        full_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=full_gmh,
+            entry_agg_group_membership=pins,
+        )
+        cells_ht = compute_stats_per_ref_site(
+            synthetic_vds,
+            reference_ht,
+            entry_agg_funcs,
+            group_membership_ht=cells_gmh,
+            reducible_aggs={"AN"},
+            entry_agg_group_membership=pins,
+        )
+
+        full_an = self._index(full_ht, "AN")
+        cells_an = self._index(cells_ht, "AN")
+        assert set(full_an) == set(cells_an)
+        for k in full_an:
+            assert full_an[k] == cells_an[k], k
+
+        full_rows = full_ht.collect()
+        cells_rows = cells_ht.collect()
+        assert all(len(r.max_called) == 2 for r in cells_rows)
+        assert [r.max_called for r in full_rows] == [r.max_called for r in cells_rows]
+        # The two pins must be distinguishable, or a bug that aggregated the
+        # whole label for both would pass unnoticed.
+        assert any(r.alt_hist[0].bin_freq != r.alt_hist[1].bin_freq for r in full_rows)
+        for f_row, c_row in zip(full_rows, cells_rows):
+            assert len(c_row.alt_hist) == 2
+            for f, c in zip(f_row.alt_hist, c_row.alt_hist):
+                assert f.bin_edges == c.bin_edges
+                assert f.bin_freq == c.bin_freq
+                assert f.n_smaller == c.n_smaller
+                assert f.n_larger == c.n_larger
+
     def test_force_leaf_groups_kept_as_real_leaves(self, synthetic_vds):
         """A forced leaf keeps its own `freq_meta` index ahead of the cells, is not decomposed, and leaves no orphan cell behind for its label."""
         vd = synthetic_vds.variant_data

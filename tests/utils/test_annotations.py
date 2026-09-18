@@ -21,6 +21,7 @@ from gnomad.utils.annotations import (
     find_strata_cells,
     generate_freq_group_membership_array,
     get_copy_state_by_sex,
+    index_sex_ploidy_flags,
     merge_array_expressions,
     merge_freq_arrays,
     merge_histograms,
@@ -2754,27 +2755,33 @@ class TestFindMinimalStrataGroups:
             find_minimal_strata_groups([{"group": "adj"}], [1, 2])
 
 
+@pytest.fixture
+def sex_ploidy_mt() -> hl.MatrixTable:
+    """Two samples (XX, lowercase xy) by an autosome, chrX PAR1, chrX non-PAR and chrY non-PAR locus."""
+    loci = [
+        hl.locus("chr1", 1000, reference_genome="GRCh38"),
+        hl.locus("chrX", 20000, reference_genome="GRCh38"),
+        hl.locus("chrX", 5000000, reference_genome="GRCh38"),
+        hl.locus("chrY", 5000000, reference_genome="GRCh38"),
+    ]
+    entries = [
+        {"locus": locus, "s": s, "GT": hl.call(0, 1)}
+        for locus in loci
+        for s in ("s1", "s2")
+    ]
+    mt = hl.Table.parallelize(
+        entries, hl.tstruct(locus=hl.tlocus("GRCh38"), s=hl.tstr, GT=hl.tcall)
+    ).to_matrix_table(row_key=["locus"], col_key=["s"])
+    return mt.annotate_cols(sex_karyotype=hl.if_else(mt.s == "s1", "XX", "xy"))
+
+
 class TestAnnotateAndIndexSourceMtForSexPloidy:
     """Test the annotate_and_index_source_mt_for_sex_ploidy function."""
 
     @pytest.fixture
-    def mt(self) -> hl.MatrixTable:
-        """Two samples (XX, lowercase xy) by an autosome, chrX PAR1, chrX non-PAR and chrY non-PAR locus."""
-        loci = [
-            hl.locus("chr1", 1000, reference_genome="GRCh38"),
-            hl.locus("chrX", 20000, reference_genome="GRCh38"),
-            hl.locus("chrX", 5000000, reference_genome="GRCh38"),
-            hl.locus("chrY", 5000000, reference_genome="GRCh38"),
-        ]
-        entries = [
-            {"locus": locus, "s": s, "GT": hl.call(0, 1)}
-            for locus in loci
-            for s in ("s1", "s2")
-        ]
-        mt = hl.Table.parallelize(
-            entries, hl.tstruct(locus=hl.tlocus("GRCh38"), s=hl.tstr, GT=hl.tcall)
-        ).to_matrix_table(row_key=["locus"], col_key=["s"])
-        return mt.annotate_cols(sex_karyotype=hl.if_else(mt.s == "s1", "XX", "xy"))
+    def mt(self, sex_ploidy_mt: hl.MatrixTable) -> hl.MatrixTable:
+        """Alias the shared sex-ploidy MatrixTable fixture."""
+        return sex_ploidy_mt
 
     def test_flags_are_fields_of_returned_mt(self, mt: hl.MatrixTable) -> None:
         """The returned structs are plain fields of the returned MT with the expected per-sample and per-locus values, and dropping them restores the input schema."""
@@ -2807,6 +2814,59 @@ class TestAnnotateAndIndexSourceMtForSexPloidy:
         assert out.aggregate_cols(hl.agg.all(out._sex_ploidy_col == 1))
         assert out.aggregate_rows(hl.agg.all(out._sex_ploidy_row == 2))
         assert "xy" in col_flags and "in_non_par" in row_flags
+
+
+class TestIndexSexPloidyFlags:
+    """Test the index_sex_ploidy_flags function."""
+
+    def test_flags_index_onto_source_and_match_in_place_annotation(
+        self, sex_ploidy_mt: hl.MatrixTable
+    ) -> None:
+        """The returned structs are usable as entry expressions on the source MatrixTable and hold the same per-sample and per-locus values as `annotate_and_index_source_mt_for_sex_ploidy`."""
+        mt = sex_ploidy_mt
+        col_idx, row_idx = index_sex_ploidy_flags(mt.locus, mt.sex_karyotype)
+        # Indexed expressions are bound to the source MT (not to its cols()/rows()
+        # Tables), so they can be combined in an entry expression without a join.
+        indexed = mt.annotate_entries(col_flags=col_idx, row_flags=row_idx).entries()
+        annotated, col_flags, row_flags = annotate_and_index_source_mt_for_sex_ploidy(
+            mt, mt.sex_karyotype
+        )
+        in_place = annotated.annotate_entries(
+            col_flags=col_flags, row_flags=row_flags
+        ).entries()
+        got = {
+            (e.locus.contig, e.locus.position, e.s): (e.col_flags, e.row_flags)
+            for e in indexed.collect()
+        }
+        expected = {
+            (e.locus.contig, e.locus.position, e.s): (e.col_flags, e.row_flags)
+            for e in in_place.collect()
+        }
+        assert got == expected
+        assert len(got) == mt.count_rows() * mt.count_cols()
+        # Spot-check the values themselves so the test does not pass on two
+        # matching-but-wrong implementations.
+        xy_flags, locus_flags = got[("chrX", 5000000, "s2")]
+        assert (xy_flags.xy, xy_flags.xx) == (True, False)
+        assert locus_flags.x_nonpar and locus_flags.in_non_par
+        assert not locus_flags.in_autosome
+        xx_flags, _ = got[("chrX", 5000000, "s1")]
+        assert (xx_flags.xy, xx_flags.xx) == (False, True)
+
+    def test_custom_karyotype_strings(self, sex_ploidy_mt: hl.MatrixTable) -> None:
+        """Alternate karyotype labels are matched case-insensitively and the defaults are then not recognised."""
+        mt = sex_ploidy_mt.annotate_cols(
+            label=hl.if_else(sex_ploidy_mt.s == "s1", "Female", "MALE")
+        )
+        col_idx, _ = index_sex_ploidy_flags(
+            mt.locus, mt.label, xy_karyotype_str="MALE", xx_karyotype_str="FEMALE"
+        )
+        cols = {r.s: r.f for r in mt.annotate_cols(f=col_idx).cols().collect()}
+        assert (cols["s1"].xy, cols["s1"].xx) == (False, True)
+        assert (cols["s2"].xy, cols["s2"].xx) == (True, False)
+        default_idx, _ = index_sex_ploidy_flags(mt.locus, mt.label)
+        cols = {r.s: r.f for r in mt.annotate_cols(f=default_idx).cols().collect()}
+        assert all((c.xy, c.xx) == (False, False) for c in cols.values())
 
 
 class TestFindStrataCells:

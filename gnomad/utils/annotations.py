@@ -822,12 +822,14 @@ def index_sex_ploidy_flags(
     :return: Tuple of column and row flag structs indexed onto the source.
     """
     source_mt = locus_expr._indices.source
-    col_ht = source_mt.annotate_cols(
+    # Select rather than annotate so the indexed structs hold only the flags and
+    # none of the source's other column or row fields.
+    col_ht = source_mt.select_cols(
         **get_sex_ploidy_col_flags_expr(
             karyotype_expr, xy_karyotype_str, xx_karyotype_str
         )
     ).cols()
-    row_ht = source_mt.annotate_rows(**get_sex_ploidy_row_flags_expr(locus_expr)).rows()
+    row_ht = source_mt.select_rows(**get_sex_ploidy_row_flags_expr(locus_expr)).rows()
 
     return col_ht[source_mt.col_key], row_ht[source_mt.row_key]
 
@@ -3385,12 +3387,64 @@ def agg_by_strata(
 
     # For each stratification group in group_membership, determine the indices of the
     # samples that belong to that group.
+    n_samples = mt.count_cols()
     global_expr["indices_by_group"] = hl.range(n_groups).map(
-        lambda g_i: hl.range(mt.count_cols()).filter(
+        lambda g_i: hl.range(n_samples).filter(
             lambda s_i: ht.cols[s_i].group_membership[g_i]
         )
     )
     ht = ht.annotate_globals(**global_expr)
+
+    # Resolve each `entry_agg_group_membership` target to its sample index
+    # array and adj flag once, as globals, so the per-row aggregation below
+    # only reads them. Leaf targets alias their `indices_by_group` slot.
+    # Non-leaf parent targets take the union of their leaf-children's samples
+    # (safe — the leaves of a parent's decomposition are pairwise disjoint,
+    # enforced by the sample-count checks in `find_minimal_strata_groups` and
+    # `find_strata_cells`). Building that union in the row expression instead
+    # would redo the n_samples x n_children scan at every row, which is
+    # heaviest under `reduce_to_cells`, where a broad target such as
+    # `{"group": "adj"}` decomposes into every cell of its label. The union is
+    # a single flat index array (a filter over all samples) rather than a
+    # flatten of per-leaf arrays so its IR shape matches the leaf path;
+    # aggregators like `hl.agg.hist` fail to lower over the flattened form.
+    # The parent's adj flag is taken from its own `group` key, equivalent to
+    # any leaf-child's adj because a parent's leaf-set shares the same
+    # `group` value.
+    def _target_indices_and_adj(
+        target_resolutions: List[Tuple[str, Any, bool]],
+    ) -> hl.expr.StructExpression:
+        s_indices_per_target = []
+        adj_per_target = []
+        for kind, payload, adj in target_resolutions:
+            if kind == "leaf":
+                s_indices_per_target.append(ht.indices_by_group[payload])
+                adj_per_target.append(ht.adj_groups[payload])
+            else:  # parent
+                children = hl.literal(payload, hl.tarray(hl.tint32))
+                s_indices_per_target.append(
+                    hl.range(n_samples).filter(
+                        lambda s_i: hl.any(
+                            children.map(lambda lp: ht.cols[s_i].group_membership[lp])
+                        )
+                    )
+                )
+                adj_per_target.append(hl.literal(adj))
+        return hl.struct(
+            s_indices=hl.array(s_indices_per_target), adj=hl.array(adj_per_target)
+        )
+
+    target_field = "_entry_agg_targets"
+    while target_field in ht.globals:
+        target_field += "_"
+    if entry_agg_group_membership:
+        targets_expr = hl.struct(
+            **{
+                ann: _target_indices_and_adj(res)
+                for ann, res in entry_agg_group_membership.items()
+            }
+        )
+        ht = ht.annotate_globals(**{target_field: targets_expr})
 
     # Pull out each annotation that will be used in the array aggregation below as its
     # own ArrayExpression. This is important to prevent memory issues when performing
@@ -3429,53 +3483,16 @@ def agg_by_strata(
             adj_groups_expr,
         )
 
-    # Build per-target (s_indices, adj) arrays for each annotation in
-    # `entry_agg_group_membership`. Leaf targets reuse the
-    # `indices_by_group` / `adj_groups` slots directly; non-leaf parent
-    # targets synthesize their `s_indices` as the flatten of their
-    # leaf-children's index arrays (safe — the leaves of a parent's
-    # decomposition are pairwise disjoint, enforced by the sample-count
-    # check in `find_minimal_strata_groups`). The parent's adj flag is
-    # taken from its own `group` key, equivalent to any leaf-child's
-    # adj because a parent's leaf-set shares the same `group` value.
-    def _per_target_indices_and_adj(target_resolutions):
-        s_indices_per_target = []
-        adj_per_target = []
-        for kind, payload, adj in target_resolutions:
-            if kind == "leaf":
-                s_indices_per_target.append(ht.indices_by_group[payload])
-                adj_per_target.append(ht.adj_groups[payload])
-            else:  # parent
-                # Reconstruct the parent's sample set as a single flat
-                # index array (OR of its disjoint leaf-children's
-                # per-sample membership) instead of flattening an
-                # array-of-index-arrays. The flat form matches the IR shape of
-                # the leaf path, which lets aggregators like `hl.agg.hist` lower
-                # correctly. The previous approach — hl.flatten(array of per-leaf
-                # index arrays) — has the same values but a different IR shape
-                # that Hail cannot lower for these aggregators.
-                s_indices_per_target.append(
-                    hl.range(hl.len(ht.cols)).filter(
-                        lambda s_i: hl.any(
-                            hl.array(
-                                [ht.cols[s_i].group_membership[lp] for lp in payload]
-                            )
-                        )
-                    )
-                )
-                adj_per_target.append(hl.literal(adj))
-        return hl.array(s_indices_per_target), hl.array(adj_per_target)
-
     # Add annotations for any supplied entry transform and aggregation functions.
-    # Filter groups to only those in entry_agg_group_membership if specified.
-    # If there are no specific entry group indices for an annotation, use ht[g]
-    # to consider all groups without filtering.
+    # Annotations in `entry_agg_group_membership` aggregate only their resolved
+    # targets (read from the global built above); all other annotations
+    # aggregate every group.
     def _agg_for(ann, f):
         if ann in entry_agg_group_membership:
-            s_indices, adjs = _per_target_indices_and_adj(
-                entry_agg_group_membership[ann]
+            targets = ht[target_field][ann]
+            return _agg_by_group(
+                targets.s_indices, targets.adj, agg_func=f[1], ann_expr=ht[ann]
             )
-            return _agg_by_group(s_indices, adjs, agg_func=f[1], ann_expr=ht[ann])
         return _agg_by_group(
             ht.indices_by_group,
             ht.adj_groups,
@@ -3487,6 +3504,9 @@ def agg_by_strata(
         *select_fields,
         **{ann: _agg_for(ann, f) for ann, f in entry_agg_funcs.items()},
     )
+
+    if entry_agg_group_membership:
+        ht = ht.drop(target_field)
 
     return ht.drop("cols")
 

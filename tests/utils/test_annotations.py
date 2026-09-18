@@ -21,6 +21,7 @@ from gnomad.utils.annotations import (
     find_strata_cells,
     generate_freq_group_membership_array,
     get_copy_state_by_sex,
+    get_is_haploid_expr,
     index_sex_ploidy_flags,
     merge_array_expressions,
     merge_freq_arrays,
@@ -2867,6 +2868,50 @@ class TestIndexSexPloidyFlags:
         default_idx, _ = index_sex_ploidy_flags(mt.locus, mt.label)
         cols = {r.s: r.f for r in mt.annotate_cols(f=default_idx).cols().collect()}
         assert all((c.xy, c.xx) == (False, False) for c in cols.values())
+
+
+class TestGetIsHaploidExpr:
+    """Test the get_is_haploid_expr function."""
+
+    def test_gt_expr_path(self) -> None:
+        """With a genotype the result is that call's ploidy check, missing for a missing call."""
+        assert hl.eval(get_is_haploid_expr(gt_expr=hl.call(0))) is True
+        assert hl.eval(get_is_haploid_expr(gt_expr=hl.call(0, 1))) is False
+        assert hl.eval(get_is_haploid_expr(gt_expr=hl.missing(hl.tcall))) is None
+
+    def test_locus_and_karyotype_path(self, sex_ploidy_mt: hl.MatrixTable) -> None:
+        """Per-locus, per-sample haploid flags for an XX and an XY sample across an autosome, chrX PAR, chrX non-PAR and chrY non-PAR."""
+        mt = sex_ploidy_mt
+        out = mt.annotate_entries(
+            h=get_is_haploid_expr(locus_expr=mt.locus, karyotype_expr=mt.sex_karyotype)
+        )
+        got = {
+            (e.locus.contig, e.locus.position, e.s): e.h
+            for e in out.entries().collect()
+        }
+        # s1 is XX, s2 is xy (matched case-insensitively). XX on chrY non-PAR
+        # is missing rather than False: the call itself should be missing there.
+        expected = {
+            ("chr1", 1000, "s1"): False,
+            ("chr1", 1000, "s2"): False,
+            ("chrX", 20000, "s1"): False,
+            ("chrX", 20000, "s2"): False,
+            ("chrX", 5000000, "s1"): False,
+            ("chrX", 5000000, "s2"): True,
+            ("chrY", 5000000, "s1"): None,
+            ("chrY", 5000000, "s2"): True,
+        }
+        assert got == expected
+
+    def test_missing_arguments_raise(self, sex_ploidy_mt: hl.MatrixTable) -> None:
+        """No arguments, or a locus or karyotype on its own, is rejected."""
+        mt = sex_ploidy_mt
+        with pytest.raises(ValueError, match="is required"):
+            get_is_haploid_expr()
+        with pytest.raises(ValueError, match="Both"):
+            get_is_haploid_expr(locus_expr=mt.locus)
+        with pytest.raises(ValueError, match="Both"):
+            get_is_haploid_expr(karyotype_expr=mt.sex_karyotype)
 
 
 class TestFindStrataCells:

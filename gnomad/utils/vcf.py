@@ -1513,7 +1513,7 @@ def build_vcf_export_reference(
         keep_contigs = list(keep_contigs)
 
     if keep_chrM:
-        keep_contigs.extend(ref.mt_contigs)
+        keep_contigs += [c for c in ref.mt_contigs if c not in keep_contigs]
         ref_args.update({"mt_contigs": ref.mt_contigs})
 
     ref_args.update(

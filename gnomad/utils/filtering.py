@@ -11,7 +11,7 @@ import gnomad.utils.annotations as annotate_utils
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.intervals import pad_intervals
 from gnomad.utils.parse import parse_locus_intervals
-from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.utils.reference_genome import get_primary_contigs, get_reference_genome
 
 logging.basicConfig(format="%(levelname)s (%(name)s %(lineno)s): %(message)s")
 logger = logging.getLogger(__name__)
@@ -229,10 +229,11 @@ def filter_to_autosomes(
     :return:  MT/HT autosomes
     """
     reference = get_reference_genome(t.locus)
-    autosomes = hl.parse_locus_interval(
-        f"{reference.contigs[0]}-{reference.contigs[21]}", reference_genome=reference
-    )
-    return hl.filter_intervals(t, [autosomes])
+    autosomes = [
+        hl.parse_locus_interval(c, reference_genome=reference)
+        for c in get_primary_contigs(reference.name, include_sex=False)
+    ]
+    return hl.filter_intervals(t, autosomes)
 
 
 def add_filters_expr(

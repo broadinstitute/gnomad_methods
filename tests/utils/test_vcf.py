@@ -41,3 +41,11 @@ class TestBuildVcfExportReference:
         assert keep == ["chr1", "chrX", "chrY"]
         assert ref.contigs == ["chr1", "chrX", "chrY", "chrM"]
         assert ref.lengths["chr1"] == hl.get_reference("GRCh38").lengths["chr1"]
+
+    def test_keep_contigs_with_chrm_not_duplicated(self) -> None:
+        """Test that chrM already in keep_contigs is not added again."""
+        ref = build_vcf_export_reference(
+            "test_chrm_dedup", keep_contigs=["chr1", "chrM", "chrX", "chrY"]
+        )
+        assert ref.contigs == ["chr1", "chrM", "chrX", "chrY"]
+        assert ref.mt_contigs == ["chrM"]

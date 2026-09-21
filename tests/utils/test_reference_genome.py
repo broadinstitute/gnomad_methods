@@ -37,7 +37,9 @@ class TestGetPrimaryContigs:
 
     def test_no_alt_contigs(self) -> None:
         """Test that alt/decoy contigs are never included."""
-        assert all("_" not in c for c in get_primary_contigs("GRCh38", keep_chrM=True))
+        assert all(
+            "_" not in c for c in get_primary_contigs("GRCh38", include_chrM=True)
+        )
 
     def test_unsupported_build_raises(self) -> None:
         """Test that non-human builds raise instead of returning positional contigs."""

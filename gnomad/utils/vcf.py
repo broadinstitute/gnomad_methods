@@ -1494,7 +1494,7 @@ def build_vcf_export_reference(
     """
     Create export reference based on reference genome defined by `build`.
 
-    By default this will return a new reference with all non-standard contigs eliminated. Keeps chr 1-22, Y, X, and M.
+    By default this will return a new reference with all non-standard contigs eliminated. Keeps chr 1-22, Y, X, and optionally M.
 
     An example of a non-standard contig is: ##contig=<ID=chr3_GL000221v1_random,length=155397,assembly=GRCh38>
 

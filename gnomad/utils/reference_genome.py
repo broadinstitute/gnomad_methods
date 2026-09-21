@@ -122,7 +122,7 @@ def add_reference_sequence(ref: hl.ReferenceGenome) -> hl.ReferenceGenome:
 
 
 def get_primary_contigs(
-    build: str = "GRCh38", include_sex: bool = True, keep_chrM: bool = False
+    build: str = "GRCh38", include_sex: bool = True, include_chrM: bool = False
 ) -> List[str]:
     """
     Get the primary contigs (autosomes, optionally sex chromosomes and MT) for a build.
@@ -132,7 +132,7 @@ def get_primary_contigs(
 
     :param build: Reference genome build. Default is "GRCh38".
     :param include_sex: Whether to include the X and Y contigs. Default is True.
-    :param keep_chrM: Whether to include the MT contig. Default is False.
+    :param include_chrM: Whether to include the MT contig. Default is False.
     :return: List of contig names in reference order.
     """
     if build not in ("GRCh37", "GRCh38"):
@@ -143,7 +143,7 @@ def get_primary_contigs(
     contigs = list(rg.contigs[:22])
     if include_sex:
         contigs += rg.x_contigs + rg.y_contigs
-    if keep_chrM:
+    if include_chrM:
         contigs += rg.mt_contigs
     return contigs
 

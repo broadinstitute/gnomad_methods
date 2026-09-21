@@ -26,10 +26,10 @@ class TestGetPrimaryContigs:
         ],
     )
     def test_get_primary_contigs(
-        self, build: str, include_sex: bool, keep_chrM: bool, expected: List[str]
+        self, build: str, include_sex: bool, include_chrM: bool, expected: List[str]
     ) -> None:
         """Test that the expected contigs are returned in reference order."""
-        assert get_primary_contigs(build, include_sex, keep_chrM) == expected
+        assert get_primary_contigs(build, include_sex, include_chrM) == expected
 
     def test_default_build_is_grch38(self) -> None:
         """Test that the default build is GRCh38 with sex contigs and no MT."""

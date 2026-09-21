@@ -14,7 +14,7 @@ class TestGetPrimaryContigs:
     """Test the get_primary_contigs function."""
 
     @pytest.mark.parametrize(
-        "build, include_sex, keep_chrM, expected",
+        "build, include_sex, include_chrM, expected",
         [
             ("GRCh38", True, False, GRCH38_AUTOSOMES + ["chrX", "chrY"]),
             ("GRCh38", False, False, GRCH38_AUTOSOMES),

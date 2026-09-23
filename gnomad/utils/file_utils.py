@@ -4,6 +4,7 @@ import base64
 import gzip
 import logging
 import os
+import pprint
 import subprocess
 import uuid
 from typing import List, Optional, Tuple, Union
@@ -325,6 +326,10 @@ def print_global_struct(t: Union[hl.Table, hl.Struct, hl.StructExpression]) -> N
     Accepts a Table (uses its globals), a StructExpression (evaluates it),
     or an already-evaluated Struct.
 
+    Each struct field is logged on its own ``key: value`` line, with nested structs
+    indented beneath their key. Other values, such as long lists and dicts, are
+    formatted with ``pprint.pformat`` and wrapped beneath their key.
+
     :param t: Table, StructExpression, or Struct to print.
     """
     if isinstance(t, hl.Table):
@@ -336,9 +341,15 @@ def print_global_struct(t: Union[hl.Table, hl.Struct, hl.StructExpression]) -> N
         indent = "    " * level
         lines = []
         for k, v in s.items():
+            prefix = f"{indent}{k}:"
             if isinstance(v, hl.Struct):
-                v = f"\n{_format_struct(v, level + 1)}"
-            lines.append(f"{indent}{k}: {v}")
+                lines.append(f"{prefix}\n{_format_struct(v, level + 1)}")
+                continue
+
+            # Wrap long values so continuation lines align under the first one.
+            v = v if isinstance(v, str) else pprint.pformat(v, width=88 - len(prefix))
+            lines.append(f"{prefix} {v}".replace("\n", "\n" + " " * (len(prefix) + 1)))
+
         return "\n".join(lines)
 
     logger.info("\nGlobal struct:\n%s", _format_struct(t))

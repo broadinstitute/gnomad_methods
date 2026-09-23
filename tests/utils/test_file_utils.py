@@ -492,6 +492,18 @@ class TestPrintGlobalStruct:
         assert "        level2:" in caplog.text
         assert "            value: 99" in caplog.text
 
+    def test_long_value_wraps_under_key(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that a long list wraps with continuation lines aligned under the key."""
+        s = hl.Struct(groupings=[f"grouping_field_{i}" for i in range(10)])
+
+        with caplog.at_level(logging.INFO):
+            print_global_struct(s)
+
+        assert "    groupings: ['grouping_field_0',\n" in caplog.text
+        assert (
+            "\n" + " " * len("    groupings: [") + "'grouping_field_1'," in caplog.text
+        )
+
 
 class TestConvertMultiArrayToArrayOfStructs:
     """Test the convert_multi_array_to_array_of_structs function."""

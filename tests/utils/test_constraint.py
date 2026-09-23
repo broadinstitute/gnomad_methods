@@ -150,6 +150,16 @@ class TestOeConfidenceInterval:
         with pytest.raises(ValueError, match="Unknown CI method"):
             ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="invalid"))
 
+    def test_gamma_without_qgamma_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that the gamma method raises a clear error on Hail without qgamma."""
+        monkeypatch.delattr(hl, "qgamma", raising=False)
+        ht = hl.Table.parallelize(
+            [{"obs": 5, "exp": 10.0}],
+            hl.tstruct(obs=hl.tint64, exp=hl.tfloat64),
+        )
+        with pytest.raises(RuntimeError, match="method='poisson'"):
+            oe_confidence_interval(ht.obs, ht.exp, method="gamma")
+
     @pytest.mark.skipif(
         not hasattr(hl, "qgamma"), reason="hl.qgamma requires Hail >= 0.2.137"
     )

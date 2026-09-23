@@ -2199,7 +2199,7 @@ def _oe_ci_discretized_poisson(
 
 
 def _oe_ci_gamma(
-    obs_expr: hl.expr.Int32Expression,
+    obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
     alpha: float = 0.05,
 ) -> hl.expr.StructExpression:
@@ -2213,18 +2213,11 @@ def _oe_ci_gamma(
     :param alpha: Significance level. Default is 0.05.
     :return: Struct with ``lower`` and ``upper`` bounds.
     """
-    try:
-        qgamma = hl.qgamma
-    except AttributeError:
-        raise RuntimeError(
-            "_oe_ci_gamma requires hl.qgamma, available in Hail >= 0.2.137. "
-            "Use method='poisson' or upgrade Hail."
-        )
     shape = obs_expr + hl.literal(1.0)
     scale = divide_null(hl.literal(1.0), exp_expr)
     return hl.struct(
-        lower=qgamma(hl.literal(alpha), shape, scale),
-        upper=qgamma(hl.literal(1.0 - alpha), shape, scale),
+        lower=hl.qgamma(hl.literal(alpha), shape, scale),
+        upper=hl.qgamma(hl.literal(1.0 - alpha), shape, scale),
     )
 
 
@@ -2251,9 +2244,13 @@ def oe_confidence_interval(
     :param method: CI method — ``"gamma"`` or ``"poisson"``. Default is
         ``"gamma"``.
     :return: Struct with ``lower`` and ``upper`` bounds.
-    :raises ValueError: If ``method`` is not ``"gamma"`` or ``"poisson"``.
     """
     if method == "gamma":
+        if not hasattr(hl, "qgamma"):
+            raise RuntimeError(
+                "method='gamma' requires hl.qgamma, available in Hail >= 0.2.137. "
+                "Use method='poisson' or upgrade Hail."
+            )
         return _oe_ci_gamma(obs_expr, exp_expr, alpha)
     elif method == "poisson":
         return _oe_ci_discretized_poisson(obs_expr, exp_expr, alpha)

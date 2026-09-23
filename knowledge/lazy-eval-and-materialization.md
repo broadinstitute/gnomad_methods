@@ -119,4 +119,34 @@ survives executor loss) over in-memory `.cache()`.
 
 ---
 
+## A skip-if-exists wrapper has to defer *building* the expression, not just the write
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+`checkpoint(_read_if_exists=not overwrite)` skips the write. It does not skip
+whatever ran while you were assembling the table handed to it — and in Python
+that argument is evaluated first, before the wrapper can decide anything.
+
+Most Hail table-building is lazy, so this is usually harmless. It stops being
+harmless when a builder does real work while constructing the expression:
+
+- an internal `.checkpoint()` — a helper that materialises an intermediate
+- `hl.import_table(..., impute=True)` — scans the file to infer column types
+- `.collect()` / `.aggregate()` — e.g. pulling a small table to the driver to
+  rebroadcast it as a literal
+
+Any of these run *before* the skip is considered, and their results are then
+thrown away.
+
+```python
+_checkpoint(build_ht(src), path, resume=True)         # build_ht() already ran
+_checkpoint(lambda: build_ht(src), path, resume=True) # only runs if needed
+```
+
+**Symptom:** a resumed run logs that it reused a checkpoint, but the log above
+that line shows it wrote a large intermediate table first. Seen as a 402M-row
+write on every resume of a pipeline whose first step checkpointed internally.
+
+---
+
 [← back to the index](README.md)

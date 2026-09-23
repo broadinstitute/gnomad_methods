@@ -106,6 +106,39 @@ filtering; reach for `repartition` last.
 
 ---
 
+## A shuffle's output partition count is inherited from its input
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+This is the mechanism behind the rule above. `group_by(...).aggregate(...)`
+does not choose a partition count — it carries through whatever the table
+feeding it had. So a narrow input produces a narrow output no matter how many
+rows come out.
+
+Measured on one derive:
+
+| source read at | rows out | partitions out | rows/partition |
+|---|---|---|---|
+| 99 (as written) | 973,085,319 | 99 | ~9.8 M |
+| `_n_partitions=5000` | 973,085,319 | 4,493 | ~217 K |
+
+Same content both times — only the layout changed.
+
+**Why `repartition` afterwards is the wrong fix.** It pays for the problem
+twice: the aggregate still runs on the narrow count, and then a *second* full
+shuffle rebalances its output. The narrow stage is the slow one, and
+repartitioning cannot make it any wider retroactively. Widening the read costs
+nothing (`_n_partitions` re-splits off the table's own index) and the aggregate
+never narrows in the first place.
+
+**Corollary for the input you don't control.** The 99 above was not a choice
+anyone made in this pipeline — it was the partitioning of an upstream published
+table, inherited silently. When a shuffle stage is slower than its row count
+justifies, check the partition count of what feeds it before tuning anything
+downstream.
+
+---
+
 ## Shuffle failures at scale are usually fleet-shaped, not code-shaped — shard the job
 
 **`[gnomAD data]` · anecdotal, v4 exomes scale**
@@ -129,6 +162,12 @@ log):
 - One task at `(N-1)/N` for hours → data skew; shard the skewed key.
 - Disk-full during shuffle spill → worker boot-disk sizing; see the
   `ht[key_expr]`-is-a-join entry in [Hail idioms](hail-idioms.md#hail-idioms).
+
+**Hail's own shuffler is the other lever.** Wrapping the shuffling write in
+`hl._with_flags(use_new_shuffle="1")` moves the blocks off Spark's
+executor-local disk, which is what preemption takes with it. It is part of the recipe, not a
+substitute for the fleet change — see
+[Hidden and undocumented APIs](hidden-apis.md#backend-feature-flags-hl_set_flags--hl_get_flags--hl_with_flags).
 
 **If you can't avoid a big shuffle, isolate it.** Long-standing advice
 that predates the run above and still holds: run the shuffling step on

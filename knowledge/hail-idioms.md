@@ -298,6 +298,57 @@ workers.
 
 ---
 
+## A `ht[key_expr]` lookup on a **prefix** of the left's key doesn't shuffle
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+Hail decides shuffle-versus-ordered-join from **key structure alone**. If the
+index expressions form a prefix of the left table's key, the join is ordered
+and the left is never re-keyed. If they don't — *even when every field is a key
+field* — Hail re-keys and shuffles the whole left side.
+
+```python
+# left key: (locus, alleles, transcript_id, uniprot_id, gene_id)
+plp_by_locus_alleles[ht.locus, ht.alleles]           # prefix     -> ordered, no shuffle
+an_by_locus_transcript[ht.locus, ht.transcript_id]   # NOT prefix -> shuffles the left
+```
+
+The second looks harmless — both fields are in the key — but `alleles` sits
+between them, so it is not a prefix.
+
+**Telling them apart before you run anything:** count `TableKeyBy` nodes in the
+plan.
+
+```python
+str(ht.annotate(x=right[...])._tir).count("(TableKeyBy")
+```
+
+A prefix join adds none for the left; a non-prefix join adds three.
+
+Measured on a 292,944,386-row table: two prefix lookups carried the partition
+count through unchanged (4109 in, 4109 out) with no ordering shuffle logged and
+the whole pass — read, both joins, full rewrite — taking ~7 minutes. The same
+shape of lookup on a non-prefix key re-keyed all 292,944,386 rows.
+
+**`hl.or_missing` does not avoid it.** Masking the result leaves the join in the
+plan; the shuffle is paid and then discarded:
+
+```python
+hl.or_missing(cond, right[ht.a, ht.b].x)   # TableFilter: 0 — still shuffles
+```
+
+To keep rows that cannot match out of the shuffle, **filter before the join and
+join the result back on the left's own key** (which is a prefix of itself, so
+that step is ordered). This matters most when the unmatchable rows share one
+key value: a sentinel like `"None"` in a key field passes `hl.is_defined`, so
+every null guard misses it, and all of those rows hash to a single partition.
+
+**Symptom:** one task in a stage runs while every other finishes in seconds, and
+Spark launches a speculative duplicate that cannot help — both copies read the
+same oversized partition.
+
+---
+
 ## `.order_by()` destroys the key — use `add_index` to rekey cheaply
 
 **`[Hail]`**
@@ -406,6 +457,38 @@ or silently captures a constant.
   runs on the driver over a *small* aggregate, or export and process
   outside Hail. That's the "don't pull a large table to the driver"
   problem; size it before you reach for it.
+
+---
+
+## `hl.agg.count_distinct` does not exist
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+`hasattr(hl.agg, "count_distinct")` is `False`. The name is intuitive enough
+that it gets written, and gets caught only at runtime — pylint won't flag it,
+because `hl.agg` resolves dynamically.
+
+```python
+hl.len(hl.agg.collect_as_set(ht.gene_id))   # what you want instead
+```
+
+That builds the whole set in aggregator state, so it is fine for tens of
+thousands of distinct values (gene or transcript IDs) and not for millions.
+
+---
+
+## `hl.literal` on an empty collection can't infer its type
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+`hl.literal(set())` raises `ExpressionException: Hail cannot impute type`. It
+bites when the collection is *usually* non-empty and the empty case only shows
+up on a small input or an edge-case test — a filter that matched nothing, an
+optional gene panel.
+
+```python
+hl.literal(genes, hl.tset(hl.tstr))   # always pass the type
+```
 
 ---
 

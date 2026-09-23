@@ -6,6 +6,7 @@ import hail as hl
 import pytest
 
 from gnomad.utils.constraint import (
+    _resolve_row_annotation_expr,
     assemble_constraint_context_ht,
     build_constraint_consequence_groups,
     build_models,
@@ -100,6 +101,30 @@ class TestAssembleConstraintContextHt:
             "missense_variant"
         )
         assert "consequence_terms" not in row.vep.transcript_consequences[0]
+
+
+class TestResolveRowAnnotationExpr:
+    """Test the _resolve_row_annotation_expr function."""
+
+    @pytest.fixture
+    def ht(self) -> hl.Table:
+        """Fixture for a Table with a ``freq`` row field."""
+        return hl.Table.parallelize([{"freq": 1, "other": 2}])
+
+    def test_returns_expr_when_provided(self, ht: hl.Table) -> None:
+        """Test that an explicit ``expr`` takes precedence over the named field."""
+        expr = _resolve_row_annotation_expr(ht, "freq", ht.other)
+        assert ht.aggregate(hl.agg.collect(expr)) == [2]
+
+    def test_falls_back_to_row_field(self, ht: hl.Table) -> None:
+        """Test that the named row field is used when ``expr`` is None."""
+        expr = _resolve_row_annotation_expr(ht, "freq")
+        assert ht.aggregate(hl.agg.collect(expr)) == [1]
+
+    def test_raises_when_field_missing(self, ht: hl.Table) -> None:
+        """Test that a missing field raises an error naming ``expr_param_name``."""
+        with pytest.raises(ValueError, match="gerp_expr was not provided"):
+            _resolve_row_annotation_expr(ht, "gerp", expr_param_name="gerp_expr")
 
 
 class TestOeConfidenceInterval:

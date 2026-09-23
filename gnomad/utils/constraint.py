@@ -123,22 +123,22 @@ def annotate_with_mu(
     )
 
 
-def _resolve_annotation_expr(
+def _resolve_row_annotation_expr(
     t: Optional[Union[hl.Table, hl.MatrixTable]] = None,
     annotation_name: Optional[str] = None,
     expr: Optional[hl.expr.Expression] = None,
     expr_param_name: Optional[str] = None,
 ) -> hl.expr.Expression:
     """
-    Get an annotation from a Table/MatrixTable, or return a provided expression.
+    Get a row annotation from a Table/MatrixTable, or return a provided expression.
 
     Provides a consistent pattern for functions that accept either an explicit
     Hail expression or fall back to a well-known field on a Table. This avoids
     duplicating "resolve expr or look it up on ht" logic across callers.
 
     If ``expr`` is provided it is returned directly. Otherwise, ``t`` and
-    ``annotation_name`` must both be supplied and the named field is looked up on
-    ``t``.
+    ``annotation_name`` must both be supplied and the named row field is looked up
+    on ``t``.
 
     Example usage inside a public function::
 
@@ -146,7 +146,7 @@ def _resolve_annotation_expr(
             ht: hl.Table,
             freq_expr: Optional[hl.expr.StructExpression] = None,
         ) -> ...:
-            freq_expr = _resolve_annotation_expr(
+            freq_expr = _resolve_row_annotation_expr(
                 t=ht,
                 annotation_name="freq",
                 expr=freq_expr,
@@ -166,7 +166,7 @@ def _resolve_annotation_expr(
     :return: The resolved Hail expression.
     """
     if expr is None and (t is None or annotation_name is None):
-        raise ValueError("Either t and annotation_name or expr must be provided.")
+        raise ValueError("Either 't' and 'annotation_name' or 'expr' must be provided.")
 
     expr_param_name = expr_param_name or "expr"
     if expr is None and annotation_name in t.row:
@@ -223,7 +223,7 @@ def variant_observed_expr(
         raise ValueError("Either ht or freq_expr must be provided.")
 
     if freq_expr is None and (max_af is not None or singleton or "freq" in ht.row):
-        freq_expr = _resolve_annotation_expr(ht, "freq", freq_expr, "freq_expr")
+        freq_expr = _resolve_row_annotation_expr(ht, "freq", freq_expr, "freq_expr")
     if isinstance(freq_expr, hl.expr.ArrayExpression):
         freq_expr = freq_expr[0]
 
@@ -362,7 +362,7 @@ def counts_agg_expr(
     if ht is None and freq_expr is None:
         raise ValueError("Either ht or freq_expr must be provided.")
 
-    freq_expr = _resolve_annotation_expr(ht, "freq", freq_expr, "freq_expr")
+    freq_expr = _resolve_row_annotation_expr(ht, "freq", freq_expr, "freq_expr")
 
     params = {"variant_count": {"singleton": False, "max_af": max_af}}
     if count_singletons:
@@ -1069,8 +1069,7 @@ def calculate_gerp_cutoffs(
     :param upper_percentile: Upper percentile threshold (0-1). Default is 0.95.
     :return: Tuple of (lower cutoff, upper cutoff) GERP scores.
     """
-    if gerp_expr is None:
-        gerp_expr = ht.gerp
+    gerp_expr = _resolve_row_annotation_expr(ht, "gerp", gerp_expr, "gerp_expr")
 
     cutoffs = ht.aggregate(
         hl.agg.approx_quantiles(gerp_expr, [lower_percentile, upper_percentile])

@@ -10,7 +10,7 @@ import hail as hl
 from hail.utils.misc import divide_null, new_temp_file
 
 from gnomad.assessment.summary_stats import generate_filter_combinations
-from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.utils.reference_genome import get_primary_contigs, get_reference_genome
 from gnomad.utils.vep import (
     add_most_severe_consequence_to_consequence,
     explode_by_vep_annotation,
@@ -1200,7 +1200,8 @@ def assemble_constraint_context_ht(
 
     # Filter Table to only contigs 1-22, X, Y.
     ht = hl.filter_intervals(
-        ht, [hl.parse_locus_interval(c, ref.name) for c in ref.contigs[:24]]
+        ht,
+        [hl.parse_locus_interval(c, ref.name) for c in get_primary_contigs(ref.name)],
     )
 
     # Add annotations for 'ref' and 'alt'.

@@ -222,10 +222,10 @@ def variant_observed_expr(
     if ht is None and freq_expr is None:
         raise ValueError("Either ht or freq_expr must be provided.")
 
-    if max_af is not None or singleton:
+    if freq_expr is None and (max_af is not None or singleton or "freq" in ht.row):
         freq_expr = _resolve_annotation_expr(ht, "freq", freq_expr, "freq_expr")
-        if isinstance(freq_expr, hl.expr.ArrayExpression):
-            freq_expr = freq_expr[0]
+    if isinstance(freq_expr, hl.expr.ArrayExpression):
+        freq_expr = freq_expr[0]
 
     if singleton:
         count_var = freq_expr.AC == 1

@@ -807,6 +807,26 @@ class TestSingleVariantCountExpr:
 
         assert result.count == 1
 
+    def test_array_freq_without_filter_uses_first_element(self) -> None:
+        """Test that an array ``freq_expr`` is unwrapped even with no filter set."""
+        ht = hl.Table.parallelize(
+            [{"freq": [hl.Struct(AC=0, AF=0.0), hl.Struct(AC=3, AF=0.01)]}],
+            hl.tstruct(freq=hl.tarray(hl.tstruct(AC=hl.tint32, AF=hl.tfloat64))),
+        )
+        ht = ht.annotate(count=variant_observed_expr(freq_expr=ht.freq))
+
+        assert ht.collect()[0].count == 0
+
+    def test_ht_freq_used_without_filter(self) -> None:
+        """Test that ``ht.freq`` is used when no ``freq_expr`` or filter is given."""
+        ht = hl.Table.parallelize(
+            [{"freq": hl.Struct(AC=0, AF=0.0)}],
+            hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
+        )
+        ht = ht.annotate(count=variant_observed_expr(ht=ht))
+
+        assert ht.collect()[0].count == 0
+
     def test_raises_when_no_ht_or_freq(self):
         """Test that ValueError is raised when neither ht nor freq_expr is given."""
         with pytest.raises(ValueError, match="Either ht or freq_expr"):

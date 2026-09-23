@@ -30,6 +30,11 @@ from gnomad.utils.constraint import (
     weighted_sum_agg_expr,
 )
 
+requires_qgamma = pytest.mark.skipif(
+    not hasattr(hl, "qgamma"), reason="hl.qgamma requires Hail >= 0.2.137"
+)
+"""Skip marker for tests that need ``hl.qgamma``."""
+
 
 def _context_ht(build: str, loci: List[str]) -> hl.Table:
     """Build a minimal split context Table with heptamer context and VEP annotation."""
@@ -136,9 +141,7 @@ class TestResolveRowAnnotationExpr:
 class TestOeConfidenceInterval:
     """Test the oe_confidence_interval function."""
 
-    @pytest.mark.skipif(
-        not hasattr(hl, "qgamma"), reason="hl.qgamma requires Hail >= 0.2.137"
-    )
+    @requires_qgamma
     def test_gamma_returns_lower_and_upper(self):
         """Test that gamma method returns a struct with lower < upper."""
         ht = hl.Table.parallelize(
@@ -191,9 +194,7 @@ class TestOeConfidenceInterval:
         with pytest.raises(RuntimeError, match="method='poisson'"):
             oe_confidence_interval(ht.obs, ht.exp, method="gamma")
 
-    @pytest.mark.skipif(
-        not hasattr(hl, "qgamma"), reason="hl.qgamma requires Hail >= 0.2.137"
-    )
+    @requires_qgamma
     def test_gamma_and_poisson_give_similar_results(self):
         """Test that gamma and poisson methods give roughly similar CIs."""
         ht = hl.Table.parallelize(
@@ -501,7 +502,7 @@ class TestRankAndAssignBins:
         assert [r.bins.bin_decile for r in defined] == list(range(10))
 
 
-class TestComputeOeUpperPercentileThresholds:
+class TestComputePercentileThresholds:
     """Test the compute_percentile_thresholds function."""
 
     @pytest.fixture
@@ -549,7 +550,7 @@ class TestComputeOeUpperPercentileThresholds:
             ht, ht.metric, outlier_expr=ht.is_outlier, percentiles=(50,)
         )
 
-        # With outliers excluded, median should be around 0.4 (values 0..8 / 10).
+        # With outliers excluded (only 0.9 removed), median of [0.0...0.8] is 0.4.
         assert result[50] < 0.5
 
     def test_transcript_filter(self):
@@ -772,7 +773,7 @@ class TestRankVsThresholdBinning:
         assert len(tied_thresh_bins) == 1, "Threshold-based should not split ties"
 
 
-class TestSingleVariantCountExpr:
+class TestVariantObservedExpr:
     """Test the variant_observed_expr function."""
 
     def test_ac_positive_counts_as_one(self):
@@ -998,7 +999,7 @@ class TestVariantObservedAndPossibleExpr:
         assert result.observed_variants == [0, 1]
 
 
-class TestGetCountsAggExpr:
+class TestCountsAggExpr:
     """Test the counts_agg_expr function."""
 
     @pytest.fixture
@@ -1066,7 +1067,7 @@ class TestGetCountsAggExpr:
         assert result.variant_count == 0
 
 
-class TestWeightedAggSumExpr:
+class TestWeightedSumAggExpr:
     """Test the weighted_sum_agg_expr function."""
 
     def test_scalar_scalar(self):

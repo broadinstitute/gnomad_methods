@@ -364,13 +364,13 @@ def counts_agg_expr(
 
     freq_expr = _resolve_row_annotation_expr(ht, "freq", freq_expr, "freq_expr")
 
-    params = {"variant_count": {"singleton": False, "max_af": max_af}}
-    if count_singletons:
-        params["singleton_count"] = {"singleton": True}
-
     is_struct = isinstance(freq_expr, hl.expr.StructExpression)
     if is_struct:
         freq_expr = hl.array([freq_expr])
+
+    params = {"variant_count": {"singleton": False, "max_af": max_af}}
+    if count_singletons:
+        params["singleton_count"] = {"singleton": True}
 
     count_expr = {
         k: freq_expr.map(

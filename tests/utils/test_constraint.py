@@ -7,6 +7,10 @@ import pytest
 
 from gnomad.utils.constraint import (
     _resolve_row_annotation_expr,
+    aggregate_constraint_metrics_expr,
+    annotate_bins_by_threshold,
+    apply_models,
+    apply_plateau_models,
     assemble_constraint_context_ht,
     build_constraint_consequence_groups,
     build_models,
@@ -16,9 +20,11 @@ from gnomad.utils.constraint import (
     compute_percentile_thresholds,
     count_observed_and_possible_by_group,
     counts_agg_expr,
+    coverage_correction_expr,
     get_constraint_grouping_expr,
     oe_confidence_interval,
     rank_and_assign_bins,
+    rank_array_element_metrics,
     variant_observed_and_possible_expr,
     variant_observed_expr,
     weighted_sum_agg_expr,
@@ -852,6 +858,21 @@ class TestSingleVariantCountExpr:
 
         assert ht.collect()[0].count == 0
 
+    @pytest.mark.parametrize("count_missing, expected", [(True, 1), (False, 0)])
+    def test_count_missing(self, count_missing: bool, expected: int) -> None:
+        """Test that ``count_missing`` is the count used when ``freq`` is missing."""
+        ht = hl.Table.parallelize(
+            [{"freq": None}],
+            hl.tstruct(freq=hl.tstruct(AC=hl.tint32, AF=hl.tfloat64)),
+        )
+        ht = ht.annotate(
+            count=variant_observed_expr(
+                freq_expr=ht.freq, max_af=0.01, count_missing=count_missing
+            )
+        )
+
+        assert ht.collect()[0].count == expected
+
     def test_raises_when_no_ht_or_freq(self):
         """Test that ValueError is raised when neither ht nor freq_expr is given."""
         with pytest.raises(ValueError, match="Either ht or freq_expr"):
@@ -1491,3 +1512,216 @@ class TestBuildModels:
         assert _coverage_model(self.AUTOSOME_ROWS) == pytest.approx(
             _coverage_model(self.AUTOSOME_ROWS + chrx_rows)
         )
+
+
+class TestCalibrationModelGroupExpr:
+    """Test the calibration_model_group_expr function."""
+
+    @staticmethod
+    def _groups(covs: List[int], **kwargs) -> list:
+        """Return the calibration model group for each coverage value."""
+        ht = hl.Table.parallelize(
+            [{"cov": c, "cpg": True} for c in covs],
+            hl.tstruct(cov=hl.tint32, cpg=hl.tbool),
+        )
+        ht = ht.annotate(
+            g=calibration_model_group_expr(
+                ht.cov, ht.cpg, low_cov_cutoff=0, high_cov_cutoff=30, **kwargs
+            )
+        )
+        return ht.g.collect()
+
+    def test_assigns_high_low_and_missing(self) -> None:
+        """Test high/low assignment around the cutoffs; coverage 0 is in neither."""
+        groups = self._groups([0, 10, 30])
+
+        assert groups[0] is None
+        assert [g.high_or_low_coverage for g in groups[1:]] == ["low", "high"]
+
+    def test_skip_coverage_model_drops_low(self) -> None:
+        """Test that low coverage sites get no group when the coverage model is skipped."""
+        groups = self._groups([10, 30], skip_coverage_model=True)
+
+        assert groups[0] is None
+        assert groups[1].high_or_low_coverage == "high"
+
+    def test_model_group_fields(self) -> None:
+        """Test ``cpg_in_high_only`` and that extra groupings nest in ``model_group``."""
+        groups = self._groups(
+            [10, 30],
+            cpg_in_high_only=True,
+            additional_grouping_exprs={"genomic_region": hl.literal("chrx_nonpar")},
+        )
+
+        assert groups[0].model_group == hl.Struct(
+            cpg=None, genomic_region="chrx_nonpar"
+        )
+        assert groups[1].model_group == hl.Struct(
+            cpg=True, genomic_region="chrx_nonpar"
+        )
+
+
+class TestApplyPlateauModels:
+    """Test the apply_plateau_models function."""
+
+    def test_single_model(self) -> None:
+        """Test that a single [intercept, slope] model returns a scalar."""
+        result = hl.eval(apply_plateau_models(hl.float64(0.5), hl.literal([0.1, 2.0])))
+
+        assert result == pytest.approx(1.1)
+
+    def test_array_of_models(self) -> None:
+        """Test that an array of models returns one prediction per model."""
+        result = hl.eval(
+            apply_plateau_models(hl.float64(0.5), hl.literal([[0.1, 2.0], [0.0, 1.0]]))
+        )
+
+        assert result == pytest.approx([1.1, 0.5])
+
+
+class TestCoverageCorrectionExpr:
+    """Test the coverage_correction_expr function."""
+
+    @pytest.mark.parametrize(
+        "cov, is_low, expected",
+        [(0, True, 0.0), (10, True, 0.6), (10, False, 1.0)],
+    )
+    def test_low_coverage_expr(self, cov: int, is_low: bool, expected: float) -> None:
+        """Test zero coverage, the model on low coverage sites, and 1 elsewhere."""
+        result = hl.eval(
+            coverage_correction_expr(
+                hl.float64(cov), (0.5, 0.01), low_coverage_expr=hl.bool(is_low)
+            )
+        )
+
+        assert result == pytest.approx(expected)
+
+    @pytest.mark.parametrize("cov, expected", [(10, 0.7), (40, 1.0)])
+    def test_coverage_cutoff_with_log10(self, cov: int, expected: float) -> None:
+        """Test ``coverage_cutoff`` with log10-transformed coverage."""
+        result = hl.eval(
+            coverage_correction_expr(
+                hl.float64(cov), (0.5, 0.2), coverage_cutoff=30, log10_coverage=True
+            )
+        )
+
+        assert result == pytest.approx(expected)
+
+    @pytest.mark.parametrize("both", [True, False])
+    def test_requires_exactly_one_low_coverage_definition(self, both: bool) -> None:
+        """Test that exactly one of ``low_coverage_expr`` and ``coverage_cutoff`` is required."""
+        kwargs = {"low_coverage_expr": hl.bool(True), "coverage_cutoff": 30}
+        with pytest.raises(ValueError):
+            coverage_correction_expr(
+                hl.float64(10), (0.5, 0.01), **(kwargs if both else {})
+            )
+
+
+class TestApplyModels:
+    """Test the apply_models function."""
+
+    def test_without_coverage_model(self) -> None:
+        """Test that expected variants are the plateau prediction times possible."""
+        result = hl.eval(
+            apply_models(
+                hl.float64(0.5),
+                hl.literal([0.1, 2.0]),
+                hl.int64(3),
+                coverage_expr=hl.int32(10),
+                cpg_expr=hl.bool(False),
+            )
+        )
+
+        assert result.predicted_proportion_observed == pytest.approx(1.1)
+        assert result.expected_variants == pytest.approx(3.3)
+        assert result.mu == pytest.approx(1.5)
+        assert "coverage_correction" not in result
+
+    def test_with_coverage_model(self) -> None:
+        """Test that the coverage correction scales ``mu`` and expected variants."""
+        result = hl.eval(
+            apply_models(
+                hl.float64(0.5),
+                hl.literal([0.1, 2.0]),
+                hl.int64(3),
+                coverage_model=(0.5, 0.01),
+                coverage_expr=hl.int32(10),
+                cpg_expr=hl.bool(False),
+                log10_coverage=False,
+            )
+        )
+
+        assert result.coverage_correction == pytest.approx(0.6)
+        assert result.expected_variants == pytest.approx(3.3 * 0.6)
+        assert result.mu == pytest.approx(1.5 * 0.6)
+
+
+class TestAggregateConstraintMetricsExpr:
+    """Test the aggregate_constraint_metrics_expr function."""
+
+    def test_sums_scalar_array_and_additional_exprs(self) -> None:
+        """Test sum for scalar fields, array sum for arrays, and extra expressions."""
+        ht = hl.Table.parallelize(
+            [{"obs": 1, "ds": [1, 2]}, {"obs": 4, "ds": [3, 4]}],
+            hl.tstruct(obs=hl.tint64, ds=hl.tarray(hl.tint64)),
+        )
+        result = ht.aggregate(
+            aggregate_constraint_metrics_expr(
+                ht,
+                fields_to_sum=["obs", "ds"],
+                additional_exprs_to_sum={"double_obs": ht.obs * 2},
+            )
+        )
+
+        assert result == hl.Struct(double_obs=10, obs=5, ds=[4, 6])
+
+
+class TestAnnotateBinsByThreshold:
+    """Test the annotate_bins_by_threshold function."""
+
+    def test_bins_count_thresholds_met(self) -> None:
+        """Test that the bin is the number of thresholds the value meets or exceeds."""
+        # 0.3 sits exactly on a threshold, so it is counted as meeting it.
+        ht = hl.Table.parallelize(
+            [{"v": v} for v in [0.05, 0.3, 0.5, 0.95, None]],
+            hl.tstruct(v=hl.tfloat64),
+        )
+        ht = annotate_bins_by_threshold(
+            ht,
+            metric_exprs={"lof": ht.v},
+            thresholds={("tertile", "lof"): [0.3, 0.6]},
+            granularities=["tertile"],
+        )
+
+        assert ht.constraint_bins.tertile.lof.collect() == [0, 1, 1, 2, None]
+
+
+class TestRankArrayElementMetrics:
+    """Test the rank_array_element_metrics function."""
+
+    def test_ranks_each_element_independently(self) -> None:
+        """Test per-element ranking, missing ranks for filtered rows, and the key."""
+        ht = hl.Table.parallelize(
+            [
+                {"id": i, "keep": i != 3, "arr": [{"v": float(i)}, {"v": float(-i)}]}
+                for i in range(4)
+            ],
+            hl.tstruct(
+                id=hl.tint32, keep=hl.tbool, arr=hl.tarray(hl.tstruct(v=hl.tfloat64))
+            ),
+            key="id",
+        )
+        ht = rank_array_element_metrics(
+            ht,
+            "arr",
+            element_value_fn=lambda e: {"v": e.v},
+            filter_fn=lambda t: t.keep,
+            bin_granularities={"half": 2},
+        )
+        rows = ht.collect()
+
+        assert list(ht.key) == ["id"]
+        # Element 0 ranks ascending by id and element 1 descending; id 3 is filtered.
+        assert [r.arr[0].v_rank.rank for r in rows[:3]] == [0, 1, 2]
+        assert [r.arr[1].v_rank.rank for r in rows[:3]] == [2, 1, 0]
+        assert rows[3].arr[0].v_rank is None

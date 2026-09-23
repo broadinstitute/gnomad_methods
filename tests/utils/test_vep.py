@@ -9,8 +9,8 @@ import pytest
 
 from gnomad.utils.vep import (
     get_loftee_end_trunc_filter_expr,
+    get_mane_select_over_canonical_filter_expr,
     get_vep_help,
-    mane_select_over_canonical_filter_expr,
     update_loftee_end_trunc_filter,
     vep_or_lookup_vep,
 )
@@ -487,8 +487,8 @@ class TestVepOrLookupVep:
         assert hl.eval(result.vep_config) == "CONTEXT_CONFIG"
 
 
-class TestManeSelectOverCanonicalFilterExpr:
-    """Test the mane_select_over_canonical_filter_expr function."""
+class TestGetManeSelectOverCanonicalFilterExpr:
+    """Test the get_mane_select_over_canonical_filter_expr function."""
 
     @pytest.fixture
     def sample_table(self):
@@ -540,7 +540,7 @@ class TestManeSelectOverCanonicalFilterExpr:
     def test_mane_select_preferred_over_canonical(self, sample_table):
         """Test that MANE Select is chosen when available for a gene."""
         ht = sample_table.annotate(
-            selected=mane_select_over_canonical_filter_expr(
+            selected=get_mane_select_over_canonical_filter_expr(
                 sample_table.transcript,
                 sample_table.mane_select,
                 sample_table.canonical,
@@ -557,7 +557,7 @@ class TestManeSelectOverCanonicalFilterExpr:
     def test_canonical_fallback_when_no_mane(self, sample_table):
         """Test that canonical is used as fallback when no MANE Select exists."""
         ht = sample_table.annotate(
-            selected=mane_select_over_canonical_filter_expr(
+            selected=get_mane_select_over_canonical_filter_expr(
                 sample_table.transcript,
                 sample_table.mane_select,
                 sample_table.canonical,
@@ -574,7 +574,7 @@ class TestManeSelectOverCanonicalFilterExpr:
     def test_non_enst_excluded(self, sample_table):
         """Test that non-ENST transcripts are excluded."""
         ht = sample_table.annotate(
-            selected=mane_select_over_canonical_filter_expr(
+            selected=get_mane_select_over_canonical_filter_expr(
                 sample_table.transcript,
                 sample_table.mane_select,
                 sample_table.canonical,

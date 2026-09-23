@@ -1205,7 +1205,7 @@ def update_loftee_end_trunc_filter(
         return csq_expr.map(lambda x: x.annotate(**_update_csq_struct(x)))
 
 
-def mane_select_over_canonical_filter_expr(
+def get_mane_select_over_canonical_filter_expr(
     transcript_expr: hl.expr.StringExpression,
     mane_select_expr: hl.expr.BooleanExpression,
     canonical_expr: hl.expr.BooleanExpression,

@@ -212,11 +212,13 @@ def variant_observed_expr(
     :param ht: Input Table. Used to look up ``freq`` when ``freq_expr`` is None.
     :param freq_expr: StructExpression (or ArrayExpression of structs) with
         ``AC`` and ``AF`` fields. When an array, ``freq_expr[0]`` is used.
-    :param singleton: Count only singletons (AC == 1). Default is False.
+    :param singleton: Count only singletons (AC == 1). When True, ``max_af`` is
+        ignored. Default is False.
     :param max_af: Maximum allele frequency threshold. Default is None (no
         cutoff).
-    :param count_missing: Value to substitute when the count expression is
-        missing (e.g. frequency is None). Default is False (0).
+    :param count_missing: Whether to count a variant whose count expression is
+        missing (e.g. frequency is None). True counts it as 1, False as 0. Default
+        is False.
     :return: Int32Expression equal to 0 or 1.
     """
     if ht is None and freq_expr is None:
@@ -255,7 +257,7 @@ def variant_observed_and_possible_expr(
 
     When ``use_possible_adj`` is True (default), the possible count is a scalar
     derived from the first (adj) element of the frequency array. When False, it
-    is an array with one entry per downsampling, matching the shape of
+    is an array with one entry per array element, matching the shape of
     ``observed_variants``.
 
     :param freq_expr: Array of frequency structs with ``AC`` and ``AF`` fields.
@@ -353,8 +355,8 @@ def counts_agg_expr(
     :param max_af: Maximum allele frequency threshold. Variants with
         ``AF > max_af`` are excluded from ``variant_count``. Does not affect
         ``singleton_count``. Default is None (no cutoff).
-    :param count_missing: Value to substitute when frequency is missing.
-        Default is False (0).
+    :param count_missing: Whether to count a variant whose frequency is missing.
+        True counts it as 1, False as 0. Default is False.
     :return: Aggregation StructExpression with ``variant_count`` (and
         optionally ``singleton_count``). Values are scalars when ``freq_expr`` is
         a StructExpression, or arrays when it is an ArrayExpression.
@@ -490,7 +492,7 @@ def count_observed_and_possible_by_group(
         fields named in ``additional_grouping``.
     :param possible_expr: Per-variant possible count (scalar).
     :param observed_expr: Per-variant observed count (array, one element per
-        downsampling).
+        array element of the frequency array).
     :param additional_grouping: Field names to append to the base
         ``(context, ref, alt)`` grouping. Default is ``("methylation_level",)``.
     :param partition_hint: Target number of partitions for the ``group_by``.
@@ -1159,7 +1161,8 @@ def _build_sum_agg_struct(
     The aggregation expression is a struct with the sum or array_sum of the fields or
     expressions provided in `fields_to_sum` or `exprs_to_sum`.
 
-    :param fields_to_sum: List of fields to sum. Default is None.
+    :param fields_to_sum: List of fields to sum. Must provide ``t`` if using this.
+        Default is None.
     :param exprs_to_sum: Dictionary of expressions to sum. Default is None.
     :param t: Optional Table or StructExpression to get `fields_to_sum` from. Default
         is None.
@@ -1273,8 +1276,9 @@ def build_models(
         built only on sites where it is "autosome_or_par"; otherwise all sites are
         used. If not provided, the ``calibration_model_group_expr`` function is used to
         define the grouping, which does not include ``genomic_region``.
-    :param high_cov_definition: Lower coverage cutoff. Sites with coverage above this
-        cutoff are considered well covered. Default is ``COVERAGE_CUTOFF``.
+    :param high_cov_definition: Coverage threshold for high/low classification.
+        Sites with coverage above this cutoff are considered well covered. Default is
+        ``COVERAGE_CUTOFF``.
     :param upper_cov_cutoff: Upper coverage cutoff. Sites with coverage above this
         cutoff are excluded from the high coverage Table. Default is None.
     :param skip_coverage_model: Whether to skip generating the coverage model. If set
@@ -1312,6 +1316,11 @@ def build_models(
             model_group_expr.high_or_low_coverage == "low", coverage_expr
         )
 
+    # Collapse per-site rows into one row per (context, ref, alt,
+    # methylation_level, …) group with summed observed/possible counts.
+    # model_group_expr and (optionally) exomes_coverage are carried along so
+    # that plateau and coverage models can be built on the grouped table.
+    # mu_snp is identical for all rows within a group so grabbing one value suffices.
     ht = (
         ht.group_by(*grouping, **grouping_exprs)
         .aggregate(
@@ -1734,7 +1743,8 @@ def apply_plateau_models(
     :param plateau_models_expr: This can be either a single plateau model, where the
         first element is the intercept and the second element is the slope, or an array
         of plateau models.
-    :return: Predicted probability observed expression.
+    :return: Float64Expression of the predicted probability observed, or an
+        ArrayExpression of them when ``plateau_models_expr`` is an array of models.
     """
 
     def _apply_model(plateau_model: hl.ArrayExpression) -> hl.Float64Expression:
@@ -1742,7 +1752,7 @@ def apply_plateau_models(
         Apply the plateau model to the mutation rate expression.
 
         :param plateau_model: ArrayExpression of the plateau model.
-        :return: Predicted probability observed expression.
+        :return: Float64Expression of the predicted probability observed.
         """
         slope = plateau_model[1]
         intercept = plateau_model[0]
@@ -1905,7 +1915,7 @@ def aggregate_constraint_metrics_expr(
     additional_exprs_to_sum: Optional[Dict[str, hl.expr.Expression]] = None,
 ) -> hl.expr.StructExpression:
     """
-    Get an aggregation expression for the sum of expected variants and other fields.
+    Get an aggregation expression for the sum of specified fields and expressions.
 
     An aggregate sum or array sum is created for each field in ``fields_to_sum``.
 
@@ -1915,7 +1925,7 @@ def aggregate_constraint_metrics_expr(
     :param additional_exprs_to_sum: Dictionary of additional expressions to get
         an aggregate sum expression for. Field names are the keys and expressions are
         the values. Default is None.
-    :return: StructExpression with the sum of expected variants and other fields.
+    :return: StructExpression with the sum of each field and expression.
     """
     return _build_sum_agg_struct(
         fields_to_sum=list(fields_to_sum),
@@ -2232,9 +2242,9 @@ def add_gencode_transcript_annotations(
         Default is True because the Y chromosome PAR regions are typically not included
         in the constraint calculations and both chrX and chrY will have the same
         'transcript_id' field for these regions. This parameter can only be True if
-        ``gencode_ht`` includes a 'transcript_id_version' field because Y_PAR is
-        included in the version of the transcript, which has been stripped from the
-        'transcript_id' field.
+        ``gencode_ht`` includes a 'transcript_id_version' field because Y_PAR (or
+        PAR_Y, depending on the GENCODE release) is included in the version of the
+        transcript, which has been stripped from the 'transcript_id' field.
     :return: Table with transcript annotations from GENCODE added.
     """
     annotations = list(annotations)
@@ -2302,7 +2312,8 @@ def rank_and_assign_bins(
     bin_granularities: Optional[Dict[str, int]] = None,
     prefix: str = "",
 ) -> hl.StructExpression:
-    """Rank rows by a numeric expression and assign bin labels.
+    """
+    Rank rows by a numeric expression and assign bin labels.
 
     **Rank-based binning**: every row receives a unique position in the sorted
     order, and bins are derived from that position. This differs from
@@ -2367,7 +2378,8 @@ def compute_percentile_thresholds(
     percentiles: Tuple[float, ...] = (1, 5, 10, 15, 25, 50, 75),
     quantile_k: int = 1000,
 ) -> Dict[float, float]:
-    """Compute approximate percentile thresholds for a metric expression.
+    """
+    Compute approximate percentile thresholds for a metric expression.
 
     **Threshold-based binning, step 1**: computes the boundary values that
     define bin edges. The returned dict is passed to
@@ -2449,8 +2461,8 @@ def annotate_bins_by_threshold(
     :param ht: Input Table.
     :param metric_exprs: Mapping of metric name to the Float64Expression to
         bin (e.g. ``{"lof": ht.lof_oe_upper, "mis": ht.mis_oe_upper}``).
-    :param thresholds: Mapping of ``(granularity, metric)`` to an ordered list
-        of threshold values, as produced by
+    :param thresholds: Mapping of ``(granularity, metric)`` to a list of threshold
+        values in ascending order, as produced by
         :func:`compute_percentile_thresholds`.
     :param granularities: Granularity names to iterate over (e.g.
         ``["decile", "ventile"]``). Each must appear as the first element of
@@ -2466,11 +2478,12 @@ def annotate_bins_by_threshold(
         value_expr: hl.expr.Float64Expression,
         threshold_list: List[float],
     ) -> hl.expr.Int32Expression:
-        """Count how many thresholds a value exceeds.
+        """
+        Count how many thresholds a value meets or exceeds.
 
         :param value_expr: Metric value to bin.
-        :param threshold_list: Ordered list of boundary values.
-        :return: Number of boundaries exceeded (0 = below all thresholds).
+        :param threshold_list: Boundary values in ascending order.
+        :return: Number of boundaries met or exceeded (0 = below all thresholds).
         """
         arr = hl.literal(threshold_list)
         return hl.sum(arr.map(lambda t: hl.int(value_expr >= t)))

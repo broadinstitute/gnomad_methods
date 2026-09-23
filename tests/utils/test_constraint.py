@@ -8,8 +8,10 @@ import pytest
 from gnomad.utils.constraint import (
     assemble_constraint_context_ht,
     build_constraint_consequence_groups,
+    build_models,
     calculate_gerp_cutoffs,
     calculate_raw_z_score,
+    calibration_model_group_expr,
     compute_percentile_thresholds,
     count_observed_and_possible_by_group,
     counts_agg_expr,
@@ -1359,3 +1361,78 @@ class TestGetConstraintGroupingExpr:
 
         # lof is None, polyphen is missing from struct → modifier should be "None"
         assert result.modifier == "None"
+
+
+class TestBuildModels:
+    """Test the build_models function."""
+
+    @staticmethod
+    def _models_ht(rows: List[dict]) -> hl.Table:
+        """Build a minimal build_models input Table from (region, cov, obs) rows."""
+        return hl.Table.parallelize(
+            [
+                {
+                    "context": context,
+                    "ref": "C",
+                    "alt": "T",
+                    "methylation_level": 0,
+                    "mu_snp": mu,
+                    "cpg": False,
+                    "genomic_region": region,
+                    "cov": cov,
+                    "observed_variants": obs,
+                    "possible_variants": 10,
+                }
+                for region, cov, obs in rows
+                for context, mu in [("ACA", 1e-8), ("TCT", 2e-8)]
+            ],
+            hl.tstruct(
+                context=hl.tstr,
+                ref=hl.tstr,
+                alt=hl.tstr,
+                methylation_level=hl.tint32,
+                mu_snp=hl.tfloat64,
+                cpg=hl.tbool,
+                genomic_region=hl.tstr,
+                cov=hl.tint32,
+                observed_variants=hl.tint64,
+                possible_variants=hl.tint64,
+            ),
+        )
+
+    AUTOSOME_ROWS = [
+        ("autosome_or_par", 40, 5),
+        ("autosome_or_par", 10, 1),
+        ("autosome_or_par", 20, 3),
+    ]
+
+    def test_default_grouping_builds_coverage_model(self) -> None:
+        """Test that the default grouping, which has no ``genomic_region``, works."""
+        ht = self._models_ht(self.AUTOSOME_ROWS)
+        coverage_model, plateau_models = build_models(ht, ht.cov)
+
+        assert len(hl.eval(coverage_model)) == 2
+        assert hl.eval(plateau_models) is not None
+
+    def test_genomic_region_restricts_coverage_model(self) -> None:
+        """Test that non-autosome/PAR sites are excluded when grouped by region."""
+
+        def _coverage_model(rows: List[tuple]) -> List[float]:
+            ht = self._models_ht(rows)
+            model_group_expr = calibration_model_group_expr(
+                ht.cov,
+                ht.cpg,
+                low_cov_cutoff=0,
+                additional_grouping_exprs={"genomic_region": ht.genomic_region},
+                cpg_in_high_only=True,
+            )
+            coverage_model, _ = build_models(
+                ht, ht.cov, model_group_expr=model_group_expr
+            )
+            return hl.eval(coverage_model)
+
+        # chrX rows with very different proportions observed must not change the model.
+        chrx_rows = [("chrx_nonpar", 40, 10), ("chrx_nonpar", 15, 9)]
+        assert _coverage_model(self.AUTOSOME_ROWS) == pytest.approx(
+            _coverage_model(self.AUTOSOME_ROWS + chrx_rows)
+        )

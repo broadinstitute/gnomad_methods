@@ -1093,19 +1093,18 @@ def calibration_model_group_expr(
 
     The calibration model expression is a struct with the following fields:
 
-        - genomic_region: The genomic region of the variant ("autosome_or_par",
-          "chrx_nonpar", or "chry_nonpar").
         - high_or_low_coverage: Whether the variant belongs to the high or low coverage
           calibration model. The variant is assigned to the high coverage model if the
           exome coverage is greater than or equal to 'high_cov_cutoff' and less than or
           equal to 'upper_cov_cutoff' (if provided). The variant is assigned to the low
           coverage model if `skip_coverage_model` is False and the exome coverage is
           greater than 'low_cov_cutoff' (if provided) and less than 'high_cov_cutoff'.
-        - cpg: Whether the variant is a CpG (`cpg_expr`).
+        - model_group: Struct of the fields the models are grouped by:
 
-    The global parameters for the calibration model are the values of the function
-    parameters: `low_cov_cutoff`, `high_cov_cutoff`, `upper_cov_cutoff`, and
-    `skip_coverage_model`.
+            - cpg: Whether the variant is a CpG (`cpg_expr`).
+            - Any fields in `additional_grouping_exprs` (e.g. ``genomic_region``).
+
+    The expression is missing for variants that belong to neither model.
 
     :param exomes_coverage_expr: Exome coverage expression.
     :param cpg_expr: CpG expression.
@@ -1115,7 +1114,10 @@ def calibration_model_group_expr(
     :param skip_coverage_model: Whether to skip the coverage model. Default is False.
     :param additional_grouping_exprs: Optional Dictionary of additional expressions to
         group by. Default is None.
-    :return: Tuple containing the calibration model expression and the globals.
+    :param cpg_in_high_only: Whether to only include `cpg_expr` in the model grouping
+        for the high coverage model. Default is False.
+    :return: StructExpression with ``high_or_low_coverage`` and ``model_group``
+        fields.
     """
     high_cov_expr = exomes_coverage_expr >= high_cov_cutoff
     if upper_cov_cutoff is not None:
@@ -1270,9 +1272,12 @@ def build_models(
         model) by 'possible_variants'. Default is False.
     :param keys: Annotations used to group observed and possible variant counts.
         Default is ("context", "ref", "alt", "methylation_level").
-    :param model_group_expr: Expression with ``high_or_low_coverage`` annotation
-        to group variants into high or low coverage models. If not provided, the
-        ``calibration_model_group_expr`` function is used to define the grouping.
+    :param model_group_expr: Expression with ``high_or_low_coverage`` and
+        ``model_group`` annotations to group variants into high or low coverage models.
+        If ``model_group`` includes a ``genomic_region`` field, the coverage model is
+        built only on sites where it is "autosome_or_par"; otherwise all sites are
+        used. If not provided, the ``calibration_model_group_expr`` function is used to
+        define the grouping, which does not include ``genomic_region``.
     :param high_cov_definition: Lower coverage cutoff. Sites with coverage above this
         cutoff are considered well covered. Default is ``COVERAGE_CUTOFF``.
     :param upper_cov_cutoff: Upper coverage cutoff. Sites with coverage above this
@@ -1347,12 +1352,18 @@ def build_models(
         obs_is_array = isinstance(ht.observed_variants, hl.expr.ArrayExpression)
         obs_expr = ht.observed_variants[0] if obs_is_array else ht.observed_variants
 
+        # Restrict the coverage model to autosome/PAR sites when the model grouping
+        # includes a genomic region, otherwise use all sites.
+        model_group = ht.build_model.model_group
+        autosome_or_par_expr = (
+            model_group.genomic_region == "autosome_or_par"
+            if "genomic_region" in model_group
+            else hl.bool(True)
+        )
+
         # Create a metric that represents the relative mutability of the exome calculated
         # on high coverage sites and will be used as scaling factor when building the
         # coverage model.
-        autosome_or_par_expr = (
-            ht.build_model.model_group.genomic_region == "autosome_or_par"
-        )
         agg_expr["high_coverage_scale_factor"] = hl.agg.filter(
             is_high_expr & autosome_or_par_expr,
             hl.agg.sum(obs_expr) / hl.agg.sum(ht.possible_variants * ht.mu_snp),

@@ -22,6 +22,21 @@ team for functionality that already existed here but that they couldn't find.
 Optimize new code for discoverability — clear names, tight scopes, accurate
 docstrings — not for cleverness.
 
+## gnomAD & Hail institutional knowledge
+
+`knowledge/` is a shared reference of gnomAD + Hail institutional knowledge
+maintained by the methods group: silent-fail bug classes, design tradeoffs,
+release conventions, and facts that are hidden in the source.
+
+**Consult [`knowledge/README.md`](knowledge/README.md) before writing gnomAD- or
+Hail-touching code.** It is a routing index — read it, then load only the
+sub-document you need rather than the whole tree.
+
+It is also where new institutional knowledge belongs. The contribution rules
+live in that README; the two that matter most are **never add a fact you have
+not verified** (against the Hail source, the official docs, or a job you
+actually ran) and **propose entries to the user before writing them**.
+
 ## Repo Layout
 
 **The repo layout lives in the README**, along with the list of related gnomAD

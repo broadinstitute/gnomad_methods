@@ -26,6 +26,10 @@ extensions = [
 # README.md contains developer documentation for building docs
 exclude_patterns = ["README.md"]
 
+# Generate anchors for headings in Markdown so the knowledge tree's
+# cross-document links (file.md#some-heading) resolve.
+myst_heading_anchors = 3
+
 master_doc = "index"
 
 html_theme = "sphinx_rtd_theme"

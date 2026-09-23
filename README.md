@@ -6,6 +6,10 @@ This repo contains a number of [Hail](https://hail.is/) utility functions and sc
 
 We therefore encourage users to browse through the [API reference](https://broadinstitute.github.io/gnomad_methods/api_reference/) to identify modules and functions that will be useful in their own pipelines, and to edit and reconfigure relevant code to suit their particular analysis and QC needs.
 
+## gnomAD & Hail institutional knowledge
+
+[`knowledge/`](knowledge/README.md) is a reference of gnomAD + Hail institutional knowledge maintained by the methods group: silent-fail bug classes, design tradeoffs, and facts that are hidden in the source. Start at the README — it routes you to the relevant sub-document.
+
 ## Repo layout
 
 | Directory | Purpose |

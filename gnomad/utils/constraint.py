@@ -1124,7 +1124,10 @@ def calibration_model_group_expr(
     if upper_cov_cutoff is not None:
         high_cov_expr &= exomes_coverage_expr <= upper_cov_cutoff
 
+    # Sites above `upper_cov_cutoff` fail the high coverage check, so the upper bound
+    # on low coverage keeps them out of both models.
     low_cov_expr = hl.bool(False) if skip_coverage_model else hl.bool(True)
+    low_cov_expr &= exomes_coverage_expr < high_cov_cutoff
     if low_cov_cutoff is not None:
         low_cov_expr &= exomes_coverage_expr > low_cov_cutoff
 

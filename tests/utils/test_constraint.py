@@ -1539,6 +1539,13 @@ class TestCalibrationModelGroupExpr:
         assert groups[0] is None
         assert [g.high_or_low_coverage for g in groups[1:]] == ["low", "high"]
 
+    def test_above_upper_cutoff_in_neither_model(self) -> None:
+        """Test that sites above ``upper_cov_cutoff`` are in neither model."""
+        groups = self._groups([10, 50, 100], upper_cov_cutoff=50)
+
+        assert [g.high_or_low_coverage for g in groups[:2]] == ["low", "high"]
+        assert groups[2] is None
+
     def test_skip_coverage_model_drops_low(self) -> None:
         """Test that low coverage sites get no group when the coverage model is skipped."""
         groups = self._groups([10, 30], skip_coverage_model=True)

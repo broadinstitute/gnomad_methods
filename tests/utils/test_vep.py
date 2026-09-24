@@ -528,6 +528,20 @@ class TestGetManeSelectOverCanonicalFilterExpr:
                     "canonical": True,
                     "gene_id": "ENSG_C",
                 },
+                # Gene D: only a non-ENST transcript is MANE Select, so the ENST
+                # canonical transcript should be the fallback.
+                {
+                    "transcript": "NM_00002",
+                    "mane_select": True,
+                    "canonical": False,
+                    "gene_id": "ENSG_D",
+                },
+                {
+                    "transcript": "ENST00005",
+                    "mane_select": False,
+                    "canonical": True,
+                    "gene_id": "ENSG_D",
+                },
             ],
             hl.tstruct(
                 transcript=hl.tstr,
@@ -585,3 +599,20 @@ class TestGetManeSelectOverCanonicalFilterExpr:
 
         result_map = {r.transcript: r.selected for r in results}
         assert result_map["NM_00001"] is False
+
+    def test_non_enst_mane_does_not_block_canonical_fallback(
+        self, sample_table: hl.Table
+    ) -> None:
+        """Test that a non-ENST MANE Select transcript does not suppress the fallback."""
+        ht = sample_table.annotate(
+            selected=get_mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        result_map = {r.transcript: r.selected for r in ht.collect()}
+
+        assert result_map["ENST00005"] is True
+        assert result_map["NM_00002"] is False

@@ -1231,14 +1231,18 @@ def get_mane_select_over_canonical_filter_expr(
     :return: Boolean expression that is ``True`` for the selected transcripts.
     """
     ht = transcript_expr._indices.source
+    is_enst_expr = transcript_expr.startswith("ENST")
+
+    # Restrict the per-gene checks to Ensembl transcripts too, so a non-ENST MANE
+    # Select transcript cannot suppress the canonical fallback for its gene.
     genes = ht.group_by(gene_id=gene_id_expr).aggregate(
-        mane_present=hl.agg.any(mane_select_expr),
-        canonical_present=hl.agg.any(canonical_expr),
+        mane_present=hl.agg.any(is_enst_expr & mane_select_expr),
+        canonical_present=hl.agg.any(is_enst_expr & canonical_expr),
     )
     genes = genes.annotate(only_canonical=~genes.mane_present & genes.canonical_present)
     gene_info = genes[gene_id_expr]
 
-    return transcript_expr.startswith("ENST") & (
+    return is_enst_expr & (
         (gene_info.mane_present & mane_select_expr)
         | (gene_info.only_canonical & canonical_expr)
     )

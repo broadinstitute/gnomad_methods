@@ -419,6 +419,17 @@ def build_constraint_consequence_groups(
     Additional groupings can be added via ``additional_groupings``, and
     grouping combinations via ``additional_grouping_combinations``.
 
+    .. note::
+
+        A combination of more than one grouping builds the **union** of the
+        combined groups, not their intersection. For example, with an
+        ``additional_groupings`` entry ``{"am": {"am_per_99": ...}}``, the
+        combination ``["lof", "am"]`` produces groups such as
+        ``{"lof": "hc", "am": "am_per_99"}`` that contain variants that are HC
+        LoF **or** in the top 1% of AlphaMissense scores. This differs from
+        frequency metadata (e.g. ``freq_meta``), where multiple keys mean all of
+        them apply.
+
     :param csq_expr: VEP most severe consequence expression (e.g.,
         ``ht.most_severe_consequence``).
     :param lof_modifier_expr: LOFTEE modifier expression (e.g., ``ht.modifier``).
@@ -427,7 +438,8 @@ def build_constraint_consequence_groups(
     :param additional_groupings: Additional groupings to add to the constraint
         groups. Default is None.
     :param additional_grouping_combinations: Additional grouping combinations to
-        add to the constraint groups. Default is None.
+        add to the constraint groups. Groupings combined in one entry are joined as a
+        union (see the note above). Default is None.
     :return: Tuple of (constraint group filter expressions, meta dicts).
     """
     lof_classic_expr = hl.literal(set(classic_lof_annotations)).contains(csq_expr)
@@ -454,6 +466,7 @@ def build_constraint_consequence_groups(
         grouping_combinations,
         {k: list(v.keys()) for k, v in annotation_dict.items()},
     )
+    # Multi-grouping combinations are unions, e.g. LoF or high-scoring missense.
     constraint_group_filters = [
         functools.reduce(operator.ior, [annotation_dict[k][v] for k, v in m.items()])
         for m in meta

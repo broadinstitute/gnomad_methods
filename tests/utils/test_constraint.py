@@ -366,6 +366,28 @@ class TestBuildConstraintConsequenceGroups:
         assert (("lof", "hc_lc"),) in meta_values
         assert (("lof", "hc"),) in meta_values
 
+    def test_multi_grouping_combination_is_union(self) -> None:
+        """Test that a multi-grouping combination selects variants in either group."""
+        ht = hl.Table.parallelize(
+            [
+                {"csq": "stop_gained", "modifier": "HC", "am": False},
+                {"csq": "missense_variant", "modifier": "NA", "am": True},
+                {"csq": "missense_variant", "modifier": "NA", "am": False},
+                {"csq": "synonymous_variant", "modifier": "NA", "am": False},
+            ],
+            hl.tstruct(csq=hl.tstr, modifier=hl.tstr, am=hl.tbool),
+        )
+        filters, meta = build_constraint_consequence_groups(
+            ht.csq,
+            ht.modifier,
+            additional_groupings={"am": {"am_high": ht.am}},
+            additional_grouping_combinations=[["lof", "am"]],
+        )
+        idx = meta.index({"lof": "hc", "am": "am_high"})
+
+        # HC LoF or high-AlphaMissense missense, as in a "damaging variants" group.
+        assert ht.annotate(f=filters[idx]).f.collect() == [True, True, False, False]
+
 
 class TestRankAndAssignBins:
     """Test the rank_and_assign_bins function."""

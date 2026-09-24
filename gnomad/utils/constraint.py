@@ -2105,6 +2105,13 @@ def oe_confidence_interval(
     - ``"poisson"``: sweeps a discretized Poisson likelihood over the OE
       parameter space [0, 2). Retained for backwards compatibility.
 
+    .. note::
+
+        The default changed from the discretized Poisson computation to
+        ``"gamma"``, so calls that do not pass ``method`` return different bounds
+        than before. ``"gamma"`` requires Hail >= 0.2.137, which added
+        ``hl.qgamma``; on older Hail versions pass ``method="poisson"``.
+
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
     :param alpha: Significance level for the confidence interval. Default is

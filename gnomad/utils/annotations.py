@@ -3235,7 +3235,9 @@ def agg_by_strata(
         in 'group_membership'. Under leaf reduction (when `freq_reduced=True` is set on
         the supplied globals), targets may also reference non-leaf parents present in
         `freq_meta_full`; their sample-sets are reconstructed by flattening the
-        `s_indices` of their leaf-children listed in `freq_group_decomposition`. If not
+       in 'group_membership'. If the groups were reduced (`freq_reduced=True`), a
+        target can also be any group in `freq_meta_full`; it is aggregated over all
+        samples in the leaves or cells that make it up. If not
         provided, all entries of the 'group_membership' annotation will have the entry
         aggregation functions applied to them.
     :return: Table with annotations of stratified aggregations.

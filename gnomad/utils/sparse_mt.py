@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.sample_qc.sex import adjusted_sex_ploidy_expr
+from gnomad.sample_qc.sex import adjust_sex_ploidy
 from gnomad.utils.annotations import (
     COVERAGE_OVER_X_BINS,
     _read_reduction_globals,
@@ -1360,17 +1360,13 @@ def compute_stats_per_ref_site(
 
     if sex_karyotype_ht is not None:
         logger.info("Adjusting genotype ploidy based on sex karyotype.")
-        gt_field = gt_field.pop()
         mt = mt.annotate_cols(
             sex_karyotype=sex_karyotype_ht[mt.col_key][sex_karyotype_field]
         )
-        mt = mt.annotate_entries(
-            **{
-                gt_field: adjusted_sex_ploidy_expr(
-                    mt.locus, mt[gt_field], mt.sex_karyotype
-                )
-            }
-        )
+        # `adjust_sex_ploidy` annotates the sample/locus flags in place;
+        # `adjusted_sex_ploidy_expr` would index them back from this densified
+        # MT's cols()/rows(), which Hail runs as a second full densify.
+        mt = adjust_sex_ploidy(mt, mt.sex_karyotype, gt_field=gt_field.pop())
 
     # Annotate with adj if needed.
     if adj and "adj" not in mt.entry:

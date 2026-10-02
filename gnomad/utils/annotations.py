@@ -171,37 +171,26 @@ def annotate_with_ht(
     return t
 
 
-def _strata_keys(
-    meta: hl.expr.DictExpression, subset: Optional[str]
-) -> hl.expr.SetExpression:
-    """
-    Return the keys that identify a `freq_meta` entry's stratification.
-
-    When selecting within a `subset`, the "subset" key is not part of the
-    stratification, so it is removed before key-set comparisons.
-
-    :param meta: One `freq_meta` entry.
-    :param subset: Subset being selected, or None for the global strata.
-    :return: Set of keys.
-    """
-    keys = hl.set(meta.keys())
-    return keys.remove("subset") if subset is not None else keys
-
-
-def _in_subset(
-    meta: hl.expr.DictExpression, subset: Optional[str]
+def _has_strata(
+    meta: hl.expr.DictExpression, keys: Set[str], subset: Optional[str]
 ) -> hl.expr.BooleanExpression:
     """
-    Return whether a `freq_meta` entry belongs to `subset`.
+    Return whether a `freq_meta` entry is stratified by exactly `keys`.
 
-    With `subset` None every entry qualifies; entries carrying a "subset" key are
-    then excluded by the key-set checks of the callers, as before.
+    With `subset` set, the entry must belong to that subset and its "subset" key
+    is not counted as a stratification. With `subset` None, entries carrying a
+    "subset" key do not match, as before.
 
     :param meta: One `freq_meta` entry.
-    :param subset: Subset being selected, or None.
+    :param keys: Stratification keys to match, e.g. ``{"group", "gen_anc"}``.
+    :param subset: Subset being selected, or None for the global strata.
     :return: Boolean expression.
     """
-    return hl.literal(True) if subset is None else (meta.get("subset") == subset)
+    if subset is None:
+        return hl.set(meta.keys()) == hl.set(keys)
+    return hl.coalesce(meta.get("subset") == subset, False) & (
+        hl.set(meta.keys()).remove("subset") == hl.set(keys)
+    )
 
 
 def grpmax_expr(
@@ -243,8 +232,7 @@ def grpmax_expr(
     # pylint: disable=invalid-unary-operand-type
     gen_anc_max_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (
-            _in_subset(freq_meta[i], subset)
-            & (_strata_keys(freq_meta[i], subset) == {"group", gen_anc_label})
+            _has_strata(freq_meta[i], {"group", gen_anc_label}, subset)
             & (freq_meta[i]["group"] == "adj")
             & (~_gen_anc_groups_to_exclude.contains(freq_meta[i][gen_anc_label]))
         )
@@ -367,12 +355,11 @@ def faf_expr(
     # pylint: disable=invalid-unary-operand-type
     faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (
-            _in_subset(freq_meta[i], subset)
-            & (freq_meta[i].get("group") == "adj")
+            (freq_meta[i].get("group") == "adj")
             & (
-                (_strata_keys(freq_meta[i], subset) == {"group"})
+                _has_strata(freq_meta[i], {"group"}, subset)
                 | (
-                    (_strata_keys(freq_meta[i], subset) == {gen_anc_label, "group"})
+                    _has_strata(freq_meta[i], {gen_anc_label, "group"}, subset)
                     & (
                         ~_gen_anc_groups_to_exclude.contains(
                             freq_meta[i][gen_anc_label]
@@ -384,15 +371,11 @@ def faf_expr(
     )
     sex_faf_freq_indices = hl.range(0, hl.len(freq_meta)).filter(
         lambda i: (
-            _in_subset(freq_meta[i], subset)
-            & (freq_meta[i].get("group") == "adj")
+            (freq_meta[i].get("group") == "adj")
             & (
-                (_strata_keys(freq_meta[i], subset) == {"group", "sex"})
+                _has_strata(freq_meta[i], {"group", "sex"}, subset)
                 | (
-                    (
-                        _strata_keys(freq_meta[i], subset)
-                        == {gen_anc_label, "group", "sex"}
-                    )
+                    _has_strata(freq_meta[i], {gen_anc_label, "group", "sex"}, subset)
                     & (
                         ~_gen_anc_groups_to_exclude.contains(
                             freq_meta[i][gen_anc_label]
@@ -464,8 +447,7 @@ def gen_anc_faf_max_expr(
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
         lambda i: (
-            _in_subset(i[1], subset)
-            & (_strata_keys(i[1], subset) == {"group", gen_anc_label})
+            _has_strata(i[1], {"group", gen_anc_label}, subset)
             & (i[1]["group"] == "adj")
         )
     )
@@ -3268,15 +3250,13 @@ def agg_by_strata(
     `generate_freq_group_membership_array`) is supplied, `mt` must contain a
     'group_membership' annotation that is a list of bools to aggregate the columns by.
 
-    With `defined_entries_only`, each row's entries array is first compacted to the
-    defined entries and every aggregation runs over those, visiting each stratum a
-    carrier belongs to once. On sparse data (a VDS's variant data has an entry only
-    for samples with a non-reference call, so ~99.9% of the array is missing) this
-    makes the per-row cost proportional to carriers instead of samples times
-    strata. The result is identical as long as the aggregation functions ignore
-    missing values (`hl.agg.sum`, `hl.agg.count_where`, `hl.agg.hist`, ...);
-    `hl.agg.count` would count every sample in the default mode but only the
-    carriers here. `entry_agg_group_membership` targets must be leaves in this mode.
+    With `defined_entries_only`, each row is reduced to its defined entries and the
+    aggregations run over those, so on sparse variant data (an entry only for
+    samples with a non-reference call) the cost scales with carriers rather than
+    samples times strata. Results match the default mode when the aggregators
+    ignore missing values (`hl.agg.sum`, `hl.agg.count_where`, `hl.agg.hist`);
+    `hl.agg.count` would count carriers instead of samples.
+    `entry_agg_group_membership` targets must be leaves in this mode.
 
     :param mt: Input MatrixTable.
     :param entry_agg_funcs: Dict of entry aggregation functions where the
@@ -3449,18 +3429,6 @@ def agg_by_strata(
     # for that variant.
     ht = mt.localize_entries("entries", "cols")
 
-    if defined_entries_only:
-        return _agg_by_strata_defined_entries(
-            ht,
-            select_fields,
-            select_expr,
-            entry_agg_funcs,
-            global_expr["adj_groups"],
-            has_adj,
-            n_groups,
-            entry_agg_group_membership,
-        )
-
     # For each stratification group in group_membership, determine the indices of the
     # samples that belong to that group.
     n_samples = mt.count_cols()
@@ -3470,6 +3438,11 @@ def agg_by_strata(
         )
     )
     ht = ht.annotate_globals(**global_expr)
+
+    if defined_entries_only:
+        return _agg_by_strata_defined_entries(
+            ht, select_fields, entry_agg_funcs, has_adj, entry_agg_group_membership
+        )
 
     # Resolve each `entry_agg_group_membership` target to its sample index
     # array and adj flag once, as globals, so the per-row aggregation below
@@ -3590,11 +3563,8 @@ def agg_by_strata(
 def _agg_by_strata_defined_entries(
     ht: hl.Table,
     select_fields: List[str],
-    select_expr: Dict[str, hl.Expression],
     entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
-    adj_groups: hl.expr.ArrayExpression,
     has_adj: bool,
-    n_groups: int,
     entry_agg_group_membership: Dict[str, List[Tuple[str, Any, bool]]],
 ) -> hl.Table:
     """
@@ -3605,13 +3575,11 @@ def _agg_by_strata_defined_entries(
     one explode plus group_by over those indices. Strata with no carrier get the
     aggregation function's empty value.
 
-    :param ht: Localized MT (`entries`, `cols`) with the transformed entry fields.
+    :param ht: Localized MT (`entries`, `cols`) with the transformed entry fields
+        and `agg_by_strata`'s globals (`adj_groups`, `indices_by_group`).
     :param select_fields: Row fields to keep.
-    :param select_expr: Transformed entry field names.
     :param entry_agg_funcs: As in `agg_by_strata`.
-    :param adj_groups: Per-stratum adj flags.
     :param has_adj: Whether any stratum is adj filtered.
-    :param n_groups: Number of strata.
     :param entry_agg_group_membership: `agg_by_strata`'s targets, already resolved
         to ``(kind, payload, adj)`` tuples.
     :return: Table with one aggregated array per annotation.
@@ -3624,8 +3592,7 @@ def _agg_by_strata_defined_entries(
                 " `entry_agg_group_membership`."
             )
         targets[ann] = [idx for _, idx, _ in resolved]
-
-    ht = ht.annotate_globals(adj_groups=adj_groups)
+    n_groups = hl.eval(hl.len(ht.adj_groups))
 
     def _counted_in(s_i, entry):
         # Indices of the strata this carrier counts toward: the ones its sample
@@ -3665,7 +3632,7 @@ def _agg_by_strata_defined_entries(
     ht = ht.select(
         *select_fields, **{ann: _agg(ann, f[1]) for ann, f in entry_agg_funcs.items()}
     )
-    return ht.drop("cols", "adj_groups")
+    return ht.drop("cols")
 
 
 def update_structured_annotations(

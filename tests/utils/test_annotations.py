@@ -3817,25 +3817,28 @@ class TestSubsetStrataSelection:
             {"group": "adj", "gen_anc": "nfe", "sex": "XY", "subset": "aou"},
         ]
         cs = self._cs
+        # Global afr has the highest AF of the non-excluded strata and subset nfe
+        # the highest overall, so a leak of global entries into a subset grpmax, or
+        # a broken exclusion, changes the answer. One autosomal and one non-PAR chrX
+        # locus so the sex-stratified FAF values are computed for the second.
         freq = [
             cs(50, 1000, 2),
             cs(60, 1100, 2),
-            cs(30, 400, 1),
+            cs(60, 400, 1),
             cs(20, 600, 1),
             cs(25, 500),
             cs(15, 200),
             cs(40, 800, 1),
             cs(45, 900, 1),
             cs(35, 300, 1),
-            cs(5, 500),
+            cs(50, 100),
             cs(20, 400),
             cs(3, 100),
         ]
         ht = hl.Table.parallelize(
             [
-                hl.struct(
-                    locus=hl.locus("chr1", 100, reference_genome="GRCh38"), freq=freq
-                )
+                hl.struct(locus=hl.locus(c, p, reference_genome="GRCh38"), freq=freq)
+                for c, p in [("chr1", 100), ("chrX", 3_000_000)]
             ],
             key="locus",
         )
@@ -3868,18 +3871,32 @@ class TestSubsetStrataSelection:
         fafmax_old = gen_anc_faf_max_expr(faf_old, hl.literal(faf_meta_old))
         faf_meta_old = [{**m, "subset": "aou"} for m in faf_meta_old]
 
-        row = ht.annotate(
+        # fafmax over a FAF array that mixes global and subset entries must still
+        # pick within the subset.
+        faf_global, faf_meta_global = faf_expr(ht.freq, ht.freq_meta, ht.locus, {"nfe"})
+        fafmax_mixed = gen_anc_faf_max_expr(
+            faf_global.extend(faf_new),
+            hl.literal(faf_meta_global + faf_meta_new),
+            subset="aou",
+        )
+
+        rows = ht.annotate(
             faf_new=faf_new,
             faf_old=faf_old,
             g_new=grpmax_new,
             g_old=grpmax_old,
             m_new=fafmax_new,
             m_old=fafmax_old,
-        ).collect()[0]
+            m_mixed=fafmax_mixed,
+        ).collect()
         assert faf_meta_new == faf_meta_old
-        assert row.faf_new == row.faf_old
-        assert row.g_new == row.g_old
-        assert row.m_new == row.m_old
+        for row in rows:
+            assert row.faf_new == row.faf_old, row.locus
+            assert row.g_new == row.g_old, row.locus
+            assert row.m_new == row.m_old, row.locus
+            assert row.m_mixed == row.m_old, row.locus
+        # The chrX row exercises the sex-stratified FAF values.
+        assert any(f is not None for f in rows[1].faf_new[2:]), rows[1].faf_new
 
     def test_no_subset_ignores_subset_strata(self, ht: hl.Table) -> None:
         """Without `subset`, strata carrying a subset key are left out as before."""
@@ -3967,6 +3984,8 @@ class TestAggByStrataDefinedEntriesOnly:
             mt, self.funcs, group_membership_ht=gm, defined_entries_only=True
         )
         assert dense.row.dtype == sparse.row.dtype
+        assert dense.globals.dtype == sparse.globals.dtype
+        assert hl.eval(dense.globals) == hl.eval(sparse.globals)
         assert dense.collect() == sparse.collect()
 
     def test_matches_default_mode_with_targets(self, mt_and_gm) -> None:

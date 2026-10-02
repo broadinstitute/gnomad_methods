@@ -229,7 +229,9 @@ def grpmax_expr(
     :param freq_meta: ArrayExpression of meta dictionaries corresponding to freq (as returned by annotate_freq)
     :param gen_anc_groups_to_exclude: Set of genetic ancestry groups to skip for genetic ancestry max calculation
     :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
-    :param subset: If set, only consider `freq_meta` entries whose "subset" key equals this value; the key is ignored when matching the stratification. Default is None (global strata only).
+    :param subset: If set, only consider `freq_meta` entries whose "subset" key
+        equals this value; the key is ignored when matching the stratification.
+        Default is None (global strata only).
     :return: Genetic ancestry max struct
     """
     _gen_anc_groups_to_exclude = (
@@ -351,7 +353,9 @@ def faf_expr(
     :param gen_anc_groups_to_exclude: Set of genetic ancestry groups to exclude from faf calculation (typically bottlenecked or consanguineous genetic ancestry groups)
     :param faf_thresholds: List of FAF thresholds to compute
     :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
-    :param subset: If set, compute FAF over the `freq_meta` entries whose "subset" key equals this value; the returned metadata keeps the "subset" key. Default is None (global strata only).
+    :param subset: If set, compute FAF over the `freq_meta` entries whose "subset"
+        key equals this value; the returned metadata keeps the "subset" key.
+        Default is None (global strata only).
     :return: (FAF expression, FAF metadata)
     """
     _gen_anc_groups_to_exclude = (
@@ -453,7 +457,9 @@ def gen_anc_faf_max_expr(
     :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
         returned by faf_expr)
     :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
-    :param subset: If set, only consider `faf_meta` entries whose "subset" key equals this value; the key is ignored when matching the stratification. Default is None.
+    :param subset: If set, only consider `faf_meta` entries whose "subset" key
+        equals this value; the key is ignored when matching the stratification.
+        Default is None.
     :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(
@@ -3257,6 +3263,11 @@ def agg_by_strata(
     """
     Get row expression for annotations of each entry aggregation function(s) by strata.
 
+    The entry aggregation functions are applied to the MatrixTable entries and
+    aggregated. If no `group_membership_ht` (like the one returned by
+    `generate_freq_group_membership_array`) is supplied, `mt` must contain a
+    'group_membership' annotation that is a list of bools to aggregate the columns by.
+
     With `defined_entries_only`, each row's entries array is first compacted to the
     defined entries and every aggregation runs over those, visiting each stratum a
     carrier belongs to once. On sparse data (a VDS's variant data has an entry only
@@ -3266,11 +3277,6 @@ def agg_by_strata(
     missing values (`hl.agg.sum`, `hl.agg.count_where`, `hl.agg.hist`, ...);
     `hl.agg.count` would count every sample in the default mode but only the
     carriers here. `entry_agg_group_membership` targets must be leaves in this mode.
-
-    The entry aggregation functions are applied to the MatrixTable entries and
-    aggregated. If no `group_membership_ht` (like the one returned by
-    `generate_freq_group_membership_array`) is supplied, `mt` must contain a
-    'group_membership' annotation that is a list of bools to aggregate the columns by.
 
     :param mt: Input MatrixTable.
     :param entry_agg_funcs: Dict of entry aggregation functions where the
@@ -3289,14 +3295,11 @@ def agg_by_strata(
         of dicts. Each dict in the list contains the strata in 'freq_meta' to use for
         the corresponding entry aggregation function. If provided, 'freq_meta' must be
         present in `group_membership_ht` or `mt` and represent the same strata as those
-        in 'group_membership'. Under leaf reduction (when `freq_reduced=True` is set on
-        the supplied globals), targets may also reference non-leaf parents present in
-        `freq_meta_full`; their sample-sets are reconstructed by flattening the
-       in 'group_membership'. If the groups were reduced (`freq_reduced=True`), a
+        in 'group_membership'. If the groups were reduced (`freq_reduced=True`), a
         target can also be any group in `freq_meta_full`; it is aggregated over all
-        samples in the leaves or cells that make it up. If not
-        provided, all entries of the 'group_membership' annotation will have the entry
-        aggregation functions applied to them.
+        samples in the leaves or cells that make it up. If not provided, all entries
+        of the 'group_membership' annotation will have the entry aggregation
+        functions applied to them.
     :param defined_entries_only: Aggregate over each row's defined entries only; see
         above. Default is False.
     :return: Table with annotations of stratified aggregations.
@@ -3625,6 +3628,8 @@ def _agg_by_strata_defined_entries(
     ht = ht.annotate_globals(adj_groups=adj_groups)
 
     def _counted_in(s_i, entry):
+        # Indices of the strata this carrier counts toward: the ones its sample
+        # belongs to, minus the adj strata when the entry itself is not adj.
         strata = hl.enumerate(ht.cols[s_i].group_membership).filter(lambda t: t[1])
         if has_adj:
             strata = strata.filter(
@@ -3641,6 +3646,10 @@ def _agg_by_strata_defined_entries(
     carrier_t = ht._carriers.dtype.element_type
 
     def _agg(ann, agg_func):
+        # One pass per annotation: explode each carrier over its strata and group
+        # the aggregation by stratum index, giving a dict of only the strata with
+        # carriers. Aggregating an empty array yields the function's own empty
+        # value (a zero sum, an all-zero histogram) for the strata with none.
         by_group = ht._carriers.aggregate(
             lambda c: hl.agg.explode(
                 lambda g: hl.agg.group_by(g, agg_func(c[ann])), c._counted_in
@@ -3648,6 +3657,7 @@ def _agg_by_strata_defined_entries(
         )
         empty = hl.empty_array(carrier_t).aggregate(lambda c: agg_func(c[ann]))
         indices = hl.literal(targets[ann]) if ann in targets else hl.range(n_groups)
+        # Bound so the dict is built once rather than once per stratum lookup.
         return hl.bind(
             lambda by_group: indices.map(lambda g: by_group.get(g, empty)), by_group
         )

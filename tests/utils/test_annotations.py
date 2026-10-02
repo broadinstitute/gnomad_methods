@@ -11,23 +11,28 @@ from gnomad.utils.annotations import (
     VRS_CHROM_IDS,
     add_gks_va,
     add_gks_vrs,
+    agg_by_strata,
     annotate_and_index_source_mt_for_sex_ploidy,
     annotate_downsamplings,
     annotate_freq,
     check_annotation_missingness,
     expand_strata_array_from_leaves,
+    faf_expr,
     fill_missing_key_combinations,
     find_minimal_strata_groups,
     find_strata_cells,
+    gen_anc_faf_max_expr,
     generate_freq_group_membership_array,
     get_copy_state_by_sex,
     get_is_haploid_expr,
+    grpmax_expr,
     index_sex_ploidy_flags,
     merge_array_expressions,
     merge_freq_arrays,
     merge_histograms,
     missing_struct_expr,
 )
+from gnomad.utils.filtering import filter_arrays_by_meta
 
 
 class TestFillMissingKeyCombinations:
@@ -3785,3 +3790,197 @@ class TestAnnotateFreqReduceToMinimalGroups:
                 == reduced_indexed[key]["sample_count"]
             ), key
             assert full_indexed[key]["freqs"] == reduced_indexed[key]["freqs"], key
+
+
+class TestSubsetStrataSelection:
+    """`subset` on faf_expr / grpmax_expr / gen_anc_faf_max_expr selects a subset's strata directly."""
+
+    @staticmethod
+    def _cs(ac: int, an: int, hom: int = 0) -> hl.expr.StructExpression:
+        return hl.struct(AC=ac, AF=hl.float64(ac) / an, AN=an, homozygote_count=hom)
+
+    @pytest.fixture
+    def ht(self) -> hl.Table:
+        """One row whose freq array mixes global strata and an 'aou' subset."""
+        meta = [
+            {"group": "adj"},
+            {"group": "raw"},
+            {"group": "adj", "gen_anc": "afr"},
+            {"group": "adj", "gen_anc": "nfe"},
+            {"group": "adj", "sex": "XX"},
+            {"group": "adj", "gen_anc": "afr", "sex": "XY"},
+            {"group": "adj", "subset": "aou"},
+            {"group": "raw", "subset": "aou"},
+            {"group": "adj", "gen_anc": "afr", "subset": "aou"},
+            {"group": "adj", "gen_anc": "nfe", "subset": "aou"},
+            {"group": "adj", "sex": "XX", "subset": "aou"},
+            {"group": "adj", "gen_anc": "nfe", "sex": "XY", "subset": "aou"},
+        ]
+        cs = self._cs
+        freq = [
+            cs(50, 1000, 2),
+            cs(60, 1100, 2),
+            cs(30, 400, 1),
+            cs(20, 600, 1),
+            cs(25, 500),
+            cs(15, 200),
+            cs(40, 800, 1),
+            cs(45, 900, 1),
+            cs(35, 300, 1),
+            cs(5, 500),
+            cs(20, 400),
+            cs(3, 100),
+        ]
+        ht = hl.Table.parallelize(
+            [
+                hl.struct(
+                    locus=hl.locus("chr1", 100, reference_genome="GRCh38"), freq=freq
+                )
+            ],
+            key="locus",
+        )
+        return ht.annotate_globals(freq_meta=meta)
+
+    def test_subset_matches_strip_and_restore(self, ht: hl.Table) -> None:
+        """Passing `subset` equals filtering to the subset, stripping the key, and adding it back."""
+        faf_new, faf_meta_new = faf_expr(
+            ht.freq, ht.freq_meta, ht.locus, {"nfe"}, subset="aou"
+        )
+        grpmax_new = grpmax_expr(ht.freq, ht.freq_meta, {"nfe"}, subset="aou")
+        fafmax_new = gen_anc_faf_max_expr(
+            faf_new, hl.literal(faf_meta_new), subset="aou"
+        )
+
+        aou_meta, aou_arrays = filter_arrays_by_meta(
+            ht.freq_meta,
+            {"freq": ht.freq},
+            items_to_filter={"subset": ["aou"]},
+            keep=True,
+            combine_operator="or",
+        )
+        stripped = aou_meta.map(
+            lambda d: hl.dict(d.items().filter(lambda x: x[0] != "subset"))
+        )
+        faf_old, faf_meta_old = faf_expr(
+            aou_arrays["freq"], stripped, ht.locus, {"nfe"}
+        )
+        grpmax_old = grpmax_expr(aou_arrays["freq"], stripped, {"nfe"})
+        fafmax_old = gen_anc_faf_max_expr(faf_old, hl.literal(faf_meta_old))
+        faf_meta_old = [{**m, "subset": "aou"} for m in faf_meta_old]
+
+        row = ht.annotate(
+            faf_new=faf_new,
+            faf_old=faf_old,
+            g_new=grpmax_new,
+            g_old=grpmax_old,
+            m_new=fafmax_new,
+            m_old=fafmax_old,
+        ).collect()[0]
+        assert faf_meta_new == faf_meta_old
+        assert row.faf_new == row.faf_old
+        assert row.g_new == row.g_old
+        assert row.m_new == row.m_old
+
+    def test_no_subset_ignores_subset_strata(self, ht: hl.Table) -> None:
+        """Without `subset`, strata carrying a subset key are left out as before."""
+        _, faf_meta = faf_expr(ht.freq, ht.freq_meta, ht.locus, {"nfe"})
+        assert all("subset" not in m for m in faf_meta)
+        assert len(faf_meta) == 4
+
+
+class TestAggByStrataDefinedEntriesOnly:
+    """`agg_by_strata(defined_entries_only=True)` equals the default mode on sparse entries."""
+
+    @pytest.fixture
+    def mt_and_gm(self) -> tuple[hl.MatrixTable, hl.Table]:
+        """Sparse MT (missing entries, missing adj and GT, haploid call) and its membership HT."""
+        samples = [f"s{i}" for i in range(8)]
+        sex = ["XX", "XY", "XX", "XY", "XX", "XY", "XX", "XY"]
+        pop = ["afr", "afr", "nfe", "nfe", "afr", "nfe", "afr", "nfe"]
+        meta_ht = hl.Table.parallelize(
+            [hl.struct(s=s, sex=k, pop=p) for s, k, p in zip(samples, sex, pop)],
+            key="s",
+        )
+        gm = generate_freq_group_membership_array(
+            meta_ht, [{"sex": meta_ht.sex}, {"gen_anc": meta_ht.pop}]
+        )
+        et = hl.tstruct(GT=hl.tcall, GQ=hl.tint32, DP=hl.tint32, adj=hl.tbool)
+
+        def e(gt, gq, dp, adj):
+            return hl.struct(GT=gt, GQ=gq, DP=dp, adj=adj)
+
+        miss = hl.missing(et)
+        rows = [
+            hl.struct(
+                locus=hl.locus("chr1", 10, reference_genome="GRCh38"),
+                alleles=["A", "T"],
+                entries=hl.array(
+                    [
+                        e(hl.call(0, 1), 30, 12, True),
+                        miss,
+                        e(hl.call(1, 1), 50, 20, True),
+                        miss,
+                        e(hl.call(0, 1), 15, 5, False),
+                        miss,
+                        miss,
+                        e(hl.call(0, 1), 99, 30, hl.missing(hl.tbool)),
+                    ]
+                ),
+            ),
+            hl.struct(
+                locus=hl.locus("chr1", 20, reference_genome="GRCh38"),
+                alleles=["C", "G"],
+                entries=hl.array([miss] * 8),
+            ),
+            hl.struct(
+                locus=hl.locus("chr1", 30, reference_genome="GRCh38"),
+                alleles=["G", "A"],
+                entries=hl.array(
+                    [
+                        miss,
+                        e(hl.call(1), 40, 9, True),
+                        miss,
+                        e(hl.missing(hl.tcall), 20, 10, True),
+                        miss,
+                        e(hl.call(1, 1), 100, 40, True),
+                        miss,
+                        miss,
+                    ]
+                ),
+            ),
+        ]
+        t = hl.Table.parallelize(hl.array(rows), key=["locus", "alleles"])
+        t = t.annotate_globals(cols=hl.array([hl.struct(s=s) for s in samples]))
+        return t._unlocalize_entries("entries", "cols", ["s"]), gm
+
+    funcs = {
+        "AC": (lambda m: m.GT.n_alt_alleles(), hl.agg.sum),
+        "hom": (lambda m: m.GT.is_hom_var(), hl.agg.count_where),
+        "gq_hist": (lambda m: m.GQ, lambda x: hl.agg.hist(x, 0, 100, 10)),
+    }
+
+    def test_matches_default_mode(self, mt_and_gm) -> None:
+        """Every stratum, including strata with no carrier, matches the full-array aggregation."""
+        mt, gm = mt_and_gm
+        dense = agg_by_strata(mt, self.funcs, group_membership_ht=gm)
+        sparse = agg_by_strata(
+            mt, self.funcs, group_membership_ht=gm, defined_entries_only=True
+        )
+        assert dense.row.dtype == sparse.row.dtype
+        assert dense.collect() == sparse.collect()
+
+    def test_matches_default_mode_with_targets(self, mt_and_gm) -> None:
+        """Leaf `entry_agg_group_membership` targets select the same strata in both modes."""
+        mt, gm = mt_and_gm
+        targets = {"gq_hist": [{"group": "raw"}, {"group": "adj", "sex": "XX"}]}
+        dense = agg_by_strata(
+            mt, self.funcs, group_membership_ht=gm, entry_agg_group_membership=targets
+        )
+        sparse = agg_by_strata(
+            mt,
+            self.funcs,
+            group_membership_ht=gm,
+            entry_agg_group_membership=targets,
+            defined_entries_only=True,
+        )
+        assert dense.collect() == sparse.collect()

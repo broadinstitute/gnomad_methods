@@ -3288,8 +3288,8 @@ def agg_by_strata(
         The two modes agree as long as the aggregators ignore missing values, as
         `hl.agg.sum`, `hl.agg.count_where` and `hl.agg.hist` do. An aggregator that
         counts entries regardless of value, such as `hl.agg.count`, would count
-        carriers instead of samples. Strata with no carrier get the aggregator's
-        empty result (0 for a sum, an all-zero histogram). In this mode,
+        defined entries instead of samples. Strata with no defined entry get the
+        aggregator's empty result (0 for a sum, an all-zero histogram). In this mode,
         `entry_agg_group_membership` targets must be strata present in `freq_meta`
         itself (leaves), not parents reconstructed from `freq_meta_full`.
 
@@ -3475,8 +3475,8 @@ def agg_by_strata(
     )
     ht = ht.annotate_globals(**global_expr)
 
-    # Carrier-only path. Everything above (globals, adj flags, resolved targets) is
-    # shared with the default path; only the per-row aggregation differs.
+    # Defined-entries-only path. Everything above (globals, adj flags, resolved
+    # targets) is shared with the default path; only the per-row aggregation differs.
     if defined_entries_only:
         return _agg_by_strata_defined_entries(
             ht, select_fields, entry_agg_funcs, has_adj, entry_agg_group_membership
@@ -3606,20 +3606,21 @@ def _agg_by_strata_defined_entries(
     entry_agg_group_membership: Dict[str, List[Tuple[str, Any, bool]]],
 ) -> hl.Table:
     """
-    Carrier-only aggregation for `agg_by_strata` (`defined_entries_only=True`).
+    Defined-entries-only aggregation for `agg_by_strata` (`defined_entries_only=True`).
 
     The default path in `agg_by_strata` lists the samples in each stratum and
     aggregates their entries, so every stratum walks its whole sample list even
     when almost every entry is missing. This path turns that around:
 
-    1. Drop each row's missing entries, keeping only the defined ones (the carriers).
-    2. Tag each carrier with ``_counted_in``, the indices of the strata its sample
-       belongs to. Adj strata are included only when the entry itself is adj.
-    3. For each annotation, explode the carriers over their ``_counted_in`` indices
-       and group the aggregation by stratum index. The result is a dict from
-       stratum index to aggregated value that holds only strata with a carrier.
+    1. Drop each row's missing entries, keeping only the defined ones.
+    2. Tag each defined entry with ``_counted_in``, the indices of the strata its
+       sample belongs to. Adj strata are included only when the entry itself is adj.
+    3. For each annotation, explode the defined entries over their ``_counted_in``
+       indices and group the aggregation by stratum index. The result is a dict
+       from stratum index to aggregated value that holds only strata with at least
+       one defined entry.
     4. Read the dict back out in stratum order (or in the order of the requested
-       targets), filling strata with no carrier with the aggregator's empty
+       targets), filling strata with no defined entry with the aggregator's empty
        result, so the output array has the same shape as the default mode.
 
     :param ht: Localized MT (`entries`, `cols`) with the transformed entry fields
@@ -3646,7 +3647,7 @@ def _agg_by_strata_defined_entries(
     n_groups = hl.eval(hl.len(ht.adj_groups))
 
     def _counted_in(s_i, entry):
-        # Indices of the strata this carrier counts toward: the ones its sample
+        # Indices of the strata this entry counts toward: the ones its sample
         # belongs to, minus the adj strata when the entry itself is not adj. A
         # missing adj flag counts as not adj, matching `hl.agg.filter` in the
         # default path, which drops entries whose predicate is missing.
@@ -3659,27 +3660,27 @@ def _agg_by_strata_defined_entries(
 
     # Steps 1 and 2: keep only the defined entries, each tagged with the strata it
     # counts toward. `t[0]` is the sample's column index, `t[1]` its entry.
-    carriers = (
+    defined_entries = (
         hl.enumerate(ht.entries)
         .filter(lambda t: hl.is_defined(t[1]))
         .map(lambda t: t[1].annotate(_counted_in=_counted_in(t[0], t[1])))
     )
-    ht = ht.select(*select_fields, _carriers=carriers)
-    carrier_t = ht._carriers.dtype.element_type
+    ht = ht.select(*select_fields, _defined_entries=defined_entries)
+    entry_t = ht._defined_entries.dtype.element_type
 
     def _agg(ann, agg_func):
-        # Step 3, one pass per annotation. `explode` turns a carrier tagged with
+        # Step 3, one pass per annotation. `explode` turns an entry tagged with
         # strata [0, 3, 5] into three copies, one per stratum, and `group_by` then
         # aggregates all copies that share a stratum index. The result is a dict
-        # {stratum index: aggregated value} holding only strata with a carrier.
-        by_group = ht._carriers.aggregate(
+        # {stratum index: aggregated value} holding only strata with an entry.
+        by_group = ht._defined_entries.aggregate(
             lambda c: hl.agg.explode(
                 lambda g: hl.agg.group_by(g, agg_func(c[ann])), c._counted_in
             )
         )
         # Aggregating nothing gives the function's own empty result (0 for a sum,
         # an all-zero histogram); this fills the strata missing from `by_group`.
-        empty = hl.empty_array(carrier_t).aggregate(lambda c: agg_func(c[ann]))
+        empty = hl.empty_array(entry_t).aggregate(lambda c: agg_func(c[ann]))
         # Step 4: every stratum in order, or just the requested targets.
         indices = hl.literal(targets[ann]) if ann in targets else hl.range(n_groups)
         # Bound so the dict is built once rather than once per stratum lookup.

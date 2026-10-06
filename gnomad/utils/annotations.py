@@ -3272,10 +3272,16 @@ def agg_by_strata(
 
     By default, each stratum is aggregated by visiting the entry of every sample in
     it, so a row costs roughly samples x strata even when most entries are missing.
-    With `defined_entries_only=True`, a row is first cut down to the entries that
-    are defined (on a sparse variant MatrixTable, the carriers), and each of those
-    is counted once in every stratum its sample belongs to. The cost then scales
-    with the number of carriers instead.
+    With `defined_entries_only=True`, a row is first cut down to its defined
+    entries, and each of those is counted once in every stratum its sample belongs
+    to. The cost then scales with the number of defined entries instead.
+
+    Use `defined_entries_only=True` on data where non-reference samples are the
+    only ones with an entry: a VDS ``variant_data`` MatrixTable, or a sparse
+    MatrixTable from the Hail VCF combiner (there, a reference block that starts at
+    the locus is also a defined entry; it contributes a hom-ref call). On a dense
+    MatrixTable, including one from ``hl.vds.to_dense_mt``, every entry is defined,
+    so the result is the same as the default mode and there is nothing to skip.
 
     .. note::
 
@@ -3310,8 +3316,8 @@ def agg_by_strata(
         of the 'group_membership' annotation will have the entry aggregation
         functions applied to them.
     :param defined_entries_only: If True, aggregate over each row's defined entries
-        (carriers) only, instead of over every sample in each stratum. See above
-        for when the result is identical. Default is False.
+        only, instead of over every sample in each stratum. Meant for a VDS
+        ``variant_data`` or sparse MatrixTable; see above. Default is False.
     :return: Table with annotations of stratified aggregations.
     """
     if group_membership_ht is None and "group_membership" not in mt.col:

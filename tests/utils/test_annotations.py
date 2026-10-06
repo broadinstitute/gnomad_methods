@@ -3903,21 +3903,28 @@ class TestSubsetStrataSelection:
         _, faf_meta = faf_expr(ht.freq, ht.freq_meta, ht.locus, {"nfe"})
         assert all("subset" not in m for m in faf_meta)
         assert len(faf_meta) == 4
+        grpmax = ht.annotate(g=grpmax_expr(ht.freq, ht.freq_meta, {"nfe"})).collect()
+        assert all((r.g.gen_anc, r.g.AC) == ("afr", 60) for r in grpmax)
 
 
 class TestAggByStrataDefinedEntriesOnly:
     """`agg_by_strata(defined_entries_only=True)` equals the default mode on sparse entries."""
 
     @pytest.fixture
-    def mt_and_gm(self) -> tuple[hl.MatrixTable, hl.Table]:
-        """Sparse MT (missing entries, missing adj and GT, haploid call) and its membership HT."""
+    def meta_ht(self) -> hl.Table:
+        """Sex and genetic ancestry for eight samples, two of each sex per ancestry."""
         samples = [f"s{i}" for i in range(8)]
         sex = ["XX", "XY", "XX", "XY", "XX", "XY", "XX", "XY"]
         pop = ["afr", "afr", "nfe", "nfe", "afr", "nfe", "afr", "nfe"]
-        meta_ht = hl.Table.parallelize(
+        return hl.Table.parallelize(
             [hl.struct(s=s, sex=k, pop=p) for s, k, p in zip(samples, sex, pop)],
             key="s",
         )
+
+    @pytest.fixture
+    def mt_and_gm(self, meta_ht: hl.Table) -> tuple[hl.MatrixTable, hl.Table]:
+        """Sparse MT (missing entries, missing adj and GT, haploid call) and its membership HT."""
+        samples = [f"s{i}" for i in range(8)]
         gm = generate_freq_group_membership_array(
             meta_ht, [{"sex": meta_ht.sex}, {"gen_anc": meta_ht.pop}]
         )
@@ -3986,7 +3993,49 @@ class TestAggByStrataDefinedEntriesOnly:
         assert dense.row.dtype == sparse.row.dtype
         assert dense.globals.dtype == sparse.globals.dtype
         assert hl.eval(dense.globals) == hl.eval(sparse.globals)
-        assert dense.collect() == sparse.collect()
+        rows = sparse.collect()
+        assert dense.collect() == rows
+
+        # Anchor the comparison with hand-computed values so both modes cannot be
+        # wrong in the same way. On the first row s4 is non-adj and s7 has a
+        # missing adj flag, so both count toward raw only.
+        meta = [dict(m) for m in hl.eval(gm.freq_meta)]
+        first = rows[0]
+        assert first.AC[meta.index({"group": "adj"})] == 3
+        assert first.AC[meta.index({"group": "raw"})] == 5
+        assert first.AC[meta.index({"group": "adj", "gen_anc": "afr"})] == 1
+        assert first.AC[meta.index({"group": "adj", "gen_anc": "nfe"})] == 2
+        assert first.hom[meta.index({"group": "raw"})] == 1
+        # The all-missing second row is empty in every stratum.
+        assert all(v == 0 for v in rows[1].AC)
+
+    def test_non_leaf_target_raises(self, mt_and_gm, meta_ht: hl.Table) -> None:
+        """A target that only exists in `freq_meta_full` is rejected in this mode."""
+        mt, _ = mt_and_gm
+        gm = generate_freq_group_membership_array(
+            meta_ht,
+            [
+                {"gen_anc": meta_ht.pop},
+                {"sex": meta_ht.sex},
+                {"gen_anc": meta_ht.pop, "sex": meta_ht.sex},
+            ],
+            no_raw_group=True,
+            reduce_to_minimal_groups=True,
+            group_label="raw",
+        )
+        # Under reduction the per-ancestry group is a parent of the ancestry x sex
+        # leaves, so it is in `freq_meta_full` but not `freq_meta`.
+        parent = {"group": "raw", "gen_anc": "afr"}
+        assert parent not in [dict(m) for m in hl.eval(gm.freq_meta)]
+        assert parent in [dict(m) for m in hl.eval(gm.freq_meta_full)]
+        with pytest.raises(ValueError, match="leaf targets"):
+            agg_by_strata(
+                mt,
+                {"AC": self.funcs["AC"]},
+                group_membership_ht=gm,
+                entry_agg_group_membership={"AC": [parent]},
+                defined_entries_only=True,
+            )
 
     def test_matches_default_mode_with_targets(self, mt_and_gm) -> None:
         """Leaf `entry_agg_group_membership` targets select the same strata in both modes."""

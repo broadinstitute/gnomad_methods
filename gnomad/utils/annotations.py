@@ -179,7 +179,7 @@ def _has_strata(
 
     A `freq_meta` entry is a dict such as ``{"group": "adj", "gen_anc": "afr"}``. An
     entry from a subset carries one extra key, e.g. ``{"group": "adj", "gen_anc":
-    "afr", "subset": "aou"}``.
+    "afr", "subset": "my_subset"}``.
 
     - With `subset` None, the entry matches when its keys are exactly `keys`. A
       subset entry never matches, so only the global strata are picked up.
@@ -230,11 +230,10 @@ def grpmax_expr(
     :param freq_meta: ArrayExpression of meta dictionaries corresponding to freq (as returned by annotate_freq)
     :param gen_anc_groups_to_exclude: Set of genetic ancestry groups to skip for genetic ancestry max calculation
     :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
-    :param subset: Name of a subset, e.g. ``"aou"``. If set, grpmax is computed over
-        only the `freq_meta` entries whose ``"subset"`` equals this value (the key
-        is otherwise ignored when picking the per-ancestry strata). Default is
-        None, which uses only the global strata and skips every entry that has a
-        ``"subset"`` key.
+    :param subset: Sample subset to compute grpmax for, e.g. ``"my_subset"``. Only
+        `freq_meta` entries whose ``"subset"`` key equals this value are used; the
+        key itself is not treated as a stratification. Default is None, which uses
+        the global strata and skips any entry with a ``"subset"`` key.
     :return: Genetic ancestry max struct
     """
     _gen_anc_groups_to_exclude = (
@@ -355,11 +354,11 @@ def faf_expr(
     :param gen_anc_groups_to_exclude: Set of genetic ancestry groups to exclude from faf calculation (typically bottlenecked or consanguineous genetic ancestry groups)
     :param faf_thresholds: List of FAF thresholds to compute
     :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
-    :param subset: Name of a subset, e.g. ``"aou"``. If set, FAF is computed over
-        only the `freq_meta` entries whose ``"subset"`` equals this value, and the
-        returned metadata dicts keep that ``"subset"`` key so the subset's FAF
-        entries can be told apart from the global ones. Default is None, which uses
-        only the global strata and skips every entry that has a ``"subset"`` key.
+    :param subset: Sample subset to compute FAF for, e.g. ``"my_subset"``. Only
+        `freq_meta` entries whose ``"subset"`` key equals this value are used; the
+        key itself is not treated as a stratification. Default is None, which uses
+        the global strata and skips any entry with a ``"subset"`` key. The returned
+        metadata dicts keep the ``"subset"`` key.
     :return: (FAF expression, FAF metadata)
     """
     _gen_anc_groups_to_exclude = (
@@ -460,10 +459,10 @@ def gen_anc_faf_max_expr(
     :param faf_meta: ArrayExpression of meta dictionaries corresponding to faf (as
         returned by faf_expr)
     :param gen_anc_label: Label of the genetic ancestry group field in the meta dictionary
-    :param subset: Name of a subset, e.g. ``"aou"``. If set, only the `faf_meta`
-        entries whose ``"subset"`` equals this value are considered, so a FAF array
-        that mixes global and subset entries still gives the max within the subset.
-        Default is None, which uses only the global strata.
+    :param subset: Sample subset to compute FAF max for, e.g. ``"my_subset"``. Only
+        `faf_meta` entries whose ``"subset"`` key equals this value are used; the
+        key itself is not treated as a stratification. Default is None, which uses
+        the global strata and skips any entry with a ``"subset"`` key.
     :return: Genetic ancestry group struct for FAF max
     """
     faf_gen_anc_indices = hl.enumerate(faf_meta).filter(

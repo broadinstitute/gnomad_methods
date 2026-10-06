@@ -213,7 +213,6 @@ def grpmax_expr(
     subset: Optional[str] = None,
 ) -> hl.expr.StructExpression:
     """
-
     Create an expression containing the frequency information about the genetic ancestry group that has the highest AF in `freq_meta`.
 
     Genetic ancestry groups specified in `gen_anc_groups_to_exclude` are excluded and only frequencies from adj genetic ancestry groups are considered.

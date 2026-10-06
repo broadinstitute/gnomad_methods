@@ -3984,7 +3984,7 @@ class TestAggByStrataDefinedEntriesOnly:
     }
 
     def test_matches_default_mode(self, mt_and_gm) -> None:
-        """Every stratum, including strata with no carrier, matches the full-array aggregation."""
+        """Every stratum, including strata with no defined entry, matches the full-array aggregation."""
         mt, gm = mt_and_gm
         dense = agg_by_strata(mt, self.funcs, group_membership_ht=gm)
         sparse = agg_by_strata(

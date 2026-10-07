@@ -1,5 +1,8 @@
 # Generated files
 api_reference
 
+# Copied from ../knowledge by build.sh
+knowledge
+
 # sphinx-build output
 html

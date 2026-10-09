@@ -1,6 +1,6 @@
 """Tests for the annotations utility module."""
 
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import ga4gh.core as ga4gh_core
 import ga4gh.vrs as ga4gh_vrs
@@ -21,6 +21,7 @@ from gnomad.utils.annotations import (
     find_strata_cells,
     generate_freq_group_membership_array,
     get_copy_state_by_sex,
+    get_het_ab_adj_expr,
     get_is_haploid_expr,
     index_sex_ploidy_flags,
     merge_array_expressions,
@@ -2912,6 +2913,49 @@ class TestGetIsHaploidExpr:
             get_is_haploid_expr(locus_expr=mt.locus)
         with pytest.raises(ValueError, match="Both"):
             get_is_haploid_expr(karyotype_expr=mt.sex_karyotype)
+
+
+class TestGetHetAbAdjExpr:
+    """Test the get_het_ab_adj_expr function."""
+
+    @staticmethod
+    def _ab(gt: hl.expr.CallExpression, ad: List[int]) -> Optional[bool]:
+        """Evaluate the het AB adj check with DP set to the sum of AD."""
+        return hl.eval(get_het_ab_adj_expr(gt, hl.sum(ad), hl.literal(ad)))
+
+    @pytest.mark.parametrize(
+        "gt, ad, expected",
+        [
+            # Unphased het-ref is stored ref-first; AD[1] is the alt depth.
+            (hl.call(0, 1), [15, 2], False),
+            (hl.call(0, 1), [9, 74], True),
+            # Phased alt-first (1|0): alt depth must be read from AD[1], not AD[GT[1]].
+            (hl.call(1, 0, phased=True), [15, 2], False),
+            (hl.call(1, 0, phased=True), [9, 74], True),
+            (hl.call(0, 1, phased=True), [15, 2], False),
+            # Unsplit het-ref with a non-1 alt allele.
+            (hl.call(0, 2), [15, 1, 2], False),
+            (hl.call(2, 0, phased=True), [15, 1, 2], False),
+            (hl.call(2, 0, phased=True), [2, 1, 15], True),
+            # Het non-ref requires both alleles to pass, regardless of order.
+            (hl.call(1, 2), [0, 10, 10], True),
+            (hl.call(2, 1, phased=True), [0, 10, 10], True),
+            (hl.call(1, 2), [0, 1, 19], False),
+            # Hom and haploid calls have no AB test.
+            (hl.call(1, 1), [1, 19], True),
+            (hl.call(0, 0), [19, 1], True),
+            (hl.call(1), [19, 1], True),
+        ],
+    )
+    def test_het_ab(
+        self, gt: hl.expr.CallExpression, ad: List[int], expected: bool
+    ) -> None:
+        """Allele balance is tested on the non-ref allele for het-ref calls."""
+        assert self._ab(gt, ad) is expected
+
+    def test_missing_gt(self) -> None:
+        """A missing call gives a missing result."""
+        assert self._ab(hl.missing(hl.tcall), [10, 10]) is None
 
 
 class TestFindStrataCells:

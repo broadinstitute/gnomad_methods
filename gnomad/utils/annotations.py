@@ -929,6 +929,9 @@ def get_het_ab_adj_expr(
     """
     Get adj het AB annotation.
 
+    For het-ref calls the non-ref allele's depth is used, so phased alt-first calls
+    (1|0) are handled correctly.
+
     :param gt_expr: Genotype expression.
     :param dp_expr: DP expression.
     :param ad_expr: AD expression.
@@ -938,7 +941,10 @@ def get_het_ab_adj_expr(
     return (
         hl.case()
         .when(~gt_expr.is_het(), True)
-        .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+        .when(
+            gt_expr.is_het_ref(),
+            ad_expr[hl.max(gt_expr[0], gt_expr[1])] / dp_expr >= adj_ab,
+        )
         .default(
             (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
             & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)

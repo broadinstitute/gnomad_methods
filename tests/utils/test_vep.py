@@ -9,6 +9,7 @@ import pytest
 
 from gnomad.utils.vep import (
     get_loftee_end_trunc_filter_expr,
+    get_mane_select_over_canonical_filter_expr,
     get_vep_help,
     update_loftee_end_trunc_filter,
     vep_or_lookup_vep,
@@ -484,3 +485,134 @@ class TestVepOrLookupVep:
         assert hl.eval(result.vep_version) == "v105"
         assert hl.eval(result.vep_help) == "CONTEXT_HELP"
         assert hl.eval(result.vep_config) == "CONTEXT_CONFIG"
+
+
+class TestGetManeSelectOverCanonicalFilterExpr:
+    """Test the get_mane_select_over_canonical_filter_expr function."""
+
+    @pytest.fixture
+    def sample_table(self):
+        """Fixture to create a table with transcript/mane_select/canonical/gene_id fields."""
+        return hl.Table.parallelize(
+            [
+                # Gene A: has MANE Select transcript.
+                {
+                    "transcript": "ENST00001",
+                    "mane_select": True,
+                    "canonical": True,
+                    "gene_id": "ENSG_A",
+                },
+                {
+                    "transcript": "ENST00002",
+                    "mane_select": False,
+                    "canonical": True,
+                    "gene_id": "ENSG_A",
+                },
+                # Gene B: no MANE Select, only canonical.
+                {
+                    "transcript": "ENST00003",
+                    "mane_select": False,
+                    "canonical": True,
+                    "gene_id": "ENSG_B",
+                },
+                {
+                    "transcript": "ENST00004",
+                    "mane_select": False,
+                    "canonical": False,
+                    "gene_id": "ENSG_B",
+                },
+                # Gene C: non-ENST transcript should be excluded.
+                {
+                    "transcript": "NM_00001",
+                    "mane_select": True,
+                    "canonical": True,
+                    "gene_id": "ENSG_C",
+                },
+                # Gene D: only a non-ENST transcript is MANE Select, so the ENST
+                # canonical transcript should be the fallback.
+                {
+                    "transcript": "NM_00002",
+                    "mane_select": True,
+                    "canonical": False,
+                    "gene_id": "ENSG_D",
+                },
+                {
+                    "transcript": "ENST00005",
+                    "mane_select": False,
+                    "canonical": True,
+                    "gene_id": "ENSG_D",
+                },
+            ],
+            hl.tstruct(
+                transcript=hl.tstr,
+                mane_select=hl.tbool,
+                canonical=hl.tbool,
+                gene_id=hl.tstr,
+            ),
+        )
+
+    def test_mane_select_preferred_over_canonical(self, sample_table):
+        """Test that MANE Select is chosen when available for a gene."""
+        ht = sample_table.annotate(
+            selected=get_mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        results = ht.collect()
+
+        # Gene A: ENST00001 (MANE Select) should be selected, ENST00002 should not.
+        result_map = {r.transcript: r.selected for r in results}
+        assert result_map["ENST00001"] is True
+        assert result_map["ENST00002"] is False
+
+    def test_canonical_fallback_when_no_mane(self, sample_table):
+        """Test that canonical is used as fallback when no MANE Select exists."""
+        ht = sample_table.annotate(
+            selected=get_mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        results = ht.collect()
+
+        result_map = {r.transcript: r.selected for r in results}
+        # Gene B: ENST00003 (canonical) should be selected, ENST00004 should not.
+        assert result_map["ENST00003"] is True
+        assert result_map["ENST00004"] is False
+
+    def test_non_enst_excluded(self, sample_table):
+        """Test that non-ENST transcripts are excluded."""
+        ht = sample_table.annotate(
+            selected=get_mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        results = ht.collect()
+
+        result_map = {r.transcript: r.selected for r in results}
+        assert result_map["NM_00001"] is False
+
+    def test_non_enst_mane_does_not_block_canonical_fallback(
+        self, sample_table: hl.Table
+    ) -> None:
+        """Test that a non-ENST MANE Select transcript does not suppress the fallback."""
+        ht = sample_table.annotate(
+            selected=get_mane_select_over_canonical_filter_expr(
+                sample_table.transcript,
+                sample_table.mane_select,
+                sample_table.canonical,
+                sample_table.gene_id,
+            )
+        )
+        result_map = {r.transcript: r.selected for r in ht.collect()}
+
+        assert result_map["ENST00005"] is True
+        assert result_map["NM_00002"] is False

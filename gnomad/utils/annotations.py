@@ -3444,6 +3444,18 @@ def agg_by_strata(
             for ann, targets in entry_agg_group_membership.items()
         }
 
+        # The defined-entries path counts each entry toward strata by index, so a
+        # parent target (a group reconstructed from `freq_meta_full` under
+        # reduction) has no single index to count toward. Reject it here, before
+        # the entries are localized.
+        if defined_entries_only:
+            for ann, resolved in entry_agg_group_membership.items():
+                if any(kind != "leaf" for kind, _, _ in resolved):
+                    raise ValueError(
+                        "`defined_entries_only` supports only leaf targets in"
+                        " `entry_agg_group_membership`."
+                    )
+
     n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
     if n_adj_groups != n_groups:
         raise ValueError(
@@ -3478,7 +3490,16 @@ def agg_by_strata(
     # targets) is shared with the default path; only the per-row aggregation differs.
     if defined_entries_only:
         return _agg_by_strata_defined_entries(
-            ht, select_fields, entry_agg_funcs, has_adj, entry_agg_group_membership
+            ht,
+            select_fields,
+            entry_agg_funcs,
+            has_adj,
+            {
+                ann: [idx for _, idx, _ in resolved]
+                for ann, resolved in entry_agg_group_membership.items()
+            },
+            n_groups,
+            n_samples,
         )
 
     # Resolve each `entry_agg_group_membership` target to its sample index
@@ -3602,7 +3623,9 @@ def _agg_by_strata_defined_entries(
     select_fields: List[str],
     entry_agg_funcs: Dict[str, Tuple[Callable, Callable]],
     has_adj: bool,
-    entry_agg_group_membership: Dict[str, List[Tuple[str, Any, bool]]],
+    targets: Dict[str, List[int]],
+    n_groups: int,
+    n_samples: int,
 ) -> hl.Table:
     """
     Defined-entries-only aggregation for `agg_by_strata` (`defined_entries_only=True`).
@@ -3614,6 +3637,8 @@ def _agg_by_strata_defined_entries(
     1. Drop each row's missing entries, keeping only the defined ones.
     2. Tag each defined entry with ``_counted_in``, the indices of the strata its
        sample belongs to. Adj strata are included only when the entry itself is adj.
+       The per-sample index lists are built once as globals, so tagging an entry
+       is a lookup rather than a scan over every stratum.
     3. For each annotation, explode the defined entries over their ``_counted_in``
        indices and group the aggregation by stratum index. The result is a dict
        from stratum index to aggregated value that holds only strata with at least
@@ -3627,35 +3652,63 @@ def _agg_by_strata_defined_entries(
     :param select_fields: Row fields to keep.
     :param entry_agg_funcs: As in `agg_by_strata`.
     :param has_adj: Whether any stratum is adj filtered.
-    :param entry_agg_group_membership: `agg_by_strata`'s targets, already resolved
-        to ``(kind, payload, adj)`` tuples.
+    :param targets: Stratum indices to aggregate, per annotation, for the
+        annotations restricted by `entry_agg_group_membership`. Each is a leaf in
+        `freq_meta`; parents are rejected by `agg_by_strata` before this is called.
+    :param n_groups: Number of strata.
+    :param n_samples: Number of samples (columns).
     :return: Table with one aggregated array per annotation.
     """
-    # A "leaf" target is a stratum present in `freq_meta` itself, so it is just one
-    # stratum index. A "parent" target (a group reconstructed from `freq_meta_full`
-    # when the strata were reduced) would need its children's samples combined,
-    # which this path does not do.
-    targets: Dict[str, List[int]] = {}
-    for ann, resolved in entry_agg_group_membership.items():
-        if any(kind != "leaf" for kind, _, _ in resolved):
-            raise ValueError(
-                "`defined_entries_only` supports only leaf targets in"
-                " `entry_agg_group_membership`."
-            )
-        targets[ann] = [idx for _, idx, _ in resolved]
-    n_groups = hl.eval(hl.len(ht.adj_groups))
 
-    def _counted_in(s_i, entry):
-        # Indices of the strata this entry counts toward: the ones its sample
-        # belongs to, minus the adj strata when the entry itself is not adj. A
-        # missing adj flag counts as not adj, matching `hl.agg.filter` in the
-        # default path, which drops entries whose predicate is missing.
+    def _strata_of(
+        s_i: hl.expr.Int32Expression, include_adj: bool
+    ) -> hl.expr.ArrayExpression:
+        """
+        Return the indices of the strata that sample `s_i` belongs to.
+
+        :param s_i: Column index of the sample.
+        :param include_adj: Whether to keep the adj filtered strata.
+        :return: Array of stratum indices.
+        """
         strata = hl.enumerate(ht.cols[s_i].group_membership).filter(lambda t: t[1])
-        if has_adj:
-            strata = strata.filter(
-                lambda t: ~ht.adj_groups[t[0]] | hl.coalesce(entry.adj, False)
-            )
+        if not include_adj:
+            strata = strata.filter(lambda t: ~ht.adj_groups[t[0]])
         return strata.map(lambda t: t[0])
+
+    # Per-sample stratum index lists, computed once as globals: one with every
+    # stratum the sample belongs to and, when some strata are adj filtered, one
+    # without the adj strata. Both are dropped from the output below.
+    all_field, non_adj_field = "_strata_by_sample", "_non_adj_strata_by_sample"
+    while all_field in ht.globals or non_adj_field in ht.globals:
+        all_field += "_"
+        non_adj_field += "_"
+    strata_globals = {
+        all_field: hl.range(n_samples).map(lambda s_i: _strata_of(s_i, True))
+    }
+    if has_adj:
+        strata_globals[non_adj_field] = hl.range(n_samples).map(
+            lambda s_i: _strata_of(s_i, False)
+        )
+    ht = ht.annotate_globals(**strata_globals)
+
+    def _counted_in(
+        s_i: hl.expr.Int32Expression, entry: hl.expr.StructExpression
+    ) -> hl.expr.ArrayExpression:
+        """
+        Return the indices of the strata that a defined entry counts toward.
+
+        A missing adj flag counts as not adj, matching `hl.agg.filter` in the
+        default path, which drops entries whose predicate is missing.
+
+        :param s_i: Column index of the entry's sample.
+        :param entry: The entry.
+        :return: Array of stratum indices.
+        """
+        if not has_adj:
+            return ht[all_field][s_i]
+        return hl.if_else(
+            hl.coalesce(entry.adj, False), ht[all_field][s_i], ht[non_adj_field][s_i]
+        )
 
     # Steps 1 and 2: keep only the defined entries, each tagged with the strata it
     # counts toward. `t[0]` is the sample's column index, `t[1]` its entry.
@@ -3667,7 +3720,14 @@ def _agg_by_strata_defined_entries(
     ht = ht.select(*select_fields, _defined_entries=defined_entries)
     entry_t = ht._defined_entries.dtype.element_type
 
-    def _agg(ann, agg_func):
+    def _agg(ann: str, agg_func: Callable) -> hl.expr.ArrayExpression:
+        """
+        Aggregate one annotation over the defined entries, by stratum.
+
+        :param ann: Name of the entry field to aggregate.
+        :param agg_func: Aggregation function to apply to it.
+        :return: Array with one aggregated value per stratum (or per target).
+        """
         # Step 3, one pass per annotation. `explode` turns an entry tagged with
         # strata [0, 3, 5] into three copies, one per stratum, and `group_by` then
         # aggregates all copies that share a stratum index. The result is a dict
@@ -3690,7 +3750,7 @@ def _agg_by_strata_defined_entries(
     ht = ht.select(
         *select_fields, **{ann: _agg(ann, f[1]) for ann, f in entry_agg_funcs.items()}
     )
-    return ht.drop("cols")
+    return ht.drop("cols", *strata_globals)
 
 
 def update_structured_annotations(

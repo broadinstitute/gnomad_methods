@@ -1,6 +1,6 @@
 """Tests for the annotations utility module."""
 
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import ga4gh.core as ga4gh_core
 import ga4gh.vrs as ga4gh_vrs
@@ -3922,7 +3922,7 @@ class TestAggByStrataDefinedEntriesOnly:
         )
 
     @pytest.fixture
-    def mt_and_gm(self, meta_ht: hl.Table) -> tuple[hl.MatrixTable, hl.Table]:
+    def mt_and_gm(self, meta_ht: hl.Table) -> Tuple[hl.MatrixTable, hl.Table]:
         """Sparse MT (missing entries, missing adj and GT, haploid call) and its membership HT."""
         samples = [f"s{i}" for i in range(8)]
         gm = generate_freq_group_membership_array(

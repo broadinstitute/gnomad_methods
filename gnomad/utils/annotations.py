@@ -2,6 +2,7 @@
 
 import itertools
 import logging
+import warnings
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
@@ -978,6 +979,8 @@ def get_het_ab_adj_expr(
     dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
     ad_expr: hl.expr.ArrayNumericExpression,
     adj_ab: float = 0.2,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.expr.BooleanExpression:
     """
     Get adj het AB annotation.
@@ -989,16 +992,28 @@ def get_het_ab_adj_expr(
     :param dp_expr: DP expression.
     :param ad_expr: AD expression.
     :param adj_ab: AB threshold for adj. Default is 0.2.
+    :param legacy_het_ab: Deprecated. Read the het-ref allele depth as `AD[GT[1]]`,
+        which is the reference depth for phased alt-first calls (1|0). Only for
+        reproducing results computed before this was fixed (e.g. gnomAD v4.1
+        exomes). Default is False.
     :return: Boolean expression indicating adj het AB filter.
     """
+    if legacy_het_ab:
+        warnings.warn(
+            "legacy_het_ab=True reads the reference depth for phased alt-first het-ref"
+            " calls (1|0) and will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        het_ref_ad = ad_expr[gt_expr[1]]
+    else:
+        # One het-ref allele is 0, so max() is the alt index in either phase order.
+        het_ref_ad = ad_expr[hl.max(gt_expr[0], gt_expr[1])]
+
     return (
         hl.case()
         .when(~gt_expr.is_het(), True)
-        .when(
-            gt_expr.is_het_ref(),
-            # One het-ref allele is 0, so max() is the alt index in either phase order.
-            ad_expr[hl.max(gt_expr[0], gt_expr[1])] / dp_expr >= adj_ab,
-        )
+        .when(gt_expr.is_het_ref(), het_ref_ad / dp_expr >= adj_ab)
         .default(
             (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
             & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
@@ -1015,11 +1030,14 @@ def get_adj_expr(
     adj_dp: int = 10,
     adj_ab: float = 0.2,
     haploid_adj_dp: int = 5,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.expr.BooleanExpression:
     """
     Get adj genotype annotation.
 
-    Defaults correspond to gnomAD values.
+    Defaults correspond to gnomAD values. See `get_het_ab_adj_expr` for
+    `legacy_het_ab`.
     """
     return get_gq_dp_adj_expr(
         gq_expr,
@@ -1028,7 +1046,9 @@ def get_adj_expr(
         adj_gq=adj_gq,
         adj_dp=adj_dp,
         haploid_adj_dp=haploid_adj_dp,
-    ) & get_het_ab_adj_expr(gt_expr, dp_expr, ad_expr, adj_ab)
+    ) & get_het_ab_adj_expr(
+        gt_expr, dp_expr, ad_expr, adj_ab, legacy_het_ab=legacy_het_ab
+    )
 
 
 def annotate_adj(
@@ -1037,11 +1057,14 @@ def annotate_adj(
     adj_dp: int = 10,
     adj_ab: float = 0.2,
     haploid_adj_dp: int = 5,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid).
 
-    Defaults correspond to gnomAD values.
+    Defaults correspond to gnomAD values. See `get_het_ab_adj_expr` for
+    `legacy_het_ab`.
     """
     if "GT" not in mt.entry and "LGT" in mt.entry:
         logger.warning("No GT field found, using LGT instead.")
@@ -1057,7 +1080,15 @@ def annotate_adj(
 
     return mt.annotate_entries(
         adj=get_adj_expr(
-            gt_expr, mt.GQ, mt.DP, ad_expr, adj_gq, adj_dp, adj_ab, haploid_adj_dp
+            gt_expr,
+            mt.GQ,
+            mt.DP,
+            ad_expr,
+            adj_gq,
+            adj_dp,
+            adj_ab,
+            haploid_adj_dp,
+            legacy_het_ab=legacy_het_ab,
         )
     )
 

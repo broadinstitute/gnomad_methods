@@ -2962,6 +2962,26 @@ class TestGetHetAbAdjExpr:
         """A missing call gives a missing result."""
         assert self._ab(hl.missing(hl.tcall), [10, 10]) is None
 
+    @pytest.mark.parametrize(
+        "gt, ad, expected",
+        [
+            # Legacy reads AD[GT[1]], the reference depth for alt-first phased calls.
+            (hl.call(1, 0, phased=True), [15, 2], True),
+            (hl.call(1, 0, phased=True), [9, 74], False),
+            (hl.call(0, 1), [15, 2], False),
+            (hl.call(1, 2), [0, 1, 19], False),
+        ],
+    )
+    def test_legacy_het_ab(
+        self, gt: hl.expr.CallExpression, ad: List[int], expected: bool
+    ) -> None:
+        """legacy_het_ab reproduces the pre-fix reading and warns."""
+        with pytest.warns(DeprecationWarning):
+            expr = get_het_ab_adj_expr(
+                gt, hl.sum(ad), hl.literal(ad), legacy_het_ab=True
+            )
+        assert hl.eval(expr) is expected
+
 
 class TestFindStrataCells:
     """Test the find_strata_cells function."""

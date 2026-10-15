@@ -3402,6 +3402,15 @@ def agg_by_strata(
             for i, m in enumerate(freq_meta_py):
                 if m == target:
                     return ("leaf", i, target.get("group") == "adj")
+            # The defined-entries path counts each entry toward strata by index,
+            # so a parent target (a group reconstructed from `freq_meta_full`
+            # under reduction) has no single index to count toward.
+            if defined_entries_only:
+                raise ValueError(
+                    f"`entry_agg_group_membership` target {target} is not a leaf"
+                    " in `freq_meta`; `defined_entries_only` supports only leaf"
+                    " targets."
+                )
             if not is_reduced_for_lookup:
                 raise ValueError(
                     f"`entry_agg_group_membership` target {target} is not in"
@@ -3443,18 +3452,6 @@ def agg_by_strata(
             ann: [_resolve_target(t) for t in targets]
             for ann, targets in entry_agg_group_membership.items()
         }
-
-        # The defined-entries path counts each entry toward strata by index, so a
-        # parent target (a group reconstructed from `freq_meta_full` under
-        # reduction) has no single index to count toward. Reject it here, before
-        # the entries are localized.
-        if defined_entries_only:
-            for ann, resolved in entry_agg_group_membership.items():
-                if any(kind != "leaf" for kind, _, _ in resolved):
-                    raise ValueError(
-                        "`defined_entries_only` supports only leaf targets in"
-                        " `entry_agg_group_membership`."
-                    )
 
     n_adj_groups = hl.eval(hl.len(global_expr["adj_groups"]))
     if n_adj_groups != n_groups:

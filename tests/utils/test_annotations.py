@@ -1,6 +1,6 @@
 """Tests for the annotations utility module."""
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import ga4gh.core as ga4gh_core
 import ga4gh.vrs as ga4gh_vrs
@@ -3797,6 +3797,7 @@ class TestSubsetStrataSelection:
 
     @staticmethod
     def _cs(ac: int, an: int, hom: int = 0) -> hl.expr.StructExpression:
+        """Build one call-stats struct, as found in a ``freq`` array."""
         return hl.struct(AC=ac, AF=hl.float64(ac) / an, AN=an, homozygote_count=hom)
 
     @pytest.fixture
@@ -3930,7 +3931,13 @@ class TestAggByStrataDefinedEntriesOnly:
         )
         et = hl.tstruct(GT=hl.tcall, GQ=hl.tint32, DP=hl.tint32, adj=hl.tbool)
 
-        def e(gt, gq, dp, adj):
+        def e(
+            gt: hl.expr.CallExpression,
+            gq: int,
+            dp: int,
+            adj: Union[bool, hl.expr.BooleanExpression],
+        ) -> hl.expr.StructExpression:
+            """Build one entry struct."""
             return hl.struct(GT=gt, GQ=gq, DP=dp, adj=adj)
 
         miss = hl.missing(et)
@@ -3983,7 +3990,9 @@ class TestAggByStrataDefinedEntriesOnly:
         "gq_hist": (lambda m: m.GQ, lambda x: hl.agg.hist(x, 0, 100, 10)),
     }
 
-    def test_matches_default_mode(self, mt_and_gm) -> None:
+    def test_matches_default_mode(
+        self, mt_and_gm: Tuple[hl.MatrixTable, hl.Table]
+    ) -> None:
         """Every stratum, including strata with no defined entry, matches the full-array aggregation."""
         mt, gm = mt_and_gm
         dense = agg_by_strata(mt, self.funcs, group_membership_ht=gm)
@@ -4009,7 +4018,9 @@ class TestAggByStrataDefinedEntriesOnly:
         # The all-missing second row is empty in every stratum.
         assert all(v == 0 for v in rows[1].AC)
 
-    def test_non_leaf_target_raises(self, mt_and_gm, meta_ht: hl.Table) -> None:
+    def test_non_leaf_target_raises(
+        self, mt_and_gm: Tuple[hl.MatrixTable, hl.Table], meta_ht: hl.Table
+    ) -> None:
         """A target that only exists in `freq_meta_full` is rejected in this mode."""
         mt, _ = mt_and_gm
         gm = generate_freq_group_membership_array(
@@ -4037,7 +4048,9 @@ class TestAggByStrataDefinedEntriesOnly:
                 defined_entries_only=True,
             )
 
-    def test_matches_default_mode_with_targets(self, mt_and_gm) -> None:
+    def test_matches_default_mode_with_targets(
+        self, mt_and_gm: Tuple[hl.MatrixTable, hl.Table]
+    ) -> None:
         """Leaf `entry_agg_group_membership` targets select the same strata in both modes."""
         mt, gm = mt_and_gm
         targets = {"gq_hist": [{"group": "raw"}, {"group": "adj", "sex": "XX"}]}

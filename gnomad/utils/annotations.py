@@ -996,12 +996,16 @@ def get_het_ab_adj_expr(
         `legacy_het_ab` only covers direct callers of this function, `get_adj_expr`
         and `annotate_adj`.
 
+    .. deprecated:: 0.9.0
+        `legacy_het_ab` reproduces the pre-0.9.0 reading, logs a warning, and will
+        be removed in a future release.
+
     :param gt_expr: Genotype expression.
     :param dp_expr: DP expression.
     :param ad_expr: AD expression.
     :param adj_ab: AB threshold for adj. Default is 0.2.
-    :param legacy_het_ab: Deprecated. Read the het-ref allele depth as `AD[GT[1]]`
-        to reproduce pre-0.9.0 results. Logs a warning. Default is False.
+    :param legacy_het_ab: Read the het-ref allele depth as `AD[GT[1]]`. Default is
+        False.
     :return: Boolean expression indicating adj het AB filter.
     """
     if legacy_het_ab:
@@ -1040,8 +1044,19 @@ def get_adj_expr(
     """
     Get adj genotype annotation.
 
-    Defaults correspond to gnomAD values. See `get_het_ab_adj_expr` for
-    `legacy_het_ab`.
+    Defaults correspond to gnomAD values.
+
+    :param gt_expr: Genotype expression.
+    :param gq_expr: GQ expression.
+    :param dp_expr: DP expression.
+    :param ad_expr: AD expression.
+    :param adj_gq: GQ threshold for adj. Default is 20.
+    :param adj_dp: DP threshold for adj. Default is 10.
+    :param adj_ab: AB threshold for adj. Default is 0.2.
+    :param haploid_adj_dp: DP threshold for adj on haploid calls. Default is 5.
+    :param legacy_het_ab: Deprecated. Passed to `get_het_ab_adj_expr`; see there.
+        Default is False.
+    :return: Boolean expression indicating adj.
     """
     return get_gq_dp_adj_expr(
         gq_expr,
@@ -1067,8 +1082,16 @@ def annotate_adj(
     """
     Annotate genotypes with adj criteria (assumes diploid).
 
-    Defaults correspond to gnomAD values. See `get_het_ab_adj_expr` for
-    `legacy_het_ab`.
+    Defaults correspond to gnomAD values. Uses LGT/LAD when GT/AD are absent.
+
+    :param mt: Input MatrixTable with GT (or LGT), GQ, DP and AD (or LAD) entries.
+    :param adj_gq: GQ threshold for adj. Default is 20.
+    :param adj_dp: DP threshold for adj. Default is 10.
+    :param adj_ab: AB threshold for adj. Default is 0.2.
+    :param haploid_adj_dp: DP threshold for adj on haploid calls. Default is 5.
+    :param legacy_het_ab: Deprecated. Passed to `get_het_ab_adj_expr`; see there.
+        Default is False.
+    :return: MatrixTable with `adj` entry annotation.
     """
     if "GT" not in mt.entry and "LGT" in mt.entry:
         logger.warning("No GT field found, using LGT instead.")

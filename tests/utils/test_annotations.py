@@ -13,6 +13,7 @@ from gnomad.utils.annotations import (
     add_gks_va,
     add_gks_vrs,
     agg_by_strata,
+    annotate_adj,
     annotate_and_index_source_mt_for_sex_ploidy,
     annotate_downsamplings,
     annotate_freq,
@@ -24,6 +25,7 @@ from gnomad.utils.annotations import (
     find_strata_cells,
     gen_anc_faf_max_expr,
     generate_freq_group_membership_array,
+    get_adj_expr,
     get_copy_state_by_sex,
     get_het_ab_adj_expr,
     get_is_haploid_expr,
@@ -2987,6 +2989,57 @@ class TestGetHetAbAdjExpr:
             )
         assert "legacy_het_ab" in caplog.text
         assert hl.eval(expr) is expected
+
+
+class TestGetAdjExprAndAnnotateAdj:
+    """Test get_adj_expr and annotate_adj, including legacy_het_ab threading."""
+
+    # Four entries: alt-first phased low AB, alt-first phased high AB, unphased
+    # low AB, and unphased high AB but low GQ.
+    GTS = [
+        hl.call(1, 0, phased=True),
+        hl.call(1, 0, phased=True),
+        hl.call(0, 1),
+        hl.call(0, 1),
+    ]
+    ADS = [[15, 2], [9, 74], [15, 2], [9, 74]]
+    GQS = [30, 30, 30, 10]
+    EXPECTED = [False, True, False, False]
+    EXPECTED_LEGACY = [True, False, False, False]
+
+    @pytest.fixture
+    def mt(self) -> hl.MatrixTable:
+        """One-row MT with GT, GQ, DP, AD entries, one column per case."""
+        mt = hl.utils.range_matrix_table(n_rows=1, n_cols=len(self.GTS))
+        gts, ads, gqs = map(hl.literal, (self.GTS, self.ADS, self.GQS))
+        return mt.annotate_entries(
+            GT=gts[mt.col_idx],
+            AD=ads[mt.col_idx],
+            GQ=gqs[mt.col_idx],
+            DP=hl.sum(ads[mt.col_idx]),
+        )
+
+    @staticmethod
+    def _adj(mt: hl.MatrixTable) -> List[bool]:
+        """Collect the `adj` entry per column, in column order."""
+        return [e.adj for e in mt.entries().order_by("col_idx").collect()]
+
+    def test_get_adj_expr(self, mt: hl.MatrixTable) -> None:
+        """Default reads the alt depth; legacy_het_ab reproduces the old reading."""
+        out = mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+        assert self._adj(out) == self.EXPECTED
+        out = mt.annotate_entries(
+            adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, legacy_het_ab=True)
+        )
+        assert self._adj(out) == self.EXPECTED_LEGACY
+
+    @pytest.mark.parametrize("local", [False, True], ids=["GT/AD", "LGT/LAD"])
+    def test_annotate_adj(self, mt: hl.MatrixTable, local: bool) -> None:
+        """annotate_adj threads legacy_het_ab through on GT/AD and the LGT/LAD fallback."""
+        if local:
+            mt = mt.annotate_entries(LGT=mt.GT, LAD=mt.AD).drop("GT", "AD")
+        assert self._adj(annotate_adj(mt)) == self.EXPECTED
+        assert self._adj(annotate_adj(mt, legacy_het_ab=True)) == self.EXPECTED_LEGACY
 
 
 class TestFindStrataCells:

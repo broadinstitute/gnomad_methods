@@ -2927,7 +2927,7 @@ class TestGetHetAbAdjExpr:
     """Test the get_het_ab_adj_expr function."""
 
     @staticmethod
-    def _ab(gt: hl.expr.CallExpression, ad: List[int]) -> Optional[bool]:
+    def _het_ab_adj(gt: hl.expr.CallExpression, ad: List[int]) -> Optional[bool]:
         """Evaluate the het AB adj check with DP set to the sum of AD."""
         return hl.eval(get_het_ab_adj_expr(gt, hl.sum(ad), hl.literal(ad)))
 
@@ -2959,11 +2959,11 @@ class TestGetHetAbAdjExpr:
         self, gt: hl.expr.CallExpression, ad: List[int], expected: bool
     ) -> None:
         """Allele balance is tested on the non-ref allele for het-ref calls."""
-        assert self._ab(gt, ad) is expected
+        assert self._het_ab_adj(gt, ad) is expected
 
     def test_missing_gt(self) -> None:
         """A missing call gives a missing result."""
-        assert self._ab(hl.missing(hl.tcall), [10, 10]) is None
+        assert self._het_ab_adj(hl.missing(hl.tcall), [10, 10]) is None
 
     @pytest.mark.parametrize(
         "gt, ad, expected",
@@ -2991,55 +2991,63 @@ class TestGetHetAbAdjExpr:
         assert hl.eval(expr) is expected
 
 
-class TestGetAdjExprAndAnnotateAdj:
-    """Test get_adj_expr and annotate_adj, including legacy_het_ab threading."""
+# Four adj test entries: alt-first phased low AB, alt-first phased high AB,
+# unphased low AB, and unphased high AB but low GQ.
+ADJ_GTS = [
+    hl.call(1, 0, phased=True),
+    hl.call(1, 0, phased=True),
+    hl.call(0, 1),
+    hl.call(0, 1),
+]
+ADJ_ADS = [[15, 2], [9, 74], [15, 2], [9, 74]]
+ADJ_GQS = [30, 30, 30, 10]
+ADJ_EXPECTED = [False, True, False, False]
+ADJ_EXPECTED_LEGACY = [True, False, False, False]
 
-    # Four entries: alt-first phased low AB, alt-first phased high AB, unphased
-    # low AB, and unphased high AB but low GQ.
-    GTS = [
-        hl.call(1, 0, phased=True),
-        hl.call(1, 0, phased=True),
-        hl.call(0, 1),
-        hl.call(0, 1),
-    ]
-    ADS = [[15, 2], [9, 74], [15, 2], [9, 74]]
-    GQS = [30, 30, 30, 10]
-    EXPECTED = [False, True, False, False]
-    EXPECTED_LEGACY = [True, False, False, False]
 
-    @pytest.fixture
-    def mt(self) -> hl.MatrixTable:
-        """One-row MT with GT, GQ, DP, AD entries, one column per case."""
-        mt = hl.utils.range_matrix_table(n_rows=1, n_cols=len(self.GTS))
-        gts, ads, gqs = map(hl.literal, (self.GTS, self.ADS, self.GQS))
-        return mt.annotate_entries(
-            GT=gts[mt.col_idx],
-            AD=ads[mt.col_idx],
-            GQ=gqs[mt.col_idx],
-            DP=hl.sum(ads[mt.col_idx]),
-        )
+@pytest.fixture
+def adj_mt() -> hl.MatrixTable:
+    """One-row MT with GT, GQ, DP, AD entries, one column per adj test case."""
+    mt = hl.utils.range_matrix_table(n_rows=1, n_cols=len(ADJ_GTS))
+    gts, ads, gqs = map(hl.literal, (ADJ_GTS, ADJ_ADS, ADJ_GQS))
+    return mt.annotate_entries(
+        GT=gts[mt.col_idx],
+        AD=ads[mt.col_idx],
+        GQ=gqs[mt.col_idx],
+        DP=hl.sum(ads[mt.col_idx]),
+    )
 
-    @staticmethod
-    def _adj(mt: hl.MatrixTable) -> List[bool]:
-        """Collect the `adj` entry per column, in column order."""
-        return [e.adj for e in mt.entries().order_by("col_idx").collect()]
 
-    def test_get_adj_expr(self, mt: hl.MatrixTable) -> None:
+def _collect_adj(mt: hl.MatrixTable) -> List[bool]:
+    """Collect the `adj` entry per column, in column order."""
+    return [e.adj for e in mt.entries().order_by("col_idx").collect()]
+
+
+class TestGetAdjExpr:
+    """Test the get_adj_expr function."""
+
+    def test_get_adj_expr(self, adj_mt: hl.MatrixTable) -> None:
         """Default reads the alt depth; legacy_het_ab reproduces the old reading."""
+        mt = adj_mt
         out = mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
-        assert self._adj(out) == self.EXPECTED
+        assert _collect_adj(out) == ADJ_EXPECTED
         out = mt.annotate_entries(
             adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, legacy_het_ab=True)
         )
-        assert self._adj(out) == self.EXPECTED_LEGACY
+        assert _collect_adj(out) == ADJ_EXPECTED_LEGACY
+
+
+class TestAnnotateAdj:
+    """Test the annotate_adj function."""
 
     @pytest.mark.parametrize("local", [False, True], ids=["GT/AD", "LGT/LAD"])
-    def test_annotate_adj(self, mt: hl.MatrixTable, local: bool) -> None:
+    def test_annotate_adj(self, adj_mt: hl.MatrixTable, local: bool) -> None:
         """annotate_adj threads legacy_het_ab through on GT/AD and the LGT/LAD fallback."""
+        mt = adj_mt
         if local:
             mt = mt.annotate_entries(LGT=mt.GT, LAD=mt.AD).drop("GT", "AD")
-        assert self._adj(annotate_adj(mt)) == self.EXPECTED
-        assert self._adj(annotate_adj(mt, legacy_het_ab=True)) == self.EXPECTED_LEGACY
+        assert _collect_adj(annotate_adj(mt)) == ADJ_EXPECTED
+        assert _collect_adj(annotate_adj(mt, legacy_het_ab=True)) == ADJ_EXPECTED_LEGACY
 
 
 class TestFindStrataCells:

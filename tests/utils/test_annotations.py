@@ -2926,83 +2926,66 @@ class TestGetIsHaploidExpr:
 class TestGetHetAbAdjExpr:
     """Test the get_het_ab_adj_expr function."""
 
-    @staticmethod
-    def _het_ab_adj(gt: hl.expr.CallExpression, ad: List[int]) -> Optional[bool]:
-        """Evaluate the het AB adj check with DP set to the sum of AD."""
-        return hl.eval(get_het_ab_adj_expr(gt, hl.sum(ad), hl.literal(ad)))
+    # (case id, GT, AD, expected adj, expected adj with legacy_het_ab).
+    CASES = [
+        # Unphased het-ref is stored ref-first; AD[1] is the alt depth.
+        ("unphased_low_ab", hl.call(0, 1), [15, 2], False, False),
+        ("unphased_high_ab", hl.call(0, 1), [9, 74], True, True),
+        # Phased alt-first (1|0): alt depth is AD[1], not AD[GT[1]]; legacy flips.
+        ("alt_first_low_ab", hl.call(1, 0, phased=True), [15, 2], False, True),
+        ("alt_first_high_ab", hl.call(1, 0, phased=True), [9, 74], True, False),
+        ("ref_first_phased", hl.call(0, 1, phased=True), [15, 2], False, False),
+        # Unsplit het-ref with a non-1 alt allele.
+        ("unsplit_unphased", hl.call(0, 2), [15, 1, 2], False, False),
+        ("unsplit_alt_first_low", hl.call(2, 0, phased=True), [15, 1, 2], False, True),
+        ("unsplit_alt_first_high", hl.call(2, 0, phased=True), [2, 1, 15], True, False),
+        # Het non-ref requires both alleles to pass, regardless of order.
+        ("het_non_ref", hl.call(1, 2), [0, 10, 10], True, True),
+        ("het_non_ref_phased", hl.call(2, 1, phased=True), [0, 10, 10], True, True),
+        ("het_non_ref_fail", hl.call(1, 2), [0, 1, 19], False, False),
+        # Hom and haploid calls have no AB test.
+        ("hom_var", hl.call(1, 1), [1, 19], True, True),
+        ("hom_ref", hl.call(0, 0), [19, 1], True, True),
+        ("haploid", hl.call(1), [19, 1], True, True),
+        ("missing", hl.missing(hl.tcall), [10, 10], None, None),
+    ]
 
-    @pytest.mark.parametrize(
-        "gt, ad, expected",
-        [
-            # Unphased het-ref is stored ref-first; AD[1] is the alt depth.
-            (hl.call(0, 1), [15, 2], False),
-            (hl.call(0, 1), [9, 74], True),
-            # Phased alt-first (1|0): alt depth must be read from AD[1], not AD[GT[1]].
-            (hl.call(1, 0, phased=True), [15, 2], False),
-            (hl.call(1, 0, phased=True), [9, 74], True),
-            (hl.call(0, 1, phased=True), [15, 2], False),
-            # Unsplit het-ref with a non-1 alt allele.
-            (hl.call(0, 2), [15, 1, 2], False),
-            (hl.call(2, 0, phased=True), [15, 1, 2], False),
-            (hl.call(2, 0, phased=True), [2, 1, 15], True),
-            # Het non-ref requires both alleles to pass, regardless of order.
-            (hl.call(1, 2), [0, 10, 10], True),
-            (hl.call(2, 1, phased=True), [0, 10, 10], True),
-            (hl.call(1, 2), [0, 1, 19], False),
-            # Hom and haploid calls have no AB test.
-            (hl.call(1, 1), [1, 19], True),
-            (hl.call(0, 0), [19, 1], True),
-            (hl.call(1), [19, 1], True),
-        ],
-    )
-    def test_het_ab(
-        self, gt: hl.expr.CallExpression, ad: List[int], expected: bool
-    ) -> None:
+    @classmethod
+    def _het_ab_adj(cls, **kwargs: bool) -> Dict[str, Optional[bool]]:
+        """Evaluate every case in one job, with DP set to the sum of AD."""
+        exprs = [
+            get_het_ab_adj_expr(gt, hl.sum(ad), hl.literal(ad), **kwargs)
+            for _, gt, ad, _, _ in cls.CASES
+        ]
+        return dict(zip([c[0] for c in cls.CASES], hl.eval(hl.array(exprs))))
+
+    def test_het_ab(self) -> None:
         """Allele balance is tested on the non-ref allele for het-ref calls."""
-        assert self._het_ab_adj(gt, ad) is expected
+        assert self._het_ab_adj() == {c[0]: c[3] for c in self.CASES}
 
-    def test_missing_gt(self) -> None:
-        """A missing call gives a missing result."""
-        assert self._het_ab_adj(hl.missing(hl.tcall), [10, 10]) is None
-
-    @pytest.mark.parametrize(
-        "gt, ad, expected",
-        [
-            # Legacy reads AD[GT[1]], the reference depth for alt-first phased calls.
-            (hl.call(1, 0, phased=True), [15, 2], True),
-            (hl.call(1, 0, phased=True), [9, 74], False),
-            (hl.call(0, 1), [15, 2], False),
-            (hl.call(1, 2), [0, 1, 19], False),
-        ],
-    )
-    def test_legacy_het_ab(
-        self,
-        gt: hl.expr.CallExpression,
-        ad: List[int],
-        expected: bool,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
+    def test_legacy_het_ab(self, caplog: pytest.LogCaptureFixture) -> None:
         """legacy_het_ab reproduces the pre-fix reading and logs a warning."""
         with caplog.at_level(logging.WARNING, logger="gnomad.utils.annotations"):
-            expr = get_het_ab_adj_expr(
-                gt, hl.sum(ad), hl.literal(ad), legacy_het_ab=True
-            )
+            got = self._het_ab_adj(legacy_het_ab=True)
         assert "legacy_het_ab" in caplog.text
-        assert hl.eval(expr) is expected
+        assert got == {c[0]: c[4] for c in self.CASES}
 
 
-# Four adj test entries: alt-first phased low AB, alt-first phased high AB,
-# unphased low AB, and unphased high AB but low GQ.
 ADJ_GTS = [
     hl.call(1, 0, phased=True),
     hl.call(1, 0, phased=True),
     hl.call(0, 1),
     hl.call(0, 1),
 ]
+"""Adj test GTs: alt-first phased low AB, alt-first phased high AB, unphased low AB, unphased high AB but low GQ."""
 ADJ_ADS = [[15, 2], [9, 74], [15, 2], [9, 74]]
+"""AD per adj test entry."""
 ADJ_GQS = [30, 30, 30, 10]
+"""GQ per adj test entry."""
 ADJ_EXPECTED = [False, True, False, False]
+"""Expected adj per entry."""
 ADJ_EXPECTED_LEGACY = [True, False, False, False]
+"""Expected adj per entry with legacy_het_ab=True."""
 
 
 @pytest.fixture
@@ -3028,11 +3011,14 @@ class TestGetAdjExpr:
 
     def test_get_adj_expr(self, adj_mt: hl.MatrixTable) -> None:
         """Default reads the alt depth; legacy_het_ab reproduces the old reading."""
-        mt = adj_mt
-        out = mt.annotate_entries(adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD))
+        out = adj_mt.annotate_entries(
+            adj=get_adj_expr(adj_mt.GT, adj_mt.GQ, adj_mt.DP, adj_mt.AD)
+        )
         assert _collect_adj(out) == ADJ_EXPECTED
-        out = mt.annotate_entries(
-            adj=get_adj_expr(mt.GT, mt.GQ, mt.DP, mt.AD, legacy_het_ab=True)
+        out = adj_mt.annotate_entries(
+            adj=get_adj_expr(
+                adj_mt.GT, adj_mt.GQ, adj_mt.DP, adj_mt.AD, legacy_het_ab=True
+            )
         )
         assert _collect_adj(out) == ADJ_EXPECTED_LEGACY
 

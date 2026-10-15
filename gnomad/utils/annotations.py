@@ -996,6 +996,7 @@ def get_het_ab_adj_expr(
         .when(~gt_expr.is_het(), True)
         .when(
             gt_expr.is_het_ref(),
+            # One het-ref allele is 0, so max() is the alt index in either phase order.
             ad_expr[hl.max(gt_expr[0], gt_expr[1])] / dp_expr >= adj_ab,
         )
         .default(

@@ -2,7 +2,6 @@
 
 import itertools
 import logging
-import warnings
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import hail as hl
@@ -988,22 +987,27 @@ def get_het_ab_adj_expr(
     For het-ref calls the non-ref allele's depth is used, so phased alt-first calls
     (1|0) are handled correctly.
 
+    .. versionchanged:: 0.9.0
+        Previously read `AD[GT[1]]`, which is the reference depth for a phased
+        alt-first call (1|0). GATK >= 4.0.12.0 writes read-backed phase into GT, so
+        such calls passed adj with low alt AB and failed with high alt AB. gnomAD
+        v4.1 exomes were computed with the old reading. To reproduce a full
+        pipeline, pin gnomad_methods to a pre-fix commit (`0e38c42e` or earlier);
+        `legacy_het_ab` only covers direct callers of this function, `get_adj_expr`
+        and `annotate_adj`.
+
     :param gt_expr: Genotype expression.
     :param dp_expr: DP expression.
     :param ad_expr: AD expression.
     :param adj_ab: AB threshold for adj. Default is 0.2.
-    :param legacy_het_ab: Deprecated. Read the het-ref allele depth as `AD[GT[1]]`,
-        which is the reference depth for phased alt-first calls (1|0). Only for
-        reproducing results computed before this was fixed (e.g. gnomAD v4.1
-        exomes). Default is False.
+    :param legacy_het_ab: Deprecated. Read the het-ref allele depth as `AD[GT[1]]`
+        to reproduce pre-0.9.0 results. Logs a warning. Default is False.
     :return: Boolean expression indicating adj het AB filter.
     """
     if legacy_het_ab:
-        warnings.warn(
+        logger.warning(
             "legacy_het_ab=True reads the reference depth for phased alt-first het-ref"
-            " calls (1|0) and will be removed in a future release.",
-            DeprecationWarning,
-            stacklevel=2,
+            " calls (1|0) and will be removed in a future release."
         )
         het_ref_ad = ad_expr[gt_expr[1]]
     else:

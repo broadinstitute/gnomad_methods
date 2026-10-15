@@ -1,5 +1,6 @@
 """Tests for the annotations utility module."""
 
+import logging
 from typing import Dict, List, Optional, Tuple, Union
 
 import ga4gh.core as ga4gh_core
@@ -2973,13 +2974,18 @@ class TestGetHetAbAdjExpr:
         ],
     )
     def test_legacy_het_ab(
-        self, gt: hl.expr.CallExpression, ad: List[int], expected: bool
+        self,
+        gt: hl.expr.CallExpression,
+        ad: List[int],
+        expected: bool,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """legacy_het_ab reproduces the pre-fix reading and warns."""
-        with pytest.warns(DeprecationWarning):
+        """legacy_het_ab reproduces the pre-fix reading and logs a warning."""
+        with caplog.at_level(logging.WARNING, logger="gnomad.utils.annotations"):
             expr = get_het_ab_adj_expr(
                 gt, hl.sum(ad), hl.literal(ad), legacy_het_ab=True
             )
+        assert "legacy_het_ab" in caplog.text
         assert hl.eval(expr) is expected
 
 

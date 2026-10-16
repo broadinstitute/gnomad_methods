@@ -4,7 +4,6 @@ import re
 
 import setuptools
 
-
 with open("README.md", "r") as readme_file:
     long_description = readme_file.read()
 
@@ -22,7 +21,7 @@ with open("requirements.txt", "r") as requirements_file:
 
 setuptools.setup(
     name="gnomad",
-    version="0.8.2",
+    version="0.9.0",
     author="The Genome Aggregation Database",
     author_email="gnomad@broadinstitute.org",
     description="Hail utilities for the Genome Aggregation Database",

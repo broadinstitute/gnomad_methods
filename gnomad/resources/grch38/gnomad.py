@@ -39,6 +39,7 @@ EXOME_RELEASES = ["4.0", "4.1", "4.1.1"]
 GENOME_RELEASES = ["3.0", "3.1", "3.1.1", "3.1.2", "4.0", "4.1", "4.1.1"]
 
 CURRENT_CONSTRAINT_RELEASE = "4.1.2"
+CURRENT_CONSTRAINT_MUTATION_RATE_RELEASE = "4.1.1"
 
 JOINT_RELEASES = ["4.1"]
 BROWSER_RELEASES = ["4.1", "4.1.1"]
@@ -862,7 +863,7 @@ def constraint_mutation_rate() -> VersionedTableResource:
     :return: Mutation rate Table.
     """
     return VersionedTableResource(
-        CURRENT_CONSTRAINT_RELEASE,
+        CURRENT_CONSTRAINT_MUTATION_RATE_RELEASE,
         {
             release: GnomadPublicTableResource(
                 path=_public_constraint_mutation_rate_ht_path(release)

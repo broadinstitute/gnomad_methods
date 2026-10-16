@@ -4,6 +4,7 @@ import base64
 import gzip
 import logging
 import os
+import pprint
 import subprocess
 import uuid
 from typing import List, Optional, Tuple, Union
@@ -316,3 +317,69 @@ def create_vds(
     combiner.run()
     vds = hl.vds.read_vds(output_path)
     return vds
+
+
+def print_global_struct(t: Union[hl.Table, hl.Struct, hl.StructExpression]) -> None:
+    """
+    Pretty-print a Hail global struct with nested indentation.
+
+    Accepts a Table (uses its globals), a StructExpression (evaluates it),
+    or an already-evaluated Struct.
+
+    Each struct field is logged on its own ``key: value`` line, with nested structs
+    indented beneath their key. Other values, such as long lists and dicts, are
+    formatted with ``pprint.pformat`` and wrapped beneath their key.
+
+    :param t: Table, StructExpression, or Struct to print.
+    """
+    if isinstance(t, hl.Table):
+        t = t.globals
+    if isinstance(t, hl.StructExpression):
+        t = hl.eval(t)
+
+    def _format_struct(s: hl.Struct, level: int = 1) -> str:
+        indent = "    " * level
+        lines = []
+        for k, v in s.items():
+            prefix = f"{indent}{k}:"
+            if isinstance(v, hl.Struct):
+                lines.append(f"{prefix}\n{_format_struct(v, level + 1)}")
+                continue
+
+            # Wrap long values so continuation lines align under the first one.
+            v = v if isinstance(v, str) else pprint.pformat(v, width=88 - len(prefix))
+            lines.append(f"{prefix} {v}".replace("\n", "\n" + " " * (len(prefix) + 1)))
+
+        return "\n".join(lines)
+
+    logger.info("\nGlobal struct:\n%s", _format_struct(t))
+
+
+def convert_multi_array_to_array_of_structs(
+    t: Union[hl.Table, hl.expr.StructExpression],
+    array_fields_to_combine: List[str],
+    new_array_field: str,
+) -> Union[hl.Table, hl.expr.StructExpression]:
+    """
+    Zip parallel array fields into a single array of structs.
+
+    For example, given fields ``a = [1, 2]`` and ``b = [3, 4]``, produces
+    ``ab = [{a: 1, b: 3}, {a: 2, b: 4}]``. The original array fields are
+    dropped.
+
+    .. note::
+
+        All arrays in ``array_fields_to_combine`` must have the same length.
+
+    :param t: Table or StructExpression containing the array fields.
+    :param array_fields_to_combine: Names of the array fields to zip.
+    :param new_array_field: Name of the resulting array-of-structs field.
+    :return: Input with the original arrays replaced by ``new_array_field``.
+    """
+    return t.annotate(
+        **{
+            new_array_field: hl.range(t[array_fields_to_combine[0]].length()).map(
+                lambda i: hl.struct(**{f: t[f][i] for f in array_fields_to_combine})
+            )
+        }
+    ).drop(*array_fields_to_combine)

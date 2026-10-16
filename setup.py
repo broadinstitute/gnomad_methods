@@ -8,7 +8,7 @@ with open("README.md", "r") as readme_file:
     long_description = readme_file.read()
 
 # Hail is deliberately excluded from install_requires: users install the Hail
-# version that matches their cluster. Match the name only so that a version
+# build that matches their cluster. Match the name only so that a build
 # specifier on the requirements.txt line (e.g. ``hail!=0.2.139``) is still excluded.
 install_requires = []
 with open("requirements.txt", "r") as requirements_file:

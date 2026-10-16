@@ -987,7 +987,7 @@ def get_het_ab_adj_expr(
     For het-ref calls the non-ref allele's depth is used, so phased alt-first calls
     (1|0) are handled correctly.
 
-    .. versionchanged:: 0.9.0
+    .. versionchanged:: 0.9.1
         Previously read `AD[GT[1]]`, which is the reference depth for a phased
         alt-first call (1|0). GATK >= 4.0.12.0 writes read-backed phase into GT, so
         such calls passed adj with low alt AB and failed with high alt AB. gnomAD
@@ -996,8 +996,8 @@ def get_het_ab_adj_expr(
         `legacy_het_ab` only covers direct callers of this function, `get_adj_expr`
         and `annotate_adj`.
 
-    .. deprecated:: 0.9.0
-        `legacy_het_ab` reproduces the pre-0.9.0 reading, logs a warning, and will
+    .. deprecated:: 0.9.1
+        `legacy_het_ab` reproduces the pre-0.9.1 reading, logs a warning, and will
         be removed in a future release.
 
     :param gt_expr: Genotype expression.

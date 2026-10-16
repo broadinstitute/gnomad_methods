@@ -992,9 +992,9 @@ def get_het_ab_adj_expr(
         alt-first call (1|0). GATK >= 4.0.12.0 writes read-backed phase into GT, so
         such calls passed adj with low alt AB and failed with high alt AB. gnomAD
         v4.1 exomes were computed with the old reading. To reproduce a full
-        pipeline, pin gnomad_methods to a pre-fix commit (`0e38c42e` or earlier);
-        `legacy_het_ab` only covers direct callers of this function, `get_adj_expr`
-        and `annotate_adj`.
+        pipeline, pin gnomad_methods to a pre-fix commit (`0e38c42e` or earlier,
+        i.e. `gnomad` package version <= 0.9.0); `legacy_het_ab` only covers direct
+        callers of this function, `get_adj_expr` and `annotate_adj`.
 
     .. deprecated:: 0.9.1
         `legacy_het_ab` reproduces the pre-0.9.1 reading, logs a warning, and will

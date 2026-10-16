@@ -1,6 +1,7 @@
 """Tests for the annotations utility module."""
 
-from typing import Dict, List, Tuple, Union
+import logging
+from typing import Dict, List, Optional, Tuple, Union
 
 import ga4gh.core as ga4gh_core
 import ga4gh.vrs as ga4gh_vrs
@@ -12,6 +13,7 @@ from gnomad.utils.annotations import (
     add_gks_va,
     add_gks_vrs,
     agg_by_strata,
+    annotate_adj,
     annotate_and_index_source_mt_for_sex_ploidy,
     annotate_downsamplings,
     annotate_freq,
@@ -23,7 +25,9 @@ from gnomad.utils.annotations import (
     find_strata_cells,
     gen_anc_faf_max_expr,
     generate_freq_group_membership_array,
+    get_adj_expr,
     get_copy_state_by_sex,
+    get_het_ab_adj_expr,
     get_is_haploid_expr,
     grpmax_expr,
     index_sex_ploidy_flags,
@@ -2917,6 +2921,119 @@ class TestGetIsHaploidExpr:
             get_is_haploid_expr(locus_expr=mt.locus)
         with pytest.raises(ValueError, match="Both"):
             get_is_haploid_expr(karyotype_expr=mt.sex_karyotype)
+
+
+class TestGetHetAbAdjExpr:
+    """Test the get_het_ab_adj_expr function."""
+
+    # (case id, GT, AD, expected adj, expected adj with legacy_het_ab).
+    CASES = [
+        # Unphased het-ref is stored ref-first; AD[1] is the alt depth.
+        ("unphased_low_ab", hl.call(0, 1), [15, 2], False, False),
+        ("unphased_high_ab", hl.call(0, 1), [9, 74], True, True),
+        # Phased alt-first (1|0): alt depth is AD[1], not AD[GT[1]]; legacy flips.
+        ("alt_first_low_ab", hl.call(1, 0, phased=True), [15, 2], False, True),
+        ("alt_first_high_ab", hl.call(1, 0, phased=True), [9, 74], True, False),
+        ("ref_first_phased", hl.call(0, 1, phased=True), [15, 2], False, False),
+        # Unsplit het-ref with a non-1 alt allele.
+        ("unsplit_unphased", hl.call(0, 2), [15, 1, 2], False, False),
+        ("unsplit_alt_first_low", hl.call(2, 0, phased=True), [15, 1, 2], False, True),
+        ("unsplit_alt_first_high", hl.call(2, 0, phased=True), [2, 1, 15], True, False),
+        # Het non-ref requires both alleles to pass, regardless of order.
+        ("het_non_ref", hl.call(1, 2), [0, 10, 10], True, True),
+        ("het_non_ref_phased", hl.call(2, 1, phased=True), [0, 10, 10], True, True),
+        ("het_non_ref_fail", hl.call(1, 2), [0, 1, 19], False, False),
+        # Hom and haploid calls have no AB test.
+        ("hom_var", hl.call(1, 1), [1, 19], True, True),
+        ("hom_ref", hl.call(0, 0), [19, 1], True, True),
+        ("haploid", hl.call(1), [19, 1], True, True),
+        ("missing", hl.missing(hl.tcall), [10, 10], None, None),
+    ]
+
+    @classmethod
+    def _het_ab_adj(cls, **kwargs: bool) -> Dict[str, Optional[bool]]:
+        """Evaluate every case in one job, with DP set to the sum of AD."""
+        exprs = [
+            get_het_ab_adj_expr(gt, hl.sum(ad), hl.literal(ad), **kwargs)
+            for _, gt, ad, _, _ in cls.CASES
+        ]
+        return dict(zip([c[0] for c in cls.CASES], hl.eval(hl.array(exprs))))
+
+    def test_het_ab(self) -> None:
+        """Allele balance is tested on the non-ref allele for het-ref calls."""
+        assert self._het_ab_adj() == {c[0]: c[3] for c in self.CASES}
+
+    def test_legacy_het_ab(self, caplog: pytest.LogCaptureFixture) -> None:
+        """legacy_het_ab reproduces the pre-fix reading and logs a warning."""
+        with caplog.at_level(logging.WARNING, logger="gnomad.utils.annotations"):
+            got = self._het_ab_adj(legacy_het_ab=True)
+        assert "legacy_het_ab" in caplog.text
+        assert got == {c[0]: c[4] for c in self.CASES}
+
+
+ADJ_GTS = [
+    hl.call(1, 0, phased=True),
+    hl.call(1, 0, phased=True),
+    hl.call(0, 1),
+    hl.call(0, 1),
+]
+"""Adj test GTs: alt-first phased low AB, alt-first phased high AB, unphased low AB, unphased high AB but low GQ."""
+ADJ_ADS = [[15, 2], [9, 74], [15, 2], [9, 74]]
+"""AD per adj test entry."""
+ADJ_GQS = [30, 30, 30, 10]
+"""GQ per adj test entry."""
+ADJ_EXPECTED = [False, True, False, False]
+"""Expected adj per entry."""
+ADJ_EXPECTED_LEGACY = [True, False, False, False]
+"""Expected adj per entry with legacy_het_ab=True."""
+
+
+@pytest.fixture
+def adj_mt() -> hl.MatrixTable:
+    """One-row MT with GT, GQ, DP, AD entries, one column per adj test case."""
+    mt = hl.utils.range_matrix_table(n_rows=1, n_cols=len(ADJ_GTS))
+    gts, ads, gqs = map(hl.literal, (ADJ_GTS, ADJ_ADS, ADJ_GQS))
+    return mt.annotate_entries(
+        GT=gts[mt.col_idx],
+        AD=ads[mt.col_idx],
+        GQ=gqs[mt.col_idx],
+        DP=hl.sum(ads[mt.col_idx]),
+    )
+
+
+def _collect_adj(mt: hl.MatrixTable) -> List[bool]:
+    """Collect the `adj` entry per column, in column order."""
+    return [e.adj for e in mt.entries().order_by("col_idx").collect()]
+
+
+class TestGetAdjExpr:
+    """Test the get_adj_expr function."""
+
+    def test_get_adj_expr(self, adj_mt: hl.MatrixTable) -> None:
+        """Default reads the alt depth; legacy_het_ab reproduces the old reading."""
+        out = adj_mt.annotate_entries(
+            adj=get_adj_expr(adj_mt.GT, adj_mt.GQ, adj_mt.DP, adj_mt.AD)
+        )
+        assert _collect_adj(out) == ADJ_EXPECTED
+        out = adj_mt.annotate_entries(
+            adj=get_adj_expr(
+                adj_mt.GT, adj_mt.GQ, adj_mt.DP, adj_mt.AD, legacy_het_ab=True
+            )
+        )
+        assert _collect_adj(out) == ADJ_EXPECTED_LEGACY
+
+
+class TestAnnotateAdj:
+    """Test the annotate_adj function."""
+
+    @pytest.mark.parametrize("local", [False, True], ids=["GT/AD", "LGT/LAD"])
+    def test_annotate_adj(self, adj_mt: hl.MatrixTable, local: bool) -> None:
+        """annotate_adj threads legacy_het_ab through on GT/AD and the LGT/LAD fallback."""
+        mt = adj_mt
+        if local:
+            mt = mt.annotate_entries(LGT=mt.GT, LAD=mt.AD).drop("GT", "AD")
+        assert _collect_adj(annotate_adj(mt)) == ADJ_EXPECTED
+        assert _collect_adj(annotate_adj(mt, legacy_het_ab=True)) == ADJ_EXPECTED_LEGACY
 
 
 class TestFindStrataCells:

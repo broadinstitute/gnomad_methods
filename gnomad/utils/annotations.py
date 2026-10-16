@@ -978,20 +978,50 @@ def get_het_ab_adj_expr(
     dp_expr: Union[hl.expr.Int32Expression, hl.expr.Int64Expression],
     ad_expr: hl.expr.ArrayNumericExpression,
     adj_ab: float = 0.2,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.expr.BooleanExpression:
     """
     Get adj het AB annotation.
+
+    For het-ref calls the non-ref allele's depth is used, so phased alt-first calls
+    (1|0) are handled correctly.
+
+    .. versionchanged:: 0.9.1
+        Previously read `AD[GT[1]]`, which is the reference depth for a phased
+        alt-first call (1|0). GATK >= 4.0.12.0 writes read-backed phase into GT, so
+        such calls passed adj with low alt AB and failed with high alt AB. gnomAD
+        v4.1 exomes were computed with the old reading. To reproduce a full
+        pipeline, pin gnomad_methods to a pre-fix commit (`0e38c42e` or earlier,
+        i.e. `gnomad` package version <= 0.9.0); `legacy_het_ab` only covers direct
+        callers of this function, `get_adj_expr` and `annotate_adj`.
+
+    .. deprecated:: 0.9.1
+        `legacy_het_ab` reproduces the pre-0.9.1 reading, logs a warning, and will
+        be removed in a future release.
 
     :param gt_expr: Genotype expression.
     :param dp_expr: DP expression.
     :param ad_expr: AD expression.
     :param adj_ab: AB threshold for adj. Default is 0.2.
+    :param legacy_het_ab: Read the het-ref allele depth as `AD[GT[1]]`. Default is
+        False.
     :return: Boolean expression indicating adj het AB filter.
     """
+    if legacy_het_ab:
+        logger.warning(
+            "legacy_het_ab=True reads the reference depth for phased alt-first het-ref"
+            " calls (1|0) and will be removed in a future release."
+        )
+        het_ref_ad = ad_expr[gt_expr[1]]
+    else:
+        # One het-ref allele is 0, so max() is the alt index in either phase order.
+        het_ref_ad = ad_expr[hl.max(gt_expr[0], gt_expr[1])]
+
     return (
         hl.case()
         .when(~gt_expr.is_het(), True)
-        .when(gt_expr.is_het_ref(), ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
+        .when(gt_expr.is_het_ref(), het_ref_ad / dp_expr >= adj_ab)
         .default(
             (ad_expr[gt_expr[0]] / dp_expr >= adj_ab)
             & (ad_expr[gt_expr[1]] / dp_expr >= adj_ab)
@@ -1008,11 +1038,25 @@ def get_adj_expr(
     adj_dp: int = 10,
     adj_ab: float = 0.2,
     haploid_adj_dp: int = 5,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.expr.BooleanExpression:
     """
     Get adj genotype annotation.
 
     Defaults correspond to gnomAD values.
+
+    :param gt_expr: Genotype expression.
+    :param gq_expr: GQ expression.
+    :param dp_expr: DP expression.
+    :param ad_expr: AD expression.
+    :param adj_gq: GQ threshold for adj. Default is 20.
+    :param adj_dp: DP threshold for adj. Default is 10.
+    :param adj_ab: AB threshold for adj. Default is 0.2.
+    :param haploid_adj_dp: DP threshold for adj on haploid calls. Default is 5.
+    :param legacy_het_ab: Deprecated. Passed to `get_het_ab_adj_expr`; see there.
+        Default is False.
+    :return: Boolean expression indicating adj.
     """
     return get_gq_dp_adj_expr(
         gq_expr,
@@ -1021,7 +1065,9 @@ def get_adj_expr(
         adj_gq=adj_gq,
         adj_dp=adj_dp,
         haploid_adj_dp=haploid_adj_dp,
-    ) & get_het_ab_adj_expr(gt_expr, dp_expr, ad_expr, adj_ab)
+    ) & get_het_ab_adj_expr(
+        gt_expr, dp_expr, ad_expr, adj_ab, legacy_het_ab=legacy_het_ab
+    )
 
 
 def annotate_adj(
@@ -1030,11 +1076,22 @@ def annotate_adj(
     adj_dp: int = 10,
     adj_ab: float = 0.2,
     haploid_adj_dp: int = 5,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.MatrixTable:
     """
     Annotate genotypes with adj criteria (assumes diploid).
 
-    Defaults correspond to gnomAD values.
+    Defaults correspond to gnomAD values. Uses LGT/LAD when GT/AD are absent.
+
+    :param mt: Input MatrixTable with GT (or LGT), GQ, DP and AD (or LAD) entries.
+    :param adj_gq: GQ threshold for adj. Default is 20.
+    :param adj_dp: DP threshold for adj. Default is 10.
+    :param adj_ab: AB threshold for adj. Default is 0.2.
+    :param haploid_adj_dp: DP threshold for adj on haploid calls. Default is 5.
+    :param legacy_het_ab: Deprecated. Passed to `get_het_ab_adj_expr`; see there.
+        Default is False.
+    :return: MatrixTable with `adj` entry annotation.
     """
     if "GT" not in mt.entry and "LGT" in mt.entry:
         logger.warning("No GT field found, using LGT instead.")
@@ -1050,7 +1107,15 @@ def annotate_adj(
 
     return mt.annotate_entries(
         adj=get_adj_expr(
-            gt_expr, mt.GQ, mt.DP, ad_expr, adj_gq, adj_dp, adj_ab, haploid_adj_dp
+            gt_expr,
+            mt.GQ,
+            mt.DP,
+            ad_expr,
+            adj_gq,
+            adj_dp,
+            adj_ab,
+            haploid_adj_dp,
+            legacy_het_ab=legacy_het_ab,
         )
     )
 

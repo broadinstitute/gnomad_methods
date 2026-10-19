@@ -1638,6 +1638,18 @@ class TestCoverageCorrectionExpr:
 
         assert result == pytest.approx(expected)
 
+    def test_array_expression_coverage_model(self) -> None:
+        """Test a coverage model passed as an array expression, as ``build_models`` returns it."""
+        result = hl.eval(
+            coverage_correction_expr(
+                hl.float64(10),
+                hl.literal([0.5, 0.01]),
+                low_coverage_expr=hl.bool(True),
+            )
+        )
+
+        assert result == pytest.approx(0.6)
+
     @pytest.mark.parametrize("both", [True, False])
     def test_requires_exactly_one_low_coverage_definition(self, both: bool) -> None:
         """Test that exactly one of ``low_coverage_expr`` and ``coverage_cutoff`` is required."""

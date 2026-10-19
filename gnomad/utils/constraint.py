@@ -1163,7 +1163,7 @@ def build_models(
     skip_coverage_model: bool = False,
     log10_coverage: bool = True,
     additional_grouping: Tuple[str, ...] = (),
-) -> Tuple[Optional[hl.expr.StructExpression], hl.expr.DictExpression]:
+) -> Tuple[Optional[hl.expr.ArrayNumericExpression], hl.expr.DictExpression]:
     """
     Build coverage and plateau models.
 
@@ -1246,8 +1246,9 @@ def build_models(
         the coverage model. Default is True.
     :param additional_grouping: Additional annotations to group by before
         counting the observed and possible variants. Default is ().
-    :return: Tuple of (coverage model, plateau models). Coverage model is None
-        when ``skip_coverage_model`` is True.
+    :return: Tuple of (coverage model, plateau models). The coverage model is an
+        ``[intercept, slope]`` ArrayNumericExpression, or None when
+        ``skip_coverage_model`` is True.
     """
     if model_group_expr is None:
         # Define whether the variant should be included in the high or low coverage
@@ -1736,7 +1737,7 @@ def apply_plateau_models(
 
 def coverage_correction_expr(
     coverage_expr: hl.Float64Expression,
-    coverage_model: Tuple[float, float],
+    coverage_model: Union[Tuple[float, float], hl.expr.ArrayNumericExpression],
     low_coverage_expr: Optional[hl.BooleanExpression] = None,
     coverage_cutoff: Optional[int] = None,
     log10_coverage: bool = False,
@@ -1757,7 +1758,8 @@ def coverage_correction_expr(
         - Otherwise, the coverage correction is 1.
 
     :param coverage_expr: Float64Expression of the coverage.
-    :param coverage_model: Tuple of the intercept and slope of the coverage model.
+    :param coverage_model: Coverage model as ``[intercept, slope]``, either a tuple of
+        floats or an ArrayNumericExpression (as returned by ``build_models``).
     :param low_coverage_expr: Optional BooleanExpression indicating whether the site is
         a low coverage site, and the coverage model should be applied. Default is None.
     :param coverage_cutoff: Optional coverage cutoff. If specified, the coverage model
@@ -1798,7 +1800,9 @@ def apply_models(
     mu_expr: hl.expr.Float64Expression,
     plateau_models_expr: hl.expr.ArrayExpression,
     possible_variants_expr: hl.expr.Int64Expression,
-    coverage_model: Optional[Tuple[float, float]] = None,
+    coverage_model: Optional[
+        Union[Tuple[float, float], hl.expr.ArrayNumericExpression]
+    ] = None,
     coverage_expr: Optional[hl.expr.Int32Expression] = None,
     cpg_expr: Optional[hl.expr.BooleanExpression] = None,
     model_group_expr: Optional[hl.expr.StructExpression] = None,
@@ -1817,7 +1821,8 @@ def apply_models(
         slope]) or an array of plateau models.
     :param possible_variants_expr: Possible variant counts to multiply the
         predicted proportion observed by.
-    :param coverage_model: Tuple of (intercept, slope) of the coverage model.
+    :param coverage_model: Coverage model as ``[intercept, slope]``, either a tuple of
+        floats or an ArrayNumericExpression (as returned by ``build_models``).
         Default is None.
     :param coverage_expr: Int32Expression of the coverage. Required when
         ``coverage_model`` is provided or ``model_group_expr`` is None.

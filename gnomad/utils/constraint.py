@@ -2313,6 +2313,17 @@ def rank_and_assign_bins(
     Used by :func:`rank_array_element_metrics` to rank metrics within array
     elements.
 
+    .. note::
+
+        This function evaluates its input when it is called. It needs the number
+        of rows with a defined ``value_expr`` for the bin denominator, so it counts
+        them, and it caches the filtered and the ranked rows so the filter and the
+        sort are not recomputed. In Hail, ``Table.cache()`` ignores the storage
+        level and writes a checkpoint to a ``persist_Table*`` path under the
+        temporary directory set by ``hl.init(tmp_dir=...)``, so with a GCS
+        ``tmp_dir`` these Tables are written to GCS. They hold only ``value_expr``
+        and the key, and are not removed when the function returns.
+
     :param value_expr: Numeric expression to rank by (ascending).
     :param bin_granularities: Mapping of bin name to multiplier. Each entry
         produces a ``{prefix}bin_{name}`` field. Default is
@@ -2324,6 +2335,12 @@ def rank_and_assign_bins(
     """
     if bin_granularities is None:
         bin_granularities = {"percentile": 100, "decile": 10, "sextile": 6}
+
+    logger.warning(
+        "rank_and_assign_bins evaluates its input and checkpoints the ranked rows"
+        " to the Hail temporary directory (via .cache()); see the function's"
+        " docstring."
+    )
 
     ht = value_expr._indices.source
     source_key = list(ht.key)
@@ -2513,6 +2530,17 @@ def rank_array_element_metrics(
     comparing values against pre-computed boundaries rather than sorted
     position.
 
+    .. note::
+
+        This function evaluates its input when it is called. It caches the full
+        input Table (with an added row index) and the extracted metric values,
+        reads one row to get the array length, and each
+        :func:`rank_and_assign_bins` call it makes caches its own ranked rows.
+        Caching avoids recomputing ``ht`` and ``filter_fn`` for every metric, but
+        in Hail ``Table.cache()`` writes a checkpoint under the temporary directory
+        (see :func:`rank_and_assign_bins`), so this writes a copy of ``ht`` there.
+        The copies are not removed when the function returns.
+
     :param ht: Input Table.
     :param array_field: Name of the array field on ``ht``.
     :param element_value_fn: Function that takes an array element
@@ -2529,6 +2557,12 @@ def rank_array_element_metrics(
     :return: Table with ``{metric_name}_rank`` structs added to each array
         element. The table is returned with its original key restored.
     """
+    logger.warning(
+        "rank_array_element_metrics evaluates its input and checkpoints it, and the"
+        " ranked values, to the Hail temporary directory (via .cache()); see the"
+        " function's docstring."
+    )
+
     original_key = list(ht.key)
     ht = ht.add_index("_rank_idx").key_by("_rank_idx").cache()
 

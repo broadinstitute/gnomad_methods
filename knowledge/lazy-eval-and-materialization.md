@@ -74,21 +74,28 @@ upstream.
 
 ## cache vs persist vs checkpoint
 
-**`[Hail]` · Verified on Hail 0.2.134**
+**`[Hail]` · Verified on Hail 0.2.128, 0.2.134, and 0.2.139 (source)**
 
-| | what it is | survives executor loss | survives the session |
+`cache()` and `persist()` are **not** in-memory alternatives to a
+checkpoint. `Table.persist` never passes its storage level on, and the
+backend's `persist` (the Spark backend doesn't override it) calls
+`checkpoint()` on a `persist_Table*` path under `hl.tmp_dir()`.
+
+| | what it actually does | survives executor loss | deleted by |
 |---|---|---|---|
-| `ht.cache()` | alias for `persist("MEMORY_ONLY")` | no | no |
-| `ht.persist()` | Spark block storage, default `MEMORY_AND_DISK` | no | no |
-| `ht.checkpoint(path)` | `write()` + read back — a real on-disk table | yes | yes |
+| `ht.cache()` | `persist("MEMORY_ONLY")`, so the row below | if `tmp_dir` is durable (e.g. GCS) | `unpersist()` only |
+| `ht.persist(level)` | ignores `level`; checkpoints under `hl.tmp_dir()` | if `tmp_dir` is durable | `unpersist()` only |
+| `ht.checkpoint(path)` | `write()` + read back at `path` | yes | you (it's your path) |
 
-- **Small intermediate reused a few times in one session** → `cache()`.
-  Also load-bearing before a shuffle (next entry).
-- **Large intermediate, anything feeding a big shuffle, or anything
-  you'd hate to recompute** → `checkpoint("gs://…")`. Durable across
-  executor loss, and makes `count()` free.
-- **`persist()`** only when you specifically want `MEMORY_AND_DISK`
-  without paying a write.
+`tmp_dir` defaults to `/tmp` on the default filesystem; with
+`hl.init(tmp_dir="gs://…")` every `cache()` is a GCS write.
+
+- **All three cost a full write.** Pick `checkpoint(path)` when you want
+  to choose the location or reuse it across runs; `cache()` only saves
+  you naming a path.
+- **A library function that calls `.cache()` is checkpointing on the
+  caller's behalf**, into their `tmp_dir`, and nothing removes it when
+  the function returns unless it calls `unpersist()`.
 
 `checkpoint()` takes `_read_if_exists=True` — private, but an
 established gnomad_qc idiom (`_read_if_exists=not overwrite`) that lets
@@ -114,8 +121,9 @@ worse under executor churn.
 
 **Rule of thumb:** keep `.cache()` before shuffle-heavy ops even when the
 intermediate is used once; treat it as load-bearing, not decorative. For
-very large intermediates prefer `.checkpoint("gs://…")` (spills to GCS,
-survives executor loss) over in-memory `.cache()`.
+very large intermediates prefer `.checkpoint("gs://…")` over `.cache()`:
+both write, but `checkpoint` lets you pick a durable location, while
+`.cache()` lands in `hl.tmp_dir()` (see the previous entry).
 
 ---
 

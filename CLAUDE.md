@@ -225,10 +225,13 @@ def my_function(
   the result. Historical exceptions exist; don't add new ones. Checkpointing in
   particular is not free and is not yours to spend: a caller has no idea a
   library function is checkpointing on their behalf, so a checkpoint buried in a
-  utility quietly consumes their storage and compute. If a function genuinely
-  needs one — a table about to be joined several ways, or an expensive
-  computation that must be forced once — take a path or a flag from the caller
-  rather than deciding for them.
+  utility quietly consumes their storage and compute. `.cache()` and
+  `.persist()` count too: Hail ignores their storage level and checkpoints to
+  `hl.tmp_dir()` (see [cache vs persist vs
+  checkpoint](knowledge/lazy-eval-and-materialization.md#cache-vs-persist-vs-checkpoint)).
+  If a function genuinely needs one — a table about to be joined several ways,
+  or an expensive computation that must be forced once — take a path or a flag
+  from the caller rather than deciding for them.
 - **Lazy imports are the exception, not the rule.** Use top-level imports.
   Three cases justify an import inside a function, and they are all already
   present in the repo: resolving a circular import; an optional or heavy

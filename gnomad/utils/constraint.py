@@ -570,63 +570,6 @@ def count_observed_and_possible_by_group(
     return ht
 
 
-def get_downsampling_freq_indices(
-    freq_meta_expr: hl.expr.ArrayExpression,
-    gen_anc: str = "global",
-    variant_quality: str = "adj",
-    genetic_ancestry_label: Optional[str] = None,
-    subset: Optional[str] = None,
-    downsamplings: Optional[List[int]] = None,
-) -> hl.expr.ArrayExpression:
-    """
-    Get indices of dictionaries in meta dictionaries that only have the "downsampling" key with specified `genetic_ancestry_label` and "variant_quality" values.
-
-    :param freq_meta_expr: ArrayExpression containing the set of groupings for each
-        element of the `freq_expr` array (e.g., [{'group': 'adj'}, {'group': 'adj',
-        'gen_anc': 'nfe'}, {'downsampling': '5000', 'group': 'adj', 'gen_anc': 'global'}]).
-    :param gen_anc: Genetic ancestry group to use for filtering by the `genetic_ancestry_label` key in
-        `freq_meta_expr`. Default is 'global'.
-    :param variant_quality: Variant quality to use for filtering by the 'group' key in
-        `freq_meta_expr`. Default is 'adj'.
-    :param genetic_ancestry_label: Label defining the genetic ancestry groups. If None,
-        "gen_anc" or "gen_anc" is used (in that order of preference) if present. Default is
-        None.
-    :param subset: Subset to use for filtering by the 'subset' key in `freq_meta_expr`.
-        Default is None, which will return all downsampling indices without a 'subset'
-        key in `freq_meta_expr`.
-    :param downsamplings: Optional List of integers specifying what downsampling
-        indices to obtain. Default is None, which will return all downsampling indices.
-    :return: ArrayExpression of indices of dictionaries in `freq_meta_expr` that only
-        have the "downsampling" key with specified `genetic_ancestry_label` and
-        "variant_quality" values.
-    """
-    if genetic_ancestry_label is None:
-        gen_anc = ["gen_anc", "pop"]
-    else:
-        gen_anc = [genetic_ancestry_label]
-
-    def _get_filter_expr(m: hl.expr.StructExpression) -> hl.expr.BooleanExpression:
-        filter_expr = (
-            (m.get("group") == variant_quality)
-            & (hl.any([m.get(l, "") == gen_anc for l in gen_anc]))
-            & m.contains("downsampling")
-        )
-        if downsamplings is not None:
-            filter_expr &= hl.literal(downsamplings).contains(
-                hl.int(m.get("downsampling", "0"))
-            )
-        if subset is None:
-            filter_expr &= ~m.contains("subset")
-        else:
-            filter_expr &= m.get("subset", "") == subset
-        return filter_expr
-
-    indices = hl.enumerate(freq_meta_expr).filter(lambda f: _get_filter_expr(f[1]))
-
-    # Get an array of indices and meta dictionaries sorted by "downsampling" key.
-    return hl.sorted(indices, key=lambda f: hl.int(f[1]["downsampling"]))
-
-
 def explode_downsamplings_oe(
     ht: hl.Table,
     downsampling_meta: Dict[str, List[str]],

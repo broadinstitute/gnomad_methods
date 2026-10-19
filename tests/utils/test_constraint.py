@@ -9,6 +9,7 @@ from gnomad.utils.constraint import (
     _resolve_row_annotation_expr,
     aggregate_constraint_metrics_expr,
     annotate_bins_by_threshold,
+    annotate_exploded_vep_for_constraint_groupings,
     apply_models,
     apply_plateau_models,
     assemble_constraint_context_ht,
@@ -1769,4 +1770,74 @@ class TestRankArrayElementMetrics:
                 "arr",
                 element_value_fn=lambda e: {"v": e.v},
                 filter_fn=lambda t: False,
+            )
+
+
+class TestAnnotateExplodedVepForConstraintGroupings:
+    """Test the annotate_exploded_vep_for_constraint_groupings function."""
+
+    @pytest.fixture
+    def ht(self) -> hl.Table:
+        """Fixture for a one-variant Table with two VEP transcript consequences."""
+        csq_type = hl.tstruct(
+            most_severe_consequence=hl.tstr,
+            lof=hl.tstr,
+            polyphen_prediction=hl.tstr,
+            gene_symbol=hl.tstr,
+            gene_id=hl.tstr,
+            transcript_id=hl.tstr,
+            canonical=hl.tint32,
+            mane_select=hl.tstr,
+        )
+        csqs = [
+            hl.Struct(
+                most_severe_consequence="stop_gained",
+                lof="HC",
+                polyphen_prediction=None,
+                gene_symbol="GENE1",
+                gene_id="ENSG1",
+                transcript_id=t,
+                canonical=c,
+                mane_select=None,
+            )
+            for t, c in [("ENST1", 1), ("ENST2", None)]
+        ]
+        return hl.Table.parallelize(
+            [{"other": 7, "cov": 30, "vep": hl.Struct(transcript_consequences=csqs)}],
+            hl.tstruct(
+                other=hl.tint32,
+                cov=hl.tint32,
+                vep=hl.tstruct(transcript_consequences=hl.tarray(csq_type)),
+            ),
+        )
+
+    def test_replaces_vep_with_grouping_fields(self, ht: hl.Table) -> None:
+        """Test one row per transcript, with only grouping fields kept from VEP."""
+        result, groupings = annotate_exploded_vep_for_constraint_groupings(
+            ht, coverage_expr=ht.cov
+        )
+
+        assert set(groupings) == {
+            "annotation",
+            "modifier",
+            "gene",
+            "gene_id",
+            "coverage",
+            "transcript",
+            "canonical",
+        }
+        # The VEP struct and the temporary coverage field are dropped; others kept.
+        assert set(result.row) == {"other", "cov", *groupings}
+        rows = result.collect()
+        assert [(r.transcript, r.canonical) for r in rows] == [
+            ("ENST1", True),
+            ("ENST2", False),
+        ]
+        assert {(r.modifier, r.coverage, r.other) for r in rows} == {("HC", 30, 7)}
+
+    def test_requires_a_transcript_level_group(self, ht: hl.Table) -> None:
+        """Test that transcript_consequences needs canonical or MANE Select grouping."""
+        with pytest.raises(ValueError, match="include_canonical_group"):
+            annotate_exploded_vep_for_constraint_groupings(
+                ht, include_canonical_group=False, include_mane_select_group=False
             )

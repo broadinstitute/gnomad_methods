@@ -1632,6 +1632,13 @@ def annotate_exploded_vep_for_constraint_groupings(
 
         This function expects that a ``vep`` annotation is present in ``ht``.
 
+    .. note::
+
+        Only the grouping fields are kept from the VEP annotation. The returned
+        Table no longer has the ``vep`` annotation or the exploded
+        ``vep_annotation`` struct, which keeps per-variant tables built from it
+        small. All other fields of ``ht`` are kept.
+
     :param ht: Input Table.
     :param coverage_expr: Expression that defines the coverage metric. Default
         is None.
@@ -1645,7 +1652,9 @@ def annotate_exploded_vep_for_constraint_groupings(
     :param include_mane_select_group: Whether to include mane_select
         annotation in the groupings. Default is False. Ignored unless
         ``vep_annotation`` is ``"transcript_consequences"``.
-    :return: Tuple of (annotated Table, names of added grouping fields).
+    :return: Tuple of (Table with one row per element of ``vep_annotation`` and the
+        grouping fields added in place of the VEP annotation, names of the added
+        grouping fields).
     """
     # Annotate ht with coverage_expr set as a temporary annotation '_coverage_metric'
     # before modifying ht.

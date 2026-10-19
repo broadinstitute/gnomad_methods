@@ -2527,10 +2527,13 @@ def rank_array_element_metrics(
         )
     ).cache()
 
-    # Determine element count and metric names from a sample row.
-    sample = subset_ht.take(1)[0]._rank_values
-    n_elements = len(sample)
-    metric_names = list(sample[0])
+    # Metric names come from the type, but the array length is not part of the type,
+    # so the element count is taken from a sample row.
+    metric_names = list(subset_ht._rank_values.dtype.element_type.fields)
+    sample = subset_ht.take(1)
+    if not sample:
+        raise ValueError("No rows left to rank after applying 'filter_fn'.")
+    n_elements = len(sample[0]._rank_values)
 
     # Rank each metric within each array element.
     subset_ht = subset_ht.annotate(

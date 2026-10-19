@@ -1755,3 +1755,18 @@ class TestRankArrayElementMetrics:
         assert [r.arr[0].v_rank.rank for r in rows[:3]] == [0, 1, 2]
         assert [r.arr[1].v_rank.rank for r in rows[:3]] == [2, 1, 0]
         assert rows[3].arr[0].v_rank is None
+
+    def test_raises_when_filter_matches_no_rows(self) -> None:
+        """Test that an empty subset raises a clear error rather than an IndexError."""
+        ht = hl.Table.parallelize(
+            [{"id": 0, "arr": [{"v": 1.0}]}],
+            hl.tstruct(id=hl.tint32, arr=hl.tarray(hl.tstruct(v=hl.tfloat64))),
+            key="id",
+        )
+        with pytest.raises(ValueError, match="No rows left to rank"):
+            rank_array_element_metrics(
+                ht,
+                "arr",
+                element_value_fn=lambda e: {"v": e.v},
+                filter_fn=lambda t: False,
+            )

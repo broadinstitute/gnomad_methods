@@ -426,7 +426,7 @@ set as `hl.agg`.
 
 ---
 
-## There are no Python UDFs — a Python function in `.map()` runs once, at plan-build time
+## A Python function in `.map()` runs once, at plan-build time — not per row
 
 **`[Hail]` · Verified on Hail 0.2.134**
 
@@ -453,10 +453,90 @@ or silently captures a constant.
   math function library).
 - `hl.experimental.define_function(f, *param_types)` — packages an
   expression-returning function as a reusable Hail-native function.
-- Genuinely non-expressible per-row Python → restructure so the Python
-  runs on the driver over a *small* aggregate, or export and process
-  outside Hail. That's the "don't pull a large table to the driver"
-  problem; size it before you reach for it.
+- Genuinely non-expressible per-row Python → run it on the driver over a
+  *small* aggregate (size it first — that's the "don't pull a large table
+  to the driver" problem), or, for a large table, drop to Spark and run it
+  on the executors (next entry).
+
+---
+
+## Arbitrary Python per row at scale: drop to Spark and come back
+
+**`[Hail]` · Round trip verified locally on Hail 0.2.134; gotchas from production runs (cited)**
+
+When per-row work needs real Python — scoring with a pickled XGBoost model,
+parsing thousands of structure files with Biopython — and the table is too big
+for the driver, hand the rows to Spark, run the Python on the executors, and
+convert back. This needs Hail's Spark backend (Dataproc or local):
+`to_spark`, `from_spark`, and `hl.spark_context()` don't exist on
+Query-on-Batch.
+
+```python
+import pickle
+
+from pyspark.sql import Row
+from pyspark.sql.types import DoubleType, StringType, StructField, StructType
+
+spark = hl.utils.java.Env.spark_session()
+sc = hl.spark_context()
+
+# 1. Out of Hail: flat columns, and the locus as a string (to_spark() would
+#    split it into locus.contig / locus.position columns).
+ft = ht.key_by()
+ft = ft.select(locus_str=hl.str(ft.locus), **{c: ft[c] for c in features})
+ft.to_spark().write.mode("overwrite").parquet(in_path)
+df = spark.read.parquet(in_path)  # plain Spark DataFrame, no Hail lineage
+
+# 2. Python on the executors: broadcast the model once, then score each
+#    partition (batch its rows into a pandas frame for a vectorized predict).
+bc_model = sc.broadcast(pickle.dumps(model))
+
+
+def score_partition(rows):
+    m = pickle.loads(bc_model.value)
+    for r in rows:
+        x = [[r[c] for c in features]]
+        yield Row(locus_str=r.locus_str, score=float(m.predict_proba(x)[0, 1]))
+
+
+schema = StructType(
+    [StructField("locus_str", StringType()), StructField("score", DoubleType())]
+)
+scored_df = spark.createDataFrame(df.rdd.mapPartitions(score_partition), schema)
+scored_df.write.mode("overwrite").parquet(out_path)
+
+# 3. Back into Hail.
+scored = hl.Table.from_spark(spark.read.parquet(out_path))
+scored = scored.annotate(
+    locus=hl.parse_locus(scored.locus_str, reference_genome="GRCh38")
+)
+scored = scored.key_by("locus").drop("locus_str")
+```
+
+**Starting from files instead of rows:** `spark.read.format("text").load(glob,
+wholetext=True)` gives one row per file, with the path in
+`_metadata.file_path`. Parse each file in a pandas UDF or `mapPartitions`, then
+take the same parquet + `from_spark` step back. ProEmis3D built its AlphaFold2
+sequence, distance-matrix, pLDDT, and pAE tables this way (gnomad-constraint
+`experimental/proemis3d/utils.py`, `process_af2_structures`).
+
+**Gotchas:**
+- **Write parquet on both sides.** Working directly on the Hail-backed
+  DataFrame that `to_spark()` returns "can hang" (gnomad-3d-missense-constraint
+  `mpc3d/model/score.py`). On the way back, `from_spark` without an
+  intermediate parquet write "sometimes has missing and/or duplicate rows"
+  (`gnomad/variant_qc/random_forest.py`).
+- **Packages must be on the workers.** Install them at cluster start with
+  `--packages`; a driver-side `pip install` never reaches the executors. See
+  [Dataproc / operational](dataproc-operational.md#dataproc--operational).
+- **Local runs: pin the workers' Python.** Spark starts executors with the
+  `python3` on `PATH`; if that isn't the driver's interpreter the job fails with
+  `PYTHON_VERSION_MISMATCH`. Set `PYSPARK_PYTHON` to the driver's Python before
+  starting. (On Dataproc every node shares one Python.)
+- **Partition count sets the per-task overhead.** Each task unpickles the model
+  once, so many tiny partitions spend their time loading it and a few huge ones
+  run out of memory. Batch rows within a partition rather than converting a
+  whole partition to pandas at once.
 
 ---
 

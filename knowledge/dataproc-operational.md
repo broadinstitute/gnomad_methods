@@ -243,6 +243,10 @@ parquet and re-read it before `hl.Table.from_spark` — without the
 intermediate write the resulting HT "sometimes has missing and/or
 duplicate rows."
 
+For a model Spark ML doesn't have (XGBoost, or anything you pickle), score
+it in a broadcast `mapPartitions` instead — see the "drop to Spark and come
+back" entry in [Hail idioms](hail-idioms.md#hail-idioms).
+
 ---
 
 ## Use `gcloud storage`, not `gsutil`

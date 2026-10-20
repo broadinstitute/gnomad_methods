@@ -31,7 +31,7 @@ Load only the one you need — that's the point of the split.
 | sub-doc | consult it when |
 |---|---|
 | [Missingness](missingness.md) | you touch a nullable field, a `hl.case` / `hl.if_else`, a `group_by` on a derived key, or a max/min over floats that could be NaN — or a total comes out smaller than expected with no error, which is usually a null drop |
-| [Hail idioms](hail-idioms.md) | you rebind `ht`, build a big literal or many-branch expression, join with `ht[key]`, sort with `order_by`, use scans, reach for a Python UDF, or call an `hl.experimental` numeric kernel |
+| [Hail idioms](hail-idioms.md) | you rebind `ht`, build a big literal or many-branch expression, join with `ht[key]`, sort with `order_by`, use scans, pass a Python function to `.map()` or need real Python per row, or call an `hl.experimental` numeric kernel |
 | [Lazy evaluation and materialization](lazy-eval-and-materialization.md) | you add a logging `.count()`, or you're choosing between `cache` / `persist` / `checkpoint` |
 | [Partitioning, shuffles, and OOM](partitioning-shuffles-oom.md) | a job dies in a shuffle, you're about to `repartition`, or you want to know what shuffles in the first place |
 | [Hidden and undocumented APIs](hidden-apis.md) | you meet an underscore-prefixed Hail parameter in gnomad_qc, or want the `hl.experimental` helpers we use |

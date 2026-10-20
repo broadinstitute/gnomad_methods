@@ -94,8 +94,8 @@ of partitions.
 - Local: `hl.literal(<~730k-element set>)` in a unit test hung the JVM
   for minutes before returning — no error, no progress bar, just CPU.
   Bigger sets OOM the driver.
-- Dataproc: an `hl.literal(<PBT-index-set>)` embedded in a per-pair
-  count expression got replicated into every count task and killed the
+- Dataproc: an `hl.literal(<set of sample indices>)` embedded in a
+  per-row count expression got replicated into every task and killed the
   job at task-scheduling time with a serialized-task-too-big error.
 
 **Fix pattern:** keep the large collection in the *data plane* (a
@@ -104,16 +104,16 @@ Table you join or semi-join against), not the *code plane*.
 ```python
 # BAD: literal in a row-scoped expression → replicated to every task
 mt = mt.annotate_rows(
-    is_pbt=hl.literal(pbt_index_set).contains(mt.sample_idx)
+    in_set=hl.literal(sample_index_set).contains(mt.sample_idx)
 )
 
 # GOOD: put it in a Table, join once, checkpoint if the set is big
-pbt_ht = hl.Table.parallelize(
-    [{"sample_idx": s} for s in pbt_index_set],
+set_ht = hl.Table.parallelize(
+    [{"sample_idx": s} for s in sample_index_set],
     hl.tstruct(sample_idx=hl.tint32),
     key="sample_idx",
 )
-mt = mt.annotate_rows(is_pbt=hl.is_defined(pbt_ht[mt.sample_idx]))
+mt = mt.annotate_rows(in_set=hl.is_defined(set_ht[mt.sample_idx]))
 ```
 
 If you *must* use `hl.literal` for a large set (small keep-set, one-off
@@ -365,8 +365,8 @@ left.annotate(x=right[left.k].x)                           # k=1 -> "a" only
 left.annotate(xs=right.index(left.k, all_matches=True).x)  # k=1 -> ["a", "b"]
 ```
 
-**Symptom:** counts a little low with no error. A variant-to-pairs map with
-39 duplicated keys silently dropped 45 CAPN3 pairs.
+**Symptom:** counts a little low with no error. A lookup table with 39
+duplicated keys silently dropped 45 rows from a downstream count.
 
 **Rule of thumb:** before relying on a lookup, check that the right side's key
 is unique (`other.distinct().count() == other.count()`), or use
@@ -548,14 +548,14 @@ scored = scored.key_by("locus").drop("locus_str")
 **Starting from files instead of rows:** `spark.read.format("text").load(glob,
 wholetext=True)` gives one row per file, with the path in
 `_metadata.file_path`. Parse each file in a pandas UDF or `mapPartitions`, then
-take the same parquet + `from_spark` step back. ProEmis3D built its AlphaFold2
-sequence, distance-matrix, pLDDT, and pAE tables this way (gnomad-constraint
-`experimental/proemis3d/utils.py`, `process_af2_structures`).
+take the same parquet + `from_spark` step back. This is how per-protein
+sequence, distance-matrix, pLDDT, and pAE tables were built from thousands of
+AlphaFold2 structure files.
 
 **Gotchas:**
 - **Write parquet on both sides.** Working directly on the Hail-backed
-  DataFrame that `to_spark()` returns "can hang" (gnomad-3d-missense-constraint
-  `mpc3d/model/score.py`). On the way back, `from_spark` without an
+  DataFrame that `to_spark()` returns can hang (seen in production scoring
+  runs). On the way back, `from_spark` without an
   intermediate parquet write "sometimes has missing and/or duplicate rows"
   (`gnomad/variant_qc/random_forest.py`).
 - **Packages must be on the workers, and `--packages` doesn't put them

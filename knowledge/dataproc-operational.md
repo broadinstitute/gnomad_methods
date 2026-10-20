@@ -147,7 +147,7 @@ set -e
 hailctl dataproc start CLUSTER --init=gs://<bucket>/install_xgboost.sh
 ```
 
-Two details from the MPC-3D pipeline, which scores this way:
+Two details that matter in practice:
 `--no-deps` matters (a full install pulls in newer scipy and setuptools that
 break Hail), and the script has to live in a bucket that **isn't
 requester-pays**, because init actions download before the GCS connector has a

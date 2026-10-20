@@ -23,7 +23,7 @@ filters = {
 **Consequence:** `filters.length() == 0` drops both fail-QC AND
 AC0-in-release variants together. For trio-side analyses (or any
 analysis that legitimately wants variants carried only by non-release
-samples), this silently loses a large fraction of pairs.
+samples), this silently loses a large fraction of variants.
 
 **Correct patterns:**
 - **Pure release-side analysis** (variant needs a release AC>0 to be
@@ -74,9 +74,8 @@ tag is defined against different cohorts**:
   "no release-sample carrier."
 - **`all_variants.only_filters.ht`**: `AC0` appears to be defined against
   a wider joint-genotyping cohort, so it effectively never fires on real
-  variants. Empirically, applying its filter check to a 682k-pair trio
-  substrate classified 100% of pair endpoints as `filters={}` — no
-  `AC0`-tagged variants at all.
+  variants. Empirically, checked against a large set of trio-observed
+  variants, every one came back `filters={}` — no `AC0` tags at all.
 
 **Rule of thumb:**
 - Use `only_filters.ht` when you want *global* QC status (does this
@@ -144,9 +143,9 @@ Consequence:
 
 Whenever your analysis spans releasable and non-releasable samples
 (trios where some members are non-release, external cohorts joined to
-gnomAD, family sub-sets), you'll see this gap. It commonly manifests as
-a large fraction of trio-truth pairs with null AC/AF because at least
-one endpoint is a "trio-only variant" absent from release annotations.
+gnomAD, family sub-sets), you'll see this gap. It commonly shows up as a
+large fraction of trio-derived variants with null AC/AF, because they're
+"trio-only" variants absent from the release annotations.
 
 **Rule of thumb:** for any analysis touching non-release samples, use
 the permissive filter path (`only_filters.ht` + AC0-allowed check)
@@ -181,21 +180,24 @@ well-covered site is informative; absence at a poorly-covered one is not.
 
 **`[gnomAD data]`**
 
-An annotation join graph like `variant_filter_ht → sites_ht →
-annotated_phase_ht` may not have identical row coverage between steps:
-- `variant_filter_ht` may include tags for variants absent from
-  `sites_ht`
-- `sites_ht` may drop AC0 variants that `only_filters.ht` retains
-- `vep_ht` and `freq_ht` are typically joint-call-scoped (broader) but
-  `sites_ht` is release-scoped (narrower)
+A chain of joins across gnomAD tables — say a variant tag or filter
+table, then the release sites table, then your own annotated table — may
+not have the same rows at each step:
+- a tag or filter table may cover variants absent from the release sites
+  table
+- the release sites table drops AC0 variants that `only_filters.ht`
+  retains
+- the VEP and frequency tables are typically joint-call-scoped (broader),
+  while the release sites table is release-scoped (narrower)
 
-A downstream function that reads a `v_ann` struct may find:
-- `v_ann.source` defined (from `variant_filter_ht`)
-- `v_ann.ac` null (variant absent from release `sites_ht`)
-- `v_ann.vep` defined or null depending on `vep_ht` scope
+So an annotation struct built from those lookups (`ann` below) can be
+partly filled in:
+- `ann.source` defined (from the tag table)
+- `ann.ac` null (variant absent from the release sites table)
+- `ann.vep` defined or null depending on the VEP table's scope
 
 **Always check field-level nullability, not just struct-level.**
-`hl.is_defined(v_ann)` does NOT guarantee `hl.is_defined(v_ann.ac)`.
+`hl.is_defined(ann)` does NOT guarantee `hl.is_defined(ann.ac)`.
 
 ---
 

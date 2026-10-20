@@ -124,10 +124,9 @@ propose an entry. It should be:
 - **Silent-fail bugs** — the wrong pattern produces a plausible answer.
   Fixing these silently improves any analysis that would have hit them.
 - **Design-choice tradeoffs** — e.g. "canonical vs MANE Select
-  transcript picking, and when each is right"; "per-population EM vs
-  full-cohort EM"; "when to drop OE-candidate × candidate pairs vs keep
-  them." Documenting these lets a future analysis start with the right
-  default.
+  transcript picking, and when each is right"; "per-population vs
+  full-cohort estimates"; "release-only vs trio-inclusive variant sets."
+  Documenting these lets a future analysis start with the right default.
 - **Hidden-in-code facts** — things about HT schemas, path
   conventions, filter definitions, or upstream pipeline behavior that
   aren't apparent without reading the source. Reduces "why does this

@@ -28,7 +28,7 @@ hl.case()
 ```
 returns null when `cv` is defined but `cv.is_plp` is null (edge case:
 partial struct). Whole case → null → dropped from group_by. Symptom:
-~184k trio-truth pairs missing from a stratification table with no error.
+~184k rows missing from a stratification table with no error.
 
 **Fix:** `hl.case(missing_false=True)` — treats null conditions as False,
 falling through to the default. Same fix applies to
@@ -48,19 +48,19 @@ falling through to the default. Same fix applies to
 Unlike SQL COALESCE or Python's ternary, Hail's `hl.if_else` propagates
 null when the condition is null:
 ```python
-is_v1_rarer = ht.v1_ann.ac <= ht.v2_ann.ac  # null if either .ac is null
-rarer_ac = hl.if_else(is_v1_rarer, ht.v1_ann.ac, ht.v2_ann.ac)  # → null!
+a_is_rarer = ht.a.ac <= ht.b.ac                      # null if either .ac is null
+rarer_ac = hl.if_else(a_is_rarer, ht.a.ac, ht.b.ac)  # → null!
 ```
 
-If a downstream analysis expects `rarer_ac` to hold *one of* v1 or v2
-(like a min), you get all-nulls when either input is null. Mysteriously
-empty buckets in stratifications.
+If a downstream analysis expects `rarer_ac` to hold *one of* the two
+values (like a min), you get nulls whenever either input is null.
+Mysteriously empty buckets in stratifications.
 
 **Fixes:**
-- `hl.coalesce(v1.ac, v2.ac)` — if you just want first-defined.
+- `hl.coalesce(ht.a.ac, ht.b.ac)` — if you just want first-defined.
 - `hl.if_else(cond, ..., ..., missing_false=True)` — treat null
   condition as False.
-- Coalesce inputs before the comparison: `hl.or_else(ht.v1_ann.ac, ...)`.
+- Coalesce inputs before the comparison: `hl.or_else(ht.a.ac, ...)`.
 
 ---
 
@@ -109,8 +109,8 @@ These null returns propagate. In a `filter()`, null → row dropped. In an
 
 **Defensive pattern for potentially-null Set / Array fields:**
 ```python
-source = hl.or_else(ht.v1_ann.source, hl.empty_set(hl.tstr))
-gene_id = hl.or_else(ht.v1_ann.gene_id, hl.empty_array(hl.tstr))
+source = hl.or_else(ht.ann.source, hl.empty_set(hl.tstr))
+gene_id = hl.or_else(ht.ann.gene_id, hl.empty_array(hl.tstr))
 ```
 
 ---

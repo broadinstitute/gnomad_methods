@@ -10,23 +10,21 @@ row set is fully determined by the input HT's row set. Choice of the
 starting HT (the "anchor") determines the outer bound on what downstream
 code can see.
 
-**Two concrete instances** where this trap fires in the variant-
-cooccurrence pipeline:
+**Two ways this bites:**
 
-1. **`assemble_sites_ht`** starts with `ht = vep_ht.select("vep")` —
-   anchoring on `vep_ht`. If a variant is in the filter HT but missing
-   from vep_ht, it's gone before any `.filter()` runs. Swapping the
-   filter for something more permissive doesn't help.
+1. **The anchor drops rows before any filter runs.** A sites table built
+   by starting from the VEP table (`vep_ht.select("vep")`) and joining the
+   filters onto it loses every variant that's in the filter table but
+   missing from the VEP table — before any `.filter()` runs. Loosening the
+   filter can't bring those variants back.
 
-2. **`annotate_phased_ht_with_sites`** takes a `phased_ht` and adds
-   `v1_ann`/`v2_ann` per-endpoint via sites-HT lookup. The output's
-   row set is `phased_ht`'s row set. If you swap in a more permissive
-   sites HT but leave `phased_ht` pointing at a release-scoped table,
-   trio-only pairs (absent from the release phased HT) still get no
-   annotation row — they get null `v_ann` on the downstream left-join
-   from consumers. The fix isn't in the sites HT, it's in what you pass
-   as `phased_ht`. Anchor on the trio-comparison HT if you want trio-
-   only pairs annotated.
+2. **A more permissive lookup table doesn't add rows.** Annotating a
+   release-scoped table by looking up a more permissive one (say, one that
+   also covers trio-only variants) still yields only the release-scoped
+   rows. The trio-only rows were never in the anchor, so downstream
+   left-joins see them as missing. The fix is to change the anchor — start
+   from the table that contains the rows you want — not the lookup
+   table.
 
 **Symptom of getting this wrong:** you build a "permissive" annotation
 path and downstream aggregations produce bit-identical output to the
@@ -36,9 +34,9 @@ set never grew.
 **Rule of thumb:** anchor on the widest-coverage table for the
 semantics you want. Join everything else with nullability tolerance
 downstream. When you have both a "release" and a "trio-inclusive"
-consumer, you likely need two annotated HTs — one anchored on the
-release pair space, one on the trio comparison. Document the anchor
-choice in the function docstring so callers can predict what's missing.
+consumer, you likely need two annotated HTs, one anchored on each row
+set. Document the anchor choice in the function docstring so callers can
+predict what's missing.
 
 ---
 
@@ -103,11 +101,11 @@ transcript first, then take that transcript's score.
 **`[Hail]` + `[gnomAD data]`**
 
 A `hl.case().default("missing_af")` (or `"unknown"`, `"other"`, etc.) is
-a *catch-all* for pairs that didn't match any preceding `.when()`. It
+a *catch-all* for rows that didn't match any preceding `.when()`. It
 does **not** mean "the AF value was null" — it means "the AF didn't fit
 any of the buckets you defined."
 
-Concrete failure mode from a session:
+A concrete failure:
 
 ```python
 AF_BUCKETS = [
@@ -121,13 +119,12 @@ AF_BUCKETS = [
 case.default("missing_af")
 ```
 
-If the analysis populates the pair list from a dataset that includes
-higher-AF variants (e.g., OE-candidate expansion up to AF 0.5), those
-common variants land in `missing_af` — same bucket as genuinely null-AF
-variants. The label is misleading. We saw a session where 438k of 682k
-trio pairs (64%) landed in `missing_af` and were interpreted as "AC0
-coverage gap" — actually they were common-AF variants overflowing Guo
-2024's rare-focused bucket range.
+If the input includes higher-AF variants than the buckets were designed
+for (e.g. a candidate list expanded up to AF 0.5), those common variants
+land in `missing_af` — the same bucket as genuinely null-AF variants. The
+label is misleading: in one analysis, 64% of the inputs landed there and
+were read as a coverage gap, when they were common variants above the
+ceiling of a rare-variant binning scheme.
 
 **Rule of thumb:**
 - Name catch-all default buckets by what they *catch* ("out_of_range",
@@ -143,7 +140,7 @@ coverage gap" — actually they were common-AF variants overflowing Guo
   return case.default("out_of_range")
   ```
 
-**Symptom:** a large fraction of your pairs end up in the default
+**Symptom:** a large fraction of your rows end up in the default
 bucket, and interpreting the fraction as a coverage / annotation-scope
 issue leads you down a rabbit hole that's actually about bucket-range
 design.
@@ -244,18 +241,13 @@ stratum in a single pass. Two payoffs:
    ~by the group's cohort fraction, so the co-partition / join shuffle is
    a fraction of the full-cohort size.
 
-Derive the `"all"` stratum as the **element-wise sum over strata** (v2's
-fold-sum), valid when the strata partition the cohort (every sample has a
+Derive the `"all"` stratum as the **element-wise sum over strata**, valid when the strata partition the cohort (every sample has a
 group label); don't run a separate full-cohort pass for it.
 
 **Tradeoff:** K passes instead of 1. But each pass is smaller *and it
 actually completes at K≥3*, where the one-pass form both blows codegen and
 shuffles the full-cohort sets. For a handful of strata this is a clear win;
 for hundreds of tiny strata, reconsider (per-pass fixed overhead adds up).
-
-**Where this lives:** the variant-cooccurrence per-population counts
-(`compute_counts_by_pop`: `restrict_encoded_to_pops` per group → flat
-count → assemble; `"all"` = sum over groups).
 
 ---
 

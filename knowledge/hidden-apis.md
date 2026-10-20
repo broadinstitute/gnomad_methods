@@ -61,7 +61,7 @@ you verified `_with_flags` on, use `try` / `finally` rather than a bare pair.
 `shuffle_cutoff_to_local_sort` and `shuffle_max_branch_factor`.
 
 **When `use_new_shuffle` earns its keep** — *`[gnomAD data]` · anecdotal,
-from the v4 variant-pair-list work*: it selects Hail's own shuffler over
+from a genome-wide v4 job*: it selects Hail's own shuffler over
 Spark's. On a mostly-preemptible fleet, Spark keeps shuffle blocks on
 executor-local disk, so a reclaimed worker takes its blocks with it and the
 stage dies with `FetchFailedException` — the failure that no partition

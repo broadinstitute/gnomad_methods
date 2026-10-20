@@ -197,7 +197,7 @@ problem. Signature, from the driver log: `FetchFailed` /
 `ExecutorLostFailure`, with large counts of `Container from a bad node`,
 ending in a stage-retry abort — and no `OutOfMemoryError` anywhere.
 
-What worked on the v4 variant-pair-list step, after the genome-wide pass
+What worked on a genome-wide v4 job with a large shuffle, after the full pass
 failed repeatedly: **shard the job by chromosome** and run each shard on
 its own smaller cluster with fewer preemptible workers. Tuning executor
 memory did not help, because memory was never the problem.

@@ -187,9 +187,7 @@ autosomes and PAR, `2·XX + XY` on chrX non-PAR, and `XY` on chrY non-PAR. A
 percentage computed against `2·N` caps a fully covered chrX non-PAR site at
 about 75% (with roughly equal numbers of XX and XY samples), so a 90% floor
 silently drops every X-linked region. The per-sex sample counts are in the AN
-table's `strata_sample_count` global, indexed by its `strata_meta`;
-gnomad-constraint's per-base branch computes its AN-percent coverage metric
-this way.
+table's `strata_sample_count` global, indexed by its `strata_meta`.
 
 ---
 

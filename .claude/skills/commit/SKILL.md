@@ -44,6 +44,8 @@ If a non-autofixable hook fails (e.g. pydocstyle, check-yaml), stop and surface 
 
 Run `git diff --staged` and read the full diff. Look for anything that shouldn't be there: debug prints, commented-out code, unintended files, or anything that looks like a secret. If something looks wrong, stop and tell the user before proceeding.
 
+**Check for tests.** Any new or modified function needs a test (see Testing in `CLAUDE.md`). If the staged diff adds or changes code under `gnomad/` but stages nothing under `tests/`, tell the user which functions look untested and ask whether to add tests before committing. Don't block on it: the tests may be in another commit on the branch, or the change may not alter behavior (docs, formatting, a rename).
+
 ### 4. Read recent commit style
 
 Run `git log --oneline -10` to understand the repo's commit message convention (capitalization, prefix style, length, etc.).

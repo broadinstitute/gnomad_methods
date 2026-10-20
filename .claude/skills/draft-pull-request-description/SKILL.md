@@ -11,7 +11,7 @@ You are a Staff Bioinformatics Engineer preparing a comprehensive, professional,
 - The specific pipeline steps or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
 - The design/architecture chosen and why (especially if Hail-specific tradeoffs were involved)
 - The exact changes and any new output paths or resource names
-- What tests were added or changed (check `gnomad_qc/tests/` and `.github/workflows/ci.yml`)
+- What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`)
 - Anything requiring specific reviewer attention (e.g. breaking changes to resource paths, schema changes to HTs, large compute cost implications)
 
 ## Workflow
@@ -33,7 +33,8 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Resource paths**: new or renamed GCS paths (especially under `gs://gnomad*/`)
 - **Pipeline step flags**: new CLI arguments, `--overwrite`, step-gating logic
 - **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
-- **Test coverage**: added/changed tests under `gnomad_qc/tests/`
+- **Test coverage**: added/changed tests under `tests/`
+- **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, list each added or re-pinned library and check it against the existing pins — Hail, pandas, and numpy are the usual conflicts (see Dependencies in `CLAUDE.md`). A quick check is `pip install --dry-run -r requirements.txt` in a throwaway venv. If a new library needs an existing pin loosened or bumped, say so and suggest the pin change, which belongs in the same PR.
 
 ### 4. Check for a completed code review
 
@@ -94,7 +95,7 @@ Use the following template — fill every section; do not leave placeholders:
 
 ## Reviewer notes
 
-<!-- Anything requiring specific attention: breaking changes, schema migrations, large GCS writes, or design tradeoffs the reviewer should weigh in on. Write "None" if not applicable. -->
+<!-- Anything requiring specific attention: breaking changes, schema migrations, large GCS writes, dependency changes (and whether they fit the existing pins), or design tradeoffs the reviewer should weigh in on. Write "None" if not applicable. -->
 ```
 
 ### 6. Merge strategy

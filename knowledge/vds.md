@@ -103,7 +103,7 @@ re-reading the warning log.
 
 ## Split a VDS by columns, not `hl.vds.filter_samples`, if you'll rejoin/densify
 
-**`[gnomAD data]` · `[internal only]` · Applies to:** v4 (the release VDS is split into UKB / non-UKB
+**`[gnomAD data]` · `[internal: research]` · Applies to:** v4 (the release VDS is split into UKB / non-UKB
 cohorts for size; any analysis that subsets VDS samples with intent to
 recombine).
 

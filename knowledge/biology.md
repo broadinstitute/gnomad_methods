@@ -111,7 +111,7 @@ two chromosomes were inferred the same way.
 
 ## Trio / family / relatedness gotchas
 
-**`[gnomAD data]` · `[internal only]`**
+**`[gnomAD data]` · `[internal: research]`**
 
 - **PBT ∩ release is a small subset.** Many trio members in gnomAD v4
   are non-releasable, so the intersection between PBT trios and release

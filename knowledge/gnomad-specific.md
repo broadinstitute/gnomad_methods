@@ -41,7 +41,7 @@ much larger than expected.
 
 ## `only_filters.ht` (all-variants) exists
 
-**`[gnomAD data]` · `[internal only]`**
+**`[gnomAD data]` · `[internal: production]`**
 
 Alongside the release-scoped `final_filter.ht` there is an
 **all-variants** sibling — same directory, `…final_filter.all_variants.only_filters.ht`
@@ -64,7 +64,7 @@ Genomes counterpart at the analogous path.
 
 ## `only_filters.ht` and release `final_filter.ht` are NOT interchangeable for AC0 semantics
 
-**`[gnomAD data]` · `[internal only]`**
+**`[gnomAD data]` · `[internal: production]`**
 
 Both HTs have the same `filters: Set[String]` schema. But their **`AC0`
 tag is defined against different cohorts**:
@@ -131,7 +131,7 @@ documents the released HT schemas and this access pattern (source:
 
 ## Sample releasability skews annotation coverage
 
-**`[gnomAD data]` · `[internal only]` · Applies to:** v4 (multi-cohort release model; less relevant in v2).
+**`[gnomAD data]` · `[internal: production]` · `[internal: research]` · Applies to:** v4 (multi-cohort release model; less relevant in v2).
 
 gnomAD joint-calls variants across ALL samples (releasable +
 non-releasable) but the release freq HT only counts releasable samples.
@@ -201,7 +201,7 @@ A downstream function that reads a `v_ann` struct may find:
 
 ## Identifying UKB samples in v4: `s.startswith("UKB")` vs `project_meta.ukb_sample`
 
-**`[gnomAD data]` · `[internal only]` · Applies to:** v4 exomes. Any analysis that subsets or removes the UKB
+**`[gnomAD data]` · `[internal: production]` · `[internal: research]` · Applies to:** v4 exomes. Any analysis that subsets or removes the UKB
 cohort.
 
 The authoritative UKB flag is `meta().project_meta.ukb_sample` (defined as

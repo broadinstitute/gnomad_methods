@@ -301,7 +301,7 @@ attributes it per job. Against that, a shared service means you don't
 control the machine shape the way `--master-machine-type` lets you (see
 the driver-sizing entry above).
 
-**`[internal only]`** — the operating guidance for this group is to
+**`[internal: production]` · `[internal: research]`** — the operating guidance for this group is to
 prefer QoB where it works, and to raise cases where it doesn't with the
 Hail team rather than quietly falling back to Dataproc.
 

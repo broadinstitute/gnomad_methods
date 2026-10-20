@@ -1,7 +1,9 @@
 # gnomAD & Hail reference — institutional knowledge
 
-Reference doc for anyone — AI or human — working with gnomAD data + Hail.
-Contents range across:
+Reference doc for anyone — AI or human — working with gnomAD data + Hail,
+maintained by the gnomAD methods group. It captures the kind of knowledge
+that usually only gets learned by running into the problem, or by being
+told by someone who already did:
 
 - Classes of bug that **produce plausible-looking wrong output rather
   than crashes** (the original motivation — silent-fail traps).
@@ -9,12 +11,14 @@ Contents range across:
   prefer one pattern over another, tradeoffs that aren't obvious from
   the code.
 - **Useful-but-hidden facts** about the datasets, HT schemas, and
-  cross-repo conventions — the kind of thing that's known to the
-  methods group by folklore but not easy to find from source.
+  cross-repo conventions — known to the methods group by folklore but
+  not easy to find from source.
 
-Prefer the listed patterns and considerations when writing new analysis
-code, and use the symptoms + design notes as a checklist when
-scoping or debugging.
+Consult it before you touch gnomAD annotation tables, write Hail
+aggregations, filter by QC status, assume coverage carries over between
+HTs, or choose between two reasonable-sounding approaches. Prefer the
+listed patterns when writing new code, and use the symptoms and design
+notes as a checklist when scoping or debugging.
 
 ---
 
@@ -22,50 +26,52 @@ scoping or debugging.
 
 Load only the one you need — that's the point of the split.
 
+**Hail behavior**
+
 | sub-doc | consult it when |
 |---|---|
-| [Missingness](missingness.md) | you touch a nullable field, a `hl.case` / `hl.if_else`, a `group_by` on a derived key, or a max/min over floats that could be NaN |
-| [Hail idioms](hail-idioms.md) | you rebind `ht`, build a big literal or many-branch expression, join with `ht[key]`, sort with `order_by`, use scans, or reach for a Python UDF |
+| [Missingness](missingness.md) | you touch a nullable field, a `hl.case` / `hl.if_else`, a `group_by` on a derived key, or a max/min over floats that could be NaN — or a total comes out smaller than expected with no error, which is usually a null drop |
+| [Hail idioms](hail-idioms.md) | you rebind `ht`, build a big literal or many-branch expression, join with `ht[key]`, sort with `order_by`, use scans, reach for a Python UDF, or call an `hl.experimental` numeric kernel |
 | [Lazy evaluation and materialization](lazy-eval-and-materialization.md) | you add a logging `.count()`, or you're choosing between `cache` / `persist` / `checkpoint` |
 | [Partitioning, shuffles, and OOM](partitioning-shuffles-oom.md) | a job dies in a shuffle, you're about to `repartition`, or you want to know what shuffles in the first place |
 | [Hidden and undocumented APIs](hidden-apis.md) | you meet an underscore-prefixed Hail parameter in gnomad_qc, or want the `hl.experimental` helpers we use |
-| [gnomAD-specific](gnomad-specific.md) | you filter variants, index into `freq`, or cross HTs with different variant sets |
 | [VDS](vds.md) | you subset or densify a VDS, or you're choosing between Table / MatrixTable / VDS |
+
+**gnomAD data**
+
+| sub-doc | consult it when |
+|---|---|
+| [gnomAD-specific](gnomad-specific.md) | you filter variants, index into `freq`, cross HTs with different variant sets, touch non-release samples, or densify the v4 VDS and classify genotypes |
 | [Biology](biology.md) | reference builds, multiallelics, sex chromosomes, trios, AC/AF null semantics, or what QUAL and LOFTEE do and don't tell you |
 | [Release conventions and data policy](dataset-conventions.md) | you wonder why the data is shaped the way it is — annotation versions, subsets, constraint cutoffs across releases, labels, requester-pays |
-| [Codebase and analysis patterns](analysis-patterns.md) | you pick a starting table, a VEP transcript, a bucket scheme, or a per-stratum aggregation |
-| [Dataproc / operational](dataproc-operational.md) | you run, size, package, or post-mortem a job on Dataproc or QoB, or you're wondering why storage costs what it does |
+| [Codebase and analysis patterns](analysis-patterns.md) | you pick a starting table, a VEP transcript, a bucket scheme, or a per-stratum aggregation, or read an HT whose filter provenance is unclear |
+
+**Running the work**
+
+| sub-doc | consult it when |
+|---|---|
+| [Dataproc / operational](dataproc-operational.md) | you run, size, package, or post-mortem a job on Dataproc or QoB — especially one that died with no Python traceback — or you're wondering why storage costs what it does |
 | [Testing](testing.md) | after any refactor of the join graph or aggregation semantics, and before you pay for a cluster run |
 | [Working with an AI assistant](working-with-ai.md) | you're setting up `CLAUDE.md` / `CLAUDE.local.md`, or wondering what's burning tokens and cluster time |
 
-
 Entries are tagged **`[Hail]`** (universal Hail behavior) and/or
-**`[gnomAD data]`** (dataset- or schema-specific). Entries tagged
-**`[internal only]`** describe data or artifacts available only to the
-internal production team — unreleasable samples, the pre-release VDS,
-internal QC tables. Everything untagged that way applies to anyone
-working with released gnomAD data.
+**`[gnomAD data]`** (dataset- or schema-specific). Entries that only the
+internal team can use also carry one or both of:
+
+- **`[internal: production]`** — relies on QC outputs or production
+  pipeline artifacts (variant-QC filter HTs, sample-QC metadata).
+- **`[internal: research]`** — relies on internal data but not on QC
+  outputs (the full VDS, non-releasable samples).
+
+Everything without an internal tag applies to anyone working with
+released gnomAD data. Internal code spans two repos that
+depend on each other — `gnomad_qc` imports `gnomad_methods` — so check a
+change to one against the other; see "Check every change against
+`gnomad_qc`" in the repo's `CLAUDE.md`.
 
 ---
 
-## For AI or human reading this file
-
-**What this file is:** a shared reference maintained by the gnomAD
-methods group. It captures data-model quirks, Hail idioms, codebase
-conventions, and design-choice tradeoffs — the kind of institutional
-knowledge that usually only gets learned by running into the problem
-(or being told by someone who already did).
-
-**When to consult it:** any time you're touching gnomAD annotation
-tables, writing Hail aggregations, filtering by QC status, making
-assumptions about coverage between HTs, or picking between two
-reasonable-sounding analysis approaches. See the [When to consult this
-](#when-to-consult-this) section at the bottom for the concrete trigger
-list.
-
----
-
-### How to contribute
+## How to contribute
 
 **Rules — these come first** (and apply to AI assistants especially):
 
@@ -132,8 +138,8 @@ propose an entry. It should be:
 
 **Contribution format:** every item follows this shape:
 - **Heading** (`##`) — one-line "the thing" summary, in whichever
-  sub-document fits (see the routing table above). If nothing fits, a
-  new sub-document is fine — add it to the routing table and to this
+  sub-document fits (see the routing tables above). If nothing fits, a
+  new sub-document is fine — add it to the matching routing table and to this
   README's `toctree` so the docs build can find it.
 - **One-paragraph explanation** of the mechanism / rationale.
 - **Code example** where relevant (fenced code block, small).
@@ -144,8 +150,8 @@ propose an entry. It should be:
 - **Recommendation / rule of thumb**.
 - **Scope tag** — one of **`[Hail]`** (universal Hail behavior),
   **`[gnomAD data]`** (dataset/schema-specific), or both. Add
-  **`[internal only]`** for anything that applies solely to the internal
-  production team (unreleasable samples, internal bucket paths).
+  **`[internal: production]`** and/or **`[internal: research]`** for
+  anything only the internal team can use (definitions above).
 - **Hail version** — whenever the behavior is version-dependent, state
   the version it was verified on (`Verified on Hail 0.2.134`). Behavior
   noted for one version can change.
@@ -168,51 +174,8 @@ gnomAD release changes schema (v4.1 → v5).
 
 ---
 
-## When to consult this
-
-Before writing new gnomAD-touching analysis code, especially:
-
-- Anything that **filters variants** — see [gnomAD-specific](gnomad-specific.md#gnomad-specific)
-  (filters, only_filters.ht, releasability).
-- Anything with **`hl.case`, `hl.if_else`, set/dict ops on nullable
-  fields** — see [Missingness](missingness.md#missingness).
-- Anything that **group_by / agg_group_by on derived keys** — same.
-- Anything that takes a **max / min over float data that can be NaN** —
-  same section; `hl.max` and `hl.agg.max` disagree on NaN.
-- Anything that builds a **many-branch expression or a per-stratum
-  breakdown in one row op** (a `hl.case` with many `.when`s, or a dict
-  comprehension of heavy sub-exprs) — the `ClassTooLargeException` item
-  in [Hail idioms](hail-idioms.md#hail-idioms); prefer the loop-restrict-per-stratum
-  pattern in [Codebase / analysis patterns](analysis-patterns.md#codebase-and-analysis-patterns).
-- Anything that calls an **`hl.experimental` numeric kernel / iterative
-  solver** (EM, statistical routines) — cast dtypes and assert value
-  invariants first; see the un-validated-kernel item in
-  [Hail idioms](hail-idioms.md#hail-idioms).
-- Anything that adds a **logging `.count()` / `.show()`** to a pipeline
-  — see [Lazy evaluation and materialization](lazy-eval-and-materialization.md#lazy-evaluation-and-materialization);
-  it's free after a checkpoint and a full re-run before one.
-- Anything that **indexes into `freq` arrays** — the freq[0] item.
-- Anything that touches **trios, family data, or non-release samples**
-  — releasability + trio gotchas.
-- Anything that **picks a single VEP transcript** — the MANE / canonical
-  item.
-- Anything that **reads HTs whose filter provenance is unclear** — the
-  bake-time-vs-read-time item.
-- Anything that **subsets a VDS** (samples or sites) or densifies one —
-  see [VDS](vds.md#vds); filtering one of the two MatrixTables alone corrupts
-  the densified output silently.
-- Anything involving **sex chromosomes, PAR, or multiallelics** — see
-  [Biology](biology.md#biology).
-- Anything that **densifies the v4 VDS and classifies genotypes**
-  (het / hom-var counts, freq, phasing) — the high-AB correction +
-  operation-order item under [gnomAD-specific](gnomad-specific.md#gnomad-specific).
-- Anything you **run or debug on Dataproc** — log capture and
-  post-mortems in [Dataproc / operational](dataproc-operational.md#dataproc--operational),
-  especially when a job dies with no Python traceback.
-
-And after any bug that looks like "the total is smaller than I
-expected but there's no error message" — that's almost always a
-`hl.case`/`hl.if_else`/`group_by` null drop.
+<!-- Docs-site navigation for the sub-docs (hidden on the site; GitHub shows it
+     as a plain list). Keep it in sync with the routing tables above. -->
 
 ```{toctree}
 :hidden:
@@ -223,12 +186,12 @@ hail-idioms.md
 lazy-eval-and-materialization.md
 partitioning-shuffles-oom.md
 hidden-apis.md
-gnomad-specific.md
 vds.md
+gnomad-specific.md
 biology.md
+dataset-conventions.md
 analysis-patterns.md
 dataproc-operational.md
-dataset-conventions.md
 testing.md
 working-with-ai.md
 ```

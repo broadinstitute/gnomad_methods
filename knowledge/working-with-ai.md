@@ -56,8 +56,7 @@ can do before submitting a job.
   what's needed beats five round trips.
 - **Permission round-trips.** Every prompt for a read-only command costs
   a turn. Allowlisting genuinely read-only commands in a project's
-  `.claude/settings.json` removes that overhead — see the config
-  section below.
+  `.claude/settings.json` removes that overhead.
 - **Long outputs you don't read.** Piping to `head`, `tail`, or a
   filtered `grep` is cheaper than dumping a 5,000-line log into context.
 

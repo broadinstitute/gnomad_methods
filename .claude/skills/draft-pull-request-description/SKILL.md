@@ -47,11 +47,15 @@ ls .code_review/*CODE_REVIEW_COMPLETED 2>/dev/null | sort | tail -1
 If a marker exists, take its timestamp prefix (format `YYYYMMDD_HHMMSS`) and identify which models were in the roster by listing prompt files that share that prefix:
 
 ```bash
-ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*__*.md 2>/dev/null        # detection
-ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*_validate.md 2>/dev/null  # validation
+ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*.md 2>/dev/null | grep -v '_validate\.md$'  # detection
+ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*_validate.md 2>/dev/null                     # validation
 ```
 
-The suffix before `.md` is the model name (`opus`, `sonnet`, `agy`).
+The model name (`opus`, `sonnet`, `agy`) is the last `__`-separated token of a
+detection file (`…__opus.md`) and the token just before `_validate.md` in a
+validation file (`…_opus_validate.md`). Filter `_validate.md` out of the
+detection list: when a review is split into subsets, the label itself contains
+`__`, so a looser pattern also matches the validation prompts.
 
 **Check both lists — the two rosters can differ.** A reviewer that completes
 detection can still drop out of validation (an `agy` run that times out at the

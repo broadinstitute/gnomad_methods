@@ -16,8 +16,9 @@ meet them in code review. Re-check these on a Hail upgrade.
 Supported-but-easy-to-miss `hl.experimental` helpers the pipelines lean
 on: `sparse_split_multi`, `densify`, `filtering_allele_frequency`,
 `pc_project`, `import_gtf`, `get_gene_intervals`, `read_expression` /
-`write_expression`, `define_function`. Note the input-validation caveat
-in the experimental-kernel entry above before using the numeric ones.
+`write_expression`, `define_function`. Before using the numeric ones, see
+the input-validation caveat in [Hail idioms](hail-idioms.md#hail-idioms)
+(`hl.experimental` numeric kernels don't validate inputs).
 
 ---
 

@@ -142,12 +142,21 @@ here," not as "no data" — and go look at the two separately.
 
 ---
 
-## The large Hail tables are requester-pays
+## The requester-pays copy of the release needs a billing project
 
 **`[gnomAD data]` · Verified against Hail 0.2.134 API**
 
-Reading the full Hail Tables/VDS means paying for the egress yourself,
-which needs a billing project configured or the read fails.
+Released gnomAD data has two copies on GCS: the free public mirror
+`gs://gcp-public-data--gnomad` (Google Cloud Public Datasets), and
+`gs://gnomad-public-requester-pays`, where the production team writes the
+release. The gnomad_methods resource classes read the free mirror by default
+(`gnomad/resources/config.py`; `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`
+overrides it), so most reads need no billing setup.
+
+Reading the requester-pays bucket directly — a path copied out of the
+resource definitions, or a tool that doesn't go through the resource
+classes — means paying for the egress yourself, which needs a billing
+project configured or the read fails.
 
 ```python
 hl.init(gcs_requester_pays_configuration="my-project")

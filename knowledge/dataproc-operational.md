@@ -168,12 +168,14 @@ sometimes returns, sometimes cascades into executor-loss. There's
 no OOM message; the driver just becomes unresponsive.
 
 **Fix — narrow it Hail-side first.** The specific technique depends
-on what you actually need on the driver:
+on what you actually need on the driver. (For why `hl.set(...).contains`
+is the wrong way to filter by a large key set, see the
+`hl.literal(large_collection)` entry in [Hail idioms](hail-idioms.md#hail-idioms).)
 
 ```python
 # 1. You need a small subset of rows → semi_join (NOT hl.set().contains,
 #    which broadcasts the whole key set into every task; see the
-#    hl.literal / large-collection entry above).
+#    hl.literal(large_collection) entry in Hail idioms).
 key_ht = hl.import_table(keys_tsv, ...).key_by("locus", "alleles").select()
 df = ht.semi_join(key_ht).to_pandas()
 

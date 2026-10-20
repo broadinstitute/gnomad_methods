@@ -356,6 +356,11 @@ Treat any change to cloud configuration as cost-affecting until proven
 otherwise, and check the installed Hail version before concluding that something
 in this library is broken.
 
+**Before changing the Hail version partway through a pipeline**, check
+[Hail versions](knowledge/hail-versions.md) and the `hail_version` recorded in
+the inputs' `metadata.json.gz`: a table written by a newer Hail can't be read by
+an older one, and some versions have known bugs that affect gnomAD work.
+
 ## Never Do This
 
 - **Never delete or overwrite data outside temp buckets.** When testing, write

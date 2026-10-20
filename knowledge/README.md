@@ -36,6 +36,7 @@ Load only the one you need — that's the point of the split.
 | [Partitioning, shuffles, and OOM](partitioning-shuffles-oom.md) | a job dies in a shuffle, you're about to `repartition`, or you want to know what shuffles in the first place |
 | [Hidden and undocumented APIs](hidden-apis.md) | you meet an underscore-prefixed Hail parameter in gnomad_qc, or want the `hl.experimental` helpers we use |
 | [VDS](vds.md) | you subset or densify a VDS, or you're choosing between Table / MatrixTable / VDS |
+| [Hail versions](hail-versions.md) | you pick, upgrade, or downgrade the Hail version for a pipeline, or an older Hail can't read a table |
 
 **gnomAD data**
 
@@ -154,7 +155,9 @@ propose an entry. It should be:
   anything only the internal team can use (definitions above).
 - **Hail version** — whenever the behavior is version-dependent, state
   the version it was verified on (`Verified on Hail 0.2.134`). Behavior
-  noted for one version can change.
+  noted for one version can change. A bug or regression tied to specific
+  Hail versions goes in [Hail versions](hail-versions.md), with a link to
+  its source.
 
 Add new items in whichever section fits best. If nothing fits, add a
 new section — but tell the user first so we can decide whether that
@@ -169,8 +172,12 @@ Do **not** add:
 
 **When to re-look at this doc:** on every Hail version bump, re-verify
 the entries carrying a `Verified on Hail X` line — those are the ones
-whose behavior can silently change under you. Also re-read it when a
-gnomAD release changes schema (v4.1 → v5).
+whose behavior can silently change under you — and update
+[Hail versions](hail-versions.md): read the new release's change log for
+problems that affect gnomAD, and check whether `FileFormat.version` changed
+in the source, since a format bump isn't always listed in the change log's
+File Format notes. Also re-read it when a gnomAD release changes schema
+(v4.1 → v5).
 
 ---
 
@@ -187,6 +194,7 @@ lazy-eval-and-materialization.md
 partitioning-shuffles-oom.md
 hidden-apis.md
 vds.md
+hail-versions.md
 gnomad-specific.md
 biology.md
 dataset-conventions.md

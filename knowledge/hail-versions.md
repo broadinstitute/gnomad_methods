@@ -47,6 +47,22 @@ makes its outputs unreadable to 0.2.138 and earlier.
 
 ---
 
+## The hailctl you start a cluster from decides its Hail version
+
+**`[Hail]` · Verified in hailctl 0.2.134 (`deploy.yaml`, `dataproc/start.py`)**
+
+`hailctl dataproc start` installs the Hail wheel pinned in its own
+`deploy.yaml` (for 0.2.134,
+`gs://hail-common/hailctl/dataproc/0.2.134/hail-0.2.134-py3-none-any.whl`). A
+cluster therefore runs whatever Hail is installed in the environment you ran
+`hailctl` from, not the version your project expects — which is how clusters
+meant for 0.2.134 ended up on 0.2.139 and wrote format-1.8.0 tables.
+
+**Rule of thumb:** run `hailctl version` in the shell before `start`. The
+`--wheel` option overrides the pinned wheel (hailctl marks it experimental).
+
+---
+
 ## Known problems by Hail version
 
 **`[Hail]` · Fix versions checked against the Hail release tags**

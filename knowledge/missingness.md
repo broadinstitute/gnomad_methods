@@ -188,6 +188,49 @@ definedness on a field you *know* is populated —
 
 ---
 
+## `array.filter` drops elements whose predicate is missing — and so does the negated filter
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+`filter` keeps only the elements where the predicate is `True`. A missing
+predicate drops the element, and `~pred` is still missing, so the
+complementary filter drops it too:
+
+```python
+f = lambda x: hl.if_else(x == 2, hl.missing(hl.tbool), True)
+hl.array([1, 2, 3]).filter(f)                 # [1, 3]
+hl.array([1, 2, 3]).filter(lambda x: ~f(x))   # [] -- 2 is in neither
+```
+
+**Symptom:** an array that shrinks with no error. One sample-list filter
+silently dropped 186,563 of 186,573 samples.
+
+**Rule of thumb:** make the predicate total — `hl.coalesce(pred, False)` — and
+decide explicitly which side a missing value belongs on.
+
+---
+
+## Comparing structs field by field goes missing; whole-struct `==` doesn't
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+`(a.x == b.x) & (a.y == b.y)` is missing whenever any compared field is
+missing, so a filter on it drops those rows. Comparing whole structs is
+null-safe: two structs with the same values, including the same missing
+fields, compare `True`.
+
+```python
+s1 = hl.struct(a=1, b=hl.missing(hl.tint32))
+s2 = hl.struct(a=1, b=hl.missing(hl.tint32))
+(s1.a == s2.a) & (s1.b == s2.b)   # missing
+s1 == s2                          # True
+```
+
+**Rule of thumb:** to test "same values" across several fields, compare
+`hl.struct(...)` objects rather than chaining field comparisons with `&`.
+
+---
+
 ## `hl.max` drops missing but propagates NaN — and the aggregator disagrees
 
 **`[Hail]` · Verified on Hail 0.2.134**

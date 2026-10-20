@@ -69,8 +69,12 @@ mutation. Re-derive, don't carry over.
 
 **`[gnomAD data]` · reported · project meeting**
 
-v4 ships **UKB** and **non-UKB**. Two categories of subset people ask
-for do not exist, both deliberately:
+v4 releases one subset, **non-UKB** (`SUBSETS["v4"] == ["non_ukb"]` in
+`gnomad/resources/grch38/gnomad.py`); there is no UKB-only subset. UKB-only
+counts come from subtraction (full minus non-UKB), which works for additive
+counts — AC, AN, homozygote counts — but not for FAF, grpmax, or anything else
+that isn't a sum. Two categories of subset people ask for do not exist, both
+deliberately:
 
 - **non-TOPMed** was planned and then dropped. gnomAD holds only a small
   fraction of TOPMed (on the order of 30k of ~160k samples at the time),

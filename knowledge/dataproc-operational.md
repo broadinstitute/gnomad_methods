@@ -91,10 +91,8 @@ this can fire at surprisingly modest sizes (a few-GB checkpoint on a
 
 **Fix:**
 ```python
-hl.init(
-    tmp_dir="gs://<your-scratch-bucket>",
-    default_reference="GRCh38",
-)
+hl.init(tmp_dir="gs://<your-scratch-bucket>")
+hl.default_reference("GRCh38")
 ```
 
 **Rule of thumb:** every standalone script that runs on Dataproc should
@@ -109,9 +107,9 @@ the failed stage in the DAG is the checkpoint or shuffle-write itself
 
 ---
 
-## Installing packages on a Dataproc cluster: driver-time pip vs `--packages` at start
+## Installing packages on a Dataproc cluster: driver-time pip vs an init action on every node
 
-**`[Hail]`/ops**
+**`[Hail]`/ops · `--packages` behavior read from the hailctl 0.2.134 init script**
 
 `hailctl dataproc submit`'s image ships Hail, numpy, pandas, scipy,
 sklearn — but no ML / DL / bio libraries beyond that. A script that
@@ -133,14 +131,27 @@ except ImportError:
 Works for driver-only workloads (fit-a-model-on-collected-pandas,
 driver-side scoring, etc.). For executor-side use — e.g. broadcasting
 a model into a `mapPartitions` scorer — the package has to be on the
-**workers**, and only cluster creation can put it there:
+**workers**, and **`--packages` doesn't do that**: hailctl's init script
+(`init_notebook.py`, deployed per Hail version) installs `--packages`, and the
+Hail wheel itself, inside `if role == 'Master'`. Use a Dataproc initialization
+action, which runs on every node:
 
 ```bash
-hailctl dataproc start CLUSTER \
-  --packages xgboost,shap \        # --pkgs is the same flag; installed on all nodes
-  --properties spark:spark.driver.maxResultSize=0 \   # arbitrary Spark config
-  --metadata VEP_CONFIG_URI=…      # consumed by the init actions
+#!/bin/bash
+# install_xgboost.sh
+set -e
+/opt/conda/default/bin/pip install --quiet --no-deps xgboost
 ```
+
+```bash
+hailctl dataproc start CLUSTER --init=gs://<bucket>/install_xgboost.sh
+```
+
+Two details from the MPC-3D pipeline, which scores this way:
+`--no-deps` matters (a full install pulls in newer scipy and setuptools that
+break Hail), and the script has to live in a bucket that **isn't
+requester-pays**, because init actions download before the GCS connector has a
+billing project.
 
 `hailctl dataproc submit` has **no** `--packages` equivalent, so a
 driver-time pip-install never reaches the workers. Decide which side
@@ -152,6 +163,31 @@ at load time, before any Hail work starts. `hailctl dataproc submit`'s
 streamed output ends at the traceback with no Spark stage having run.
 If the driver imports fine and executors fail later, the package went
 on the wrong side.
+
+---
+
+## Getting branch code onto a cluster: `--pyfiles` takes one zip, and it shadows `--packages`
+
+**`[Hail]`/ops · Verified in hailctl 0.2.134 (`dataproc/submit.py`) and PySpark (`context.py`)**
+
+`hailctl dataproc submit --pyfiles` passes a single `.zip` through unchanged.
+Anything else — a directory, a `.py` file, or a comma-separated list — is
+re-zipped, and the re-zip silently drops things:
+
+- a `.py` file goes in under its basename, losing its package path;
+- a directory keeps only its `*.py` files (no package data), with paths
+  relative to the directory's parent, so the directory's own name becomes the
+  import root — pass `gnomad_methods/gnomad`, not the repo root;
+- any other entry, such as a second `.zip`, contributes nothing.
+
+PySpark puts the zip at `sys.path[1]`, ahead of site-packages, so code in it
+shadows the cluster's `--packages` install (usually `@main`). That's what you
+want when testing a change — and it means **a package you leave out of the zip
+silently runs the cluster's installed version**, not your branch.
+
+**Rule of thumb:** when a job tests a change to a library, build one zip that
+holds every local package the job needs (for example both `gnomad_qc/` and
+`gnomad/`), pass that single zip, and check what's in it with `unzip -l`.
 
 ---
 
@@ -244,7 +280,8 @@ intermediate write the resulting HT "sometimes has missing and/or
 duplicate rows."
 
 For a model Spark ML doesn't have (XGBoost, or anything you pickle), score
-it in a broadcast `mapPartitions` instead — see the "drop to Spark and come
+it in a broadcast `mapPartitions` instead (with the package installed on every
+node by an init action, as above) — see the "drop to Spark and come
 back" entry in [Hail idioms](hail-idioms.md#hail-idioms).
 
 ---

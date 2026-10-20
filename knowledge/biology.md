@@ -38,8 +38,8 @@ loses ~1–2% of variants and may flip alleles). Related: chromosome
 naming (`1` vs `chr1`) and MT vs chrM. Hail's `hl.get_reference('GRCh38')`
 uses `chrN` prefix.
 
-**Hail defaults to GRCh37** (`[Hail]` · verified on 0.2.134). `hl.init()`
-without `default_reference=` gives you GRCh37, so `hl.locus`,
+**Hail defaults to GRCh37** (`[Hail]` · verified on 0.2.134). Unless you
+set a default reference, you get GRCh37, so `hl.locus`,
 `hl.parse_locus_interval`, and `hl.tlocus()` all build GRCh37 objects
 unless told otherwise. Because GRCh38 in Hail uses `chr`-prefixed
 contigs, the mismatch usually surfaces as a loud error (`invalid
@@ -48,9 +48,14 @@ join) — but it surfaces *at execute time*, which on Dataproc means
 you've paid for the cluster to get there.
 
 ```python
-hl.init(default_reference="GRCh38", tmp_dir="gs://…")                 # do this
+hl.init(tmp_dir="gs://...")
+hl.default_reference("GRCh38")                                        # do this
 hl.parse_locus_interval("chr1:1000-2000", reference_genome="GRCh38")  # or be explicit
 ```
+
+`hl.init(default_reference="GRCh38")` still works but logs a deprecation
+warning on 0.2.128 and later. On 0.2.120, `hl.default_reference()` takes no
+argument, so this form needs 0.2.128 or later.
 
 ---
 
@@ -94,6 +99,16 @@ integrate — are the real fix.
   chrX/chrY; the gnomAD freq HT typically treats PAR separately.
 - `locus.in_autosome()` excludes chrX/Y/M (and chr sex-linked regions).
   Trio-analysis or PBT code that filters to autosomes drops these.
+
+- **GENCODE gives chrY PAR transcripts a `_PAR_Y` suffix** on the versioned
+  ID (e.g. `ENST00000431238.7_PAR_Y`; 173 transcripts in GENCODE v39, counted
+  in a Dataproc job). gnomad_methods' `import_gencode` strips the version to
+  make `transcript_id`, which strips the suffix too, so the chrX and chrY
+  copies of a PAR transcript share a `transcript_id`. Grouping by
+  `transcript_id` alone merges their exons; key on
+  `(contig, transcript_id)` or use `transcript_id_version`. On gnomad_methods
+  `main`, `add_gencode_transcript_annotations(remove_y_par=True)` checks only
+  `endswith("Y_PAR")`, so it removes nothing (fixed in PR #824).
 
 If you're doing anything sex-chromosome-inclusive, check that AC/AN
 denominators respect ploidy and PAR boundaries.
@@ -166,6 +181,15 @@ frequency (*reported · project meeting*).
 **Rule of thumb:** read AN next to AF, always. Treat low-AN sites as
 unstable rather than rare-and-interesting, and consider an AN floor
 (e.g. a percentage of the cohort maximum) before ranking anything by AF.
+
+**On the sex chromosomes the maximum AN depends on ploidy:** `2·N` on the
+autosomes and PAR, `2·XX + XY` on chrX non-PAR, and `XY` on chrY non-PAR. A
+percentage computed against `2·N` caps a fully covered chrX non-PAR site at
+about 75% (with roughly equal numbers of XX and XY samples), so a 90% floor
+silently drops every X-linked region. The per-sex sample counts are in the AN
+table's `strata_sample_count` global, indexed by its `strata_meta`;
+gnomad-constraint's per-base branch computes its AN-percent coverage metric
+this way.
 
 ---
 

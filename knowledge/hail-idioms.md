@@ -349,6 +349,31 @@ same oversized partition.
 
 ---
 
+## `other[ht.key]` keeps one row per key when the right table has duplicates
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+A non-interval `other[key]` lookup is a left join against a right table with
+*distinct* keys — Hail lowers it to `TableLeftJoinRightDistinct`. If `other`
+has several rows with the same key, the lookup returns one of them and
+silently ignores the rest. `other.index(key, all_matches=True)` (marked
+experimental) returns an array of every match.
+
+```python
+# right has two rows keyed 1 ("a", "b") and one keyed 2 ("c")
+left.annotate(x=right[left.k].x)                           # k=1 -> "a" only
+left.annotate(xs=right.index(left.k, all_matches=True).x)  # k=1 -> ["a", "b"]
+```
+
+**Symptom:** counts a little low with no error. A variant-to-pairs map with
+39 duplicated keys silently dropped 45 CAPN3 pairs.
+
+**Rule of thumb:** before relying on a lookup, check that the right side's key
+is unique (`other.distinct().count() == other.count()`), or use
+`all_matches=True` and handle the array.
+
+---
+
 ## `.order_by()` destroys the key — use `add_index` to rekey cheaply
 
 **`[Hail]`**
@@ -381,6 +406,13 @@ ranked = (
 ht = ht.annotate(rank=ranked[ht._row_idx].rank)
 ht = ht.drop("_row_idx")
 ```
+
+**Missing values sort last.** `order_by` puts every missing value after the
+non-missing ones (verified on 0.2.134), so in the pattern above rows with a
+missing `score` take the top ranks. Rank only the rows with a defined value —
+filter first, and use the filtered row count as the bin denominator. Ranking
+with the missing rows left in is what gave the v4.1 and v4.1.1 LOEUF releases
+wrong rank and bin fields (fixed in v4.1.2).
 
 **When to reach for this**: computing per-row ranks, quantile bins, or
 any other order-dependent annotation you need to fold back onto the
@@ -526,9 +558,23 @@ sequence, distance-matrix, pLDDT, and pAE tables this way (gnomad-constraint
   `mpc3d/model/score.py`). On the way back, `from_spark` without an
   intermediate parquet write "sometimes has missing and/or duplicate rows"
   (`gnomad/variant_qc/random_forest.py`).
-- **Packages must be on the workers.** Install them at cluster start with
-  `--packages`; a driver-side `pip install` never reaches the executors. See
+- **Packages must be on the workers, and `--packages` doesn't put them
+  there.** hailctl's init script installs `--packages` (and Hail itself) on
+  the master only. Install executor-side packages with a Dataproc init action
+  instead (`hailctl dataproc start --init=...`); see the packages entry in
   [Dataproc / operational](dataproc-operational.md#dataproc--operational).
+- **The executors don't have Hail.** Any module the executor has to import to
+  run your function — the module that defines it, and the modules its globals
+  come from — must import cleanly without `hail`. Otherwise every task fails
+  with `ModuleNotFoundError: No module named 'hail'` and the stage aborts after
+  Spark's retries, even though the same code ran fine locally. Keep
+  executor-side helpers in a module that doesn't import Hail.
+- **`from_spark` can't take a `BinaryType` column.** Its docstring lists
+  `BinaryType`, but Hail's type parser has no binary type, so the conversion
+  fails with a misleading `IncompleteParseError ... begins with 'uct{...'`.
+  Convert binary columns before `from_spark` — `pyspark.sql.functions.base64`
+  turns one into a string, or decode it to an array. The conversion runs at the
+  end of the job, so this loses the whole run (one SHAP run lost 6 hours).
 - **Local runs: pin the workers' Python.** Spark starts executors with the
   `python3` on `PATH`; if that isn't the driver's interpreter the job fails with
   `PYTHON_VERSION_MISMATCH`. Set `PYSPARK_PYTHON` to the driver's Python before

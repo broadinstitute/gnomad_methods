@@ -7,7 +7,8 @@ meet them in code review. Re-check these on a Hail upgrade.
 | API | what it does |
 |---|---|
 | `read_table` / `read_matrix_table(_n_partitions=n)` | set partitioning at read, no shuffle |
-| `read_*(_intervals=…, _filter_intervals=True)` | read only the given intervals |
+| `read_*(_intervals=…, _filter_intervals=True)` | read only the given intervals, keeping the table's own partitions that overlap them |
+| `read_*(_intervals=…)` | read only the given intervals, using them as the partitions — one per interval, no shuffle; can't be combined with `_n_partitions` (see [Partitioning](partitioning-shuffles-oom.md#partitioning-shuffles-and-oom)) |
 | `checkpoint(_read_if_exists=not overwrite)` | skip already-written steps on a re-run |
 | `expr.aggregate(..., _localize=False)` | keep the result as an expression instead of pulling it to the driver |
 | `ht._force_count()` | force a real full pass (vs the metadata-only `count()`) |

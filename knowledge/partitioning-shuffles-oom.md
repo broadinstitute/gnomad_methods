@@ -104,6 +104,14 @@ count **at read time** (`_n_partitions`) or **at write time**; use
 `naive_coalesce` when you only need *fewer* partitions after heavy
 filtering; reach for `repartition` last.
 
+**`naive_coalesce` also narrows the work before it.** It doesn't shuffle, so
+it runs in the same stage as everything since the last materialization: that
+upstream work runs on the coalesced number of tasks. Locally (0.2.134), an
+expensive per-row annotation followed by `naive_coalesce(2)` ran as one 2-task
+stage instead of 10 tasks. To shrink the partition count after a heavy filter
+without also shrinking the parallelism of the expensive work, checkpoint the
+filtered table first and coalesce after (or set the count at read time).
+
 ---
 
 ## A shuffle's output partition count is inherited from its input
@@ -136,6 +144,46 @@ anyone made in this pipeline — it was the partitioning of an upstream publishe
 table, inherited silently. When a shuffle stage is slower than its row count
 justifies, check the partition count of what feeds it before tuning anything
 downstream.
+
+---
+
+## Gene- or region-scale runs: `filter_intervals` keeps the table's partitions — re-read with `_intervals`
+
+**`[Hail]` · Verified on Hail 0.2.134**
+
+`hl.filter_intervals` (and `read_table(..., _intervals=..., _filter_intervals=True)`)
+keeps the table's own partitioning and drops the partitions that don't overlap
+— it never splits them. A few genes on a table written with large partitions
+leave a handful of partitions, and the run happens on that many tasks however
+big the cluster is: 5 genes gave 26 partitions, and the run was killed after
+4 hours without the autoscaler adding workers.
+
+Reading with `_intervals=` and *without* `_filter_intervals` makes the
+intervals the partitions — one per interval, no shuffle — and still reads only
+the rows inside them. So compute finer intervals over the rows you want and
+re-read:
+
+```python
+genes_ht = hl.filter_intervals(hl.read_table(path), gene_intervals)
+intervals = genes_ht._calculate_new_partitions(n_partitions)
+ht = hl.filter_intervals(hl.read_table(path, _intervals=intervals), gene_intervals)
+```
+
+`_calculate_new_partitions` returns contiguous intervals over the filtered
+table's key range, so they span the gaps between genes; the second
+`filter_intervals` keeps only the gene rows. (A local test went from 3
+partitions to 8 with the same rows.) `_intervals` can't be combined with
+`_n_partitions`. gnomad_qc's `get_gnomad_v4_vds(chrom=..., n_partitions=...)`
+uses this same pattern.
+
+**The same mechanism co-partitions tables before a chain of joins.** Tables
+keyed the same way but written separately have different partition bounds;
+read them all with intervals computed once from the base table
+(`base_ht._calculate_new_partitions(n)`), as gnomad_qc's
+`create_release_sites_ht.py` does. When the base table is sparse — a few
+genes — its intervals cover everything between the genes, so a single task can
+end up reading a large stretch of the other table: filter the other table to
+the genes first.
 
 ---
 
@@ -197,6 +245,27 @@ There's no formula, but the failure modes are known:
 - Aim for roughly constant *work per partition*, not a constant
   partition count.
 
+
+---
+
+## Check partition counts and key ranges from a table's metadata, without Hail
+
+**`[Hail]` · Verified on a Table written by 0.2.134**
+
+A Table directory's `metadata.json.gz` holds the full schema (`table_type`) and
+the row count of every partition (`components.partition_counts.counts`).
+`rows/metadata.json.gz` holds each partition's key range (`_jRangeBounds`) and
+part file (`_partFiles`). Reading them takes seconds and no cluster — enough to
+tell whether a field exists, how many partitions will feed a shuffle, whether
+they're skewed, and which partitions overlap your genes.
+
+```bash
+gcloud storage cat gs://<bucket>/<table>.ht/metadata.json.gz | gunzip | python -m json.tool | less
+```
+
+The same file records the Hail version that wrote the table; see
+[Hail versions](hail-versions.md#hail-versions). MatrixTable directories are
+laid out differently.
 ---
 
 [← back to the index](README.md)

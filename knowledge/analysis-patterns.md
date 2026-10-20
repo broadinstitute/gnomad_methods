@@ -201,6 +201,31 @@ expect that the caller may not know what filters are baked in.
 
 ---
 
+## Importing gnomad turns off your script's INFO logging
+
+**`[gnomAD data]` (gnomad_methods code) · Verified on Python 3.11 with `gnomad.utils.filtering`**
+
+27 gnomad_methods modules call `logging.basicConfig(...)` when imported, which
+installs a handler on the root logger. A script that imports any of them and
+then calls `logging.basicConfig(level=logging.INFO)` gets nothing:
+`basicConfig` does nothing once the root logger has a handler, so the root
+level stays at WARNING and the script's own INFO messages disappear.
+
+```python
+import gnomad.utils.filtering                      # installs a root handler
+logging.basicConfig(level=logging.INFO)            # silently ignored
+logging.basicConfig(level=logging.INFO, force=True)  # works (Python 3.8+)
+logger.setLevel(logging.INFO)                      # also works: the gnomad_qc pattern
+```
+
+**What the library should do differently:** a library shouldn't configure the
+root logger when imported — Python's logging HOWTO advises libraries to add no
+handlers other than `NullHandler`. Removing these calls changes the logging
+output of every downstream script that doesn't configure logging itself, so it
+needs a coordinated change with gnomad_qc rather than a one-line fix.
+
+---
+
 ## Per-stratum aggregates: loop-restrict-per-stratum, don't one-pass-inline-all
 
 **`[Hail]`**

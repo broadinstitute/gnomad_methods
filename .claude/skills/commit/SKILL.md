@@ -1,7 +1,6 @@
 ---
 name: commit
 description: Use this when the user wants to commit staged changes. Drafts a commit message matching the repo's style, confirms with the user, then commits.
-allowed-tools: bash, read_file
 ---
 
 ## Objective

@@ -1,7 +1,6 @@
 ---
 name: draft-pull-request-description
 description: Use this whenever the user wants to open a pull request (PR), draft a PR, or summarize their branch for merging.
-allowed-tools: bash, read_file
 ---
 
 ## Objective

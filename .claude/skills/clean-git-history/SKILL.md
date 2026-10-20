@@ -1,7 +1,6 @@
 ---
 name: clean-git-history
 description: Use this when the user wants to clean up a messy branch, squash commits, or tidy history before opening a PR. Rewrites local history into clean atomic commits without losing any changes.
-allowed-tools: bash, read_file
 ---
 
 ## Objective

@@ -1718,6 +1718,28 @@ class TestApplyModels:
         assert result.expected_variants == pytest.approx(3.3 * 0.6)
         assert result.mu == pytest.approx(1.5 * 0.6)
 
+    def test_missing_model_group_with_coverage_model(self) -> None:
+        """Test that a site in neither model gets missing expected variants."""
+        # Coverage 200 is above upper_cov_cutoff, so the model group is missing.
+        model_group_expr = calibration_model_group_expr(
+            hl.int32(200), hl.bool(False), upper_cov_cutoff=100
+        )
+        result = hl.eval(
+            apply_models(
+                hl.float64(0.5),
+                hl.literal([0.1, 2.0]),
+                hl.int64(3),
+                coverage_model=(0.5, 0.01),
+                coverage_expr=hl.int32(200),
+                model_group_expr=model_group_expr,
+            )
+        )
+
+        assert result.predicted_proportion_observed == pytest.approx(1.1)
+        assert result.coverage_correction is None
+        assert result.expected_variants is None
+        assert result.mu is None
+
 
 class TestAggregateConstraintMetricsExpr:
     """Test the aggregate_constraint_metrics_expr function."""

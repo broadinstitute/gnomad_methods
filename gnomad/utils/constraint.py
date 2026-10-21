@@ -1823,6 +1823,17 @@ def apply_models(
     ``mu``, ``predicted_proportion_observed``, ``expected_variants``, and
     (when a coverage model is provided) ``coverage_correction``.
 
+    .. note::
+
+        When a coverage model is applied, a row whose ``model_group_expr`` is
+        missing gets missing ``mu``, ``expected_variants``, and
+        ``coverage_correction`` (unless its coverage is 0, which always gives a
+        correction of 0). ``calibration_model_group_expr`` is missing for sites in
+        neither model, such as sites above ``upper_cov_cutoff`` or at or below
+        ``low_cov_cutoff``. ``hl.agg.sum`` skips missing values, so filter these rows
+        out before applying the models if they should not silently drop out of
+        aggregated expected counts.
+
     :param mu_expr: Mutation rate expression.
     :param plateau_models_expr: Single plateau model (array of [intercept,
         slope]) or an array of plateau models.

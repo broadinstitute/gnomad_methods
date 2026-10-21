@@ -26,7 +26,13 @@ Capture the staged file list first (only run hooks on staged files — never all
 git diff --staged --name-only
 ```
 
-Run the hooks scoped to those files:
+Then check whether any of those files also has unstaged changes:
+```bash
+git diff --name-only -- <staged files>
+```
+A file listed here is only partly staged. The hooks reformat the whole file on disk, and re-staging it after they run (below) would also stage the changes the user deliberately left out. Tell the user which files are partly staged and ask how to proceed before running the hooks; do not re-stage those files without their OK.
+
+Run the hooks scoped to the staged files:
 ```bash
 pre-commit run --files <staged files>
 ```

@@ -5,10 +5,10 @@ description: Use this whenever the user wants to open a pull request (PR), draft
 
 ## Objective
 
-You are a Staff Bioinformatics Engineer preparing a comprehensive, professional, and concise Pull Request description for a gnomAD pipeline codebase. Your goal is to produce a description thorough enough that the reviewer can understand:
+You are a Staff Bioinformatics Engineer preparing a comprehensive, professional, and concise Pull Request description for gnomad_methods, the shared Hail utility library that gnomAD pipelines and other repos import. Your goal is to produce a description thorough enough that the reviewer can understand:
 
 - The intent and motivation for the change
-- The specific pipeline steps or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
+- The specific modules or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
 - The design/architecture chosen and why (especially if Hail-specific tradeoffs were involved)
 - The exact changes and any new output paths or resource names
 - What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`)
@@ -31,7 +31,7 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Hail operations**: new/modified VDS, MT, HT read/write paths, aggregations, or annotations
 - **Dataproc / cluster config**: cluster size, autoscaling policy, init scripts, `hailctl dataproc submit` invocations
 - **Resource paths**: new or renamed GCS paths (especially under `gs://gnomad*/`)
-- **Pipeline step flags**: new CLI arguments, `--overwrite`, step-gating logic
+- **Public API**: new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for code that imports the library (see Project Overview in `CLAUDE.md`).
 - **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
 - **Test coverage**: added/changed tests under `tests/`
 - **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, list each added or re-pinned library and check it against the existing pins — Hail, pandas, and numpy are the usual conflicts (see Dependencies in `CLAUDE.md`). A quick check is `pip install --dry-run -r requirements.txt` in a throwaway venv. If a new library needs an existing pin loosened or bumped, say so and suggest the pin change, which belongs in the same PR.

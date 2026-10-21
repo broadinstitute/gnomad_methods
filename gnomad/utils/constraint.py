@@ -2382,8 +2382,10 @@ def compute_percentile_thresholds(
     Compute approximate percentile thresholds for a metric expression.
 
     **Threshold-based binning, step 1**: computes the boundary values that
-    define bin edges. The returned dict is passed to
-    :func:`annotate_bins_by_threshold` (step 2) to assign each row to a bin.
+    define bin edges. Its values, keyed by ``(granularity, metric)`` instead of
+    percentile, form the ``thresholds`` argument of
+    :func:`annotate_bins_by_threshold` (step 2), which assigns each row to a bin;
+    see that function for an example.
 
     This two-step approach differs from rank-based binning (see
     :func:`rank_and_assign_bins`), where every row receives a unique position
@@ -2458,12 +2460,27 @@ def annotate_bins_by_threshold(
     bin, and the thresholds may have been derived from a different subset of
     rows than those being annotated.
 
+    :func:`compute_percentile_thresholds` returns a dict of percentile to value,
+    so ``thresholds`` is built from it by selecting the percentiles for each
+    granularity. Example use, with decile bins for two metrics:
+
+    .. code-block:: python
+
+        deciles = [10, 20, 30, 40, 50, 60, 70, 80, 90]
+        metric_exprs = {"lof": ht.lof_oe_upper, "mis": ht.mis_oe_upper}
+        thresholds = {}
+        for metric, expr in metric_exprs.items():
+            pct_to_value = compute_percentile_thresholds(ht, expr, percentiles=deciles)
+            thresholds[("decile", metric)] = [pct_to_value[p] for p in deciles]
+
+        ht = annotate_bins_by_threshold(ht, metric_exprs, thresholds, ["decile"])
+
     :param ht: Input Table.
     :param metric_exprs: Mapping of metric name to the Float64Expression to
         bin (e.g. ``{"lof": ht.lof_oe_upper, "mis": ht.mis_oe_upper}``).
     :param thresholds: Mapping of ``(granularity, metric)`` to a list of threshold
-        values in ascending order, as produced by
-        :func:`compute_percentile_thresholds`.
+        values in ascending order, built from :func:`compute_percentile_thresholds`
+        output (see the example above).
     :param granularities: Granularity names to iterate over (e.g.
         ``["decile", "ventile"]``). Each must appear as the first element of
         at least one key in ``thresholds``.

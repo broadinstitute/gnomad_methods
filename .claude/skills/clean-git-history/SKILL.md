@@ -38,22 +38,15 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 
 1. Create a backup: `git branch backup-$(git branch --show-current)-$(date +%Y-%m-%d--%H-%M)`. Tell the user the backup branch name.
 2. `git reset --soft <fork-point>` (the merge-base from step 1.4) then `git reset` to unstage everything. Never reset to the tip of the base: if the base has moved, the new commits would also undo every commit added to the base since the fork, and the check in step 4 would not catch it.
-3. For each planned commit:
-   - `git add <specific files>` — never `git add .` or `git add -A`
+3. For each planned commit, stage and commit the way the `commit` skill
+   (`.claude/skills/commit/SKILL.md`) says to: name the paths when staging
+   (step 1) and end the message with its `Assisted-by` trailer (step 7). Skip its
+   other steps, such as running hooks and confirming each commit: the plan is
+   already approved, and a hook that reformats a file would make the check in
+   step 4 fail.
+   - `git add <specific files>`
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing
-   - Commit with the planned title and an `Assisted-by: ClaudeCode:<model-id>`
-     trailer, where `<model-id>` is the model **you are actually running as**
-     (e.g. `claude-opus-5-5`). Do not copy the placeholder or a model name from
-     an earlier commit — a stale name defeats the point of the trailer. Match
-     the repo's existing trailer format if it differs.
-     ```bash
-     git commit -m "$(cat <<'EOF'
-     <title>
-
-     Assisted-by: ClaudeCode:<model-id>
-     EOF
-     )"
-     ```
+   - `git commit` with the planned title and the trailer
 
 ### 4. Verify
 

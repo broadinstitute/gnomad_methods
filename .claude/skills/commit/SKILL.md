@@ -15,6 +15,10 @@ Run `git diff --staged --stat` to see what is staged. If nothing is staged:
 - Run `git status` to show what is available
 - Tell the user what is unstaged and ask what to add before proceeding
 
+Whenever you stage files, name the paths. Never use `git add .` or `git add -A`:
+they also pick up untracked files that don't belong in the commit, such as
+scratch files or local notes.
+
 ### 2. Run pre-commit hooks
 
 Always run the repo's pre-commit hooks on the staged files before reviewing, so the commit matches what CI enforces (black, isort, autopep8, pydocstyle, whitespace fixers, etc.). This runs even if the user has not installed the git hook.

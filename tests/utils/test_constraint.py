@@ -1285,19 +1285,24 @@ class TestCountObservedAndPossibleByGroup:
         # ACG: poss=1*0.5 + poss=1*0.5 = 1.0
         assert abs(rows["ACG"].weighted_poss - 1.0) < 1e-6
 
-    def test_additional_agg_sum_exprs(self, sample_table):
-        """Test that additional_agg_sum_exprs sums extra fields."""
-        sample_table = sample_table.annotate(extra=1)
+    def test_additional_agg_sum_exprs(self, sample_table) -> None:
+        """Test that additional_agg_sum_exprs sums scalar and array fields."""
+        sample_table = sample_table.annotate(extra=1, extra_arr=[1, 2])
         result = count_observed_and_possible_by_group(
             sample_table,
             possible_expr=sample_table.poss,
             observed_expr=sample_table.obs,
-            additional_agg_sum_exprs={"extra": sample_table.extra},
+            additional_agg_sum_exprs={
+                "extra": sample_table.extra,
+                "extra_arr": sample_table.extra_arr,
+            },
         )
         rows = {r.context: r for r in result.collect()}
 
         assert rows["ACG"].extra == 2
         assert rows["TCG"].extra == 1
+        assert rows["ACG"].extra_arr == [2, 4]
+        assert rows["TCG"].extra_arr == [1, 2]
 
 
 class TestGetConstraintGroupingExpr:

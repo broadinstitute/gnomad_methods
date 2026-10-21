@@ -559,16 +559,7 @@ def count_observed_and_possible_by_group(
     )
 
     # Get sum aggregation expressions for requested fields.
-    agg_expr.update(
-        {
-            k: (
-                hl.agg.array_sum(v)
-                if isinstance(v, hl.ArrayExpression)
-                else hl.agg.sum(v)
-            )
-            for k, v in additional_agg_sum_exprs.items()
-        }
-    )
+    agg_expr.update(_build_sum_agg_struct(exprs_to_sum=additional_agg_sum_exprs))
 
     # Apply each variant count aggregation in `agg_expr` to get counts for all
     # combinations of `grouping`.

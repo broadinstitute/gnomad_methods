@@ -20,6 +20,7 @@ We therefore encourage users to browse through the [API reference](https://broad
 | `gnomad/variant_qc/` | Variant QC: random forest, training, evaluation, LD. |
 | `gnomad/assessment/` | Release assessment: summary stats, validity checks. |
 | `tests/` | Pytest suite, mirroring the `gnomad/` layout. |
+| `knowledge/` | gnomAD + Hail institutional knowledge: silent-fail bug classes, design tradeoffs, and facts hidden in the source. Start at its `README.md`; also published to the docs site. |
 | `docs/` | Sphinx docs; the API reference is auto-generated from docstrings. |
 
 This is a subpackage-level map only. Individual functions are not listed here

@@ -22,6 +22,7 @@ from gnomad.utils.constraint import (
     count_observed_and_possible_by_group,
     counts_agg_expr,
     coverage_correction_expr,
+    get_all_gen_anc_lengths,
     get_constraint_grouping_expr,
     oe_confidence_interval,
     rank_and_assign_bins,
@@ -1744,6 +1745,24 @@ class TestApplyModels:
         assert result.coverage_correction is None
         assert result.expected_variants is None
         assert result.mu is None
+
+
+class TestGetAllGenAncLengths:
+    """Test the get_all_gen_anc_lengths function."""
+
+    def test_returns_length_and_gen_anc_tuples(self) -> None:
+        """Test that the result is a list of (length, gen_anc) tuples."""
+        ht = hl.Table.parallelize(
+            [{"obs": hl.Struct(afr=[1, 2], nfe=[1, 2, 3])}] * 2,
+            hl.tstruct(
+                obs=hl.tstruct(afr=hl.tarray(hl.tint32), nfe=hl.tarray(hl.tint32))
+            ),
+        )
+
+        assert get_all_gen_anc_lengths(ht, ("afr", "nfe"), ht.obs) == [
+            (2, "afr"),
+            (3, "nfe"),
+        ]
 
 
 class TestAggregateConstraintMetricsExpr:

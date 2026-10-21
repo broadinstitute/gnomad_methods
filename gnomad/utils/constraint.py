@@ -1477,9 +1477,9 @@ def build_coverage_model(
 
 def get_all_gen_anc_lengths(
     ht: hl.Table,
-    gen_ancs: Tuple[str],
+    gen_ancs: Tuple[str, ...],
     obs_expr: hl.expr.StructExpression,
-) -> List[Tuple[str, str]]:
+) -> List[Tuple[int, str]]:
     """
     Get the minimum length of observed variant counts array for each genetic ancestry group downsampling.
 
@@ -1493,7 +1493,8 @@ def get_all_gen_anc_lengths(
     :param gen_ancs: Genetic ancestry groups used to categorize observed variant counts in downsamplings.
     :param obs_expr: Expression for the genetic ancestry group observed variant counts. Should be a
         struct containing an array for each gen_anc in `gen_ancs`.
-    :return: A Dictionary with the minimum array length for each genetic ancestry group.
+    :return: List of ``(length, gen_anc)`` tuples, one per group in ``gen_ancs``,
+        where ``length`` is the minimum array length for that group.
     """
     # TODO: This function will be converted into doing just the length check if there
     #  is no usage of gen_anc_lengths in the constraint pipeline.

@@ -1,5 +1,15 @@
 # claude-code-review-skill
 
+> **Vendored copy in gnomad_methods.** `SKILL.md`, `README.md`, and `LICENSE`
+> were copied from [bw2/claude-code-review-skill](https://github.com/bw2/claude-code-review-skill)
+> at commit [`081cdda2f954`](https://github.com/bw2/claude-code-review-skill/commit/081cdda2f9545e972625137df6cc37d2d5b3cba0)
+> (2026-07-02). They match that commit except for this note and one trailing
+> blank line that this repo's end-of-file hook removed from `SKILL.md`. To
+> update, copy the three files from upstream, restore this note with the new
+> commit, and open a PR. You don't need the install step below to use `/review`
+> in this repo, and a personal copy in `~/.claude/skills/review/` takes
+> precedence over this one.
+
 A [Claude Code](https://claude.com/claude-code) skill that runs code review using Claude under two different models — Opus and Sonnet — plus an optional third reviewer, [agy](https://antigravity.google/) (Google Antigravity). The reviewers in the roster independently review your code in parallel, merge the results into a deduplicated list, and then do a second validation pass to see if they agree with each other's findings. At the end, you are presented with a list of all findings along with the level of agreement between reviewers (`Agreed`, `Disputed`, `Unanimous`, etc — the exact tiers depend on whether agy is in the roster), and the proposed fixes.
 
 agy is optional: the skill drops it automatically if the `agy` CLI isn't installed, and you can also ask to skip it explicitly (e.g. `/review --no-agy`) even when it is installed.

@@ -103,12 +103,19 @@ confirmed.
 
 ### 5. Draft the PR description
 
+**Ask the user for the summary first.** Before drafting, ask them to describe in
+a sentence or two what changed, why, and which tests cover it. The person opening
+the PR should be able to explain it, and reviewers rely on that. Build the
+Summary section from their answer: tidy the wording, but don't add claims they
+didn't make. If the diff shows a significant change their summary leaves out,
+point it out and ask rather than adding it yourself.
+
 Use the following template — fill every section; do not leave placeholders:
 
 ```markdown
 ## Summary
 
-<!-- 1-3 bullet points on what this PR does and why -->
+<!-- 1-3 bullet points built from the user's own summary of what this PR does and why -->
 
 ## Changes
 

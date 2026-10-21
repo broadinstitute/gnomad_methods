@@ -43,7 +43,7 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing
    - Commit with the planned title and an `Assisted-by: ClaudeCode:<model-id>`
      trailer, where `<model-id>` is the model **you are actually running as**
-     (e.g. `claude-opus-5`). Do not copy the placeholder or a model name from
+     (e.g. `claude-opus-5-5`). Do not copy the placeholder or a model name from
      an earlier commit — a stale name defeats the point of the trailer. Match
      the repo's existing trailer format if it differs.
      ```bash

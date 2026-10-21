@@ -85,7 +85,7 @@ EOF
 ```
 
 `<model-id>` is the model **you are actually running as** — e.g.
-`claude-opus-5`, `claude-sonnet-5`. Do not copy a model name out of this
+`claude-opus-5-5`, `claude-sonnet-5-5`. Do not copy a model name out of this
 file or out of an earlier commit; the trailer records which model
 assisted, so a stale name makes it useless. If the repo's existing
 trailers use a different format, match the repo.

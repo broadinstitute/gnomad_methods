@@ -250,10 +250,17 @@ def variant_observed_and_possible_expr(
     Return per-variant observed and possible count expressions.
 
     For each element of the frequency array, ``observed_variants`` is 1 when the
-    variant meets the frequency criteria (AC > 0, optionally AF <= ``max_af``) and
-    0 otherwise. ``possible_variants`` uses the same criteria but substitutes 1
-    for missing frequencies (i.e., the variant site is considered possible even
-    when frequency data is absent).
+    variant meets the frequency criteria (AC > 0, and AF <= ``max_af`` if set) and 0
+    otherwise. ``possible_variants`` uses the same criteria, except that a missing
+    frequency counts as possible: a variant absent from the dataset could still have
+    been observed. A variant with a defined frequency that fails the criteria
+    (AC == 0, or AF > ``max_af``) is therefore 0 in both, so it is excluded from the
+    denominator as well as the numerator. With ``max_af`` set, this removes common
+    variants from the possible counts.
+
+    When ``freq_expr`` itself is missing (e.g. the variant is not in the dataset),
+    ``observed_variants`` is missing and ``possible_variants`` is 1, or missing when
+    ``use_possible_adj`` is False.
 
     When ``use_possible_adj`` is True (default), the possible count is a scalar
     derived from the first (adj) element of the frequency array. When False, it
@@ -261,8 +268,8 @@ def variant_observed_and_possible_expr(
     ``observed_variants``.
 
     :param freq_expr: Array of frequency structs with ``AC`` and ``AF`` fields.
-    :param max_af: Maximum allele frequency threshold. Default is None (no
-        cutoff).
+    :param max_af: Maximum allele frequency threshold. Variants above it are excluded
+        from both counts. Default is None (no cutoff).
     :param use_possible_adj: If True, compute possible count from only the adj
         (first) frequency element. If False, compute per-downsampling. Default
         is True.

@@ -1010,8 +1010,8 @@ class TestVariantObservedAndPossibleExpr:
         # Missing freq element should still count as possible.
         assert result.possible_variants[0] == 1
 
-    def test_max_af_filters_observed(self):
-        """Test that max_af filters out variants with AF above threshold."""
+    def test_max_af_filters_observed_and_possible(self) -> None:
+        """Test that a variant with AF above max_af is neither observed nor possible."""
         ht = hl.Table.parallelize(
             [{"freq": [hl.Struct(AC=5, AF=0.01), hl.Struct(AC=3, AF=0.0005)]}],
             hl.tstruct(freq=hl.tarray(hl.tstruct(AC=hl.tint32, AF=hl.tfloat64))),
@@ -1020,6 +1020,26 @@ class TestVariantObservedAndPossibleExpr:
         result = ht.collect()[0]
         # First element AF=0.01 > max_af, second AF=0.0005 <= max_af.
         assert result.observed_variants == [0, 1]
+        # Possible comes from the first (adj) element, which fails max_af.
+        assert result.possible_variants == 0
+
+    def test_missing_freq_array(self) -> None:
+        """Test that a missing frequency array is possible but not observed."""
+        ht = hl.Table.parallelize(
+            [{"freq": None}],
+            hl.tstruct(freq=hl.tarray(hl.tstruct(AC=hl.tint32, AF=hl.tfloat64))),
+        )
+        ht = ht.annotate(
+            adj=variant_observed_and_possible_expr(ht.freq),
+            per_element=variant_observed_and_possible_expr(
+                ht.freq, use_possible_adj=False
+            ),
+        )
+        result = ht.collect()[0]
+        assert result.adj.observed_variants is None
+        assert result.adj.possible_variants == 1
+        # Without the array length there is nothing to build per-element counts from.
+        assert result.per_element.possible_variants is None
 
 
 class TestCountsAggExpr:

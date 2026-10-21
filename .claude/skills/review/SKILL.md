@@ -337,4 +337,3 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && touch .code_review/X
 - The confidence-tier scheme (Step 6) is chosen per run based on how many validator slots actually returned a verdict — 3 slots use Unanimous/Agreed/Controversial/Rejected/Inconclusive; 2 slots use Agreed/Disputed/Rejected/Inconclusive. Detection and validation rosters are decided independently, so it's possible for agy to contribute detection findings but drop out of validation (or vice versa).
 - If opus or sonnet fails with no counterpart to fall back on, proceed with the survivor(s) — never invent a verdict for the missing slot. A single surviving validator verdict on its own always lands in the Inconclusive tier (see Step 6) since it lacks corroboration.
 - If a review is requested multiple times, write each prompt as if it's the first review — do not mention prior reviews.
-

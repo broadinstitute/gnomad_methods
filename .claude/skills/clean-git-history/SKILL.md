@@ -18,7 +18,7 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 1. Run `git log --oneline --graph --decorate -n 20` to see where the branch diverges.
 2. Check for stacking: find the oldest commit unique to this branch and run `git branch -a --contains <hash>`. If another non-main branch contains it, this branch is stacked on it.
 3. **Stop and ask the user:** "Is this branch stacked on another branch? I think the base is `[branch]` — confirm or correct me."
-4. After the user confirms, verify: `git merge-base <confirmed-base> HEAD` should equal the tip of the base.
+4. After the user confirms, record the fork point: `git merge-base <confirmed-base> HEAD`. If it is not the tip of the base, the base has moved on since the branch was cut. Tell the user, and ask whether to rebase onto the base first or to clean up the history in place on top of the fork point. If they want to rebase, stop here and let them do it (it may need conflicts resolved), then start this skill again.
 
 ### 2. Understand the existing history (read-only, mutate nothing)
 
@@ -37,7 +37,7 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 ### 3. Restructure
 
 1. Create a backup: `git branch backup-$(git branch --show-current)-$(date +%Y-%m-%d--%H-%M)`. Tell the user the backup branch name.
-2. `git reset --soft <base>` then `git reset` to unstage everything.
+2. `git reset --soft <fork-point>` (the merge-base from step 1.4) then `git reset` to unstage everything. Never reset to the tip of the base: if the base has moved, the new commits would also undo every commit added to the base since the fork, and the check in step 4 would not catch it.
 3. For each planned commit:
    - `git add <specific files>` — never `git add .` or `git add -A`
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing

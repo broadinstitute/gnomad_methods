@@ -35,6 +35,8 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
 - **Test coverage**: added/changed tests under `tests/`
 - **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, list each added or re-pinned library and check it against the existing pins — Hail, pandas, and numpy are the usual conflicts (see Dependencies in `CLAUDE.md`). A quick check is `pip install --dry-run -r requirements.txt` in a throwaway venv. If a new library needs an existing pin loosened or bumped, say so and suggest the pin change, which belongs in the same PR.
+- **Downstream callers**: if the signature, return schema, field names, or defaults of a public function changed, grep `gnomad_qc` for callers, on its `main` branch and not only a local checkout. List the call sites that break and which pipeline version each belongs to (see Pull Requests in `CLAUDE.md`). Flag them in the description rather than fixing them here; the fix belongs in a coordinated `gnomad_qc` PR.
+- **Repo layout**: if a subpackage was added, removed, renamed, or moved, check that this PR also updates the repo layout table in the README.
 
 ### 4. Check for AI code reviews
 

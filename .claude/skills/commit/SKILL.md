@@ -37,7 +37,7 @@ Run the hooks scoped to the staged files:
 pre-commit run --files <staged files>
 ```
 - If `pre-commit` is not on PATH, try `python -m pre_commit run --files <staged files>`.
-- If pre-commit is unavailable entirely, fall back to running the tools listed in `.pre-commit-config.yaml` directly on the staged files, using the versions pinned in `requirements-dev.txt` / the config's `rev:` (a throwaway venv is fine). For this repo that means: `black`, `isort --profile black --filter-files`, `autopep8 --exit-code --in-place`, `pydocstyle`. autopep8 needs `lib2to3`, so run it under Python ≤ 3.12, not 3.13.
+- If pre-commit is unavailable entirely, fall back to running the tools listed in `.pre-commit-config.yaml` directly on the staged files, using the versions pinned in `requirements-dev.txt` / the config's `rev:` (a throwaway venv is fine). For this repo that means: `black`, `isort --profile black --filter-files`, `autopep8 --exit-code --in-place`, `pydocstyle`. Ensure Python version is compatible with the pre-commit tools.
 - If neither pre-commit nor the individual tools can be run, tell the user the hooks could not run and why, and ask how to proceed — do NOT silently commit unformatted code.
 
 Auto-fixing hooks (black, isort, autopep8, end-of-file-fixer, trailing-whitespace) modify the working tree, which unstages those edits. Re-stage the same paths and re-run until the hooks pass cleanly:

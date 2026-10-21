@@ -36,15 +36,34 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Test coverage**: added/changed tests under `tests/`
 - **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, list each added or re-pinned library and check it against the existing pins — Hail, pandas, and numpy are the usual conflicts (see Dependencies in `CLAUDE.md`). A quick check is `pip install --dry-run -r requirements.txt` in a throwaway venv. If a new library needs an existing pin loosened or bumped, say so and suggest the pin change, which belongs in the same PR.
 
-### 4. Check for a completed code review
+### 4. Check for AI code reviews
 
-Look for a completion marker written by the `/review` skill:
+Look for completion markers written by the `/review` skill, newest first:
 
 ```bash
-ls .code_review/*CODE_REVIEW_COMPLETED 2>/dev/null | sort | tail -1
+ls .code_review/*CODE_REVIEW_COMPLETED 2>/dev/null | sort -r
 ```
 
-If a marker exists, take its timestamp prefix (format `YYYYMMDD_HHMMSS`) and identify which models were in the roster by listing prompt files that share that prefix:
+`.code_review/` is shared by every branch in the checkout, and the review skill
+records neither the branch nor the commit it reviewed, so the newest marker may
+belong to another branch. Each marker's name starts with its run's timestamp
+(`YYYYMMDD_HHMMSS`, local time). Use the first marker that passes both checks:
+
+1. **It is newer than the branch's last commit**, so the review saw the current
+   code. Compare its timestamp with
+   `git log -1 --format=%cd --date=format-local:%Y%m%d_%H%M%S`.
+2. **It reviewed this branch's files.** Compare the files its findings cite
+   (`path:line` references in that run's reviewer outputs,
+   `.code_review/<timestamp>_*`) with `git diff --name-only main...HEAD`. Most
+   should be files this branch changes; a widely shared file such as
+   `CLAUDE.md` or `README.md` appearing in both is not enough. If the run cites
+   too little to tell, ask the user whether it was a review of this branch.
+
+If no marker passes both, but one passes check 2, that run reviewed this branch
+before its latest commits: don't check the box. Say when it ran and offer to
+re-run `/review`.
+
+For the marker that passes, identify which models were in the roster by listing prompt files that share its timestamp prefix:
 
 ```bash
 ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*.md 2>/dev/null | grep -v '_validate\.md$'  # detection
@@ -64,6 +83,21 @@ skill treats the two rosters as decided independently. Report the models that
 actually *validated*, since that is what the confidence labels rest on. If the
 two lists differ, say so rather than printing one merged roster — e.g.
 "reviewed by opus, sonnet, agy; validated by opus, sonnet".
+
+Use what you found to write the `/review` line of the AI code review section.
+The template does not pre-fill it, so write exactly one of these:
+
+- A marker passed both checks: `- [x] /review run — models: <validated models>`,
+  followed by its findings and their disposition (fixed here / deferred /
+  rejected as a false positive).
+- Only a run from before the latest commits matched:
+  `- [ ] /review last run <date>, before the latest commits`.
+- Otherwise: `- [ ] /review not run`.
+
+Then ask the user whether they ran any other AI reviews on this branch (for
+example `/code-review`, or a review with another model or tool), and list each
+one they confirm with what came of it. Don't list a review the user hasn't
+confirmed.
 
 ### 5. Draft the PR description
 
@@ -86,16 +120,11 @@ Use the following template — fill every section; do not leave placeholders:
 
 <!-- How was this tested? Dataproc job IDs / log snippets if relevant, or unit test coverage. -->
 
-## Code review
+## AI code review
 
-<!-- Emit exactly ONE of the two lines below, whichever is true, and delete the other.
-     Never emit both: an unchecked "not run" sitting above a checked "run" reads as
-     if no review happened, and a skimmer will believe the first line.
-       run:     - [x] `/review` run — models: Opus, Sonnet
-       not run: - [ ] `/review` not run
-     If a review was run, follow the line with its findings and their disposition
-     (fixed here / deferred / rejected as a false positive). -->
-- [x] `/review` run — models: <!-- e.g. Opus, Sonnet -->
+<!-- Written in step 4: the /review line (checked only for a review of this
+     branch's latest commit) with its findings and their disposition, then any
+     other AI reviews the user confirmed running. -->
 
 ## Reviewer notes
 

@@ -1784,7 +1784,9 @@ class TestAnnotateBinsByThreshold:
 class TestRankArrayElementMetrics:
     """Test the rank_array_element_metrics function."""
 
-    def test_ranks_each_element_independently(self) -> None:
+    def test_ranks_each_element_independently(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test per-element ranking, missing ranks for filtered rows, and the key."""
         ht = hl.Table.parallelize(
             [
@@ -1810,6 +1812,13 @@ class TestRankArrayElementMetrics:
         assert [r.arr[0].v_rank.rank for r in rows[:3]] == [0, 1, 2]
         assert [r.arr[1].v_rank.rank for r in rows[:3]] == [2, 1, 0]
         assert rows[3].arr[0].v_rank is None
+        # One caching warning in total, not one per ranked element and metric.
+        warnings = [
+            r
+            for r in caplog.records
+            if r.name == "constraint_utils" and r.levelname == "WARNING"
+        ]
+        assert len(warnings) == 1
 
     def test_raises_when_filter_matches_no_rows(self) -> None:
         """Test that an empty subset raises a clear error rather than an IndexError."""

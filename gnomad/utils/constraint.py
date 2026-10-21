@@ -2354,12 +2354,6 @@ def rank_and_assign_bins(
     if bin_granularities is None:
         bin_granularities = {"percentile": 100, "decile": 10, "sextile": 6}
 
-    logger.warning(
-        "rank_and_assign_bins evaluates its input and checkpoints the ranked rows"
-        " to the Hail temporary directory (via .cache()); see the function's"
-        " docstring."
-    )
-
     ht = value_expr._indices.source
     source_key = list(ht.key)
     ranked_ht = ht.select(_=value_expr)

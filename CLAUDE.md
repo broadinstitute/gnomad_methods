@@ -322,9 +322,10 @@ determines who pays:
   Cloud Public Datasets. **Read from here.** No requester-pays, no project
   billing for the read.
 - `gs://gnomad-public-requester-pays` — where the gnomAD Production Team
-  *writes* release data, which then syncs to the mirror above. It is public but
-  **requester-pays**: reading it bills the requester's project. Don't hardcode
-  paths into this bucket in examples, tests, or docstrings.
+  *stages* release data before it syncs to the mirror above; data should sit
+  there for less than a day. It is public but **requester-pays**: reading it
+  bills the requester's project. Don't hardcode paths into this bucket in
+  examples, tests, or docstrings.
 - `gs://gnomad` and other internal buckets — not public; internal work only.
 
 **Prefer the resource classes over any literal path.** `gnomad/resources/` picks
@@ -332,10 +333,11 @@ the source for you (see `config.py`: it defaults to Google Cloud Public Datasets
 and can be pointed elsewhere with `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`), so
 `some_resource.ht()` reads the free copy without the caller having to know any
 of the above. Note that the literal paths stored in `gnomad/resources/grch37/`
-and `grch38/` are `gnomad-public-requester-pays` URLs — that is the write
+and `grch38/` are `gnomad-public-requester-pays` URLs — that is the staging
 location, and the source config rewrites them on read. Copying one of those
-strings out of the source and using it directly bypasses the rewrite and incurs
-charges.
+strings out of the source and using it directly bypasses the rewrite: the data
+has most likely already left that bucket, and reading anything still there
+incurs charges.
 
 ### Cost and cluster conventions
 

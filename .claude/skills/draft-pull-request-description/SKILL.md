@@ -18,11 +18,11 @@ You are a Staff Bioinformatics Engineer preparing a comprehensive, professional,
 
 ### 1. Determine the base branch
 
-Default to `main`. Ask the user only if they indicate this is a stacked branch.
+Default to `main`. Ask the user only if they indicate this is a stacked branch. Use the chosen branch as `<base>` everywhere below.
 
 ### 2. Analyze the diff
 
-Run `git diff main...HEAD` to understand the full set of changes. Then read the changed files in full — especially any new or modified Python scripts, resource definitions, or config changes.
+Run `git diff <base>...HEAD` to understand the full set of changes. Then read the changed files in full — especially any new or modified Python scripts, resource definitions, or config changes.
 
 ### 3. Identify gnomAD-specific context
 
@@ -56,7 +56,7 @@ belong to another branch. Each marker's name starts with its run's timestamp
    `git log -1 --format=%cd --date=format-local:%Y%m%d_%H%M%S`.
 2. **It reviewed this branch's files.** Compare the files its findings cite
    (`path:line` references in that run's reviewer outputs,
-   `.code_review/<timestamp>_*`) with `git diff --name-only main...HEAD`. Most
+   `.code_review/<timestamp>_*`) with `git diff --name-only <base>...HEAD`. Most
    should be files this branch changes; a widely shared file such as
    `CLAUDE.md` or `README.md` appearing in both is not enough. If the run cites
    too little to tell, ask the user whether it was a review of this branch.

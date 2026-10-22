@@ -1243,3 +1243,90 @@ class TestComputeStatsPerRefSiteSexKaryotype:
             sex_chrom_vds, reference_ht, {"AN": an_agg}
         )
         assert all(r.AN == 8 for r in unadjusted.collect())
+
+
+class TestComputeStatsPerRefSiteLegacyHetAb:
+    """Test that `legacy_het_ab` reaches the adj annotation computed inside the helper."""
+
+    @pytest.fixture
+    def phased_het_vds(self):
+        """
+        Return a 2-sample, 1-site VDS where only `legacy_het_ab` changes adj.
+
+        s1 is a phased alt-first het (1|0) with AD [1, 9]: the fixed reading uses the
+        alt depth (AB 0.9, adj) while the legacy reading uses AD[GT[1]] = AD[0] (AB
+        0.1, not adj). s2 is a plain 0/1 het with AD [5, 5], adj either way. Every
+        sample has a variant call at the one locus, so the ref blocks only carry the
+        fields densification selects.
+        """
+        locus = hl.locus("chr1", 1000, reference_genome="GRCh38")
+        calls = {
+            "s1": (hl.call(1, 0, phased=True), [1, 9]),
+            "s2": (hl.call(0, 1), [5, 5]),
+        }
+        vd = hl.Table.parallelize(
+            [
+                {
+                    "locus": locus,
+                    "alleles": ["A", "T"],
+                    "s": s,
+                    "GT": gt,
+                    "AD": ad,
+                    "DP": 10,
+                    "GQ": 30,
+                }
+                for s, (gt, ad) in calls.items()
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                AD=hl.tarray(hl.tint32),
+                DP=hl.tint32,
+                GQ=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(grp="all")
+        rd = hl.Table.parallelize(
+            [
+                {"locus": locus, "s": s, "END": 1000, "LEN": 1, "DP": 10, "GQ": 30}
+                for s in calls
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                END=hl.tint32,
+                LEN=hl.tint32,
+                DP=hl.tint32,
+                GQ=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self):
+        """Return a reference HT with the one locus."""
+        return hl.Table.parallelize(
+            [{"locus": hl.locus("chr1", 1000, reference_genome="GRCh38")}],
+            hl.tstruct(locus=hl.tlocus("GRCh38")),
+        ).key_by("locus")
+
+    @pytest.mark.parametrize("legacy_het_ab, expected_adj_an", [(False, 4), (True, 2)])
+    def test_legacy_het_ab_changes_adj_an(
+        self, phased_het_vds, reference_ht, legacy_het_ab, expected_adj_an
+    ):
+        """The adj AN counts s1 only under the fixed reading; raw AN is unchanged."""
+        cols_ht = phased_het_vds.variant_data.cols()
+        gm_ht = generate_freq_group_membership_array(cols_ht, [{"grp": cols_ht.grp}])
+        ht = compute_stats_per_ref_site(
+            phased_het_vds,
+            reference_ht,
+            {"AN": (lambda t: t.GT, lambda gt: hl.agg.sum(gt.ploidy))},
+            group_membership_ht=gm_ht,
+            legacy_het_ab=legacy_het_ab,
+        )
+        meta = hl.eval(ht.strata_meta)
+        an = ht.collect()[0].AN
+        assert an[meta.index({"group": "adj"})] == expected_adj_an
+        assert an[meta.index({"group": "raw"})] == 4

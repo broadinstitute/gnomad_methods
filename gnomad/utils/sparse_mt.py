@@ -1082,6 +1082,8 @@ def compute_stats_per_ref_site(
     reduce_to_minimal_groups: bool = False,
     non_summable_strata: Optional[Set[str]] = None,
     reducible_aggs: Optional[Set[str]] = None,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
@@ -1167,6 +1169,10 @@ def compute_stats_per_ref_site(
         reduction is in effect. Defaults to all of `entry_agg_funcs`.
         Must be disjoint from the keys of `entry_agg_group_membership`.
         Ignored when no leaf reduction is in effect.
+    :param legacy_het_ab: Passed to :func:`annotate_adj` when adj is computed
+        here: read the het-ref allele depth as `AD[GT[1]]`, the pre-0.9.1
+        reading, so results match tables computed before that fix. Default is
+        False.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1371,7 +1377,7 @@ def compute_stats_per_ref_site(
     # Annotate with adj if needed.
     if adj and "adj" not in mt.entry:
         logger.info("Annotating the MT with adj.")
-        mt = annotate_adj(mt)
+        mt = annotate_adj(mt, legacy_het_ab=legacy_het_ab)
 
     ht = agg_by_strata(
         mt,

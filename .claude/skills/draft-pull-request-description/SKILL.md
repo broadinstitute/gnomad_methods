@@ -54,16 +54,35 @@ belong to another branch. Each marker's name starts with its run's timestamp
 1. **It is newer than the branch's last commit**, so the review saw the current
    code. Compare its timestamp with
    `git log -1 --format=%cd --date=format-local:%Y%m%d_%H%M%S`.
-2. **It reviewed this branch's files.** Compare the files its findings cite
-   (`path:line` references in that run's reviewer outputs,
-   `.code_review/<timestamp>_*`) with `git diff --name-only <base>...HEAD`. Most
-   should be files this branch changes; a widely shared file such as
-   `CLAUDE.md` or `README.md` appearing in both is not enough. If the run cites
-   too little to tell, ask the user whether it was a review of this branch.
+2. **It reviewed this branch's files.** The review skill itself saves only
+   its prompts and the marker, but a local wrapper may also save reviewer
+   output under the same prefix (`…_OUT__*`, `…_VAL__*`, `…_FINDINGS__*`); if
+   those exist, use them first, since they hold the findings and verdicts.
+   Otherwise the validation prompts (`…_validate.md`) list each finding with a
+   `file:` line, and the detection prompts (`…_PROMPT__*.md`, excluding
+   `_validate.md`) name the target under review. A run that found nothing has
+   no validation prompts; then the file list or diff target in its detection
+   prompt is the comparison set. Compare the cited files with
+   `git diff --name-only <base>...HEAD`. Most should be files this branch
+   changes; a widely shared file such as `CLAUDE.md` or `README.md` appearing
+   in both is not enough. If the run cites too little to tell, ask the user
+   whether it was a review of this branch.
 
-If no marker passes both, but one passes check 2, that run reviewed this branch
-before its latest commits: don't check the box. Say when it ran and offer to
-re-run `/review`.
+The marker's timestamp is when the run *started*, so check 1 fails for a run
+whose findings were fixed and committed afterward, and for a branch whose
+history was rewritten since (`/clean-git-history` gives every commit a new
+committer date even when the tree is unchanged). If no marker passes both, but
+one passes check 2, list the branch's commits with their dates and keep only
+the rows whose date is later than the marker's timestamp:
+
+```bash
+git log --format='%h %cd %s' --date=format-local:%Y%m%d_%H%M%S <base>..HEAD
+```
+
+Ask the user whether those later commits only address that run's findings or rewrite
+history with the same tree. If they confirm, treat the marker as passing.
+Otherwise that run reviewed this branch before its latest commits: don't check
+the box, say when it ran, and offer to re-run `/review`.
 
 For the marker that passes, identify which models were in the roster by listing prompt files that share its timestamp prefix:
 
@@ -89,9 +108,12 @@ two lists differ, say so rather than printing one merged roster — e.g.
 Use what you found to write the `/review` line of the AI code review section.
 The template does not pre-fill it, so write exactly one of these:
 
-- A marker passed both checks: `- [x] /review run — models: <validated models>`,
+- A marker passed both checks (or the user confirmed the later commits only
+  address its findings): `- [x] /review run — models: <validated models>`,
   followed by its findings and their disposition (fixed here / deferred /
-  rejected as a false positive).
+  rejected as a false positive). The findings are the items in that run's
+  `_validate.md` prompts; ask the user for any disposition the branch's
+  commits don't make evident.
 - Only a run from before the latest commits matched:
   `- [ ] /review last run <date>, before the latest commits`.
 - Otherwise: `- [ ] /review not run`.

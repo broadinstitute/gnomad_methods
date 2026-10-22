@@ -32,6 +32,8 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 
    Map every original commit into exactly one target commit.
 
+   Target commits must own disjoint sets of files: step 3 stages whole files, so one file's changes can't be split across commits that way. If two original commits edit the same file and belong in different target commits, either merge those target commits or plan to stage part of the file with a hand-built patch (`git diff <fork-point> -- <file>` trimmed to the wanted hunks, then `git apply --cached`). Say which in the plan, so the user approves it.
+
 5. Present the plan to the user and ask for explicit approval before touching anything.
 
 ### 3. Restructure

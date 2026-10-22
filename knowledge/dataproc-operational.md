@@ -2,7 +2,7 @@
 
 ## Always `hl.copy_log()` to GCS in a `finally` — the local log dies with the cluster
 
-**`[Hail]`/ops**
+**`[Hail]` + `[ops]`**
 
 Hail writes its driver log to a local path on the Dataproc master
 (`hl.init(log=…)`, default under `/tmp`). When the cluster is deleted —
@@ -33,7 +33,7 @@ disconnected, and the GCS log was the only trace.
 
 ## Diagnosing a Dataproc job that "just died" (no Python traceback)
 
-**`[Hail]`/ops**
+**`[Hail]` + `[ops]`**
 
 A job that ERRORs with no Python traceback in the streamed output
 usually failed JVM-side. Pull the driver log from GCS:
@@ -70,7 +70,7 @@ treat an empty state as *unknown*, not "still running."
 
 ## Standalone Dataproc scripts need `hl.init(tmp_dir="gs://...")`
 
-**`[Hail]`/ops**
+**`[Hail]` + `[ops]`**
 
 `hailctl dataproc submit` does **not** wire a GCS scratch path into
 `hl.init` for you the way gnomad_qc's shared entrypoints do (via
@@ -109,7 +109,7 @@ the failed stage in the DAG is the checkpoint or shuffle-write itself
 
 ## Installing packages on a Dataproc cluster: driver-time pip vs an init action on every node
 
-**`[Hail]`/ops · `--packages` behavior read from the hailctl 0.2.134 init script**
+**`[Hail]` + `[ops]` · `--packages` behavior read from the hailctl 0.2.134 init script**
 
 `hailctl dataproc submit`'s image ships Hail, numpy, pandas, scipy,
 sklearn — but no ML / DL / bio libraries beyond that. A script that
@@ -168,7 +168,7 @@ on the wrong side.
 
 ## Getting branch code onto a cluster: `--pyfiles` takes one zip, and it shadows `--packages`
 
-**`[Hail]`/ops · Verified in hailctl 0.2.134 (`dataproc/submit.py`) and PySpark (`context.py`)**
+**`[Hail]` + `[ops]` · Verified in hailctl 0.2.134 (`dataproc/submit.py`) and PySpark (`context.py`)**
 
 `hailctl dataproc submit --pyfiles` passes a single `.zip` through unchanged.
 Anything else — a directory, a `.py` file, or a comma-separated list — is
@@ -288,7 +288,7 @@ back" entry in [Hail idioms](hail-idioms.md#hail-idioms).
 
 ## Use `gcloud storage`, not `gsutil`
 
-**ops · verified against Google's docs, July 2026**
+**`[ops]` · verified against Google's docs, July 2026**
 
 Google's current guidance: *"gsutil is not the recommended CLI for Cloud
 Storage. Use `gcloud storage` commands in the Google Cloud CLI
@@ -315,7 +315,7 @@ when syncing a directory of checkpoints.
 
 ## Query on Batch (QoB) vs Dataproc
 
-**`[Hail]`/ops**
+**`[Hail]` + `[ops]`**
 
 Query on Batch is the same Hail you already write (`import hail as hl`)
 with a different executor: instead of a Spark cluster you provision with
@@ -358,7 +358,7 @@ identically on both backends.
 
 ## Cloud storage settings quietly dominate the bill
 
-**ops · current as of July 2025**
+**`[ops]` · current as of July 2026**
 
 Four settings that cost money without appearing anywhere in your code:
 

@@ -6,7 +6,7 @@ doc reduce to one of them propagating somewhere you didn't expect.
 
 ## `hl.case()` without `missing_false=True` silently drops rows
 
-**`[Hail]`**
+**`[Hail]` · Verified on Hail 0.2.134**
 
 ```python
 case = hl.case()                            # BAD
@@ -43,7 +43,7 @@ falling through to the default. Same fix applies to
 
 ## `hl.if_else(null_cond, a, b)` returns null, not `b`
 
-**`[Hail]`**
+**`[Hail]` · Verified on Hail 0.2.134**
 
 Unlike SQL COALESCE or Python's ternary, Hail's `hl.if_else` propagates
 null when the condition is null:
@@ -66,7 +66,7 @@ Mysteriously empty buckets in stratifications.
 
 ## `group_by` with null-string keys drops rows from labeled outputs
 
-**`[Hail]`**
+**`[Hail]` · Verified on Hail 0.2.134**
 
 `hl.agg.group_by(k, ...)` where `k` is a null string: Hail preserves the
 null-keyed items in the raw result dict (as `key=None`), but consumers
@@ -81,7 +81,7 @@ conversion; look for `None` and empty-string keys.
 
 ## `hl.explode` on a null array/set drops the row
 
-**`[Hail]`**
+**`[Hail]` · Verified on Hail 0.2.134**
 
 `ht.explode("gene_id")` when `gene_id` is null (from a left-join miss)
 silently drops that row. Not preserved with a null; not errored on; just
@@ -160,12 +160,12 @@ hl.parse_json(j, hl.tarray(hl.tstr))
 A misspelled or renamed field yields a **column of nulls** that looks
 exactly like "this annotation is legitimately missing for these
 variants," and a wrong scalar type is silently coerced. This is the
-mechanism behind hand-written schemas for large nested JSON (VEP output
-being the usual suspect) quietly losing fields after an upstream version
+mechanism behind hand-written schemas for large nested JSON (Ensembl VEP
+output being the usual suspect) quietly losing fields after an upstream version
 bump.
 
 **Seen in production, and note there are two distinct causes.** gnomAD
-v3 and v4 both shipped VEP structs with several fully-missing fields
+v3 and v4 both shipped Ensembl VEP structs with several fully-missing fields
 (`ancestral`, `context`, `swissprot`, `trembl`, `uniparc`, the
 `*.minimised` ones), and the two explanations are different problems that
 present identically (*reported · project meeting*):
@@ -231,7 +231,7 @@ s1 == s2                          # True
 
 ---
 
-## `hl.max` drops missing but propagates NaN — and the aggregator disagrees
+## `hl.max` / `hl.min` drop missing but propagate NaN — and the aggregators disagree
 
 **`[Hail]` · Verified on Hail 0.2.134**
 
@@ -251,14 +251,15 @@ Two traps stacked. First, missing and NaN are handled *oppositely* by
 contrast with `hl.max`" —
 [agg.max docs](https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.max)),
 so the scalar and the aggregator form of "the max" disagree on the same
-column. A sanity-check `hl.agg.max` sitting next to a per-row `hl.max`
-reports a plausible number while every per-row value is NaN. Identical
-story for `min` / `nanmin`.
+column. A validity-check `hl.agg.max` sitting next to a per-row `hl.max`
+reports a plausible number while every per-row value is NaN. `hl.min`,
+`hl.nanmin`, and `hl.agg.min` behave the same way.
 
-**Rule of thumb:** on float data that can carry NaN — any ratio with a
-possibly-zero denominator, e.g. the EM outputs in the
-[experimental-kernel entry](hail-idioms.md#hail-idioms) — reach for `hl.nanmax` /
-`hl.nanmin` explicitly. Pass `filter_missing=False` when a missing input
+**Rule of thumb:** when Hail has several functions for one idea, don't
+assume they treat missing and NaN alike — check each one. On float data
+that can carry NaN — any ratio with a possibly-zero denominator, e.g. the
+EM outputs in the [experimental-kernel entry](hail-idioms.md#hail-idioms)
+— reach for `hl.nanmax` / `hl.nanmin` explicitly. Pass `filter_missing=False` when a missing input
 should invalidate the result rather than be quietly skipped.
 
 ---

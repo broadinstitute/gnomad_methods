@@ -4,20 +4,30 @@ Private (underscore) parameters are unsupported and can change between
 Hail versions — but several are load-bearing in gnomad_qc, so you'll
 meet them in code review. Re-check these on a Hail upgrade.
 
+## Underscore parameters in gnomad_qc
+
+**`[Hail]`**
+
 | API | what it does |
 |---|---|
-| `read_table` / `read_matrix_table(_n_partitions=n)` | set partitioning at read, no shuffle |
+| `read_table` / `read_matrix_table(_n_partitions=n)` | set partitioning at read; no shuffle on Spark. On Query-on-Batch it isn't free: it adds a `table_calculate_new_partitions` stage with one Batch job per source partition, which took one run from 20 minutes and $5 to 49 minutes and $7.70 (*reported · PR review*) |
 | `read_*(_intervals=…, _filter_intervals=True)` | read only the given intervals, keeping the table's own partitions that overlap them |
 | `read_*(_intervals=…)` | read only the given intervals, using them as the partitions — one per interval, no shuffle; can't be combined with `_n_partitions` (see [Partitioning](partitioning-shuffles-oom.md#partitioning-shuffles-and-oom)) |
 | `checkpoint(_read_if_exists=not overwrite)` | skip already-written steps on a re-run |
-| `expr.aggregate(..., _localize=False)` | keep the result as an expression instead of pulling it to the driver |
+| `ht.aggregate(expr, _localize=False)` (also `mt.aggregate_rows` / `_cols` / `_entries`) | keep the result as an expression instead of pulling it to the driver. The Hail team has advised against relying on it; confirm with them before adding new uses |
 | `ht._force_count()` | force a real full pass (vs the metadata-only `count()`) |
 | `ht._filter_partitions(range(n))` | read just the first `n` partitions of a real table — cheap iteration on real data |
 
-Supported-but-easy-to-miss `hl.experimental` helpers the pipelines lean
-on: `sparse_split_multi`, `densify`, `filtering_allele_frequency`,
-`pc_project`, `import_gtf`, `get_gene_intervals`, `read_expression` /
-`write_expression`, `define_function`. Before using the numeric ones, see
+---
+
+## Supported `hl.experimental` helpers the pipelines lean on
+
+**`[Hail]`**
+
+Supported but easy to miss: `sparse_split_multi`, `densify`,
+`filtering_allele_frequency`, `pc_project`, `import_gtf`,
+`get_gene_intervals`, `read_expression` / `write_expression`,
+`define_function`. Before using the numeric ones, see
 the input-validation caveat in [Hail idioms](hail-idioms.md#hail-idioms)
 (`hl.experimental` numeric kernels don't validate inputs).
 

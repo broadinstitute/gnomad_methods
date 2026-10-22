@@ -1,6 +1,10 @@
-# Canary tests
+# Testing
 
-Cheap sanity checks that catch whole classes of the bugs above. Run
+## Canary tests
+
+**`[Hail]` + `[gnomAD data]`**
+
+Cheap checks that catch whole classes of the bugs above. Run
 after any refactor that touches the annotation join graph or the
 aggregation semantics.
 
@@ -32,6 +36,8 @@ permissive_n = ht.aggregate(hl.agg.count_where(
 ---
 
 ## Quick tests
+
+**`[Hail]`**
 
 Canary tests above check a *production* output. This is the cheaper
 loop that comes first: a pure transform can be tested on a table you

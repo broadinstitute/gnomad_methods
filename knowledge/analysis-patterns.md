@@ -13,10 +13,10 @@ code can see.
 **Two ways this bites:**
 
 1. **The anchor drops rows before any filter runs.** A sites table built
-   by starting from the VEP table (`vep_ht.select("vep")`) and joining the
-   filters onto it loses every variant that's in the filter table but
-   missing from the VEP table — before any `.filter()` runs. Loosening the
-   filter can't bring those variants back.
+   by starting from the Ensembl VEP table (`vep_ht.select("vep")`) and joining
+   the filters onto it loses every variant that's in the filter table but
+   missing from the Ensembl VEP table — before any `.filter()` runs.
+   Loosening the filter can't bring those variants back.
 
 2. **A more permissive lookup table doesn't add rows.** Annotating a
    release-scoped table by looking up a more permissive one (say, one that
@@ -48,11 +48,10 @@ Analyses that assign a single "priority" tag per variant (source-set →
 priority-source) pick from a priority list. That priority list is a
 design decision — not obvious from input tags.
 
-Example: `SOURCE_PRIORITY = ["clinvar_plp", "hc_lof", "splice_path",
-"clinvar_vus", "in_trans_oe_candidate", ..., "clinvar_blb"]`. A variant
-tagged both `clinvar_blb` and `in_trans_oe_candidate` gets priority
-= `in_trans_oe_candidate` (because `clinvar_blb` is at the *bottom* of
-the list — a deliberate choice for that analysis).
+Example: with a priority list that starts at pathogenic ClinVar and ends
+at benign ClinVar, a variant tagged both benign-ClinVar and any other
+source is counted under the other source, because benign sits at the
+*bottom* of the list.
 
 **Symptom:** apparent tag counts don't sum to source-set counts.
 **Fix:** document the priority order visibly in code and downstream
@@ -60,7 +59,7 @@ analysis narratives.
 
 ---
 
-## VEP transcript picking: canonical vs MANE Select vs first vs explode-all
+## Ensembl VEP transcript picking: canonical vs MANE Select vs first vs explode-all
 
 **`[gnomAD data]`**
 
@@ -72,8 +71,8 @@ different representative transcripts:
 - **Canonical** — `tc.canonical == 1`. Ensembl's designated canonical
   transcript per gene.
 - **MANE Select** — `tc.mane_select` defined and non-empty. NCBI/EBI
-  joint standard; generally preferred over canonical when available.
-- **First** — `tcs[0]`. Order depends on VEP config; can be non-coding
+  joint standard.
+- **First** — `tcs[0]`. Order depends on Ensembl VEP config; can be non-coding
   or a pseudogene transcript when the variant is intergenic.
 
 The gotcha: picking `tcs[0]` when the first transcript is non-coding
@@ -131,8 +130,8 @@ ceiling of a rare-variant binning scheme.
   "af_gte_5e-2"), not by what you *hope* they catch ("missing_af").
 - If a plausible input range extends past your bucket ceiling, add
   an explicit bucket for it rather than relying on the default.
-- Before interpreting a large "missing" bucket as a coverage gap, sanity-
-  check by looking at the actual input distribution. Ideally emit
+- Before interpreting a large "missing" bucket as a coverage gap, check
+  the actual input distribution. Ideally emit
   separate default and null buckets:
   ```python
   case = case.when(hl.is_missing(af_expr), "null_af")
@@ -186,10 +185,10 @@ If your on-disk HT has 1M rows but a downstream analysis shows 700k
 rows, you need to know *where* the filter was applied — inside a
 Dataproc job that wrote the HT, or inside the loader at read time.
 
-Common example: mega-gene exclusion via `--exclude-gene-ids` gets baked
-into some HTs at build time, but not others. Downstream loaders may
-re-apply the exclusion at read time. `ht.count()` on the raw on-disk
-HT gives one number; `_load_trio_ht(args).count()` gives another.
+Common example: excluding a handful of very large genes can be baked
+into some HTs when they're written but not into others, and a downstream
+loader may re-apply the exclusion at read time. `ht.count()` on the raw
+on-disk HT gives one number; the count after the loader gives another.
 Neither is wrong.
 
 **Rule of thumb:** in the docstring of any function that returns an
@@ -215,11 +214,10 @@ logging.basicConfig(level=logging.INFO, force=True)  # works (Python 3.8+)
 logger.setLevel(logging.INFO)                      # also works: the gnomad_qc pattern
 ```
 
-**What the library should do differently:** a library shouldn't configure the
-root logger when imported — Python's logging HOWTO advises libraries to add no
-handlers other than `NullHandler`. Removing these calls changes the logging
-output of every downstream script that doesn't configure logging itself, so it
-needs a coordinated change with gnomad_qc rather than a one-line fix.
+Removing these calls from the library is tracked in
+[#856](https://github.com/broadinstitute/gnomad_methods/issues/856). It needs a
+coordinated change with gnomad_qc, so until it lands, use one of the two forms
+that work.
 
 ---
 
@@ -227,10 +225,10 @@ needs a coordinated change with gnomad_qc rather than a one-line fix.
 
 **`[Hail]`**
 
-For per-population (or any per-stratum) counts / EM over a large keyed
-dataset, prefer **restrict the cohort to each stratum, aggregate that
-stratum on its own, then assemble the strata** over computing every
-stratum in a single pass. Two payoffs:
+For per-genetic-ancestry-group (or any per-stratum) counts / EM over a
+large keyed dataset, prefer **restrict the cohort to each stratum,
+aggregate that stratum on its own, then assemble the strata** over
+computing every stratum in a single pass. Two payoffs:
 
 1. **Codegen-safe** — sidesteps the `ClassTooLargeException` cliff (one
    heavy expression per stratum inlined into one row op; see

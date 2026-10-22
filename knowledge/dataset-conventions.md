@@ -13,26 +13,26 @@ notes before treating any of them as the present state of the data.
 
 **`[gnomAD data]` · reported · project meeting**
 
-A release's VEP and GENCODE versions are fixed for the life of that
-release. v4 and v5 sit on **VEP 105 / GENCODE 39** — partly because
+A release's Ensembl VEP and GENCODE versions are fixed for the life of that
+release. v4 and v5 sit on **Ensembl VEP 105 / GENCODE 39** — partly because
 downstream products are coupled to it, notably pext, which depends on
 GTEx being on the same GENCODE build.
 
 Staying put has a known cost: a problem in `RNU4ATAC` (a coordinate shift
-relative to ClinVar, fixed upstream in VEP 114) persists in the pinned
+relative to ClinVar, fixed upstream in Ensembl VEP 114) persists in the pinned
 version. The remedy was to patch that one gene rather than move the whole
 release, and that patch has shipped — the browser now annotates
-`RNU4ATAC` with **VEP 115 / GENCODE v49** while everything else stays on
+`RNU4ATAC` with **Ensembl VEP 115 / GENCODE v49** while everything else stays on
 the pinned version, and flags the gene page to say so. So "which
 annotation version is this?" can have a per-gene answer.
 
-Moving isn't cheap either. VEP 115 more than doubles the transcript count
+Moving isn't cheap either. Ensembl VEP 115 more than doubles the transcript count
 (protein-coding and lncRNA alike) and takes roughly 3.5 hours where 105
 takes 45 minutes — and every transcript-level annotation downstream
 shifts with it.
 
 **What this means for you:** don't assume gnomAD's consequences match
-whatever VEP you run locally. When your annotation disagrees with the
+whatever Ensembl VEP you run locally. When your annotation disagrees with the
 browser's, compare versions before you debug anything else. If you need a
 newer annotation for a specific gene, that's a targeted re-run, not a
 reason to expect the release to move.
@@ -79,7 +79,7 @@ deliberately:
 - **non-TOPMed** was planned and then dropped. gnomAD holds only a small
   fraction of TOPMed (on the order of 30k of ~160k samples at the time),
   it was expensive to construct without the metadata, and user demand
-  was low. It could return in a point release if demand appears.
+  was low.
 - **Disease-specific subsets** (the v2-era non-neuro being the one still
   asked about) ended after v2, on two grounds: no single disease is
   over-enriched in the callset, and the label was inaccurate about what
@@ -102,20 +102,31 @@ information, so finer resolution at the tails isn't available at any
 access level. It isn't a display choice you can work around by
 requesting the underlying data.
 
+Age also has two caveats of its own: it is known for only a subset of
+samples, and what it measures (age at recruitment, at sample collection, or
+something else) isn't known for every sample. Treat any age-stratified result
+as approximate.
+
 ---
 
-## "Remaining individuals," not "other" or "unassigned"
+## Describing people: genetic ancestry groups, sex karyotypes, "remaining individuals"
 
-**`[gnomAD data]` · reported · project meeting**
+**`[gnomAD data]` · reported · project meeting, PR review**
 
-The label for samples not assigned to a genetic ancestry group is
-**"remaining individuals."** It was chosen over "other" and over
-"unassigned" on genetic-counselor feedback that `un-` and `non-`
-constructions should be avoided when describing people.
+gnomAD's words for groups of people are deliberate. Use them in anything you
+write from gnomAD data:
 
-Worth knowing when you're writing anything user-facing off gnomAD data,
-and when you're matching labels programmatically — the string is
-`remaining` in the data.
+- **Genetic ancestry group, not population.** The groups are defined by
+  genetic similarity, so describe them that way. v4 code and fields say
+  `gen_anc` (`grpmax_gen_anc`); older code and earlier releases still say `pop`.
+- **Sex karyotype, not gender.** Samples are split by inferred sex karyotype,
+  `XX` and `XY` (`SEXES` in `gnomad/resources/grch38/gnomad.py`); describe
+  them that way rather than with gender terms.
+- **"Remaining individuals," not "other" or "unassigned."** This is the
+  label for samples not assigned to a genetic ancestry group, chosen on
+  genetic-counselor feedback that `un-` and `non-` constructions should be
+  avoided when describing people. When matching labels programmatically, the
+  string in the data is `remaining`.
 
 ---
 
@@ -146,21 +157,35 @@ here," not as "no data" — and go look at the two separately.
 
 ---
 
-## The requester-pays copy of the release needs a billing project
+## Read released data from the public mirror, not the requester-pays bucket
 
-**`[gnomAD data]` · Verified against Hail 0.2.134 API**
+**`[gnomAD data]` · Verified against Hail 0.2.134 API and Google's [requester-pays docs](https://docs.cloud.google.com/storage/docs/requester-pays)**
 
-Released gnomAD data has two copies on GCS: the free public mirror
-`gs://gcp-public-data--gnomad` (Google Cloud Public Datasets), and
-`gs://gnomad-public-requester-pays`, where the production team writes the
-release. The gnomad_methods resource classes read the free mirror by default
+Released gnomAD data is served from the free public mirror
+`gs://gcp-public-data--gnomad` (Google Cloud Public Datasets).
+`gs://gnomad-public-requester-pays` is where the production team stages a
+release before it syncs to the mirror, and data should sit there for less than
+a day. The resource definitions still name the staging bucket, but the
+gnomad_methods resource classes read the mirror instead
 (`gnomad/resources/config.py`; `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`
 overrides it), so most reads need no billing setup.
 
-Reading the requester-pays bucket directly — a path copied out of the
-resource definitions, or a tool that doesn't go through the resource
-classes — means paying for the egress yourself, which needs a billing
-project configured or the read fails.
+**What this means for you:** read through the resource classes, or from the
+mirror. A path copied out of the resource definitions points at the staging
+bucket, where the data has most likely already been removed, and reading
+anything still there bills your project.
+
+**Naming a billing project on a free bucket isn't free.** A bucket without
+requester pays still accepts a request that names a billing project, and Google
+then bills that project for it. So this copy costs money, where the same command
+without `--billing-project` doesn't:
+
+```bash
+gcloud storage cp --billing-project <project> gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta .
+```
+
+Name a billing project only for buckets that are requester-pays. To read one
+from Hail:
 
 ```python
 hl.init(gcs_requester_pays_configuration="my-project")

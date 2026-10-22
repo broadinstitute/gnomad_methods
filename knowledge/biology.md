@@ -1,8 +1,5 @@
 # Biology
 
-Fewer of these came up in a specific recent session; contribute more as
-you hit them.
-
 ## Multiallelic sites: split vs unsplit changes everything
 
 **`[Hail]` + `[gnomAD data]`**
@@ -12,7 +9,7 @@ A single VCF row like `chr1:100 A→G,T` splits into two biallelic rows
 - Whether `(locus, alleles)` is a unique key (split: yes; unsplit: no —
   same locus appears multiple times with a length-≥3 alleles array)
 - Whether AC / AF are per-alt or aggregated
-- Whether VEP consequences are per-alt or shared
+- Whether Ensembl VEP consequences are per-alt or shared
 
 Reading an unsplit HT and treating it as split (or vice versa) produces
 plausible-looking wrong output. Check `hl.experimental.split_multi_hts`
@@ -248,7 +245,7 @@ before it is a biological finding.
 
 ---
 
-## Synonymous O/E ≈ 1 is the constraint sanity check
+## Synonymous O/E ≈ 1 is the constraint validity check
 
 **`[gnomAD data]` · reported · project meeting**
 

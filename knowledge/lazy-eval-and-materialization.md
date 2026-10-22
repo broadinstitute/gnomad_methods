@@ -25,7 +25,7 @@ ht.write(out)                        # <-- runs the whole join a SECOND time
 — doubles the stage. Nothing about it looks expensive at the call site.
 
 **AI assistants are especially prone to this**: they insert `count()` /
-`show()` calls for progress logging and sanity-checking, which is
+`show()` calls for progress logging and validity-checking, which is
 harmless on a toy table and doubles wall-clock on a real one. When
 reviewing generated code, grep for `.count()` and `.show()` and check
 that each one sits *after* a checkpoint.
@@ -55,7 +55,7 @@ logger.info("checkpoint has %d rows", n)
 A checkpointed HT is a materialized on-disk table in Hail's native
 format (not Parquet) with a per-partition index; `count()` answers from
 that metadata rather than scanning, and its wall time stays flat as the
-table grows. You get a free logging / sanity-check point. (`_force_count()`
+table grows. You get a free logging / validity-check point. (`_force_count()`
 is the private counterpart that *does* force the full pass — useful when
 you actually want to materialize or time one.)
 
@@ -64,6 +64,12 @@ you actually want to materialize or time one.)
 filter drop what I expected" check — `ht_after.count()` after a
 checkpoint is essentially free; `ht_before.count()` before the
 checkpoint costs a full extra pass.
+
+**It's also the place to add a `naive_coalesce`.** `ht.n_partitions()` is free
+here too, so you can see rows per partition. If a heavy filter left the
+partitions sparse, coalesce *after* the checkpoint: the expensive work upstream
+of it keeps its full parallelism (see
+[Partitioning](partitioning-shuffles-oom.md#partitioning-shuffles-and-oom)).
 
 **Symptom of the anti-pattern:** a pipeline where a "quick" logging
 `.count()` doubles the wall-clock of a stage, because it's on an
@@ -105,7 +111,7 @@ a re-run of a partially-completed pipeline skip already-written steps.
 
 ## `.cache()` before a shuffle is load-bearing, not just a perf optimization
 
-**`[Hail]`**
+**`[Hail]` · anecdotal · production runs**
 
 Materializing the input to a `group_by` / big join with `.cache()` (or
 `.checkpoint()`) isn't only about speed — it empirically avoids

@@ -1,5 +1,8 @@
 # Hail versions
 
+Everything in this knowledge tree is about Hail 0.2. This page tracks the
+differences between 0.2.x releases that matter for gnomAD work.
+
 ## Newer Hail writes files that older Hail can't read
 
 **`[Hail]` · Verified against the Hail change log and `FileFormat.version` in the source at the 0.2.134, 0.2.138, and 0.2.139 tags**

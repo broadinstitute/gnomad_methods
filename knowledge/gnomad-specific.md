@@ -187,14 +187,14 @@ not have the same rows at each step:
   table
 - the release sites table drops AC0 variants that `only_filters.ht`
   retains
-- the VEP and frequency tables are typically joint-call-scoped (broader),
+- the Ensembl VEP and frequency tables are typically joint-call-scoped (broader),
   while the release sites table is release-scoped (narrower)
 
 So an annotation struct built from those lookups (`ann` below) can be
 partly filled in:
 - `ann.source` defined (from the tag table)
 - `ann.ac` null (variant absent from the release sites table)
-- `ann.vep` defined or null depending on the VEP table's scope
+- `ann.vep` defined or null depending on the Ensembl VEP table's scope
 
 **Always check field-level nullability, not just struct-level.**
 `hl.is_defined(ann)` does NOT guarantee `hl.is_defined(ann.ac)`.

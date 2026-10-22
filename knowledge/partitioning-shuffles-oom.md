@@ -89,7 +89,7 @@ the shuffle. See the driver-memory entry in
 | `ht.repartition(n)` | full shuffle, equal-sized partitions (`shuffle=True` is the default) | a shuffle, at the next action |
 | `ht.repartition(n, shuffle=False)` | merges existing partitions; `n` cannot exceed the current count | no shuffle |
 | `ht.naive_coalesce(n)` | merges *adjacent* partitions, no rebalancing — can leave you badly skewed | no shuffle |
-| `hl.read_table(path, _n_partitions=n)` | sets partitioning as the table is read | no shuffle |
+| `hl.read_table(path, _n_partitions=n)` | sets partitioning as the table is read | no shuffle on Spark; an extra stage on Query-on-Batch (see [hidden APIs](hidden-apis.md#hidden-and-undocumented-apis-we-rely-on)) |
 
 **All of these are lazy** — the call returns instantly and the shuffle
 happens at the next action, which is why a repartition usually gets
@@ -135,9 +135,11 @@ Same content both times — only the layout changed.
 **Why `repartition` afterwards is the wrong fix.** It pays for the problem
 twice: the aggregate still runs on the narrow count, and then a *second* full
 shuffle rebalances its output. The narrow stage is the slow one, and
-repartitioning cannot make it any wider retroactively. Widening the read costs
-nothing (`_n_partitions` re-splits off the table's own index) and the aggregate
-never narrows in the first place.
+repartitioning cannot make it any wider retroactively. On Spark, widening the
+read costs nothing (`_n_partitions` re-splits off the table's own index) and the
+aggregate never narrows in the first place. On Query-on-Batch the wider read
+isn't free (see
+[hidden APIs](hidden-apis.md#hidden-and-undocumented-apis-we-rely-on)).
 
 **Corollary for the input you don't control.** The 99 above was not a choice
 anyone made in this pipeline — it was the partitioning of an upstream published
@@ -180,10 +182,11 @@ uses this same pattern.
 keyed the same way but written separately have different partition bounds;
 read them all with intervals computed once from the base table
 (`base_ht._calculate_new_partitions(n)`), as gnomad_qc's
-`create_release_sites_ht.py` does. When the base table is sparse — a few
-genes — its intervals cover everything between the genes, so a single task can
-end up reading a large stretch of the other table: filter the other table to
-the genes first.
+`create_release_sites_ht.py` does; gnomad_methods wraps this as
+`gnomad.utils.file_utils.repartition_for_join`. When the base table is sparse —
+a few genes — its intervals cover everything between the genes, so a single task
+can end up reading a large stretch of the other table: filter the other table
+to the genes first.
 
 ---
 
@@ -228,7 +231,7 @@ job. Cheap machines can come back for the non-shuffling stages.
 
 ## How many partitions?
 
-**anecdotal · gathered from production runs, ~2023**
+**`[Hail]` · anecdotal · gathered from production runs, ~2023**
 
 There's no formula, but the failure modes are known:
 
@@ -241,7 +244,8 @@ There's no formula, but the failure modes are known:
   had.** Joining several large tables multiplies bytes per row while the
   partition count stays fixed, so partitions that were well-sized going
   in are oversized coming out. A release-scale join of six or seven
-  tables was one place this bit.
+  tables was one place this bit. `repartition_for_join` builds in that
+  headroom: by default it returns 1.1× the base table's partition count.
 - Aim for roughly constant *work per partition*, not a constant
   partition count.
 
@@ -250,14 +254,16 @@ There's no formula, but the failure modes are known:
 
 ## Check partition counts and key ranges from a table's metadata, without Hail
 
-**`[Hail]` · Verified on a Table written by 0.2.134**
+**`[Hail]` · Verified on Tables written by 0.2.134 and 0.2.139**
 
 A Table directory's `metadata.json.gz` holds the full schema (`table_type`) and
 the row count of every partition (`components.partition_counts.counts`).
 `rows/metadata.json.gz` holds each partition's key range (`_jRangeBounds`) and
 part file (`_partFiles`). Reading them takes seconds and no cluster — enough to
 tell whether a field exists, how many partitions will feed a shuffle, whether
-they're skewed, and which partitions overlap your genes.
+they're skewed, and which partitions overlap your genes. (0.2.139 stopped
+writing the per-partition index metadata, `index/*.idx/metadata.json.gz`, but
+both of these files are still there.)
 
 ```bash
 gcloud storage cat gs://<bucket>/<table>.ht/metadata.json.gz | gunzip | python -m json.tool | less
@@ -266,6 +272,7 @@ gcloud storage cat gs://<bucket>/<table>.ht/metadata.json.gz | gunzip | python -
 The same file records the Hail version that wrote the table; see
 [Hail versions](hail-versions.md#hail-versions). MatrixTable directories are
 laid out differently.
+
 ---
 
 [← back to the index](README.md)

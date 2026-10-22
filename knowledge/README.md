@@ -20,6 +20,9 @@ HTs, or choose between two reasonable-sounding approaches. Prefer the
 listed patterns when writing new code, and use the symptoms and design
 notes as a checklist when scoping or debugging.
 
+Everything here is about Hail 0.2. Entries whose behavior depends on a
+particular 0.2.x release say which one they were verified on.
+
 ---
 
 ## Which sub-doc do I need?
@@ -45,7 +48,7 @@ Load only the one you need — that's the point of the split.
 | [gnomAD-specific](gnomad-specific.md) | you filter variants, index into `freq`, cross HTs with different variant sets, touch non-release samples, or densify the v4 VDS and classify genotypes |
 | [Biology](biology.md) | reference builds, multiallelics, sex chromosomes, trios, AC/AF null semantics, or what QUAL and LOFTEE do and don't tell you |
 | [Release conventions and data policy](dataset-conventions.md) | you wonder why the data is shaped the way it is — annotation versions, subsets, constraint cutoffs across releases, labels, requester-pays |
-| [Codebase and analysis patterns](analysis-patterns.md) | you pick a starting table, a VEP transcript, a bucket scheme, or a per-stratum aggregation, or read an HT whose filter provenance is unclear |
+| [Codebase and analysis patterns](analysis-patterns.md) | you pick a starting table, an Ensembl VEP transcript, a bucket scheme, or a per-stratum aggregation, or read an HT whose filter provenance is unclear |
 
 **Running the work**
 
@@ -55,8 +58,12 @@ Load only the one you need — that's the point of the split.
 | [Testing](testing.md) | after any refactor of the join graph or aggregation semantics, and before you pay for a cluster run |
 | [Working with an AI assistant](working-with-ai.md) | you're setting up `CLAUDE.md` / `CLAUDE.local.md`, or wondering what's burning tokens and cluster time |
 
-Entries are tagged **`[Hail]`** (universal Hail behavior) and/or
-**`[gnomAD data]`** (dataset- or schema-specific). Entries that only the
+Entries are tagged **`[Hail]`** (universal Hail behavior),
+**`[gnomAD data]`** (dataset- or schema-specific), and/or **`[ops]`**
+(running the work: clusters, Query-on-Batch, storage, and cost).
+[Working with an AI assistant](working-with-ai.md) is the exception: it is
+process guidance rather than Hail or gnomAD knowledge, so its entries carry no
+scope tag. Entries that only the
 internal team can use also carry one or both of:
 
 - **`[internal: production]`** — relies on QC outputs or production
@@ -101,7 +108,8 @@ change to one against the other; see "Check every change against
    Three things GitHub renders happily and Sphinx rejects:
    - **Adjacent `---` rules** with nothing between them.
    - **Skipping a heading level** — entries are `##` under the page's
-     single `#` title. Don't reach for `###`.
+     single `#` title. A `###` is fine inside an entry, but never directly
+     under the `#`.
    - **Non-Python placeholders in a ` ```python ` block** — `…` outside
      a string literal can't be lexed. Use `...`, or drop the fence's
      language tag.
@@ -124,7 +132,7 @@ propose an entry. It should be:
 - **Silent-fail bugs** — the wrong pattern produces a plausible answer.
   Fixing these silently improves any analysis that would have hit them.
 - **Design-choice tradeoffs** — e.g. "canonical vs MANE Select
-  transcript picking, and when each is right"; "per-population vs
+  transcript picking, and when each is right"; "per-genetic-ancestry-group vs
   full-cohort estimates"; "release-only vs trio-inclusive variant sets."
   Documenting these lets a future analysis start with the right default.
 - **Hidden-in-code facts** — things about HT schemas, path
@@ -148,8 +156,9 @@ propose an entry. It should be:
   option cost / gain), OR **Where to find more** for hidden-fact items
   (file paths, upstream repo, etc.).
 - **Recommendation / rule of thumb**.
-- **Scope tag** — one of **`[Hail]`** (universal Hail behavior),
-  **`[gnomAD data]`** (dataset/schema-specific), or both. Add
+- **Scope tag** — one or more of **`[Hail]`** (universal Hail behavior),
+  **`[gnomAD data]`** (dataset/schema-specific), and **`[ops]`** (running
+  the work). Add
   **`[internal: production]`** and/or **`[internal: research]`** for
   anything only the internal team can use (definitions above).
 - **Hail version** — whenever the behavior is version-dependent, state

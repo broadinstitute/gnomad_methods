@@ -141,15 +141,15 @@ slowdown: the same code works at K≤2 and dies at K≥3 with
 `is.hail.relocated.org.objectweb.asm.ClassTooLargeException: Class too
 large: __C…native_writer`.
 
-Concrete case: a per-population count built
+Concrete case: a per-group count built
 ```python
 hl.dict([
-    (pop, hl.struct(raw=_count_from_sets(...), adj=_count_from_sets(...)))
-    for pop in pops
+    (g, hl.struct(raw=_count_from_sets(...), adj=_count_from_sets(...)))
+    for g in grps
 ])
 ```
-inside one `vp.select(gt_counts_by_pop=…)`. `_count_from_sets` is ~dozens
-of set intersections; 2 pops compiled fine, 3 pops (`afr,nfe,eas`) blew
+inside one `vp.select(gt_counts_by_grp=…)`. `_count_from_sets` is ~dozens
+of set intersections; 2 groups compiled fine, 3 groups (`afr,nfe,eas`) blew
 the class limit before any row work ran.
 
 **Fix:** don't inline all K into one expression. Compute each in a
@@ -178,7 +178,7 @@ size.
 
 ## `hl.experimental` numeric kernels don't validate inputs — check dtype and value invariants yourself
 
-**`[Hail]`**
+**`[Hail]` · `int32` requirement verified on Hail 0.2.134; the hang is reported from a production run**
 
 Experimental / numeric Hail functions (EM solvers, statistical kernels)
 are thin wrappers over a numeric routine with far fewer guardrails than
@@ -270,26 +270,29 @@ a per-row array of structs, project first.
 
 ---
 
-## `ht[key_expr]` is a Spark join (shuffle), not an indexed point lookup
+## `ht[key_expr]` is a join, not an indexed point lookup
 
 **`[Hail]`**
 
-Hail's Spark backend compiles `other[ht.key]` /
-`ht.annotate(x=other[ht.key].x)` into a **Spark join** — broadcast if the
-right side is small, otherwise sort-merge with a shuffle to disk — not an
-indexed random-access lookup. So "just annotating one field" from a
-multi-GB table triggers a full shuffle. On Dataproc this is where
-boot-disk sizing bites: secondary / preemptible workers with small
-(~40 GB) boot disks and several executors per node sharing that disk
-overflow when a shuffle spills > ~2 GB, killing the stage.
+`other[ht.key]` / `ht.annotate(x=other[ht.key].x)` compiles to a join against
+`other`, not an indexed random-access lookup, so "just annotating one field"
+from a multi-GB table costs a join. Whether the left side shuffles depends
+only on key structure: a lookup on a prefix of the left's key is an ordered
+join, and anything else re-keys and shuffles the whole left side (next entry).
+
+When it does shuffle, on Dataproc this is where boot-disk sizing bites:
+secondary / preemptible workers with small (~40 GB) boot disks and several
+executors per node sharing that disk overflow when a shuffle spills > ~2 GB,
+killing the stage.
 
 **Plan around it:**
-- A right-side table > ~10 MB won't broadcast; it sort-merge joins
-  (shuffle). Keep frequently-joined annotation tables small, or
-  `checkpoint` + co-partition them.
+- Look up on a prefix of the left's key where you can.
 - **Disk, not just memory, is a scaling limit on Dataproc** — size worker
   boot disks (or use SSDs) for the shuffle, or shrink / shard the join.
-- Chaining many `[key]` lookups chains many joins/shuffles; assemble via
+- Co-partition tables you join repeatedly: read them all with the intervals
+  from `gnomad.utils.file_utils.repartition_for_join` (see
+  [Partitioning](partitioning-shuffles-oom.md#partitioning-shuffles-and-oom)).
+- Chaining many non-prefix `[key]` lookups chains many shuffles; assemble via
   one keyed join where you can.
 
 **Symptom:** an `annotate` that "should be cheap" spends its wall time in

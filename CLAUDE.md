@@ -22,6 +22,21 @@ team for functionality that already existed here but that they couldn't find.
 Optimize new code for discoverability — clear names, tight scopes, accurate
 docstrings — not for cleverness.
 
+## gnomAD & Hail institutional knowledge
+
+`knowledge/` is a shared reference of gnomAD + Hail institutional knowledge
+maintained by the methods group: silent-fail bug classes, design tradeoffs,
+release conventions, and facts that are hidden in the source.
+
+**Consult [`knowledge/README.md`](knowledge/README.md) before writing gnomAD- or
+Hail-touching code.** It is a routing index — read it, then load only the
+sub-document you need rather than the whole tree.
+
+It is also where new institutional knowledge belongs. The contribution rules
+live in that README; the two that matter most are **never add a fact you have
+not verified** (against the Hail source, the official docs, or a job you
+actually ran) and **propose entries to the user before writing them**.
+
 ## Repo Layout
 
 **The repo layout lives in the README**, along with the list of related gnomAD
@@ -210,10 +225,13 @@ def my_function(
   the result. Historical exceptions exist; don't add new ones. Checkpointing in
   particular is not free and is not yours to spend: a caller has no idea a
   library function is checkpointing on their behalf, so a checkpoint buried in a
-  utility quietly consumes their storage and compute. If a function genuinely
-  needs one — a table about to be joined several ways, or an expensive
-  computation that must be forced once — take a path or a flag from the caller
-  rather than deciding for them.
+  utility quietly consumes their storage and compute. `.cache()` and
+  `.persist()` count too: Hail ignores their storage level and checkpoints to
+  `hl.tmp_dir()` (see [cache vs persist vs
+  checkpoint](knowledge/lazy-eval-and-materialization.md#cache-vs-persist-vs-checkpoint)).
+  If a function genuinely needs one — a table about to be joined several ways,
+  or an expensive computation that must be forced once — take a path or a flag
+  from the caller rather than deciding for them.
 - **Lazy imports are the exception, not the rule.** Use top-level imports.
   Three cases justify an import inside a function, and they are all already
   present in the repo: resolving a circular import; an optional or heavy
@@ -304,9 +322,10 @@ determines who pays:
   Cloud Public Datasets. **Read from here.** No requester-pays, no project
   billing for the read.
 - `gs://gnomad-public-requester-pays` — where the gnomAD Production Team
-  *writes* release data, which then syncs to the mirror above. It is public but
-  **requester-pays**: reading it bills the requester's project. Don't hardcode
-  paths into this bucket in examples, tests, or docstrings.
+  *stages* release data before it syncs to the mirror above; data should sit
+  there for less than a day. It is public but **requester-pays**: reading it
+  bills the requester's project. Don't hardcode paths into this bucket in
+  examples, tests, or docstrings.
 - `gs://gnomad` and other internal buckets — not public; internal work only.
 
 **Prefer the resource classes over any literal path.** `gnomad/resources/` picks
@@ -314,10 +333,11 @@ the source for you (see `config.py`: it defaults to Google Cloud Public Datasets
 and can be pointed elsewhere with `GNOMAD_DEFAULT_PUBLIC_RESOURCE_SOURCE`), so
 `some_resource.ht()` reads the free copy without the caller having to know any
 of the above. Note that the literal paths stored in `gnomad/resources/grch37/`
-and `grch38/` are `gnomad-public-requester-pays` URLs — that is the write
+and `grch38/` are `gnomad-public-requester-pays` URLs — that is the staging
 location, and the source config rewrites them on read. Copying one of those
-strings out of the source and using it directly bypasses the rewrite and incurs
-charges.
+strings out of the source and using it directly bypasses the rewrite: the data
+has most likely already left that bucket, and reading anything still there
+incurs charges.
 
 ### Cost and cluster conventions
 
@@ -337,6 +357,11 @@ charges.
 Treat any change to cloud configuration as cost-affecting until proven
 otherwise, and check the installed Hail version before concluding that something
 in this library is broken.
+
+**Before changing the Hail version partway through a pipeline**, check
+[Hail versions](knowledge/hail-versions.md) and the `hail_version` recorded in
+the inputs' `metadata.json.gz`: a table written by a newer Hail can't be read by
+an older one, and some versions have known bugs that affect gnomAD work.
 
 ## Never Do This
 

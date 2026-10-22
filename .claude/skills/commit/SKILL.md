@@ -25,9 +25,9 @@ Always run the repo's pre-commit hooks on the staged files before reviewing, so 
 
 Skip this step only if the repo has no `.pre-commit-config.yaml`.
 
-Capture the staged file list first (only run hooks on staged files — never all files, to avoid reformatting unrelated code):
+Capture the staged file list first (only run hooks on staged files — never all files, to avoid reformatting unrelated code). Leave out files staged for deletion: the hooks have nothing to check there, and `git add` on a deleted path fails and stages nothing.
 ```bash
-git diff --staged --name-only
+git diff --staged --name-only --diff-filter=d
 ```
 
 Then check whether any of those files also has unstaged changes:
@@ -48,6 +48,7 @@ Auto-fixing hooks (black, isort, autopep8, end-of-file-fixer, trailing-whitespac
 ```bash
 git add -- <staged files>
 ```
+Then confirm nothing is left unstaged in those files (`git diff --name-only -- <staged files>` prints nothing); if it does, the re-add failed and the index still holds unformatted content.
 If a non-autofixable hook fails (e.g. pydocstyle, check-yaml), stop and surface the failure to the user rather than committing.
 
 ### 3. Review the diff

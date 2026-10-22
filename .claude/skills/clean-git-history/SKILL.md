@@ -29,10 +29,16 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
    - Title (matching this repo's commit style — check `git log --oneline -10`)
    - One-line rationale
    - Which original commits / files it absorbs
+   - Credit to carry over: human co-authors of the commits it absorbs, from
+     `git log --format='%h %an <%ae>%n%(trailers:key=Co-authored-by,valueonly)' <fork-point>..HEAD`.
+     GitHub adds `Co-authored-by:` when a reviewer's suggestion is applied, and a
+     rewrite would otherwise drop it. Keep only people: leave out AI co-author
+     lines (e.g. `Co-Authored-By: Claude ...`), since the rebuilt commit's
+     `Assisted-by` trailer covers those.
 
    Map every original commit into exactly one target commit.
 
-   Target commits must own disjoint sets of files: step 3 stages whole files, so one file's changes can't be split across commits that way. If two original commits edit the same file and belong in different target commits, either merge those target commits or plan to stage part of the file with a hand-built patch (`git diff <fork-point> -- <file>` trimmed to the wanted hunks, then `git apply --cached`). Say which in the plan, so the user approves it.
+   Target commits must own disjoint sets of files: step 3 stages whole files, so one file's changes can't be split across commits that way. If two original commits edit the same file and belong in different target commits, either merge those target commits or plan to commit an intermediate version of the file in the earlier one. When the earlier target commit absorbs the file's earlier original commits, that version is exactly `git show <last-absorbed-commit>:<file>`; otherwise it has to be edited by hand. Say which in the plan, so the user approves it.
 
 5. Present the plan to the user and ask for explicit approval before touching anything.
 
@@ -47,8 +53,14 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
    already approved, and a hook that reformats a file would make the check in
    step 4 fail.
    - `git add <specific files>`
+   - For a file the plan splits across commits: copy its final version to a
+     temporary path outside the repo, write the intermediate version into the
+     file (`git show <commit>:<file> > <file>`, or the hand-edited version),
+     `git add` it, and copy the final version back after committing. This works
+     for files the branch added, which are untracked after the reset.
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing
-   - `git commit --no-verify` with the planned title and the trailer. The
+   - `git commit --no-verify` with the planned title, a `Co-authored-by:` line
+     for each person the plan lists for this commit, and the trailer. The
      `--no-verify` matters: if the user installed the pre-commit git hook, it
      would reformat files during the commit and the result would no longer match
      the backup branch in step 4. This skill reorganizes the branch's content

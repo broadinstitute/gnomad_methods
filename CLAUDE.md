@@ -105,7 +105,10 @@ install surface changed.
 
 **Run the `/review` skill on every pull request before requesting review from a
 team member** (Ben Weisburd's skill:
-https://github.com/bw2/claude-code-review-skill). It reviews the diff under
+https://github.com/bw2/claude-code-review-skill). A SessionStart hook in
+`.claude/settings.json` clones it into `~/.claude/skills/review` the first time
+you open this repo (it is usable from the next session) and pulls updates after
+that, so there is nothing to install by hand. It reviews the diff under
 multiple models and cross-validates the findings. Work through what it reports,
 and note in the PR description that it was run and what you did or did not act
 on. Human review time is the scarce resource here — don't spend it on things the

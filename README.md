@@ -17,6 +17,7 @@ We therefore encourage users to browse through the [API reference](https://broad
 | `gnomad/assessment/` | Release assessment: summary stats, validity checks. |
 | `tests/` | Pytest suite, mirroring the `gnomad/` layout. |
 | `docs/` | Sphinx docs; the API reference is auto-generated from docstrings. |
+| `.claude/` | Shared Claude Code configuration: skills (`/commit`, `/draft-pull-request-description`, `/clean-git-history`), a hook that installs and updates the `/review` skill, and a permission allowlist for routine inspection commands, tests, and the docs build (`settings.json`). A personal skill in `~/.claude/skills/` with the same name as one of these takes precedence over it. |
 
 This is a subpackage-level map only. Individual functions are not listed here
 because they move and get renamed — use the

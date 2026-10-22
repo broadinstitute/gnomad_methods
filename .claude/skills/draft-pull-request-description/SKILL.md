@@ -1,0 +1,171 @@
+---
+name: draft-pull-request-description
+description: Use this whenever the user wants to open a pull request (PR), draft a PR, or summarize their branch for merging.
+---
+
+## Objective
+
+You are a Staff Bioinformatics Engineer preparing a comprehensive, professional, and concise Pull Request description for gnomad_methods, the shared Hail utility library that gnomAD pipelines and other repos import. Your goal is to produce a description thorough enough that the reviewer can understand:
+
+- The intent and motivation for the change
+- The specific modules or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
+- The design/architecture chosen and why (especially if Hail-specific tradeoffs were involved)
+- The exact changes and any new output paths or resource names
+- What tests were added or changed (check `tests/` and `.github/workflows/ci.yml`)
+- Anything requiring specific reviewer attention (e.g. breaking changes to resource paths, schema changes to HTs, large compute cost implications)
+
+## Workflow
+
+### 1. Determine the base branch
+
+Default to `main`. Ask the user only if they indicate this is a stacked branch. Use the chosen branch as `<base>` everywhere below.
+
+### 2. Analyze the diff
+
+Run `git diff <base>...HEAD` to understand the full set of changes. Then read the changed files in full — especially any new or modified Python scripts, resource definitions, or config changes.
+
+### 3. Identify gnomAD-specific context
+
+Check whether the diff touches any of the following and note it in the description:
+
+- **Hail operations**: new/modified VDS, MT, HT read/write paths, aggregations, or annotations
+- **Dataproc / cluster config**: cluster size, autoscaling policy, init scripts, `hailctl dataproc submit` invocations
+- **Resource paths**: new or renamed GCS paths (especially under `gs://gnomad*/`)
+- **Public API**: new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for code that imports the library (see Project Overview in `CLAUDE.md`).
+- **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
+- **Test coverage**: added/changed tests under `tests/`
+- **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, list each added or re-pinned library and check it against the existing pins — Hail, pandas, and numpy are the usual conflicts (see Dependencies in `CLAUDE.md`). A quick check is `pip install --dry-run -r requirements.txt` in a throwaway venv. If a new library needs an existing pin loosened or bumped, say so and suggest the pin change, which belongs in the same PR.
+- **Downstream callers**: if the signature, return schema, field names, or defaults of a public function changed, grep `gnomad_qc` for callers, on its `main` branch and not only a local checkout. List the call sites that break and which pipeline version each belongs to (see Pull Requests in `CLAUDE.md`). Flag them in the description rather than fixing them here; the fix belongs in a coordinated `gnomad_qc` PR.
+- **Repo layout**: if a subpackage was added, removed, renamed, or moved, check that this PR also updates the repo layout table in the README.
+
+### 4. Check for AI code reviews
+
+Look for completion markers written by the `/review` skill, newest first:
+
+```bash
+ls .code_review/*CODE_REVIEW_COMPLETED 2>/dev/null | sort -r
+```
+
+`.code_review/` is shared by every branch in the checkout, and the review skill
+records neither the branch nor the commit it reviewed, so the newest marker may
+belong to another branch. Each marker's name starts with its run's timestamp
+(`YYYYMMDD_HHMMSS`, local time). Use the first marker that passes both checks:
+
+1. **It is newer than the branch's last commit**, so the review saw the current
+   code. Compare its timestamp with
+   `git log -1 --format=%cd --date=format-local:%Y%m%d_%H%M%S`.
+2. **It reviewed this branch's files.** The review skill itself saves only
+   its prompts and the marker, but a local wrapper may also save reviewer
+   output under the same prefix (`…_OUT__*`, `…_VAL__*`, `…_FINDINGS__*`); if
+   those exist, use them first, since they hold the findings and verdicts.
+   Otherwise the validation prompts (`…_validate.md`) list each finding with a
+   `file:` line, and the detection prompts (`…_PROMPT__*.md`, excluding
+   `_validate.md`) name the target under review. A run that found nothing has
+   no validation prompts; then the file list or diff target in its detection
+   prompt is the comparison set. Compare the cited files with
+   `git diff --name-only <base>...HEAD`. Most should be files this branch
+   changes; a widely shared file such as `CLAUDE.md` or `README.md` appearing
+   in both is not enough. If the run cites too little to tell, ask the user
+   whether it was a review of this branch.
+
+The marker's timestamp is when the run *started*, so check 1 fails for a run
+whose findings were fixed and committed afterward, and for a branch whose
+history was rewritten since (`/clean-git-history` gives every commit a new
+committer date even when the tree is unchanged). If no marker passes both, but
+one passes check 2, list the branch's commits with their dates and keep only
+the rows whose date is later than the marker's timestamp:
+
+```bash
+git log --format='%h %cd %s' --date=format-local:%Y%m%d_%H%M%S <base>..HEAD
+```
+
+Ask the user whether those later commits only address that run's findings or rewrite
+history with the same tree. If they confirm, treat the marker as passing.
+Otherwise that run reviewed this branch before its latest commits: don't check
+the box, say when it ran, and offer to re-run `/review`.
+
+For the marker that passes, identify which models were in the roster by listing prompt files that share its timestamp prefix:
+
+```bash
+ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*.md 2>/dev/null | grep -v '_validate\.md$'  # detection
+ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*_validate.md 2>/dev/null                     # validation
+```
+
+The model name (`opus`, `sonnet`, `agy`) is the last `__`-separated token of a
+detection file (`…__opus.md`) and the token just before `_validate.md` in a
+validation file (`…_opus_validate.md`). Filter `_validate.md` out of the
+detection list: when a review is split into subsets, the label itself contains
+`__`, so a looser pattern also matches the validation prompts.
+
+**Check both lists — the two rosters can differ.** A reviewer that completes
+detection can still drop out of validation (an `agy` run that times out at the
+validation call, a model whose CLI invocation fails partway), and the review
+skill treats the two rosters as decided independently. Report the models that
+actually *validated*, since that is what the confidence labels rest on. If the
+two lists differ, say so rather than printing one merged roster — e.g.
+"reviewed by opus, sonnet, agy; validated by opus, sonnet".
+
+Use what you found to write the `/review` line of the AI code review section.
+The template does not pre-fill it, so write exactly one of these:
+
+- A marker passed both checks (or the user confirmed the later commits only
+  address its findings): `- [x] /review run — models: <validated models>`,
+  followed by its findings and their disposition (fixed here / deferred /
+  rejected as a false positive). The findings are the items in that run's
+  `_validate.md` prompts; ask the user for any disposition the branch's
+  commits don't make evident.
+- Only a run from before the latest commits matched:
+  `- [ ] /review last run <date>, before the latest commits`.
+- Otherwise: `- [ ] /review not run`.
+
+Then ask the user whether they ran any other AI reviews on this branch (for
+example `/code-review`, or a review with another model or tool), and list each
+one they confirm with what came of it. Don't list a review the user hasn't
+confirmed.
+
+### 5. Draft the PR description
+
+**Ask the user for the summary first.** Before drafting, ask them to describe in
+a sentence or two what changed, why, and which tests cover it. The person opening
+the PR should be able to explain it, and reviewers rely on that. Build the
+Summary section from their answer: tidy the wording, but don't add claims they
+didn't make. If the diff shows a significant change their summary leaves out,
+point it out and ask rather than adding it yourself.
+
+Use the following template — fill every section; do not leave placeholders:
+
+```markdown
+## Summary
+
+<!-- 1-3 bullet points built from the user's own summary of what this PR does and why -->
+
+## Changes
+
+<!-- Bullet list of specific changes: functions added/modified, new CLI flags, resource paths changed, etc. -->
+
+## Hail / Compute notes
+
+<!-- Any cluster config, VDS/HT schema changes, estimated cost or runtime if significant. Write "None" if not applicable. -->
+
+## Testing
+
+<!-- How was this tested? Dataproc job IDs / log snippets if relevant, or unit test coverage. -->
+
+## AI code review
+
+<!-- Written in step 4: the /review line (checked only for a review of this
+     branch's latest commit) with its findings and their disposition, then any
+     other AI reviews the user confirmed running. -->
+
+## Reviewer notes
+
+<!-- Anything requiring specific attention: breaking changes, schema migrations, large GCS writes, dependency changes (and whether they fit the existing pins), or design tradeoffs the reviewer should weigh in on. Write "None" if not applicable. -->
+```
+
+### 6. Merge strategy
+
+Specify whether this PR should be **squash-merged** (preferred for single-topic changes) or **rebased** (preferred for a clean commit stack). Default to squash unless the commit history is intentionally structured.
+
+### 7. Output
+
+Print the complete filled-out markdown. Do not add UI screenshot instructions — this codebase has no frontend.

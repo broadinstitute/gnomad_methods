@@ -48,7 +48,12 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
    step 4 fail.
    - `git add <specific files>`
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing
-   - `git commit` with the planned title and the trailer
+   - `git commit --no-verify` with the planned title and the trailer. The
+     `--no-verify` matters: if the user installed the pre-commit git hook, it
+     would reformat files during the commit and the result would no longer match
+     the backup branch in step 4. This skill reorganizes the branch's content
+     without changing it; formatting fixes belong in their own commit afterwards,
+     via the `commit` skill.
 
 ### 4. Verify
 

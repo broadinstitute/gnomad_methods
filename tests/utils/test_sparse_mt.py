@@ -1,6 +1,7 @@
 """Tests for the sparse_mt utility module."""
 
 import logging
+from typing import Dict
 
 import hail as hl
 import pytest
@@ -9,6 +10,7 @@ from gnomad.utils.annotations import generate_freq_group_membership_array
 from gnomad.utils.sparse_mt import (
     compute_allele_number_per_ref_site,
     compute_stats_per_ref_site,
+    get_allele_number_agg_func,
     get_coverage_agg_func,
 )
 
@@ -1243,3 +1245,161 @@ class TestComputeStatsPerRefSiteSexKaryotype:
             sex_chrom_vds, reference_ht, {"AN": an_agg}
         )
         assert all(r.AN == 8 for r in unadjusted.collect())
+
+
+class TestComputeStatsPerRefSiteLegacyHetAb:
+    """
+    Test that `legacy_het_ab` reaches the adj annotation the helper computes itself.
+
+    `annotate_adj` and its layouts are tested in test_annotations.py; this only covers
+    the helper's own adj branch, which the other tests here bypass with `adj=True`.
+    """
+
+    # Plain Python only at class level: a `hl.locus` here would
+    # initialize Hail at collection, before the session fixture in conftest runs.
+    CONTIG, POSITION = "chr1", 1000
+    # s1 is a phased alt-first het (1|0) with AD [1, 9]: the fixed reading uses the
+    # alt depth (AB 0.9, adj) while the legacy reading uses AD[GT[1]] = AD[0] (AB
+    # 0.1, not adj). s2 is a plain 0/1 het with AD [5, 5], adj either way.
+    CALLS = {"s1": ("1|0", [1, 9]), "s2": ("0/1", [5, 5])}
+
+    @pytest.fixture
+    def locus(self) -> hl.expr.LocusExpression:
+        """Return the single test locus."""
+        return hl.locus(self.CONTIG, self.POSITION, reference_genome="GRCh38")
+
+    @pytest.fixture
+    def vds(self, locus: hl.expr.LocusExpression) -> hl.vds.VariantDataset:
+        """Build a 2-sample, 1-site VDS; each sample has a variant call at the locus."""
+        vd = hl.Table.parallelize(
+            [
+                {
+                    "locus": locus,
+                    "alleles": ["A", "T"],
+                    "s": s,
+                    "GT": hl.parse_call(gt),
+                    "AD": ad,
+                    "DP": 10,
+                    "GQ": 30,
+                }
+                for s, (gt, ad) in self.CALLS.items()
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                alleles=hl.tarray(hl.tstr),
+                s=hl.tstr,
+                GT=hl.tcall,
+                AD=hl.tarray(hl.tint32),
+                DP=hl.tint32,
+                GQ=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus", "alleles"], col_key=["s"])
+        vd = vd.annotate_cols(grp="all")
+        rd = hl.Table.parallelize(
+            [
+                {
+                    "locus": locus,
+                    "s": s,
+                    "END": self.POSITION,
+                    "LEN": 1,
+                    "DP": 10,
+                    "GQ": 30,
+                }
+                for s in self.CALLS
+            ],
+            hl.tstruct(
+                locus=hl.tlocus("GRCh38"),
+                s=hl.tstr,
+                END=hl.tint32,
+                LEN=hl.tint32,
+                DP=hl.tint32,
+                GQ=hl.tint32,
+            ),
+        ).to_matrix_table(row_key=["locus"], col_key=["s"])
+        return hl.vds.VariantDataset(reference_data=rd, variant_data=vd)
+
+    @pytest.fixture
+    def reference_ht(self, locus: hl.expr.LocusExpression) -> hl.Table:
+        """Return a reference HT with the single test locus."""
+        return hl.Table.parallelize(
+            [{"locus": locus}], hl.tstruct(locus=hl.tlocus("GRCh38"))
+        ).key_by("locus")
+
+    @pytest.fixture
+    def group_membership_ht(self, vds: hl.vds.VariantDataset) -> hl.Table:
+        """Return a one-stratum group membership HT, so the groups are adj and raw."""
+        cols_ht = vds.variant_data.cols()
+        return generate_freq_group_membership_array(cols_ht, [{"grp": cols_ht.grp}])
+
+    @staticmethod
+    def _an_by_group(ht: hl.Table) -> Dict[str, int]:
+        """Return the AN at the single site for the overall adj and raw groups."""
+        meta = hl.eval(ht.strata_meta)
+        an = ht.collect()[0].AN
+        return {g: an[meta.index({"group": g})] for g in ("adj", "raw")}
+
+    @pytest.mark.parametrize("legacy_het_ab, expected_adj_an", [(False, 4), (True, 2)])
+    def test_legacy_het_ab_changes_adj_an(
+        self,
+        vds: hl.vds.VariantDataset,
+        reference_ht: hl.Table,
+        group_membership_ht: hl.Table,
+        legacy_het_ab: bool,
+        expected_adj_an: int,
+    ) -> None:
+        """
+        The adj AN counts s1 only under the fixed reading; raw AN is unchanged.
+
+        Goes through `compute_allele_number_per_ref_site` so its keyword forwarding
+        of the flag is covered too.
+        """
+        ht = compute_allele_number_per_ref_site(
+            vds,
+            reference_ht,
+            group_membership_ht=group_membership_ht,
+            legacy_het_ab=legacy_het_ab,
+        )
+        an = self._an_by_group(ht)
+        assert an["adj"] == expected_adj_an
+        assert an["raw"] == 4
+
+    def test_legacy_het_ab_ignored_when_adj_present(
+        self,
+        vds: hl.vds.VariantDataset,
+        reference_ht: hl.Table,
+        group_membership_ht: hl.Table,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """A precomputed adj entry is kept over legacy_het_ab, and a warning says so."""
+        # adj=False everywhere gives adj AN 0, which neither reading produces
+        # (fixed: 4, legacy: 2), so 0 proves the precomputed field was kept.
+        vds = hl.vds.VariantDataset(
+            vds.reference_data, vds.variant_data.annotate_entries(adj=False)
+        )
+        with caplog.at_level(logging.WARNING, logger="gnomad.utils.sparse_mt"):
+            ht = compute_stats_per_ref_site(
+                vds,
+                reference_ht,
+                {"AN": get_allele_number_agg_func("GT")},
+                group_membership_ht=group_membership_ht,
+                legacy_het_ab=True,
+            )
+        assert "'adj' is already an entry field" in caplog.text
+        assert self._an_by_group(ht)["adj"] == 0
+
+    def test_legacy_het_ab_ignored_without_adj_group(
+        self,
+        vds: hl.vds.VariantDataset,
+        reference_ht: hl.Table,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Without strata only the raw group is computed, so the flag warns instead."""
+        with caplog.at_level(logging.WARNING, logger="gnomad.utils.sparse_mt"):
+            ht = compute_stats_per_ref_site(
+                vds,
+                reference_ht,
+                {"AN": get_allele_number_agg_func("GT")},
+                legacy_het_ab=True,
+            )
+        assert "no adj group is requested" in caplog.text
+        assert ht.collect()[0].AN == 4

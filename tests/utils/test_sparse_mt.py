@@ -1255,7 +1255,7 @@ class TestComputeStatsPerRefSiteLegacyHetAb:
     the helper's own adj branch, which the other tests here bypass with `adj=True`.
     """
 
-    # Plain Python only at class level: an `hl.locus` or `hl.call` here would
+    # Plain Python only at class level: a `hl.locus` here would
     # initialize Hail at collection, before the session fixture in conftest runs.
     CONTIG, POSITION = "chr1", 1000
     # s1 is a phased alt-first het (1|0) with AD [1, 9]: the fixed reading uses the

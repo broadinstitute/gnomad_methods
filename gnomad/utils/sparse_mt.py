@@ -1169,10 +1169,12 @@ def compute_stats_per_ref_site(
         reduction is in effect. Defaults to all of `entry_agg_funcs`.
         Must be disjoint from the keys of `entry_agg_group_membership`.
         Ignored when no leaf reduction is in effect.
-    :param legacy_het_ab: Passed to :func:`annotate_adj` when adj is computed
-        here: read the het-ref allele depth as `AD[GT[1]]`, the pre-0.9.1
-        reading, so results match tables computed before that fix. Default is
-        False.
+    :param legacy_het_ab: Deprecated. Passed to
+        :func:`~gnomad.utils.annotations.annotate_adj` when adj is computed here:
+        read the het-ref allele depth as ``AD[GT[1]]``, the pre-0.9.1 reading, so
+        results match tables computed before that fix. Has no effect, and logs a
+        warning, when ``adj`` is already an entry field or no adj group is
+        requested. Default is False.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1378,6 +1380,13 @@ def compute_stats_per_ref_site(
     if adj and "adj" not in mt.entry:
         logger.info("Annotating the MT with adj.")
         mt = annotate_adj(mt, legacy_het_ab=legacy_het_ab)
+    elif legacy_het_ab:
+        # In this branch `adj` being True means the entry field already exists.
+        logger.warning(
+            "legacy_het_ab=True has no effect because %s, so adj is not computed"
+            " here.",
+            "'adj' is already an entry field" if adj else "no adj group is requested",
+        )
 
     ht = agg_by_strata(
         mt,

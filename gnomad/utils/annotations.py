@@ -1000,11 +1000,8 @@ def get_het_ab_adj_expr(
         be removed in a future release.
 
     ``legacy_het_ab`` only covers the functions that expose it: this one,
-    :func:`get_adj_expr`, :func:`annotate_adj`, and
-    :func:`~gnomad.utils.sparse_mt.compute_stats_per_ref_site`
-    (:func:`~gnomad.utils.sparse_mt.compute_allele_number_per_ref_site` forwards
-    its keyword arguments there). ``compute_stats_per_ref_site`` gained it after
-    0.9.1.
+    ``get_adj_expr``, ``annotate_adj``, and ``compute_stats_per_ref_site``
+    (``compute_allele_number_per_ref_site`` forwards its keyword arguments there).
 
     :param gt_expr: Genotype expression.
     :param dp_expr: DP expression.

@@ -993,12 +993,15 @@ def get_het_ab_adj_expr(
         such calls passed adj with low alt AB and failed with high alt AB. gnomAD
         v4.1 exomes were computed with the old reading. To reproduce a full
         pipeline, pin gnomad_methods to a pre-fix commit (`0e38c42e` or earlier,
-        i.e. `gnomad` package version <= 0.9.0); `legacy_het_ab` only covers direct
-        callers of this function, `get_adj_expr` and `annotate_adj`.
+        i.e. `gnomad` package version <= 0.9.0).
 
     .. deprecated:: 0.9.1
         `legacy_het_ab` reproduces the pre-0.9.1 reading, logs a warning, and will
         be removed in a future release.
+
+    ``legacy_het_ab`` only covers the functions that expose it: this one,
+    ``get_adj_expr``, ``annotate_adj``, and ``compute_stats_per_ref_site``
+    (``compute_allele_number_per_ref_site`` forwards its keyword arguments there).
 
     :param gt_expr: Genotype expression.
     :param dp_expr: DP expression.

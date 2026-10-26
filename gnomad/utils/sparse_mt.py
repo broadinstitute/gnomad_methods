@@ -1082,6 +1082,8 @@ def compute_stats_per_ref_site(
     reduce_to_minimal_groups: bool = False,
     non_summable_strata: Optional[Set[str]] = None,
     reducible_aggs: Optional[Set[str]] = None,
+    *,
+    legacy_het_ab: bool = False,
 ) -> hl.Table:
     """
     Compute stats per site in a reference Table.
@@ -1125,6 +1127,9 @@ def compute_stats_per_ref_site(
           `reduce_to_minimal_groups=True` while passing a non-reduced
           `group_membership_ht` is a no-op.
 
+    .. versionadded:: 0.9.2
+        The ``legacy_het_ab`` parameter.
+
     :param mtds: Input sparse Matrix Table or VariantDataset.
     :param reference_ht: Table of reference sites.
     :param entry_agg_funcs: Dict of entry aggregation functions to perform on the
@@ -1167,6 +1172,11 @@ def compute_stats_per_ref_site(
         reduction is in effect. Defaults to all of `entry_agg_funcs`.
         Must be disjoint from the keys of `entry_agg_group_membership`.
         Ignored when no leaf reduction is in effect.
+    :param legacy_het_ab: Deprecated. Passed to ``annotate_adj`` when adj is
+        computed here: read the het-ref allele depth as ``AD[GT[1]]``, the
+        pre-0.9.1 reading, so results match tables computed before that fix. Has
+        no effect, and logs a warning, when ``adj`` is already an entry field or
+        no adj group is requested. Default is False.
     :return: Table of stats per site.
     """
     is_vds = isinstance(mtds, hl.vds.VariantDataset)
@@ -1295,6 +1305,14 @@ def compute_stats_per_ref_site(
             "so adj can't be computed!"
         )
 
+    # adj is only computed here when it is needed and not already present.
+    if legacy_het_ab and not (adj and "adj" not in en):
+        logger.warning(
+            "legacy_het_ab=True has no effect because %s, so adj is not computed"
+            " here.",
+            "'adj' is already an entry field" if adj else "no adj group is requested",
+        )
+
     entry_keep_fields = set(entry_keep_fields or set([])) | gt_field | adj_fields
 
     # Write the sex karyotype field out to a temp HT so we can annotate the field back
@@ -1371,7 +1389,7 @@ def compute_stats_per_ref_site(
     # Annotate with adj if needed.
     if adj and "adj" not in mt.entry:
         logger.info("Annotating the MT with adj.")
-        mt = annotate_adj(mt)
+        mt = annotate_adj(mt, legacy_het_ab=legacy_het_ab)
 
     ht = agg_by_strata(
         mt,

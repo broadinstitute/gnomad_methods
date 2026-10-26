@@ -1,3 +1,5 @@
+# The dev toolchain needs Python >=3.11 (filelock 4.x, platformdirs 4.13+); the package
+# itself still supports the python_requires in setup.py. CI runs 3.11.
 # Used to create the requirements-dev.txt file
 # Note: `pip-compile requirements-dev.in` needs to be run before changes in requirements-dev.in are reflected in
 # requirements-dev.txt, which is used for GitHub Actions

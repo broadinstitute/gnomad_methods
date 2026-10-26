@@ -60,7 +60,7 @@ pylint==3.0.2
     # via -r requirements-dev.in
 pytest==7.4.3
     # via -r requirements-dev.in
-python-discovery==1.6.3
+python-discovery==1.6.4
     # via virtualenv
 pytokens==0.4.1
     # via black

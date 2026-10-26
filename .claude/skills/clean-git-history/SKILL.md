@@ -48,7 +48,8 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 2. `git reset --soft <fork-point>` (the merge-base from step 1.4) then `git reset` to unstage everything. Never reset to the tip of the base: if the base has moved, the new commits would also undo every commit added to the base since the fork, and the check in step 4 would not catch it.
 3. For each planned commit, stage and commit the way the `commit` skill
    (`.claude/skills/commit/SKILL.md`) says to: name the paths when staging
-   (step 1) and end the message with its `Assisted-by` trailer (step 7). Skip its
+   (its "Check staged changes" section) and end the message with its
+   `Assisted-by` trailer (its "Commit" section). Skip its
    other steps, such as running hooks and confirming each commit: the plan is
    already approved, and a hook that reformats a file would make the check in
    step 4 fail.

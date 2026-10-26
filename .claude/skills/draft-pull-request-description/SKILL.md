@@ -68,7 +68,7 @@ Then write the `/review` line of the AI code review section as exactly one of:
   disposition, if the user confirms it reviewed this branch with no changes
   after it except fixes for its findings.
 - `- [ ] /review last run <date>, before the latest commits`, if it ran before
-  later changes. Offer to re-run it.
+  later changes other than fixes for its findings. Offer to re-run it.
 - `- [ ] /review not run`.
 
 Then ask whether they ran any other AI reviews on this branch (for example
@@ -105,9 +105,10 @@ Use the following template — fill every section; do not leave placeholders:
 
 ## AI code review
 
-<!-- Written in step 4: the /review line (checked only for a review of this
-     branch's latest commit) with its findings and their disposition, then any
-     other AI reviews the user confirmed running. -->
+<!-- Written in step 4: the /review line (checked only when the user confirms
+     the run reviewed this branch and later commits only fix its findings) with
+     its findings and their disposition, then any other AI reviews the user
+     confirmed running. -->
 
 ## Reviewer notes
 

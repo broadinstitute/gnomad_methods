@@ -21,7 +21,7 @@ scratch files or local notes.
 
 ### 2. Run pre-commit hooks
 
-Always run the repo's pre-commit hooks on the staged files before reviewing, so the commit matches what CI enforces (black, isort, autopep8, pydocstyle, whitespace fixers, etc.). This runs even if the user has not installed the git hook.
+Always run the repo's pre-commit hooks on the staged files before reviewing, so the commit matches what CI enforces. This runs even if the user has not installed the git hook.
 
 Skip this step only if the repo has no `.pre-commit-config.yaml`.
 
@@ -29,6 +29,7 @@ Capture the staged file list first (only run hooks on staged files — never all
 ```bash
 git diff --staged --name-only --diff-filter=d
 ```
+If that list is empty (everything staged is a deletion), skip the rest of this step: there is nothing for the hooks to check, and the commands below would run on every file instead of none.
 
 Then check whether any of those files also has unstaged changes:
 ```bash
@@ -41,15 +42,15 @@ Run the hooks scoped to the staged files:
 pre-commit run --files <staged files>
 ```
 - If `pre-commit` is not on PATH, try `python -m pre_commit run --files <staged files>`.
-- If pre-commit is unavailable entirely, fall back to running the tools listed in `.pre-commit-config.yaml` directly on the staged files, using the versions pinned in `requirements-dev.txt` / the config's `rev:` (a throwaway venv is fine). For this repo that means: `black`, `isort --profile black --filter-files`, `autopep8 --exit-code --in-place`, `pydocstyle`. Ensure Python version is compatible with the pre-commit tools.
+- If pre-commit is unavailable entirely, fall back to running the tools listed in `.pre-commit-config.yaml` directly on the staged files, using the versions pinned in `requirements-dev.txt` / the config's `rev:` (a throwaway venv is fine). Ensure Python version is compatible with the pre-commit tools. Pass each tool only the staged files that match its hook's `files:` and `exclude:` patterns, with the hook's `args:`; some hooks only cover part of the repo, and running them on other files reformats code CI leaves alone.
 - If neither pre-commit nor the individual tools can be run, tell the user the hooks could not run and why, and ask how to proceed — do NOT silently commit unformatted code.
 
-Auto-fixing hooks (black, isort, autopep8, end-of-file-fixer, trailing-whitespace) modify the working tree, which unstages those edits. Re-stage the same paths and re-run until the hooks pass cleanly:
+Auto-fixing hooks (formatters and whitespace fixers) modify the working tree, which unstages those edits. Re-stage the same paths and re-run until the hooks pass cleanly:
 ```bash
 git add -- <staged files>
 ```
 Then confirm nothing is left unstaged in those files (`git diff --name-only -- <staged files>` prints nothing); if it does, the re-add failed and the index still holds unformatted content.
-If a non-autofixable hook fails (e.g. pydocstyle, check-yaml), stop and surface the failure to the user rather than committing.
+If a hook that can't fix files fails (a docstring or YAML check, for example), stop and surface the failure to the user rather than committing.
 
 ### 3. Review the diff
 

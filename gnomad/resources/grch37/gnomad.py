@@ -127,8 +127,12 @@ def _public_pext_path(pext_type: str = "base_level") -> str:
     :return: Path to pext data.
     """
     pext_paths = {
-        "annotation_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht",
-        "base_level": "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht",
+        "annotation_level": (
+            "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/pre_computed/all.possible.snvs.tx_annotated.021520.ht"
+        ),
+        "base_level": (
+            "gs://gnomad-public-requester-pays/papers/2019-tx-annotation/gnomad_browser/all.baselevel.021620.ht"
+        ),
     }
 
     if pext_type not in pext_paths:

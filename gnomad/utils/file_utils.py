@@ -117,8 +117,14 @@ def select_primitives_from_ht(ht: hl.Table) -> hl.Table:
         **{
             x: v
             for x, v in ht.row_value.items()
-            if v.dtype
-            in {hl.tstr, hl.tint32, hl.tfloat32, hl.tint64, hl.tfloat64, hl.tbool}
+            if v.dtype in {
+                hl.tstr,
+                hl.tint32,
+                hl.tfloat32,
+                hl.tint64,
+                hl.tfloat64,
+                hl.tbool,
+            }
         }
     )
 
@@ -378,8 +384,10 @@ def convert_multi_array_to_array_of_structs(
     """
     return t.annotate(
         **{
-            new_array_field: hl.range(t[array_fields_to_combine[0]].length()).map(
-                lambda i: hl.struct(**{f: t[f][i] for f in array_fields_to_combine})
+            new_array_field: (
+                hl.range(t[array_fields_to_combine[0]].length()).map(
+                    lambda i: hl.struct(**{f: t[f][i] for f in array_fields_to_combine})
+                )
             )
         }
     ).drop(*array_fields_to_combine)

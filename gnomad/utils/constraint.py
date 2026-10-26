@@ -993,9 +993,11 @@ def assemble_constraint_context_ht(
         **{
             k: hl.struct(
                 **{
-                    data_type: ann_ht.select_globals(
-                        *[x for x in g if x in ann_ht.globals]
-                    ).index_globals()
+                    data_type: (
+                        ann_ht.select_globals(
+                            *[x for x in g if x in ann_ht.globals]
+                        ).index_globals()
+                    )
                     for data_type, ann_ht in hts.items()
                 }
             )

@@ -250,9 +250,9 @@ def compute_stratified_metrics_filter(
     select_expr.update(
         **{
             f"fail_{metric}": (
-                ht._qc_metrics[metric] <= metrics_stats_expr[metric].lower
+                (ht._qc_metrics[metric] <= metrics_stats_expr[metric].lower)
+                | (ht._qc_metrics[metric] >= metrics_stats_expr[metric].upper)
             )
-            | (ht._qc_metrics[metric] >= metrics_stats_expr[metric].upper)
             for metric in qc_metrics
         }
     )
@@ -448,12 +448,14 @@ def merge_sample_qc_expr(
     if "n_called" in sample_qc_fields:
         merged_exprs.update(
             {
-                metric: merge_stats_counters_expr(
-                    [
-                        sample_qc_expr[metric].annotate(n=sample_qc_expr.n_called)
-                        for sample_qc_expr in sample_qc_exprs
-                    ]
-                ).drop("n")
+                metric: (
+                    merge_stats_counters_expr(
+                        [
+                            sample_qc_expr[metric].annotate(n=sample_qc_expr.n_called)
+                            for sample_qc_expr in sample_qc_exprs
+                        ]
+                    ).drop("n")
+                )
                 for metric in stats_metrics
                 if metric in sample_qc_fields
             }

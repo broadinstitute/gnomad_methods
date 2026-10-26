@@ -582,9 +582,13 @@ def compare_subset_freqs(
                     field_check_expr[
                         f"{check_field_left} != {check_field_right} while non-zero"
                     ] = {
-                        "expr": non_zero_condition
-                        & generate_field_check_expr(
-                            t.info[check_field_left], t.info[check_field_right], "=="
+                        "expr": (
+                            non_zero_condition
+                            & generate_field_check_expr(
+                                t.info[check_field_left],
+                                t.info[check_field_right],
+                                "==",
+                            )
                         ),
                         "agg_func": hl.agg.count_where,
                         "display_fields": hl.struct(

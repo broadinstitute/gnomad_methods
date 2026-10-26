@@ -300,8 +300,7 @@ def project_max_expr(
             lambda ai: hl.sorted(
                 project_cs.filter(
                     # filter to projects with AF > 0
-                    lambda x: x[1].AF[ai]
-                    > 0
+                    lambda x: x[1].AF[ai] > 0
                 ),
                 # order the callstats computed by AF in decreasing order
                 lambda x: -x[1].AF[ai],
@@ -2494,7 +2493,7 @@ def find_minimal_strata_groups(
     else:
         non_summable_strata = set(non_summable_strata)
 
-    force_leaf_set = {frozenset(d.items()) for d in (force_leaf_groups or [])}
+    force_leaf_set = {frozenset(d.items()) for d in force_leaf_groups or []}
 
     def summable_strata_of(entry: Dict[str, str]) -> frozenset:
         return frozenset(

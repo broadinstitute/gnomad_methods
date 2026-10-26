@@ -40,88 +40,40 @@ Check whether the diff touches any of the following and note it in the descripti
 
 ### 4. Check for AI code reviews
 
-Look for completion markers written by the `/review` skill, newest first:
+`CLAUDE.md` asks for `/review` on every PR, and for the description to say what
+came of it. Gather what you can, then ask the user to confirm it:
 
-```bash
-ls .code_review/*CODE_REVIEW_COMPLETED 2>/dev/null | sort -r
-```
+1. **Find the latest `/review` run.** If `/review` ran earlier in this
+   conversation, use its results. Otherwise look in `.code_review/`, where the
+   skill writes its prompts: the newest `*CODE_REVIEW_COMPLETED` marker's name
+   starts with the run's start time (`YYYYMMDD_HHMMSS`), the prompt files with
+   the same prefix name its models (`…__opus.md`), and its `…_validate.md`
+   prompts list the findings. The directory is shared by every branch in the
+   checkout and doesn't record which branch was reviewed.
+2. **Ask one question.** Show the run's start time, models, and findings, plus
+   any commits made after it started
+   (`git log --format='%h %cd %s' --date=format-local:%Y%m%d_%H%M%S <base>..HEAD`).
+   Ask whether that run reviewed this branch, and whether those later commits
+   only fix its findings.
+3. **Fill in the disposition** of each finding (fixed here, deferred, or
+   rejected as a false positive) from the branch's commits, and ask only about
+   the findings they don't settle.
 
-`.code_review/` is shared by every branch in the checkout, and the review skill
-records neither the branch nor the commit it reviewed, so the newest marker may
-belong to another branch. Each marker's name starts with its run's timestamp
-(`YYYYMMDD_HHMMSS`, local time). Use the first marker that passes both checks:
+If you find no run, or the files aren't laid out as described, ask the user
+which reviews they ran, with which models, and what came of the findings.
 
-1. **It is newer than the branch's last commit**, so the review saw the current
-   code. Compare its timestamp with
-   `git log -1 --format=%cd --date=format-local:%Y%m%d_%H%M%S`.
-2. **It reviewed this branch's files.** The review skill itself saves only
-   its prompts and the marker, but a local wrapper may also save reviewer
-   output under the same prefix (`…_OUT__*`, `…_VAL__*`, `…_FINDINGS__*`); if
-   those exist, use them first, since they hold the findings and verdicts.
-   Otherwise the validation prompts (`…_validate.md`) list each finding with a
-   `file:` line, and the detection prompts (`…_PROMPT__*.md`, excluding
-   `_validate.md`) name the target under review. A run that found nothing has
-   no validation prompts; then the file list or diff target in its detection
-   prompt is the comparison set. Compare the cited files with
-   `git diff --name-only <base>...HEAD`. Most should be files this branch
-   changes; a widely shared file such as `CLAUDE.md` or `README.md` appearing
-   in both is not enough. If the run cites too little to tell, ask the user
-   whether it was a review of this branch.
+Then write the `/review` line of the AI code review section as exactly one of:
 
-The marker's timestamp is when the run *started*, so check 1 fails for a run
-whose findings were fixed and committed afterward, and for a branch whose
-history was rewritten since (`/clean-git-history` gives every commit a new
-committer date even when the tree is unchanged). If no marker passes both, but
-one passes check 2, list the branch's commits with their dates and keep only
-the rows whose date is later than the marker's timestamp:
+- `- [x] /review run — models: <models>`, followed by its findings and their
+  disposition, if the user confirms it reviewed this branch with no changes
+  after it except fixes for its findings.
+- `- [ ] /review last run <date>, before the latest commits`, if it ran before
+  later changes. Offer to re-run it.
+- `- [ ] /review not run`.
 
-```bash
-git log --format='%h %cd %s' --date=format-local:%Y%m%d_%H%M%S <base>..HEAD
-```
-
-Ask the user whether those later commits only address that run's findings or rewrite
-history with the same tree. If they confirm, treat the marker as passing.
-Otherwise that run reviewed this branch before its latest commits: don't check
-the box, say when it ran, and offer to re-run `/review`.
-
-For the marker that passes, identify which models were in the roster by listing prompt files that share its timestamp prefix:
-
-```bash
-ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*.md 2>/dev/null | grep -v '_validate\.md$'  # detection
-ls .code_review/YYYYMMDD_HHMMSS_PROMPT__*_validate.md 2>/dev/null                     # validation
-```
-
-The model name (`opus`, `sonnet`, `agy`) is the last `__`-separated token of a
-detection file (`…__opus.md`) and the token just before `_validate.md` in a
-validation file (`…_opus_validate.md`). Filter `_validate.md` out of the
-detection list: when a review is split into subsets, the label itself contains
-`__`, so a looser pattern also matches the validation prompts.
-
-**Check both lists — the two rosters can differ.** A reviewer that completes
-detection can still drop out of validation (an `agy` run that times out at the
-validation call, a model whose CLI invocation fails partway), and the review
-skill treats the two rosters as decided independently. Report the models that
-actually *validated*, since that is what the confidence labels rest on. If the
-two lists differ, say so rather than printing one merged roster — e.g.
-"reviewed by opus, sonnet, agy; validated by opus, sonnet".
-
-Use what you found to write the `/review` line of the AI code review section.
-The template does not pre-fill it, so write exactly one of these:
-
-- A marker passed both checks (or the user confirmed the later commits only
-  address its findings): `- [x] /review run — models: <validated models>`,
-  followed by its findings and their disposition (fixed here / deferred /
-  rejected as a false positive). The findings are the items in that run's
-  `_validate.md` prompts; ask the user for any disposition the branch's
-  commits don't make evident.
-- Only a run from before the latest commits matched:
-  `- [ ] /review last run <date>, before the latest commits`.
-- Otherwise: `- [ ] /review not run`.
-
-Then ask the user whether they ran any other AI reviews on this branch (for
-example `/code-review`, or a review with another model or tool), and list each
-one they confirm with what came of it. Don't list a review the user hasn't
-confirmed.
+Then ask whether they ran any other AI reviews on this branch (for example
+`/code-review`, or a review with another model or tool), and list each one they
+confirm with what came of it. Don't list a review the user hasn't confirmed.
 
 ### 5. Draft the PR description
 

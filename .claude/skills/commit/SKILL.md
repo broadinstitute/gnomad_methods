@@ -23,8 +23,6 @@ scratch files or local notes.
 
 Always run the repo's pre-commit hooks on the staged files before reviewing, so the commit matches what CI enforces. This runs even if the user has not installed the git hook.
 
-Skip this step only if the repo has no `.pre-commit-config.yaml`.
-
 Capture the staged file list first (only run hooks on staged files — never all files, to avoid reformatting unrelated code). Leave out files staged for deletion: the hooks have nothing to check there, and `git add` on a deleted path fails and stages nothing.
 ```bash
 git diff --staged --name-only --diff-filter=d

@@ -50,12 +50,23 @@ came of it. Gather what you can, then ask the user to confirm it:
    the same prefix name its models (`…__opus.md`), and its `…_validate.md`
    prompts list the findings. The directory is shared by every branch in the
    checkout and doesn't record which branch was reviewed.
-2. **Ask one question.** Show the run's start time, models, and findings, plus
-   any commits made after it started
-   (`git log --format='%h %cd %s' --date=format-local:%Y%m%d_%H%M%S <base>..HEAD`).
-   Ask whether that run reviewed this branch, and whether those later commits
-   only fix its findings.
-3. **Fill in the disposition** of each finding (fixed here, deferred, or
+2. **Find what changed since the run.** The branch's reflog records which
+   commit it pointed to when the run started:
+   `git rev-parse <branch>@{YYYY-MM-DD HH:MM:SS}`, using the run's start time.
+   `git diff --stat <that commit> HEAD` then shows what changed since. Compare
+   content rather than commit dates: a rebase or `/clean-git-history` gives
+   every commit a new date even when the content is unchanged. If the branch
+   was rebased onto a newer base since, limit the diff to this branch's files
+   (`-- $(git diff --name-only <base>...HEAD)`). If git warns that the log
+   only goes back to a later date, the reflog can't tell you (the branch is
+   newer than the run, or this is a different clone); list the commits dated
+   after the run instead
+   (`git log --format='%h %cd %s' --date=format-local:%Y%m%d_%H%M%S <base>..HEAD`)
+   and say the dates may reflect a rewrite.
+3. **Ask one question.** Show the run's start time, models, and findings, plus
+   what changed since it started. Ask whether that run reviewed this branch,
+   and, if anything changed, whether those changes only fix its findings.
+4. **Fill in the disposition** of each finding (fixed here, deferred, or
    rejected as a false positive) from the branch's commits, and ask only about
    the findings they don't settle.
 

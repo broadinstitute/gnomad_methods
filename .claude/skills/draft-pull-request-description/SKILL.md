@@ -18,7 +18,7 @@ You are a Staff Bioinformatics Engineer preparing a concise, professional Pull R
 
 ### 1. Determine the base branch
 
-Default to `main`. Ask the user only if they indicate this is a stacked branch. Use the chosen branch as `<base>` everywhere below.
+Default to `main`. Ask the user only if they indicate this is a stacked branch. Run `git fetch` and use the remote-tracking ref (`origin/main`, or `origin/<branch>` for a stacked branch that exists on the remote) as `<base>` everywhere below: it is what the PR targets, and a stale local ref would put other PRs' merged changes into the diff.
 
 ### 2. Analyze the diff
 

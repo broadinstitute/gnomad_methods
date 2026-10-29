@@ -16,9 +16,9 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 **Do not run any diff or log commands spanning the branch until the base is confirmed.**
 
 1. Run `git log --oneline --graph --decorate -n 20` to see where the branch diverges.
-2. Check for stacking: find the oldest commit unique to this branch and run `git branch -a --contains <hash>`. If another non-main branch contains it, this branch is stacked on it.
+2. Run `git fetch` so the remote-tracking refs are current. Then check for stacking: find the oldest commit unique to this branch and run `git branch -a --contains <hash>`. If another non-main branch contains it, this branch is stacked on it. If `origin/main` contains it but local `main` does not, local `main` is stale and that commit is really an upstream one.
 3. **Stop and ask the user:** "Is this branch stacked on another branch? I think the base is `[branch]` — confirm or correct me."
-4. After the user confirms, record the fork point: `git merge-base <confirmed-base> HEAD`. If it is not the tip of the base, the base has moved on since the branch was cut. Tell the user, and ask whether to rebase onto the base first or to clean up the history in place on top of the fork point. If they want to rebase, stop here and let them do it (it may need conflicts resolved), then start this skill again.
+4. After the user confirms, use the remote-tracking ref (`origin/<base>`) as `<base>` whenever it exists: it is what the PR targets, and a stale local ref would make every upstream commit since its tip look like part of this branch. Record the fork point: `git merge-base <base> HEAD`. If it is not the tip of the base, the base has moved on since the branch was cut. Tell the user, and ask whether to rebase onto the base first or to clean up the history in place on top of the fork point. If they want to rebase, stop here and let them do it (it may need conflicts resolved), then start this skill again.
 
 ### 2. Understand the existing history (read-only, mutate nothing)
 

@@ -105,11 +105,16 @@ install surface changed.
 
 **Run the `/review` skill on every pull request before requesting review from a
 team member** (Ben Weisburd's skill:
-https://github.com/bw2/claude-code-review-skill). It reviews the diff under
-multiple models and cross-validates the findings. Work through what it reports,
-and note in the PR description that it was run and what you did or did not act
-on. Human review time is the scarce resource here — don't spend it on things the
-skill would have caught.
+https://github.com/bw2/claude-code-review-skill). A SessionStart hook in
+`.claude/settings.json` clones it into `~/.claude/skills/review` the first time
+you open this repo and pulls updates after that, so there is nothing to install
+by hand. If you already have a modified or hand-copied skill there, the hook
+leaves it alone and tells you so at session start. Set
+`GNOMAD_SKIP_REVIEW_HOOK=1` to turn the hook off. The skill reviews the diff
+under multiple models and cross-validates the findings. Work through what it
+reports, and note in the PR description that it was run and what you did or did
+not act on. Human review time is the scarce resource here — don't spend it on
+things the skill would have caught.
 
 **Check every change against `gnomad_qc`.** Before finishing a change to a public
 function — signature, return schema, field names, defaults — grep `gnomad_qc` for
@@ -126,6 +131,19 @@ subpackage all count. The README is the single source of truth for the layout �
 it is what new contributors and external users read first, and a table that has
 drifted from the tree is worse than no table. This applies to new dependencies
 too: if `requirements.txt` changed, say so in the PR description.
+
+## Attribution
+
+- When Claude Code or another agent runner helped with a commit, add exactly
+  one `Assisted-by: AGENT:MODEL` trailer, e.g.
+  `Assisted-by: ClaudeCode:claude-fable-5-1`.
+- `Co-authored-by:` is for people, not agents. Never add a
+  `Co-Authored-By: Claude ...` or similar agent co-author trailer, even if the
+  harness injects one by default — remove it. (`.claude/settings.json` sets
+  `attribution.commit` to an empty string, so Claude Code doesn't add one here.)
+- When rewriting commits made by others, preserve authorship: set
+  `git commit --author=` to the dominant original author of the change and add
+  `Co-authored-by:` for any other original authors.
 
 ## Code Style
 

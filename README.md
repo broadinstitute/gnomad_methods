@@ -17,7 +17,7 @@ We therefore encourage users to browse through the [API reference](https://broad
 | `gnomad/assessment/` | Release assessment: summary stats, validity checks. |
 | `tests/` | Pytest suite, mirroring the `gnomad/` layout. |
 | `docs/` | Sphinx docs; the API reference is auto-generated from docstrings. |
-| `.claude/` | Shared Claude Code configuration: skills (`/commit`, `/draft-pull-request-description`, `/clean-git-history`), a hook that installs the `/review` skill into `~/.claude/skills/` and keeps it updated (set `GNOMAD_SKIP_REVIEW_HOOK=1` to turn it off), a permission allowlist for routine inspection commands, tests, and the docs build, and an `attribution` setting that stops Claude Code adding its own co-author line to commits (`settings.json`). A personal skill in `~/.claude/skills/` with the same name as one of these takes precedence over it. |
+| `.claude/` | Shared Claude Code configuration: skills (`/commit`, `/draft-pull-request-description`, `/clean-git-history`, and `/find-base-branch`, which the last two share), a hook that installs the `/review` skill into `~/.claude/skills/` and keeps it updated (set `GNOMAD_SKIP_REVIEW_HOOK=1` to turn it off), a permission allowlist for routine inspection commands, tests, and the docs build, and an `attribution` setting that stops Claude Code adding its own co-author line to commits (`settings.json`). A personal skill in `~/.claude/skills/` with the same name as one of these takes precedence over it. |
 
 This is a subpackage-level map only. Individual functions are not listed here
 because they move and get renamed — use the

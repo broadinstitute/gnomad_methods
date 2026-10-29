@@ -16,9 +16,8 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 **Do not run any diff or log commands spanning the branch until the base is confirmed.**
 
 1. Run `git log --oneline --graph --decorate -n 20` to see where the branch diverges.
-2. Run `git fetch` so the remote-tracking refs are current. Then check for stacking: find the oldest commit unique to this branch and run `git branch -a --contains <hash> --no-contains HEAD`, which leaves out branches stacked on top of this one. Also ignore this branch's own remote-tracking ref (`origin/<this branch>`) and the `backup-*` branches this skill creates. If another non-main branch still contains it, this branch is stacked on it. If `origin/main` contains it but local `main` does not, local `main` is stale and that commit is really an upstream one.
-3. **Stop and ask the user:** "Is this branch stacked on another branch? I think the base is `[branch]` — confirm or correct me."
-4. After the user confirms, compare the local base with its remote-tracking ref (`origin/<base>`). If they point to the same commit, or there is no remote ref, use it. If they differ, show the user how (`git rev-list --left-right --count <base>...origin/<base>` counts the commits only on each side) and ask which to use: a stale local ref makes every upstream commit since its tip look like part of this branch, and a local base with unpushed commits makes `origin/<base>` too old. Use their choice as `<base>` from here on. Record the fork point: `git merge-base <base> HEAD`. If it is not the tip of the base, the base has moved on since the branch was cut. Tell the user, and ask whether to rebase onto the base first or to clean up the history in place on top of the fork point. If they want to rebase, stop here and let them do it (it may need conflicts resolved), then start this skill again.
+2. Find the base with the `find-base-branch` skill (`.claude/skills/find-base-branch/SKILL.md`), and have the user confirm it even if it is `main`: a rewrite on the wrong base is hard to spot afterwards.
+3. Record the fork point: `git merge-base <base> HEAD`. If it is not the tip of the base, the base has moved on since the branch was cut. Tell the user, and ask whether to rebase onto the base first or to clean up the history in place on top of the fork point. If they want to rebase, stop here and let them do it (it may need conflicts resolved), then start this skill again.
 
 ### 2. Understand the existing history (read-only, mutate nothing)
 
@@ -49,7 +48,7 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
 ### 3. Restructure
 
 1. Create a backup: `git branch backup-$(git branch --show-current)-$(date +%Y-%m-%d--%H-%M)`. Tell the user the backup branch name.
-2. `git reset --soft <fork-point>` (the merge-base from step 1.4) then `git reset` to unstage everything. Never reset to the tip of the base: if the base has moved, the new commits would also undo every commit added to the base since the fork, and the check in step 4 would not catch it.
+2. `git reset --soft <fork-point>` (the merge-base from step 1.3) then `git reset` to unstage everything. Never reset to the tip of the base: if the base has moved, the new commits would also undo every commit added to the base since the fork, and the check in step 4 would not catch it.
 3. For each planned commit, stage and commit the way the `commit` skill
    (`.claude/skills/commit/SKILL.md`) says to: name the paths when staging
    (its "Check staged changes" section) and end the message with its

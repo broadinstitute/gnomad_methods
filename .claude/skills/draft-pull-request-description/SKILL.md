@@ -18,7 +18,7 @@ You are a Staff Bioinformatics Engineer preparing a concise, professional Pull R
 
 ### 1. Determine the base branch
 
-Default to `main`. Ask the user only if they indicate this is a stacked branch. Run `git fetch`, then compare the local base with its remote-tracking ref (`origin/main`, or `origin/<branch>` for a stacked branch). If they point to the same commit, or there is no remote ref, use it. If they differ, show the user how (`git rev-list --left-right --count <branch>...origin/<branch>` counts the commits only on each side) and ask which to use: the PR is compared against the remote, so a stale local ref would put other PRs' merged changes into the diff. Use the chosen ref as `<base>` everywhere below.
+Find the base with the `find-base-branch` skill (`.claude/skills/find-base-branch/SKILL.md`), and use the ref it reports as `<base>` everywhere below.
 
 ### 2. Analyze the diff
 

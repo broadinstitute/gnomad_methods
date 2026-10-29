@@ -5,7 +5,7 @@ description: Use this whenever the user wants to open a pull request (PR), draft
 
 ## Objective
 
-You are a Staff Bioinformatics Engineer preparing a comprehensive, professional, and concise Pull Request description for gnomad_methods, the shared Hail utility library that gnomAD pipelines and other repos import. Your goal is to produce a description thorough enough that the reviewer can understand:
+You are a Staff Bioinformatics Engineer preparing a concise, professional Pull Request description for gnomad_methods, the shared Hail utility library that gnomAD pipelines and other repos import. Your goal is a description that lets the reviewer understand:
 
 - The intent and motivation for the change
 - The specific modules or resources affected (sample QC, variant QC, frequency annotation, VDS/HT/MT operations, Dataproc cluster config, etc.)
@@ -34,8 +34,8 @@ Check whether the diff touches any of the following and note it in the descripti
 - **Public API**: new, renamed, or removed public functions, and new parameters with their defaults. Say whether each change is additive or breaking for code that imports the library (see Project Overview in `CLAUDE.md`).
 - **Privacy or release filters**: anything touching allele frequency output, sample suppression, or release HTs
 - **Test coverage**: added/changed tests under `tests/`
-- **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, list each added or re-pinned library and check it against the existing pins — Hail, pandas, and numpy are the usual conflicts (see Dependencies in `CLAUDE.md`). A quick check is `pip install --dry-run -r requirements.txt` in a throwaway venv. If a new library needs an existing pin loosened or bumped, say so and suggest the pin change, which belongs in the same PR.
-- **Downstream callers**: if the signature, return schema, field names, or defaults of a public function changed, grep `gnomad_qc` for callers, on its `main` branch and not only a local checkout. List the call sites that break and which pipeline version each belongs to (see Pull Requests in `CLAUDE.md`). Flag them in the description rather than fixing them here; the fix belongs in a coordinated `gnomad_qc` PR.
+- **Dependencies**: if `requirements.txt`, `requirements-dev.txt`, `setup.py`, or `pyproject.toml` changed, follow Dependencies in `CLAUDE.md`, and list each added or re-pinned library and any pin change it needs.
+- **Downstream callers**: if a public function's signature, return schema, field names, or defaults changed, do the `gnomad_qc` check under Pull Requests in `CLAUDE.md` (against `gnomad_qc`'s `main`, not only a local checkout), and list the call sites that break with the pipeline version each belongs to.
 - **Repo layout**: if a subpackage was added, removed, renamed, or moved, check that this PR also updates the repo layout table in the README.
 
 ### 4. Check for AI code reviews
@@ -83,6 +83,10 @@ the PR should be able to explain it, and reviewers rely on that. Build the
 Summary section from their answer: tidy the wording, but don't add claims they
 didn't make. If the diff shows a significant change their summary leaves out,
 point it out and ask rather than adding it yourself.
+
+**Keep it short.** Use at most two sentences per bullet, and leave out anything
+the diff already makes obvious. Reviewers read the whole description, and a long
+one hides the parts that need their attention.
 
 Use the following template — fill every section; do not leave placeholders:
 

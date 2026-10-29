@@ -15,7 +15,27 @@ dir="$HOME/.claude/skills/review"
 repo="https://github.com/bw2/claude-code-review-skill.git"
 stamp="$HOME/.claude/.review-skill-last-check"
 partial="$HOME/.claude/.review-skill-clone"
+lock="$HOME/.claude/.review-skill.lock"
 reload_skills='"hookSpecificOutput": {"hookEventName": "SessionStart", "reloadSkills": true}'
+
+# Let one hook act at a time. /review starts two `claude -p` sessions at once
+# and each runs this hook; without a lock both update the clone and the loser
+# reports a failure that didn't happen. mkdir is atomic, so exactly one hook
+# takes the lock and the others leave quietly. A lock older than five minutes
+# was left by a hook that was killed, so it is cleared.
+mkdir -p "$HOME/.claude" 2>/dev/null
+now=$(date +%s)
+if ! mkdir "$lock" 2>/dev/null; then
+    since=$(cat "$lock/since" 2>/dev/null)
+    if [ -z "$since" ] || [ $((now - since)) -le 300 ]; then
+        exit 0
+    fi
+    rm -rf "$lock"
+    mkdir "$lock" 2>/dev/null || exit 0
+fi
+echo "$now" > "$lock/since"
+trap 'rm -rf "$lock"' EXIT
+trap 'exit 1' HUP INT TERM
 
 # Plain stdout from a SessionStart hook only reaches Claude, so messages for
 # the user go in the JSON systemMessage field.

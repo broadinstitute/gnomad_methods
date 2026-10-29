@@ -130,10 +130,24 @@ Use the following template — fill every section; do not leave placeholders:
 <!-- Anything requiring specific attention: breaking changes, schema migrations, large GCS writes, dependency changes (and whether they fit the existing pins), or design tradeoffs the reviewer should weigh in on. Write "None" if not applicable. -->
 ```
 
-### 6. Merge strategy
+### 6. Title and Changelog label
+
+`.github/pull_request_template.md` asks for both, because the release notes are
+generated from merged PRs and sorted by label (`.github/release.yml`):
+
+- **Title:** a short, descriptive phrase that reads well as one line of the
+  release notes. If the PR already exists and its title no longer covers the
+  branch, suggest a new one.
+- **Label:** one of the `Changelog:` labels defined in `.github/release.yml`,
+  with a one-line reason. Changes that don't touch the published package, such
+  as CI or contributor tooling, take `Changelog: ignore`.
+
+### 7. Merge strategy
 
 Specify whether this PR should be **squash-merged** (preferred for single-topic changes) or **rebased** (preferred for a clean commit stack). Default to squash unless the commit history is intentionally structured.
 
-### 7. Output
+### 8. Output
 
-Print the complete filled-out markdown. Do not add UI screenshot instructions — this codebase has no frontend.
+Print the suggested title and label, then the complete filled-out markdown. Set
+the title or label on the PR (`gh pr edit --title` / `--add-label`) only if the
+user asks. Do not add UI screenshot instructions — this codebase has no frontend.

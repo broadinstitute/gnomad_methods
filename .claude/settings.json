@@ -1,4 +1,7 @@
 {
+  "attribution": {
+    "commit": ""
+  },
   "permissions": {
     "allow": [
       "Bash(git status:*)",

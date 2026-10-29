@@ -132,6 +132,19 @@ it is what new contributors and external users read first, and a table that has
 drifted from the tree is worse than no table. This applies to new dependencies
 too: if `requirements.txt` changed, say so in the PR description.
 
+## Attribution
+
+- When Claude Code or another agent runner helped with a commit, add exactly
+  one `Assisted-by: AGENT:MODEL` trailer, e.g.
+  `Assisted-by: ClaudeCode:claude-fable-5-1`.
+- `Co-authored-by:` is for people, not agents. Never add a
+  `Co-Authored-By: Claude ...` or similar agent co-author trailer, even if the
+  harness injects one by default — remove it. (`.claude/settings.json` sets
+  `attribution.commit` to an empty string, so Claude Code doesn't add one here.)
+- When rewriting commits made by others, preserve authorship: set
+  `git commit --author=` to the dominant original author of the change and add
+  `Co-authored-by:` for any other original authors.
+
 ## Code Style
 
 ### Docstrings

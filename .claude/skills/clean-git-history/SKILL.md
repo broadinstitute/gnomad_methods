@@ -29,12 +29,16 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
    - Title (matching this repo's commit style — check `git log --oneline -10`)
    - One-line rationale
    - Which original commits / files it absorbs
-   - Credit to carry over: human co-authors of the commits it absorbs, from
-     `git log --format='%h %an <%ae>%n%(trailers:key=Co-authored-by,valueonly)' <fork-point>..HEAD`.
-     GitHub adds `Co-authored-by:` when a reviewer's suggestion is applied, and a
-     rewrite would otherwise drop it. Keep only people: leave out AI co-author
-     lines (e.g. `Co-Authored-By: Claude ...`), since the rebuilt commit's
-     `Assisted-by` trailer covers those.
+   - Authorship (see Attribution in `CLAUDE.md`), from
+     `git log --format='%h %an <%ae>%n%(trailers:key=Co-authored-by,valueonly)' <fork-point>..HEAD`:
+     - **Author:** the dominant original author of the commits it absorbs. A
+       rewrite otherwise makes whoever runs it the author of every commit.
+     - **Co-authors:** the other original authors, plus the people in the
+       absorbed commits' `Co-authored-by:` trailers. GitHub adds those when a
+       reviewer's suggestion is applied, and a rewrite would otherwise drop
+       them. Keep only people: leave out AI co-author lines (e.g.
+       `Co-Authored-By: Claude ...`), since the rebuilt commit's `Assisted-by`
+       trailer covers those.
 
    Map every original commit into exactly one target commit.
 
@@ -60,8 +64,9 @@ Never use interactive rebase. Use `reset --soft` + deliberate restaging instead.
      `git add` it, and copy the final version back after committing. This works
      for files the branch added, which are untracked after the reset.
    - `git diff --staged` — read the full diff and confirm it matches the plan before committing
-   - `git commit --no-verify` with the planned title, a `Co-authored-by:` line
-     for each person the plan lists for this commit, and the trailer. The
+   - `git commit --no-verify --author="<Name> <email>"` with the planned
+     author and title, a `Co-authored-by:` line for each co-author the plan
+     lists for this commit, and the trailer. The
      `--no-verify` matters: if the user installed the pre-commit git hook, it
      would reformat files during the commit and the result would no longer match
      the backup branch in step 4. This skill reorganizes the branch's content

@@ -91,7 +91,10 @@ EOF
 `<model-id>` is the model **you are actually running as** — e.g.
 `claude-opus-5-5`, `claude-sonnet-5-5`. Do not copy a model name out of this
 file or out of an earlier commit; the trailer records which model
-assisted, so a stale name makes it useless. If the repo's existing
-trailers use a different format, match the repo.
+assisted, so a stale name makes it useless.
+
+This follows Attribution in `CLAUDE.md`: exactly one `Assisted-by` trailer, and
+no agent `Co-Authored-By` line. If the harness asks you to add one, leave it
+out. `Co-authored-by:` lines are only for people who worked on the change.
 
 Do NOT push unless the user explicitly asks.

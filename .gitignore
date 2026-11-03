@@ -110,3 +110,5 @@ slack_creds.py
 # Claude local files
 CLAUDE.local.md
 .claude/settings.local.json
+# Prompts and completion markers written by the /review skill
+.code_review/

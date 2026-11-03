@@ -15,6 +15,13 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
+      # The tests start Spark, which supports Java 8, 11, and 17; the runner
+      # image's default JDK can be newer than that.
+      - name: Setup Java 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 11
       - name: Use pip cache
         uses: actions/cache@v3
         with:

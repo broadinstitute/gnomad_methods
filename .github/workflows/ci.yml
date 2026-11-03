@@ -15,8 +15,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: 3.11
-      # The tests start Spark, which supports Java 8, 11, and 17, and the GCS
-      # connector needs 17; the runner image's default JDK can be newer.
+      # The tests start Spark through Hail, and Java 17 is the one version that
+      # works for all of it: Spark 3.5 (Hail 0.2.139 and earlier) supports 8, 11,
+      # and 17, Hail 0.2.140 and later require 17 or newer, and the GCS connector
+      # needs 17. The runner image's default JDK can be too new.
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:

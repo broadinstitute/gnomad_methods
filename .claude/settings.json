@@ -1,6 +1,7 @@
 {
   "attribution": {
-    "commit": ""
+    "commit": "",
+    "pr": "Assisted by Claude Code."
   },
   "permissions": {
     "allow": [

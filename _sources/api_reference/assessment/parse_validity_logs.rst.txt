@@ -1,0 +1,8 @@
+gnomad.assessment.parse_validity_logs
+=====================================
+
+Script to parse logs from validity check output.
+
+.. gnomad_automodulesummary:: gnomad.assessment.parse_validity_logs
+
+.. automodule:: gnomad.assessment.parse_validity_logs

@@ -44,20 +44,22 @@ def fit_regional_mutation_rate_model(
     Rows with any missing feature are dropped, and features with a single value in
     the remaining rows are left out, since they carry no information and can't be
     standardized. The features are z-scored, and the fit minimizes mean log loss +
-    ``ridge_penalty`` / 2 * sum(coef ** 2), with the intercept unpenalized. A site's
-    linear predictor is ``intercept + sum(coefs * (x - mean) / sd)``.
+    ``ridge_penalty`` / 2 * sum(coef ** 2), with the intercept unpenalized; a penalty
+    of 0 gives an unpenalized fit. A site's linear predictor is
+    ``intercept + sum(coefs * (x - mean) / sd)``.
 
     :param df: Training rows, with a 0/1 ``label_col`` (1 for a site with a DNM) and
         the feature columns.
     :param features: Feature columns to model.
-    :param ridge_penalty: Per-row ridge penalty.
+    :param ridge_penalty: Per-row ridge penalty, 0 or more.
     :param label_col: Column with the 0/1 labels. Default is "y".
     :param max_iter: Maximum number of solver iterations. Default is 10000.
     :return: Dictionary with the kept ``features``, their training ``mean`` and
         ``sd`` (ddof=0), ``coefs``, ``intercept``, ``ave`` (the predicted
         probability with every feature at its mean), ``n_mutated`` and
-        ``n_background`` (rows of each label), and ``converged``; or None if either
-        label has no rows or no feature varies.
+        ``n_background`` (rows of each label), and ``converged`` (whether the solver
+        stopped before ``max_iter`` iterations); or None if either label has no rows
+        or no feature varies.
     """
     df = df[[label_col, *features]].dropna()
     labels = df[label_col].to_numpy(dtype=np.int64)
@@ -73,8 +75,9 @@ def fit_regional_mutation_rate_model(
     mean = x.mean(axis=0)
     sd = x.std(axis=0)
     # sklearn minimizes C * sum(log loss) + sum(coef ** 2) / 2, so C = 1 / (n *
-    # penalty) gives the per-row penalty.
-    fit = LogisticRegression(C=1.0 / (len(labels) * ridge_penalty), max_iter=max_iter)
+    # penalty) gives the per-row penalty, and C = inf no penalty.
+    c = np.inf if ridge_penalty == 0 else 1.0 / (len(labels) * ridge_penalty)
+    fit = LogisticRegression(C=c, max_iter=max_iter)
     fit.fit((x - mean) / sd, labels)
     intercept = float(fit.intercept_[0])
 
@@ -184,7 +187,8 @@ def tune_regional_mutation_rate_penalty(
         for context, features in context_features.items():
             context_df = df[df[context_col] == context]
             for fold in folds:
-                in_fold = context_df[fold_col] == fold
+                # A missing fold is not in any fold, whatever the column's dtype.
+                in_fold = context_df[fold_col].eq(fold).fillna(False).to_numpy(bool)
                 model = fit_regional_mutation_rate_model(
                     context_df[~in_fold], features, penalty, label_col
                 )
@@ -288,8 +292,8 @@ def regional_mutation_rate_expr(
         Because the non-mutated sites are a sample, the model is case-control, and
         the ratio of mutation rates between a window and the average window is
         closer to the odds ratio than to this ratio of probabilities. This form
-        compresses the regional effect toward 1 by about ``1 - ave`` on the log
-        scale and caps the rate at ``1 / ave``. That is negligible when DNMs are a
+        multiplies the log-scale regional effect by about ``1 - ave``, which pulls
+        it toward 1, and caps the rate at ``1 / ave``. That is negligible when DNMs are a
         few percent of the training rows, but not when they are a large share, as
         for CpG contexts.
 
@@ -317,7 +321,8 @@ def compute_regional_mutation_rate_ht(
     Compute the regional mutation rate of every window for each context.
 
     Contexts without a model, and windows missing one of a context's features, get a
-    rate of 1.0. Windows are kept only if at least one modeled context has a rate.
+    rate of 1.0. Models of contexts not in ``contexts`` are ignored. Windows are kept
+    only if at least one modeled context in ``contexts`` has a rate.
 
     :param ht: Feature Table with one row per window, e.g. keyed by an interval.
     :param models: Model dictionaries or rows of
@@ -326,7 +331,11 @@ def compute_regional_mutation_rate_ht(
     :return: ``ht`` keyed as before, with only an ``adj_r`` dict field mapping each
         context to its rate.
     """
-    rate_exprs = {m["context"]: regional_mutation_rate_expr(ht.row, m) for m in models}
+    rate_exprs = {
+        m["context"]: regional_mutation_rate_expr(ht.row, m)
+        for m in models
+        if m["context"] in contexts
+    }
     if not rate_exprs:
         logger.warning("No context has a model, so the rate Table is empty.")
         return ht.select(adj_r=hl.empty_dict(hl.tstr, hl.tfloat64)).filter(False)

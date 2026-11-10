@@ -76,6 +76,18 @@ from gnomad.utils.constraint.ranking import (
     rank_and_assign_bins,
     rank_array_element_metrics,
 )
+from gnomad.utils.constraint.regional_mutation_rate import (
+    choose_regional_mutation_rate_penalty,
+    compute_regional_mutation_rate_ht,
+    fit_regional_mutation_rate_model,
+    fit_regional_mutation_rate_models,
+    normalize_regional_mutation_rate_expr,
+    predict_regional_mutation_rate_probability,
+    regional_mutation_rate_expr,
+    regional_mutation_rate_models_to_ht,
+    regional_mutation_rate_normalization_factors_agg_expr,
+    tune_regional_mutation_rate_penalty,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -125,4 +137,14 @@ __all__ = [
     "compute_percentile_thresholds",
     "annotate_bins_by_threshold",
     "rank_array_element_metrics",
+    "fit_regional_mutation_rate_model",
+    "fit_regional_mutation_rate_models",
+    "predict_regional_mutation_rate_probability",
+    "tune_regional_mutation_rate_penalty",
+    "choose_regional_mutation_rate_penalty",
+    "regional_mutation_rate_models_to_ht",
+    "regional_mutation_rate_expr",
+    "compute_regional_mutation_rate_ht",
+    "regional_mutation_rate_normalization_factors_agg_expr",
+    "normalize_regional_mutation_rate_expr",
 ]

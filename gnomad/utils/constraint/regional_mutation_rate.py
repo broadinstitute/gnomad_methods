@@ -11,12 +11,13 @@ is then normalized so that its expected-weighted mean over a set of sites is 1 i
 each context.
 
 The models are fit by Newton's method in Hail: each step aggregates every context's
-gradient and Hessian over the training Table, and only the small per-context linear
-systems are solved on the driver.
+gradient, Hessian, and loss over the training Table, and only the small per-context
+linear systems are solved on the driver. A step that raises the loss is halved.
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+import sys
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import hail as hl
 import numpy as np
@@ -25,7 +26,7 @@ logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
-logger = logging.getLogger("regional_mutation_rate")
+logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
 MODELS_HT_SCHEMA = hl.tstruct(
@@ -40,7 +41,12 @@ MODELS_HT_SCHEMA = hl.tstruct(
     n_background=hl.tint32,
     converged=hl.tbool,
 )
-"""Row type of the models Table returned by :func:`fit_regional_mutation_rate_models`."""
+"""
+Row type of a regional mutation rate models Table.
+
+:func:`fit_regional_mutation_rate_models` returns a Table of this type, and
+:func:`regional_mutation_rate_expr` applies one.
+"""
 
 _MODEL_EXPR_TYPE = hl.tstruct(
     positions=hl.tarray(hl.tint32),
@@ -51,111 +57,207 @@ _MODEL_EXPR_TYPE = hl.tstruct(
 )
 
 
-def _models_expr(models: Dict[str, Dict[str, Any]]) -> hl.expr.DictExpression:
+def _models_by_group_expr(
+    models: Dict[str, Dict[str, Any]],
+) -> hl.expr.DictExpression:
     """
-    Get a dict expression of context to model, for evaluating models on rows.
+    Get a dict expression of group to model, for evaluating models on rows.
 
-    :param models: Dictionary of context to model, each with ``positions`` (the
+    :param models: Dictionary of group to model, each with ``positions`` (the
         positions of its features in a row's feature array), ``mean``, ``sd``,
         ``coefs``, and ``intercept``.
-    :return: Dict expression of context to model struct.
+    :return: Dict expression of group to model struct.
     """
     return hl.literal(
         {
-            c: hl.Struct(**{f: m[f] for f in _MODEL_EXPR_TYPE})
-            for c, m in models.items()
+            g: hl.Struct(**{f: m[f] for f in _MODEL_EXPR_TYPE})
+            for g, m in models.items()
         },
         hl.tdict(hl.tstr, _MODEL_EXPR_TYPE),
     )
 
 
-def _linear_predictor_expr(
+def _standardized_expr(
     x_expr: hl.expr.ArrayNumericExpression, model_expr: hl.expr.StructExpression
-) -> hl.expr.Float64Expression:
+) -> hl.expr.ArrayNumericExpression:
     """
-    Get the linear predictor ``intercept + sum(coefs * (x - mean) / sd)`` of a model.
-
-    It is missing if any of the model's features is missing.
+    Get the standardized values ``(x - mean) / sd`` of a model's features.
 
     :param x_expr: Feature values, indexed by the model's ``positions``.
-    :param model_expr: Model struct (see :func:`_models_expr`).
+    :param model_expr: Model struct (see :func:`_models_by_group_expr`).
+    :return: Standardized value of each of the model's features, in its order.
+    """
+    return hl.range(hl.len(model_expr.positions)).map(
+        lambda i: (x_expr[model_expr.positions[i]] - model_expr.mean[i])
+        / model_expr.sd[i]
+    )
+
+
+def _linear_predictor_expr(
+    z_expr: hl.expr.ArrayNumericExpression, model_expr: hl.expr.StructExpression
+) -> hl.expr.Float64Expression:
+    """
+    Get the linear predictor ``intercept + sum(coefs * z)`` of a model.
+
+    It is missing if any of the standardized values is missing.
+
+    :param z_expr: Standardized feature values (:func:`_standardized_expr`).
+    :param model_expr: Model struct (see :func:`_models_by_group_expr`).
     :return: Linear predictor expression.
     """
     return model_expr.intercept + hl.sum(
-        hl.range(hl.len(model_expr.positions)).map(
-            lambda i: model_expr.coefs[i]
-            * (x_expr[model_expr.positions[i]] - model_expr.mean[i])
-            / model_expr.sd[i]
-        ),
+        hl.zip(model_expr.coefs, z_expr).map(lambda t: t[0] * t[1]),
         filter_missing=False,
     )
 
 
-def _prepare_training_ht(
+def _log_loss_expr(
+    label_expr: hl.expr.Float64Expression, eta_expr: hl.expr.Float64Expression
+) -> hl.expr.Float64Expression:
+    """
+    Get a row's log loss ``log(1 + exp(eta)) - label * eta``.
+
+    It is written as ``log(1 + exp(-|eta|)) + max(eta, 0) - label * eta`` to avoid
+    overflow.
+
+    :param label_expr: 0/1 label.
+    :param eta_expr: Linear predictor (:func:`_linear_predictor_expr`).
+    :return: Log loss expression.
+    """
+    return (
+        hl.log(1 + hl.exp(-hl.abs(eta_expr)))
+        + hl.max(eta_expr, 0)
+        - label_expr * eta_expr
+    )
+
+
+def prepare_regional_mutation_rate_training_ht(
     ht: hl.Table,
-    context_features: Dict[str, List[str]],
-    label_expr: hl.expr.NumericExpression,
-    context_expr: hl.expr.StringExpression,
+    features: Union[List[str], Dict[str, List[str]]],
+    label_expr: Optional[hl.expr.NumericExpression] = None,
+    context_expr: Optional[hl.expr.StringExpression] = None,
     fold_expr: Optional[hl.expr.StringExpression] = None,
 ) -> hl.Table:
     """
-    Select each training row's label, context, fold, and its context's features.
+    Prepare a training Table for fitting and tuning regional mutation rate models.
 
-    Rows with a missing label, a context not in ``context_features``, or a missing
-    value for one of the context's features are dropped.
+    Each row gets its 0/1 label, its context, its fold if ``fold_expr`` is given, and
+    the values of its features in order: the same ``features`` for every context, or
+    its context's features when ``features`` is a dict. ``features`` is recorded in
+    the globals, so the fit and the tuning use the same ones. Rows with a missing
+    value are kept; :func:`fit_regional_mutation_rate_models` and
+    :func:`tune_regional_mutation_rate_penalty` leave them out.
 
-    :param ht: Training Table.
-    :param context_features: Features to model for each context.
-    :param label_expr: 0/1 label of each row (1 for a site with a DNM).
-    :param context_expr: Context of each row.
-    :param fold_expr: Optional fold of each row. Default is None.
-    :return: Table with ``label`` (float64), ``context``, ``fold`` (if given), and
-        ``x``, the values of the row's context's features in order.
+    :param ht: Training Table with the feature fields.
+    :param features: Feature fields to model, which must be numeric or boolean and
+        are converted to float64: one list for every context, or a dict of context to
+        its own list.
+    :param label_expr: 0/1 label of each row (1 for a site with a DNM), a number or a
+        boolean. Default is ``ht.y``.
+    :param context_expr: Context of each row. Default is ``ht.context``.
+    :param fold_expr: Fold of each row, e.g. odd or even chromosomes, needed for
+        :func:`tune_regional_mutation_rate_penalty`. Default is None.
+    :return: Table keyed as ``ht`` with only ``label`` (float64), ``context``,
+        ``fold`` (if ``fold_expr`` is given), and ``x``, the float64 values of the
+        row's features in order (missing, with a dict, for a context not in it). Its
+        only global is ``features``.
     """
-    all_features = list(
-        dict.fromkeys(f for features in context_features.values() for f in features)
+    # hl.float64 also parses strings, so a string field would only fail, or be
+    # misread, when the models are fit.
+    feature_fields = (
+        [f for fs in features.values() for f in fs]
+        if isinstance(features, dict)
+        else features
     )
-    positions = hl.literal(
-        {c: [all_features.index(f) for f in fs] for c, fs in context_features.items()},
-        hl.tdict(hl.tstr, hl.tarray(hl.tint32)),
+    not_numeric = [
+        f
+        for f in dict.fromkeys(feature_fields)
+        if not isinstance(ht[f], hl.expr.NumericExpression)
+    ]
+    if not_numeric:
+        raise ValueError(
+            "Features must be numeric or boolean fields; these are not:"
+            f" {', '.join(not_numeric)}."
+        )
+
+    context_expr = ht.context if context_expr is None else context_expr
+    # x holds a row's features in one array, so they are all converted to float64.
+    if isinstance(features, dict):
+        # Each row gets its own context's features.
+        x = hl.switch(context_expr)
+        for context, context_features in features.items():
+            x = x.when(context, hl.array([hl.float64(ht[f]) for f in context_features]))
+        x = x.or_missing()
+        features_expr = hl.literal(features, hl.tdict(hl.tstr, hl.tarray(hl.tstr)))
+    else:
+        x = hl.array([hl.float64(ht[f]) for f in features])
+        features_expr = hl.literal(list(features), hl.tarray(hl.tstr))
+    fields = {
+        "label": hl.float64(ht.y if label_expr is None else label_expr),
+        "context": context_expr,
+        **({"fold": fold_expr} if fold_expr is not None else {}),
+    }
+    ht = ht.select(**fields, x=x)
+
+    return ht.select_globals(features=features_expr)
+
+
+def _complete_training_rows(
+    ht: hl.Table, fields: List[str]
+) -> Tuple[hl.Table, Dict[str, List[str]]]:
+    """
+    Check a prepared training Table and drop the rows with a missing label or feature.
+
+    :param ht: Table from :func:`prepare_regional_mutation_rate_training_ht`.
+    :param fields: Row fields ``ht`` must have.
+    :return: ``ht`` without incomplete rows, and the features of each context, from
+        its ``features`` global. With one list for every context, the contexts are
+        those of the remaining rows.
+    """
+    missing = [f for f in fields if f not in ht.row]
+    if "features" not in ht.globals:
+        missing.append("the features global")
+    if missing:
+        raise ValueError(
+            f"The training Table has no {', '.join(missing)}. Prepare it with"
+            " prepare_regional_mutation_rate_training_ht"
+            + (", with a fold_expr." if "fold" in missing else ".")
+        )
+    ht = ht.filter(
+        hl.is_defined(ht.label) & hl.is_defined(ht.x) & hl.all(hl.is_defined, ht.x)
     )
-    x = hl.array([hl.float64(ht[f]) for f in all_features])
-    fields = {"label": hl.float64(label_expr), "context": context_expr}
-    if fold_expr is not None:
-        fields["fold"] = fold_expr
-    ht = ht.select(**fields, x=positions.get(context_expr).map(lambda i: x[i]))
 
-    return ht.filter(
-        hl.is_defined(ht.label)
-        & hl.is_defined(ht.x)
-        & hl.all(lambda v: hl.is_defined(v), ht.x)
-    )
+    features = hl.eval(ht.features)
+    if isinstance(features, list):
+        # With one list for every context, model each context the rows have.
+        contexts = ht.aggregate(hl.agg.collect_as_set(ht.context))
+        features = {c: features for c in sorted(contexts - {None})}
+
+    return ht, {c: list(f) for c, f in features.items()}
 
 
-def _fit_models(
+def _init_ridge_logistic_models(
     ht: hl.Table,
     group_features: Dict[str, List[str]],
     ridge_penalties: Dict[str, float],
-    max_iter: int,
-    tol: float,
-    log: bool = True,
+    log: bool,
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Fit a ridge-penalized logistic model for each group of rows of a prepared Table.
+    Set up a model for each group with rows of both labels and a varying feature.
 
-    A group is a context, or, when tuning, a context in one penalty and fold. All
-    groups are fit together, with one pass over ``ht`` per Newton step.
+    One pass over ``ht`` gets each group's counts and its features' means, minimums,
+    and maximums. Features with a single value carry no information and can't be
+    standardized, so they are left out. A second pass gets the standard deviations
+    (:func:`_feature_sds`). Each model starts at the intercept of the group's label
+    rate, with every coefficient 0.
 
-    :param ht: Table from :func:`_prepare_training_ht` with a ``group`` field.
+    :param ht: Complete training rows (:func:`_complete_training_rows`) with a
+        ``group`` field.
     :param group_features: Features of each group, in the order of its rows' ``x``.
-    :param ridge_penalties: Per-row ridge penalty of each group, 0 or more.
-    :param max_iter: Maximum number of Newton steps.
-    :param tol: A fit has converged when no coefficient changes by more than this.
-    :param log: Whether to log groups without a model, features left out, and fits
-        that don't converge. Default is True.
+    :param ridge_penalties: Per-row ridge penalty of each group.
+    :param log: Whether to log groups without a model and features left out.
     :return: Dictionary of group to model, for the groups that have one.
     """
-    # Features with a single value carry no information and can't be standardized.
     stats = ht.aggregate(
         hl.agg.group_by(
             ht.group,
@@ -174,9 +276,12 @@ def _fit_models(
     models = {}
     for group, features in group_features.items():
         s = stats.get(group)
-        n_mutated = int(round(s.n_mutated)) if s else 0
+        # Compare the min and max rather than test sd > 0: a constant feature's
+        # computed mean can differ from its value by rounding, leaving a tiny sd.
         keep = [i for i, v in enumerate(s.x) if v.min < v.max] if s else []
-        if not n_mutated or n_mutated == s.n or not keep:
+        # The label is float64, so its sum is too.
+        n_mutated = int(round(s.n_mutated)) if s else 0
+        if not keep or not 0 < n_mutated < s.n:
             if log:
                 logger.info(
                     "No model for %s: no rows of one label, or no feature varies.",
@@ -190,138 +295,229 @@ def _fit_models(
             "features": [features[i] for i in keep],
             "positions": keep,
             "mean": [s.x[i].mean for i in keep],
+            "sd": [1.0] * len(keep),
             "n": s.n,
             "n_mutated": n_mutated,
             "intercept": float(np.log(n_mutated / (s.n - n_mutated))),
             "coefs": [0.0] * len(keep),
             "converged": False,
             "penalty": ridge_penalties[group],
+            # The penalized loss at the last accepted coefficients (none yet).
+            "objective": np.inf,
         }
+    if models:
+        for group, sds in _feature_sds(ht, models).items():
+            models[group]["sd"] = sds
 
-    if not models:
-        return models
+    return models
 
-    # Standard deviation (ddof=0) in a second pass, around the means, for precision.
-    means = hl.literal(
-        {
-            c: hl.Struct(positions=m["positions"], mean=m["mean"])
-            for c, m in models.items()
-        },
-        hl.tdict(
-            hl.tstr,
-            hl.tstruct(positions=hl.tarray(hl.tint32), mean=hl.tarray(hl.tfloat64)),
-        ),
-    )
-    m_expr = means.get(ht.group)
-    ss = ht.aggregate(
+
+def _feature_sds(
+    ht: hl.Table, models: Dict[str, Dict[str, Any]]
+) -> Dict[str, List[float]]:
+    """
+    Get the standard deviation (ddof=0) of each model's features, around their means.
+
+    ``hl.agg.stats`` gets the sd from the sum of squares in the same pass as the
+    mean, which loses precision when a feature varies little next to its mean: a
+    nearly constant feature can get an sd of NaN. Summing the squared deviations from
+    the means, in a second pass, doesn't.
+
+    :param ht: Complete training rows (:func:`_complete_training_rows`) with a
+        ``group`` field.
+    :param models: Models by group, with every ``sd`` still 1.
+    :return: Dictionary of group to the sds of its model's features.
+    """
+    model_expr = _models_by_group_expr(models).get(ht.group)
+    # With every sd 1, the standardized values are the deviations from the means.
+    deviations = _standardized_expr(ht.x, model_expr)
+    sum_sq = ht.aggregate(
         hl.agg.filter(
-            hl.is_defined(m_expr),
+            hl.is_defined(model_expr),
+            hl.agg.group_by(ht.group, hl.agg.array_sum(deviations.map(lambda d: d**2))),
+        )
+    )
+
+    return {g: [float(np.sqrt(s / models[g]["n"])) for s in sum_sq[g]] for g in models}
+
+
+def _newton_sums(
+    ht: hl.Table, models: Dict[str, Dict[str, Any]]
+) -> Dict[str, hl.Struct]:
+    """
+    Sum each group's log loss, gradient, and Hessian terms at its current model.
+
+    With ``v = [1, z]`` for a row's standardized features and ``p`` its predicted
+    probability, ``g`` sums ``(label - p) * v``, ``h`` sums ``p * (1 - p) * v * v^T``
+    (flattened), and ``loss`` sums the log loss, in one pass over ``ht``.
+
+    :param ht: Complete training rows (:func:`_complete_training_rows`) with a
+        ``group`` field.
+    :param models: Models to evaluate, by group.
+    :return: Dictionary of group to a struct with ``g``, ``h``, and ``loss``.
+    """
+    model_expr = _models_by_group_expr(models).get(ht.group)
+    z = _standardized_expr(ht.x, model_expr)
+    eta = _linear_predictor_expr(z, model_expr)
+    p = hl.expit(eta)
+    # The leading 1 is the intercept's term.
+    v = hl.array([1.0]).extend(z)
+
+    # Skip the rows of groups without a model, or whose model has converged.
+    return ht.aggregate(
+        hl.agg.filter(
+            hl.is_defined(model_expr),
             hl.agg.group_by(
                 ht.group,
-                hl.agg.array_sum(
-                    hl.range(hl.len(m_expr.positions)).map(
-                        lambda i: (ht.x[m_expr.positions[i]] - m_expr.mean[i]) ** 2
-                    )
+                hl.struct(
+                    g=hl.agg.array_sum(v.map(lambda a: a * (ht.label - p))),
+                    h=hl.agg.array_sum(
+                        hl.flatten(
+                            v.map(lambda a: v.map(lambda b: p * (1 - p) * a * b))
+                        )
+                    ),
+                    loss=hl.agg.sum(_log_loss_expr(ht.label, eta)),
                 ),
             ),
         )
     )
-    for group, m in models.items():
-        m["sd"] = [float(np.sqrt(v / m["n"])) for v in ss[group]]
 
-    # Newton's method on mean log loss + ridge_penalty / 2 * sum(coef ** 2), with the
-    # intercept unpenalized, on the standardized features.
+
+def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
+    """
+    Take one step of Newton's method, with step halving, on a model's objective.
+
+    The objective is mean log loss + ``penalty`` / 2 * sum(coef ** 2), with the
+    intercept unpenalized. If the last step raised it by more than the rounding in
+    the summed loss, the step overshot, so the model goes back and takes half of it.
+    Otherwise the next Newton step is taken from the current coefficients. The model
+    has converged when a step changes no coefficient by more than ``tol``.
+
+    :param model: Model to update in place.
+    :param sums: The model's loss, gradient, and Hessian sums (:func:`_newton_sums`).
+    :param tol: Convergence tolerance.
+    :return: None.
+    """
+    k = len(model["coefs"]) + 1
+    beta = np.array([model["intercept"], *model["coefs"]])
+    # Penalize every coefficient but the intercept.
+    penalty = model["penalty"] * np.r_[0.0, np.ones(k - 1)]
+    objective = sums.loss / model["n"] + np.sum(penalty * beta**2) / 2
+    # Near the minimum, the rounding in the summed loss, up to about n * eps of it,
+    # can be larger than a step's real change, so a smaller rise isn't an overshoot.
+    rounding = model["n"] * sys.float_info.epsilon * model["objective"]
+    if objective > model["objective"] + rounding:
+        model["step"] = model["step"] / 2
+        model["converged"] = bool(np.max(np.abs(model["step"])) < tol)
+    else:
+        grad = -np.array(sums.g) / model["n"] + penalty * beta
+        hess = np.array(sums.h).reshape(k, k) / model["n"] + np.diag(penalty)
+        model["objective"] = objective
+        model["start"] = beta
+        model["step"] = np.linalg.solve(hess, grad)
+        model["converged"] = bool(np.max(np.abs(model["step"])) < tol)
+    beta = model["start"] - model["step"]
+    model["intercept"] = float(beta[0])
+    model["coefs"] = beta[1:].tolist()
+
+
+def _fit_ridge_logistic_models(
+    ht: hl.Table,
+    group_features: Dict[str, List[str]],
+    ridge_penalties: Dict[str, float],
+    max_iter: int,
+    tol: float,
+    log: bool = True,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Fit a ridge-penalized logistic model for each group of rows of a prepared Table.
+
+    A group is a context, or, when tuning, a context in one penalty and fold. All
+    groups are fit together by Newton's method (:func:`_newton_update`), with one
+    pass over ``ht`` per step.
+
+    :param ht: Complete training rows (:func:`_complete_training_rows`) with a
+        ``group`` field.
+    :param group_features: Features of each group, in the order of its rows' ``x``.
+    :param ridge_penalties: Per-row ridge penalty of each group, greater than 0.
+    :param max_iter: Maximum number of Newton steps.
+    :param tol: A fit has converged when a Newton step changes no coefficient by more
+        than this.
+    :param log: Whether to log groups without a model, features left out, and fits
+        that don't converge. Default is True.
+    :return: Dictionary of group to model, for the groups that have one.
+    """
+    models = _init_ridge_logistic_models(ht, group_features, ridge_penalties, log)
+    if not models:
+        return models
+
     for _ in range(max_iter):
-        todo = {c: m for c, m in models.items() if not m["converged"]}
+        # Converged models keep their coefficients and leave the aggregation.
+        todo = {g: m for g, m in models.items() if not m["converged"]}
         if not todo:
             break
-        model_expr = _models_expr(todo).get(ht.group)
-        z = hl.range(hl.len(model_expr.positions)).map(
-            lambda i: (ht.x[model_expr.positions[i]] - model_expr.mean[i])
-            / model_expr.sd[i]
-        )
-        p = hl.expit(_linear_predictor_expr(ht.x, model_expr))
-        v = hl.array([1.0]).extend(z)
-        sums = ht.aggregate(
-            hl.agg.filter(
-                hl.is_defined(model_expr),
-                hl.agg.group_by(
-                    ht.group,
-                    hl.struct(
-                        g=hl.agg.array_sum(v.map(lambda a: a * (ht.label - p))),
-                        h=hl.agg.array_sum(
-                            hl.flatten(
-                                v.map(lambda a: v.map(lambda b: p * (1 - p) * a * b))
-                            )
-                        ),
-                    ),
-                ),
-            )
-        )
-        for group, m in todo.items():
-            k = len(m["coefs"]) + 1
-            beta = np.array([m["intercept"], *m["coefs"]])
-            penalty = m["penalty"] * np.r_[0.0, np.ones(k - 1)]
-            grad = -np.array(sums[group].g) / m["n"] + penalty * beta
-            hess = np.array(sums[group].h).reshape(k, k) / m["n"] + np.diag(penalty)
-            step = np.linalg.lstsq(hess, grad, rcond=None)[0]
-            beta = beta - step
-            m["intercept"] = float(beta[0])
-            m["coefs"] = beta[1:].tolist()
-            m["converged"] = bool(np.max(np.abs(step)) < tol)
+        sums = _newton_sums(ht, todo)
+        for group, model in todo.items():
+            _newton_update(model, sums[group], tol)
 
     if log:
-        for group, m in models.items():
-            if not m["converged"]:
+        for group, model in models.items():
+            if not model["converged"]:
                 logger.warning("The model fit for %s did not converge.", group)
         logger.info("%d of %d contexts modeled.", len(models), len(group_features))
 
     return models
 
 
+def _check_penalties(penalties: List[float]) -> None:
+    """
+    Check that every ridge penalty is greater than 0.
+
+    Without a penalty the objective can have no minimum, e.g. when a feature
+    separates the labels, and collinear features leave it without a unique one.
+
+    :param penalties: Per-row ridge penalties.
+    :return: None.
+    """
+    if not penalties or min(penalties) <= 0:
+        raise ValueError(f"Ridge penalties must be greater than 0, not {penalties}.")
+
+
 def fit_regional_mutation_rate_models(
     ht: hl.Table,
-    context_features: Dict[str, List[str]],
     ridge_penalty: float,
-    label_expr: Optional[hl.expr.NumericExpression] = None,
-    context_expr: Optional[hl.expr.StringExpression] = None,
     max_iter: int = 50,
     tol: float = 1e-8,
 ) -> hl.Table:
     """
     Fit a ridge-penalized logistic regional mutation rate model for each context.
 
-    For each context, rows missing any of its features are dropped, and features with
-    a single value in the remaining rows are left out, since they carry no
-    information and can't be standardized. The features are z-scored (ddof=0), and
-    the fit minimizes mean log loss + ``ridge_penalty`` / 2 * sum(coef ** 2), with the
-    intercept unpenalized; a penalty of 0 gives an unpenalized fit. A site's linear
-    predictor is ``intercept + sum(coefs * (x - mean) / sd)``.
+    For each context, rows missing the label or any of its features are dropped, and
+    features with a single value in the remaining rows are left out, since they carry
+    no information and can't be standardized. The features are standardized with
+    their mean and standard deviation (ddof=0), and the fit minimizes mean log loss +
+    ``ridge_penalty`` / 2 * sum(coef ** 2), with the intercept unpenalized. A site's
+    linear predictor is ``intercept + sum(coefs * (x - mean) / sd)``.
 
-    Contexts with no model, features left out because they are constant, and fits
-    that don't converge are logged.
+    The fit is by Newton's method, and each step is a pass over ``ht``, so ``ht``
+    should be read from disk or checkpointed. Contexts with no model, features left
+    out because they are constant, and fits that don't converge are logged.
 
-    :param ht: Training Table with the feature fields.
-    :param context_features: Feature fields to model for each context.
-    :param ridge_penalty: Per-row ridge penalty, 0 or more.
-    :param label_expr: 0/1 label of each row (1 for a site with a DNM). Default is
-        ``ht.y``.
-    :param context_expr: Context of each row. Default is ``ht.context``.
+    :param ht: Training Table from
+        :func:`prepare_regional_mutation_rate_training_ht`.
+    :param ridge_penalty: Per-row ridge penalty, greater than 0.
     :param max_iter: Maximum number of Newton steps. Default is 50.
-    :param tol: The fit has converged when no coefficient changes by more than this
-        in a step. Default is 1e-8.
+    :param tol: The fit has converged when a Newton step changes no coefficient by
+        more than this. Default is 1e-8.
     :return: Table keyed by ``context`` with one row per modeled context: the kept
         ``features``, their training ``mean`` and ``sd``, ``coefs``, ``intercept``,
         ``ave`` (the predicted probability with every feature at its mean),
-        ``n_mutated`` and ``n_background`` (rows of each label), and ``converged``.
+        ``n_mutated`` and ``n_background`` (rows of each label), and ``converged``
+        (see :data:`MODELS_HT_SCHEMA`).
     """
-    ht = _prepare_training_ht(
-        ht,
-        context_features,
-        ht.y if label_expr is None else label_expr,
-        ht.context if context_expr is None else context_expr,
-    )
-    models = _fit_models(
+    _check_penalties([ridge_penalty])
+    ht, context_features = _complete_training_rows(ht, ["label", "context", "x"])
+    models = _fit_ridge_logistic_models(
         ht.annotate(group=ht.context),
         context_features,
         dict.fromkeys(context_features, ridge_penalty),
@@ -333,26 +529,83 @@ def fit_regional_mutation_rate_models(
         [
             {
                 "context": context,
-                **{f: m[f] for f in ["features", "mean", "sd", "coefs", "intercept"]},
+                "features": m["features"],
+                "mean": m["mean"],
+                "sd": m["sd"],
+                "coefs": m["coefs"],
+                "intercept": m["intercept"],
+                # At the feature means every standardized value is 0.
                 "ave": float(1.0 / (1.0 + np.exp(-m["intercept"]))),
                 "n_mutated": m["n_mutated"],
                 "n_background": m["n"] - m["n_mutated"],
                 "converged": m["converged"],
-            }
-            for context, m in models.items()
+            } for context, m in models.items()
         ],
         MODELS_HT_SCHEMA,
         key="context",
     )
 
 
+def _rows_by_fit(ht: hl.Table, fits: List[hl.Struct], held_out: bool) -> hl.Table:
+    """
+    Copy each training row into every fit it is a training, or held-out, row of.
+
+    Fit ``i`` trains on the rows outside ``fits[i].fold`` (including rows with a
+    missing fold) and is scored on the rows in it.
+
+    :param ht: Complete training rows (:func:`_complete_training_rows`) with a
+        ``fold``.
+    :param fits: Penalty and fold of each fit.
+    :param held_out: Whether to copy each row into the fits it is held out of,
+        rather than those it trains.
+    :return: ``ht`` with one row per row and fit, and a ``group`` field naming the
+        fit and the row's context, ``"{i}|{context}"``.
+    """
+    fit_folds = hl.literal([fit.fold for fit in fits], hl.tarray(hl.tstr))
+    # A row with a missing fold trains every fit and is never held out.
+    fit_ids = hl.range(len(fits)).filter(
+        lambda i: (
+            (fit_folds[i] == ht.fold)
+            if held_out
+            else hl.or_else(fit_folds[i] != ht.fold, True)
+        )
+    )
+    ht = ht.annotate(fit=fit_ids).explode("fit")
+
+    return ht.annotate(group=hl.str(ht.fit) + "|" + ht.context)
+
+
+def _held_out_log_loss(
+    ht: hl.Table, models: Dict[str, Dict[str, Any]]
+) -> Dict[str, hl.Struct]:
+    """
+    Sum each group's log loss under its model, in one pass over ``ht``.
+
+    :param ht: Held-out rows with a ``group`` field (:func:`_rows_by_fit`).
+    :param models: Models by group; groups without one are skipped.
+    :return: Dictionary of group to a struct with the number of rows (``n_test``)
+        and their summed log loss (``log_loss``).
+    """
+    model_expr = _models_by_group_expr(models).get(ht.group)
+    eta = _linear_predictor_expr(_standardized_expr(ht.x, model_expr), model_expr)
+
+    return ht.aggregate(
+        hl.agg.filter(
+            hl.is_defined(model_expr),
+            hl.agg.group_by(
+                ht.group,
+                hl.struct(
+                    n_test=hl.agg.count(),
+                    log_loss=hl.agg.sum(_log_loss_expr(ht.label, eta)),
+                ),
+            ),
+        )
+    )
+
+
 def tune_regional_mutation_rate_penalty(
     ht: hl.Table,
-    context_features: Dict[str, List[str]],
     penalties: List[float],
-    label_expr: Optional[hl.expr.NumericExpression] = None,
-    context_expr: Optional[hl.expr.StringExpression] = None,
-    fold_expr: Optional[hl.expr.StringExpression] = None,
     max_iter: int = 50,
     tol: float = 1e-8,
 ) -> hl.Table:
@@ -361,86 +614,69 @@ def tune_regional_mutation_rate_penalty(
 
     For each penalty, context, and fold, the context's model is fit on the rows
     outside the fold (:func:`fit_regional_mutation_rate_models`) and scored on the
-    rows in it. Rows with a missing fold are only used for fitting.
+    rows in it. Rows with a missing fold are only used for fitting. All the fits are
+    made together, with one pass over every fit's rows per Newton step, so ``ht``
+    should be read from disk or checkpointed. Fits that don't converge are counted
+    in a warning and still scored.
 
-    :param ht: Training Table with the feature fields.
-    :param context_features: Feature fields to model for each context.
-    :param penalties: Per-row ridge penalties to try.
-    :param label_expr: 0/1 label of each row. Default is ``ht.y``.
-    :param context_expr: Context of each row. Default is ``ht.context``.
-    :param fold_expr: Fold of each row, e.g. odd or even chromosomes. Default is
-        ``ht.fold``.
+    :param ht: Training Table from
+        :func:`prepare_regional_mutation_rate_training_ht`, with a ``fold``.
+    :param penalties: Per-row ridge penalties to try, each greater than 0. Repeats
+        are tried once.
     :param max_iter: Maximum number of Newton steps per fit. Default is 50.
     :param tol: Convergence tolerance of each fit. Default is 1e-8.
-    :return: Table keyed by ``penalty``, ``context``, and ``fold``, with the number of
-        held-out rows with no missing feature (``n_test``) and their summed log loss
-        (``log_loss``). It is empty when no held-out rows could be scored.
+    :return: Table keyed by ``penalty`` (float64), ``context`` (str), and ``fold``
+        (str), with the number of held-out rows with no missing label or feature
+        (``n_test``, int64) and their summed log loss (``log_loss``, float64). A
+        context and fold with no model (its training rows have only one label, or no
+        feature varies) has no rows, and the Table is empty when no held-out rows
+        could be scored.
     """
-    ht = _prepare_training_ht(
-        ht,
-        context_features,
-        ht.y if label_expr is None else label_expr,
-        ht.context if context_expr is None else context_expr,
-        ht.fold if fold_expr is None else fold_expr,
+    _check_penalties(penalties)
+    ht, context_features = _complete_training_rows(
+        ht, ["label", "context", "fold", "x"]
     )
     folds = sorted(ht.aggregate(hl.agg.collect_as_set(ht.fold)) - {None})
-    # Fit i is penalty fits[i][0] on the rows outside fold fits[i][1]. Every fit is
-    # done at once, each row joining the fits it belongs to, and so is the scoring.
-    fits = [(float(p), f) for p in penalties for f in folds]
-    fit_folds = hl.literal([f for _, f in fits], hl.tarray(hl.tstr))
-
-    def _groups_ht(in_fold: bool) -> hl.Table:
-        """Return the rows of every fit's training (or held-out) set, by group."""
-        fit_ids = hl.range(len(fits)).filter(
-            lambda i: (
-                (fit_folds[i] == ht.fold)
-                if in_fold
-                else hl.or_else(fit_folds[i] != ht.fold, True)
-            )
-        )
-        groups_ht = ht.annotate(fit=fit_ids).explode("fit")
-        return groups_ht.annotate(group=hl.str(groups_ht.fit) + "|" + groups_ht.context)
-
+    # One fit per penalty and fold, on the rows outside the fold. They are all fit,
+    # and scored, together: each row is copied into every fit it belongs to.
+    fits = [
+        hl.Struct(penalty=p, fold=f)
+        for p in sorted({float(p) for p in penalties})
+        for f in folds
+    ]
+    # Each context in each fit is its own model, so its own group.
     groups = {
-        f"{i}|{c}": (penalty, c, features)
-        for i, (penalty, _) in enumerate(fits)
+        f"{i}|{c}": hl.Struct(**fit, context=c, features=features)
+        for i, fit in enumerate(fits)
         for c, features in context_features.items()
     }
-    models = _fit_models(
-        _groups_ht(in_fold=False),
-        {g: features for g, (_, _, features) in groups.items()},
-        {g: penalty for g, (penalty, _, _) in groups.items()},
+    models = _fit_ridge_logistic_models(
+        _rows_by_fit(ht, fits, held_out=False),
+        {g: group.features for g, group in groups.items()},
+        {g: group.penalty for g, group in groups.items()},
         max_iter,
         tol,
         log=False,
     )
-
-    test_ht = _groups_ht(in_fold=True)
-    model_expr = _models_expr(models).get(test_ht.group)
-    eta = _linear_predictor_expr(test_ht.x, model_expr)
-    # log(1 + exp(eta)) - label * eta, written to avoid overflow.
-    loss = hl.log(1 + hl.exp(-hl.abs(eta))) + hl.max(eta, 0) - test_ht.label * eta
-    scores = test_ht.aggregate(
-        hl.agg.filter(
-            hl.is_defined(model_expr),
-            hl.agg.group_by(
-                test_ht.group,
-                hl.struct(n_test=hl.agg.count(), log_loss=hl.agg.sum(loss)),
-            ),
+    not_converged = sum(not m["converged"] for m in models.values())
+    if not_converged:
+        logger.warning(
+            "%d of %d tuning fits did not converge; they are still scored.",
+            not_converged,
+            len(models),
         )
-    )
-    rows = [
-        {
-            "penalty": groups[g][0],
-            "context": groups[g][1],
-            "fold": fits[int(g.split("|")[0])][1],
-            **score,
-        }
-        for g, score in scores.items()
-    ]
+    scores = _held_out_log_loss(_rows_by_fit(ht, fits, held_out=True), models)
 
     return hl.Table.parallelize(
-        rows,
+        [
+            {
+                "penalty": groups[g].penalty,
+                "context": groups[g].context,
+                "fold": groups[g].fold,
+                **score,
+            }
+            for g, score in scores.items()
+        ],
         hl.tstruct(
             penalty=hl.tfloat64,
             context=hl.tstr,
@@ -453,7 +689,7 @@ def tune_regional_mutation_rate_penalty(
 
 
 def choose_regional_mutation_rate_penalty(
-    tuning_ht: hl.Table, default_penalty: float
+    ht: hl.Table, default_penalty: float
 ) -> float:
     """
     Choose the ridge penalty with the lowest held-out log loss.
@@ -463,15 +699,12 @@ def choose_regional_mutation_rate_penalty(
     the chosen penalty is at either end of those tried, since the best one may then
     lie outside them.
 
-    :param tuning_ht: Held-out log loss per penalty
+    :param ht: Held-out log loss per penalty
         (:func:`tune_regional_mutation_rate_penalty`).
-    :param default_penalty: Penalty returned, with a warning, when ``tuning_ht`` is
-        empty.
+    :param default_penalty: Penalty returned, with a warning, when ``ht`` is empty.
     :return: Chosen per-row ridge penalty.
     """
-    loss = tuning_ht.aggregate(
-        hl.agg.group_by(tuning_ht.penalty, hl.agg.sum(tuning_ht.log_loss))
-    )
+    loss = ht.aggregate(hl.agg.group_by(ht.penalty, hl.agg.sum(ht.log_loss)))
     if not loss:
         logger.warning(
             "No held-out rows to score the ridge penalties on; using %s.",
@@ -480,6 +713,7 @@ def choose_regional_mutation_rate_penalty(
         return default_penalty
 
     tried = sorted(loss)
+    # min keeps the first of tied penalties, so the smallest.
     penalty = min(tried, key=lambda p: loss[p])
     if len(tried) > 1 and penalty in (tried[0], tried[-1]):
         logger.warning(
@@ -491,19 +725,45 @@ def choose_regional_mutation_rate_penalty(
     return penalty
 
 
-def compute_regional_mutation_rate_ht(
-    features_ht: hl.Table,
+def _model_rate_expr(
+    features_expr: hl.expr.StructExpression, model: hl.Struct
+) -> hl.expr.Float64Expression:
+    """
+    Get a window's regional mutation rate under one context's model.
+
+    The rate is ``expit(intercept + sum(coefs * (x - mean) / sd)) / ave``, and is
+    missing if any of the model's features is missing. The model's values go into
+    the expression as constants, so it compiles to plain arithmetic, which is about
+    4 times faster than applying the models with :func:`_linear_predictor_expr`.
+
+    :param features_expr: Struct with the model's feature fields.
+    :param model: Row of a models Table (:data:`MODELS_HT_SCHEMA`).
+    :return: Regional mutation rate expression.
+    """
+    eta = model.intercept + sum(
+        coef * (hl.float64(features_expr[f]) - mean) / sd
+        for f, mean, sd, coef in zip(model.features, model.mean, model.sd, model.coefs)
+    )
+
+    return hl.expit(eta) / model.ave
+
+
+def regional_mutation_rate_expr(
+    features_expr: hl.expr.StructExpression,
     models_ht: hl.Table,
     contexts: List[str],
-) -> hl.Table:
+    missing_feature_rate: Optional[float] = 1.0,
+) -> hl.expr.DictExpression:
     """
-    Compute the regional mutation rate of every window for each context.
+    Get a window's regional mutation rate in each context.
 
     A window's rate in a context is ``expit(intercept + sum(coefs * (x - mean) /
-    sd)) / ave`` of that context's model, as in Gnocchi. Contexts without a model,
-    and windows missing one of a context's features, get a rate of 1.0. Models of
-    contexts not in ``contexts`` are ignored. Windows are kept only if at least one
-    modeled context in ``contexts`` has a rate.
+    sd)) / ave`` of that context's model, as in Gnocchi. Contexts without a model get
+    a rate of 1.0, and contexts whose model needs a feature the window is missing get
+    ``missing_feature_rate``. Models of contexts not in ``contexts`` are ignored. The
+    rates are missing when no modeled context in ``contexts`` has one, e.g. for a
+    window missing every feature, so filtering to defined rates keeps the windows the
+    models cover.
 
     .. note::
 
@@ -515,50 +775,38 @@ def compute_regional_mutation_rate_ht(
         are a few percent of the training rows, but not when they are a large
         share, as for CpG contexts.
 
-    :param features_ht: Feature Table with one row per window, e.g. keyed by an
-        interval.
-    :param models_ht: Models Table (:func:`fit_regional_mutation_rate_models`).
-    :param contexts: Contexts to include in each window's rates.
-    :return: ``features_ht`` keyed as before, with only an ``adj_r`` dict field
-        mapping each context to its rate.
+    :param features_expr: Struct with the models' feature fields, e.g. the row of a
+        feature Table with one row per window.
+    :param models_ht: Models Table (:func:`fit_regional_mutation_rate_models`). It
+        has one small row per context and is collected.
+    :param contexts: Contexts to include in the rates.
+    :param missing_feature_rate: Rate of a context whose model needs a feature the
+        window is missing, or None to leave it missing. Default is 1.0, the model's
+        rate for the average window.
+    :return: Dict of each context in ``contexts`` to the window's rate, or missing.
     """
-    # The models Table has one small row per context.
     models = [m for m in models_ht.collect() if m.context in contexts]
     if not models:
-        logger.warning("No context has a model, so the rate Table is empty.")
-        return features_ht.select(adj_r=hl.empty_dict(hl.tstr, hl.tfloat64)).filter(
-            False
+        logger.warning("None of the contexts has a model, so every rate is missing.")
+        return hl.missing(hl.tdict(hl.tstr, hl.tfloat64))
+
+    def _rates(model_rates: hl.expr.DictExpression) -> hl.expr.DictExpression:
+        def _rate(context: hl.expr.StringExpression) -> hl.expr.Float64Expression:
+            rate = model_rates.get(context)
+            if missing_feature_rate is not None:
+                rate = hl.or_else(rate, missing_feature_rate)
+            # A context without a model has no regional effect.
+            return hl.if_else(model_rates.contains(context), rate, 1.0)
+
+        return hl.or_missing(
+            hl.any(hl.is_defined, model_rates.values()),
+            hl.dict(hl.literal(contexts).map(lambda c: (c, _rate(c)))),
         )
 
-    all_features = list(dict.fromkeys(f for m in models for f in m.features))
-    x = hl.array([hl.float64(features_ht[f]) for f in all_features])
-    models_expr = _models_expr(
-        {
-            m.context: {
-                **m,
-                "positions": [all_features.index(f) for f in m.features],
-            }
-            for m in models
-        }
-    )
-    aves = hl.literal({m.context: m.ave for m in models})
-    rates = hl.dict(
-        hl.literal([m.context for m in models]).map(
-            lambda c: (c, hl.expit(_linear_predictor_expr(x, models_expr[c])) / aves[c])
-        )
-    )
-    ht = features_ht.select(_rate=rates)
-    ht = ht.filter(hl.any(lambda r: hl.is_defined(r), ht._rate.values()))
-
-    # TODO: Windows missing a context's features get 1.0 here, the model's rate for
-    #  the average window. Normalization then divides it by the context's factor, so
-    #  these windows end up at 1 / factor instead of 1, unlike sites without a
-    #  window. Consider leaving them missing here and filling 1.0 after
-    #  normalization.
-    return ht.select(
-        adj_r=hl.dict(
-            hl.literal(contexts).map(lambda c: (c, hl.or_else(ht._rate.get(c), 1.0)))
-        )
+    # Bind the models' rates so each is computed once per window.
+    return hl.bind(
+        _rates,
+        hl.dict([(m.context, _model_rate_expr(features_expr, m)) for m in models]),
     )
 
 
@@ -598,8 +846,8 @@ def normalize_regional_mutation_rate_expr(
 
     Contexts without a factor are left unchanged.
 
-    :param rate_expr: Dict of context to rate, e.g. the ``adj_r`` field of
-        :func:`compute_regional_mutation_rate_ht`.
+    :param rate_expr: Dict of context to rate, e.g. from
+        :func:`regional_mutation_rate_expr`.
     :param normalization_factors: Dict, or dict expression, of context to factor,
         e.g. from :func:`regional_mutation_rate_normalization_factors_agg_expr`.
     :return: Dict of context to normalized rate.

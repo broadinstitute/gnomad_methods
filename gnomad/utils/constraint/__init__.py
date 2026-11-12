@@ -77,10 +77,12 @@ from gnomad.utils.constraint.ranking import (
     rank_array_element_metrics,
 )
 from gnomad.utils.constraint.regional_mutation_rate import (
+    MODELS_HT_SCHEMA,
     choose_regional_mutation_rate_penalty,
-    compute_regional_mutation_rate_ht,
     fit_regional_mutation_rate_models,
     normalize_regional_mutation_rate_expr,
+    prepare_regional_mutation_rate_training_ht,
+    regional_mutation_rate_expr,
     regional_mutation_rate_normalization_factors_agg_expr,
     tune_regional_mutation_rate_penalty,
 )
@@ -133,10 +135,12 @@ __all__ = [
     "compute_percentile_thresholds",
     "annotate_bins_by_threshold",
     "rank_array_element_metrics",
+    "MODELS_HT_SCHEMA",
+    "prepare_regional_mutation_rate_training_ht",
     "fit_regional_mutation_rate_models",
     "tune_regional_mutation_rate_penalty",
     "choose_regional_mutation_rate_penalty",
-    "compute_regional_mutation_rate_ht",
+    "regional_mutation_rate_expr",
     "regional_mutation_rate_normalization_factors_agg_expr",
     "normalize_regional_mutation_rate_expr",
 ]

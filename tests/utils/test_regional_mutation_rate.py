@@ -265,18 +265,59 @@ class TestFitRegionalMutationRateModels:
             [0, 0, 0, 0], abs=1e-8
         )
 
-    def test_penalty_must_be_positive(self) -> None:
+    @pytest.mark.parametrize("penalty", [0.0, -1.0, float("nan")])
+    def test_penalty_must_be_positive(self, penalty: float) -> None:
         """
-        Test that the fit and the tuning reject a penalty of 0.
+        Test that the fit and the tuning reject a penalty that isn't greater than 0.
 
         With no penalty, full Newton steps on a heavy-tailed feature ran off until
-        every prediction was exactly 0 or 1, where the fit looked converged.
+        every prediction was exactly 0 or 1, where the fit looked converged. A NaN
+        penalty makes the models NaN. Tuning with no penalties raises too.
         """
         ht = _prepared(_training_rows(), {"AAA": ["a", "b"]}, fold=True)
         with pytest.raises(ValueError, match="greater than 0"):
-            fit_regional_mutation_rate_models(ht, 0.0)
+            fit_regional_mutation_rate_models(ht, penalty)
         with pytest.raises(ValueError, match="greater than 0"):
-            tune_regional_mutation_rate_penalty(ht, [0.3, 0.0])
+            tune_regional_mutation_rate_penalty(ht, [0.3, penalty])
+        with pytest.raises(ValueError, match="No ridge penalties"):
+            tune_regional_mutation_rate_penalty(ht, [])
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf")])
+    def test_non_finite_features_raise(self, value: float) -> None:
+        """
+        Test that a NaN or infinite feature value makes the fit and the tuning raise.
+
+        NaN counts as defined in Hail, so such a row survived the missing-value
+        filter and made its context's model NaN.
+        """
+        rows = _training_rows()
+        rows[3]["a"] = value
+        ht = _prepared(rows, {"AAA": ["a", "b"]}, fold=True)
+        with pytest.raises(ValueError, match="1 training rows have a NaN or infinite"):
+            fit_regional_mutation_rate_models(ht, 0.3)
+        with pytest.raises(ValueError, match="NaN or infinite"):
+            tune_regional_mutation_rate_penalty(ht, [0.3])
+
+    def test_stopped_while_halving_keeps_the_last_accepted_point(self) -> None:
+        """
+        Test that a fit that runs out of steps while halving keeps its best point.
+
+        On the heavy-tailed rows the first Newton step overshoots, so the second pass
+        halves it. Stopped there, the fit returns the coefficients it last accepted,
+        its start, rather than the halved point it never evaluated.
+        """
+        rows = _heavy_tailed_rows()
+        model = _models(
+            fit_regional_mutation_rate_models(
+                _prepared(rows, {"AAA": ["a", "b", "c"]}), 0.01, max_iter=2
+            )
+        )["AAA"]
+        n_mutated = sum(r["y"] for r in rows)
+        assert not model.converged
+        assert model.coefs == [0.0, 0.0, 0.0]
+        assert model.intercept == pytest.approx(
+            np.log(n_mutated / (len(rows) - n_mutated))
+        )
 
     def test_counts_and_expressions(self) -> None:
         """Test the label counts, and labels and contexts from other expressions."""
@@ -456,20 +497,47 @@ class TestNewtonUpdate:
         }
 
     @staticmethod
-    def _sums(objective: float) -> hl.Struct:
+    def _sums(model: dict, objective: float) -> hl.Struct:
         """Return sums whose loss gives the model this objective at its coefficients."""
-        # The penalty term at coefficient 1.0 is 0.1 / 2.
+        penalty_term = model["penalty"] / 2 * sum(c**2 for c in model["coefs"])
         return hl.Struct(
-            g=[1.0, -2.0], h=[300.0, 0.0, 0.0, 400.0], loss=1000 * (objective - 0.05)
+            g=[1.0, -2.0],
+            h=[300.0, 0.0, 0.0, 400.0],
+            loss=model["n"] * (objective - penalty_term),
         )
 
-    def test_rise_halves_the_step(self) -> None:
-        """Test that a step that raised the objective is halved from its start."""
+    @pytest.mark.parametrize("objective", [0.6, 0.5 + 1e-10])
+    def test_rise_halves_the_step(self, objective: float) -> None:
+        """
+        Test that a step that raised the objective is halved from its start.
+
+        A rise of 1e-10 is far above the rounding in the loss, so it is an overshoot
+        too; that bounds the rounding allowance from above. The start and its
+        objective stay those of the last accepted point.
+        """
         model = self._model()
-        _newton_update(model, self._sums(0.6), 1e-8)
+        _newton_update(model, self._sums(model, objective), 1e-8)
         assert list(model["step"]) == [0.0, 0.1]
         assert [model["intercept"], *model["coefs"]] == pytest.approx([0.0, 1.1])
+        assert list(model["start"]) == [0.0, 1.2]
+        assert model["objective"] == 0.5
         assert not model["converged"]
+
+    def test_repeated_rises_keep_halving(self) -> None:
+        """
+        Test that a halved step that still raises the objective is halved again.
+
+        Each halving is compared with the last accepted point. Comparing with the
+        rejected point instead let a step halve only once, and in heavy-tailed
+        replicas fits then cycled or failed.
+        """
+        model = self._model()
+        _newton_update(model, self._sums(model, 0.6), 1e-8)
+        _newton_update(model, self._sums(model, 0.55), 1e-8)
+        assert list(model["step"]) == [0.0, 0.05]
+        assert [model["intercept"], *model["coefs"]] == pytest.approx([0.0, 1.15])
+        assert list(model["start"]) == [0.0, 1.2]
+        assert model["objective"] == 0.5
 
     def test_rise_within_rounding_is_kept(self) -> None:
         """
@@ -477,17 +545,20 @@ class TestNewtonUpdate:
 
         Near the minimum the rounding can exceed a step's real change. Treating it as
         an overshoot halved the step over and over on real data, so fits that full
-        Newton steps converged on never converged.
+        Newton steps converged on never converged. The kept point's Newton step is
+        taken from the gradient and Hessian of the penalized mean loss.
         """
         model = self._model()
-        _newton_update(model, self._sums(0.5 + 1e-15), 1e-8)
+        _newton_update(model, self._sums(model, 0.5 + 1e-15), 1e-8)
         assert list(model["start"]) == [0.0, 1.0]
-        assert model["objective"] == pytest.approx(0.5 + 1e-15)
+        assert model["objective"] == pytest.approx(0.5 + 1e-15, abs=1e-16)
+        # Gradient -g / n + penalty * coef and Hessian h / n + penalty, at [0, 1].
+        assert list(model["step"]) == pytest.approx([-0.001 / 0.3, 0.102 / 0.5])
 
     def test_step_halved_below_tol_has_converged(self) -> None:
         """Test that a model whose halved step is below ``tol`` has converged."""
         model = {**self._model(), "step": np.array([0.0, 1.5e-8])}
-        _newton_update(model, self._sums(0.6), 1e-8)
+        _newton_update(model, self._sums(model, 0.6), 1e-8)
         assert model["converged"]
 
 
@@ -593,6 +664,19 @@ class TestTuneRegionalMutationRatePenalty:
         )
         assert ht.count() == 0
         assert list(ht.row) == ["penalty", "context", "fold", "n_test", "log_loss"]
+
+    def test_non_converged_fits_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that tuning fits that don't converge are counted, with penalties."""
+        with caplog.at_level(logging.WARNING):
+            tune_regional_mutation_rate_penalty(
+                _prepared(_training_rows(seed=2), {"AAA": ["a", "b"]}, fold=True),
+                [0.3],
+                max_iter=1,
+            )
+        assert any(
+            m.startswith("2 of 2 tuning models") and "penalties [0.3]" in m
+            for m in _warnings(caplog)
+        )
 
     def test_repeated_penalty_is_tried_once(self) -> None:
         """
@@ -802,13 +886,20 @@ class TestRegionalMutationRateExpr:
         gets 1.0.
         """
         features_ht = _features_ht([(1, 1001, 1.0, None)])
-        assert _rates(features_ht, _models_ht(), ["ACG", "AAA", "CCC"])[1] == (
-            pytest.approx({"AAA": _expit(0.5) / 0.6, "ACG": 1.0, "CCC": 1.0})
+        assert _rates(features_ht, _models_ht(), ["ACG", "AAA", "CCC"], 2.0)[1] == (
+            pytest.approx({"AAA": _expit(0.5) / 0.6, "ACG": 2.0, "CCC": 1.0})
         )
         rates = _rates(features_ht, _models_ht(), ["ACG", "AAA", "CCC"], None)[1]
         assert rates["ACG"] is None
         assert rates["AAA"] == pytest.approx(_expit(0.5) / 0.6)
         assert rates["CCC"] == 1.0
+
+    def test_contexts(self) -> None:
+        """Test that a context listed twice gets one rate, and no contexts no rates."""
+        features_ht = _features_ht([(1, 1001, 0.5, 2.0)])
+        rates = _rates(features_ht, _models_ht(), ["ACG", "ACG"])
+        assert rates == {1: pytest.approx({"ACG": _expit(-1.0) / 0.5})}
+        assert _rates(features_ht, _models_ht(), []) == {1: None}
 
     def test_no_models(self) -> None:
         """Test that with no models every window's rates are missing."""
@@ -916,6 +1007,24 @@ class TestRegionalMutationRateNormalizationFactorsAggExpr:
         factors = _normalization_factors(_sites_ht(), _rate_ht())
         assert factors == pytest.approx({"AAA": (1 * 2 + 3 * 1) / 4, "ACG": 0.5})
 
+    def test_missing_rates_are_left_out(self) -> None:
+        """
+        Test that a missing rate in a window is left out of its context's factor.
+
+        ``regional_mutation_rate_expr`` leaves such rates missing when its
+        ``missing_feature_rate`` is None.
+        """
+        rate_ht = _rate_ht()
+        rate_ht = rate_ht.annotate(
+            adj_r=hl.if_else(
+                rate_ht.interval.start.position == 100,
+                hl.dict({"AAA": hl.missing(hl.tfloat64), "ACG": 1.0, "CCC": 1.0}),
+                rate_ht.adj_r,
+            )
+        )
+        factors = _normalization_factors(_sites_ht(), rate_ht)
+        assert factors == pytest.approx({"AAA": 2.0, "ACG": 0.5})
+
 
 class TestNormalizeRegionalMutationRateExpr:
     """Test the normalize_regional_mutation_rate_expr function."""
@@ -940,3 +1049,17 @@ class TestNormalizeRegionalMutationRateExpr:
         assert rates[1]["ACG"] == pytest.approx(1.0)
         assert rates[100]["ACG"] == pytest.approx(2.0)
         assert rates[1]["CCC"] == 3.0
+
+    def test_missing_rates_stay_missing(self) -> None:
+        """Test that a missing rate stays missing, and a missing dict stays missing."""
+        ht = hl.Table.parallelize(
+            [{"i": 0, "adj_r": {"AAA": None, "ACG": 1.0}}, {"i": 1, "adj_r": None}],
+            hl.tstruct(i=hl.tint32, adj_r=hl.tdict(hl.tstr, hl.tfloat64)),
+            key="i",
+        )
+        ht = ht.annotate(
+            adj_r=normalize_regional_mutation_rate_expr(
+                ht.adj_r, {"AAA": 2.0, "ACG": 0.5}
+            )
+        )
+        assert [r.adj_r for r in ht.collect()] == [{"AAA": None, "ACG": 2.0}, None]

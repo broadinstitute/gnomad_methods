@@ -208,6 +208,9 @@ def _complete_training_rows(
     """
     Check a prepared training Table and drop the rows with a missing label or feature.
 
+    NaN counts as defined in Hail, and one NaN or infinite feature value would make
+    its context's model NaN, so the remaining rows' features must all be finite.
+
     :param ht: Table from :func:`prepare_regional_mutation_rate_training_ht`.
     :param fields: Row fields ``ht`` must have.
     :return: ``ht`` without incomplete rows, and the features of each context, from
@@ -227,11 +230,22 @@ def _complete_training_rows(
         hl.is_defined(ht.label) & hl.is_defined(ht.x) & hl.all(hl.is_defined, ht.x)
     )
 
+    rows = ht.aggregate(
+        hl.struct(
+            n_not_finite=hl.agg.count_where(~hl.all(hl.is_finite, ht.x)),
+            contexts=hl.agg.collect_as_set(ht.context),
+        )
+    )
+    if rows.n_not_finite:
+        raise ValueError(
+            f"{rows.n_not_finite} training rows have a NaN or infinite feature value."
+            " Make those values missing, or remove the rows."
+        )
+
     features = hl.eval(ht.features)
     if isinstance(features, list):
         # With one list for every context, model each context the rows have.
-        contexts = ht.aggregate(hl.agg.collect_as_set(ht.context))
-        features = {c: features for c in sorted(contexts - {None})}
+        features = {c: features for c in sorted(rows.contexts - {None})}
 
     return ht, {c: list(f) for c, f in features.items()}
 
@@ -391,7 +405,8 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
     intercept unpenalized. If the last step raised it by more than the rounding in
     the summed loss, the step overshot, so the model goes back and takes half of it.
     Otherwise the next Newton step is taken from the current coefficients. The model
-    has converged when a step changes no coefficient by more than ``tol``.
+    has converged when a step, full or halved, changes no coefficient by more than
+    ``tol``.
 
     :param model: Model to update in place.
     :param sums: The model's loss, gradient, and Hessian sums (:func:`_newton_sums`).
@@ -403,10 +418,12 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
     # Penalize every coefficient but the intercept.
     penalty = model["penalty"] * np.r_[0.0, np.ones(k - 1)]
     objective = sums.loss / model["n"] + np.sum(penalty * beta**2) / 2
-    # Near the minimum, the rounding in the summed loss, up to about n * eps of it,
-    # can be larger than a step's real change, so a smaller rise isn't an overshoot.
-    rounding = model["n"] * sys.float_info.epsilon * model["objective"]
-    if objective > model["objective"] + rounding:
+    # Near the minimum, rounding in the mean loss can be larger than a step's real
+    # change, so a smaller rise isn't an overshoot. Summing n rows rounds by up to
+    # about n * eps of the sum, and each row's loss by about eps on its own.
+    rounding = sys.float_info.epsilon * (model["n"] * model["objective"] + 1)
+    model["halving"] = objective > model["objective"] + rounding
+    if model["halving"]:
         model["step"] = model["step"] / 2
         model["converged"] = bool(np.max(np.abs(model["step"])) < tol)
     else:
@@ -434,15 +451,17 @@ def _fit_ridge_logistic_models(
 
     A group is a context, or, when tuning, a context in one penalty and fold. All
     groups are fit together by Newton's method (:func:`_newton_update`), with one
-    pass over ``ht`` per step.
+    pass over ``ht`` per step. A model whose last step was halved, because it
+    converged that way or ran out of steps, keeps its last accepted coefficients.
 
     :param ht: Complete training rows (:func:`_complete_training_rows`) with a
         ``group`` field.
     :param group_features: Features of each group, in the order of its rows' ``x``.
     :param ridge_penalties: Per-row ridge penalty of each group, greater than 0.
-    :param max_iter: Maximum number of Newton steps.
-    :param tol: A fit has converged when a Newton step changes no coefficient by more
-        than this.
+    :param max_iter: Maximum number of passes over ``ht`` for Newton steps,
+        including halved ones.
+    :param tol: A fit has converged when a step, full or halved, changes no
+        coefficient by more than this.
     :param log: Whether to log groups without a model, features left out, and fits
         that don't converge. Default is True.
     :return: Dictionary of group to model, for the groups that have one.
@@ -459,6 +478,13 @@ def _fit_ridge_logistic_models(
         sums = _newton_sums(ht, todo)
         for group, model in todo.items():
             _newton_update(model, sums[group], tol)
+
+    for model in models.values():
+        # A model whose last step was halved sits at a point it never evaluated, so
+        # it goes back to its last accepted coefficients, the best it knows.
+        if model.get("halving"):
+            model["intercept"] = float(model["start"][0])
+            model["coefs"] = model["start"][1:].tolist()
 
     if log:
         for group, model in models.items():
@@ -479,8 +505,11 @@ def _check_penalties(penalties: List[float]) -> None:
     :param penalties: Per-row ridge penalties.
     :return: None.
     """
-    if not penalties or min(penalties) <= 0:
-        raise ValueError(f"Ridge penalties must be greater than 0, not {penalties}.")
+    if not penalties:
+        raise ValueError("No ridge penalties were given.")
+    not_positive = [p for p in penalties if not p > 0]
+    if not_positive:
+        raise ValueError(f"Ridge penalties must be greater than 0, not {not_positive}.")
 
 
 def fit_regional_mutation_rate_models(
@@ -500,15 +529,20 @@ def fit_regional_mutation_rate_models(
     linear predictor is ``intercept + sum(coefs * (x - mean) / sd)``.
 
     The fit is by Newton's method, and each step is a pass over ``ht``, so ``ht``
-    should be read from disk or checkpointed. Contexts with no model, features left
-    out because they are constant, and fits that don't converge are logged.
+    should be read from disk or checkpointed. A step that raises the objective is
+    halved and tried again. A fit whose last step was halved, because the halved
+    step fell below ``tol`` or ``max_iter`` ran out, keeps its last accepted
+    coefficients. Contexts with no model, features left out because they are
+    constant, and fits that don't converge are logged. Feature values must be finite:
+    a NaN or infinite value raises an error.
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`.
     :param ridge_penalty: Per-row ridge penalty, greater than 0.
-    :param max_iter: Maximum number of Newton steps. Default is 50.
-    :param tol: The fit has converged when a Newton step changes no coefficient by
-        more than this. Default is 1e-8.
+    :param max_iter: Maximum number of Newton steps, including halved ones. Default
+        is 50.
+    :param tol: The fit has converged when a step, full or halved, changes no
+        coefficient by more than this. Default is 1e-8.
     :return: Table keyed by ``context`` with one row per modeled context: the kept
         ``features``, their training ``mean`` and ``sd``, ``coefs``, ``intercept``,
         ``ave`` (the predicted probability with every feature at its mean),
@@ -616,21 +650,24 @@ def tune_regional_mutation_rate_penalty(
     outside the fold (:func:`fit_regional_mutation_rate_models`) and scored on the
     rows in it. Rows with a missing fold are only used for fitting. All the fits are
     made together, with one pass over every fit's rows per Newton step, so ``ht``
-    should be read from disk or checkpointed. Fits that don't converge are counted
-    in a warning and still scored.
+    should be read from disk or checkpointed. Fits that don't converge are counted,
+    with their penalties, in a warning and still scored. Feature values must be
+    finite: a NaN or infinite value raises an error.
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`, with a ``fold``.
     :param penalties: Per-row ridge penalties to try, each greater than 0. Repeats
         are tried once.
-    :param max_iter: Maximum number of Newton steps per fit. Default is 50.
+    :param max_iter: Maximum number of Newton steps per fit, including halved ones.
+        Default is 50.
     :param tol: Convergence tolerance of each fit. Default is 1e-8.
     :return: Table keyed by ``penalty`` (float64), ``context`` (str), and ``fold``
         (str), with the number of held-out rows with no missing label or feature
         (``n_test``, int64) and their summed log loss (``log_loss``, float64). A
         context and fold with no model (its training rows have only one label, or no
-        feature varies) has no rows, and the Table is empty when no held-out rows
-        could be scored.
+        feature varies) or no held-out rows has no rows, at every penalty alike, so
+        each penalty's loss is summed over the same contexts and folds. The Table is
+        empty when no held-out rows could be scored.
     """
     _check_penalties(penalties)
     ht, context_features = _complete_training_rows(
@@ -658,12 +695,14 @@ def tune_regional_mutation_rate_penalty(
         tol,
         log=False,
     )
-    not_converged = sum(not m["converged"] for m in models.values())
+    not_converged = [g for g, m in models.items() if not m["converged"]]
     if not_converged:
         logger.warning(
-            "%d of %d tuning fits did not converge; they are still scored.",
-            not_converged,
+            "%d of %d tuning models (one per penalty, fold, and context) did not"
+            " converge, at penalties %s; they are still scored.",
+            len(not_converged),
             len(models),
+            sorted({groups[g].penalty for g in not_converged}),
         )
     scores = _held_out_log_loss(_rows_by_fit(ht, fits, held_out=True), models)
 
@@ -733,8 +772,9 @@ def _model_rate_expr(
 
     The rate is ``expit(intercept + sum(coefs * (x - mean) / sd)) / ave``, and is
     missing if any of the model's features is missing. The model's values go into
-    the expression as constants, so it compiles to plain arithmetic, which is about
-    4 times faster than applying the models with :func:`_linear_predictor_expr`.
+    the expression as constants, so it compiles to plain arithmetic. Applying the
+    models through literals and :func:`_linear_predictor_expr` instead was several
+    times slower and, with 32 models, made a class too large for the JVM.
 
     :param features_expr: Struct with the model's feature fields.
     :param model: Row of a models Table (:data:`MODELS_HT_SCHEMA`).
@@ -763,7 +803,7 @@ def regional_mutation_rate_expr(
     ``missing_feature_rate``. Models of contexts not in ``contexts`` are ignored. The
     rates are missing when no modeled context in ``contexts`` has one, e.g. for a
     window missing every feature, so filtering to defined rates keeps the windows the
-    models cover.
+    models cover. A NaN or infinite feature value gives a NaN rate.
 
     .. note::
 
@@ -783,31 +823,28 @@ def regional_mutation_rate_expr(
     :param missing_feature_rate: Rate of a context whose model needs a feature the
         window is missing, or None to leave it missing. Default is 1.0, the model's
         rate for the average window.
-    :return: Dict of each context in ``contexts`` to the window's rate, or missing.
+    :return: Dict of each context in ``contexts`` to the window's rate, missing when
+        no modeled context has a rate. With ``missing_feature_rate`` None, the rates
+        of contexts missing a model feature are missing within the dict.
     """
     models = [m for m in models_ht.collect() if m.context in contexts]
     if not models:
         logger.warning("None of the contexts has a model, so every rate is missing.")
         return hl.missing(hl.tdict(hl.tstr, hl.tfloat64))
 
-    def _rates(model_rates: hl.expr.DictExpression) -> hl.expr.DictExpression:
-        def _rate(context: hl.expr.StringExpression) -> hl.expr.Float64Expression:
-            rate = model_rates.get(context)
-            if missing_feature_rate is not None:
-                rate = hl.or_else(rate, missing_feature_rate)
-            # A context without a model has no regional effect.
-            return hl.if_else(model_rates.contains(context), rate, 1.0)
+    def _rates(*model_rates: hl.expr.Float64Expression) -> hl.expr.DictExpression:
+        rates = dict(zip([m.context for m in models], model_rates))
+        if missing_feature_rate is not None:
+            rates = {c: hl.or_else(r, missing_feature_rate) for c, r in rates.items()}
 
+        # A context without a model has no regional effect.
         return hl.or_missing(
-            hl.any(hl.is_defined, model_rates.values()),
-            hl.dict(hl.literal(contexts).map(lambda c: (c, _rate(c)))),
+            hl.any(*[hl.is_defined(r) for r in model_rates]),
+            hl.dict({c: rates.get(c, 1.0) for c in contexts}),
         )
 
     # Bind the models' rates so each is computed once per window.
-    return hl.bind(
-        _rates,
-        hl.dict([(m.context, _model_rate_expr(features_expr, m)) for m in models]),
-    )
+    return hl.bind(_rates, *[_model_rate_expr(features_expr, m) for m in models])
 
 
 def regional_mutation_rate_normalization_factors_agg_expr(

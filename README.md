@@ -10,7 +10,7 @@ We therefore encourage users to browse through the [API reference](https://broad
 
 | Directory | Purpose |
 |-----------|---------|
-| `gnomad/utils/` | General-purpose utilities: annotations, filtering, Ensembl VEP, constraint, sparse MTs, liftover, VCF export, etc. One module per topic, except `constraint/`, a package split by stage (constants, context, counts, grouping, models, metrics, ranking) that re-exports everything from `gnomad.utils.constraint`. |
+| `gnomad/utils/` | General-purpose utilities: annotations, filtering, Ensembl VEP, constraint, sparse MTs, liftover, VCF export, etc. One module per topic, except `constraint/`, a package split by stage (constants, context, counts, grouping, models, metrics, ranking, regional_mutation_rate) that re-exports everything from `gnomad.utils.constraint`. |
 | `gnomad/resources/` | Resource classes (`resource_utils.py`), resource source config (`config.py`), and per-build resource definitions (`grch37/`, `grch38/`). |
 | `gnomad/sample_qc/` | Sample QC: genetic ancestry, relatedness, sex inference, platform inference, filtering. |
 | `gnomad/variant_qc/` | Variant QC: random forest, training, evaluation, LD. |

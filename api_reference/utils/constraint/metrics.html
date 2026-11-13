@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.utils.constraint.metrics &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="gnomad.utils.constraint.models" href="models.html" />
+    <link rel="prev" title="gnomad.utils.constraint.grouping" href="grouping.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../sample_qc/index.html">sample_qc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../resources/index.html">resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../variant_qc/index.html">variant_qc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../assessment/index.html">assessment</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../index.html">utils</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../annotations.html">annotations</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="index.html">constraint</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="constants.html">constants</a></li>
+<li class="toctree-l4"><a class="reference internal" href="context.html">context</a></li>
+<li class="toctree-l4"><a class="reference internal" href="counts.html">counts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="grouping.html">grouping</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="models.html">models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="ranking.html">ranking</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../file_utils.html">file_utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../filtering.html">filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gen_stats.html">gen_stats</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../intervals.html">intervals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../liftover.html">liftover</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../parse.html">parse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../plotting.html">plotting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference_genome.html">reference_genome</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../release.html">release</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../slack.html">slack</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sparse_mt.html">sparse_mt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../transcript_annotation.html">transcript_annotation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vcf.html">vcf</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vep.html">vep</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">gnomad</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">gnomad.utils</a></li>
+          <li class="breadcrumb-item"><a href="index.html">gnomad.utils.constraint</a></li>
+      <li class="breadcrumb-item active">gnomad.utils.constraint.metrics</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../_sources/api_reference/utils/constraint/metrics.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="gnomad-utils-constraint-metrics">
+<h1>gnomad.utils.constraint.metrics<a class="headerlink" href="#gnomad-utils-constraint-metrics" title="Permalink to this heading"></a></h1>
+<p>Functions to compute constraint metrics.</p>
+<p>Covers pLI, the o/e confidence interval, z-scores, flags, and GENCODE annotations.</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gnomad.utils.constraint.metrics.compute_pli" title="gnomad.utils.constraint.metrics.compute_pli"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.metrics.compute_pli</span></code></a>(ht, ...)</p></td>
+<td><p>Compute the pLI score using the observed and expected variant counts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gnomad.utils.constraint.metrics.oe_confidence_interval" title="gnomad.utils.constraint.metrics.oe_confidence_interval"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.metrics.oe_confidence_interval</span></code></a>(...)</p></td>
+<td><p>Compute a confidence interval around the observed/expected ratio.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gnomad.utils.constraint.metrics.calculate_raw_z_score" title="gnomad.utils.constraint.metrics.calculate_raw_z_score"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.metrics.calculate_raw_z_score</span></code></a>(...)</p></td>
+<td><p>Compute the signed raw z-score using observed and expected variant counts.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gnomad.utils.constraint.metrics.get_constraint_flags" title="gnomad.utils.constraint.metrics.get_constraint_flags"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.metrics.get_constraint_flags</span></code></a>(...)</p></td>
+<td><p>Determine the constraint flags that define why constraint will not be calculated.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gnomad.utils.constraint.metrics.calculate_raw_z_score_sd" title="gnomad.utils.constraint.metrics.calculate_raw_z_score_sd"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.metrics.calculate_raw_z_score_sd</span></code></a>(...)</p></td>
+<td><p>Calculate the standard deviation of the raw z-score.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gnomad.utils.constraint.metrics.add_gencode_transcript_annotations" title="gnomad.utils.constraint.metrics.add_gencode_transcript_annotations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.metrics.add_gencode_transcript_annotations</span></code></a>(ht, ...)</p></td>
+<td><p>Add GENCODE annotations to Table based on transcript id.</p></td>
+</tr>
+</tbody>
+</table>
+<span class="target" id="module-gnomad.utils.constraint.metrics"></span><p>Functions to compute constraint metrics.</p>
+<p>Covers pLI, the o/e confidence interval, z-scores, flags, and GENCODE annotations.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.metrics.compute_pli">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.metrics.</span></span><span class="sig-name descname"><span class="pre">compute_pli</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obs_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">expected_values</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_diff_convergence</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/metrics.html#compute_pli"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.metrics.compute_pli" title="Permalink to this definition"></a></dt>
+<dd><p>Compute the pLI score using the observed and expected variant counts.</p>
+<p>Full details on pLI can be found in the ExAC paper: Lek, M., Karczewski, K.,
+Minikel, E. et al. Analysis of protein-coding genetic variation in 60,706 humans.
+Nature 536, 285–291 (2016).</p>
+<p>pLI is the probability of being loss-of-function intolerant, and this function
+computes that probability using the expectation-maximization (EM) algorithm.</p>
+<p>We assume a 3 state model, where each gene fits into one of three categories
+with respect loss-of-function variation sensitivity:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Null: where protein truncating variation is completely tolerated by natural
+selection.</p></li>
+<li><p>Recessive (Rec): where heterozygous pLoFs are tolerated but homozygous pLoFs
+are not.</p></li>
+<li><p>Haploinsufficient (LI): where heterozygous pLoFs are not tolerated.</p></li>
+</ul>
+</div></blockquote>
+<p>The function requires the expected amount of loss-of-function depletion for each of
+these states. The default provided is based on the observed depletion of
+protein-truncating variation in the Blekhman autosomal recessive and ClinGen
+dosage sensitivity gene sets (Supplementary Information Table 12 of the above
+reference):</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Null: 1.0, assume tolerant genes have the expected amount of truncating
+variation.</p></li>
+<li><p>Rec: 0.463, derived from the empirical mean observed/expected rate of
+truncating variation for recessive disease genes (0.463).</p></li>
+<li><p>LI: 0.089, derived from the empirical mean observed/expected rate of
+truncating variation for severe haploinsufficient genes.</p></li>
+</ul>
+</div></blockquote>
+<p>The output StructExpression will include the following annotations:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>pLI: Probability of loss-of-function intolerance; probability that transcript
+falls into distribution of haploinsufficient genes.</p></li>
+<li><p>pNull: Probability that transcript falls into distribution of unconstrained
+genes.</p></li>
+<li><p>pRec: Probability that transcript falls into distribution of recessive genes.</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ht</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>) – Input Table containing <cite>obs_expr</cite> and <cite>exp_expr</cite>.</p></li>
+<li><p><strong>obs_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Int64Expression.html#hail.expr.Int64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Int64Expression</span></code></a>) – Expression for the number of observed variants on each gene or
+transcript in <cite>ht</cite>.</p></li>
+<li><p><strong>exp_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Expression for the number of expected variants on each gene or
+transcript in <cite>ht</cite>.</p></li>
+<li><p><strong>expected_values</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>]]) – Dictionary containing the expected values for ‘Null’,
+‘Rec’, and ‘LI’ to use as starting values.</p></li>
+<li><p><strong>min_diff_convergence</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>) – Minimum iteration change in LI to consider the EM
+model convergence criteria as met. Default is 0.001.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.expr.StructExpression.html#hail.expr.StructExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StructExpression</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>StructExpression for pLI scores.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.metrics.oe_confidence_interval">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.metrics.</span></span><span class="sig-name descname"><span class="pre">oe_confidence_interval</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">method</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'gamma'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/metrics.html#oe_confidence_interval"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.metrics.oe_confidence_interval" title="Permalink to this definition"></a></dt>
+<dd><p>Compute a confidence interval around the observed/expected ratio.</p>
+<p>Two methods are available:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;gamma&quot;</span></code> (default): uses <code class="docutils literal notranslate"><span class="pre">hl.qgamma</span></code> to compute exact quantiles of
+the Gamma posterior. Fast and precise.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;poisson&quot;</span></code>: sweeps a discretized Poisson likelihood over the OE
+parameter space [0, 2). Retained for backwards compatibility.</p></li>
+</ul>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>The default changed from the discretized Poisson computation to
+<code class="docutils literal notranslate"><span class="pre">&quot;gamma&quot;</span></code>, so calls that do not pass <code class="docutils literal notranslate"><span class="pre">method</span></code> return different bounds
+than before. <code class="docutils literal notranslate"><span class="pre">&quot;gamma&quot;</span></code> requires Hail &gt;= 0.2.137, which added
+<code class="docutils literal notranslate"><span class="pre">hl.qgamma</span></code>; on older Hail versions pass <code class="docutils literal notranslate"><span class="pre">method=&quot;poisson&quot;</span></code>.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obs_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Int64Expression.html#hail.expr.Int64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Int64Expression</span></code></a>) – Observed variant count expression.</p></li>
+<li><p><strong>exp_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Expected variant count expression.</p></li>
+<li><p><strong>alpha</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>) – Significance level for the confidence interval. Default is
+0.05 (90% CI).</p></li>
+<li><p><strong>method</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>) – CI method — <code class="docutils literal notranslate"><span class="pre">&quot;gamma&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;poisson&quot;</span></code>. Default is
+<code class="docutils literal notranslate"><span class="pre">&quot;gamma&quot;</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.expr.StructExpression.html#hail.expr.StructExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StructExpression</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Struct with <code class="docutils literal notranslate"><span class="pre">lower</span></code> and <code class="docutils literal notranslate"><span class="pre">upper</span></code> bounds.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.metrics.calculate_raw_z_score">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.metrics.</span></span><span class="sig-name descname"><span class="pre">calculate_raw_z_score</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obs_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exp_expr</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/metrics.html#calculate_raw_z_score"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.metrics.calculate_raw_z_score" title="Permalink to this definition"></a></dt>
+<dd><p>Compute the signed raw z-score using observed and expected variant counts.</p>
+<p>The raw z-scores are positive when the transcript had fewer variants than expected,
+and are negative when transcripts had more variants than expected.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>obs_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Int64Expression.html#hail.expr.Int64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Int64Expression</span></code></a>) – Observed variant count expression.</p></li>
+<li><p><strong>exp_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Expected variant count expression.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Raw z-score expression.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.metrics.get_constraint_flags">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.metrics.</span></span><span class="sig-name descname"><span class="pre">get_constraint_flags</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exp_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_z_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_z_lower_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_z_upper_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flag_postfix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/metrics.html#get_constraint_flags"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.metrics.get_constraint_flags" title="Permalink to this definition"></a></dt>
+<dd><p>Determine the constraint flags that define why constraint will not be calculated.</p>
+<dl class="simple">
+<dt>Flags which are added:</dt><dd><ul class="simple">
+<li><p>“no_exp_{flag_postfix}” - for genes that have missing or zero expected variants.</p></li>
+<li><p>“outlier_{flag_postfix}” - for genes that are raw z-score outliers:
+(<cite>raw_z_expr</cite> &lt; <cite>raw_z_lower_threshold</cite>) or (<cite>raw_z_expr</cite> &gt;
+<cite>raw_z_upper_threshold</cite>).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>exp_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Expression for the expected variant counts of pLoF, missense, or
+synonymous variants.</p></li>
+<li><p><strong>raw_z_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Expression for the signed raw z-score of pLoF, missense, or
+synonymous variants.</p></li>
+<li><p><strong>raw_z_lower_threshold</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>, <a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code>]) – Lower threshold for the raw z-score. When <cite>raw_z_expr</cite>
+is less than this threshold it is considered an ‘outlier’. Default is -5.0.</p></li>
+<li><p><strong>raw_z_upper_threshold</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>, <a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>, <code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code>]) – Upper threshold for the raw z-score. When <cite>raw_z_expr</cite>
+is greater than this threshold it is considered an ‘outlier’. Default is 5.0.</p></li>
+<li><p><strong>flag_postfix</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>) – Postfix to add to the end of the constraint flag names.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Expression.html#hail.expr.Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Expression</span></code></a>]</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary containing expressions for constraint flags.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.metrics.calculate_raw_z_score_sd">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.metrics.</span></span><span class="sig-name descname"><span class="pre">calculate_raw_z_score_sd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_z_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flag_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mirror_neg_raw_z</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/metrics.html#calculate_raw_z_score_sd"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.metrics.calculate_raw_z_score_sd" title="Permalink to this definition"></a></dt>
+<dd><p>Calculate the standard deviation of the raw z-score.</p>
+<p>When using <cite>mirror_neg_raw_z</cite> is True, all the negative raw z-scores (defined by
+<cite>raw_z_expr</cite>) are combined with those same z-scores multiplied by -1 (to create a
+mirrored distribution).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>raw_z_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Expression for the raw z-score.</p></li>
+<li><p><strong>flag_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.StringExpression.html#hail.expr.StringExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StringExpression</span></code></a>) – Expression for the constraint flags. z-score will not be
+calculated if flags are present.</p></li>
+<li><p><strong>mirror_neg_raw_z</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code>) – Whether the standard deviation should be computed using a
+mirrored distribution of negative <cite>raw_z_expr</cite>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Expression.html#hail.expr.Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Expression</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>StructExpression containing standard deviation of the raw z-score and
+the z-score.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.metrics.add_gencode_transcript_annotations">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.metrics.</span></span><span class="sig-name descname"><span class="pre">add_gencode_transcript_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gencode_ht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">('transcript_id_version',</span> <span class="pre">'gene_id_version',</span> <span class="pre">'level',</span> <span class="pre">'transcript_type',</span> <span class="pre">'start_position',</span> <span class="pre">'end_position')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_y_par</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/metrics.html#add_gencode_transcript_annotations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.metrics.add_gencode_transcript_annotations" title="Permalink to this definition"></a></dt>
+<dd><p>Add GENCODE annotations to Table based on transcript id.</p>
+<p>In addition to the annotations specified by <code class="docutils literal notranslate"><span class="pre">annotations</span></code>, the following
+computed annotations are always added:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>chromosome</p></li>
+<li><p>cds_length</p></li>
+<li><p>num_coding_exons</p></li>
+</ul>
+</div></blockquote>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ht</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>) – Input Table.</p></li>
+<li><p><strong>gencode_ht</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>) – Table with GENCODE annotations.</p></li>
+<li><p><strong>annotations</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>], <code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">...</span></code>]]) – GENCODE annotations to add. Default is
+<code class="docutils literal notranslate"><span class="pre">DEFAULT_GENCODE_ANNOTATIONS</span></code>.</p></li>
+<li><p><strong>remove_y_par</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code>) – Whether to remove features for the Y chromosome PAR regions.
+Default is True because the Y chromosome PAR regions are typically not included
+in the constraint calculations and both chrX and chrY will have the same
+‘transcript_id’ field for these regions. This parameter can only be True if
+<code class="docutils literal notranslate"><span class="pre">gencode_ht</span></code> includes a ‘transcript_id_version’ field because Y_PAR (or
+PAR_Y, depending on the GENCODE release) is included in the version of the
+transcript, which has been stripped from the ‘transcript_id’ field.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Table with transcript annotations from GENCODE added.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="grouping.html" class="btn btn-neutral float-left" title="gnomad.utils.constraint.grouping" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="models.html" class="btn btn-neutral float-right" title="gnomad.utils.constraint.models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

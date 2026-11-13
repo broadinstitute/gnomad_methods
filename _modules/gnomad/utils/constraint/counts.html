@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.utils.constraint.counts &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../../_static/jquery.js"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+        <script src="../../../../_static/doctools.js"></script>
+        <script src="../../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gnomad.utils.constraint.counts</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gnomad.utils.constraint.counts</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Functions to count observed and possible variants and sum them by group.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">hail</span> <span class="k">as</span> <span class="nn">hl</span>
+
+<span class="kn">from</span> <span class="nn">gnomad.utils.constraint.constants</span> <span class="kn">import</span> <span class="n">DEFAULT_FIELDS_TO_SUM</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> (</span><span class="si">%(name)s</span><span class="s2"> </span><span class="si">%(lineno)s</span><span class="s2">): </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">datefmt</span><span class="o">=</span><span class="s2">&quot;%m/</span><span class="si">%d</span><span class="s2">/%Y %I:%M:%S %p&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;constraint_utils&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">_resolve_row_annotation_expr</span><span class="p">(</span>
+    <span class="n">t</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">annotation_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Expression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">expr_param_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Expression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get a row annotation from a Table/MatrixTable, or return a provided expression.</span>
+
+<span class="sd">    Provides a consistent pattern for functions that accept either an explicit</span>
+<span class="sd">    Hail expression or fall back to a well-known field on a Table. This avoids</span>
+<span class="sd">    duplicating &quot;resolve expr or look it up on ht&quot; logic across callers.</span>
+
+<span class="sd">    If ``expr`` is provided it is returned directly. Otherwise, ``t`` and</span>
+<span class="sd">    ``annotation_name`` must both be supplied and the named row field is looked up</span>
+<span class="sd">    on ``t``.</span>
+
+<span class="sd">    Example usage inside a public function::</span>
+
+<span class="sd">        def my_function(</span>
+<span class="sd">            ht: hl.Table,</span>
+<span class="sd">            freq_expr: Optional[hl.expr.StructExpression] = None,</span>
+<span class="sd">        ) -&gt; ...:</span>
+<span class="sd">            freq_expr = _resolve_row_annotation_expr(</span>
+<span class="sd">                t=ht,</span>
+<span class="sd">                annotation_name=&quot;freq&quot;,</span>
+<span class="sd">                expr=freq_expr,</span>
+<span class="sd">                expr_param_name=&quot;freq_expr&quot;,</span>
+<span class="sd">            )</span>
+<span class="sd">            # freq_expr is now guaranteed to be a valid expression —</span>
+<span class="sd">            # either the caller&#39;s explicit value or ht.freq.</span>
+
+<span class="sd">    :param t: Input Table or MatrixTable to look up ``annotation_name`` on. Required</span>
+<span class="sd">        when ``expr`` is None.</span>
+<span class="sd">    :param annotation_name: Name of the field to retrieve from ``t``. Required when</span>
+<span class="sd">        ``expr`` is None.</span>
+<span class="sd">    :param expr: Expression to return directly. When provided, ``t`` and</span>
+<span class="sd">        ``annotation_name`` are ignored.</span>
+<span class="sd">    :param expr_param_name: Human-readable name for ``expr``, used in log/error</span>
+<span class="sd">        messages. Defaults to &quot;expr&quot;.</span>
+<span class="sd">    :return: The resolved Hail expression.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">t</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">annotation_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either &#39;t&#39; and &#39;annotation_name&#39; or &#39;expr&#39; must be provided.&quot;</span><span class="p">)</span>
+
+    <span class="n">expr_param_name</span> <span class="o">=</span> <span class="n">expr_param_name</span> <span class="ow">or</span> <span class="s2">&quot;expr&quot;</span>
+    <span class="k">if</span> <span class="n">expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">annotation_name</span> <span class="ow">in</span> <span class="n">t</span><span class="o">.</span><span class="n">row</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;</span><span class="si">%s</span><span class="s2"> was not provided, using &#39;</span><span class="si">%s</span><span class="s2">&#39;.&quot;</span><span class="p">,</span> <span class="n">expr_param_name</span><span class="p">,</span> <span class="n">annotation_name</span>
+        <span class="p">)</span>
+        <span class="n">expr</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="n">annotation_name</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="n">expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">expr_param_name</span><span class="si">}</span><span class="s2"> was not provided and &#39;</span><span class="si">{</span><span class="n">annotation_name</span><span class="si">}</span><span class="s2">&#39; is &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;not present in the input Table or MatrixTable.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">expr</span>
+
+
+<div class="viewcode-block" id="variant_observed_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/counts.html#gnomad.utils.constraint.counts.variant_observed_expr">[docs]</a><span class="k">def</span> <span class="nf">variant_observed_expr</span><span class="p">(</span>
+    <span class="n">freq_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">singleton</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">max_af</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">count_missing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return 1 if a variant meets frequency criteria, 0 otherwise.</span>
+
+<span class="sd">    One of ``ht`` or ``freq_expr`` must be provided. If ``freq_expr`` is not provided,</span>
+<span class="sd">    ``ht.freq`` is used. When ``freq_expr`` is an ArrayExpression, the first</span>
+<span class="sd">    element is used.</span>
+
+<span class="sd">    The returned count is 1 when:</span>
+
+<span class="sd">        - ``singleton`` is True and ``freq_expr.AC == 1``.</span>
+<span class="sd">        - ``max_af`` is not None and ``freq_expr.AC &gt; 0`` and</span>
+<span class="sd">          ``freq_expr.AF &lt;= max_af``.</span>
+<span class="sd">        - Neither ``singleton`` nor ``max_af`` is set but ``freq_expr`` is</span>
+<span class="sd">          available: ``freq_expr.AC &gt; 0``.</span>
+<span class="sd">        - Neither ``singleton`` nor ``max_af`` is set and no ``freq_expr`` is</span>
+<span class="sd">          available: unconditionally 1.</span>
+
+<span class="sd">    :param ht: Input Table. Used to look up ``freq`` when ``freq_expr`` is None.</span>
+<span class="sd">    :param freq_expr: StructExpression (or ArrayExpression of structs) with</span>
+<span class="sd">        ``AC`` and ``AF`` fields. When an array, ``freq_expr[0]`` is used.</span>
+<span class="sd">    :param singleton: Count only singletons (AC == 1). When True, ``max_af`` is</span>
+<span class="sd">        ignored. Default is False.</span>
+<span class="sd">    :param max_af: Maximum allele frequency threshold. Default is None (no</span>
+<span class="sd">        cutoff).</span>
+<span class="sd">    :param count_missing: Whether to count a variant whose count expression is</span>
+<span class="sd">        missing (e.g. frequency is None). True counts it as 1, False as 0. Default</span>
+<span class="sd">        is False.</span>
+<span class="sd">    :return: Int32Expression equal to 0 or 1.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">ht</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">freq_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either ht or freq_expr must be provided.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">freq_expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">max_af</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">singleton</span> <span class="ow">or</span> <span class="s2">&quot;freq&quot;</span> <span class="ow">in</span> <span class="n">ht</span><span class="o">.</span><span class="n">row</span><span class="p">):</span>
+        <span class="n">freq_expr</span> <span class="o">=</span> <span class="n">_resolve_row_annotation_expr</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="s2">&quot;freq&quot;</span><span class="p">,</span> <span class="n">freq_expr</span><span class="p">,</span> <span class="s2">&quot;freq_expr&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">freq_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">):</span>
+        <span class="n">freq_expr</span> <span class="o">=</span> <span class="n">freq_expr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">if</span> <span class="n">singleton</span><span class="p">:</span>
+        <span class="n">count_var</span> <span class="o">=</span> <span class="n">freq_expr</span><span class="o">.</span><span class="n">AC</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">max_af</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">count_var</span> <span class="o">=</span> <span class="p">(</span><span class="n">freq_expr</span><span class="o">.</span><span class="n">AC</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">freq_expr</span><span class="o">.</span><span class="n">AF</span> <span class="o">&lt;=</span> <span class="n">max_af</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">freq_expr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">count_var</span> <span class="o">=</span> <span class="n">freq_expr</span><span class="o">.</span><span class="n">AC</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">count_var</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">int</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">or_else</span><span class="p">(</span><span class="n">count_var</span><span class="p">,</span> <span class="n">count_missing</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="variant_observed_and_possible_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/counts.html#gnomad.utils.constraint.counts.variant_observed_and_possible_expr">[docs]</a><span class="k">def</span> <span class="nf">variant_observed_and_possible_expr</span><span class="p">(</span>
+    <span class="n">freq_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span>
+    <span class="n">max_af</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">use_possible_adj</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return per-variant observed and possible count expressions.</span>
+
+<span class="sd">    For each element of the frequency array, ``observed_variants`` is 1 when the</span>
+<span class="sd">    variant meets the frequency criteria (AC &gt; 0, and AF &lt;= ``max_af`` if set) and 0</span>
+<span class="sd">    otherwise. ``possible_variants`` uses the same criteria, except that a missing</span>
+<span class="sd">    frequency counts as possible: a variant absent from the dataset could still have</span>
+<span class="sd">    been observed. A variant with a defined frequency that fails the criteria</span>
+<span class="sd">    (AC == 0, or AF &gt; ``max_af``) is therefore 0 in both, so it is excluded from the</span>
+<span class="sd">    denominator as well as the numerator. With ``max_af`` set, this removes common</span>
+<span class="sd">    variants from the possible counts.</span>
+
+<span class="sd">    When ``freq_expr`` itself is missing (e.g. the variant is not in the dataset),</span>
+<span class="sd">    ``observed_variants`` is missing and ``possible_variants`` is 1, or missing when</span>
+<span class="sd">    ``use_possible_adj`` is False.</span>
+
+<span class="sd">    When ``use_possible_adj`` is True (default), the possible count is a scalar</span>
+<span class="sd">    derived from the first (adj) element of the frequency array. When False, it</span>
+<span class="sd">    is an array with one entry per array element, matching the shape of</span>
+<span class="sd">    ``observed_variants``.</span>
+
+<span class="sd">    :param freq_expr: Array of frequency structs with ``AC`` and ``AF`` fields.</span>
+<span class="sd">    :param max_af: Maximum allele frequency threshold. Variants above it are excluded</span>
+<span class="sd">        from both counts. Default is None (no cutoff).</span>
+<span class="sd">    :param use_possible_adj: If True, compute possible count from only the adj</span>
+<span class="sd">        (first) frequency element. If False, compute per-downsampling. Default</span>
+<span class="sd">        is True.</span>
+<span class="sd">    :return: Struct with ``observed_variants`` (array of int) and</span>
+<span class="sd">        ``possible_variants`` (int if ``use_possible_adj``, else array of int).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pos_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">freq_expr</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span> <span class="k">if</span> <span class="n">use_possible_adj</span> <span class="k">else</span> <span class="n">freq_expr</span>
+    <span class="n">pos_expr</span> <span class="o">=</span> <span class="n">pos_expr</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+        <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">variant_observed_expr</span><span class="p">(</span><span class="n">freq_expr</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">max_af</span><span class="o">=</span><span class="n">max_af</span><span class="p">,</span> <span class="n">count_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">pos_expr</span> <span class="o">=</span> <span class="n">pos_expr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">use_possible_adj</span> <span class="k">else</span> <span class="n">pos_expr</span>
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+        <span class="n">observed_variants</span><span class="o">=</span><span class="n">freq_expr</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">variant_observed_expr</span><span class="p">(</span><span class="n">freq_expr</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">max_af</span><span class="o">=</span><span class="n">max_af</span><span class="p">)</span>
+        <span class="p">),</span>
+        <span class="n">possible_variants</span><span class="o">=</span><span class="n">pos_expr</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="weighted_sum_agg_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/counts.html#gnomad.utils.constraint.counts.weighted_sum_agg_expr">[docs]</a><span class="k">def</span> <span class="nf">weighted_sum_agg_expr</span><span class="p">(</span>
+    <span class="n">expr</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">],</span>
+    <span class="n">weight_expr</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return the weighted aggregate sum of ``expr`` weighted by ``weight_expr``.</span>
+
+<span class="sd">    Both parameters may be scalar or array numeric expressions:</span>
+
+<span class="sd">        - Both arrays: elements are multiplied pairwise and summed per-element</span>
+<span class="sd">          across rows (``hl.agg.array_sum``).</span>
+<span class="sd">        - Both scalars: standard ``hl.agg.sum(expr * weight_expr)``.</span>
+<span class="sd">        - Mixed: the scalar is broadcast across the array elements and summed</span>
+<span class="sd">          per-element across rows.</span>
+
+<span class="sd">    :param expr: Numeric expression (scalar or array) to be weighted.</span>
+<span class="sd">    :param weight_expr: Numeric expression (scalar or array) to weight by.</span>
+<span class="sd">    :return: Weighted aggregate sum expression.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">expr_is_array</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">)</span>
+    <span class="n">weight_is_array</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">expr_is_array</span> <span class="ow">and</span> <span class="n">weight_is_array</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_sum</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">zip</span><span class="p">(</span><span class="n">expr</span><span class="p">,</span> <span class="n">weight_expr</span><span class="p">)</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">expr_is_array</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">weight_is_array</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">expr</span> <span class="o">*</span> <span class="n">weight_expr</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_sum</span><span class="p">(</span><span class="n">expr</span> <span class="o">*</span> <span class="n">weight_expr</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="counts_agg_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/counts.html#gnomad.utils.constraint.counts.counts_agg_expr">[docs]</a><span class="k">def</span> <span class="nf">counts_agg_expr</span><span class="p">(</span>
+    <span class="n">freq_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">count_singletons</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">max_af</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">count_missing</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return an aggregation expression for variant and singleton counts.</span>
+
+<span class="sd">    Aggregates per-variant counts (via ``variant_observed_expr``) across</span>
+<span class="sd">    rows. Each variant contributes 0 or 1 to the count based on its frequency</span>
+<span class="sd">    metadata (AC, AF). The result is a struct with ``variant_count`` and, when</span>
+<span class="sd">    ``count_singletons`` is True, ``singleton_count``.</span>
+
+<span class="sd">    One of ``freq_expr`` or ``ht`` must be provided. If ``freq_expr`` is not</span>
+<span class="sd">    provided, ``ht.freq`` is used as the fallback.</span>
+
+<span class="sd">    The shape of ``freq_expr`` controls whether the output counts are scalars or</span>
+<span class="sd">    arrays:</span>
+
+<span class="sd">        - **StructExpression** (single frequency entry with ``AC`` / ``AF``):</span>
+<span class="sd">          returns scalar ``variant_count`` and ``singleton_count``.</span>
+<span class="sd">        - **ArrayExpression** (array of frequency structs, e.g. one per</span>
+<span class="sd">          downsampling): returns array-valued counts where each element corresponds</span>
+<span class="sd">          to a position in the input array. Internally the array is mapped through</span>
+<span class="sd">          ``variant_observed_expr`` and summed element-wise with</span>
+<span class="sd">          ``hl.agg.array_sum``.</span>
+
+<span class="sd">    When ``max_af`` is set, only variants with ``AF &lt;= max_af`` and ``AC &gt; 0``</span>
+<span class="sd">    are counted. Singleton counting (``count_singletons=True``) counts only</span>
+<span class="sd">    variants with ``AC == 1``, independent of the ``max_af`` filter.</span>
+
+<span class="sd">    :param freq_expr: Frequency expression — an ArrayExpression of structs or a</span>
+<span class="sd">        single StructExpression with ``AC`` and ``AF`` fields. If None, falls</span>
+<span class="sd">        back to ``ht.freq``.</span>
+<span class="sd">    :param ht: Input Table. Used to look up ``freq`` when ``freq_expr`` is None.</span>
+<span class="sd">    :param count_singletons: If True, include a ``singleton_count`` field in</span>
+<span class="sd">        the result. Default is False.</span>
+<span class="sd">    :param max_af: Maximum allele frequency threshold. Variants with</span>
+<span class="sd">        ``AF &gt; max_af`` are excluded from ``variant_count``. Does not affect</span>
+<span class="sd">        ``singleton_count``. Default is None (no cutoff).</span>
+<span class="sd">    :param count_missing: Whether to count a variant whose frequency is missing.</span>
+<span class="sd">        True counts it as 1, False as 0. Default is False.</span>
+<span class="sd">    :return: Aggregation StructExpression with ``variant_count`` (and</span>
+<span class="sd">        optionally ``singleton_count``). Values are scalars when ``freq_expr`` is</span>
+<span class="sd">        a StructExpression, or arrays when it is an ArrayExpression.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">ht</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">freq_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either ht or freq_expr must be provided.&quot;</span><span class="p">)</span>
+
+    <span class="n">freq_expr</span> <span class="o">=</span> <span class="n">_resolve_row_annotation_expr</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="s2">&quot;freq&quot;</span><span class="p">,</span> <span class="n">freq_expr</span><span class="p">,</span> <span class="s2">&quot;freq_expr&quot;</span><span class="p">)</span>
+
+    <span class="n">is_struct</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">freq_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">is_struct</span><span class="p">:</span>
+        <span class="n">freq_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">freq_expr</span><span class="p">])</span>
+
+    <span class="n">params</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;variant_count&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;singleton&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s2">&quot;max_af&quot;</span><span class="p">:</span> <span class="n">max_af</span><span class="p">}}</span>
+    <span class="k">if</span> <span class="n">count_singletons</span><span class="p">:</span>
+        <span class="n">params</span><span class="p">[</span><span class="s2">&quot;singleton_count&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;singleton&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+
+    <span class="n">count_expr</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">k</span><span class="p">:</span> <span class="n">freq_expr</span><span class="o">.</span><span class="n">map</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">variant_observed_expr</span><span class="p">(</span>
+                <span class="n">freq_expr</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="o">**</span><span class="n">p</span><span class="p">,</span> <span class="n">count_missing</span><span class="o">=</span><span class="n">count_missing</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">params</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+
+    <span class="n">agg_expr</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_sum</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">count_expr</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">agg_expr</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">agg_expr</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">agg_expr</span><span class="p">}</span> <span class="k">if</span> <span class="n">is_struct</span> <span class="k">else</span> <span class="n">agg_expr</span>
+
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span><span class="o">**</span><span class="n">agg_expr</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="count_observed_and_possible_by_group"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/counts.html#gnomad.utils.constraint.counts.count_observed_and_possible_by_group">[docs]</a><span class="k">def</span> <span class="nf">count_observed_and_possible_by_group</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">possible_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">,</span>
+    <span class="n">observed_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span>
+    <span class="n">additional_grouping</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;methylation_level&quot;</span><span class="p">,),</span>
+    <span class="n">partition_hint</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="n">weight_exprs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span>
+            <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+            <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">]],</span>
+        <span class="p">]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">additional_agg_sum_exprs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span>
+            <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+            <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">]],</span>
+        <span class="p">]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Aggregate observed and possible variant counts by substitution context group.</span>
+
+<span class="sd">    Groups rows by ``context``, ``ref``, ``alt``, and any fields in</span>
+<span class="sd">    ``additional_grouping``, then sums observed and possible counts within each</span>
+<span class="sd">    group.</span>
+
+<span class="sd">    :param ht: Input Table with ``context``, ``ref``, ``alt`` fields and any</span>
+<span class="sd">        fields named in ``additional_grouping``.</span>
+<span class="sd">    :param possible_expr: Per-variant possible count (scalar).</span>
+<span class="sd">    :param observed_expr: Per-variant observed count (array, one element per</span>
+<span class="sd">        array element of the frequency array).</span>
+<span class="sd">    :param additional_grouping: Field names to append to the base</span>
+<span class="sd">        ``(context, ref, alt)`` grouping. Default is ``(&quot;methylation_level&quot;,)``.</span>
+<span class="sd">    :param partition_hint: Target number of partitions for the ``group_by``.</span>
+<span class="sd">        Default is 100.</span>
+<span class="sd">    :param weight_exprs: Weighted sums of ``possible_expr`` to include. Pass</span>
+<span class="sd">        field names (looked up on ``ht``) or a dict mapping output names to</span>
+<span class="sd">        weight expressions. Each produces</span>
+<span class="sd">        ``weighted_sum_agg_expr(possible_expr, weight)``.</span>
+<span class="sd">    :param additional_agg_sum_exprs: Extra fields to sum alongside</span>
+<span class="sd">        observed/possible. Pass field names (looked up on ``ht``) or a dict</span>
+<span class="sd">        mapping output names to expressions. Arrays use</span>
+<span class="sd">        ``hl.agg.array_sum``; scalars use ``hl.agg.sum``.</span>
+<span class="sd">    :return: Grouped Table with ``observed_variants``, ``possible_variants``,</span>
+<span class="sd">        and any weighted/additional sum fields.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">weight_exprs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">weight_exprs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">ht</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">weight_exprs</span><span class="p">}</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">additional_agg_sum_exprs</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+        <span class="n">additional_agg_sum_exprs</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">ht</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">additional_agg_sum_exprs</span><span class="p">}</span>
+
+    <span class="n">weight_exprs</span> <span class="o">=</span> <span class="n">weight_exprs</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">additional_agg_sum_exprs</span> <span class="o">=</span> <span class="n">additional_agg_sum_exprs</span> <span class="ow">or</span> <span class="p">{}</span>
+
+    <span class="c1"># Build the grouping struct for the variant count aggregation.</span>
+    <span class="n">grouping</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="n">ref</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">alt</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">alt</span><span class="p">)</span>
+    <span class="n">grouping</span> <span class="o">=</span> <span class="n">grouping</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+        <span class="o">**</span><span class="p">{</span><span class="n">g</span><span class="p">:</span> <span class="n">ht</span><span class="p">[</span><span class="n">g</span><span class="p">]</span> <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="n">additional_grouping</span> <span class="k">if</span> <span class="n">g</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">grouping</span><span class="p">}</span>
+    <span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">&quot;The following annotations will be used to group the input Table rows when&quot;</span>
+        <span class="s2">&quot; counting variants: </span><span class="si">%s</span><span class="s2">.&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">grouping</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+    <span class="p">)</span>
+
+    <span class="n">agg_expr</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;observed_variants&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_sum</span><span class="p">(</span><span class="n">observed_expr</span><span class="p">),</span>
+        <span class="s2">&quot;possible_variants&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">possible_expr</span><span class="p">),</span>
+    <span class="p">}</span>
+
+    <span class="c1"># Update the possible variant count aggregation expression to include weighted sums</span>
+    <span class="c1"># of possible variant counts.</span>
+    <span class="n">agg_expr</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+        <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">weighted_sum_agg_expr</span><span class="p">(</span><span class="n">possible_expr</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">weight_exprs</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Get sum aggregation expressions for requested fields.</span>
+    <span class="n">agg_expr</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_build_sum_agg_struct</span><span class="p">(</span><span class="n">exprs_to_sum</span><span class="o">=</span><span class="n">additional_agg_sum_exprs</span><span class="p">))</span>
+
+    <span class="c1"># Apply each variant count aggregation in `agg_expr` to get counts for all</span>
+    <span class="c1"># combinations of `grouping`.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="o">**</span><span class="n">grouping</span><span class="p">)</span><span class="o">.</span><span class="n">partition_hint</span><span class="p">(</span><span class="n">partition_hint</span><span class="p">)</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span><span class="o">**</span><span class="n">agg_expr</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ht</span></div>
+
+
+<span class="k">def</span> <span class="nf">_build_sum_agg_struct</span><span class="p">(</span>
+    <span class="n">fields_to_sum</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">exprs_to_sum</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">]]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">t</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return an aggregation expression to sum fields or expressions in a Table/StructExpression.</span>
+
+<span class="sd">    The aggregation expression is a struct with the sum or array_sum of the fields or</span>
+<span class="sd">    expressions provided in `fields_to_sum` or `exprs_to_sum`.</span>
+
+<span class="sd">    :param fields_to_sum: List of fields to sum. Must provide ``t`` if using this.</span>
+<span class="sd">        Default is None.</span>
+<span class="sd">    :param exprs_to_sum: Dictionary of expressions to sum. Default is None.</span>
+<span class="sd">    :param t: Optional Table or StructExpression to get `fields_to_sum` from. Default</span>
+<span class="sd">        is None.</span>
+<span class="sd">    :return: Aggregation expression to sum fields or expressions in the Table.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">fields_to_sum</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">exprs_to_sum</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Either &#39;fields_to_sum&#39; or &#39;exprs_to_sum&#39; must be provided.&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fields_to_sum</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;t must be provided if &#39;fields_to_sum&#39; is provided.&quot;</span><span class="p">)</span>
+
+    <span class="n">exprs_to_sum</span> <span class="o">=</span> <span class="n">exprs_to_sum</span> <span class="ow">or</span> <span class="p">{}</span>
+    <span class="n">exprs_to_sum</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span><span class="o">**</span><span class="n">exprs_to_sum</span><span class="p">,</span> <span class="o">**</span><span class="p">{</span><span class="n">f</span><span class="p">:</span> <span class="n">t</span><span class="p">[</span><span class="n">f</span><span class="p">]</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fields_to_sum</span> <span class="ow">or</span> <span class="p">[]})</span>
+
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+        <span class="o">**</span><span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="p">(</span>
+                <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_sum</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">)</span>
+                <span class="k">else</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">exprs_to_sum</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="aggregate_constraint_metrics_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/counts.html#gnomad.utils.constraint.counts.aggregate_constraint_metrics_expr">[docs]</a><span class="k">def</span> <span class="nf">aggregate_constraint_metrics_expr</span><span class="p">(</span>
+    <span class="n">t</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">],</span>
+    <span class="n">fields_to_sum</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="n">DEFAULT_FIELDS_TO_SUM</span><span class="p">,</span>
+    <span class="n">additional_exprs_to_sum</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Expression</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get an aggregation expression for the sum of specified fields and expressions.</span>
+
+<span class="sd">    An aggregate sum or array sum is created for each field in ``fields_to_sum``.</span>
+
+<span class="sd">    :param t: Input Table or StructExpression.</span>
+<span class="sd">    :param fields_to_sum: Fields in ``t`` to get an aggregate sum expression for.</span>
+<span class="sd">        Default is ``DEFAULT_FIELDS_TO_SUM``.</span>
+<span class="sd">    :param additional_exprs_to_sum: Dictionary of additional expressions to get</span>
+<span class="sd">        an aggregate sum expression for. Field names are the keys and expressions are</span>
+<span class="sd">        the values. Default is None.</span>
+<span class="sd">    :return: StructExpression with the sum of each field and expression.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_build_sum_agg_struct</span><span class="p">(</span>
+        <span class="n">fields_to_sum</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">fields_to_sum</span><span class="p">),</span>
+        <span class="n">exprs_to_sum</span><span class="o">=</span><span class="n">additional_exprs_to_sum</span><span class="p">,</span>
+        <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span>
+    <span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

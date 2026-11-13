@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.utils.constraint.ranking &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../_static/jquery.js"></script>
+        <script src="../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../" id="documentation_options" src="../../../_static/documentation_options.js"></script>
+        <script src="../../../_static/doctools.js"></script>
+        <script src="../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="gnomad.utils.file_utils" href="../file_utils.html" />
+    <link rel="prev" title="gnomad.utils.constraint.models" href="models.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../../sample_qc/index.html">sample_qc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../resources/index.html">resources</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../variant_qc/index.html">variant_qc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../assessment/index.html">assessment</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="../index.html">utils</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="../annotations.html">annotations</a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="index.html">constraint</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="constants.html">constants</a></li>
+<li class="toctree-l4"><a class="reference internal" href="context.html">context</a></li>
+<li class="toctree-l4"><a class="reference internal" href="counts.html">counts</a></li>
+<li class="toctree-l4"><a class="reference internal" href="grouping.html">grouping</a></li>
+<li class="toctree-l4"><a class="reference internal" href="metrics.html">metrics</a></li>
+<li class="toctree-l4"><a class="reference internal" href="models.html">models</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">ranking</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="../file_utils.html">file_utils</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../filtering.html">filtering</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../gen_stats.html">gen_stats</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../intervals.html">intervals</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../liftover.html">liftover</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../parse.html">parse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../plotting.html">plotting</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../reference_genome.html">reference_genome</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../release.html">release</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../slack.html">slack</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../sparse_mt.html">sparse_mt</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../transcript_annotation.html">transcript_annotation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vcf.html">vcf</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../vep.html">vep</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">gnomad</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">gnomad.utils</a></li>
+          <li class="breadcrumb-item"><a href="index.html">gnomad.utils.constraint</a></li>
+      <li class="breadcrumb-item active">gnomad.utils.constraint.ranking</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../_sources/api_reference/utils/constraint/ranking.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="gnomad-utils-constraint-ranking">
+<h1>gnomad.utils.constraint.ranking<a class="headerlink" href="#gnomad-utils-constraint-ranking" title="Permalink to this heading"></a></h1>
+<p>Functions to rank transcripts by a metric and assign percentile bins.</p>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.ranking.rank_and_assign_bins</span></code></a>(...)</p></td>
+<td><p>Rank rows by a numeric expression and assign bin labels.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gnomad.utils.constraint.ranking.compute_percentile_thresholds" title="gnomad.utils.constraint.ranking.compute_percentile_thresholds"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.ranking.compute_percentile_thresholds</span></code></a>(ht, ...)</p></td>
+<td><p>Compute approximate percentile thresholds for a metric expression.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#gnomad.utils.constraint.ranking.annotate_bins_by_threshold" title="gnomad.utils.constraint.ranking.annotate_bins_by_threshold"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.ranking.annotate_bins_by_threshold</span></code></a>(ht, ...)</p></td>
+<td><p>Annotate rows with bin assignments using pre-computed thresholds.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_array_element_metrics" title="gnomad.utils.constraint.ranking.rank_array_element_metrics"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gnomad.utils.constraint.ranking.rank_array_element_metrics</span></code></a>(ht, ...)</p></td>
+<td><p>Rank metrics within array elements and annotate rank structs back.</p></td>
+</tr>
+</tbody>
+</table>
+<span class="target" id="module-gnomad.utils.constraint.ranking"></span><p>Functions to rank transcripts by a metric and assign percentile bins.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.ranking.rank_and_assign_bins">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.ranking.</span></span><span class="sig-name descname"><span class="pre">rank_and_assign_bins</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_granularities</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/ranking.html#rank_and_assign_bins"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="Permalink to this definition"></a></dt>
+<dd><p>Rank rows by a numeric expression and assign bin labels.</p>
+<p><strong>Rank-based binning</strong>: every row receives a unique position in the sorted
+order, and bins are derived from that position. This differs from
+threshold-based binning (see <a class="reference internal" href="#gnomad.utils.constraint.ranking.annotate_bins_by_threshold" title="gnomad.utils.constraint.ranking.annotate_bins_by_threshold"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotate_bins_by_threshold()</span></code></a>), where
+bins are assigned by comparing values against pre-computed boundary values.</p>
+<p>Rows are ordered ascending by <code class="docutils literal notranslate"><span class="pre">value_expr</span></code>. Each row is assigned a
+0-based <code class="docutils literal notranslate"><span class="pre">{prefix}rank</span></code> and a <code class="docutils literal notranslate"><span class="pre">{prefix}bin_{name}</span></code> field for every
+entry in <code class="docutils literal notranslate"><span class="pre">bin_granularities</span></code>, computed as
+<code class="docutils literal notranslate"><span class="pre">hl.int(rank</span> <span class="pre">*</span> <span class="pre">multiplier</span> <span class="pre">/</span> <span class="pre">n_rows)</span></code>.</p>
+<p>Rows where <code class="docutils literal notranslate"><span class="pre">value_expr</span></code> is missing are excluded from the ranking and
+receive missing rank and bin annotations. <code class="docutils literal notranslate"><span class="pre">n_rows</span></code> is therefore the
+number of rows with a defined <code class="docutils literal notranslate"><span class="pre">value_expr</span></code>, so bins are evenly sized
+and the full range of bins is populated.</p>
+<p>Used by <a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_array_element_metrics" title="gnomad.utils.constraint.ranking.rank_array_element_metrics"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_array_element_metrics()</span></code></a> to rank metrics within array
+elements.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This function evaluates its input when it is called. It needs the number
+of rows with a defined <code class="docutils literal notranslate"><span class="pre">value_expr</span></code> for the bin denominator, so it counts
+them, and it caches the filtered and the ranked rows so the filter and the
+sort are not recomputed. In Hail, <code class="docutils literal notranslate"><span class="pre">Table.cache()</span></code> ignores the storage
+level and writes a checkpoint to a <code class="docutils literal notranslate"><span class="pre">persist_Table*</span></code> path under the
+temporary directory set by <code class="docutils literal notranslate"><span class="pre">hl.init(tmp_dir=...)</span></code>, so with a GCS
+<code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code> these Tables are written to GCS. They hold only <code class="docutils literal notranslate"><span class="pre">value_expr</span></code>
+and the key, and are not removed when the function returns.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>value_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Numeric expression to rank by (ascending).</p></li>
+<li><p><strong>bin_granularities</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code>]]) – Mapping of bin name to multiplier. Each entry
+produces a <code class="docutils literal notranslate"><span class="pre">{prefix}bin_{name}</span></code> field. Default is
+<code class="docutils literal notranslate"><span class="pre">{&quot;percentile&quot;:</span> <span class="pre">100,</span> <span class="pre">&quot;decile&quot;:</span> <span class="pre">10,</span> <span class="pre">&quot;sextile&quot;:</span> <span class="pre">6}</span></code>.</p></li>
+<li><p><strong>prefix</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>) – String prepended to <code class="docutils literal notranslate"><span class="pre">rank</span></code> and <code class="docutils literal notranslate"><span class="pre">bin_{name}</span></code> field
+names. Default is <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> (no prefix).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.expr.StructExpression.html#hail.expr.StructExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StructExpression</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Struct with <code class="docutils literal notranslate"><span class="pre">{prefix}rank</span></code> and <code class="docutils literal notranslate"><span class="pre">{prefix}bin_{name}</span></code> fields
+for each entry in <code class="docutils literal notranslate"><span class="pre">bin_granularities</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.ranking.compute_percentile_thresholds">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.ranking.</span></span><span class="sig-name descname"><span class="pre">compute_percentile_thresholds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric_expr</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">outlier_expr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transcript_filter_expr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">percentiles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(1,</span> <span class="pre">5,</span> <span class="pre">10,</span> <span class="pre">15,</span> <span class="pre">25,</span> <span class="pre">50,</span> <span class="pre">75)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">quantile_k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/ranking.html#compute_percentile_thresholds"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.ranking.compute_percentile_thresholds" title="Permalink to this definition"></a></dt>
+<dd><p>Compute approximate percentile thresholds for a metric expression.</p>
+<p><strong>Threshold-based binning, step 1</strong>: computes the boundary values that
+define bin edges. Its values, keyed by <code class="docutils literal notranslate"><span class="pre">(granularity,</span> <span class="pre">metric)</span></code> instead of
+percentile, form the <code class="docutils literal notranslate"><span class="pre">thresholds</span></code> argument of
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.annotate_bins_by_threshold" title="gnomad.utils.constraint.ranking.annotate_bins_by_threshold"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotate_bins_by_threshold()</span></code></a> (step 2), which assigns each row to a bin;
+see that function for an example.</p>
+<p>This two-step approach differs from rank-based binning (see
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a>), where every row receives a unique position
+in the sorted order. Threshold-based binning allows thresholds to be
+computed on a filtered subset (e.g., representative transcripts) and then
+applied to all rows, so multiple rows can share the same bin.</p>
+<p>Optionally filters to a subset of rows and excludes outliers, then
+computes approximate quantile thresholds at the requested percentiles in
+a single aggregation pass.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Uses <code class="docutils literal notranslate"><span class="pre">hl.agg.approx_quantiles</span></code>, so results are approximate. Increase
+<code class="docutils literal notranslate"><span class="pre">quantile_k</span></code> for higher accuracy.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ht</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>) – Input Table.</p></li>
+<li><p><strong>metric_expr</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>) – Float expression to compute thresholds for. Must be
+defined on <code class="docutils literal notranslate"><span class="pre">ht</span></code>.</p></li>
+<li><p><strong>outlier_expr</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.BooleanExpression.html#hail.expr.BooleanExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanExpression</span></code></a>]) – Optional boolean expression that is <code class="docutils literal notranslate"><span class="pre">True</span></code> for rows
+to exclude. When None (default), no outlier filtering is applied.</p></li>
+<li><p><strong>transcript_filter_expr</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.BooleanExpression.html#hail.expr.BooleanExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanExpression</span></code></a>]) – Optional boolean expression that is <code class="docutils literal notranslate"><span class="pre">True</span></code>
+for rows to include. When None (default), all rows are included.</p></li>
+<li><p><strong>percentiles</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">...</span></code>]) – Percentile values (0-100) at which to compute
+thresholds. Default is (1, 5, 10, 15, 25, 50, 75).</p></li>
+<li><p><strong>quantile_k</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code>) – Accuracy parameter for
+<a class="reference external" href="https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.approx_quantiles" title="(in Hail v0.2.140)"><code class="xref py py-func docutils literal notranslate"><span class="pre">hail.expr.aggregators.approx_quantiles()</span></code></a>. Default is 1000.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>]</p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict mapping each percentile to its threshold value.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.ranking.annotate_bins_by_threshold">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.ranking.</span></span><span class="sig-name descname"><span class="pre">annotate_bins_by_threshold</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">metric_exprs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">thresholds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">granularities</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">field_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'constraint_bins'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/ranking.html#annotate_bins_by_threshold"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.ranking.annotate_bins_by_threshold" title="Permalink to this definition"></a></dt>
+<dd><p>Annotate rows with bin assignments using pre-computed thresholds.</p>
+<p><strong>Threshold-based binning, step 2</strong>: assigns each row to a bin by
+comparing its metric value against boundary values produced by
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.compute_percentile_thresholds" title="gnomad.utils.constraint.ranking.compute_percentile_thresholds"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_percentile_thresholds()</span></code></a> (step 1). For each
+<code class="docutils literal notranslate"><span class="pre">(granularity,</span> <span class="pre">metric)</span></code> pair, the bin equals the number of threshold
+boundaries the value exceeds. Bin 0 is the most constrained (below all
+thresholds); bin N means the value exceeds all N boundaries.</p>
+<p>This differs from rank-based binning (see <a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a>),
+where every row gets a unique position. Here, multiple rows can share a
+bin, and the thresholds may have been derived from a different subset of
+rows than those being annotated.</p>
+<p><a class="reference internal" href="#gnomad.utils.constraint.ranking.compute_percentile_thresholds" title="gnomad.utils.constraint.ranking.compute_percentile_thresholds"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_percentile_thresholds()</span></code></a> returns a dict of percentile to value,
+so <code class="docutils literal notranslate"><span class="pre">thresholds</span></code> is built from it by selecting the percentiles for each
+granularity. Example use, with decile bins for two metrics:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">deciles</span> <span class="o">=</span> <span class="p">[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">70</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">90</span><span class="p">]</span>
+<span class="n">metric_exprs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;lof&quot;</span><span class="p">:</span> <span class="n">ht</span><span class="o">.</span><span class="n">lof_oe_upper</span><span class="p">,</span> <span class="s2">&quot;mis&quot;</span><span class="p">:</span> <span class="n">ht</span><span class="o">.</span><span class="n">mis_oe_upper</span><span class="p">}</span>
+<span class="n">thresholds</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">metric</span><span class="p">,</span> <span class="n">expr</span> <span class="ow">in</span> <span class="n">metric_exprs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">pct_to_value</span> <span class="o">=</span> <span class="n">compute_percentile_thresholds</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="n">expr</span><span class="p">,</span> <span class="n">percentiles</span><span class="o">=</span><span class="n">deciles</span><span class="p">)</span>
+    <span class="n">thresholds</span><span class="p">[(</span><span class="s2">&quot;decile&quot;</span><span class="p">,</span> <span class="n">metric</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[</span><span class="n">pct_to_value</span><span class="p">[</span><span class="n">p</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">deciles</span><span class="p">]</span>
+
+<span class="n">ht</span> <span class="o">=</span> <span class="n">annotate_bins_by_threshold</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="n">metric_exprs</span><span class="p">,</span> <span class="n">thresholds</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;decile&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ht</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>) – Input Table.</p></li>
+<li><p><strong>metric_exprs</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>]) – Mapping of metric name to the Float64Expression to
+bin (e.g. <code class="docutils literal notranslate"><span class="pre">{&quot;lof&quot;:</span> <span class="pre">ht.lof_oe_upper,</span> <span class="pre">&quot;mis&quot;:</span> <span class="pre">ht.mis_oe_upper}</span></code>).</p></li>
+<li><p><strong>thresholds</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>], <code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code>]]) – Mapping of <code class="docutils literal notranslate"><span class="pre">(granularity,</span> <span class="pre">metric)</span></code> to a list of threshold
+values in ascending order, built from <a class="reference internal" href="#gnomad.utils.constraint.ranking.compute_percentile_thresholds" title="gnomad.utils.constraint.ranking.compute_percentile_thresholds"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_percentile_thresholds()</span></code></a>
+output (see the example above).</p></li>
+<li><p><strong>granularities</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>], <code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-data docutils literal notranslate"><span class="pre">...</span></code>]]) – Granularity names to iterate over (e.g.
+<code class="docutils literal notranslate"><span class="pre">[&quot;decile&quot;,</span> <span class="pre">&quot;ventile&quot;]</span></code>). Each must appear as the first element of
+at least one key in <code class="docutils literal notranslate"><span class="pre">thresholds</span></code>.</p></li>
+<li><p><strong>field_name</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>) – Name of the struct field to annotate on <code class="docutils literal notranslate"><span class="pre">ht</span></code>.
+Default is <code class="docutils literal notranslate"><span class="pre">&quot;constraint_bins&quot;</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Table with an added struct field containing per-granularity,
+per-metric bin assignments.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="gnomad.utils.constraint.ranking.rank_array_element_metrics">
+<span class="sig-prename descclassname"><span class="pre">gnomad.utils.constraint.ranking.</span></span><span class="sig-name descname"><span class="pre">rank_array_element_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ht</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">array_field</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">element_value_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bin_granularities</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rank_field_prefix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../../_modules/gnomad/utils/constraint/ranking.html#rank_array_element_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#gnomad.utils.constraint.ranking.rank_array_element_metrics" title="Permalink to this definition"></a></dt>
+<dd><p>Rank metrics within array elements and annotate rank structs back.</p>
+<p><strong>Rank-based binning for array fields</strong>: applies
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a> independently to each element of an array
+field. For each element, <code class="docutils literal notranslate"><span class="pre">element_value_fn</span></code> extracts named metric
+values, which are ranked across rows (optionally on a filtered subset
+via <code class="docutils literal notranslate"><span class="pre">filter_fn</span></code>). Each array element is then annotated with
+<code class="docutils literal notranslate"><span class="pre">{metric_name}_rank</span></code> structs containing rank and bin fields.</p>
+<p>Rows not matching <code class="docutils literal notranslate"><span class="pre">filter_fn</span></code> get missing rank annotations.</p>
+<p>This differs from threshold-based binning (see
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.compute_percentile_thresholds" title="gnomad.utils.constraint.ranking.compute_percentile_thresholds"><code class="xref py py-func docutils literal notranslate"><span class="pre">compute_percentile_thresholds()</span></code></a> and
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.annotate_bins_by_threshold" title="gnomad.utils.constraint.ranking.annotate_bins_by_threshold"><code class="xref py py-func docutils literal notranslate"><span class="pre">annotate_bins_by_threshold()</span></code></a>), where bins are assigned by
+comparing values against pre-computed boundaries rather than sorted
+position.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This function evaluates its input when it is called. It caches the full
+input Table (with an added row index) and the extracted metric values,
+reads one row to get the array length, and each
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a> call it makes caches its own ranked rows.
+Caching avoids recomputing <code class="docutils literal notranslate"><span class="pre">ht</span></code> and <code class="docutils literal notranslate"><span class="pre">filter_fn</span></code> for every metric, but
+in Hail <code class="docutils literal notranslate"><span class="pre">Table.cache()</span></code> writes a checkpoint under the temporary directory
+(see <a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a>), so this writes a copy of <code class="docutils literal notranslate"><span class="pre">ht</span></code> there.
+The copies are not removed when the function returns.</p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ht</strong> (<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>) – Input Table.</p></li>
+<li><p><strong>array_field</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>) – Name of the array field on <code class="docutils literal notranslate"><span class="pre">ht</span></code>.</p></li>
+<li><p><strong>element_value_fn</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Callable</span></code>[[<a class="reference external" href="https://hail.is/docs/0.2/hail.expr.StructExpression.html#hail.expr.StructExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">StructExpression</span></code></a>], <code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <a class="reference external" href="https://hail.is/docs/0.2/hail.expr.Float64Expression.html#hail.expr.Float64Expression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Float64Expression</span></code></a>]]) – Function that takes an array element
+(StructExpression) and returns a dict mapping metric names to
+Float64Expressions to rank. Applied identically to every element.</p></li>
+<li><p><strong>filter_fn</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-data docutils literal notranslate"><span class="pre">Callable</span></code>[[<a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a>], <a class="reference external" href="https://hail.is/docs/0.2/hail.expr.BooleanExpression.html#hail.expr.BooleanExpression" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">BooleanExpression</span></code></a>]]) – Optional function that takes a Table and returns a
+BooleanExpression to filter rows before ranking. When None, all
+rows are ranked.</p></li>
+<li><p><strong>bin_granularities</strong> (<code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code>[<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>, <code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code>]]) – Bin granularities passed to
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a>.</p></li>
+<li><p><strong>rank_field_prefix</strong> (<code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code>) – Prefix for the <code class="docutils literal notranslate"><span class="pre">rank</span></code> and <code class="docutils literal notranslate"><span class="pre">bin_{name}</span></code>
+sub-fields within each rank struct. Passed through to
+<a class="reference internal" href="#gnomad.utils.constraint.ranking.rank_and_assign_bins" title="gnomad.utils.constraint.ranking.rank_and_assign_bins"><code class="xref py py-func docutils literal notranslate"><span class="pre">rank_and_assign_bins()</span></code></a>. Default is <code class="docutils literal notranslate"><span class="pre">&quot;&quot;</span></code> (no prefix).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://hail.is/docs/0.2/hail.Table.html#hail.Table" title="(in Hail v0.2.140)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Table with <code class="docutils literal notranslate"><span class="pre">{metric_name}_rank</span></code> structs added to each array
+element. The table is returned with its original key restored.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="models.html" class="btn btn-neutral float-left" title="gnomad.utils.constraint.models" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../file_utils.html" class="btn btn-neutral float-right" title="gnomad.utils.file_utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

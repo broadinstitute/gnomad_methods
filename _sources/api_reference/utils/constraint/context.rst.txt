@@ -1,0 +1,13 @@
+gnomad.utils.constraint.context
+===============================
+
+
+Functions to annotate the context Table for constraint.
+
+Covers mutation rates, mutation types, trinucleotide context, methylation levels, and
+GERP cutoffs.
+
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.context
+
+.. automodule:: gnomad.utils.constraint.context

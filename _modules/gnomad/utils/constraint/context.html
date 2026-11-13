@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.utils.constraint.context &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../../_static/jquery.js"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+        <script src="../../../../_static/doctools.js"></script>
+        <script src="../../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gnomad.utils.constraint.context</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gnomad.utils.constraint.context</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Functions to annotate the context Table for constraint.</span>
+
+<span class="sd">Covers mutation rates, mutation types, trinucleotide context, methylation levels, and</span>
+<span class="sd">GERP cutoffs.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">hail</span> <span class="k">as</span> <span class="nn">hl</span>
+
+<span class="kn">from</span> <span class="nn">gnomad.utils.constraint.counts</span> <span class="kn">import</span> <span class="n">_resolve_row_annotation_expr</span>
+<span class="kn">from</span> <span class="nn">gnomad.utils.reference_genome</span> <span class="kn">import</span> <span class="n">get_primary_contigs</span><span class="p">,</span> <span class="n">get_reference_genome</span>
+<span class="kn">from</span> <span class="nn">gnomad.utils.vep</span> <span class="kn">import</span> <span class="n">add_most_severe_consequence_to_consequence</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> (</span><span class="si">%(name)s</span><span class="s2"> </span><span class="si">%(lineno)s</span><span class="s2">): </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">datefmt</span><span class="o">=</span><span class="s2">&quot;%m/</span><span class="si">%d</span><span class="s2">/%Y %I:%M:%S %p&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;constraint_utils&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="get_mu_annotation_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.get_mu_annotation_expr">[docs]</a><span class="k">def</span> <span class="nf">get_mu_annotation_expr</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">mutation_ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">mu_expr</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;mu_snp&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get mutation rate annotation expression from the mutation rate Table.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        Function expects that `ht` includes `mutation_ht`&#39;s key fields. Note that these</span>
+<span class="sd">        annotations don&#39;t need to be the keys of `ht`. The standard keys used are:</span>
+<span class="sd">        &#39;context&#39;, &#39;ref&#39;, &#39;alt&#39;, and &#39;methylation_level&#39;.</span>
+
+<span class="sd">    This function converts the mutation rate Table into a dictionary and uses the</span>
+<span class="sd">    mutation rate HT key fields in the input Table to get the mutation rate annotation</span>
+<span class="sd">    expression. The dictionary is used instead of joining the mutation rate Table to</span>
+<span class="sd">    the input Table to avoid unnecessary shuffling given the small size of the</span>
+<span class="sd">    mutation rate Table.</span>
+
+<span class="sd">    :param ht: Input Table that will be annotated with the returned mutation rate</span>
+<span class="sd">        expression.</span>
+<span class="sd">    :param mutation_ht: Mutation rate Table.</span>
+<span class="sd">    :param mu_expr: Mutation rate expression or annotation name in `mutation_ht`.</span>
+<span class="sd">        Default is &#39;mu_snp&#39;.</span>
+<span class="sd">    :return: Mutation rate annotation expression.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mu_expr</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">mu_expr</span> <span class="o">=</span> <span class="n">mutation_ht</span><span class="p">[</span><span class="n">mu_expr</span><span class="p">]</span>
+
+    <span class="n">mutation_dict</span> <span class="o">=</span> <span class="n">mutation_ht</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="n">mutation_ht</span><span class="o">.</span><span class="n">key</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">collect</span><span class="p">(</span><span class="n">mu_expr</span><span class="p">)),</span> <span class="n">_localize</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">map_values</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">mutation_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span><span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">ht</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">mutation_ht</span><span class="o">.</span><span class="n">key</span><span class="p">}))</span></div>
+
+
+<div class="viewcode-block" id="annotate_with_mu"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.annotate_with_mu">[docs]</a><span class="k">def</span> <span class="nf">annotate_with_mu</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">mutation_ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">mu_annotation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;mu_snp&quot;</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Annotate SNP mutation rate for the input Table.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        Function expects that `ht` includes `mutation_ht`&#39;s key fields. Note that these</span>
+<span class="sd">        annotations don&#39;t need to be the keys of `ht`. The standard keys used are:</span>
+<span class="sd">        &#39;context&#39;, &#39;ref&#39;, &#39;alt&#39;, and &#39;methylation_level&#39;.</span>
+
+<span class="sd">    :param ht: Input Table to annotate.</span>
+<span class="sd">    :param mutation_ht: Mutation rate Table.</span>
+<span class="sd">    :param mu_annotation: The name of mutation rate annotation in `mutation_ht`.</span>
+<span class="sd">        Default is &#39;mu_snp&#39;.</span>
+<span class="sd">    :return: Table with mutational rate annotation added.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mu</span> <span class="o">=</span> <span class="n">get_mu_annotation_expr</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="n">mutation_ht</span><span class="p">,</span> <span class="n">mutation_ht</span><span class="p">[</span><span class="n">mu_annotation</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+        <span class="o">**</span><span class="p">{</span><span class="n">mu_annotation</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">case</span><span class="p">()</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">is_defined</span><span class="p">(</span><span class="n">mu</span><span class="p">),</span> <span class="n">mu</span><span class="p">)</span><span class="o">.</span><span class="n">or_error</span><span class="p">(</span><span class="s2">&quot;Missing mu&quot;</span><span class="p">)}</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="annotate_mutation_type"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.annotate_mutation_type">[docs]</a><span class="k">def</span> <span class="nf">annotate_mutation_type</span><span class="p">(</span>
+    <span class="n">t</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">],</span>
+    <span class="n">context_length</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">num_scan_context_length</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Annotate mutation types.</span>
+
+<span class="sd">    The following annotations are added to the output Table:</span>
+<span class="sd">        - cpg</span>
+<span class="sd">        - transition</span>
+<span class="sd">        - mutation_type - one of &quot;CpG&quot;, &quot;non-CpG transition&quot;, or &quot;transversion&quot;</span>
+<span class="sd">        - mutation_type_model</span>
+
+<span class="sd">    ..note:</span>
+
+<span class="sd">        This function uses the term &#39;mutation_type&#39; because &#39;variant_type&#39; is already</span>
+<span class="sd">        used in this repo to indicate a variant&#39;s multiallelic and SNP/indel status.</span>
+
+<span class="sd">    :param t: Input Table or MatrixTable.</span>
+<span class="sd">    :param context_length: Length of the &#39;context&#39; annotation in &#39;t&#39;. If this is not</span>
+<span class="sd">        specified, the value will be determined by examining the first</span>
+<span class="sd">        `num_scan_context_length` values of the &#39;context&#39; annotation. Default is None.</span>
+<span class="sd">    :param num_scan_context_length: Number of values in the &#39;context&#39; annotation to use</span>
+<span class="sd">        for determining `context_length` if it is not specified. If set to None, all</span>
+<span class="sd">        values in &#39;context&#39; will be used. Default is 100.</span>
+<span class="sd">    :return: Table with mutation type annotations added.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">context_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Determine the context length by collecting all the context lengths.</span>
+        <span class="k">if</span> <span class="n">num_scan_context_length</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">context_lengths</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">collect_as_set</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">len</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">)))</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="s2">&quot;all&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">context_lengths</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">len</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">)</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">num_scan_context_length</span><span class="p">)</span>
+            <span class="n">msg</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;the first </span><span class="si">{</span><span class="n">num_scan_context_length</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="n">context_lengths</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">filter</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="n">context_lengths</span><span class="p">)))</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">context_lengths</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;More than one length was found among </span><span class="si">{</span><span class="n">msg</span><span class="si">}</span><span class="s2"> &#39;context&#39; values. Length &quot;</span>
+                <span class="s2">&quot;of &#39;context&#39; should be consistent.&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">context_length</span> <span class="o">=</span> <span class="n">context_lengths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">&quot;Detected a length of </span><span class="si">%d</span><span class="s2"> for context length using </span><span class="si">%s</span><span class="s2"> &#39;context&#39; values.&quot;</span><span class="p">,</span>
+                <span class="n">context_length</span><span class="p">,</span>
+                <span class="n">msg</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="c1"># Determine the middle index of the context annotation.</span>
+    <span class="k">if</span> <span class="n">context_length</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="n">mid_index</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">elif</span> <span class="n">context_length</span> <span class="o">==</span> <span class="mi">7</span><span class="p">:</span>
+        <span class="n">mid_index</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;The length of context should be either 3 or 7, instead of&quot;</span>
+            <span class="sa">f</span><span class="s2">&quot; </span><span class="si">{</span><span class="n">context_length</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="n">transition_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">is_transition</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">alt</span><span class="p">)</span>
+    <span class="n">cpg_expr</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">ref</span> <span class="o">==</span> <span class="s2">&quot;G&quot;</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">alt</span> <span class="o">==</span> <span class="s2">&quot;A&quot;</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="n">mid_index</span> <span class="o">-</span> <span class="mi">1</span> <span class="p">:</span> <span class="n">mid_index</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;C&quot;</span><span class="p">)</span>
+    <span class="p">)</span> <span class="o">|</span> <span class="p">(</span>
+        <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">ref</span> <span class="o">==</span> <span class="s2">&quot;C&quot;</span><span class="p">)</span>
+        <span class="o">&amp;</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">alt</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span><span class="p">)</span>
+        <span class="o">&amp;</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="n">mid_index</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">:</span> <span class="n">mid_index</span> <span class="o">+</span> <span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;G&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">):</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">annotate_rows</span><span class="p">(</span><span class="n">transition</span><span class="o">=</span><span class="n">transition_expr</span><span class="p">,</span> <span class="n">cpg</span><span class="o">=</span><span class="n">cpg_expr</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">transition</span><span class="o">=</span><span class="n">transition_expr</span><span class="p">,</span> <span class="n">cpg</span><span class="o">=</span><span class="n">cpg_expr</span><span class="p">)</span>
+    <span class="n">mutation_type_expr</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">switch</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">len</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">))</span>
+        <span class="o">.</span><span class="n">when</span><span class="p">(</span>
+            <span class="n">context_length</span><span class="p">,</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">case</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">cpg</span><span class="p">,</span> <span class="s2">&quot;CpG&quot;</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">transition</span><span class="p">,</span> <span class="s2">&quot;non-CpG transition&quot;</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">default</span><span class="p">(</span><span class="s2">&quot;transversion&quot;</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="o">.</span><span class="n">or_error</span><span class="p">(</span><span class="s2">&quot;Found &#39;context&#39; value with unexpected context length!&quot;</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">mutation_type_model_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">cpg</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">,</span> <span class="s2">&quot;non-CpG&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">annotate_rows</span><span class="p">(</span>
+            <span class="n">mutation_type</span><span class="o">=</span><span class="n">mutation_type_expr</span><span class="p">,</span>
+            <span class="n">mutation_type_model</span><span class="o">=</span><span class="n">mutation_type_model_expr</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">t</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+            <span class="n">mutation_type</span><span class="o">=</span><span class="n">mutation_type_expr</span><span class="p">,</span>
+            <span class="n">mutation_type_model</span><span class="o">=</span><span class="n">mutation_type_model_expr</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="trimer_from_heptamer"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.trimer_from_heptamer">[docs]</a><span class="k">def</span> <span class="nf">trimer_from_heptamer</span><span class="p">(</span>
+    <span class="n">t</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Trim heptamer context to create trimer context.</span>
+
+<span class="sd">    :param t: Input MatrixTable or Table with context annotation.</span>
+<span class="sd">    :return: MatrixTable or Table with trimer context annotated.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">trimer_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">len</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">)</span> <span class="o">==</span> <span class="mi">7</span><span class="p">,</span> <span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span> <span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">annotate_rows</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="n">trimer_expr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">)</span>
+        <span class="k">else</span> <span class="n">t</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="n">trimer_expr</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="collapse_strand"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.collapse_strand">[docs]</a><span class="k">def</span> <span class="nf">collapse_strand</span><span class="p">(</span>
+    <span class="n">t</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">MatrixTable</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return the deduplicated context by collapsing DNA strands.</span>
+
+<span class="sd">    Function returns the reverse complement for &#39;ref, &#39;alt&#39;, and &#39;context&#39; if the</span>
+<span class="sd">    reference allele is either &#39;G&#39; or &#39;T&#39;.</span>
+
+<span class="sd">    The following annotations are added to the output Table:</span>
+<span class="sd">        - was_flipped - whether the &#39;ref, &#39;alt&#39;, and &#39;context&#39; were flipped (reverse</span>
+<span class="sd">          complement taken)</span>
+
+<span class="sd">    :param ht: Input Table.</span>
+<span class="sd">    :return: Table with deduplicated context annotation (ref, alt, context,</span>
+<span class="sd">        was_flipped).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ref_g_or_t_expr</span> <span class="o">=</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">ref</span> <span class="o">==</span> <span class="s2">&quot;G&quot;</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">ref</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span><span class="p">)</span>
+    <span class="n">collapse_expr</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;ref&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span><span class="n">ref_g_or_t_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">reverse_complement</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">ref</span><span class="p">),</span> <span class="n">t</span><span class="o">.</span><span class="n">ref</span><span class="p">),</span>
+        <span class="s2">&quot;alt&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span><span class="n">ref_g_or_t_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">reverse_complement</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">alt</span><span class="p">),</span> <span class="n">t</span><span class="o">.</span><span class="n">alt</span><span class="p">),</span>
+        <span class="s2">&quot;context&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span>
+            <span class="n">ref_g_or_t_expr</span><span class="p">,</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">reverse_complement</span><span class="p">(</span><span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">),</span>
+            <span class="n">t</span><span class="o">.</span><span class="n">context</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="s2">&quot;was_flipped&quot;</span><span class="p">:</span> <span class="n">ref_g_or_t_expr</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">t</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="o">**</span><span class="n">collapse_expr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">)</span>
+        <span class="k">else</span> <span class="n">t</span><span class="o">.</span><span class="n">annotate_rows</span><span class="p">(</span><span class="o">**</span><span class="n">collapse_expr</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="transform_methylation_level"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.transform_methylation_level">[docs]</a><span class="k">def</span> <span class="nf">transform_methylation_level</span><span class="p">(</span>
+    <span class="n">methylation_expr</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;methylation_level&quot;</span><span class="p">,</span>
+    <span class="n">methylation_cutoffs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Transform methylation level into a 0 to 2 scale.</span>
+
+<span class="sd">    The methylation level is transformed to a 0-2 scale based on the provided cutoffs.</span>
+<span class="sd">    The methylation level is assigned a value of 2 if it is greater than the second</span>
+<span class="sd">    cutoff, 1 if it is greater than the first cutoff (but less than or equal to the</span>
+<span class="sd">    second), and 0 otherwise.</span>
+
+<span class="sd">    :param methylation_expr: Methylation level expression or annotation name in `ht`. If</span>
+<span class="sd">        `methylation_expr` is a string, `ht` must be provided.</span>
+<span class="sd">    :param methylation_cutoffs: Tuple of two integers/floats representing the cutoffs</span>
+<span class="sd">        for the methylation level transformation. Default is (0, 5).</span>
+<span class="sd">    :param ht: Input Table. Default is None.</span>
+<span class="sd">    :return: Table with methylation level annotation added or methylation level</span>
+<span class="sd">        expression.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">methylation_expr</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">ht</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ht must be provided if methylation_expr is a string.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">methylation_expr</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">methylation_expr</span> <span class="o">=</span> <span class="n">ht</span><span class="p">[</span><span class="n">methylation_expr</span><span class="p">]</span>
+
+    <span class="n">methylation_expr</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">case</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">methylation_expr</span> <span class="o">&gt;</span> <span class="n">methylation_cutoffs</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">methylation_expr</span> <span class="o">&gt;</span> <span class="n">methylation_cutoffs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">default</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">ht</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">methylation_level</span><span class="o">=</span><span class="n">methylation_expr</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">methylation_expr</span></div>
+
+
+<div class="viewcode-block" id="assemble_constraint_context_ht"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.assemble_constraint_context_ht">[docs]</a><span class="k">def</span> <span class="nf">assemble_constraint_context_ht</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">methylation_ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">gerp_ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">coverage_hts</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">an_hts</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">freq_hts</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">filter_hts</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">transformation_funcs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Callable</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Assemble context Table with necessary annotations for constraint calculations.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        Checks for &#39;was_split&#39; annotation in Table. If not present, splits</span>
+<span class="sd">        multiallelic sites.</span>
+
+<span class="sd">    The following annotations are added to the output Table:</span>
+
+<span class="sd">        - ref: Reference allele.</span>
+<span class="sd">        - alt: Alternate allele.</span>
+<span class="sd">        - context: Trimer context.</span>
+<span class="sd">        - annotations added by `annotate_mutation_type()`, `collapse_strand()`, and</span>
+<span class="sd">          `add_most_severe_csq_to_tc_within_vep_root()`.</span>
+
+<span class="sd">    Depending on the annotations provided, the following annotations may also be added:</span>
+
+<span class="sd">        - &#39;methylation_level&#39;: Methylation level annotation will be added if</span>
+<span class="sd">          `methylation_ht` is provided.</span>
+<span class="sd">        - &#39;gerp&#39;: GERP annotation will be added if `gerp_ht` is provided.</span>
+<span class="sd">        - &#39;coverage&#39;: Coverage annotations will be added if `coverage_hts` is provided.</span>
+<span class="sd">        - &#39;AN&#39;: Allele number annotations will be added if `an_hts` is provided.</span>
+<span class="sd">        - &#39;freq&#39;: Frequency annotations will be added if `freq_hts` is provided.</span>
+<span class="sd">        - &#39;filters&#39;: Filter annotations will be added if `filter_hts` is provided.</span>
+
+<span class="sd">    The `transformation_funcs` parameter can be used to transform the HTs before adding</span>
+<span class="sd">    annotations. The keys should be the annotation names (&#39;coverage&#39;, &#39;gerp&#39;, etc.) and</span>
+<span class="sd">    the values should be functions that take the annotation Table and the ht that is</span>
+<span class="sd">    being annotated as input and return the transformed and keyed annotation. If not</span>
+<span class="sd">    provided, the following default transformations are used:</span>
+
+<span class="sd">        - &#39;methylation_level&#39;: Uses the &#39;methylation_level&#39; annotation in the</span>
+<span class="sd">          Methylation Table after transforming the methylation level to a 0-2 scale</span>
+<span class="sd">          using `transform_grch37_methylation()` or `transform_grch38_methylation()`.</span>
+<span class="sd">        - &#39;gerp&#39;: Uses the &#39;S&#39; annotation in the GERP Table. If &#39;S&#39; is missing, it</span>
+<span class="sd">          defaults to 0.</span>
+<span class="sd">        - &#39;coverage&#39;: If necessary, pulls out the first element of coverage statistics</span>
+<span class="sd">          (which includes all samples). Relevant to v4, where coverage stats include</span>
+<span class="sd">          additional elements to stratify by UK Biobank subset and platforms.</span>
+<span class="sd">        - &#39;AN&#39;: Uses the &#39;AN&#39; annotation in the allele number Table.</span>
+<span class="sd">        - &#39;freq&#39;: Uses the &#39;freq&#39; annotation in the frequency Table.</span>
+<span class="sd">        - &#39;filters&#39;: Uses the &#39;filters&#39; annotation in the filter Table.</span>
+
+<span class="sd">    The following global annotations may also be added to the output Table:</span>
+
+<span class="sd">        - &#39;an_globals&#39;: Global allele number annotations &#39;strata_sample_count&#39; and</span>
+<span class="sd">          &#39;strata_meta&#39; will be added if `an_hts` is provided.</span>
+<span class="sd">        - &#39;freq_globals&#39;: Global frequency annotations &#39;freq_meta_sample_count&#39; and</span>
+<span class="sd">          &#39;freq_meta&#39; will be added if `freq_hts` is provided.</span>
+
+<span class="sd">    :param ht: Input context Table with VEP annotation.</span>
+<span class="sd">    :param methylation_ht: Optional Table with methylation annotation. Default is None.</span>
+<span class="sd">    :param gerp_ht: Optional Table with GERP annotation. Default is None.</span>
+<span class="sd">    :param coverage_hts: An optional Dictionary with key as one of &#39;exomes&#39; or</span>
+<span class="sd">        &#39;genomes&#39; and values as corresponding coverage Tables. Default is None.</span>
+<span class="sd">    :param an_hts: A Dictionary with key as one of &#39;exomes&#39; or &#39;genomes&#39; and</span>
+<span class="sd">        values as corresponding allele number Tables. Default is None.</span>
+<span class="sd">    :param transformation_funcs: An optional Dictionary to transform the HTs before</span>
+<span class="sd">        adding annotations. Default is None, which will use some default transformations</span>
+<span class="sd">        as described above.</span>
+<span class="sd">    :return: Table with sites split and necessary annotations.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ref</span> <span class="o">=</span> <span class="n">get_reference_genome</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">locus</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">ref</span> <span class="o">==</span> <span class="n">hl</span><span class="o">.</span><span class="n">get_reference</span><span class="p">(</span><span class="s2">&quot;GRCh37&quot;</span><span class="p">):</span>
+        <span class="kn">from</span> <span class="nn">gnomad.resources.grch37</span> <span class="kn">import</span> <span class="n">transform_grch37_methylation</span> <span class="k">as</span> <span class="n">trans_methyl</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="kn">from</span> <span class="nn">gnomad.resources.grch38</span> <span class="kn">import</span> <span class="n">transform_grch38_methylation</span> <span class="k">as</span> <span class="n">trans_methyl</span>
+
+    <span class="c1"># Check if context Table is split, and if not, split multiallelic sites.</span>
+    <span class="k">if</span> <span class="s2">&quot;was_split&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">row</span><span class="p">):</span>
+        <span class="n">ht</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">split_multi_hts</span><span class="p">(</span><span class="n">ht</span><span class="p">)</span>
+
+    <span class="c1"># Only need to keep the keys (locus, alleles) and the context and vep annotations.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;context&quot;</span><span class="p">,</span> <span class="s2">&quot;vep&quot;</span><span class="p">)</span>
+
+    <span class="c1"># Filter Table to only contigs 1-22, X, Y.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">filter_intervals</span><span class="p">(</span>
+        <span class="n">ht</span><span class="p">,</span>
+        <span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">parse_locus_interval</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">ref</span><span class="o">.</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">get_primary_contigs</span><span class="p">(</span><span class="n">ref</span><span class="o">.</span><span class="n">name</span><span class="p">)],</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Add annotations for &#39;ref&#39; and &#39;alt&#39;.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">ref</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">alleles</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">alt</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">alleles</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="c1"># Trim heptamer context to create trimer context.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">trimer_from_heptamer</span><span class="p">(</span><span class="n">ht</span><span class="p">)</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">matches</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[ATCG]</span><span class="se">{{</span><span class="si">{</span><span class="mi">3</span><span class="si">}</span><span class="se">}}</span><span class="s2">&quot;</span><span class="p">))</span>
+
+    <span class="c1"># Annotate mutation type (such as &quot;CpG&quot;, &quot;non-CpG transition&quot;, &quot;transversion&quot;) and</span>
+    <span class="c1"># collapse strands to deduplicate the context.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">annotate_mutation_type</span><span class="p">(</span><span class="n">collapse_strand</span><span class="p">(</span><span class="n">ht</span><span class="p">))</span>
+
+    <span class="c1"># Add most_severe_consequence annotation to &#39;transcript_consequences&#39; within the</span>
+    <span class="c1"># vep root annotation.</span>
+    <span class="n">csqs</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">vep</span><span class="o">.</span><span class="n">transcript_consequences</span>
+    <span class="n">csqs</span> <span class="o">=</span> <span class="n">add_most_severe_consequence_to_consequence</span><span class="p">(</span><span class="n">csqs</span><span class="p">)</span>
+    <span class="n">vep_csq_fields</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;transcript_id&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;gene_id&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;gene_symbol&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;biotype&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;most_severe_consequence&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;mane_select&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;canonical&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;lof&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;lof_flags&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;sift_score&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;polyphen_score&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;domains&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;uniprot_isoform&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;amino_acids&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;codons&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="n">vep_csq_fields</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">vep_csq_fields</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">csqs</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">element_type</span><span class="p">]</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+        <span class="n">vep</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">vep</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+            <span class="s2">&quot;most_severe_consequence&quot;</span><span class="p">,</span>
+            <span class="n">transcript_consequences</span><span class="o">=</span><span class="n">csqs</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="o">*</span><span class="n">vep_csq_fields</span><span class="p">)),</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Add &#39;methylation_level&#39; and &#39;gerp&#39; annotations if specified.</span>
+    <span class="n">transformation_funcs</span> <span class="o">=</span> <span class="n">transformation_funcs</span> <span class="ow">or</span> <span class="p">{}</span>
+
+    <span class="k">if</span> <span class="s2">&quot;methylation_level&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">transformation_funcs</span><span class="p">:</span>
+        <span class="n">transformation_funcs</span><span class="p">[</span><span class="s2">&quot;methylation_level&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span>
+            <span class="n">ht</span><span class="o">.</span><span class="n">cpg</span><span class="p">,</span> <span class="n">trans_methyl</span><span class="p">(</span><span class="n">x</span><span class="p">)[</span><span class="n">t</span><span class="o">.</span><span class="n">locus</span><span class="p">]</span><span class="o">.</span><span class="n">methylation_level</span><span class="p">,</span> <span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;gerp&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">transformation_funcs</span><span class="p">:</span>
+        <span class="n">transformation_funcs</span><span class="p">[</span><span class="s2">&quot;gerp&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">if_else</span><span class="p">(</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">is_missing</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">locus</span><span class="p">]</span><span class="o">.</span><span class="n">S</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">locus</span><span class="p">]</span><span class="o">.</span><span class="n">S</span>
+        <span class="p">)</span>
+
+    <span class="c1"># If necessary, pull out first element of coverage statistics (which includes all</span>
+    <span class="c1"># samples). Relevant to v4, where coverage stats include additional elements to</span>
+    <span class="c1"># stratify by ukb subset and platforms.</span>
+    <span class="k">if</span> <span class="s2">&quot;coverage&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">transformation_funcs</span><span class="p">:</span>
+        <span class="n">transformation_funcs</span><span class="p">[</span><span class="s2">&quot;coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="p">(</span>
+            <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">locus</span><span class="p">]</span><span class="o">.</span><span class="n">coverage_stats</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="s2">&quot;coverage_stats&quot;</span> <span class="ow">in</span> <span class="n">x</span><span class="o">.</span><span class="n">row</span> <span class="k">else</span> <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">locus</span><span class="p">]</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="s2">&quot;AN&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">transformation_funcs</span><span class="p">:</span>
+        <span class="n">transformation_funcs</span><span class="p">[</span><span class="s2">&quot;AN&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">locus</span><span class="p">]</span><span class="o">.</span><span class="n">AN</span>
+
+    <span class="k">if</span> <span class="s2">&quot;freq&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">transformation_funcs</span><span class="p">:</span>
+        <span class="n">transformation_funcs</span><span class="p">[</span><span class="s2">&quot;freq&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">freq</span>
+
+    <span class="k">if</span> <span class="s2">&quot;filters&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">transformation_funcs</span><span class="p">:</span>
+        <span class="n">transformation_funcs</span><span class="p">[</span><span class="s2">&quot;filters&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="n">t</span><span class="o">.</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">filters</span>
+
+    <span class="n">hts</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;methylation_level&quot;</span><span class="p">:</span> <span class="n">methylation_ht</span><span class="p">,</span>
+        <span class="s2">&quot;gerp&quot;</span><span class="p">:</span> <span class="n">gerp_ht</span><span class="p">,</span>
+        <span class="s2">&quot;coverage&quot;</span><span class="p">:</span> <span class="n">coverage_hts</span><span class="p">,</span>
+        <span class="s2">&quot;AN&quot;</span><span class="p">:</span> <span class="n">an_hts</span><span class="p">,</span>
+        <span class="s2">&quot;freq&quot;</span><span class="p">:</span> <span class="n">freq_hts</span><span class="p">,</span>
+        <span class="s2">&quot;filters&quot;</span><span class="p">:</span> <span class="n">filter_hts</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="n">hts</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">hts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+    <span class="n">exprs</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">ann</span><span class="p">,</span> <span class="n">ann_ht</span> <span class="ow">in</span> <span class="n">hts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ann_ht</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">ann_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+                <span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">transformation_funcs</span><span class="p">[</span><span class="n">ann</span><span class="p">](</span><span class="n">v</span><span class="p">,</span> <span class="n">ht</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">ann_ht</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ann_expr</span> <span class="o">=</span> <span class="n">transformation_funcs</span><span class="p">[</span><span class="n">ann</span><span class="p">](</span><span class="n">ann_ht</span><span class="p">,</span> <span class="n">ht</span><span class="p">)</span>
+
+        <span class="n">exprs</span><span class="p">[</span><span class="n">ann</span><span class="p">]</span> <span class="o">=</span> <span class="n">ann_expr</span>
+
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="o">**</span><span class="n">exprs</span><span class="p">)</span>
+
+    <span class="c1"># Add global annotations for &#39;AN&#39; and &#39;freq&#39; if HTs are provided.</span>
+    <span class="n">global_anns</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;an_globals&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">an_hts</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;strata_sample_count&quot;</span><span class="p">,</span> <span class="s2">&quot;strata_meta&quot;</span><span class="p">]),</span>
+        <span class="s2">&quot;freq_globals&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">freq_hts</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;freq_meta_sample_count&quot;</span><span class="p">,</span> <span class="s2">&quot;freq_meta&quot;</span><span class="p">]),</span>
+    <span class="p">}</span>
+    <span class="n">global_anns</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">global_anns</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">}</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate_globals</span><span class="p">(</span>
+        <span class="o">**</span><span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+                <span class="o">**</span><span class="p">{</span>
+                    <span class="n">data_type</span><span class="p">:</span> <span class="p">(</span>
+                        <span class="n">ann_ht</span><span class="o">.</span><span class="n">select_globals</span><span class="p">(</span>
+                            <span class="o">*</span><span class="p">[</span><span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">g</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">ann_ht</span><span class="o">.</span><span class="n">globals</span><span class="p">]</span>
+                        <span class="p">)</span><span class="o">.</span><span class="n">index_globals</span><span class="p">()</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">data_type</span><span class="p">,</span> <span class="n">ann_ht</span> <span class="ow">in</span> <span class="n">hts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+                <span class="p">}</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="p">(</span><span class="n">hts</span><span class="p">,</span> <span class="n">g</span><span class="p">)</span> <span class="ow">in</span> <span class="n">global_anns</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ht</span></div>
+
+
+<div class="viewcode-block" id="calculate_gerp_cutoffs"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/context.html#gnomad.utils.constraint.context.calculate_gerp_cutoffs">[docs]</a><span class="k">def</span> <span class="nf">calculate_gerp_cutoffs</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">gerp_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">lower_percentile</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+    <span class="n">upper_percentile</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.95</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Find GERP cutoffs at the given percentile thresholds.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        Uses ``hl.agg.approx_quantiles``, so results are approximate.</span>
+
+<span class="sd">    :param ht: Input Table.</span>
+<span class="sd">    :param gerp_expr: GERP score expression. Default is ``ht.gerp``.</span>
+<span class="sd">    :param lower_percentile: Lower percentile threshold (0-1). Default is 0.05.</span>
+<span class="sd">    :param upper_percentile: Upper percentile threshold (0-1). Default is 0.95.</span>
+<span class="sd">    :return: Tuple of (lower cutoff, upper cutoff) GERP scores.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">gerp_expr</span> <span class="o">=</span> <span class="n">_resolve_row_annotation_expr</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="s2">&quot;gerp&quot;</span><span class="p">,</span> <span class="n">gerp_expr</span><span class="p">,</span> <span class="s2">&quot;gerp_expr&quot;</span><span class="p">)</span>
+
+    <span class="n">cutoffs</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">approx_quantiles</span><span class="p">(</span><span class="n">gerp_expr</span><span class="p">,</span> <span class="p">[</span><span class="n">lower_percentile</span><span class="p">,</span> <span class="n">upper_percentile</span><span class="p">])</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">cutoffs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">cutoffs</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

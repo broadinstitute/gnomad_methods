@@ -1,7 +1,8 @@
 """
 Functions for the gnomAD constraint pipeline, split into submodules by stage.
 
-Every name is re-exported here, so the old import path still works:
+Every public name, and the private helpers the module had before it was split, are
+re-exported here, so the old import path still works:
 ``from gnomad.utils.constraint import X``.
 
 - ``constants``: coverage cutoff and default annotation and field lists.
@@ -14,6 +15,8 @@ Every name is re-exported here, so the old import path still works:
 - ``metrics``: pLI, the o/e confidence interval, z-scores, flags, and GENCODE
   annotations.
 - ``ranking``: ranks and percentile bins.
+- ``regional_mutation_rate``: training, tuning, and applying the per-context
+  regional mutation rate models.
 """
 
 import logging

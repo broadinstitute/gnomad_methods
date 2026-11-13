@@ -1,4 +1,20 @@
-"""Script containing generic constraint functions that may be used in the constraint pipeline."""
+"""
+Functions for the gnomAD constraint pipeline, split into submodules by stage.
+
+Every name is re-exported here, so the old import path still works:
+``from gnomad.utils.constraint import X``.
+
+- ``constants``: coverage cutoff and default annotation and field lists.
+- ``context``: mutation rates, mutation types, trinucleotide context, methylation
+  levels, and GERP cutoffs on the context Table.
+- ``counts``: observed and possible variant counts and their sums by group.
+- ``grouping``: consequence groups, VEP grouping fields, and genetic ancestry
+  downsamplings.
+- ``models``: building and applying the plateau and coverage models.
+- ``metrics``: pLI, the o/e confidence interval, z-scores, flags, and GENCODE
+  annotations.
+- ``ranking``: ranks and percentile bins.
+"""
 
 import logging
 

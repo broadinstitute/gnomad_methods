@@ -15,7 +15,7 @@ re-exported here, so the old import path still works:
 - ``metrics``: pLI, the o/e confidence interval, z-scores, flags, and GENCODE
   annotations.
 - ``ranking``: ranks and percentile bins.
-- ``regional_mutation_rate``: training, tuning, and applying the per-context
+- ``regional_mutation_rate``: fitting, tuning, and applying the per-context
   regional mutation rate models.
 """
 

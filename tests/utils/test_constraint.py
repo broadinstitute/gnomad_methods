@@ -1,5 +1,6 @@
 """Tests for the constraint utility module."""
 
+import math
 from typing import List
 
 import hail as hl
@@ -176,6 +177,38 @@ class TestOeConfidenceInterval:
         result = ht.collect()[0]
 
         assert result.ci.lower == 0
+
+    @requires_qgamma
+    def test_gamma_obs_zero_lower_is_zero(self) -> None:
+        """
+        Test that the gamma method returns lower=0 when obs=0, as poisson does.
+
+        Without this, 0 observed of 10 expected gave a lower bound of 0.005, so an
+        oe of 0 fell below its own confidence interval. The upper bound is the 95th
+        percentile of an exponential distribution with rate 10.
+        """
+        ht = hl.Table.parallelize(
+            [{"obs": 0, "exp": 10.0}],
+            hl.tstruct(obs=hl.tint64, exp=hl.tfloat64),
+        )
+        ht = ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="gamma"))
+        result = ht.collect()[0]
+
+        assert result.ci.lower == 0
+        assert result.ci.upper == pytest.approx(-math.log(0.05) / 10)
+
+    @requires_qgamma
+    def test_gamma_obs_zero_no_expected_is_missing(self) -> None:
+        """Test that the gamma bounds stay missing when obs=0 and exp=0."""
+        ht = hl.Table.parallelize(
+            [{"obs": 0, "exp": 0.0}],
+            hl.tstruct(obs=hl.tint64, exp=hl.tfloat64),
+        )
+        ht = ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="gamma"))
+        result = ht.collect()[0]
+
+        assert result.ci.lower is None
+        assert result.ci.upper is None
 
     def test_invalid_method_raises(self):
         """Test that an invalid method raises ValueError."""

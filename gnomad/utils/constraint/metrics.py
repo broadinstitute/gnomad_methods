@@ -150,7 +150,9 @@ def _oe_ci_gamma(
     """
     Compute OE confidence interval using the Gamma distribution.
 
-    Uses Hail's ``hl.qgamma`` quantile function.
+    Uses Hail's ``hl.qgamma`` quantile function. When ``obs_expr`` is 0 and
+    ``exp_expr`` is above 0, ``lower`` is 0, as in
+    :func:`_oe_ci_discretized_poisson`.
 
     :param obs_expr: Observed variant count expression.
     :param exp_expr: Expected variant count expression.
@@ -160,7 +162,12 @@ def _oe_ci_gamma(
     shape = obs_expr + hl.literal(1.0)
     scale = divide_null(hl.literal(1.0), exp_expr)
     return hl.struct(
-        lower=hl.qgamma(hl.literal(alpha), shape, scale),
+        # Missing, not 0, when the scale is missing (exp is 0 or missing).
+        lower=hl.if_else(
+            obs_expr > 0,
+            hl.qgamma(hl.literal(alpha), shape, scale),
+            hl.or_missing(hl.is_defined(scale), 0.0),
+        ),
         upper=hl.qgamma(hl.literal(1.0 - alpha), shape, scale),
     )
 
@@ -180,6 +187,9 @@ def oe_confidence_interval(
       the Gamma posterior. Fast and precise.
     - ``"poisson"``: sweeps a discretized Poisson likelihood over the OE
       parameter space [0, 2). Retained for backwards compatibility.
+
+    With either method, ``lower`` is 0 when ``obs_expr`` is 0 and ``exp_expr`` is
+    above 0.
 
     .. note::
 

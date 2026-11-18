@@ -1695,6 +1695,24 @@ class TestCoverageCorrectionExpr:
 
         assert result == pytest.approx(expected)
 
+    def test_max_coverage_correction_keeps_missing_model_missing(self) -> None:
+        """
+        Test that a cap leaves a missing model correction missing.
+
+        ``hl.min`` drops missing values by default, so without
+        ``filter_missing=False`` a missing coverage model gave the cap instead.
+        """
+        result = hl.eval(
+            coverage_correction_expr(
+                hl.float64(80),
+                hl.missing(hl.tarray(hl.tfloat64)),
+                low_coverage_expr=hl.bool(True),
+                max_coverage_correction=1.0,
+            )
+        )
+
+        assert result is None
+
     @pytest.mark.parametrize("both", [True, False])
     def test_requires_exactly_one_low_coverage_definition(self, both: bool) -> None:
         """Test that exactly one of ``low_coverage_expr`` and ``coverage_cutoff`` is required."""

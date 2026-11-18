@@ -514,7 +514,11 @@ def coverage_correction_expr(
 
     model_corr_expr = coverage_model[1] * cov_corr_expr + coverage_model[0]
     if max_coverage_correction is not None:
-        model_corr_expr = hl.min(model_corr_expr, max_coverage_correction)
+        # hl.min drops missing values by default, which would turn a missing model
+        # correction into the cap.
+        model_corr_expr = hl.min(
+            model_corr_expr, max_coverage_correction, filter_missing=False
+        )
 
     return (
         hl.case()

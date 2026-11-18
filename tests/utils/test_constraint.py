@@ -1,6 +1,6 @@
 """Tests for the constraint utility module."""
 
-from typing import List
+from typing import List, Optional
 
 import hail as hl
 import pytest
@@ -1676,6 +1676,55 @@ class TestCoverageCorrectionExpr:
 
         assert result == pytest.approx(0.6)
 
+    @pytest.mark.parametrize(
+        "cov, is_low, max_correction, expected",
+        [
+            (80, True, None, 1.3),
+            (80, True, 1.0, 1.0),
+            (80, True, 2.0, 1.3),
+            (10, True, 1.0, 0.6),
+            (0, True, 1.0, 0.0),
+            # A cap below 1 must not reach high coverage sites, which get 1.
+            (95, False, 0.8, 1.0),
+        ],
+    )
+    def test_max_coverage_correction(
+        self,
+        cov: int,
+        is_low: bool,
+        max_correction: Optional[float],
+        expected: float,
+    ) -> None:
+        """Test that ``max_coverage_correction`` caps only the low coverage model."""
+        result = hl.eval(
+            coverage_correction_expr(
+                hl.float64(cov),
+                (0.5, 0.01),
+                low_coverage_expr=hl.bool(is_low),
+                max_coverage_correction=max_correction,
+            )
+        )
+
+        assert result == pytest.approx(expected)
+
+    def test_max_coverage_correction_keeps_missing_model_missing(self) -> None:
+        """
+        Test that a cap leaves a missing model correction missing.
+
+        ``hl.min`` drops missing values by default, so without
+        ``filter_missing=False`` a missing coverage model gave the cap instead.
+        """
+        result = hl.eval(
+            coverage_correction_expr(
+                hl.float64(80),
+                hl.missing(hl.tarray(hl.tfloat64)),
+                low_coverage_expr=hl.bool(True),
+                max_coverage_correction=1.0,
+            )
+        )
+
+        assert result is None
+
     @pytest.mark.parametrize("both", [True, False])
     def test_requires_exactly_one_low_coverage_definition(self, both: bool) -> None:
         """Test that exactly one of ``low_coverage_expr`` and ``coverage_cutoff`` is required."""
@@ -1723,6 +1772,26 @@ class TestApplyModels:
         assert result.coverage_correction == pytest.approx(0.6)
         assert result.expected_variants == pytest.approx(3.3 * 0.6)
         assert result.mu == pytest.approx(1.5 * 0.6)
+
+    def test_max_coverage_correction(self) -> None:
+        """Test that ``max_coverage_correction`` reaches the coverage correction."""
+        result = hl.eval(
+            apply_models(
+                hl.float64(0.5),
+                hl.literal([0.1, 2.0]),
+                hl.int64(3),
+                coverage_model=(0.5, 0.01),
+                coverage_expr=hl.int32(80),
+                cpg_expr=hl.bool(False),
+                high_cov_definition=90,
+                log10_coverage=False,
+                max_coverage_correction=1.0,
+            )
+        )
+
+        # The model gives 1.3 at coverage 80, capped at 1.
+        assert result.coverage_correction == pytest.approx(1.0)
+        assert result.expected_variants == pytest.approx(3.3)
 
     def test_missing_model_group_with_coverage_model(self) -> None:
         """Test that a site in neither model gets missing expected variants."""

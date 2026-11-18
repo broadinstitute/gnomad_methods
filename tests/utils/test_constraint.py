@@ -1677,18 +1677,30 @@ class TestCoverageCorrectionExpr:
         assert result == pytest.approx(0.6)
 
     @pytest.mark.parametrize(
-        "cov, max_correction, expected",
-        [(80, None, 1.3), (80, 1.0, 1.0), (10, 1.0, 0.6), (0, 1.0, 0.0)],
+        "cov, is_low, max_correction, expected",
+        [
+            (80, True, None, 1.3),
+            (80, True, 1.0, 1.0),
+            (80, True, 2.0, 1.3),
+            (10, True, 1.0, 0.6),
+            (0, True, 1.0, 0.0),
+            # A cap below 1 must not reach high coverage sites, which get 1.
+            (95, False, 0.8, 1.0),
+        ],
     )
     def test_max_coverage_correction(
-        self, cov: int, max_correction: Optional[float], expected: float
+        self,
+        cov: int,
+        is_low: bool,
+        max_correction: Optional[float],
+        expected: float,
     ) -> None:
-        """Test that ``max_coverage_correction`` caps the model, and only when set."""
+        """Test that ``max_coverage_correction`` caps only the low coverage model."""
         result = hl.eval(
             coverage_correction_expr(
                 hl.float64(cov),
                 (0.5, 0.01),
-                low_coverage_expr=hl.bool(True),
+                low_coverage_expr=hl.bool(is_low),
                 max_coverage_correction=max_correction,
             )
         )

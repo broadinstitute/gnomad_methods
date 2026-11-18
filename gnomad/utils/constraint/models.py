@@ -462,6 +462,7 @@ def coverage_correction_expr(
     low_coverage_expr: Optional[hl.BooleanExpression] = None,
     coverage_cutoff: Optional[int] = None,
     log10_coverage: bool = False,
+    max_coverage_correction: Optional[float] = None,
 ) -> hl.Float64Expression:
     """
     Compute the coverage correction expression.
@@ -475,7 +476,8 @@ def coverage_correction_expr(
         - If the coverage is 0, the coverage correction is 0.
         - If the low coverage expression (`low_coverage_expr`) is True, or the
           coverage (`coverage_expr`) is below the coverage cutoff (`coverage_cutoff`),
-          the coverage model is applied to the coverage.
+          the coverage model is applied to the coverage, and capped at
+          `max_coverage_correction` if it is set.
         - Otherwise, the coverage correction is 1.
 
     :param coverage_expr: Float64Expression of the coverage.
@@ -487,6 +489,10 @@ def coverage_correction_expr(
         is applied to sites with coverage below this cutoff. Default is None.
     :param log10_coverage: Whether to convert coverage sites by log10 when applying the
         coverage model. Default is False.
+    :param max_coverage_correction: Optional upper bound on the correction the
+        coverage model gives. For example, 1 keeps a low coverage site from getting
+        more expected variants than a high coverage site, which a linear model can
+        give just below the cutoff. Default is None (no bound).
     :return: Float64Expression of the coverage correction.
     """
     if low_coverage_expr is None and coverage_cutoff is None:
@@ -506,13 +512,14 @@ def coverage_correction_expr(
     else:
         cov_corr_expr = coverage_expr
 
+    model_corr_expr = coverage_model[1] * cov_corr_expr + coverage_model[0]
+    if max_coverage_correction is not None:
+        model_corr_expr = hl.min(model_corr_expr, max_coverage_correction)
+
     return (
         hl.case()
         .when(coverage_expr == 0, 0)
-        .when(
-            low_coverage_expr,
-            coverage_model[1] * cov_corr_expr + coverage_model[0],
-        )
+        .when(low_coverage_expr, model_corr_expr)
         .default(1)
     )
 
@@ -529,6 +536,7 @@ def apply_models(
     model_group_expr: Optional[hl.expr.StructExpression] = None,
     high_cov_definition: int = COVERAGE_CUTOFF,
     log10_coverage: bool = True,
+    max_coverage_correction: Optional[float] = None,
 ) -> hl.expr.StructExpression:
     """
     Apply calibration models to compute expected variant counts.
@@ -567,6 +575,9 @@ def apply_models(
         Default is ``COVERAGE_CUTOFF``.
     :param log10_coverage: Whether to log10-transform coverage when applying
         the coverage model. Default is True.
+    :param max_coverage_correction: Optional upper bound on the coverage
+        correction, passed to :func:`coverage_correction_expr`. Default is None (no
+        bound).
     :return: StructExpression with "mu", "predicted_proportion_observed",
         "expected_variants", and optionally "coverage_correction".
     """
@@ -604,6 +615,7 @@ def apply_models(
             coverage_model,
             low_coverage_expr=model_group_expr.high_or_low_coverage == "low",
             log10_coverage=log10_coverage,
+            max_coverage_correction=max_coverage_correction,
         )
         apply_expr = apply_expr.annotate(
             mu=apply_expr.mu * cov_corr_expr,

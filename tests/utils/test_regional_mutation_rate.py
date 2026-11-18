@@ -9,11 +9,13 @@ import pytest
 
 from gnomad.utils.constraint import (
     MODELS_HT_SCHEMA,
+    choose_regional_mutation_rate_penalty,
     fit_regional_mutation_rate_models,
     normalize_regional_mutation_rate_expr,
     prepare_regional_mutation_rate_training_ht,
     regional_mutation_rate_expr,
     regional_mutation_rate_normalization_factors_agg_expr,
+    tune_regional_mutation_rate_penalty,
 )
 from gnomad.utils.constraint.regional_mutation_rate import _newton_update
 
@@ -26,6 +28,7 @@ ROW_TYPE = hl.tstruct(
     b=hl.tfloat64,
     c=hl.tfloat64,
     context=hl.tstr,
+    fold=hl.tstr,
 )
 """Row type of the test training Tables."""
 
@@ -46,7 +49,7 @@ def _training_rows(n: int = 2000, seed: int = 0, context: str = "AAA") -> List[D
     """
     Return training rows whose labels follow a logistic model of ``a`` and ``b``.
 
-    ``c`` is 0.
+    ``c`` is 0, and the rows alternate between the folds ``even`` and ``odd``.
     """
     rng = np.random.default_rng(seed)
     a = rng.normal(size=n)
@@ -59,6 +62,7 @@ def _training_rows(n: int = 2000, seed: int = 0, context: str = "AAA") -> List[D
             "b": float(b[i]),
             "c": 0.0,
             "context": context,
+            "fold": "odd" if i % 2 else "even",
         }
         for i in range(n)
     ]
@@ -73,6 +77,7 @@ def _lognormal_rows(x: np.ndarray, y: np.ndarray) -> List[Dict]:
             "b": float(x[i, 1]),
             "c": float(x[i, 2]),
             "context": "AAA",
+            "fold": None,
         }
         for i in range(len(y))
     ]
@@ -97,7 +102,8 @@ def _separated_rows() -> List[Dict]:
 
     The features have an sd of 2.5 on the log scale, so a few standardized values are
     far out, and with only 2 mutated rows they separate the labels: without a
-    penalty, the log loss of these rows has no minimum.
+    penalty, the log loss of these rows has no minimum. At a penalty of 0.01, full
+    Newton steps from the start overshoot on these rows and never converge.
     """
     rng = np.random.default_rng(23)
     x = np.exp(2.5 * rng.normal(size=(50, 3)))
@@ -111,10 +117,15 @@ def _training_ht(rows: List[Dict]) -> hl.Table:
 
 
 def _prepared(
-    rows: List[Dict], features: Union[List[str], Dict[str, List[str]]]
+    rows: List[Dict],
+    features: Union[List[str], Dict[str, List[str]]],
+    fold: bool = False,
 ) -> hl.Table:
-    """Return the prepared training Table of the rows."""
-    return prepare_regional_mutation_rate_training_ht(_training_ht(rows), features)
+    """Return the prepared training Table of the rows, with their fold if asked."""
+    ht = _training_ht(rows)
+    return prepare_regional_mutation_rate_training_ht(
+        ht, features, fold_expr=ht.fold if fold else None
+    )
 
 
 def _arrays(rows: List[Dict], features: List[str]) -> tuple:
@@ -154,29 +165,29 @@ class TestPrepareRegionalMutationRateTrainingHt:
     """Test the prepare_regional_mutation_rate_training_ht function."""
 
     ROWS = [
-        {"y": 1, "a": 1.0, "b": 2.0, "c": 0.0, "context": "AAA"},
-        {"y": 0, "a": None, "b": 3.0, "c": 0.0, "context": "AAA"},
-        {"y": 0, "a": 1.0, "b": 4.0, "c": 0.0, "context": "ACG"},
-        {"y": 1, "a": 1.0, "b": 5.0, "c": 0.0, "context": "CCC"},
+        {"y": 1, "a": 1.0, "b": 2.0, "c": 0.0, "context": "AAA", "fold": "odd"},
+        {"y": 0, "a": None, "b": 3.0, "c": 0.0, "context": "AAA", "fold": None},
+        {"y": 0, "a": 1.0, "b": 4.0, "c": 0.0, "context": "ACG", "fold": "even"},
+        {"y": 1, "a": 1.0, "b": 5.0, "c": 0.0, "context": "CCC", "fold": "odd"},
     ]
-    """Rows of three contexts, one with a missing feature."""
+    """Rows of three contexts, one with a missing feature and one with no fold."""
 
     def test_features_per_context(self) -> None:
         """
-        Test each row's label, context, and context's features, and the globals.
+        Test each row's label, context, fold, and context's features, and the globals.
 
         Rows with a missing value are kept, and a context without features has no
         ``x``.
         """
         features = {"AAA": ["b", "a"], "ACG": ["b"]}
-        ht = _prepared(self.ROWS, features)
-        assert list(ht.row) == ["label", "context", "x"]
+        ht = _prepared(self.ROWS, features, fold=True)
+        assert list(ht.row) == ["label", "context", "fold", "x"]
         assert hl.eval(ht.features) == features
-        assert [(r.label, r.context, r.x) for r in ht.collect()] == [
-            (1.0, "AAA", [2.0, 1.0]),
-            (0.0, "AAA", [3.0, None]),
-            (0.0, "ACG", [4.0]),
-            (1.0, "CCC", None),
+        assert [(r.label, r.context, r.fold, r.x) for r in ht.collect()] == [
+            (1.0, "AAA", "odd", [2.0, 1.0]),
+            (0.0, "AAA", None, [3.0, None]),
+            (0.0, "ACG", "even", [4.0]),
+            (1.0, "CCC", "odd", None),
         ]
 
     def test_one_feature_list(self) -> None:
@@ -209,35 +220,49 @@ class TestPrepareRegionalMutationRateTrainingHt:
         with pytest.raises(ValueError, match="these are not: s"):
             prepare_regional_mutation_rate_training_ht(ht, {"AAA": ["n", "s"]})
 
-    def test_fit_needs_a_prepared_table(self) -> None:
-        """Test that the fit says how to prepare a Table it can't use."""
+    def test_fit_and_tune_need_a_prepared_table(self) -> None:
+        """Test that the fit and the tuning say how to prepare a Table they can't use."""
         with pytest.raises(ValueError, match="prepare_regional_mutation_rate"):
             fit_regional_mutation_rate_models(_training_ht(_training_rows()))
+        with pytest.raises(ValueError, match="no fold.*with a fold_expr"):
+            tune_regional_mutation_rate_penalty(
+                _prepared(_training_rows(), {"AAA": ["a", "b"]}), [0.3]
+            )
 
 
 class TestFitRegionalMutationRateModels:
     """Test the fit_regional_mutation_rate_models function."""
 
     @staticmethod
-    def _gradient(rows: List[Dict], model: hl.Struct) -> np.ndarray:
-        """Return the gradient of the mean log loss at a model, with numpy."""
+    def _gradient(
+        rows: List[Dict], model: hl.Struct, penalty: float = 0.0
+    ) -> np.ndarray:
+        """Return the gradient of the penalized mean log loss at a model, with numpy."""
         y, x = _arrays(rows, model.features)
         z = (x - np.array(model.mean)) / np.array(model.sd)
         residual = _predict(model, x) - y
-        return np.r_[residual.mean(), z.T @ residual / len(y)]
+        coefs = np.array(model.coefs)
+        return np.r_[residual.mean(), z.T @ residual / len(y) + penalty * coefs]
 
-    def test_minimizes_the_log_loss(self) -> None:
+    @pytest.mark.parametrize("penalty", [None, 0.01, 0.3])
+    def test_minimizes_the_penalized_log_loss(self, penalty: Optional[float]) -> None:
         """
-        Test that the fit minimizes the mean log loss.
+        Test that the fit minimizes mean log loss + penalty / 2 * sum(coef ** 2).
 
-        The gradient of the mean log loss, with the features standardized with the
-        stored ``mean`` and ``sd`` (ddof=0), is 0 at the fit.
+        The gradient of that objective, with the intercept unpenalized and the
+        features standardized with the stored ``mean`` and ``sd`` (ddof=0), is 0 at
+        the fit. With no penalty given, there is none.
         """
         rows = _training_rows()
+        ht = _prepared(rows, {"AAA": ["a", "b"]})
         model = _models(
-            fit_regional_mutation_rate_models(_prepared(rows, {"AAA": ["a", "b"]}))
+            fit_regional_mutation_rate_models(ht)
+            if penalty is None
+            else fit_regional_mutation_rate_models(ht, penalty)
         )["AAA"]
-        assert self._gradient(rows, model) == pytest.approx([0, 0, 0], abs=1e-8)
+        assert self._gradient(rows, model, penalty or 0.0) == pytest.approx(
+            [0, 0, 0], abs=1e-8
+        )
         _, x = _arrays(rows, ["a", "b"])
         assert model.mean == pytest.approx(list(x.mean(axis=0)))
         assert model.sd == pytest.approx(list(x.std(axis=0)))
@@ -258,18 +283,75 @@ class TestFitRegionalMutationRateModels:
         assert model.converged
         assert self._gradient(rows, model) == pytest.approx([0, 0, 0, 0], abs=1e-8)
 
+    def test_step_halving_with_a_penalty(self) -> None:
+        """
+        Test that a penalized fit reaches the minimum where full Newton steps cycle.
+
+        Without a penalty the log loss of these rows has no minimum; with one it
+        does, but full steps overshoot and cycle, so a step that raises the
+        objective has to be halved.
+        """
+        rows = _separated_rows()
+        model = _models(
+            fit_regional_mutation_rate_models(
+                _prepared(rows, {"AAA": ["a", "b", "c"]}), 0.01
+            )
+        )["AAA"]
+        assert model.converged
+        assert self._gradient(rows, model, 0.01) == pytest.approx(
+            [0, 0, 0, 0], abs=1e-8
+        )
+
+    def test_penalized_fit_can_round_probabilities(self) -> None:
+        """
+        Test that a penalized fit isn't flagged for fitted probabilities of 0 or 1.
+
+        With a penalty of 1e-5 the separated rows have a minimum, but one row's
+        fitted probability rounds to 0 or 1 there. Only an unpenalized fit with such
+        rows has no minimum.
+        """
+        rows = _separated_rows()
+        model = _models(
+            fit_regional_mutation_rate_models(
+                _prepared(rows, {"AAA": ["a", "b", "c"]}), 1e-5
+            )
+        )["AAA"]
+        assert model.converged
+        assert self._gradient(rows, model, 1e-5) == pytest.approx(
+            [0, 0, 0, 0], abs=1e-8
+        )
+
+    @pytest.mark.parametrize("penalty", [-1.0, float("nan")])
+    def test_penalty_must_be_at_least_0(self, penalty: float) -> None:
+        """
+        Test that the fit and the tuning reject a negative or NaN penalty.
+
+        A negative penalty rewards large coefficients, and a NaN penalty makes the
+        models NaN. Tuning with no penalties raises too.
+        """
+        ht = _prepared(_training_rows(), {"AAA": ["a", "b"]}, fold=True)
+        with pytest.raises(ValueError, match="at least 0"):
+            fit_regional_mutation_rate_models(ht, penalty)
+        with pytest.raises(ValueError, match="at least 0"):
+            tune_regional_mutation_rate_penalty(ht, [0.3, penalty])
+        with pytest.raises(ValueError, match="No ridge penalties"):
+            tune_regional_mutation_rate_penalty(ht, [])
+
     @pytest.mark.parametrize("value", [float("nan"), float("inf")])
     def test_non_finite_features_raise(self, value: float) -> None:
         """
-        Test that a NaN or infinite feature value makes the fit raise.
+        Test that a NaN or infinite feature value makes the fit and the tuning raise.
 
         NaN counts as defined in Hail, so such a row survived the missing-value
         filter and made its context's model NaN.
         """
         rows = _training_rows()
         rows[3]["a"] = value
+        ht = _prepared(rows, {"AAA": ["a", "b"]}, fold=True)
         with pytest.raises(ValueError, match="1 training rows have a NaN or infinite"):
-            fit_regional_mutation_rate_models(_prepared(rows, {"AAA": ["a", "b"]}))
+            fit_regional_mutation_rate_models(ht)
+        with pytest.raises(ValueError, match="NaN or infinite"):
+            tune_regional_mutation_rate_penalty(ht, [0.3])
 
     def test_stopped_while_halving_keeps_the_last_accepted_point(self) -> None:
         """
@@ -497,6 +579,7 @@ class TestNewtonUpdate:
         return {
             "intercept": 0.0,
             "coefs": [1.0],
+            "penalty": 0.1,
             "n": 1000,
             "objective": 0.5,
             "start": np.array([0.0, 1.2]),
@@ -508,11 +591,12 @@ class TestNewtonUpdate:
     def _sums(
         model: dict, objective: float, h: Optional[List[float]] = None
     ) -> hl.Struct:
-        """Return sums whose loss gives the model this mean log loss."""
+        """Return sums whose loss gives the model this objective at its coefficients."""
+        penalty_term = model["penalty"] / 2 * sum(c**2 for c in model["coefs"])
         return hl.Struct(
             g=[1.0, -2.0],
             h=h or [300.0, 0.0, 0.0, 400.0],
-            loss=model["n"] * objective,
+            loss=model["n"] * (objective - penalty_term),
             n_saturated=0,
         )
 
@@ -556,23 +640,24 @@ class TestNewtonUpdate:
         Near the minimum the rounding can exceed a step's real change. Treating it as
         an overshoot halved the step over and over on real data, so fits that full
         Newton steps converged on never converged. The kept point's Newton step is
-        taken from the gradient and Hessian of the mean loss.
+        taken from the gradient and Hessian of the penalized mean loss.
         """
         model = self._model()
         _newton_update(model, self._sums(model, 0.5 + 1e-15), 1e-8)
         assert list(model["start"]) == [0.0, 1.0]
         assert model["objective"] == pytest.approx(0.5 + 1e-15, abs=1e-16)
-        # Gradient -g / n and Hessian h / n.
-        assert list(model["step"]) == pytest.approx([-0.001 / 0.3, 0.002 / 0.4])
+        # Gradient -g / n + penalty * coef and Hessian h / n + penalty, at [0, 1].
+        assert list(model["step"]) == pytest.approx([-0.001 / 0.3, 0.102 / 0.5])
 
     def test_singular_hessian_gives_the_smallest_step(self) -> None:
         """
         Test that a singular Hessian, as from collinear features, still gives a step.
 
         The step is the least-squares solution with the smallest norm: no change in
-        the direction the Hessian has no curvature in.
+        the direction the Hessian has no curvature in. Only an unpenalized Hessian
+        can be singular.
         """
-        model = self._model()
+        model = {**self._model(), "penalty": 0.0}
         _newton_update(model, self._sums(model, 0.4, h=[300.0, 0.0, 0.0, 0.0]), 1e-8)
         assert list(model["step"]) == pytest.approx([-0.001 / 0.3, 0.0])
 
@@ -581,6 +666,220 @@ class TestNewtonUpdate:
         model = {**self._model(), "step": np.array([0.0, 1.5e-8])}
         _newton_update(model, self._sums(model, 0.6), 1e-8)
         assert model["converged"]
+
+
+class TestTuneRegionalMutationRatePenalty:
+    """Test the tune_regional_mutation_rate_penalty function."""
+
+    @staticmethod
+    def _expected_loss(
+        rows: List[Dict], fold: str, penalty: float, features: List[str]
+    ) -> float:
+        """Return a fold's summed log loss under a model fit on the other rows."""
+        rows = [r for r in rows if all(r[f] is not None for f in ["y", *features])]
+        fit_rows = [r for r in rows if r["fold"] != fold]
+        model = _models(
+            fit_regional_mutation_rate_models(
+                _prepared(fit_rows, {rows[0]["context"]: features}), penalty
+            )
+        )[rows[0]["context"]]
+        y, x = _arrays([r for r in rows if r["fold"] == fold], features)
+        return _log_loss(y, _predict(model, x))
+
+    @pytest.mark.parametrize("features", [["a", "b"], {"AAA": ["a", "b"]}])
+    def test_held_out_log_loss(
+        self, features: Union[List[str], Dict[str, List[str]]]
+    ) -> None:
+        """
+        Test that each fold is scored, at each penalty, by a model of the other folds.
+
+        Rows with a missing fold are used for fitting but not scored, and rows
+        missing the label or a feature are neither. The features can be one list or
+        a dict per context.
+        """
+        rows = _training_rows(seed=2)
+        for r in rows[:200]:
+            r["fold"] = None
+        for r in rows[200:220]:
+            r["a"] = None
+        for r in rows[220:230]:
+            r["y"] = None
+        penalties = [0.3, 30.0]
+        tuning = {
+            (r.penalty, r.fold): r
+            for r in tune_regional_mutation_rate_penalty(
+                _prepared(rows, features, fold=True), penalties
+            ).collect()
+        }
+        assert sorted(tuning) == [(p, f) for p in penalties for f in ["even", "odd"]]
+        assert sum(r.n_test for r in tuning.values()) == 2 * (len(rows) - 230)
+        for (penalty, fold), r in tuning.items():
+            assert r.log_loss == pytest.approx(
+                self._expected_loss(rows, fold, penalty, ["a", "b"]), rel=1e-6
+            )
+
+    def test_contexts_and_expressions(self) -> None:
+        """
+        Test that each context is tuned on its own rows, with other expressions.
+
+        A held-out fold with only one label is still scored.
+        """
+        aaa = _training_rows(seed=2)
+        acg = _training_rows(seed=3, context="ACG")
+        only_background = [
+            {**r, "fold": "only_background"} for r in acg if r["y"] == 0
+        ][:100]
+        ht = _training_ht(aaa + acg + only_background)
+        ht = ht.rename({"y": "label", "context": "ctx", "fold": "split"})
+        tuning = {
+            (r.context, r.fold): r
+            for r in tune_regional_mutation_rate_penalty(
+                prepare_regional_mutation_rate_training_ht(
+                    ht,
+                    {"AAA": ["a", "b"], "ACG": ["a", "b"]},
+                    label_expr=ht.label,
+                    context_expr=ht.ctx,
+                    fold_expr=ht.split,
+                ),
+                [0.3],
+            ).collect()
+        }
+        assert sorted(tuning) == [
+            ("AAA", "even"),
+            ("AAA", "odd"),
+            ("ACG", "even"),
+            ("ACG", "odd"),
+            ("ACG", "only_background"),
+        ]
+        assert tuning[("AAA", "odd")].log_loss == pytest.approx(
+            self._expected_loss(aaa, "odd", 0.3, ["a", "b"]), rel=1e-6
+        )
+        acg_rows = acg + only_background
+        row = tuning[("ACG", "only_background")]
+        assert row.n_test == 100
+        assert row.log_loss == pytest.approx(
+            self._expected_loss(acg_rows, "only_background", 0.3, ["a", "b"]),
+            rel=1e-6,
+        )
+
+    def test_one_fold(self) -> None:
+        """Test that nothing is scored when every row is in one fold."""
+        rows = [{**r, "fold": "even"} for r in _training_rows()]
+        ht = tune_regional_mutation_rate_penalty(
+            _prepared(rows, {"AAA": ["a", "b"]}, fold=True), [0.01, 1000.0]
+        )
+        assert ht.count() == 0
+        assert list(ht.row) == ["penalty", "context", "fold", "n_test", "log_loss"]
+
+    def test_non_converged_fits_warn(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that tuning fits that don't converge are counted, with penalties."""
+        with caplog.at_level(logging.WARNING):
+            tune_regional_mutation_rate_penalty(
+                _prepared(_training_rows(seed=2), {"AAA": ["a", "b"]}, fold=True),
+                [0.3],
+                max_iter=1,
+            )
+        assert any(
+            m.startswith("2 of 2 tuning models") and "penalties [0.3]" in m
+            for m in _warnings(caplog)
+        )
+
+    def test_repeated_penalty_is_tried_once(self) -> None:
+        """
+        Test that a penalty listed twice gets one row per context and fold.
+
+        Two rows would double its summed loss when the penalty is chosen.
+        """
+        ht = tune_regional_mutation_rate_penalty(
+            _prepared(_training_rows(seed=2), {"AAA": ["a", "b"]}, fold=True),
+            [0.3, 0.3],
+        )
+        assert ht.aggregate(hl.agg.counter(ht.penalty)) == {0.3: 2}
+
+    def test_too_strong_penalty_loses(self) -> None:
+        """Test that a penalty that flattens a real effect has a higher held-out loss."""
+        ht = tune_regional_mutation_rate_penalty(
+            _prepared(_training_rows(seed=2), {"AAA": ["a", "b"]}, fold=True),
+            [0.01, 1000.0],
+        )
+        loss = {(r.penalty, r.fold): r.log_loss for r in ht.collect()}
+        for fold in ["even", "odd"]:
+            assert loss[(0.01, fold)] < loss[(1000.0, fold)]
+
+
+class TestChooseRegionalMutationRatePenalty:
+    """Test the choose_regional_mutation_rate_penalty function."""
+
+    ROWS = [
+        (0.1, "AAA", 5.0),
+        (0.1, "ACG", 3.0),
+        (0.3, "AAA", 4.0),
+        (0.3, "ACG", 3.5),
+        (1.0, "AAA", 4.0),
+        (1.0, "ACG", 4.0),
+    ]
+    """Summed losses of 8.0, 7.5, and 8.0 for penalties 0.1, 0.3, and 1.0."""
+
+    @classmethod
+    def _tuning_ht(cls, penalties: Optional[List[float]] = None) -> hl.Table:
+        """Return a tuning Table with the rows of the given penalties."""
+        return hl.Table.parallelize(
+            [
+                {"penalty": p, "context": c, "fold": "odd", "n_test": 10, "log_loss": l}
+                for p, c, l in cls.ROWS
+                if penalties is None or p in penalties
+            ],
+            hl.tstruct(
+                penalty=hl.tfloat64,
+                context=hl.tstr,
+                fold=hl.tstr,
+                n_test=hl.tint64,
+                log_loss=hl.tfloat64,
+            ),
+            key=["penalty", "context", "fold"],
+        )
+
+    def test_lowest_summed_loss(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that the penalty with the lowest loss summed over contexts is chosen."""
+        with caplog.at_level(logging.WARNING):
+            assert choose_regional_mutation_rate_penalty(self._tuning_ht(), 1.0) == 0.3
+        assert not _warnings(caplog)
+
+    @pytest.mark.parametrize("penalties", [[0.1, 0.3], [0.3, 1.0]])
+    def test_end_of_grid_warns(
+        self, caplog: pytest.LogCaptureFixture, penalties: List[float]
+    ) -> None:
+        """Test that a chosen penalty at either end of those tried logs a warning."""
+        with caplog.at_level(logging.WARNING):
+            assert (
+                choose_regional_mutation_rate_penalty(self._tuning_ht(penalties), 1.0)
+                == 0.3
+            )
+        assert any("at the end of those tried" in m for m in _warnings(caplog))
+
+    def test_tie_goes_to_the_smaller_penalty(self) -> None:
+        """Test that of penalties with the same summed loss, the smaller is chosen."""
+        assert (
+            choose_regional_mutation_rate_penalty(self._tuning_ht([0.1, 1.0]), 0.3)
+            == 0.1
+        )
+
+    def test_one_penalty(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that a single penalty tried is returned without a warning."""
+        with caplog.at_level(logging.WARNING):
+            assert (
+                choose_regional_mutation_rate_penalty(self._tuning_ht([0.3]), 1.0)
+                == 0.3
+            )
+        assert not _warnings(caplog)
+
+    def test_empty(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that the default penalty is returned, with a warning, when empty."""
+        with caplog.at_level(logging.WARNING):
+            assert (
+                choose_regional_mutation_rate_penalty(self._tuning_ht([]), 0.3) == 0.3
+            )
+        assert any("No held-out rows" in m for m in _warnings(caplog))
 
 
 def _features_ht(rows: list) -> hl.Table:

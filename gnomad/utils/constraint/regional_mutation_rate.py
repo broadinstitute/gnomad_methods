@@ -141,15 +141,17 @@ def prepare_regional_mutation_rate_training_ht(
     features: Union[List[str], Dict[str, List[str]]],
     label_expr: Optional[hl.expr.NumericExpression] = None,
     context_expr: Optional[hl.expr.StringExpression] = None,
+    fold_expr: Optional[hl.expr.StringExpression] = None,
 ) -> hl.Table:
     """
-    Prepare a training Table for fitting regional mutation rate models.
+    Prepare a training Table for fitting and tuning regional mutation rate models.
 
-    Each row gets its 0/1 label, its context, and the values of its features in
-    order: the same ``features`` for every context, or its context's features when
-    ``features`` is a dict. ``features`` is recorded in the globals, so the fit uses
-    the same ones. Rows with a missing value are kept;
-    :func:`fit_regional_mutation_rate_models` leaves them out.
+    Each row gets its 0/1 label, its context, its fold if ``fold_expr`` is given, and
+    the values of its features in order: the same ``features`` for every context, or
+    its context's features when ``features`` is a dict. ``features`` is recorded in
+    the globals, so the fit and the tuning use the same ones. Rows with a missing
+    value are kept; :func:`fit_regional_mutation_rate_models` and
+    :func:`tune_regional_mutation_rate_penalty` leave them out.
 
     :param ht: Training Table with the feature fields.
     :param features: Feature fields to model, which must be numeric or boolean and
@@ -158,9 +160,12 @@ def prepare_regional_mutation_rate_training_ht(
     :param label_expr: 0/1 label of each row (1 for a site with a DNM), a number or a
         boolean. Default is ``ht.y``.
     :param context_expr: Context of each row. Default is ``ht.context``.
-    :return: Table keyed as ``ht`` with only ``label`` (float64), ``context``, and
-        ``x``, the float64 values of the row's features in order (missing, with a
-        dict, for a context not in it). Its only global is ``features``.
+    :param fold_expr: Fold of each row, e.g. odd or even chromosomes, needed for
+        :func:`tune_regional_mutation_rate_penalty`. Default is None.
+    :return: Table keyed as ``ht`` with only ``label`` (float64), ``context``,
+        ``fold`` (if ``fold_expr`` is given), and ``x``, the float64 values of the
+        row's features in order (missing, with a dict, for a context not in it). Its
+        only global is ``features``.
     """
     # hl.float64 also parses strings, so a string field would only fail, or be
     # misread, when the models are fit.
@@ -192,11 +197,12 @@ def prepare_regional_mutation_rate_training_ht(
     else:
         x = hl.array([hl.float64(ht[f]) for f in features])
         features_expr = hl.literal(list(features), hl.tarray(hl.tstr))
-    ht = ht.select(
-        label=hl.float64(ht.y if label_expr is None else label_expr),
-        context=context_expr,
-        x=x,
-    )
+    fields = {
+        "label": hl.float64(ht.y if label_expr is None else label_expr),
+        "context": context_expr,
+        **({"fold": fold_expr} if fold_expr is not None else {}),
+    }
+    ht = ht.select(**fields, x=x)
 
     return ht.select_globals(features=features_expr)
 
@@ -222,7 +228,8 @@ def _complete_training_rows(
     if missing:
         raise ValueError(
             f"The training Table has no {', '.join(missing)}. Prepare it with"
-            " prepare_regional_mutation_rate_training_ht."
+            " prepare_regional_mutation_rate_training_ht"
+            + (", with a fold_expr." if "fold" in missing else ".")
         )
     ht = ht.filter(
         hl.is_defined(ht.label) & hl.is_defined(ht.x) & hl.all(hl.is_defined, ht.x)
@@ -251,6 +258,7 @@ def _complete_training_rows(
 def _init_logistic_models(
     ht: hl.Table,
     group_features: Dict[str, List[str]],
+    ridge_penalties: Dict[str, float],
     log: bool,
 ) -> Dict[str, Dict[str, Any]]:
     """
@@ -265,6 +273,7 @@ def _init_logistic_models(
     :param ht: Complete training rows (:func:`_complete_training_rows`) with a
         ``group`` field.
     :param group_features: Features of each group, in the order of its rows' ``x``.
+    :param ridge_penalties: Per-row ridge penalty of each group.
     :param log: Whether to log groups without a model and features left out.
     :return: Dictionary of group to model, for the groups that have one.
     """
@@ -311,7 +320,8 @@ def _init_logistic_models(
             "intercept": float(np.log(n_mutated / (s.n - n_mutated))),
             "coefs": [0.0] * len(keep),
             "converged": False,
-            # The mean log loss at the last accepted coefficients (none yet).
+            "penalty": ridge_penalties[group],
+            # The objective at the last accepted coefficients (none yet).
             "objective": np.inf,
         }
     if models:
@@ -399,14 +409,16 @@ def _newton_sums(
 
 def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
     """
-    Take one step of Newton's method, with step halving, on a model's mean log loss.
+    Take one step of Newton's method, with step halving, on a model's objective.
 
-    If the last step raised the mean log loss by more than the rounding in its sum,
-    the step overshot, so the model goes back and takes half of it. Otherwise the
-    next Newton step is taken from the current coefficients. The step is solved by
-    least squares, so collinear features, which leave the Hessian singular, still
-    give the smallest step that solves it. The model has converged when a step, full
-    or halved, changes no coefficient by more than ``tol``.
+    The objective is mean log loss + ``penalty`` / 2 * sum(coef ** 2), with the
+    intercept unpenalized. If the last step raised it by more than the rounding in
+    the summed loss, the step overshot, so the model goes back and takes half of it.
+    Otherwise the next Newton step is taken from the current coefficients. The step
+    is solved by least squares, so collinear features, which leave an unpenalized
+    Hessian singular, still give the smallest step that solves it. The model has
+    converged when a step, full or halved, changes no coefficient by more than
+    ``tol``.
 
     :param model: Model to update in place.
     :param sums: The model's loss, gradient, and Hessian sums (:func:`_newton_sums`).
@@ -415,7 +427,9 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
     """
     k = len(model["coefs"]) + 1
     beta = np.array([model["intercept"], *model["coefs"]])
-    objective = sums.loss / model["n"]
+    # Penalize every coefficient but the intercept.
+    penalty = model["penalty"] * np.r_[0.0, np.ones(k - 1)]
+    objective = sums.loss / model["n"] + np.sum(penalty * beta**2) / 2
     # Near the minimum, rounding in the mean loss can be larger than a step's real
     # change, so a smaller rise isn't an overshoot. Summing n rows rounds by up to
     # about n * eps of the sum, and each row's loss by about eps on its own.
@@ -425,8 +439,8 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
         model["step"] = model["step"] / 2
         model["converged"] = bool(np.max(np.abs(model["step"])) < tol)
     else:
-        grad = -np.array(sums.g) / model["n"]
-        hess = np.array(sums.h).reshape(k, k) / model["n"]
+        grad = -np.array(sums.g) / model["n"] + penalty * beta
+        hess = np.array(sums.h).reshape(k, k) / model["n"] + np.diag(penalty)
         model["objective"] = objective
         model["n_saturated"] = sums.n_saturated
         model["start"] = beta
@@ -440,24 +454,28 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
 def _fit_logistic_models(
     ht: hl.Table,
     group_features: Dict[str, List[str]],
+    ridge_penalties: Dict[str, float],
     max_iter: int,
     tol: float,
     log: bool = True,
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Fit a logistic model for each group of rows of a prepared Table.
+    Fit a logistic model, with a ridge penalty, for each group of a prepared Table.
 
-    All groups are fit together by Newton's method (:func:`_newton_update`), with one
+    A group is a context, or, when tuning, a context in one penalty and fold. All
+    groups are fit together by Newton's method (:func:`_newton_update`), with one
     pass over ``ht`` per step. A model whose last step was halved, because it
-    converged that way or ran out of steps, keeps its last accepted coefficients. A
-    model with a fitted probability numerically 0 or 1 at those coefficients is
-    marked not converged: its features separate the labels, at least in part, so the
-    log loss has no minimum and the coefficients grow until the probabilities round
-    off. R's glm.fit warns about the same fitted probabilities.
+    converged that way or ran out of steps, keeps its last accepted coefficients. An
+    unpenalized model with a fitted probability numerically 0 or 1 at those
+    coefficients is marked not converged: its features separate the labels, at least
+    in part, so the log loss has no minimum and the coefficients grow until the
+    probabilities round off. R's glm.fit warns about the same fitted probabilities.
+    A penalty gives the objective a minimum, so penalized models aren't checked.
 
     :param ht: Complete training rows (:func:`_complete_training_rows`) with a
         ``group`` field.
     :param group_features: Features of each group, in the order of its rows' ``x``.
+    :param ridge_penalties: Per-row ridge penalty of each group, 0 for none.
     :param max_iter: Maximum number of passes over ``ht`` for Newton steps,
         including halved ones.
     :param tol: A fit has converged when a step, full or halved, changes no
@@ -466,7 +484,7 @@ def _fit_logistic_models(
         that don't converge. Default is True.
     :return: Dictionary of group to model, for the groups that have one.
     """
-    models = _init_logistic_models(ht, group_features, log)
+    models = _init_logistic_models(ht, group_features, ridge_penalties, log)
     if not models:
         return models
 
@@ -485,12 +503,13 @@ def _fit_logistic_models(
         if model.get("halving"):
             model["intercept"] = float(model["start"][0])
             model["coefs"] = model["start"][1:].tolist()
-        if model.get("n_saturated"):
+        model["separated"] = bool(model.get("n_saturated")) and not model["penalty"]
+        if model["separated"]:
             model["converged"] = False
 
     if log:
         for group, model in models.items():
-            if model.get("n_saturated"):
+            if model["separated"]:
                 logger.warning(
                     "The model fit for %s did not converge: %d training rows have a"
                     " fitted probability of 0 or 1, so its features separate the"
@@ -505,8 +524,23 @@ def _fit_logistic_models(
     return models
 
 
+def _check_penalties(penalties: List[float]) -> None:
+    """
+    Check that every ridge penalty is at least 0.
+
+    :param penalties: Per-row ridge penalties.
+    :return: None.
+    """
+    if not penalties:
+        raise ValueError("No ridge penalties were given.")
+    negative = [p for p in penalties if not p >= 0]
+    if negative:
+        raise ValueError(f"Ridge penalties must be at least 0, not {negative}.")
+
+
 def fit_regional_mutation_rate_models(
     ht: hl.Table,
+    ridge_penalty: float = 0.0,
     max_iter: int = 50,
     tol: float = 1e-8,
 ) -> hl.Table:
@@ -516,23 +550,27 @@ def fit_regional_mutation_rate_models(
     For each context, rows missing the label or any of its features are dropped, and
     features with a single value in the remaining rows are left out, since they carry
     no information and can't be standardized. The features are standardized with
-    their mean and standard deviation (ddof=0), and the fit minimizes the mean log
-    loss. A site's linear predictor is ``intercept + sum(coefs * (x - mean) / sd)``.
+    their mean and standard deviation (ddof=0), and the fit minimizes mean log loss +
+    ``ridge_penalty`` / 2 * sum(coef ** 2), with the intercept unpenalized. A site's
+    linear predictor is ``intercept + sum(coefs * (x - mean) / sd)``.
 
     The fit is by Newton's method, and each step is a pass over ``ht``, so ``ht``
-    should be read from disk or checkpointed. A step that raises the loss is halved
-    and tried again. A fit whose last step was halved, because the halved step fell
-    below ``tol`` or ``max_iter`` ran out, keeps its last accepted coefficients.
-    Each step is solved by least squares, so collinear features still fit: their
-    coefficients aren't unique, but the model's predictions are. Features that
-    separate the labels, even in part, leave the loss without a minimum, and the
-    coefficients grow until some fitted probabilities are numerically 0 or 1; such a
-    fit is marked not converged. Contexts with no model, features left out because
-    they are constant, and fits that don't converge are logged. Feature values must
-    be finite: a NaN or infinite value raises an error.
+    should be read from disk or checkpointed. A step that raises the objective is
+    halved and tried again. A fit whose last step was halved, because the halved
+    step fell below ``tol`` or ``max_iter`` ran out, keeps its last accepted
+    coefficients. Each step is solved by least squares, so collinear features still
+    fit without a penalty: their coefficients aren't unique, but the model's
+    predictions are. Without a penalty, features that separate the labels, even in
+    part, leave the loss without a minimum, and the coefficients grow until some
+    fitted probabilities are numerically 0 or 1; such a fit is marked not converged.
+    Contexts with no model, features left out because they are constant, and fits
+    that don't converge are logged. Feature values must be finite: a NaN or infinite
+    value raises an error.
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`.
+    :param ridge_penalty: Per-row ridge penalty, at least 0. Default is 0.0, no
+        penalty.
     :param max_iter: Maximum number of Newton steps, including halved ones. Default
         is 50.
     :param tol: The fit has converged when a step, full or halved, changes no
@@ -543,9 +581,14 @@ def fit_regional_mutation_rate_models(
         ``n_mutated`` and ``n_background`` (rows of each label), and ``converged``
         (see :data:`MODELS_HT_SCHEMA`).
     """
+    _check_penalties([ridge_penalty])
     ht, context_features = _complete_training_rows(ht, ["label", "context", "x"])
     models = _fit_logistic_models(
-        ht.annotate(group=ht.context), context_features, max_iter, tol
+        ht.annotate(group=ht.context),
+        context_features,
+        dict.fromkeys(context_features, ridge_penalty),
+        max_iter,
+        tol,
     )
 
     return hl.Table.parallelize(
@@ -567,6 +610,190 @@ def fit_regional_mutation_rate_models(
         MODELS_HT_SCHEMA,
         key="context",
     )
+
+
+def _rows_by_fit(ht: hl.Table, fits: List[hl.Struct], held_out: bool) -> hl.Table:
+    """
+    Copy each training row into every fit it is a training, or held-out, row of.
+
+    Fit ``i`` trains on the rows outside ``fits[i].fold`` (including rows with a
+    missing fold) and is scored on the rows in it.
+
+    :param ht: Complete training rows (:func:`_complete_training_rows`) with a
+        ``fold``.
+    :param fits: Penalty and fold of each fit.
+    :param held_out: Whether to copy each row into the fits it is held out of,
+        rather than those it trains.
+    :return: ``ht`` with one row per row and fit, and a ``group`` field naming the
+        fit and the row's context, ``"{i}|{context}"``.
+    """
+    fit_folds = hl.literal([fit.fold for fit in fits], hl.tarray(hl.tstr))
+    # A row with a missing fold trains every fit and is never held out.
+    fit_ids = hl.range(len(fits)).filter(
+        lambda i: (
+            (fit_folds[i] == ht.fold)
+            if held_out
+            else hl.or_else(fit_folds[i] != ht.fold, True)
+        )
+    )
+    ht = ht.annotate(fit=fit_ids).explode("fit")
+
+    return ht.annotate(group=hl.str(ht.fit) + "|" + ht.context)
+
+
+def _held_out_log_loss(
+    ht: hl.Table, models: Dict[str, Dict[str, Any]]
+) -> Dict[str, hl.Struct]:
+    """
+    Sum each group's log loss under its model, in one pass over ``ht``.
+
+    :param ht: Held-out rows with a ``group`` field (:func:`_rows_by_fit`).
+    :param models: Models by group; groups without one are skipped.
+    :return: Dictionary of group to a struct with the number of rows (``n_test``)
+        and their summed log loss (``log_loss``).
+    """
+    model_expr = _models_by_group_expr(models).get(ht.group)
+    eta = _linear_predictor_expr(_standardized_expr(ht.x, model_expr), model_expr)
+
+    return ht.aggregate(
+        hl.agg.filter(
+            hl.is_defined(model_expr),
+            hl.agg.group_by(
+                ht.group,
+                hl.struct(
+                    n_test=hl.agg.count(),
+                    log_loss=hl.agg.sum(_log_loss_expr(ht.label, eta)),
+                ),
+            ),
+        )
+    )
+
+
+def tune_regional_mutation_rate_penalty(
+    ht: hl.Table,
+    penalties: List[float],
+    max_iter: int = 50,
+    tol: float = 1e-8,
+) -> hl.Table:
+    """
+    Get the held-out log loss of regional mutation rate models for each ridge penalty.
+
+    For each penalty, context, and fold, the context's model is fit on the rows
+    outside the fold (:func:`fit_regional_mutation_rate_models`) and scored on the
+    rows in it. Rows with a missing fold are only used for fitting. All the fits are
+    made together, with one pass over every fit's rows per Newton step, so ``ht``
+    should be read from disk or checkpointed. Fits that don't converge are counted,
+    with their penalties, in a warning and still scored. Feature values must be
+    finite: a NaN or infinite value raises an error.
+
+    :param ht: Training Table from
+        :func:`prepare_regional_mutation_rate_training_ht`, with a ``fold``.
+    :param penalties: Per-row ridge penalties to try, each at least 0. Repeats are
+        tried once.
+    :param max_iter: Maximum number of Newton steps per fit, including halved ones.
+        Default is 50.
+    :param tol: Convergence tolerance of each fit. Default is 1e-8.
+    :return: Table keyed by ``penalty`` (float64), ``context`` (str), and ``fold``
+        (str), with the number of held-out rows with no missing label or feature
+        (``n_test``, int64) and their summed log loss (``log_loss``, float64). A
+        context and fold with no model (its training rows have only one label, or no
+        feature varies) or no held-out rows has no rows, at every penalty alike, so
+        each penalty's loss is summed over the same contexts and folds. The Table is
+        empty when no held-out rows could be scored.
+    """
+    _check_penalties(penalties)
+    ht, context_features = _complete_training_rows(
+        ht, ["label", "context", "fold", "x"]
+    )
+    folds = sorted(ht.aggregate(hl.agg.collect_as_set(ht.fold)) - {None})
+    # One fit per penalty and fold, on the rows outside the fold. They are all fit,
+    # and scored, together: each row is copied into every fit it belongs to.
+    fits = [
+        hl.Struct(penalty=p, fold=f)
+        for p in sorted({float(p) for p in penalties})
+        for f in folds
+    ]
+    # Each context in each fit is its own model, so its own group.
+    groups = {
+        f"{i}|{c}": hl.Struct(**fit, context=c, features=features)
+        for i, fit in enumerate(fits)
+        for c, features in context_features.items()
+    }
+    models = _fit_logistic_models(
+        _rows_by_fit(ht, fits, held_out=False),
+        {g: group.features for g, group in groups.items()},
+        {g: group.penalty for g, group in groups.items()},
+        max_iter,
+        tol,
+        log=False,
+    )
+    not_converged = [g for g, m in models.items() if not m["converged"]]
+    if not_converged:
+        logger.warning(
+            "%d of %d tuning models (one per penalty, fold, and context) did not"
+            " converge, at penalties %s; they are still scored.",
+            len(not_converged),
+            len(models),
+            sorted({groups[g].penalty for g in not_converged}),
+        )
+    scores = _held_out_log_loss(_rows_by_fit(ht, fits, held_out=True), models)
+
+    return hl.Table.parallelize(
+        [
+            {
+                "penalty": groups[g].penalty,
+                "context": groups[g].context,
+                "fold": groups[g].fold,
+                **score,
+            }
+            for g, score in scores.items()
+        ],
+        hl.tstruct(
+            penalty=hl.tfloat64,
+            context=hl.tstr,
+            fold=hl.tstr,
+            n_test=hl.tint64,
+            log_loss=hl.tfloat64,
+        ),
+        key=["penalty", "context", "fold"],
+    )
+
+
+def choose_regional_mutation_rate_penalty(
+    ht: hl.Table, default_penalty: float
+) -> float:
+    """
+    Choose the ridge penalty with the lowest held-out log loss.
+
+    The log loss is summed over contexts and folds, so one penalty is chosen for
+    every context; on a tie, the smaller penalty is chosen. A warning is logged when
+    the chosen penalty is at either end of those tried, since the best one may then
+    lie outside them.
+
+    :param ht: Held-out log loss per penalty
+        (:func:`tune_regional_mutation_rate_penalty`).
+    :param default_penalty: Penalty returned, with a warning, when ``ht`` is empty.
+    :return: Chosen per-row ridge penalty.
+    """
+    loss = ht.aggregate(hl.agg.group_by(ht.penalty, hl.agg.sum(ht.log_loss)))
+    if not loss:
+        logger.warning(
+            "No held-out rows to score the ridge penalties on; using %s.",
+            default_penalty,
+        )
+        return default_penalty
+
+    tried = sorted(loss)
+    # min keeps the first of tied penalties, so the smallest.
+    penalty = min(tried, key=lambda p: loss[p])
+    if len(tried) > 1 and penalty in (tried[0], tried[-1]):
+        logger.warning(
+            "The chosen ridge penalty %s is at the end of those tried (%s).",
+            penalty,
+            tried,
+        )
+
+    return penalty
 
 
 def _model_rate_expr(

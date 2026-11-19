@@ -163,6 +163,7 @@ def explode_intervals_to_loci(
     interval(s).
 
     .. warning::
+
         - Overlapping intervals will produce duplicate loci. Use ``deduplicate=True``
           (default) to remove them.
         - When ``keep_intervals=True`` on a Table input, deduplication is not possible
@@ -172,7 +173,8 @@ def explode_intervals_to_loci(
           chromosomes), as it will create extremely large arrays, which may cause
           performance issues.
 
-    Note that intervals that cross chromosomes are currently not supported.
+    Intervals that span chromosomes are not supported and raise an error when the
+    result is evaluated.
 
     :param intervals: Table, IntervalExpression, or ArrayExpression of
         IntervalExpressions.
@@ -203,32 +205,31 @@ def explode_intervals_to_loci(
         " IntervalExpressions!"
     )
 
-    if isinstance(intervals, hl.Table) and (
-        not interval_field or keep_intervals is None
-    ):
-        raise ValueError(
-            "`interval_field` and `keep_intervals` must be defined if input is a Table!"
-        )
-    if isinstance(intervals, hl.Table):
-        if interval_field not in intervals.row:
-            raise ValueError(
-                "`interval_field` must be an annotation present on input Table!"
-            )
-        if not isinstance(intervals[interval_field], hl.expr.IntervalExpression):
-            raise ValueError(
-                f"`interval_field` '{interval_field}' must be an IntervalExpression"
-                " in the input Table!"
-            )
-
     def _make_loci_array(interval_expr):
-        return interval_to_pos_range(interval_expr).map(
-            lambda pos: hl.locus(
-                interval_expr.start.contig,
-                pos,
-                reference_genome=interval_expr.start.dtype.reference_genome,
+        return (
+            hl.case()
+            .when(
+                interval_expr.start.contig == interval_expr.end.contig,
+                interval_to_pos_range(interval_expr).map(
+                    lambda pos: hl.locus(
+                        interval_expr.start.contig,
+                        pos,
+                        reference_genome=interval_expr.start.dtype.reference_genome,
+                    )
+                ),
             )
+            .or_error("Cross-chromosome intervals are not supported.")
         )
 
+    # Handle IntervalExpression.
+    if isinstance(intervals, hl.expr.IntervalExpression):
+        logger.info(
+            "Input is an IntervalExpression, so function will return an"
+            " ArrayExpression of loci within the input interval."
+        )
+        return _make_loci_array(intervals)
+
+    # Handle ArrayExpression.
     if isinstance(intervals, hl.expr.ArrayExpression):
         logger.info(
             "Input is an ArrayExpression of IntervalExpressions, so function will"
@@ -240,7 +241,6 @@ def explode_intervals_to_loci(
                 " in the returned ArrayExpression. Set `deduplicate=True` to remove"
                 " them."
             )
-
         loci_arrays = intervals.map(lambda i: _make_loci_array(i))
         if flatten:
             result = hl.flatten(loci_arrays)
@@ -251,44 +251,46 @@ def explode_intervals_to_loci(
         else:
             return loci_arrays
 
-    intervals_expr = (
-        intervals
-        if isinstance(intervals, hl.expr.IntervalExpression)
-        else intervals[interval_field]
-    )
-    loci_array = _make_loci_array(intervals_expr)
+    # Handle Table.
+    if not interval_field or keep_intervals is None:
+        raise ValueError(
+            "`interval_field` and `keep_intervals` must be defined if input is a Table!"
+        )
+    if interval_field not in intervals.row:
+        raise ValueError(
+            "`interval_field` must be an annotation present on input Table!"
+        )
+    if not isinstance(intervals[interval_field], hl.expr.IntervalExpression):
+        raise ValueError(
+            f"`interval_field` '{interval_field}' must be an IntervalExpression"
+            " in the input Table!"
+        )
 
-    if isinstance(intervals, hl.Table):
-        intervals = intervals.annotate(_loci=loci_array).explode("_loci")
-        intervals = intervals.key_by(locus=intervals._loci)
+    intervals = intervals.annotate(
+        _loci=_make_loci_array(intervals[interval_field])
+    ).explode("_loci")
+    intervals = intervals.key_by(locus=intervals._loci)
 
-        fields_to_drop = ["_loci"]
-        if not keep_intervals:
-            fields_to_drop.append(interval_field)
+    fields_to_drop = ["_loci"]
+    if not keep_intervals:
+        fields_to_drop.append(interval_field)
+    intervals = intervals.drop(*fields_to_drop)
 
-        intervals = intervals.drop(*fields_to_drop)
+    if deduplicate:
+        if keep_intervals:
+            logger.warning(
+                "`deduplicate=True` has no effect when `keep_intervals=True`"
+                " because rows with different interval annotations cannot be safely"
+                " collapsed. Duplicate loci may be present in the output if"
+                " intervals overlap."
+            )
+        else:
+            intervals = intervals.distinct()
+            logger.warning(
+                "The `distinct()` call will arbitrarily select one row for each"
+                " duplicated locus. If the input table has annotations such as gene"
+                " or transcript ID, the values retained for duplicated loci are not"
+                " deterministic."
+            )
 
-        if deduplicate:
-            if keep_intervals:
-                logger.warning(
-                    "`deduplicate=True` has no effect when `keep_intervals=True`"
-                    " because rows with different interval annotations cannot be safely"
-                    " collapsed. Duplicate loci may be present in the output if"
-                    " intervals overlap."
-                )
-            else:
-                intervals = intervals.distinct()
-                logger.warning(
-                    "The `distinct()` call will arbitrarily select one row for each"
-                    " duplicated locus. If the input table has annotations such as gene"
-                    " or transcript ID, the values retained for duplicated loci are not"
-                    " deterministic."
-                )
-
-        return intervals
-
-    logger.info(
-        "Input is an IntervalExpression, so function will return an ArrayExpression of"
-        " loci within the input interval."
-    )
-    return loci_array
+    return intervals

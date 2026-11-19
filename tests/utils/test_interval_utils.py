@@ -7,14 +7,41 @@ import pytest
 
 from gnomad.utils.intervals import explode_intervals_to_loci
 
+# Endpoint inclusion cases for chr1:100-105.
+INCLUSION_CASES = pytest.mark.parametrize(
+    "includes_start,includes_end,expected_range",
+    [
+        (True, True, range(100, 106)),
+        (False, True, range(101, 106)),
+        (True, False, range(100, 105)),
+        (False, False, range(101, 105)),
+    ],
+    ids=["incl_both", "excl_start", "excl_end", "excl_both"],
+)
+
 
 class TestExplodeIntervalsToLoci:
     """Test the explode_intervals_to_loci function."""
 
     @pytest.fixture
-    def sample_interval_table(self):
+    def make_interval_table(self):
+        """Return a factory that builds a GRCh38 Table with one row per interval."""
+
+        def _make(*intervals):
+            return hl.Table.parallelize(
+                [
+                    {"interval": interval, "gene": f"GENE{i}"}
+                    for i, interval in enumerate(intervals, start=1)
+                ],
+                hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
+            )
+
+        return _make
+
+    @pytest.fixture
+    def sample_interval_table(self, make_interval_table):
         """Fixture to create a sample Hail Table with intervals."""
-        intervals = [
+        return make_interval_table(
             hl.interval(
                 start=hl.locus("chr1", 100, "GRCh38"),
                 end=hl.locus("chr1", 105, "GRCh38"),
@@ -27,15 +54,23 @@ class TestExplodeIntervalsToLoci:
                 includes_start=True,
                 includes_end=False,
             ),
-        ]
-        return hl.Table.parallelize(
-            [
-                {"interval": intervals[0], "gene": "GENE1"},
-                {"interval": intervals[1], "gene": "GENE2"},
-            ],
-            hl.tstruct(
-                interval=hl.tinterval(hl.tlocus("GRCh38")),
-                gene=hl.tstr,
+        )
+
+    @pytest.fixture
+    def overlapping_interval_table(self, make_interval_table):
+        """Fixture with chr1:100-102 (GENE1) and chr1:101-103 (GENE2), overlapping at 101-102."""
+        return make_interval_table(
+            hl.interval(
+                start=hl.locus("chr1", 100, "GRCh38"),
+                end=hl.locus("chr1", 102, "GRCh38"),
+                includes_start=True,
+                includes_end=True,
+            ),
+            hl.interval(
+                start=hl.locus("chr1", 101, "GRCh38"),
+                end=hl.locus("chr1", 103, "GRCh38"),
+                includes_start=True,
+                includes_end=True,
             ),
         )
 
@@ -49,41 +84,68 @@ class TestExplodeIntervalsToLoci:
             includes_end=True,
         )
 
+    @pytest.fixture
+    def single_pos_exclude_both_interval(self):
+        """Single-position interval with both endpoints excluded; represents an empty range."""
+        return hl.interval(
+            hl.locus("chr1", 100, "GRCh38"),
+            hl.locus("chr1", 100, "GRCh38"),
+            includes_start=False,
+            includes_end=False,
+        )
+
+    # --- IntervalExpression input ---
+
+    @INCLUSION_CASES
+    def test_explode_interval_expression_inclusion(
+        self, sample_interval_expr, includes_start, includes_end, expected_range
+    ) -> None:
+        """Test that start/end inclusivity is correctly handled for an IntervalExpression."""
+        interval = hl.interval(
+            sample_interval_expr.start,
+            sample_interval_expr.end,
+            includes_start=includes_start,
+            includes_end=includes_end,
+        )
+        loci = hl.eval(explode_intervals_to_loci(interval))
+        assert loci == [hl.Locus("chr1", pos, "GRCh38") for pos in expected_range]
+
+    def test_explode_interval_expression_single_position_excludes_both(
+        self, single_pos_exclude_both_interval
+    ) -> None:
+        """Test that a single-position interval with both endpoints excluded returns an empty array."""
+        assert (
+            hl.eval(explode_intervals_to_loci(single_pos_exclude_both_interval)) == []
+        )
+
+    # --- Table input ---
+
     def test_explode_table_with_includes_start_and_end(
         self, sample_interval_table: hl.Table
     ) -> None:
-        """Test exploding a table with intervals that include both start and end positions."""
-        result_ht = explode_intervals_to_loci(
-            sample_interval_table, interval_field="interval", keep_intervals=False
-        )
-
-        result = result_ht.collect()
-
-        expected_loci_1 = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
-        expected_loci_2 = [hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)]
-
-        result_loci = [row.locus for row in result]
-        assert len(result_loci) == len(expected_loci_1) + len(expected_loci_2)
-        assert all(locus in result_loci for locus in expected_loci_1)
-        assert all(locus in result_loci for locus in expected_loci_2)
+        """Test exploding a multi-row table with mixed endpoint inclusion across chromosomes."""
+        result_loci = [
+            row.locus
+            for row in explode_intervals_to_loci(
+                sample_interval_table, interval_field="interval", keep_intervals=False
+            ).collect()
+        ]
+        expected = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)] + [
+            hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)
+        ]
+        assert len(result_loci) == len(expected)
+        assert all(locus in result_loci for locus in expected)
 
     def test_explode_table_keep_intervals(
         self, sample_interval_table: hl.Table
     ) -> None:
         """Test that the original interval field is retained when keep_intervals=True."""
-        # Explode the intervals to loci, keeping the interval field.
         result_ht = explode_intervals_to_loci(
             sample_interval_table, interval_field="interval", keep_intervals=True
         )
-
-        # Collect results.
         result = result_ht.collect()
-
-        # Verify that the interval field is still present.
         assert "interval" in result_ht.row
         assert all(hasattr(row, "interval") for row in result)
-
-        # Verify that the locus field is present.
         assert "locus" in result_ht.key
         assert all(hasattr(row, "locus") for row in result)
 
@@ -91,101 +153,43 @@ class TestExplodeIntervalsToLoci:
         self, sample_interval_table: hl.Table
     ) -> None:
         """Test that the interval field is dropped when keep_intervals=False."""
-        # Explode the intervals to loci without keeping the interval field.
         result_ht = explode_intervals_to_loci(
             sample_interval_table, interval_field="interval", keep_intervals=False
         )
-
-        # Collect results.
         result = result_ht.collect()
-
-        # Verify that the interval field is not present.
         assert "interval" not in result_ht.row
         assert all(not hasattr(row, "interval") for row in result)
-
-        # Verify that other fields are still present.
         assert all(hasattr(row, "gene") for row in result)
 
-    def test_explode_interval_expression(
-        self, sample_interval_expr: hl.expr.IntervalExpression
+    @INCLUSION_CASES
+    def test_explode_table_interval_inclusion(
+        self,
+        sample_interval_expr,
+        make_interval_table,
+        includes_start,
+        includes_end,
+        expected_range,
     ) -> None:
-        """Test exploding a single IntervalExpression returns the correct loci."""
-        # Explode the interval expression.
-        result = explode_intervals_to_loci(sample_interval_expr)
-
-        # Evaluate the result.
-        loci = hl.eval(result)
-
-        # Expected loci (chr1:100-105, both inclusive).
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 106)]
-
-        # Verify the result.
-        assert loci == expected_loci
-
-    def test_explode_interval_expression_excludes_start(self) -> None:
-        """Test that the start position is excluded when includes_start=False."""
+        """Test that start/end inclusivity is correctly handled for Table input."""
         interval = hl.interval(
-            hl.locus("chr1", 100, "GRCh38"),
-            hl.locus("chr1", 105, "GRCh38"),
-            includes_start=False,
-            includes_end=True,
+            sample_interval_expr.start,
+            sample_interval_expr.end,
+            includes_start=includes_start,
+            includes_end=includes_end,
         )
+        result_loci = [
+            row.locus
+            for row in explode_intervals_to_loci(
+                make_interval_table(interval),
+                interval_field="interval",
+                keep_intervals=False,
+            ).collect()
+        ]
+        expected = [hl.Locus("chr1", pos, "GRCh38") for pos in expected_range]
+        assert len(result_loci) == len(expected)
+        assert all(locus in result_loci for locus in expected)
 
-        # Explode the interval expression.
-        result = explode_intervals_to_loci(interval)
-
-        # Evaluate the result.
-        loci = hl.eval(result)
-
-        # Expected loci (chr1:101-105, start excluded, end included).
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 106)]
-
-        # Verify the result.
-        assert loci == expected_loci
-
-    def test_explode_interval_expression_excludes_end(self) -> None:
-        """Test that the end position is excluded when includes_end=False."""
-        interval = hl.interval(
-            hl.locus("chr1", 100, "GRCh38"),
-            hl.locus("chr1", 105, "GRCh38"),
-            includes_start=True,
-            includes_end=False,
-        )
-
-        # Explode the interval expression.
-        result = explode_intervals_to_loci(interval)
-
-        # Evaluate the result.
-        loci = hl.eval(result)
-
-        # Expected loci (chr1:100-104, start included, end excluded).
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 105)]
-
-        # Verify the result.
-        assert loci == expected_loci
-
-    def test_explode_interval_expression_excludes_both(self) -> None:
-        """Test that both endpoints are excluded when includes_start and includes_end are False."""
-        interval = hl.interval(
-            hl.locus("chr1", 100, "GRCh38"),
-            hl.locus("chr1", 105, "GRCh38"),
-            includes_start=False,
-            includes_end=False,
-        )
-
-        # Explode the interval expression.
-        result = explode_intervals_to_loci(interval)
-
-        # Evaluate the result.
-        loci = hl.eval(result)
-
-        # Expected loci (chr1:101-104, both excluded).
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 105)]
-
-        # Verify the result.
-        assert loci == expected_loci
-
-    def test_explode_table_single_position_interval(self) -> None:
+    def test_explode_table_single_position_interval(self, make_interval_table) -> None:
         """Test exploding a table with a single-position interval that includes both endpoints."""
         interval = hl.interval(
             start=hl.locus("chr1", 100, "GRCh38"),
@@ -193,26 +197,24 @@ class TestExplodeIntervalsToLoci:
             includes_start=True,
             includes_end=True,
         )
-
-        ht = hl.Table.parallelize(
-            [{"interval": interval, "gene": "GENE1"}],
-            hl.tstruct(
-                interval=hl.tinterval(hl.tlocus("GRCh38")),
-                gene=hl.tstr,
-            ),
-        )
-
-        # Explode the intervals to loci.
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False
-        )
-
-        # Collect results.
-        result = result_ht.collect()
-
-        # Expected: single locus at position 100.
+        result = explode_intervals_to_loci(
+            make_interval_table(interval),
+            interval_field="interval",
+            keep_intervals=False,
+        ).collect()
         assert len(result) == 1
         assert result[0].locus == hl.Locus("chr1", 100, "GRCh38")
+
+    def test_explode_table_single_position_interval_excludes_both(
+        self, single_pos_exclude_both_interval, make_interval_table
+    ) -> None:
+        """Test that a table with a single-position interval excluding both endpoints returns 0 rows."""
+        result_ht = explode_intervals_to_loci(
+            make_interval_table(single_pos_exclude_both_interval),
+            interval_field="interval",
+            keep_intervals=False,
+        )
+        assert result_ht.count() == 0
 
     def test_explode_table_missing_interval_field_raises_error(
         self, sample_interval_table: hl.Table
@@ -253,32 +255,19 @@ class TestExplodeIntervalsToLoci:
             includes_start=True,
             includes_end=True,
         )
-
         ht = hl.Table.parallelize(
             [{"interval": interval, "gene": "GENE1"}],
-            hl.tstruct(
-                interval=hl.tinterval(hl.tlocus("GRCh37")),
-                gene=hl.tstr,
-            ),
+            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh37")), gene=hl.tstr),
         )
-
-        # Explode the intervals to loci.
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False
-        )
-
-        # Collect results.
-        result = result_ht.collect()
-
-        # Expected loci (1000-1003, both inclusive).
-        expected_loci = [hl.Locus("1", pos, "GRCh37") for pos in range(1000, 1004)]
-
-        # Get the loci from the result.
-        result_loci = [row.locus for row in result]
-
-        # Verify the result.
-        assert len(result_loci) == len(expected_loci)
-        assert all(locus in result_loci for locus in expected_loci)
+        result_loci = [
+            row.locus
+            for row in explode_intervals_to_loci(
+                ht, interval_field="interval", keep_intervals=False
+            ).collect()
+        ]
+        expected = [hl.Locus("1", pos, "GRCh37") for pos in range(1000, 1004)]
+        assert len(result_loci) == len(expected)
+        assert all(locus in result_loci for locus in expected)
 
     def test_explode_table_preserves_other_fields(self) -> None:
         """Test that non-interval fields are preserved after exploding."""
@@ -288,7 +277,6 @@ class TestExplodeIntervalsToLoci:
             includes_start=True,
             includes_end=True,
         )
-
         ht = hl.Table.parallelize(
             [{"interval": interval, "gene": "GENE1", "score": 42}],
             hl.tstruct(
@@ -297,19 +285,83 @@ class TestExplodeIntervalsToLoci:
                 score=hl.tint32,
             ),
         )
-
-        # Explode the intervals to loci.
-        result_ht = explode_intervals_to_loci(
+        result = explode_intervals_to_loci(
             ht, interval_field="interval", keep_intervals=False
-        )
-
-        # Collect results.
-        result = result_ht.collect()
-
-        # Verify that other fields are preserved.
+        ).collect()
         assert all(row.gene == "GENE1" for row in result)
         assert all(row.score == 42 for row in result)
-        assert len(result) == 3  # 3 positions: 100, 101, 102
+        assert len(result) == 3  # positions 100, 101, 102
+
+    def test_explode_table_no_deduplicate_keep_intervals(
+        self, overlapping_interval_table: hl.Table
+    ) -> None:
+        """Test that deduplicate=False with keep_intervals=True preserves duplicate loci with the interval column."""
+        result_ht = explode_intervals_to_loci(
+            overlapping_interval_table,
+            interval_field="interval",
+            keep_intervals=True,
+            deduplicate=False,
+        )
+        result = result_ht.collect()
+        assert "interval" in result_ht.row
+        result_loci = [row.locus for row in result]
+        # Overlapping positions 101 and 102 each appear once from GENE1 and once
+        # from GENE2.
+        assert result_loci.count(hl.Locus("chr1", 101, "GRCh38")) == 2
+        assert result_loci.count(hl.Locus("chr1", 102, "GRCh38")) == 2
+
+    def test_explode_table_overlapping_intervals_deduplicates(
+        self, overlapping_interval_table: hl.Table
+    ) -> None:
+        """Test that overlapping table intervals produce deduplicated loci when deduplicate=True."""
+        result_loci = [
+            row.locus
+            for row in explode_intervals_to_loci(
+                overlapping_interval_table,
+                interval_field="interval",
+                keep_intervals=False,
+                deduplicate=True,
+            ).collect()
+        ]
+        expected = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 104)]
+        assert len(result_loci) == len(expected)
+        assert all(locus in result_loci for locus in expected)
+
+    def test_explode_table_overlapping_intervals_no_deduplicate(
+        self, overlapping_interval_table: hl.Table
+    ) -> None:
+        """Test that overlapping table intervals produce duplicate loci when deduplicate=False."""
+        result_ht = explode_intervals_to_loci(
+            overlapping_interval_table,
+            interval_field="interval",
+            keep_intervals=False,
+            deduplicate=False,
+        )
+        # 3 rows from GENE1 + 3 rows from GENE2.
+        assert result_ht.count() == 6
+
+    def test_explode_table_overlapping_intervals_keep_intervals_warns(
+        self, overlapping_interval_table: hl.Table, caplog
+    ) -> None:
+        """Test that a warning is emitted and duplicates remain when keep_intervals=True with overlapping intervals."""
+        with caplog.at_level(logging.WARNING):
+            result_ht = explode_intervals_to_loci(
+                overlapping_interval_table,
+                interval_field="interval",
+                keep_intervals=True,
+                deduplicate=True,
+            )
+        assert (
+            "`deduplicate=True` has no effect when `keep_intervals=True`" in caplog.text
+        )
+        result_loci = [row.locus for row in result_ht.collect()]
+        assert (
+            len(result_loci)
+            == 6
+            # 3 from GENE1 (100,101,102) + 3 from GENE2 (101,102,103)
+        )
+
+    # --- ArrayExpression input ---
 
     def test_explode_invalid_input_type_raises_error(self) -> None:
         """Test that an AssertionError is raised when input is an unsupported type."""
@@ -322,108 +374,10 @@ class TestExplodeIntervalsToLoci:
         ):
             explode_intervals_to_loci("invalid_input")
 
-    def test_explode_interval_expression_single_position_excludes_both(self) -> None:
-        """Test that a single-position interval with both endpoints excluded returns an empty array."""
-        interval = hl.interval(
-            hl.locus("chr1", 100, "GRCh38"),
-            hl.locus("chr1", 100, "GRCh38"),
-            includes_start=False,
-            includes_end=False,
-        )
-
-        result = explode_intervals_to_loci(interval)
-        loci = hl.eval(result)
-
-        assert loci == []
-
-    def test_explode_table_single_position_interval_excludes_both(self) -> None:
-        """Test that a table with a single-position interval excluding both endpoints returns 0 rows."""
-        interval = hl.interval(
-            start=hl.locus("chr1", 100, "GRCh38"),
-            end=hl.locus("chr1", 100, "GRCh38"),
-            includes_start=False,
-            includes_end=False,
-        )
-
-        ht = hl.Table.parallelize(
-            [{"interval": interval, "gene": "GENE1"}],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
-        )
-
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False
-        )
-
-        assert result_ht.count() == 0
-
-    def test_explode_table_excludes_start(self) -> None:
-        """Test that the start position is excluded when exploding a table interval with includes_start=False."""
-        interval = hl.interval(
-            start=hl.locus("chr1", 100, "GRCh38"),
-            end=hl.locus("chr1", 105, "GRCh38"),
-            includes_start=False,
-            includes_end=True,
-        )
-
-        ht = hl.Table.parallelize(
-            [{"interval": interval, "gene": "GENE1"}],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
-        )
-
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False
-        )
-        result_loci = [row.locus for row in result_ht.collect()]
-
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 106)]
-        assert len(result_loci) == len(expected_loci)
-        assert all(locus in result_loci for locus in expected_loci)
-
-    def test_explode_table_excludes_end(self) -> None:
-        """Test that the end position is excluded when exploding a table interval with includes_end=False."""
-        interval = hl.interval(
-            start=hl.locus("chr1", 100, "GRCh38"),
-            end=hl.locus("chr1", 105, "GRCh38"),
-            includes_start=True,
-            includes_end=False,
-        )
-
-        ht = hl.Table.parallelize(
-            [{"interval": interval, "gene": "GENE1"}],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
-        )
-
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False
-        )
-        result_loci = [row.locus for row in result_ht.collect()]
-
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 105)]
-        assert len(result_loci) == len(expected_loci)
-        assert all(locus in result_loci for locus in expected_loci)
-
-    def test_explode_table_excludes_both(self) -> None:
-        """Test that both endpoints are excluded when exploding a table interval with includes_start and includes_end set to False."""
-        interval = hl.interval(
-            start=hl.locus("chr1", 100, "GRCh38"),
-            end=hl.locus("chr1", 105, "GRCh38"),
-            includes_start=False,
-            includes_end=False,
-        )
-
-        ht = hl.Table.parallelize(
-            [{"interval": interval, "gene": "GENE1"}],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
-        )
-
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False
-        )
-        result_loci = [row.locus for row in result_ht.collect()]
-
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(101, 105)]
-        assert len(result_loci) == len(expected_loci)
-        assert all(locus in result_loci for locus in expected_loci)
+    def test_explode_plain_list_raises_assertion_error(self) -> None:
+        """Test that passing a plain Python list raises an AssertionError."""
+        with pytest.raises(AssertionError):
+            explode_intervals_to_loci([])
 
     def test_explode_list_of_interval_expressions(self) -> None:
         """Test exploding an ArrayExpression of non-overlapping IntervalExpressions returns all expected loci."""
@@ -443,139 +397,66 @@ class TestExplodeIntervalsToLoci:
                 ),
             ]
         )
-
-        result = explode_intervals_to_loci(intervals)
-        loci = hl.eval(result)
-
-        expected_loci = {
+        loci = hl.eval(explode_intervals_to_loci(intervals))
+        expected = {
             hl.Locus("chr1", 100, "GRCh38"),
             hl.Locus("chr1", 101, "GRCh38"),
             hl.Locus("chr1", 102, "GRCh38"),
             hl.Locus("chr2", 200, "GRCh38"),
             hl.Locus("chr2", 201, "GRCh38"),
         }
-        assert set(loci) == expected_loci
+        assert set(loci) == expected
 
-    def test_explode_table_overlapping_intervals_deduplicates(self) -> None:
-        """Test that overlapping table intervals produce deduplicated loci when deduplicate=True."""
-        # chr1:100-105 and chr1:103-108, both inclusive -> without dedup: 12 rows
-        # with deduplicate=True (default): 9 distinct loci [100..108]
-        intervals = [
-            hl.interval(
-                start=hl.locus("chr1", 100, "GRCh38"),
-                end=hl.locus("chr1", 105, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                start=hl.locus("chr1", 103, "GRCh38"),
-                end=hl.locus("chr1", 108, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-        ]
-
-        ht = hl.Table.parallelize(
+    def test_explode_array_result_is_sorted(self) -> None:
+        """Test that the result is sorted by locus when flatten=True, regardless of input order."""
+        # Intervals provided in reverse chromosome order to verify output is sorted.
+        intervals = hl.array(
             [
-                {"interval": intervals[0], "gene": "GENE1"},
-                {"interval": intervals[1], "gene": "GENE2"},
-            ],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
+                hl.interval(
+                    hl.locus("chr2", 200, "GRCh38"),
+                    hl.locus("chr2", 202, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+                hl.interval(
+                    hl.locus("chr1", 100, "GRCh38"),
+                    hl.locus("chr1", 102, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+            ]
         )
-
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False, deduplicate=True
-        )
-        result_loci = [row.locus for row in result_ht.collect()]
-
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 109)]
-        assert len(result_loci) == len(expected_loci)
-        assert all(locus in result_loci for locus in expected_loci)
-
-    def test_explode_table_overlapping_intervals_no_deduplicate(self) -> None:
-        """Test that overlapping table intervals produce duplicate loci when deduplicate=False."""
-        # chr1:100-105 and chr1:103-108, both inclusive.
-        # Without deduplication: 6 rows from GENE1 + 6 rows from GENE2 = 12 rows total.
-        intervals = [
-            hl.interval(
-                start=hl.locus("chr1", 100, "GRCh38"),
-                end=hl.locus("chr1", 105, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                start=hl.locus("chr1", 103, "GRCh38"),
-                end=hl.locus("chr1", 108, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
+        loci = hl.eval(explode_intervals_to_loci(intervals))
+        expected = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 103)] + [
+            hl.Locus("chr2", pos, "GRCh38") for pos in range(200, 203)
         ]
+        assert loci == expected
 
-        ht = hl.Table.parallelize(
+    def test_explode_array_flatten_false(self) -> None:
+        """Test that flatten=False returns a nested array of per-interval loci arrays."""
+        intervals = hl.array(
             [
-                {"interval": intervals[0], "gene": "GENE1"},
-                {"interval": intervals[1], "gene": "GENE2"},
-            ],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
+                hl.interval(
+                    hl.locus("chr1", 100, "GRCh38"),
+                    hl.locus("chr1", 102, "GRCh38"),
+                    includes_start=True,
+                    includes_end=True,
+                ),
+                hl.interval(
+                    hl.locus("chr2", 200, "GRCh38"),
+                    hl.locus("chr2", 201, "GRCh38"),
+                    includes_start=True,
+                    includes_end=False,
+                ),
+            ]
         )
-
-        result_ht = explode_intervals_to_loci(
-            ht, interval_field="interval", keep_intervals=False, deduplicate=False
-        )
-        # Overlapping loci (chr1:103-105) appear twice.
-        assert result_ht.count() == 12
-
-    def test_explode_table_overlapping_intervals_keep_intervals_warns(
-        self, caplog
-    ) -> None:
-        """Test that a warning is emitted and duplicates remain when keep_intervals=True with overlapping intervals."""
-        # With keep_intervals=True and deduplicate=True, deduplication is skipped and
-        # a warning is emitted; overlapping positions appear as duplicate rows.
-
-        intervals = [
-            hl.interval(
-                start=hl.locus("chr1", 100, "GRCh38"),
-                end=hl.locus("chr1", 102, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-            hl.interval(
-                start=hl.locus("chr1", 101, "GRCh38"),
-                end=hl.locus("chr1", 103, "GRCh38"),
-                includes_start=True,
-                includes_end=True,
-            ),
-        ]
-
-        ht = hl.Table.parallelize(
-            [
-                {"interval": intervals[0], "gene": "GENE1"},
-                {"interval": intervals[1], "gene": "GENE2"},
-            ],
-            hl.tstruct(interval=hl.tinterval(hl.tlocus("GRCh38")), gene=hl.tstr),
-        )
-
-        with caplog.at_level(logging.WARNING):
-            result_ht = explode_intervals_to_loci(
-                ht, interval_field="interval", keep_intervals=True, deduplicate=True
-            )
-
-        assert (
-            "`deduplicate=True` has no effect when `keep_intervals=True`" in caplog.text
-        )
-        # Duplicate loci are present: positions 101 and 102 each appear twice.
-        result_loci = [row.locus for row in result_ht.collect()]
-        assert (
-            len(result_loci)
-            == 6
-            # 3 from GENE1 (100,101,102) + 3 from GENE2 (101,102,103), positions
-            # 101-102 duplicated
-        )
+        result = hl.eval(explode_intervals_to_loci(intervals, flatten=False))
+        assert len(result) == 2
+        assert result[0] == [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 103)]
+        assert result[1] == [hl.Locus("chr2", 200, "GRCh38")]
 
     def test_explode_list_overlapping_intervals_deduplicates(self) -> None:
         """Test that overlapping intervals in an ArrayExpression are deduplicated when deduplicate=True."""
-        # Two overlapping intervals; deduplicate=True (default) removes duplicate
-        # positions.
         intervals = hl.array(
             [
                 hl.interval(
@@ -592,12 +473,8 @@ class TestExplodeIntervalsToLoci:
                 ),
             ]
         )
-
-        result = explode_intervals_to_loci(intervals, deduplicate=True)
-        loci = hl.eval(result)
-
-        expected_loci = {hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 109)}
-        assert set(loci) == expected_loci
+        loci = hl.eval(explode_intervals_to_loci(intervals, deduplicate=True))
+        assert set(loci) == {hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 109)}
 
     def test_explode_list_overlapping_intervals_no_deduplicate_warns(
         self, caplog
@@ -619,39 +496,24 @@ class TestExplodeIntervalsToLoci:
                 ),
             ]
         )
-
         with caplog.at_level(logging.WARNING):
             result = explode_intervals_to_loci(intervals, deduplicate=False)
-
         assert (
             "Overlapping intervals in the input array may produce duplicate loci"
             in caplog.text
         )
         loci = hl.eval(result)
-        # Loci at chr1:101 and chr1:102 appear twice due to overlap.
         assert len(loci) == 6
         assert loci.count(hl.Locus("chr1", 101, "GRCh38")) == 2
         assert loci.count(hl.Locus("chr1", 102, "GRCh38")) == 2
 
-    def test_explode_plain_list_raises_assertion_error(self) -> None:
-        """Test that passing a plain Python list raises an AssertionError.
-
-        The API now requires a Hail ``ArrayExpression`` instead of a Python list.
-        Passing a Python list (including an empty one) fails the input-type
-        assertion. For an empty typed array use
-        ``hl.literal([], hl.tarray(hl.tinterval(hl.tlocus(...))))``).
-        """
-        with pytest.raises(AssertionError):
-            explode_intervals_to_loci([])
-
-    def test_explode_list_cross_chromosome_same_position_deduplicates_correctly(
+    def test_explode_list_cross_chromosome_independent_intervals_deduplicate_correctly(
         self,
     ) -> None:
-        """Test that loci on different chromosomes with the same integer position are not conflated.
+        """Test that loci on different chromosomes with the same position number are not conflated.
 
-        chr1:100-102 and chr2:100-102 share the same position numbers but are
-        distinct loci. Locus-based deduplication must preserve all 6 loci; a
-        position-only deduplication strategy would incorrectly collapse them to 3.
+        chr1:100-102 and chr2:100-102 are separate single-chromosome intervals sharing
+        the same position numbers. Locus-based deduplication must preserve all 6 loci.
         """
         intervals = hl.array(
             [
@@ -669,12 +531,19 @@ class TestExplodeIntervalsToLoci:
                 ),
             ]
         )
-
-        result = explode_intervals_to_loci(intervals, deduplicate=True)
-        loci = hl.eval(result)
-
-        expected_loci = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 103)] + [
+        loci = hl.eval(explode_intervals_to_loci(intervals, deduplicate=True))
+        expected = [hl.Locus("chr1", pos, "GRCh38") for pos in range(100, 103)] + [
             hl.Locus("chr2", pos, "GRCh38") for pos in range(100, 103)
         ]
         assert len(loci) == 6
-        assert set(loci) == set(expected_loci)
+        assert set(loci) == set(expected)
+
+    def test_explode_cross_chromosome_interval_raises_error(self) -> None:
+        """Test that a cross-chromosome interval raises an error at evaluation time."""
+        cross_chrom = hl.interval(
+            hl.locus("chr1", 100, "GRCh38"),
+            hl.locus("chr2", 200, "GRCh38"),
+        )
+        result = explode_intervals_to_loci(cross_chrom)
+        with pytest.raises(Exception, match="[Cc]ross-chromosome"):
+            hl.eval(result)

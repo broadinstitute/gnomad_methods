@@ -214,7 +214,8 @@ def _complete_training_rows(
     Check a prepared training Table and drop the rows with a missing label or feature.
 
     NaN counts as defined in Hail, and one NaN or infinite feature value would make
-    its context's model NaN, so the remaining rows' features must all be finite.
+    its context's model NaN, so the remaining rows' features must all be finite, and
+    their labels 0 or 1.
 
     :param ht: Table from :func:`prepare_regional_mutation_rate_training_ht`.
     :param fields: Row fields ``ht`` must have.
@@ -238,6 +239,8 @@ def _complete_training_rows(
     rows = ht.aggregate(
         hl.struct(
             n_not_finite=hl.agg.count_where(~hl.all(hl.is_finite, ht.x)),
+            # NaN, like any other label but 0 or 1, is counted here.
+            n_bad_label=hl.agg.count_where((ht.label != 0) & (ht.label != 1)),
             contexts=hl.agg.collect_as_set(ht.context),
         )
     )
@@ -245,6 +248,10 @@ def _complete_training_rows(
         raise ValueError(
             f"{rows.n_not_finite} training rows have a NaN or infinite feature value."
             " Make those values missing, or remove the rows."
+        )
+    if rows.n_bad_label:
+        raise ValueError(
+            f"{rows.n_bad_label} training rows have a label other than 0 or 1."
         )
 
     features = hl.eval(ht.features)
@@ -418,7 +425,14 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
     is solved by least squares, so collinear features, which leave an unpenalized
     Hessian singular, still give the smallest step that solves it. The model has
     converged when a step, full or halved, changes no coefficient by more than
-    ``tol``.
+    ``tol``; a halved step that small means no step lowers the objective by more
+    than its rounding.
+
+    The Hessian's rank at the first step is kept. If it later falls, a direction has
+    lost its curvature: along it the fitted probabilities of some rows are being
+    pushed toward 0 or 1, as when the features separate the labels. The least-squares
+    step then stops moving in that direction, so the model is marked ``separated``.
+    A penalty adds curvature along every coefficient, so it keeps the rank.
 
     :param model: Model to update in place.
     :param sums: The model's loss, gradient, and Hessian sums (:func:`_newton_sums`).
@@ -444,7 +458,9 @@ def _newton_update(model: Dict[str, Any], sums: hl.Struct, tol: float) -> None:
         model["objective"] = objective
         model["n_saturated"] = sums.n_saturated
         model["start"] = beta
-        model["step"] = np.linalg.lstsq(hess, grad, rcond=None)[0]
+        model["step"], _, rank, _ = np.linalg.lstsq(hess, grad, rcond=None)
+        model.setdefault("first_rank", rank)
+        model["separated"] = model.get("separated", False) or rank < model["first_rank"]
         model["converged"] = bool(np.max(np.abs(model["step"])) < tol)
     beta = model["start"] - model["step"]
     model["intercept"] = float(beta[0])
@@ -464,13 +480,16 @@ def _fit_logistic_models(
 
     A group is a context, or, when tuning, a context in one penalty and fold. All
     groups are fit together by Newton's method (:func:`_newton_update`), with one
-    pass over ``ht`` per step. A model whose last step was halved, because it
-    converged that way or ran out of steps, keeps its last accepted coefficients. An
-    unpenalized model with a fitted probability numerically 0 or 1 at those
-    coefficients is marked not converged: its features separate the labels, at least
-    in part, so the log loss has no minimum and the coefficients grow until the
-    probabilities round off. R's glm.fit warns about the same fitted probabilities.
-    A penalty gives the objective a minimum, so penalized models aren't checked.
+    pass over ``ht`` per step. A model that converged with a halved step, or ran out
+    of steps, keeps its last accepted coefficients, the last point evaluated.
+
+    A model marked ``separated`` (its Hessian lost rank) is not converged: its
+    features separate the labels, at least in part, so the log loss has no minimum
+    and the coefficient along that direction is wherever the steps stopped. For an
+    unpenalized model, fitted probabilities numerically 0 or 1 are only logged, as
+    R's glm.fit warns: they can come from separation, but also from a heavy-tailed
+    feature at a real minimum. A penalty gives the objective a minimum, so penalized
+    models aren't checked for them.
 
     :param ht: Complete training rows (:func:`_complete_training_rows`) with a
         ``group`` field.
@@ -498,27 +517,33 @@ def _fit_logistic_models(
             _newton_update(model, sums[group], tol)
 
     for model in models.values():
-        # A model whose last step was halved sits at a point it never evaluated, so
-        # it goes back to its last accepted coefficients, the best it knows.
-        if model.get("halving"):
+        # A halved step, or a step taken just before max_iter ran out, leads to a
+        # point never evaluated, so the model goes back to its last accepted
+        # coefficients, the best it knows.
+        if "start" in model and (model["halving"] or not model["converged"]):
             model["intercept"] = float(model["start"][0])
             model["coefs"] = model["start"][1:].tolist()
-        model["separated"] = bool(model.get("n_saturated")) and not model["penalty"]
-        if model["separated"]:
+        if model.get("separated"):
             model["converged"] = False
 
     if log:
         for group, model in models.items():
-            if model["separated"]:
+            if model.get("separated"):
                 logger.warning(
-                    "The model fit for %s did not converge: %d training rows have a"
-                    " fitted probability of 0 or 1, so its features separate the"
-                    " labels.",
+                    "The model fit for %s did not converge: its log loss lost its"
+                    " curvature in one direction, so its features separate the"
+                    " labels, at least in part.",
                     group,
-                    model["n_saturated"],
                 )
             elif not model["converged"]:
                 logger.warning("The model fit for %s did not converge.", group)
+            if model.get("n_saturated") and not model["penalty"]:
+                logger.warning(
+                    "%s: %d training rows have a fitted probability numerically 0 or"
+                    " 1, so its features may separate the labels.",
+                    group,
+                    model["n_saturated"],
+                )
         logger.info("%d of %d contexts modeled.", len(models), len(group_features))
 
     return models
@@ -561,11 +586,13 @@ def fit_regional_mutation_rate_models(
     coefficients. Each step is solved by least squares, so collinear features still
     fit without a penalty: their coefficients aren't unique, but the model's
     predictions are. Without a penalty, features that separate the labels, even in
-    part, leave the loss without a minimum, and the coefficients grow until some
-    fitted probabilities are numerically 0 or 1; such a fit is marked not converged.
-    Contexts with no model, features left out because they are constant, and fits
-    that don't converge are logged. Feature values must be finite: a NaN or infinite
-    value raises an error.
+    part, leave the loss without a minimum: the curvature along the separating
+    direction vanishes as its coefficient grows, and when the Hessian loses rank the
+    fit is marked not converged. Fitted probabilities numerically 0 or 1 in an
+    unpenalized fit are logged, as R's glm.fit warns, without changing
+    ``converged``. Contexts with no model, features left out because they are
+    constant, and fits that don't converge are logged. Feature values must be finite
+    and labels 0 or 1: anything else raises an error.
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`.
@@ -803,7 +830,8 @@ def _model_rate_expr(
     Get a window's regional mutation rate under one context's model.
 
     The rate is ``expit(intercept + sum(coefs * (x - mean) / sd)) / ave``, and is
-    missing if any of the model's features is missing. The model's values go into
+    missing if any of the model's features is missing, NaN, or infinite. The model's
+    values go into
     the expression as constants, so it compiles to plain arithmetic. Applying the
     models through literals and :func:`_linear_predictor_expr` instead was several
     times slower and, with 32 models, made a class too large for the JVM.
@@ -817,14 +845,18 @@ def _model_rate_expr(
         for f, mean, sd, coef in zip(model.features, model.mean, model.sd, model.coefs)
     )
 
-    return hl.expit(eta) / model.ave
+    # A NaN or infinite feature makes eta NaN or infinite; treat it as missing.
+    return hl.bind(
+        lambda eta: hl.or_missing(hl.is_finite(eta), hl.expit(eta) / model.ave), eta
+    )
 
 
 def regional_mutation_rate_expr(
     features_expr: hl.expr.StructExpression,
     models_ht: hl.Table,
     contexts: List[str],
-    missing_feature_rate: Optional[float] = 1.0,
+    missing_feature_rate: Optional[float] = None,
+    skip_non_converged: bool = False,
 ) -> hl.expr.DictExpression:
     """
     Get a window's regional mutation rate in each context.
@@ -832,10 +864,16 @@ def regional_mutation_rate_expr(
     A window's rate in a context is ``expit(intercept + sum(coefs * (x - mean) /
     sd)) / ave`` of that context's model, as in Gnocchi. Contexts without a model get
     a rate of 1.0, and contexts whose model needs a feature the window is missing get
-    ``missing_feature_rate``. Models of contexts not in ``contexts`` are ignored. The
-    rates are missing when no modeled context in ``contexts`` has one, e.g. for a
-    window missing every feature, so filtering to defined rates keeps the windows the
-    models cover. A NaN or infinite feature value gives a NaN rate.
+    ``missing_feature_rate``, which leaves their rates missing by default; a NaN or
+    infinite feature value counts as missing.
+    Models of contexts not in ``contexts`` are ignored. The rates are missing when
+    every modeled context in ``contexts`` is missing one of its model's features, so
+    filtering to defined rates keeps the windows the models cover. With one feature
+    list for every context, that is any window missing a feature every model uses.
+
+    Models that didn't converge (``converged`` is False) are applied as fit, with a
+    warning naming them, unless ``skip_non_converged`` is set, which gives their
+    contexts a rate of 1.0, as if they had no model.
 
     .. note::
 
@@ -853,13 +891,31 @@ def regional_mutation_rate_expr(
         has one small row per context and is collected.
     :param contexts: Contexts to include in the rates.
     :param missing_feature_rate: Rate of a context whose model needs a feature the
-        window is missing, or None to leave it missing. Default is 1.0, the model's
-        rate for the average window.
+        window is missing, or None to leave it missing. Default is None: a missing
+        rate is left out of the normalization factors and stays missing when the
+        rates are normalized, so it can be filled afterwards, e.g. with 1.0 for no
+        regional effect. A value given here is normalized like the other rates.
+    :param skip_non_converged: Whether to give contexts whose model didn't converge a
+        rate of 1.0 instead of applying the model. Default is False.
     :return: Dict of each context in ``contexts`` to the window's rate, missing when
-        no modeled context has a rate. With ``missing_feature_rate`` None, the rates
-        of contexts missing a model feature are missing within the dict.
+        no modeled context has a rate. With ``missing_feature_rate`` None, the
+        default, the rates of contexts missing a model feature are missing within the
+        dict.
     """
     models = [m for m in models_ht.collect() if m.context in contexts]
+    non_converged = sorted(m.context for m in models if not m.converged)
+    if non_converged:
+        logger.warning(
+            "The models of %s didn't converge; %s.",
+            ", ".join(non_converged),
+            (
+                "their contexts get a rate of 1.0"
+                if skip_non_converged
+                else "they are applied as fit"
+            ),
+        )
+        if skip_non_converged:
+            models = [m for m in models if m.converged]
     if not models:
         logger.warning("None of the contexts has a model, so every rate is missing.")
         return hl.missing(hl.tdict(hl.tstr, hl.tfloat64))
@@ -888,8 +944,8 @@ def regional_mutation_rate_normalization_factors_agg_expr(
     Get an aggregation of the weighted mean regional mutation rate per context.
 
     Each context's factor is ``sum(weight * rate) / sum(weight)`` over the rows with
-    a rate and a positive weight; dividing the rates by it makes their weighted mean
-    1. Contexts with no such rows are left out.
+    a finite rate and a positive weight; dividing the rates by it makes their
+    weighted mean 1. Contexts with no such rows are left out.
 
     :param context_expr: Each row's context.
     :param rate_expr: Each row's regional mutation rate, e.g. from a rate Table
@@ -898,7 +954,7 @@ def regional_mutation_rate_normalization_factors_agg_expr(
     :return: Aggregation expression for a dict of context to normalization factor.
     """
     return hl.agg.filter(
-        hl.is_defined(rate_expr) & hl.or_else(weight_expr > 0, False),
+        hl.or_else(hl.is_finite(rate_expr) & (weight_expr > 0), False),
         hl.agg.group_by(
             context_expr,
             hl.agg.sum(weight_expr * rate_expr) / hl.agg.sum(weight_expr),

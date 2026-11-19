@@ -627,7 +627,7 @@ def regional_mutation_rate_expr(
     features_expr: hl.expr.StructExpression,
     models_ht: hl.Table,
     contexts: List[str],
-    missing_feature_rate: Optional[float] = 1.0,
+    missing_feature_rate: Optional[float] = None,
     skip_non_converged: bool = False,
 ) -> hl.expr.DictExpression:
     """
@@ -636,7 +636,8 @@ def regional_mutation_rate_expr(
     A window's rate in a context is ``expit(intercept + sum(coefs * (x - mean) /
     sd)) / ave`` of that context's model, as in Gnocchi. Contexts without a model get
     a rate of 1.0, and contexts whose model needs a feature the window is missing get
-    ``missing_feature_rate``; a NaN or infinite feature value counts as missing.
+    ``missing_feature_rate``, which leaves their rates missing by default; a NaN or
+    infinite feature value counts as missing.
     Models of contexts not in ``contexts`` are ignored. The rates are missing when
     every modeled context in ``contexts`` is missing one of its model's features, so
     filtering to defined rates keeps the windows the models cover. With one feature
@@ -662,13 +663,16 @@ def regional_mutation_rate_expr(
         has one small row per context and is collected.
     :param contexts: Contexts to include in the rates.
     :param missing_feature_rate: Rate of a context whose model needs a feature the
-        window is missing, or None to leave it missing. Default is 1.0, the model's
-        rate for the average window.
+        window is missing, or None to leave it missing. Default is None: a missing
+        rate is left out of the normalization factors and stays missing when the
+        rates are normalized, so it can be filled afterwards, e.g. with 1.0 for no
+        regional effect. A value given here is normalized like the other rates.
     :param skip_non_converged: Whether to give contexts whose model didn't converge a
         rate of 1.0 instead of applying the model. Default is False.
     :return: Dict of each context in ``contexts`` to the window's rate, missing when
-        no modeled context has a rate. With ``missing_feature_rate`` None, the rates
-        of contexts missing a model feature are missing within the dict.
+        no modeled context has a rate. With ``missing_feature_rate`` None, the
+        default, the rates of contexts missing a model feature are missing within the
+        dict.
     """
     models = [m for m in models_ht.collect() if m.context in contexts]
     non_converged = sorted(m.context for m in models if not m.converged)

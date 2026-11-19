@@ -792,6 +792,23 @@ class TestRegionalMutationRateExpr:
         assert rates["AAA"] == pytest.approx(_expit(0.5) / 0.6)
         assert rates["CCC"] == 1.0
 
+    def test_missing_feature_rate_defaults_to_none(self) -> None:
+        """
+        Test that by default a context missing a model feature has a missing rate.
+
+        A 1.0 filled in before normalizing ended up at 1 / factor; left missing, it
+        stays out of the factors and can be filled with 1.0 afterwards.
+        """
+        features_ht = _features_ht([(1, 1001, 1.0, None)])
+        ht = features_ht.annotate(
+            adj_r=regional_mutation_rate_expr(
+                features_ht.row, _models_ht(), ["AAA", "ACG"]
+            )
+        )
+        rates = ht.collect()[0].adj_r
+        assert rates["ACG"] is None
+        assert rates["AAA"] == pytest.approx(_expit(0.5) / 0.6)
+
     def test_contexts(self) -> None:
         """Test that a context listed twice gets one rate, and no contexts no rates."""
         features_ht = _features_ht([(1, 1001, 0.5, 2.0)])

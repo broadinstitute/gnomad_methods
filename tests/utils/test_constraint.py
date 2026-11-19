@@ -1,6 +1,7 @@
 """Tests for the constraint utility module."""
 
-from typing import List
+import math
+from typing import List, Optional
 
 import hail as hl
 import pytest
@@ -176,6 +177,58 @@ class TestOeConfidenceInterval:
         result = ht.collect()[0]
 
         assert result.ci.lower == 0
+
+    @requires_qgamma
+    def test_gamma_obs_zero_lower_is_zero(self) -> None:
+        """
+        Test that the gamma method returns lower=0 when obs=0, as poisson does.
+
+        Without this, 0 observed of 10 expected gave a lower bound of 0.005, so an
+        oe of 0 fell below its own confidence interval. The upper bound is the 95th
+        percentile of an exponential distribution with rate 10.
+        """
+        ht = hl.Table.parallelize(
+            [{"obs": 0, "exp": 10.0}],
+            hl.tstruct(obs=hl.tint64, exp=hl.tfloat64),
+        )
+        ht = ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="gamma"))
+        result = ht.collect()[0]
+
+        assert result.ci.lower == 0
+        assert result.ci.upper == pytest.approx(-math.log(0.05) / 10)
+
+    @requires_qgamma
+    def test_gamma_obs_one_lower_is_quantile(self) -> None:
+        """
+        Test that obs=1 still gets the gamma quantile as its lower bound.
+
+        obs=1 is the smallest count the lower=0 rule must not apply to, so this
+        pins where the rule stops. Gamma(2, rate=exp) has the closed-form CDF
+        1 - e^(-exp * x) * (1 + exp * x), which is 0.05 at the lower bound.
+        """
+        ht = hl.Table.parallelize(
+            [{"obs": 1, "exp": 10.0}],
+            hl.tstruct(obs=hl.tint64, exp=hl.tfloat64),
+        )
+        ht = ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="gamma"))
+        result = ht.collect()[0]
+
+        rate_x = 10.0 * result.ci.lower
+        assert 1 - math.exp(-rate_x) * (1 + rate_x) == pytest.approx(0.05)
+
+    @requires_qgamma
+    @pytest.mark.parametrize("exp", [0.0, None])
+    def test_gamma_obs_zero_no_expected_is_missing(self, exp: Optional[float]) -> None:
+        """Test that gamma bounds stay missing at obs=0 when exp is 0 or missing."""
+        ht = hl.Table.parallelize(
+            [{"obs": 0, "exp": exp}],
+            hl.tstruct(obs=hl.tint64, exp=hl.tfloat64),
+        )
+        ht = ht.annotate(ci=oe_confidence_interval(ht.obs, ht.exp, method="gamma"))
+        result = ht.collect()[0]
+
+        assert result.ci.lower is None
+        assert result.ci.upper is None
 
     def test_invalid_method_raises(self):
         """Test that an invalid method raises ValueError."""

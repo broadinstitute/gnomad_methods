@@ -12,7 +12,11 @@ each context.
 
 The models are fit by Newton's method in Hail: each step aggregates every context's
 gradient, Hessian, and loss over the training Table, and only the small per-context
-linear systems are solved on the driver. A step that raises the loss is halved.
+linear systems are solved on the driver. The objective is the mean log loss, plus an
+optional ridge penalty on the coefficients, and a step that raises it is halved. The
+penalty can be chosen by the held-out log loss of models fit on all but one fold of
+the training rows (:func:`tune_regional_mutation_rate_penalty` and
+:func:`choose_regional_mutation_rate_penalty`).
 """
 
 import logging
@@ -160,8 +164,10 @@ def prepare_regional_mutation_rate_training_ht(
     :param label_expr: 0/1 label of each row (1 for a site with a DNM), a number or a
         boolean. Default is ``ht.y``.
     :param context_expr: Context of each row. Default is ``ht.context``.
-    :param fold_expr: Fold of each row, e.g. odd or even chromosomes, needed for
-        :func:`tune_regional_mutation_rate_penalty`. Default is None.
+    :param fold_expr: Fold of each row, a string such as ``"odd"`` or ``"even"``
+        for the chromosome number, needed for
+        :func:`tune_regional_mutation_rate_penalty`. Rows with a missing fold are
+        only used for fitting. Default is None.
     :return: Table keyed as ``ht`` with only ``label`` (float64), ``context``,
         ``fold`` (if ``fold_expr`` is given), and ``x``, the float64 values of the
         row's features in order (missing, with a dict, for a context not in it). Its
@@ -183,6 +189,10 @@ def prepare_regional_mutation_rate_training_ht(
         raise ValueError(
             "Features must be numeric or boolean fields; these are not:"
             f" {', '.join(not_numeric)}."
+        )
+    if fold_expr is not None and fold_expr.dtype != hl.tstr:
+        raise ValueError(
+            f"fold_expr must be a string expression, not {fold_expr.dtype}."
         )
 
     context_expr = ht.context if context_expr is None else context_expr
@@ -551,16 +561,16 @@ def _fit_logistic_models(
 
 def _check_penalties(penalties: List[float]) -> None:
     """
-    Check that every ridge penalty is at least 0.
+    Check that ridge penalties were given and that each is finite and at least 0.
 
     :param penalties: Per-row ridge penalties.
     :return: None.
     """
     if not penalties:
         raise ValueError("No ridge penalties were given.")
-    negative = [p for p in penalties if not p >= 0]
-    if negative:
-        raise ValueError(f"Ridge penalties must be at least 0, not {negative}.")
+    bad = [p for p in penalties if not (np.isfinite(p) and p >= 0)]
+    if bad:
+        raise ValueError(f"Ridge penalties must be finite and at least 0, not {bad}.")
 
 
 def fit_regional_mutation_rate_models(
@@ -596,8 +606,8 @@ def fit_regional_mutation_rate_models(
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`.
-    :param ridge_penalty: Per-row ridge penalty, at least 0. Default is 0.0, no
-        penalty.
+    :param ridge_penalty: Per-row ridge penalty, finite and at least 0. Default is
+        0.0, no penalty.
     :param max_iter: Maximum number of Newton steps, including halved ones. Default
         is 50.
     :param tol: The fit has converged when a step, full or halved, changes no
@@ -606,7 +616,7 @@ def fit_regional_mutation_rate_models(
         ``features``, their training ``mean`` and ``sd``, ``coefs``, ``intercept``,
         ``ave`` (the predicted probability with every feature at its mean),
         ``n_mutated`` and ``n_background`` (rows of each label), and ``converged``
-        (see :data:`MODELS_HT_SCHEMA`).
+        (see :data:`MODELS_HT_SCHEMA`), and a ``ridge_penalty`` global (float64).
     """
     _check_penalties([ridge_penalty])
     ht, context_features = _complete_training_rows(ht, ["label", "context", "x"])
@@ -636,7 +646,7 @@ def fit_regional_mutation_rate_models(
         ],
         MODELS_HT_SCHEMA,
         key="context",
-    )
+    ).annotate_globals(ridge_penalty=float(ridge_penalty))
 
 
 def _rows_by_fit(ht: hl.Table, fits: List[hl.Struct], held_out: bool) -> hl.Table:
@@ -710,19 +720,21 @@ def tune_regional_mutation_rate_penalty(
     rows in it. Rows with a missing fold are only used for fitting. All the fits are
     made together, with one pass over every fit's rows per Newton step, so ``ht``
     should be read from disk or checkpointed. Fits that don't converge are counted,
-    with their penalties, in a warning and still scored. Feature values must be
-    finite: a NaN or infinite value raises an error.
+    with their penalties, in a warning and still scored, and contexts and folds with
+    no model are logged. Feature values must be finite: a NaN or infinite value
+    raises an error.
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`, with a ``fold``.
-    :param penalties: Per-row ridge penalties to try, each at least 0. Repeats are
-        tried once.
+    :param penalties: Per-row ridge penalties to try, each finite and at least 0.
+        Repeats are tried once.
     :param max_iter: Maximum number of Newton steps per fit, including halved ones.
         Default is 50.
     :param tol: Convergence tolerance of each fit. Default is 1e-8.
     :return: Table keyed by ``penalty`` (float64), ``context`` (str), and ``fold``
         (str), with the number of held-out rows with no missing label or feature
-        (``n_test``, int64) and their summed log loss (``log_loss``, float64). A
+        (``n_test``, int64), their summed log loss (``log_loss``, float64), and
+        whether the fit converged (``converged``, bool). A
         context and fold with no model (its training rows have only one label, or no
         feature varies) or no held-out rows has no rows, at every penalty alike, so
         each penalty's loss is summed over the same contexts and folds. The Table is
@@ -754,6 +766,18 @@ def tune_regional_mutation_rate_penalty(
         tol,
         log=False,
     )
+    # Whether a context has a model in a fold depends only on its training rows, so
+    # it is the same at every penalty.
+    no_model = sorted(
+        {(group.context, group.fold) for group in groups.values()}
+        - {(groups[g].context, groups[g].fold) for g in models}
+    )
+    if no_model:
+        logger.warning(
+            "These contexts and folds have no tuning model, since their training rows"
+            " have one label or no feature varies, and are left out: %s.",
+            ", ".join(f"{c} ({f})" for c, f in no_model),
+        )
     not_converged = [g for g, m in models.items() if not m["converged"]]
     if not_converged:
         logger.warning(
@@ -772,6 +796,7 @@ def tune_regional_mutation_rate_penalty(
                 "context": groups[g].context,
                 "fold": groups[g].fold,
                 **score,
+                "converged": models[g]["converged"],
             }
             for g, score in scores.items()
         ],
@@ -781,6 +806,7 @@ def tune_regional_mutation_rate_penalty(
             fold=hl.tstr,
             n_test=hl.tint64,
             log_loss=hl.tfloat64,
+            converged=hl.tbool,
         ),
         key=["penalty", "context", "fold"],
     )
@@ -793,27 +819,55 @@ def choose_regional_mutation_rate_penalty(
     Choose the ridge penalty with the lowest held-out log loss.
 
     The log loss is summed over contexts and folds, so one penalty is chosen for
-    every context; on a tie, the smaller penalty is chosen. A warning is logged when
-    the chosen penalty is at either end of those tried, since the best one may then
-    lie outside them.
+    every context; on a tie, the smaller penalty is chosen. Every penalty must have
+    been scored on the same contexts, folds, and numbers of held-out rows, as
+    :func:`tune_regional_mutation_rate_penalty` does, so the summed loss ranks the
+    penalties as the mean loss per held-out row does. A warning is logged when the
+    chosen penalty is at either end of those tried, since the best one may then lie
+    outside them (except below a penalty of 0).
+
+    Each tuning fit is on the rows outside its fold, about half of them with two
+    folds, and the chosen penalty is returned as is. Since it is per row, it shrinks
+    a fit on all the rows about as much as the tuning fits, but the best penalty for
+    more rows is usually somewhat smaller.
 
     :param ht: Held-out log loss per penalty
         (:func:`tune_regional_mutation_rate_penalty`).
     :param default_penalty: Penalty returned, with a warning, when ``ht`` is empty.
     :return: Chosen per-row ridge penalty.
     """
-    loss = ht.aggregate(hl.agg.group_by(ht.penalty, hl.agg.sum(ht.log_loss)))
-    if not loss:
+    rows = ht.aggregate(
+        hl.agg.group_by(
+            ht.penalty,
+            hl.struct(
+                log_loss=hl.agg.sum(ht.log_loss),
+                scored=hl.agg.collect_as_set(
+                    hl.struct(context=ht.context, fold=ht.fold, n_test=ht.n_test)
+                ),
+            ),
+        )
+    )
+    if not rows:
         logger.warning(
             "No held-out rows to score the ridge penalties on; using %s.",
             default_penalty,
         )
         return default_penalty
 
-    tried = sorted(loss)
+    tried = sorted(rows)
+    if any(rows[p].scored != rows[tried[0]].scored for p in tried):
+        raise ValueError(
+            "The ridge penalties weren't all scored on the same contexts, folds, and"
+            " numbers of held-out rows, so their summed losses can't be compared."
+        )
+    loss = {p: rows[p].log_loss for p in tried}
+    not_finite = [p for p in tried if not np.isfinite(loss[p])]
+    if not_finite:
+        raise ValueError(f"The held-out log loss isn't finite at {not_finite}.")
     # min keeps the first of tied penalties, so the smallest.
     penalty = min(tried, key=lambda p: loss[p])
-    if len(tried) > 1 and penalty in (tried[0], tried[-1]):
+    # Nothing lies below a penalty of 0.
+    if len(tried) > 1 and (penalty == tried[-1] or 0 < penalty == tried[0]):
         logger.warning(
             "The chosen ridge penalty %s is at the end of those tried (%s).",
             penalty,

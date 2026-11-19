@@ -96,19 +96,32 @@ def _heavy_tailed_rows() -> List[Dict]:
     return _lognormal_rows(np.exp(2.0 * log_x), y)
 
 
-def _separated_rows() -> List[Dict]:
+def _rounding_rows() -> List[Dict]:
     """
     Return 50 rows of three lognormal features, with 2 of them mutated.
 
     The features have an sd of 2.5 on the log scale, so a few standardized values are
-    far out, and with only 2 mutated rows they separate the labels: without a
-    penalty, the log loss of these rows has no minimum. At a penalty of 0.01, full
-    Newton steps from the start overshoot on these rows and never converge.
+    far out. The log loss of these rows has a minimum, but at it 4 rows' fitted
+    probabilities round to 0. At a penalty of 0.01, full Newton steps from the start
+    overshoot on these rows and never converge.
     """
     rng = np.random.default_rng(23)
     x = np.exp(2.5 * rng.normal(size=(50, 3)))
     y = rng.random(50) < 0.05
     return _lognormal_rows(x, y)
+
+
+def _separated_rows() -> List[Dict]:
+    """
+    Return training rows where ``c`` is 1 on 5% of the non-mutated rows and 0 elsewhere.
+
+    ``c`` separates the labels in part: the log loss falls without bound as its
+    coefficient goes to minus infinity.
+    """
+    rng = np.random.default_rng(3)
+    return [
+        {**r, "c": float(r["y"] == 0 and rng.random() < 0.05)} for r in _training_rows()
+    ]
 
 
 def _training_ht(rows: List[Dict]) -> hl.Table:
@@ -287,11 +300,10 @@ class TestFitRegionalMutationRateModels:
         """
         Test that a penalized fit reaches the minimum where full Newton steps cycle.
 
-        Without a penalty the log loss of these rows has no minimum; with one it
-        does, but full steps overshoot and cycle, so a step that raises the
-        objective has to be halved.
+        Full steps overshoot and cycle on these rows at a penalty of 0.01, so a step
+        that raises the objective has to be halved.
         """
-        rows = _separated_rows()
+        rows = _rounding_rows()
         model = _models(
             fit_regional_mutation_rate_models(
                 _prepared(rows, {"AAA": ["a", "b", "c"]}), 0.01
@@ -302,24 +314,28 @@ class TestFitRegionalMutationRateModels:
             [0, 0, 0, 0], abs=1e-8
         )
 
-    def test_penalized_fit_can_round_probabilities(self) -> None:
+    def test_penalized_fit_can_round_probabilities(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """
-        Test that a penalized fit isn't flagged for fitted probabilities of 0 or 1.
+        Test that a penalized fit isn't logged for fitted probabilities of 0 or 1.
 
-        With a penalty of 1e-5 the separated rows have a minimum, but one row's
-        fitted probability rounds to 0 or 1 there. Only an unpenalized fit with such
-        rows has no minimum.
+        At a penalty of 1e-5 a fitted probability of these rows still rounds to 0 at
+        the minimum. The penalty gives the objective a minimum, so unlike an
+        unpenalized fit, the rounding can't mean the features separate the labels.
         """
-        rows = _separated_rows()
-        model = _models(
-            fit_regional_mutation_rate_models(
-                _prepared(rows, {"AAA": ["a", "b", "c"]}), 1e-5
-            )
-        )["AAA"]
+        rows = _rounding_rows()
+        with caplog.at_level(logging.WARNING):
+            model = _models(
+                fit_regional_mutation_rate_models(
+                    _prepared(rows, {"AAA": ["a", "b", "c"]}), 1e-5
+                )
+            )["AAA"]
         assert model.converged
         assert self._gradient(rows, model, 1e-5) == pytest.approx(
             [0, 0, 0, 0], abs=1e-8
         )
+        assert not any("fitted probability" in m for m in _warnings(caplog))
 
     @pytest.mark.parametrize("penalty", [-1.0, float("nan")])
     def test_penalty_must_be_at_least_0(self, penalty: float) -> None:
@@ -353,23 +369,42 @@ class TestFitRegionalMutationRateModels:
         with pytest.raises(ValueError, match="NaN or infinite"):
             tune_regional_mutation_rate_penalty(ht, [0.3])
 
-    def test_stopped_while_halving_keeps_the_last_accepted_point(self) -> None:
+    @pytest.mark.parametrize("label", [2.0, float("nan")])
+    def test_labels_must_be_0_or_1(self, label: float) -> None:
         """
-        Test that a fit that runs out of steps while halving keeps its best point.
+        Test that a label other than 0 or 1, including NaN, makes the fit raise.
+
+        A NaN label counts as defined in Hail, and crashed the fit with an unrelated
+        error; a label of 2 was counted as mutated.
+        """
+        ht = _training_ht(_training_rows())
+        ht = prepare_regional_mutation_rate_training_ht(
+            ht,
+            {"AAA": ["a", "b"]},
+            label_expr=hl.if_else(ht.a > 2, label, hl.float64(ht.y)),
+        )
+        with pytest.raises(ValueError, match="have a label other than 0 or 1"):
+            fit_regional_mutation_rate_models(ht)
+
+    @pytest.mark.parametrize("max_iter", [2, 3])
+    def test_stopped_early_keeps_the_last_accepted_point(self, max_iter: int) -> None:
+        """
+        Test that a fit that runs out of steps keeps its last accepted point.
 
         On the heavy-tailed rows the first Newton step is accepted and the second
-        overshoots, so the third pass halves it. Stopped there, the fit returns the
-        coefficients it last accepted, one Newton step from the start, rather than the
-        halved point it never evaluated.
+        overshoots. Stopped after the second step is taken (2 passes) or while it is
+        halved (3 passes), the fit returns the coefficients it last accepted, one
+        Newton step from the start, rather than a point it never evaluated.
         """
         rows = _heavy_tailed_rows()
         model = _models(
             fit_regional_mutation_rate_models(
-                _prepared(rows, {"AAA": ["a", "b", "c"]}), max_iter=3
+                _prepared(rows, {"AAA": ["a", "b", "c"]}), max_iter=max_iter
             )
         )["AAA"]
         assert not model.converged
         # One Newton step from the start: the label rate's intercept, coefficients 0.
+        # solve(H, g) on the summed terms is the module's lstsq step on the means.
         y, x = _arrays(rows, ["a", "b", "c"])
         v = np.c_[np.ones(len(y)), (x - x.mean(axis=0)) / x.std(axis=0)]
         start = np.r_[np.log(y.sum() / (len(y) - y.sum())), np.zeros(3)]
@@ -402,9 +437,9 @@ class TestFitRegionalMutationRateModels:
         """
         Test that a fit whose features separate the labels is flagged and logged.
 
-        The log loss of these rows has no minimum, so the coefficients grow until some
-        fitted probabilities round to 0 or 1, where the steps shrink and the fit
-        looked converged.
+        The log loss of these rows has no minimum. As ``c``'s coefficient grows, the
+        curvature along it vanishes, the least-squares steps stop moving it, and the
+        fit looked converged at an arbitrary coefficient.
         """
         with caplog.at_level(logging.WARNING):
             model = _models(
@@ -414,7 +449,31 @@ class TestFitRegionalMutationRateModels:
             )["AAA"]
         assert not model.converged
         assert any(
-            "AAA did not converge" in m and "fitted probability of 0 or 1" in m
+            "AAA did not converge" in m and "separate the labels" in m
+            for m in _warnings(caplog)
+        )
+
+    def test_rounded_probabilities_are_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """
+        Test that fitted probabilities of 0 or 1 at a real minimum are only logged.
+
+        At these rows' minimum (the gradient is 0), 4 fitted probabilities round to 0.
+        That marked the fit not converged, as if its features separated the labels;
+        R's glm.fit only warns.
+        """
+        rows = _rounding_rows()
+        with caplog.at_level(logging.WARNING):
+            model = _models(
+                fit_regional_mutation_rate_models(
+                    _prepared(rows, {"AAA": ["a", "b", "c"]})
+                )
+            )["AAA"]
+        assert model.converged
+        assert self._gradient(rows, model) == pytest.approx([0, 0, 0, 0], abs=1e-8)
+        assert any(
+            "AAA: 4 training rows have a fitted probability numerically 0 or 1" in m
             for m in _warnings(caplog)
         )
 
@@ -660,6 +719,43 @@ class TestNewtonUpdate:
         model = {**self._model(), "penalty": 0.0}
         _newton_update(model, self._sums(model, 0.4, h=[300.0, 0.0, 0.0, 0.0]), 1e-8)
         assert list(model["step"]) == pytest.approx([-0.001 / 0.3, 0.0])
+        # Singular from the first step, as with collinear features: not separation.
+        assert not model["separated"]
+
+    def test_full_step_below_tol_has_converged(self) -> None:
+        """Test that a model whose new Newton step is below ``tol`` has converged."""
+        model = {**self._model(), "penalty": 0.0}
+        sums = hl.Struct(**{**self._sums(model, 0.4), "g": [1e-9, -1e-9]})
+        _newton_update(model, sums, 1e-8)
+        assert model["converged"]
+
+    def test_halved_step_above_tol_has_not_converged(self) -> None:
+        """
+        Test that a halved step above ``tol`` leaves the model unconverged.
+
+        The halving keeps the counts of the last accepted point.
+        """
+        model = {**self._model(), "n_saturated": 3}
+        _newton_update(
+            model, hl.Struct(**{**self._sums(model, 0.6), "n_saturated": 9}), 1e-8
+        )
+        assert not model["converged"]
+        assert model["n_saturated"] == 3
+
+    @pytest.mark.parametrize("penalty", [0.0, 0.1])
+    def test_lost_rank_marks_separated(self, penalty: float) -> None:
+        """
+        Test that a Hessian that loses rank after the first step marks separation.
+
+        Along a separating direction the curvature vanishes as the coefficient grows,
+        so the least-squares step stops moving it and looked converged. A penalty
+        keeps curvature along every coefficient, so a penalized model keeps its rank.
+        """
+        model = {**self._model(), "penalty": penalty}
+        _newton_update(model, self._sums(model, 0.4), 1e-8)
+        assert not model["separated"]
+        _newton_update(model, self._sums(model, 0.3, h=[300.0, 0.0, 0.0, 0.0]), 1e-8)
+        assert model["separated"] == (penalty == 0)
 
     def test_step_halved_below_tol_has_converged(self) -> None:
         """Test that a model whose halved step is below ``tol`` has converged."""
@@ -1000,6 +1096,23 @@ class TestRegionalMutationRateExpr:
         assert rates["AAA"] == pytest.approx(_expit(0.5) / 0.6)
         assert rates["CCC"] == 1.0
 
+    def test_missing_feature_rate_defaults_to_none(self) -> None:
+        """
+        Test that by default a context missing a model feature has a missing rate.
+
+        A 1.0 filled in before normalizing ended up at 1 / factor; left missing, it
+        stays out of the factors and can be filled with 1.0 afterwards.
+        """
+        features_ht = _features_ht([(1, 1001, 1.0, None)])
+        ht = features_ht.annotate(
+            adj_r=regional_mutation_rate_expr(
+                features_ht.row, _models_ht(), ["AAA", "ACG"]
+            )
+        )
+        rates = ht.collect()[0].adj_r
+        assert rates["ACG"] is None
+        assert rates["AAA"] == pytest.approx(_expit(0.5) / 0.6)
+
     def test_contexts(self) -> None:
         """Test that a context listed twice gets one rate, and no contexts no rates."""
         features_ht = _features_ht([(1, 1001, 0.5, 2.0)])
@@ -1014,20 +1127,69 @@ class TestRegionalMutationRateExpr:
         )
         assert rates == {1: None}
 
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_features_are_missing(self, value: float) -> None:
+        """
+        Test that a NaN or infinite feature value counts as a missing feature.
+
+        A NaN rate passed the normalization's filter and made its context's factor,
+        and every rate in that context, NaN; an infinite value gave a rate of 1/ave or
+        0.
+        """
+        features_ht = _features_ht([(1, 1001, value, 2.0)])
+        assert _rates(features_ht, _models_ht(), ["AAA", "ACG"])[1] == pytest.approx(
+            {"AAA": 1.0, "ACG": _expit(-1.0) / 0.5}
+        )
+        assert _rates(features_ht, _models_ht(), ["AAA", "ACG"], None)[1]["AAA"] is None
+
+    @pytest.mark.parametrize("skip", [False, True])
+    def test_non_converged_models(
+        self, caplog: pytest.LogCaptureFixture, skip: bool
+    ) -> None:
+        """
+        Test that a model that didn't converge is applied, or skipped, with a warning.
+
+        It was applied silently. With ``skip_non_converged`` its context gets 1.0, as
+        a context without a model does.
+        """
+        models_ht = _models_ht()
+        models_ht = models_ht.annotate(converged=models_ht.context != "AAA")
+        features_ht = _features_ht([(1, 1001, 0.5, 2.0)])
+        with caplog.at_level(logging.WARNING):
+            ht = features_ht.annotate(
+                adj_r=regional_mutation_rate_expr(
+                    features_ht.row, models_ht, ["AAA", "ACG"], skip_non_converged=skip
+                )
+            )
+            rates = ht.collect()[0].adj_r
+        assert rates == pytest.approx(
+            {"AAA": 1.0 if skip else _expit(0.0) / 0.6, "ACG": _expit(-1.0) / 0.5}
+        )
+        assert any(
+            m.startswith("The models of AAA didn't converge") for m in _warnings(caplog)
+        )
+
     def test_matches_the_fitted_model(self) -> None:
         """
         Test that the rate is the fitted model's prediction divided by ``ave``.
 
         The two features have different means and sds, so the test covers the mean
-        subtraction, each feature's sd and coefficient, and the feature order. A
-        window at the training means has rate 1, and a window missing a feature has
-        no rate.
+        subtraction, each feature's sd and coefficient, and the feature order, which
+        isn't the order of the feature Table's fields. A window at the training means
+        has rate 1, and a window missing a feature has no rate.
         """
         models_ht = fit_regional_mutation_rate_models(
-            _prepared(_training_rows(), {"AAA": ["a", "b"]})
+            _prepared(_training_rows(), {"AAA": ["b", "a"]})
         )
         model = _models(models_ht)["AAA"]
-        values = [(-1.0, 9.0), (0.5, 5.0), (2.0, 1.0), tuple(model.mean), (None, 1.0)]
+        means = dict(zip(model.features, model.mean))
+        values = [
+            (-1.0, 9.0),
+            (0.5, 5.0),
+            (2.0, 1.0),
+            (means["a"], means["b"]),
+            (None, 1.0),
+        ]
         rates = _rates(
             _features_ht(
                 [
@@ -1038,7 +1200,8 @@ class TestRegionalMutationRateExpr:
             models_ht,
             ["AAA"],
         )
-        expected = _predict(model, np.array(values[:4])) / model.ave
+        # The values are (a, b); the model's features are (b, a).
+        expected = _predict(model, np.array(values[:4])[:, ::-1]) / model.ave
         assert [rates[1 + 1000 * i]["AAA"] for i in range(4)] == pytest.approx(
             list(expected)
         )
@@ -1125,6 +1288,25 @@ class TestRegionalMutationRateNormalizationFactorsAggExpr:
             adj_r=hl.if_else(
                 rate_ht.interval.start.position == 100,
                 hl.dict({"AAA": hl.missing(hl.tfloat64), "ACG": 1.0, "CCC": 1.0}),
+                rate_ht.adj_r,
+            )
+        )
+        factors = _normalization_factors(_sites_ht(), rate_ht)
+        assert factors == pytest.approx({"AAA": 2.0, "ACG": 0.5})
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf")])
+    def test_non_finite_rates_are_left_out(self, value: float) -> None:
+        """
+        Test that a NaN or infinite rate is left out of its context's factor.
+
+        A NaN rate counts as defined in Hail, so it made the factor, and every
+        normalized rate in that context, NaN.
+        """
+        rate_ht = _rate_ht()
+        rate_ht = rate_ht.annotate(
+            adj_r=hl.if_else(
+                rate_ht.interval.start.position == 100,
+                hl.dict({"AAA": value, "ACG": 1.0, "CCC": 1.0}),
                 rate_ht.adj_r,
             )
         )

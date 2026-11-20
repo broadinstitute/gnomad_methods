@@ -50,6 +50,9 @@ GENOME_COVERAGE_RELEASES = ["3.0", "3.0.1"]
 EXOME_AN_RELEASES = ["4.1"]
 GENOME_AN_RELEASES = ["4.1"]
 
+CURRENT_SV_RELEASE = "4.1"
+SV_RELEASES = ["4.1"]
+
 CONSTRAINT_RELEASES = ["4.0", "4.1", "4.1.1", "4.1.2"]
 CONSTRAINT_MUTATION_RATE_RELEASES = ["4.1.1"]
 
@@ -613,6 +616,26 @@ def release_vcf_path(data_type: str, version: str, contig: str) -> str:
     contig = f".{contig}" if contig else ""
     version_prefix = "r" if version.startswith("3.0") else "v"
     return f"gs://gcp-public-data--gnomad/release/{version}/vcf/{data_type}/gnomad.{data_type}.{version_prefix}{version}.sites{contig}.vcf.bgz"
+
+
+def sv_sites_vcf_path(version: str = CURRENT_SV_RELEASE) -> str:
+    """
+    Get the path to the public gnomAD genome structural variant (SV) sites VCF.
+
+    :param version: One of the SV release versions of gnomAD on GRCh38. Default is
+        CURRENT_SV_RELEASE.
+    :return: Path to the bgzipped SV sites VCF.
+    """
+    if version not in SV_RELEASES:
+        raise DataException(
+            f"Version {version} of gnomAD SVs for GRCh38 does not exist, please"
+            f" select a version from {SV_RELEASES}"
+        )
+
+    return (
+        f"gs://gcp-public-data--gnomad/release/{version}/genome_sv/"
+        f"gnomad.v{version}.sv.sites.vcf.gz"
+    )
 
 
 def add_grpMaxFAF95_v4(ht: hl.Table) -> hl.Table:

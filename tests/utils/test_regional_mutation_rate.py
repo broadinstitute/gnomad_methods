@@ -747,28 +747,48 @@ class TestScreenRegionalMutationRateFeatures:
         Test that each context is screened on its own features and rows.
 
         CCC's rows all have label 0, so it has no rows. With one feature list,
-        every context the rows have is screened on it.
+        every context the rows have is screened on it. The ``features`` global
+        records what was screened, so a selection from a screen of other features
+        can be caught.
         """
         rows = (
             _training_rows(context="AAA")
             + _training_rows(seed=1, context="ACG")
             + [{**r, "y": 0, "context": "CCC"} for r in _training_rows(n=50, seed=2)]
         )
-        per_context = self._screen(
-            _prepared(rows, {"AAA": ["a"], "ACG": ["b"], "CCC": ["a"]})
+        features = {"AAA": ["a"], "ACG": ["b"], "CCC": ["a"]}
+        per_context_ht = screen_regional_mutation_rate_features(
+            _prepared(rows, features)
         )
+        assert hl.eval(per_context_ht.features) == features
+        per_context = {(r.context, r.feature): r for r in per_context_ht.collect()}
         assert sorted(per_context) == [("AAA", "a"), ("ACG", "b")]
         aaa_only = self._screen(_prepared(rows[:2000], {"AAA": ["a"]}))
         assert per_context[("AAA", "a")].p_value == pytest.approx(
             aaa_only[("AAA", "a")].p_value
         )
-        one_list = self._screen(_prepared(rows, ["a"]))
+        one_list_ht = screen_regional_mutation_rate_features(_prepared(rows, ["a"]))
+        assert hl.eval(one_list_ht.features) == {
+            "AAA": ["a"],
+            "ACG": ["a"],
+            "CCC": ["a"],
+        }
+        one_list = {(r.context, r.feature): r for r in one_list_ht.collect()}
         assert sorted(one_list) == [("AAA", "a"), ("ACG", "a")]
 
     def test_bad_inputs_raise(self) -> None:
-        """Test that an unprepared Table, NaN features, and bad labels raise."""
+        """
+        Test that an unprepared Table, repeated features, NaN, and bad labels raise.
+
+        A feature listed twice for a context would have each of its rows fit twice,
+        shrinking its standard error by a factor of sqrt(2).
+        """
         with pytest.raises(ValueError, match="prepare_regional_mutation_rate"):
             screen_regional_mutation_rate_features(_training_ht(_training_rows()))
+        with pytest.raises(ValueError, match=r"more than once.*'AAA': \['a'\]"):
+            screen_regional_mutation_rate_features(
+                _prepared(_training_rows(), {"AAA": ["a", "b", "a"]})
+            )
         rows = _training_rows()
         rows[3]["a"] = float("nan")
         with pytest.raises(ValueError, match="1 training rows have a NaN or infinite"):

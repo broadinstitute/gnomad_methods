@@ -1,0 +1,8 @@
+gnomad.utils.constraint.counts
+==============================
+
+Functions to count observed and possible variants and sum them by group.
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.counts
+
+.. automodule:: gnomad.utils.constraint.counts

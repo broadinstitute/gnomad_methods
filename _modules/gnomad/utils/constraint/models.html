@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.utils.constraint.models &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../../_static/jquery.js"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+        <script src="../../../../_static/doctools.js"></script>
+        <script src="../../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gnomad.utils.constraint.models</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gnomad.utils.constraint.models</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Functions to build and apply the plateau and coverage models.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">hail</span> <span class="k">as</span> <span class="nn">hl</span>
+
+<span class="kn">from</span> <span class="nn">gnomad.utils.constraint.constants</span> <span class="kn">import</span> <span class="n">COVERAGE_CUTOFF</span>
+<span class="kn">from</span> <span class="nn">gnomad.utils.constraint.context</span> <span class="kn">import</span> <span class="n">annotate_mutation_type</span>
+<span class="kn">from</span> <span class="nn">gnomad.utils.constraint.counts</span> <span class="kn">import</span> <span class="n">_build_sum_agg_struct</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> (</span><span class="si">%(name)s</span><span class="s2"> </span><span class="si">%(lineno)s</span><span class="s2">): </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">datefmt</span><span class="o">=</span><span class="s2">&quot;%m/</span><span class="si">%d</span><span class="s2">/%Y %I:%M:%S %p&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;constraint_utils&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="calibration_model_group_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.calibration_model_group_expr">[docs]</a><span class="k">def</span> <span class="nf">calibration_model_group_expr</span><span class="p">(</span>
+    <span class="n">exomes_coverage_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">,</span>
+    <span class="n">cpg_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">,</span>
+    <span class="n">low_cov_cutoff</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">high_cov_cutoff</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">COVERAGE_CUTOFF</span><span class="p">,</span>
+    <span class="n">upper_cov_cutoff</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">skip_coverage_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">additional_grouping_exprs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StringExpression</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cpg_in_high_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the calibration model grouping annotation for a variant.</span>
+
+<span class="sd">    The calibration model expression is a struct with the following fields:</span>
+
+<span class="sd">        - high_or_low_coverage: Whether the variant belongs to the high or low coverage</span>
+<span class="sd">          calibration model. The variant is assigned to the high coverage model if the</span>
+<span class="sd">          exome coverage is greater than or equal to &#39;high_cov_cutoff&#39; and less than or</span>
+<span class="sd">          equal to &#39;upper_cov_cutoff&#39; (if provided). The variant is assigned to the low</span>
+<span class="sd">          coverage model if `skip_coverage_model` is False and the exome coverage is</span>
+<span class="sd">          greater than &#39;low_cov_cutoff&#39; (if provided) and less than &#39;high_cov_cutoff&#39;.</span>
+<span class="sd">        - model_group: Struct of the fields the models are grouped by:</span>
+
+<span class="sd">            - cpg: Whether the variant is a CpG (`cpg_expr`).</span>
+<span class="sd">            - Any fields in `additional_grouping_exprs` (e.g. ``genomic_region``).</span>
+
+<span class="sd">    The expression is missing for variants that belong to neither model.</span>
+
+<span class="sd">    :param exomes_coverage_expr: Exome coverage expression.</span>
+<span class="sd">    :param cpg_expr: CpG expression.</span>
+<span class="sd">    :param low_cov_cutoff: Low coverage cutoff. Default is None.</span>
+<span class="sd">    :param high_cov_cutoff: High coverage cutoff. Default is COVERAGE_CUTOFF.</span>
+<span class="sd">    :param upper_cov_cutoff: Upper coverage cutoff. Default is None.</span>
+<span class="sd">    :param skip_coverage_model: Whether to skip the coverage model. Default is False.</span>
+<span class="sd">    :param additional_grouping_exprs: Optional Dictionary of additional expressions to</span>
+<span class="sd">        group by. Default is None.</span>
+<span class="sd">    :param cpg_in_high_only: Whether to only include `cpg_expr` in the model grouping</span>
+<span class="sd">        for the high coverage model. Default is False.</span>
+<span class="sd">    :return: StructExpression with ``high_or_low_coverage`` and ``model_group``</span>
+<span class="sd">        fields.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">high_cov_expr</span> <span class="o">=</span> <span class="n">exomes_coverage_expr</span> <span class="o">&gt;=</span> <span class="n">high_cov_cutoff</span>
+    <span class="k">if</span> <span class="n">upper_cov_cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">high_cov_expr</span> <span class="o">&amp;=</span> <span class="n">exomes_coverage_expr</span> <span class="o">&lt;=</span> <span class="n">upper_cov_cutoff</span>
+
+    <span class="c1"># Sites above `upper_cov_cutoff` fail the high coverage check, so the upper bound</span>
+    <span class="c1"># on low coverage keeps them out of both models.</span>
+    <span class="n">low_cov_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">bool</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="n">skip_coverage_model</span> <span class="k">else</span> <span class="n">hl</span><span class="o">.</span><span class="n">bool</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">low_cov_expr</span> <span class="o">&amp;=</span> <span class="n">exomes_coverage_expr</span> <span class="o">&lt;</span> <span class="n">high_cov_cutoff</span>
+    <span class="k">if</span> <span class="n">low_cov_cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">low_cov_expr</span> <span class="o">&amp;=</span> <span class="n">exomes_coverage_expr</span> <span class="o">&gt;</span> <span class="n">low_cov_cutoff</span>
+
+    <span class="c1"># Define whether the variant should be included in the high or low coverage model.</span>
+    <span class="n">model_expr</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">case</span><span class="p">()</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">high_cov_expr</span><span class="p">,</span> <span class="s2">&quot;high&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">low_cov_expr</span><span class="p">,</span> <span class="s2">&quot;low&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">or_missing</span><span class="p">()</span>
+    <span class="p">)</span>
+
+    <span class="n">cpg_expr</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">or_missing</span><span class="p">(</span><span class="n">model_expr</span> <span class="o">==</span> <span class="s2">&quot;high&quot;</span><span class="p">,</span> <span class="n">cpg_expr</span><span class="p">)</span> <span class="k">if</span> <span class="n">cpg_in_high_only</span> <span class="k">else</span> <span class="n">cpg_expr</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">or_missing</span><span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">is_defined</span><span class="p">(</span><span class="n">model_expr</span><span class="p">),</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+            <span class="n">high_or_low_coverage</span><span class="o">=</span><span class="n">model_expr</span><span class="p">,</span>
+            <span class="n">model_group</span><span class="o">=</span><span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+                <span class="n">cpg</span><span class="o">=</span><span class="n">cpg_expr</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">(</span><span class="n">additional_grouping_exprs</span> <span class="ow">or</span> <span class="p">{}),</span>
+            <span class="p">),</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="build_models"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.build_models">[docs]</a><span class="k">def</span> <span class="nf">build_models</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">coverage_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">,</span>
+    <span class="n">weighted</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">keys</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;context&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ref&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;alt&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;methylation_level&quot;</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">model_group_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">high_cov_definition</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">COVERAGE_CUTOFF</span><span class="p">,</span>
+    <span class="n">upper_cov_cutoff</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">skip_coverage_model</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">log10_coverage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">additional_grouping</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">],</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">DictExpression</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build coverage and plateau models.</span>
+
+<span class="sd">    This function builds models (plateau_models) using linear regression to calibrate</span>
+<span class="sd">    mutation rate estimates against the proportion observed of each substitution,</span>
+<span class="sd">    context, and methylation level in `ht`.</span>
+
+<span class="sd">    Two plateau models are fit, one for CpG transitions, and one for the remainder of</span>
+<span class="sd">    sites (transversions and non CpG transitions).</span>
+
+<span class="sd">    The plateau models only consider high coverage sites, or sites above a median</span>
+<span class="sd">    coverage of `high_cov_definition` and median coverage below `upper_cov_cutoff`.</span>
+
+<span class="sd">    Plateau model: adjusts proportion of expected variation based on location in the</span>
+<span class="sd">    genome and CpG status.</span>
+
+<span class="sd">    The x and y of the plateau models:</span>
+<span class="sd">        - x: `mu_snp` - mutation rate</span>
+<span class="sd">        - y: proportion observed (&#39;observed_variants&#39; / &#39;possible_variants&#39;)</span>
+
+<span class="sd">    This function also builds models (coverage models) to calibrate the proportion of</span>
+<span class="sd">    expected variation at low coverage sites (sites below `high_cov_definition`).</span>
+
+<span class="sd">    The coverage models are built by creating a scaling factor across all high coverage</span>
+<span class="sd">    sites, applying this ratio to the low coverage sites, and running a linear</span>
+<span class="sd">    regression.</span>
+
+<span class="sd">    Coverage model: corrects proportion of expected variation at low coverage sites.</span>
+<span class="sd">    Low coverage sites are defined as sites with median coverage &lt; `high_cov_definition`.</span>
+
+<span class="sd">    The x and y of the coverage model:</span>
+
+<span class="sd">        - x: groupings of exome coverage at low coverage sites (log10 transformed if</span>
+<span class="sd">          requested)</span>
+<span class="sd">        - y: sum(&#39;observed_variants&#39;) / (``high_coverage_scale_factor`` *</span>
+<span class="sd">          sum(&#39;possible_variants&#39; * &#39;mu_snp&#39;)) at low coverage sites</span>
+
+<span class="sd">    ``high_coverage_scale_factor`` = sum(&#39;observed_variants&#39;) /</span>
+<span class="sd">    sum(&#39;possible_variants&#39; * &#39;mu_snp&#39;) at high coverage sites</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        This function expects that the input Table (`ht`) contains only high quality</span>
+<span class="sd">        synonymous variants below 0.1% frequency.</span>
+
+<span class="sd">    The following fields are expected in `ht`:</span>
+
+<span class="sd">        - context: trinucleotide genomic context.</span>
+<span class="sd">        - ref: the reference allele.</span>
+<span class="sd">        - alt: the alternate allele.</span>
+<span class="sd">        - methylation_level: methylation level.</span>
+<span class="sd">        - mu_snp: mutation rate.</span>
+<span class="sd">        - cpg: whether the variant is a CpG.</span>
+<span class="sd">        - observed_variants: the number of observed variants in the dataset for each</span>
+<span class="sd">          variant. Note that the term &quot;variant&quot; here refers to a specific substitution,</span>
+<span class="sd">          context, methylation level, and coverage combination.</span>
+<span class="sd">        - possible_variants: the number of possible variants in the dataset for each</span>
+<span class="sd">          variant.</span>
+
+<span class="sd">    :param ht: Input Table.</span>
+<span class="sd">    :param coverage_expr: Expression that defines the coverage metric.</span>
+<span class="sd">    :param weighted: Whether to weight the plateau models (a linear regression</span>
+<span class="sd">        model) by &#39;possible_variants&#39;. Default is False.</span>
+<span class="sd">    :param keys: Annotations used to group observed and possible variant counts.</span>
+<span class="sd">        Default is (&quot;context&quot;, &quot;ref&quot;, &quot;alt&quot;, &quot;methylation_level&quot;).</span>
+<span class="sd">    :param model_group_expr: Expression with ``high_or_low_coverage`` and</span>
+<span class="sd">        ``model_group`` annotations to group variants into high or low coverage models.</span>
+<span class="sd">        If ``model_group`` includes a ``genomic_region`` field, the coverage model is</span>
+<span class="sd">        built only on sites where it is &quot;autosome_or_par&quot;; otherwise all sites are</span>
+<span class="sd">        used. If not provided, the ``calibration_model_group_expr`` function is used to</span>
+<span class="sd">        define the grouping, which does not include ``genomic_region``.</span>
+<span class="sd">    :param high_cov_definition: Coverage threshold for high/low classification.</span>
+<span class="sd">        Sites with coverage above this cutoff are considered well covered. Default is</span>
+<span class="sd">        ``COVERAGE_CUTOFF``.</span>
+<span class="sd">    :param upper_cov_cutoff: Upper coverage cutoff. Sites with coverage above this</span>
+<span class="sd">        cutoff are excluded from the high coverage Table. Default is None.</span>
+<span class="sd">    :param skip_coverage_model: Whether to skip generating the coverage model. If set</span>
+<span class="sd">        to True, None is returned instead of the coverage model. Default is False.</span>
+<span class="sd">    :param log10_coverage: Whether to convert coverage sites with log10 when building</span>
+<span class="sd">        the coverage model. Default is True.</span>
+<span class="sd">    :param additional_grouping: Additional annotations to group by before</span>
+<span class="sd">        counting the observed and possible variants. Default is ().</span>
+<span class="sd">    :return: Tuple of (coverage model, plateau models). The coverage model is an</span>
+<span class="sd">        ``[intercept, slope]`` ArrayNumericExpression, or None when</span>
+<span class="sd">        ``skip_coverage_model`` is True.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">model_group_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Define whether the variant should be included in the high or low coverage</span>
+        <span class="c1"># model.</span>
+        <span class="n">model_group_expr</span> <span class="o">=</span> <span class="n">calibration_model_group_expr</span><span class="p">(</span>
+            <span class="n">coverage_expr</span><span class="p">,</span>
+            <span class="n">ht</span><span class="o">.</span><span class="n">cpg</span><span class="p">,</span>
+            <span class="n">low_cov_cutoff</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">high_cov_cutoff</span><span class="o">=</span><span class="n">high_cov_definition</span><span class="p">,</span>
+            <span class="n">upper_cov_cutoff</span><span class="o">=</span><span class="n">upper_cov_cutoff</span><span class="p">,</span>
+            <span class="n">skip_coverage_model</span><span class="o">=</span><span class="n">skip_coverage_model</span><span class="p">,</span>
+            <span class="n">cpg_in_high_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="n">grouping</span> <span class="o">=</span> <span class="n">keys</span> <span class="o">+</span> <span class="n">additional_grouping</span>
+    <span class="n">mu_type_fields</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;cpg&quot;</span><span class="p">,</span> <span class="s2">&quot;transition&quot;</span><span class="p">,</span> <span class="s2">&quot;mutation_type&quot;</span><span class="p">,</span> <span class="s2">&quot;mutation_type_model&quot;</span><span class="p">)</span>
+    <span class="c1"># all() accepts a generator expression directly (no list needed) and</span>
+    <span class="c1"># short-circuits on the first False.</span>
+    <span class="n">has_mu_type</span> <span class="o">=</span> <span class="nb">all</span><span class="p">(</span><span class="n">x</span> <span class="ow">in</span> <span class="n">ht</span><span class="o">.</span><span class="n">row</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">mu_type_fields</span><span class="p">)</span>
+    <span class="n">grouping</span> <span class="o">+=</span> <span class="n">mu_type_fields</span> <span class="k">if</span> <span class="n">has_mu_type</span> <span class="k">else</span> <span class="p">()</span>
+
+    <span class="n">grouping_exprs</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;build_model&quot;</span><span class="p">:</span> <span class="n">model_group_expr</span><span class="p">}</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">skip_coverage_model</span><span class="p">:</span>
+        <span class="n">grouping_exprs</span><span class="p">[</span><span class="s2">&quot;exomes_coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">or_missing</span><span class="p">(</span>
+            <span class="n">model_group_expr</span><span class="o">.</span><span class="n">high_or_low_coverage</span> <span class="o">==</span> <span class="s2">&quot;low&quot;</span><span class="p">,</span> <span class="n">coverage_expr</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Collapse per-site rows into one row per (context, ref, alt,</span>
+    <span class="c1"># methylation_level, …) group with summed observed/possible counts.</span>
+    <span class="c1"># model_group_expr and (optionally) exomes_coverage are carried along so</span>
+    <span class="c1"># that plateau and coverage models can be built on the grouped table.</span>
+    <span class="c1"># mu_snp is identical for all rows within a group so grabbing one value suffices.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">ht</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="o">*</span><span class="n">grouping</span><span class="p">,</span> <span class="o">**</span><span class="n">grouping_exprs</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">aggregate</span><span class="p">(</span>
+            <span class="n">mu_snp</span><span class="o">=</span><span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">mu_snp</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="o">**</span><span class="n">_build_sum_agg_struct</span><span class="p">(</span>
+                <span class="n">fields_to_sum</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;observed_variants&quot;</span><span class="p">,</span> <span class="s2">&quot;possible_variants&quot;</span><span class="p">],</span> <span class="n">t</span><span class="o">=</span><span class="n">ht</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="o">.</span><span class="n">key_by</span><span class="p">(</span><span class="o">*</span><span class="n">keys</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">has_mu_type</span><span class="p">:</span>
+        <span class="n">ht</span> <span class="o">=</span> <span class="n">annotate_mutation_type</span><span class="p">(</span><span class="n">ht</span><span class="p">)</span>
+
+    <span class="c1"># Build plateau models.</span>
+    <span class="n">is_high_expr</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">build_model</span><span class="o">.</span><span class="n">high_or_low_coverage</span> <span class="o">==</span> <span class="s2">&quot;high&quot;</span>
+    <span class="n">agg_expr</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;plateau&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="n">is_high_expr</span><span class="p">,</span>
+            <span class="n">build_plateau_models</span><span class="p">(</span>
+                <span class="n">ht</span><span class="o">.</span><span class="n">mu_snp</span><span class="p">,</span>
+                <span class="n">ht</span><span class="o">.</span><span class="n">observed_variants</span><span class="p">,</span>
+                <span class="n">ht</span><span class="o">.</span><span class="n">possible_variants</span><span class="p">,</span>
+                <span class="n">model_group_expr</span><span class="o">=</span><span class="n">ht</span><span class="o">.</span><span class="n">build_model</span><span class="o">.</span><span class="n">model_group</span><span class="p">,</span>
+                <span class="n">weighted</span><span class="o">=</span><span class="n">weighted</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">skip_coverage_model</span><span class="p">:</span>
+        <span class="c1"># The coverage model is only built using the full dataset observed variants</span>
+        <span class="c1"># so use the first element if the observed_variants is an array.</span>
+        <span class="n">obs_is_array</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">observed_variants</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">)</span>
+        <span class="n">obs_expr</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">observed_variants</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">obs_is_array</span> <span class="k">else</span> <span class="n">ht</span><span class="o">.</span><span class="n">observed_variants</span>
+
+        <span class="c1"># Restrict the coverage model to autosome/PAR sites when the model grouping</span>
+        <span class="c1"># includes a genomic region, otherwise use all sites.</span>
+        <span class="n">model_group</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">build_model</span><span class="o">.</span><span class="n">model_group</span>
+        <span class="n">autosome_or_par_expr</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">model_group</span><span class="o">.</span><span class="n">genomic_region</span> <span class="o">==</span> <span class="s2">&quot;autosome_or_par&quot;</span>
+            <span class="k">if</span> <span class="s2">&quot;genomic_region&quot;</span> <span class="ow">in</span> <span class="n">model_group</span>
+            <span class="k">else</span> <span class="n">hl</span><span class="o">.</span><span class="n">bool</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create a metric that represents the relative mutability of the exome calculated</span>
+        <span class="c1"># on high coverage sites and will be used as scaling factor when building the</span>
+        <span class="c1"># coverage model.</span>
+        <span class="n">agg_expr</span><span class="p">[</span><span class="s2">&quot;high_coverage_scale_factor&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="n">is_high_expr</span> <span class="o">&amp;</span> <span class="n">autosome_or_par_expr</span><span class="p">,</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">obs_expr</span><span class="p">)</span> <span class="o">/</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">possible_variants</span> <span class="o">*</span> <span class="n">ht</span><span class="o">.</span><span class="n">mu_snp</span><span class="p">),</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Get the observed variant count and mu_snp for low coverage sites.</span>
+        <span class="n">agg_expr</span><span class="p">[</span><span class="s2">&quot;coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">build_model</span><span class="o">.</span><span class="n">high_or_low_coverage</span> <span class="o">==</span> <span class="s2">&quot;low&quot;</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">autosome_or_par_expr</span><span class="p">,</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span>
+                <span class="n">ht</span><span class="o">.</span><span class="n">exomes_coverage</span><span class="p">,</span>
+                <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+                    <span class="n">obs</span><span class="o">=</span><span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">obs_expr</span><span class="p">),</span>
+                    <span class="n">mu_snp</span><span class="o">=</span><span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">ht</span><span class="o">.</span><span class="n">possible_variants</span> <span class="o">*</span> <span class="n">ht</span><span class="o">.</span><span class="n">mu_snp</span><span class="p">),</span>
+                <span class="p">),</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="n">models</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span><span class="o">**</span><span class="n">agg_expr</span><span class="p">),</span> <span class="n">_localize</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+    <span class="c1"># Build coverage model.</span>
+    <span class="n">coverage_model</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">skip_coverage_model</span><span class="p">:</span>
+        <span class="n">coverage_model</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">coverage</span><span class="o">.</span><span class="n">map_values</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+                <span class="n">low_coverage_oe</span><span class="o">=</span><span class="n">x</span><span class="o">.</span><span class="n">obs</span> <span class="o">/</span> <span class="p">(</span><span class="n">models</span><span class="o">.</span><span class="n">high_coverage_scale_factor</span> <span class="o">*</span> <span class="n">x</span><span class="o">.</span><span class="n">mu_snp</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+
+        <span class="c1"># TODO: consider weighting here as well.</span>
+        <span class="n">coverage_model</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">coverage_model</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">aggregate</span><span class="p">(</span>
+                <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">build_coverage_model</span><span class="p">(</span>
+                    <span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">low_coverage_oe</span><span class="p">,</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">log10_coverage</span><span class="o">=</span><span class="n">log10_coverage</span>
+                <span class="p">)</span>
+            <span class="p">)</span>
+            <span class="o">.</span><span class="n">beta</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">coverage_model</span><span class="p">,</span> <span class="n">models</span><span class="o">.</span><span class="n">plateau</span></div>
+
+
+<div class="viewcode-block" id="build_plateau_models"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.build_plateau_models">[docs]</a><span class="k">def</span> <span class="nf">build_plateau_models</span><span class="p">(</span>
+    <span class="n">mu_snp_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">,</span>
+    <span class="n">observed_variants_expr</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int64Expression</span><span class="p">],</span>
+    <span class="n">possible_variants_expr</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int64Expression</span><span class="p">],</span>
+    <span class="n">weighted</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">cpg_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">model_group_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">DictExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build plateau models to calibrate mutation rate against proportion observed.</span>
+
+<span class="sd">    Fits a linear regression of ``observed_variants_expr / possible_variants_expr``</span>
+<span class="sd">    on ``mu_snp_expr``. When either observed or possible expressions are arrays</span>
+<span class="sd">    (e.g., one model per downsampling), the regression is applied element-wise</span>
+<span class="sd">    via ``hl.agg.array_agg``.</span>
+
+<span class="sd">    When ``model_group_expr`` or ``cpg_expr`` is provided, the result is a</span>
+<span class="sd">    ``DictExpression`` keyed by the grouping struct. Otherwise the result is the</span>
+<span class="sd">    regression beta directly.</span>
+
+<span class="sd">    :param mu_snp_expr: Mutation rate expression.</span>
+<span class="sd">    :param observed_variants_expr: Observed variant counts (scalar or array).</span>
+<span class="sd">    :param possible_variants_expr: Possible variant counts (scalar or array).</span>
+<span class="sd">    :param weighted: If True, use weighted least squares with</span>
+<span class="sd">        ``possible_variants_expr`` as weights. Default is False.</span>
+<span class="sd">    :param cpg_expr: Boolean expression indicating CpG sites. When provided,</span>
+<span class="sd">        adds a ``cpg`` field to the grouping struct.</span>
+<span class="sd">    :param model_group_expr: Struct expression to group by in the aggregation.</span>
+<span class="sd">    :return: Regression betas, optionally grouped by ``model_group_expr``</span>
+<span class="sd">        (and/or ``cpg_expr``).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">obs_is_array</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observed_variants_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">)</span>
+    <span class="n">pos_is_array</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">possible_variants_expr</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_linreg</span><span class="p">(</span>
+        <span class="n">o</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">,</span>
+        <span class="n">p</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">NumericExpression</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run linear regression of observed/possible on mutation rate.</span>
+
+<span class="sd">        :param o: Observed variant count expression.</span>
+<span class="sd">        :param p: Possible variant count expression.</span>
+<span class="sd">        :return: Regression beta coefficients.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">linreg</span><span class="p">(</span>
+            <span class="n">o</span> <span class="o">/</span> <span class="n">p</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">mu_snp_expr</span><span class="p">],</span> <span class="n">weight</span><span class="o">=</span><span class="n">p</span> <span class="k">if</span> <span class="n">weighted</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">beta</span>
+
+    <span class="k">if</span> <span class="n">obs_is_array</span> <span class="ow">and</span> <span class="n">pos_is_array</span><span class="p">:</span>
+        <span class="n">agg_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_agg</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">_linreg</span><span class="p">(</span><span class="o">*</span><span class="n">x</span><span class="p">),</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">zip</span><span class="p">(</span><span class="n">observed_variants_expr</span><span class="p">,</span> <span class="n">possible_variants_expr</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">obs_is_array</span><span class="p">:</span>
+        <span class="n">agg_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_agg</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">_linreg</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">possible_variants_expr</span><span class="p">),</span> <span class="n">observed_variants_expr</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">pos_is_array</span><span class="p">:</span>
+        <span class="n">agg_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">array_agg</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">_linreg</span><span class="p">(</span><span class="n">observed_variants_expr</span><span class="p">,</span> <span class="n">x</span><span class="p">),</span> <span class="n">possible_variants_expr</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">agg_expr</span> <span class="o">=</span> <span class="n">_linreg</span><span class="p">(</span><span class="n">observed_variants_expr</span><span class="p">,</span> <span class="n">possible_variants_expr</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">model_group_expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">cpg_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">agg_expr</span>
+
+    <span class="n">model_group_expr</span> <span class="o">=</span> <span class="n">model_group_expr</span> <span class="ow">or</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">cpg_expr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">model_group_expr</span> <span class="o">=</span> <span class="n">model_group_expr</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">cpg</span><span class="o">=</span><span class="n">cpg_expr</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="n">model_group_expr</span><span class="p">,</span> <span class="n">agg_expr</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="build_coverage_model"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.build_coverage_model">[docs]</a><span class="k">def</span> <span class="nf">build_coverage_model</span><span class="p">(</span>
+    <span class="n">low_coverage_oe_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">,</span>
+    <span class="n">coverage_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">,</span>
+    <span class="n">log10_coverage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build coverage model.</span>
+
+<span class="sd">    This function uses linear regression to build a model of coverage to correct</span>
+<span class="sd">    proportion of expected variation at low coverage sites.</span>
+
+<span class="sd">    The x and y of the coverage model:</span>
+
+<span class="sd">        - x: `coverage_expr`</span>
+<span class="sd">        - y: `low_coverage_oe_expr`</span>
+
+<span class="sd">    :param low_coverage_oe_expr: The Float64Expression of observed:expected ratio</span>
+<span class="sd">        for a given coverage level.</span>
+<span class="sd">    :param coverage_expr: The Float64Expression of the coverage expression.</span>
+<span class="sd">    :param log10_coverage: Whether to convert coverage sites by log10 when building the</span>
+<span class="sd">        coverage model. Default is False.</span>
+<span class="sd">    :return: StructExpression with intercept and slope of the model.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">log10_coverage</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">&quot;Converting coverage sites by log10 when building the coverage model.&quot;</span>
+        <span class="p">)</span>
+        <span class="n">coverage_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">coverage_expr</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">linreg</span><span class="p">(</span><span class="n">low_coverage_oe_expr</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">coverage_expr</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="apply_plateau_models"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.apply_plateau_models">[docs]</a><span class="k">def</span> <span class="nf">apply_plateau_models</span><span class="p">(</span>
+    <span class="n">mu_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">,</span>
+    <span class="n">plateau_models_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute the predicted probability observed.</span>
+
+<span class="sd">    The predicted probability observed is computed as the mutation rate adjusted by the</span>
+<span class="sd">    plateau model.</span>
+
+<span class="sd">    :param mu_expr: Mutation rate expression.</span>
+<span class="sd">    :param plateau_models_expr: This can be either a single plateau model, where the</span>
+<span class="sd">        first element is the intercept and the second element is the slope, or an array</span>
+<span class="sd">        of plateau models.</span>
+<span class="sd">    :return: Float64Expression of the predicted probability observed, or an</span>
+<span class="sd">        ArrayExpression of them when ``plateau_models_expr`` is an array of models.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">_apply_model</span><span class="p">(</span><span class="n">plateau_model</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Apply the plateau model to the mutation rate expression.</span>
+
+<span class="sd">        :param plateau_model: ArrayExpression of the plateau model.</span>
+<span class="sd">        :return: Float64Expression of the predicted probability observed.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">slope</span> <span class="o">=</span> <span class="n">plateau_model</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">intercept</span> <span class="o">=</span> <span class="n">plateau_model</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">ppo_expr</span> <span class="o">=</span> <span class="n">mu_expr</span> <span class="o">*</span> <span class="n">slope</span> <span class="o">+</span> <span class="n">intercept</span>
+
+        <span class="k">return</span> <span class="n">ppo_expr</span>
+
+    <span class="k">if</span> <span class="n">plateau_models_expr</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">element_type</span> <span class="o">==</span> <span class="n">hl</span><span class="o">.</span><span class="n">tarray</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">tfloat64</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">plateau_models_expr</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">_apply_model</span><span class="p">(</span><span class="n">x</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">_apply_model</span><span class="p">(</span><span class="n">plateau_models_expr</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="coverage_correction_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.coverage_correction_expr">[docs]</a><span class="k">def</span> <span class="nf">coverage_correction_expr</span><span class="p">(</span>
+    <span class="n">coverage_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">,</span>
+    <span class="n">coverage_model</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">],</span>
+    <span class="n">low_coverage_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">coverage_cutoff</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">log10_coverage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Compute the coverage correction expression.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        One and only one of `low_coverage_expr` or `coverage_cutoff` must be specified.</span>
+
+<span class="sd">    The coverage correction expression is computed as follows:</span>
+
+<span class="sd">        - If the coverage is 0, the coverage correction is 0.</span>
+<span class="sd">        - If the low coverage expression (`low_coverage_expr`) is True, or the</span>
+<span class="sd">          coverage (`coverage_expr`) is below the coverage cutoff (`coverage_cutoff`),</span>
+<span class="sd">          the coverage model is applied to the coverage.</span>
+<span class="sd">        - Otherwise, the coverage correction is 1.</span>
+
+<span class="sd">    :param coverage_expr: Float64Expression of the coverage.</span>
+<span class="sd">    :param coverage_model: Coverage model as ``[intercept, slope]``, either a tuple of</span>
+<span class="sd">        floats or an ArrayNumericExpression (as returned by ``build_models``).</span>
+<span class="sd">    :param low_coverage_expr: Optional BooleanExpression indicating whether the site is</span>
+<span class="sd">        a low coverage site, and the coverage model should be applied. Default is None.</span>
+<span class="sd">    :param coverage_cutoff: Optional coverage cutoff. If specified, the coverage model</span>
+<span class="sd">        is applied to sites with coverage below this cutoff. Default is None.</span>
+<span class="sd">    :param log10_coverage: Whether to convert coverage sites by log10 when applying the</span>
+<span class="sd">        coverage model. Default is False.</span>
+<span class="sd">    :return: Float64Expression of the coverage correction.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">low_coverage_expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">coverage_cutoff</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Either &#39;low_coverage_expr&#39; or &#39;coverage_cutoff&#39; must be specified!&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">low_coverage_expr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">coverage_cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Only one of &#39;low_coverage_expr&#39; or &#39;coverage_cutoff&#39; can be specified!&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">coverage_cutoff</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">low_coverage_expr</span> <span class="o">=</span> <span class="n">coverage_expr</span> <span class="o">&lt;</span> <span class="n">coverage_cutoff</span>
+
+    <span class="k">if</span> <span class="n">log10_coverage</span><span class="p">:</span>
+        <span class="n">cov_corr_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">coverage_expr</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">cov_corr_expr</span> <span class="o">=</span> <span class="n">coverage_expr</span>
+
+    <span class="k">return</span> <span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">case</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">when</span><span class="p">(</span><span class="n">coverage_expr</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">when</span><span class="p">(</span>
+            <span class="n">low_coverage_expr</span><span class="p">,</span>
+            <span class="n">coverage_model</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">cov_corr_expr</span> <span class="o">+</span> <span class="n">coverage_model</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="o">.</span><span class="n">default</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="apply_models"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/models.html#gnomad.utils.constraint.models.apply_models">[docs]</a><span class="k">def</span> <span class="nf">apply_models</span><span class="p">(</span>
+    <span class="n">mu_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Float64Expression</span><span class="p">,</span>
+    <span class="n">plateau_models_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayExpression</span><span class="p">,</span>
+    <span class="n">possible_variants_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int64Expression</span><span class="p">,</span>
+    <span class="n">coverage_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Union</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">ArrayNumericExpression</span><span class="p">]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">coverage_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">cpg_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">model_group_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">high_cov_definition</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">COVERAGE_CUTOFF</span><span class="p">,</span>
+    <span class="n">log10_coverage</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Apply calibration models to compute expected variant counts.</span>
+
+<span class="sd">    Applies plateau and (optionally) coverage models to produce a struct with</span>
+<span class="sd">    ``mu``, ``predicted_proportion_observed``, ``expected_variants``, and</span>
+<span class="sd">    (when a coverage model is provided) ``coverage_correction``.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        When a coverage model is applied, a row whose ``model_group_expr`` is</span>
+<span class="sd">        missing gets missing ``mu``, ``expected_variants``, and</span>
+<span class="sd">        ``coverage_correction`` (unless its coverage is 0, which always gives a</span>
+<span class="sd">        correction of 0). ``calibration_model_group_expr`` is missing for sites in</span>
+<span class="sd">        neither model, such as sites above ``upper_cov_cutoff`` or at or below</span>
+<span class="sd">        ``low_cov_cutoff``. ``hl.agg.sum`` skips missing values, so filter these rows</span>
+<span class="sd">        out before applying the models if they should not silently drop out of</span>
+<span class="sd">        aggregated expected counts.</span>
+
+<span class="sd">    :param mu_expr: Mutation rate expression.</span>
+<span class="sd">    :param plateau_models_expr: Single plateau model (array of [intercept,</span>
+<span class="sd">        slope]) or an array of plateau models.</span>
+<span class="sd">    :param possible_variants_expr: Possible variant counts to multiply the</span>
+<span class="sd">        predicted proportion observed by.</span>
+<span class="sd">    :param coverage_model: Coverage model as ``[intercept, slope]``, either a tuple of</span>
+<span class="sd">        floats or an ArrayNumericExpression (as returned by ``build_models``).</span>
+<span class="sd">        Default is None.</span>
+<span class="sd">    :param coverage_expr: Int32Expression of the coverage. Required when</span>
+<span class="sd">        ``coverage_model`` is provided or ``model_group_expr`` is None.</span>
+<span class="sd">    :param cpg_expr: BooleanExpression indicating CpG sites. Required when</span>
+<span class="sd">        ``model_group_expr`` is None.</span>
+<span class="sd">    :param model_group_expr: Expression with ``high_or_low_coverage``</span>
+<span class="sd">        annotation to group variants into high or low coverage models. If not</span>
+<span class="sd">        provided, ``calibration_model_group_expr`` is used. Default is None.</span>
+<span class="sd">    :param high_cov_definition: Coverage threshold for high/low classification.</span>
+<span class="sd">        Default is ``COVERAGE_CUTOFF``.</span>
+<span class="sd">    :param log10_coverage: Whether to log10-transform coverage when applying</span>
+<span class="sd">        the coverage model. Default is True.</span>
+<span class="sd">    :return: StructExpression with &quot;mu&quot;, &quot;predicted_proportion_observed&quot;,</span>
+<span class="sd">        &quot;expected_variants&quot;, and optionally &quot;coverage_correction&quot;.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">coverage_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">coverage_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;If &#39;coverage_model&#39; is specified, &#39;coverage_expr&#39; must also be specified!&quot;</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">model_group_expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">coverage_expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">cpg_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;If &#39;model_group_expr&#39; is not specified, &#39;coverage_expr&#39; and &#39;cpg_expr&#39; must&quot;</span>
+            <span class="s2">&quot; be specified!&quot;</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">model_group_expr</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Get the annotations relevant for applying the calibration models.</span>
+        <span class="n">model_group_expr</span> <span class="o">=</span> <span class="n">calibration_model_group_expr</span><span class="p">(</span>
+            <span class="n">coverage_expr</span><span class="p">,</span>
+            <span class="n">cpg_expr</span><span class="p">,</span>
+            <span class="n">high_cov_cutoff</span><span class="o">=</span><span class="n">high_cov_definition</span><span class="p">,</span>
+            <span class="n">skip_coverage_model</span><span class="o">=</span><span class="n">coverage_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Apply plateau models.</span>
+    <span class="n">ppo_expr</span> <span class="o">=</span> <span class="n">apply_plateau_models</span><span class="p">(</span><span class="n">mu_expr</span><span class="p">,</span> <span class="n">plateau_models_expr</span><span class="p">)</span>
+    <span class="n">apply_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+        <span class="n">mu</span><span class="o">=</span><span class="n">mu_expr</span> <span class="o">*</span> <span class="n">possible_variants_expr</span><span class="p">,</span>
+        <span class="n">predicted_proportion_observed</span><span class="o">=</span><span class="n">ppo_expr</span><span class="p">,</span>
+        <span class="n">expected_variants</span><span class="o">=</span><span class="n">ppo_expr</span> <span class="o">*</span> <span class="n">possible_variants_expr</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Get the coverage correction expression if a coverage model is provided.</span>
+    <span class="k">if</span> <span class="n">coverage_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cov_corr_expr</span> <span class="o">=</span> <span class="n">coverage_correction_expr</span><span class="p">(</span>
+            <span class="n">coverage_expr</span><span class="p">,</span>
+            <span class="n">coverage_model</span><span class="p">,</span>
+            <span class="n">low_coverage_expr</span><span class="o">=</span><span class="n">model_group_expr</span><span class="o">.</span><span class="n">high_or_low_coverage</span> <span class="o">==</span> <span class="s2">&quot;low&quot;</span><span class="p">,</span>
+            <span class="n">log10_coverage</span><span class="o">=</span><span class="n">log10_coverage</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">apply_expr</span> <span class="o">=</span> <span class="n">apply_expr</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span>
+            <span class="n">mu</span><span class="o">=</span><span class="n">apply_expr</span><span class="o">.</span><span class="n">mu</span> <span class="o">*</span> <span class="n">cov_corr_expr</span><span class="p">,</span>
+            <span class="n">expected_variants</span><span class="o">=</span><span class="n">apply_expr</span><span class="o">.</span><span class="n">expected_variants</span> <span class="o">*</span> <span class="n">cov_corr_expr</span><span class="p">,</span>
+            <span class="n">coverage_correction</span><span class="o">=</span><span class="n">cov_corr_expr</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">apply_expr</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

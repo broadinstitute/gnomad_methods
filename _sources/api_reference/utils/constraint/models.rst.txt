@@ -1,0 +1,8 @@
+gnomad.utils.constraint.models
+==============================
+
+Functions to build and apply the plateau and coverage models.
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.models
+
+.. automodule:: gnomad.utils.constraint.models

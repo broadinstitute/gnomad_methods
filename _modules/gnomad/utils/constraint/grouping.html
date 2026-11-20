@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>gnomad.utils.constraint.grouping &mdash; gnomad master documentation</title>
+      <link rel="stylesheet" href="../../../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/css/theme.css" type="text/css" />
+      <link rel="stylesheet" href="../../../../_static/theme_overrides.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="../../../../_static/jquery.js"></script>
+        <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js"></script>
+        <script data-url_root="../../../../" id="documentation_options" src="../../../../_static/documentation_options.js"></script>
+        <script src="../../../../_static/doctools.js"></script>
+        <script src="../../../../_static/sphinx_highlight.js"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            gnomad
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../getting_started.html">Getting Started</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../examples/index.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api_reference/index.html">API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../resource_sources.html">Resource Sources</a></li>
+<li class="toctree-l1"><a class="reference external" href="https://github.com/broadinstitute/gnomad_methods/releases">Change Log</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">gnomad</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">gnomad.utils.constraint.grouping</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for gnomad.utils.constraint.grouping</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Functions to group variants for constraint.</span>
+
+<span class="sd">Covers consequence groups, VEP grouping fields, and genetic ancestry downsamplings.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">functools</span>
+<span class="kn">import</span> <span class="nn">logging</span>
+<span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span> <span class="nn">hail</span> <span class="k">as</span> <span class="nn">hl</span>
+
+<span class="kn">from</span> <span class="nn">gnomad.assessment.summary_stats</span> <span class="kn">import</span> <span class="n">generate_filter_combinations</span>
+<span class="kn">from</span> <span class="nn">gnomad.utils.constraint.constants</span> <span class="kn">import</span> <span class="n">CLASSIC_LOF_ANNOTATIONS</span>
+<span class="kn">from</span> <span class="nn">gnomad.utils.vep</span> <span class="kn">import</span> <span class="n">explode_by_vep_annotation</span><span class="p">,</span> <span class="n">process_consequences</span>
+
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%(asctime)s</span><span class="s2"> (</span><span class="si">%(name)s</span><span class="s2"> </span><span class="si">%(lineno)s</span><span class="s2">): </span><span class="si">%(message)s</span><span class="s2">&quot;</span><span class="p">,</span>
+    <span class="n">datefmt</span><span class="o">=</span><span class="s2">&quot;%m/</span><span class="si">%d</span><span class="s2">/%Y %I:%M:%S %p&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;constraint_utils&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="build_constraint_consequence_groups"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/grouping.html#gnomad.utils.constraint.grouping.build_constraint_consequence_groups">[docs]</a><span class="k">def</span> <span class="nf">build_constraint_consequence_groups</span><span class="p">(</span>
+    <span class="n">csq_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StringExpression</span><span class="p">,</span>
+    <span class="n">lof_modifier_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StringExpression</span><span class="p">,</span>
+    <span class="n">classic_lof_annotations</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">CLASSIC_LOF_ANNOTATIONS</span><span class="p">,</span>
+    <span class="n">additional_groupings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span>
+        <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">]]</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">additional_grouping_combinations</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Build constraint consequence groups.</span>
+
+<span class="sd">    Builds constraint groups based on the consequence expression and LoF</span>
+<span class="sd">    modifier expression. By default, the following groups are built:</span>
+
+<span class="sd">        - csq_set: synonymous_variant, missense_variant</span>
+<span class="sd">        - lof: classic, hc_lc, hc</span>
+
+<span class="sd">    The resulting meta and corresponding constraint group filters are:</span>
+
+<span class="sd">        - {&quot;csq_set&quot;: &quot;syn&quot;}: synonymous_variant</span>
+<span class="sd">        - {&quot;csq_set&quot;: &quot;mis&quot;}: missense_variant</span>
+<span class="sd">        - {&quot;lof&quot;: &quot;classic&quot;}: classic LoF annotations (stop_gained,</span>
+<span class="sd">          splice_donor_variant, splice_acceptor_variant)</span>
+<span class="sd">        - {&quot;lof&quot;: &quot;hc_lc&quot;}: LOFTEE HC or LC modifier</span>
+<span class="sd">        - {&quot;lof&quot;: &quot;hc&quot;}: LOFTEE HC modifier only</span>
+
+<span class="sd">    Additional groupings can be added via ``additional_groupings``, and</span>
+<span class="sd">    grouping combinations via ``additional_grouping_combinations``.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        A combination of more than one grouping builds the **union** of the</span>
+<span class="sd">        combined groups, not their intersection. For example, with an</span>
+<span class="sd">        ``additional_groupings`` entry ``{&quot;am&quot;: {&quot;am_per_99&quot;: ...}}``, the</span>
+<span class="sd">        combination ``[&quot;lof&quot;, &quot;am&quot;]`` produces groups such as</span>
+<span class="sd">        ``{&quot;lof&quot;: &quot;hc&quot;, &quot;am&quot;: &quot;am_per_99&quot;}`` that contain variants that are HC</span>
+<span class="sd">        LoF **or** in the top 1% of AlphaMissense scores. This differs from</span>
+<span class="sd">        frequency metadata (e.g. ``freq_meta``), where multiple keys mean all of</span>
+<span class="sd">        them apply.</span>
+
+<span class="sd">    :param csq_expr: VEP most severe consequence expression (e.g.,</span>
+<span class="sd">        ``ht.most_severe_consequence``).</span>
+<span class="sd">    :param lof_modifier_expr: LOFTEE modifier expression (e.g., ``ht.modifier``).</span>
+<span class="sd">    :param classic_lof_annotations: Classic LoF annotations. Default is</span>
+<span class="sd">        ``(&quot;stop_gained&quot;, &quot;splice_donor_variant&quot;, &quot;splice_acceptor_variant&quot;)``.</span>
+<span class="sd">    :param additional_groupings: Additional groupings to add to the constraint</span>
+<span class="sd">        groups. Default is None.</span>
+<span class="sd">    :param additional_grouping_combinations: Additional grouping combinations to</span>
+<span class="sd">        add to the constraint groups. Groupings combined in one entry are joined as a</span>
+<span class="sd">        union (see the note above). Default is None.</span>
+<span class="sd">    :return: Tuple of (constraint group filter expressions, meta dicts).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">lof_classic_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">literal</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">classic_lof_annotations</span><span class="p">))</span><span class="o">.</span><span class="n">contains</span><span class="p">(</span><span class="n">csq_expr</span><span class="p">)</span>
+    <span class="n">lof_hc_expr</span> <span class="o">=</span> <span class="n">lof_modifier_expr</span> <span class="o">==</span> <span class="s2">&quot;HC&quot;</span>
+    <span class="n">lof_hc_lc_expr</span> <span class="o">=</span> <span class="n">lof_hc_expr</span> <span class="o">|</span> <span class="p">(</span><span class="n">lof_modifier_expr</span> <span class="o">==</span> <span class="s2">&quot;LC&quot;</span><span class="p">)</span>
+    <span class="n">annotation_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;csq_set&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;syn&quot;</span><span class="p">:</span> <span class="n">csq_expr</span> <span class="o">==</span> <span class="s2">&quot;synonymous_variant&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;mis&quot;</span><span class="p">:</span> <span class="n">csq_expr</span> <span class="o">==</span> <span class="s2">&quot;missense_variant&quot;</span><span class="p">,</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;lof&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;classic&quot;</span><span class="p">:</span> <span class="n">lof_classic_expr</span><span class="p">,</span>
+            <span class="s2">&quot;hc_lc&quot;</span><span class="p">:</span> <span class="n">lof_hc_lc_expr</span><span class="p">,</span>
+            <span class="s2">&quot;hc&quot;</span><span class="p">:</span> <span class="n">lof_hc_expr</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">}</span>
+
+    <span class="n">annotation_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">additional_groupings</span> <span class="ow">or</span> <span class="p">{})</span>
+
+    <span class="n">grouping_combinations</span> <span class="o">=</span> <span class="p">[[</span><span class="s2">&quot;csq_set&quot;</span><span class="p">],</span> <span class="p">[</span><span class="s2">&quot;lof&quot;</span><span class="p">]]</span>
+    <span class="n">grouping_combinations</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">additional_grouping_combinations</span> <span class="ow">or</span> <span class="p">[])</span>
+
+    <span class="n">meta</span> <span class="o">=</span> <span class="n">generate_filter_combinations</span><span class="p">(</span>
+        <span class="n">grouping_combinations</span><span class="p">,</span>
+        <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">annotation_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+    <span class="p">)</span>
+    <span class="c1"># Multi-grouping combinations are unions, e.g. LoF or high-scoring missense.</span>
+    <span class="n">constraint_group_filters</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">functools</span><span class="o">.</span><span class="n">reduce</span><span class="p">(</span><span class="n">operator</span><span class="o">.</span><span class="n">ior</span><span class="p">,</span> <span class="p">[</span><span class="n">annotation_dict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">v</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">m</span><span class="o">.</span><span class="n">items</span><span class="p">()])</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">meta</span>
+    <span class="p">]</span>
+
+    <span class="k">return</span> <span class="n">constraint_group_filters</span><span class="p">,</span> <span class="n">meta</span></div>
+
+
+<div class="viewcode-block" id="explode_downsamplings_oe"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/grouping.html#gnomad.utils.constraint.grouping.explode_downsamplings_oe">[docs]</a><span class="k">def</span> <span class="nf">explode_downsamplings_oe</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">downsampling_meta</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+    <span class="n">metrics</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;syn&quot;</span><span class="p">,</span> <span class="s2">&quot;lof&quot;</span><span class="p">,</span> <span class="s2">&quot;mis&quot;</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Explode observed and expected downsampling counts for each genetic ancestry group and metric.</span>
+
+<span class="sd">    The input `ht` must contain struct of downsampling information for genetic ancestry</span>
+<span class="sd">    groups under each metric name. For example: &#39;lof&#39;: struct {gen_anc_exp: struct</span>
+<span class="sd">    {global: array&lt;float64&gt;}.</span>
+
+<span class="sd">    :param ht: Input Table.</span>
+<span class="sd">    :param metrics: List of metrics to explode. Default is &#39;[&#39;syn&#39;, &#39;lof&#39;, &#39;mis&#39;]&#39;.</span>
+<span class="sd">    :param downsampling_meta: Dictionary containing downsampling metadata. Keys are the</span>
+<span class="sd">        genetic ancestry group names and values are the list of downsamplings for that</span>
+<span class="sd">        genetic ancestry group. Example: {&#39;global&#39;: [&#39;5000&#39;, &#39;10000&#39;], &#39;afr&#39;: [&#39;5000&#39;,</span>
+<span class="sd">        &#39;10000&#39;]}.</span>
+<span class="sd">    :return: Table with downsampling counts exploded so that observed and expected</span>
+<span class="sd">        metric counts for each pair of genetic ancestry groups and downsamplings is a</span>
+<span class="sd">        separate row.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+        <span class="n">_data</span><span class="o">=</span><span class="p">[</span>
+            <span class="n">hl</span><span class="o">.</span><span class="n">struct</span><span class="p">(</span>
+                <span class="n">gen_anc</span><span class="o">=</span><span class="n">gen_anc</span><span class="p">,</span>
+                <span class="n">downsampling</span><span class="o">=</span><span class="n">downsampling</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">{</span>
+                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">metric</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">oe</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">:</span> <span class="n">ht</span><span class="p">[</span><span class="n">metric</span><span class="p">][</span><span class="sa">f</span><span class="s2">&quot;gen_anc_</span><span class="si">{</span><span class="n">oe</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">][</span><span class="n">gen_anc</span><span class="p">][</span><span class="n">i</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">oe</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;obs&quot;</span><span class="p">,</span> <span class="s2">&quot;exp&quot;</span><span class="p">]</span>
+                    <span class="k">for</span> <span class="n">metric</span> <span class="ow">in</span> <span class="n">metrics</span>
+                <span class="p">},</span>
+            <span class="p">)</span>
+            <span class="k">for</span> <span class="n">gen_anc</span><span class="p">,</span> <span class="n">downsamplings</span> <span class="ow">in</span> <span class="n">downsampling_meta</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">downsampling</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">downsamplings</span><span class="p">)</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">explode</span><span class="p">(</span><span class="s2">&quot;_data&quot;</span><span class="p">)</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">transmute</span><span class="p">(</span><span class="o">**</span><span class="n">ht</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ht</span></div>
+
+
+<div class="viewcode-block" id="get_all_gen_anc_lengths"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/grouping.html#gnomad.utils.constraint.grouping.get_all_gen_anc_lengths">[docs]</a><span class="k">def</span> <span class="nf">get_all_gen_anc_lengths</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">gen_ancs</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+    <span class="n">obs_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the minimum length of observed variant counts array for each genetic ancestry group downsampling.</span>
+
+<span class="sd">    The observed variant counts for each genetic ancestry group in `gen_ancs` are specified by</span>
+<span class="sd">    annotations on the `obs_expr` expression.</span>
+
+<span class="sd">    The function also performs a check that arrays of variant counts within genetic ancestry group</span>
+<span class="sd">    downsamplings all have the same lengths.</span>
+
+<span class="sd">    :param ht: Input Table containing `obs_expr`.</span>
+<span class="sd">    :param gen_ancs: Genetic ancestry groups used to categorize observed variant counts in downsamplings.</span>
+<span class="sd">    :param obs_expr: Expression for the genetic ancestry group observed variant counts. Should be a</span>
+<span class="sd">        struct containing an array for each gen_anc in `gen_ancs`.</span>
+<span class="sd">    :return: List of ``(length, gen_anc)`` tuples, one per group in ``gen_ancs``,</span>
+<span class="sd">        where ``length`` is the minimum array length for that group.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># TODO: This function will be converted into doing just the length check if there</span>
+    <span class="c1">#  is no usage of gen_anc_lengths in the constraint pipeline.</span>
+    <span class="c1"># Get minimum length of downsamplings for each genetic ancestry group.</span>
+    <span class="n">gen_anc_downsampling_lengths</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">agg</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">len</span><span class="p">(</span><span class="n">obs_expr</span><span class="p">[</span><span class="n">gen_anc</span><span class="p">]))</span> <span class="k">for</span> <span class="n">gen_anc</span> <span class="ow">in</span> <span class="n">gen_ancs</span><span class="p">]</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Zip genetic ancestry group name with their downsampling length.</span>
+    <span class="n">gen_anc_lengths</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">gen_anc_downsampling_lengths</span><span class="p">,</span> <span class="n">gen_ancs</span><span class="p">))</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Found: </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">gen_anc_lengths</span><span class="p">)))</span>
+
+    <span class="k">assert</span> <span class="n">ht</span><span class="o">.</span><span class="n">all</span><span class="p">(</span>
+        <span class="n">hl</span><span class="o">.</span><span class="n">all</span><span class="p">(</span>
+            <span class="k">lambda</span> <span class="n">f</span><span class="p">:</span> <span class="n">f</span><span class="p">,</span>
+            <span class="p">[</span>
+                <span class="n">hl</span><span class="o">.</span><span class="n">len</span><span class="p">(</span><span class="n">obs_expr</span><span class="p">[</span><span class="n">gen_anc</span><span class="p">])</span> <span class="o">==</span> <span class="n">length</span>
+                <span class="k">for</span> <span class="n">length</span><span class="p">,</span> <span class="n">gen_anc</span> <span class="ow">in</span> <span class="n">gen_anc_lengths</span>
+            <span class="p">],</span>
+        <span class="p">)</span>
+    <span class="p">),</span> <span class="p">(</span>
+        <span class="s2">&quot;The arrays of variant counts within genetic ancestry group downsamplings have different&quot;</span>
+        <span class="s2">&quot; lengths!&quot;</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">gen_anc_lengths</span></div>
+
+
+<div class="viewcode-block" id="get_constraint_grouping_expr"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/grouping.html#gnomad.utils.constraint.grouping.get_constraint_grouping_expr">[docs]</a><span class="k">def</span> <span class="nf">get_constraint_grouping_expr</span><span class="p">(</span>
+    <span class="n">vep_annotation_expr</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StructExpression</span><span class="p">,</span>
+    <span class="n">coverage_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">include_transcript_group</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_canonical_group</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_mane_select_group</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Dict</span><span class="p">[</span>
+    <span class="nb">str</span><span class="p">,</span>
+    <span class="n">Union</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">StringExpression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">,</span> <span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">BooleanExpression</span><span class="p">],</span>
+<span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Collect annotations used for constraint groupings.</span>
+
+<span class="sd">    Function collects the following annotations:</span>
+
+<span class="sd">        - annotation - most_severe_consequence from ``vep_annotation_expr``</span>
+<span class="sd">        - modifier - first non-missing of lof or polyphen_prediction</span>
+<span class="sd">          from ``vep_annotation_expr``, or the literal &quot;None&quot;</span>
+<span class="sd">        - gene - gene_symbol from ``vep_annotation_expr``</span>
+<span class="sd">        - gene_id - gene_id from ``vep_annotation_expr``</span>
+<span class="sd">        - coverage - exome coverage if ``coverage_expr`` is specified</span>
+<span class="sd">        - transcript - transcript_id from ``vep_annotation_expr`` (added when</span>
+<span class="sd">          ``include_transcript_group`` is True)</span>
+<span class="sd">        - canonical - from ``vep_annotation_expr`` (added when</span>
+<span class="sd">          ``include_canonical_group`` is True)</span>
+<span class="sd">        - mane_select - from ``vep_annotation_expr`` (added when</span>
+<span class="sd">          ``include_mane_select_group`` is True)</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        This function expects that the following fields are present in</span>
+<span class="sd">        ``vep_annotation_expr``:</span>
+
+<span class="sd">            - lof</span>
+<span class="sd">            - most_severe_consequence</span>
+<span class="sd">            - gene_symbol</span>
+<span class="sd">            - gene_id</span>
+<span class="sd">            - polyphen_prediction (optional; missing used if absent)</span>
+<span class="sd">            - transcript_id (if ``include_transcript_group`` is True)</span>
+<span class="sd">            - canonical (if ``include_canonical_group`` is True)</span>
+<span class="sd">            - mane_select (if ``include_mane_select_group`` is True)</span>
+
+<span class="sd">    :param vep_annotation_expr: StructExpression of VEP annotation.</span>
+<span class="sd">    :param coverage_expr: Int32Expression of exome coverage. Default is None.</span>
+<span class="sd">    :param include_transcript_group: Whether to include the transcript annotation in the</span>
+<span class="sd">        groupings. Default is True.</span>
+<span class="sd">    :param include_canonical_group: Whether to include canonical annotation in the</span>
+<span class="sd">        groupings. Default is True.</span>
+<span class="sd">    :param include_mane_select_group: Whether to include mane_select annotation in the</span>
+<span class="sd">        groupings. Default is False.</span>
+<span class="sd">    :return: Dict mapping annotation names to Hail expressions.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">lof_expr</span> <span class="o">=</span> <span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">lof</span>
+    <span class="k">if</span> <span class="s2">&quot;polyphen_prediction&quot;</span> <span class="ow">in</span> <span class="n">vep_annotation_expr</span><span class="p">:</span>
+        <span class="n">polyphen_prediction_expr</span> <span class="o">=</span> <span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">polyphen_prediction</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">polyphen_prediction_expr</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">missing</span><span class="p">(</span><span class="n">hl</span><span class="o">.</span><span class="n">tstr</span><span class="p">)</span>
+
+    <span class="c1"># Create constraint annotations to be used for groupings.</span>
+    <span class="n">groupings</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;annotation&quot;</span><span class="p">:</span> <span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">most_severe_consequence</span><span class="p">,</span>
+        <span class="s2">&quot;modifier&quot;</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">coalesce</span><span class="p">(</span><span class="n">lof_expr</span><span class="p">,</span> <span class="n">polyphen_prediction_expr</span><span class="p">,</span> <span class="s2">&quot;None&quot;</span><span class="p">),</span>
+        <span class="s2">&quot;gene&quot;</span><span class="p">:</span> <span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">gene_symbol</span><span class="p">,</span>
+        <span class="s2">&quot;gene_id&quot;</span><span class="p">:</span> <span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">gene_id</span><span class="p">,</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="n">coverage_expr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">groupings</span><span class="p">[</span><span class="s2">&quot;coverage&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">coverage_expr</span>
+
+    <span class="c1"># Add &#39;transcript&#39; and &#39;canonical&#39; annotation if requested.</span>
+    <span class="k">if</span> <span class="n">include_transcript_group</span><span class="p">:</span>
+        <span class="n">groupings</span><span class="p">[</span><span class="s2">&quot;transcript&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">transcript_id</span>
+    <span class="k">if</span> <span class="n">include_canonical_group</span><span class="p">:</span>
+        <span class="n">groupings</span><span class="p">[</span><span class="s2">&quot;canonical&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">or_else</span><span class="p">(</span><span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">canonical</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">include_mane_select_group</span><span class="p">:</span>
+        <span class="n">groupings</span><span class="p">[</span><span class="s2">&quot;mane_select&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">hl</span><span class="o">.</span><span class="n">is_defined</span><span class="p">(</span><span class="n">vep_annotation_expr</span><span class="o">.</span><span class="n">mane_select</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">groupings</span></div>
+
+
+<div class="viewcode-block" id="annotate_exploded_vep_for_constraint_groupings"><a class="viewcode-back" href="../../../../api_reference/utils/constraint/grouping.html#gnomad.utils.constraint.grouping.annotate_exploded_vep_for_constraint_groupings">[docs]</a><span class="k">def</span> <span class="nf">annotate_exploded_vep_for_constraint_groupings</span><span class="p">(</span>
+    <span class="n">ht</span><span class="p">:</span> <span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+    <span class="n">coverage_expr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">Int32Expression</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">vep_annotation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;transcript_consequences&quot;</span><span class="p">,</span>
+    <span class="n">include_canonical_group</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">include_mane_select_group</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">hl</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Explode a VEP annotation and add constraint grouping fields.</span>
+
+<span class="sd">    Explodes the specified VEP annotation (``vep_annotation``) and adds the</span>
+<span class="sd">    following annotations via ``get_constraint_grouping_expr``:</span>
+
+<span class="sd">        - annotation - most_severe_consequence from ``vep_annotation``</span>
+<span class="sd">        - modifier - first non-missing of lof or polyphen_prediction</span>
+<span class="sd">          from ``vep_annotation``, or the literal &quot;None&quot;</span>
+<span class="sd">        - gene - gene_symbol from ``vep_annotation``</span>
+<span class="sd">        - gene_id - gene_id from ``vep_annotation``</span>
+<span class="sd">        - coverage - exome coverage if ``coverage_expr`` is specified</span>
+<span class="sd">        - transcript - transcript_id from ``vep_annotation`` (added when</span>
+<span class="sd">          ``vep_annotation`` is &quot;transcript_consequences&quot;)</span>
+<span class="sd">        - canonical - from ``vep_annotation`` (added when</span>
+<span class="sd">          ``include_canonical_group`` is True)</span>
+<span class="sd">        - mane_select - from ``vep_annotation`` (added when</span>
+<span class="sd">          ``include_mane_select_group`` is True)</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        This function expects that a ``vep`` annotation is present in ``ht``.</span>
+
+<span class="sd">    .. note::</span>
+
+<span class="sd">        Only the grouping fields are kept from the VEP annotation. The returned</span>
+<span class="sd">        Table no longer has the ``vep`` annotation or the exploded</span>
+<span class="sd">        ``vep_annotation`` struct, which keeps per-variant tables built from it</span>
+<span class="sd">        small. All other fields of ``ht`` are kept.</span>
+
+<span class="sd">    :param ht: Input Table.</span>
+<span class="sd">    :param coverage_expr: Expression that defines the coverage metric. Default</span>
+<span class="sd">        is None.</span>
+<span class="sd">    :param vep_annotation: Name of annotation in vep (one of</span>
+<span class="sd">        ``&quot;transcript_consequences&quot;`` and ``&quot;worst_csq_by_gene&quot;``) that will be</span>
+<span class="sd">        used for obtaining constraint annotations. Default is</span>
+<span class="sd">        ``&quot;transcript_consequences&quot;``.</span>
+<span class="sd">    :param include_canonical_group: Whether to include canonical annotation</span>
+<span class="sd">        in the groupings. Default is True. Ignored unless ``vep_annotation`` is</span>
+<span class="sd">        ``&quot;transcript_consequences&quot;``.</span>
+<span class="sd">    :param include_mane_select_group: Whether to include mane_select</span>
+<span class="sd">        annotation in the groupings. Default is False. Ignored unless</span>
+<span class="sd">        ``vep_annotation`` is ``&quot;transcript_consequences&quot;``.</span>
+<span class="sd">    :return: Tuple of (Table with one row per element of ``vep_annotation`` and the</span>
+<span class="sd">        grouping fields added in place of the VEP annotation, names of the added</span>
+<span class="sd">        grouping fields).</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Annotate ht with coverage_expr set as a temporary annotation &#39;_coverage_metric&#39;</span>
+    <span class="c1"># before modifying ht.</span>
+    <span class="k">if</span> <span class="n">coverage_expr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ht</span> <span class="o">=</span> <span class="n">ht</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="n">_coverage_metric</span><span class="o">=</span><span class="n">coverage_expr</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">vep_annotation</span> <span class="o">==</span> <span class="s2">&quot;transcript_consequences&quot;</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">include_canonical_group</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">include_mane_select_group</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">&quot;If &#39;vep_annotation&#39; is &#39;transcript_consequences&#39;, one of either&quot;</span>
+                <span class="s2">&quot; &#39;include_canonical_group&#39; or &#39;include_mane_select_group&#39; must be set!&quot;</span>
+            <span class="p">)</span>
+        <span class="n">include_transcript_group</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;Setting both &#39;include_canonical_group&#39; and &#39;include_mane_select_group&#39; to&quot;</span>
+            <span class="s2">&quot; False (options cannot be used unless &#39;vep_annotation&#39; is&quot;</span>
+            <span class="s2">&quot; &#39;transcript_consequences&#39;).&quot;</span>
+        <span class="p">)</span>
+        <span class="n">include_transcript_group</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">include_canonical_group</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">include_mane_select_group</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1"># Annotate &#39;worst_csq_by_gene&#39; to `ht` if it&#39;s specified for `vep_annotation`.</span>
+    <span class="k">if</span> <span class="n">vep_annotation</span> <span class="o">==</span> <span class="s2">&quot;worst_csq_by_gene&quot;</span><span class="p">:</span>
+        <span class="n">ht</span> <span class="o">=</span> <span class="n">process_consequences</span><span class="p">(</span><span class="n">ht</span><span class="p">)</span>
+
+    <span class="c1"># Explode the specified VEP annotation.</span>
+    <span class="n">ht</span> <span class="o">=</span> <span class="n">explode_by_vep_annotation</span><span class="p">(</span><span class="n">ht</span><span class="p">,</span> <span class="n">vep_annotation</span><span class="p">)</span>
+
+    <span class="c1"># Collect the annotations used for groupings.</span>
+    <span class="n">groupings</span> <span class="o">=</span> <span class="n">get_constraint_grouping_expr</span><span class="p">(</span>
+        <span class="n">ht</span><span class="p">[</span><span class="n">vep_annotation</span><span class="p">],</span>
+        <span class="n">coverage_expr</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">coverage_expr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ht</span><span class="o">.</span><span class="n">_coverage_metric</span><span class="p">,</span>
+        <span class="n">include_transcript_group</span><span class="o">=</span><span class="n">include_transcript_group</span><span class="p">,</span>
+        <span class="n">include_canonical_group</span><span class="o">=</span><span class="n">include_canonical_group</span><span class="p">,</span>
+        <span class="n">include_mane_select_group</span><span class="o">=</span><span class="n">include_mane_select_group</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ht</span><span class="o">.</span><span class="n">transmute</span><span class="p">(</span><span class="o">**</span><span class="n">groupings</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">groupings</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p></p>
+  </div>
+
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

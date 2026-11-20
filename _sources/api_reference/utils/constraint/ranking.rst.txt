@@ -1,0 +1,8 @@
+gnomad.utils.constraint.ranking
+===============================
+
+Functions to rank transcripts by a metric and assign percentile bins.
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.ranking
+
+.. automodule:: gnomad.utils.constraint.ranking

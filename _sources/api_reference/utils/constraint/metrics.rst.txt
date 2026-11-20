@@ -1,0 +1,12 @@
+gnomad.utils.constraint.metrics
+===============================
+
+
+Functions to compute constraint metrics.
+
+Covers pLI, the o/e confidence interval, z-scores, flags, and GENCODE annotations.
+
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.metrics
+
+.. automodule:: gnomad.utils.constraint.metrics

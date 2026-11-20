@@ -1,0 +1,8 @@
+gnomad.utils.constraint.constants
+=================================
+
+Constants shared by the constraint functions.
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.constants
+
+.. automodule:: gnomad.utils.constraint.constants

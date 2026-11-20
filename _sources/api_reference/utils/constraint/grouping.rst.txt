@@ -1,0 +1,12 @@
+gnomad.utils.constraint.grouping
+================================
+
+
+Functions to group variants for constraint.
+
+Covers consequence groups, VEP grouping fields, and genetic ancestry downsamplings.
+
+
+.. gnomad_automodulesummary:: gnomad.utils.constraint.grouping
+
+.. automodule:: gnomad.utils.constraint.grouping

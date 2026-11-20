@@ -16,10 +16,14 @@ linear systems are solved on the driver. The objective is the mean log loss, plu
 optional ridge penalty on the coefficients, and a step that raises it is halved. The
 penalty can be chosen by the held-out log loss of models fit on all but one fold of
 the training rows (:func:`tune_regional_mutation_rate_penalty` and
-:func:`choose_regional_mutation_rate_penalty`).
+:func:`choose_regional_mutation_rate_penalty`). Alternatively, as in Gnocchi, each
+context's features can first be screened one at a time
+(:func:`screen_regional_mutation_rate_features`), and only those associated with the
+label kept.
 """
 
 import logging
+import math
 import sys
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -647,6 +651,146 @@ def fit_regional_mutation_rate_models(
         MODELS_HT_SCHEMA,
         key="context",
     ).annotate_globals(ridge_penalty=float(ridge_penalty))
+
+
+def screen_regional_mutation_rate_features(
+    ht: hl.Table,
+    max_iter: int = 50,
+    tol: float = 1e-8,
+) -> hl.Table:
+    """
+    Test each feature of each context on its own for an association with the label.
+
+    This is the univariate screen of Gnocchi's feature selection. For each context and
+    each of its features, an unpenalized logistic model of the label on that feature
+    alone, standardized (ddof=0), is fit on the context's rows where the label and that
+    feature are defined, so a row missing another feature still counts. The Wald test
+    of the feature's coefficient gives its standard error, from the inverse of the
+    Hessian of the summed log loss at the fit, and its two-sided p-value. All the fits
+    are made together, with one pass over the rows per Newton step, so ``ht`` should
+    be read from disk or checkpointed.
+
+    A fit that doesn't converge, for instance because the feature separates the
+    labels, has a missing ``se`` and ``p_value``, so a cutoff on the p-value never
+    selects it; these fits are counted in a warning. A feature with a single value in a
+    context's rows, and a context whose rows all have one label, have no row. Feature
+    values must be finite and labels 0 or 1: anything else raises an error.
+
+    :param ht: Training Table from
+        :func:`prepare_regional_mutation_rate_training_ht`.
+    :param max_iter: Maximum number of Newton steps per fit, including halved ones.
+        Default is 50.
+    :param tol: Convergence tolerance of each fit. Default is 1e-8.
+    :return: Table keyed by ``context`` and ``feature`` (str) with the feature's
+        coefficient per standard deviation (``coef``), its standard error (``se``) and
+        two-sided Wald p-value (``p_value``), all float64, the number of rows fit
+        (``n``) and of mutated rows among them (``n_mutated``), both int32, and whether
+        the fit converged (``converged``, bool).
+    """
+    missing = [f for f in ["label", "context", "x"] if f not in ht.row]
+    if "features" not in ht.globals:
+        missing.append("the features global")
+    if missing:
+        raise ValueError(
+            f"The training Table has no {', '.join(missing)}. Prepare it with"
+            " prepare_regional_mutation_rate_training_ht."
+        )
+    features = hl.eval(ht.features)
+    ht = ht.filter(hl.is_defined(ht.label) & hl.is_defined(ht.context))
+    if isinstance(features, list):
+        # With one list for every context, screen each context the rows have.
+        contexts = ht.aggregate(hl.agg.collect_as_set(ht.context))
+        features = {c: features for c in sorted(contexts)}
+    features = {c: list(f) for c, f in features.items()}
+
+    # One row per row and feature, keeping the rows where that feature is defined.
+    names = hl.literal(features, hl.tdict(hl.tstr, hl.tarray(hl.tstr))).get(ht.context)
+    ht = ht.annotate(
+        _names=names,
+        _i=hl.or_missing(
+            hl.is_defined(names) & hl.is_defined(ht.x), hl.range(hl.len(ht.x))
+        ),
+    )
+    ht = ht.explode("_i")
+    ht = ht.filter(hl.is_defined(ht.x[ht._i]))
+    ht = ht.select(
+        "label",
+        group=ht.context + "|" + ht._names[ht._i],
+        x=hl.array([ht.x[ht._i]]),
+    )
+    rows = ht.aggregate(
+        hl.struct(
+            n_not_finite=hl.agg.count_where(~hl.is_finite(ht.x[0])),
+            n_bad_label=hl.agg.count_where((ht.label != 0) & (ht.label != 1)),
+        )
+    )
+    if rows.n_not_finite:
+        raise ValueError(
+            f"{rows.n_not_finite} training rows have a NaN or infinite feature value."
+            " Make those values missing, or remove the rows."
+        )
+    if rows.n_bad_label:
+        raise ValueError(
+            f"{rows.n_bad_label} training rows have a label other than 0 or 1."
+        )
+
+    groups = {f"{c}|{f}": (c, f) for c, fs in features.items() for f in fs}
+    models = _fit_logistic_models(
+        ht,
+        {g: [f] for g, (_, f) in groups.items()},
+        dict.fromkeys(groups, 0.0),
+        max_iter,
+        tol,
+        log=False,
+    )
+    not_converged = sorted(g for g, m in models.items() if not m["converged"])
+    if not_converged:
+        logger.warning(
+            "%d of %d screen fits (one per context and feature) did not converge, so"
+            " they have no p-value: %s.",
+            len(not_converged),
+            len(models),
+            ", ".join(not_converged),
+        )
+
+    # The Hessian of the summed log loss at the fit, inverted, is the covariance of
+    # the intercept and coefficient.
+    sums = _newton_sums(ht, models) if models else {}
+    results = []
+    for group, m in models.items():
+        se = p_value = None
+        if m["converged"]:
+            cov = np.linalg.inv(np.array(sums[group].h).reshape(2, 2))
+            se = float(np.sqrt(cov[1, 1]))
+            p_value = math.erfc(abs(m["coefs"][0]) / se / math.sqrt(2))
+        context, feature = groups[group]
+        results.append(
+            {
+                "context": context,
+                "feature": feature,
+                "coef": m["coefs"][0],
+                "se": se,
+                "p_value": p_value,
+                "n": m["n"],
+                "n_mutated": m["n_mutated"],
+                "converged": m["converged"],
+            }
+        )
+
+    return hl.Table.parallelize(
+        results,
+        hl.tstruct(
+            context=hl.tstr,
+            feature=hl.tstr,
+            coef=hl.tfloat64,
+            se=hl.tfloat64,
+            p_value=hl.tfloat64,
+            n=hl.tint32,
+            n_mutated=hl.tint32,
+            converged=hl.tbool,
+        ),
+        key=["context", "feature"],
+    )
 
 
 def _rows_by_fit(ht: hl.Table, fits: List[hl.Struct], held_out: bool) -> hl.Table:

@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 import numpy as np
 import pytest
+import statsmodels.api as sm
 
 from gnomad.utils.constraint import (
     MODELS_HT_SCHEMA,
@@ -15,6 +16,7 @@ from gnomad.utils.constraint import (
     prepare_regional_mutation_rate_training_ht,
     regional_mutation_rate_expr,
     regional_mutation_rate_normalization_factors_agg_expr,
+    screen_regional_mutation_rate_features,
     tune_regional_mutation_rate_penalty,
 )
 from gnomad.utils.constraint.regional_mutation_rate import _newton_update
@@ -667,6 +669,116 @@ class TestFitRegionalMutationRateModels:
             )[context]
             for field in ["mean", "sd", "coefs", "intercept"]:
                 assert models[context][field] == pytest.approx(alone[field])
+
+
+class TestScreenRegionalMutationRateFeatures:
+    """Test the screen_regional_mutation_rate_features function."""
+
+    @staticmethod
+    def _screen(ht: hl.Table) -> Dict[tuple, hl.Struct]:
+        """Return the screen of a prepared Table by context and feature."""
+        return {
+            (r.context, r.feature): r
+            for r in screen_regional_mutation_rate_features(ht).collect()
+        }
+
+    def test_matches_statsmodels(self) -> None:
+        """
+        Test each feature's coefficient, standard error, and p-value against statsmodels.
+
+        Each is the univariate unpenalized logistic fit of the label on the feature
+        standardized with ddof=0, the screen Gnocchi ran with statsmodels. ``c`` is
+        constant, so it has no row.
+        """
+        rows = _training_rows()
+        screen = self._screen(_prepared(rows, {"AAA": ["a", "b", "c"]}))
+        assert sorted(screen) == [("AAA", "a"), ("AAA", "b")]
+        for feature in ["a", "b"]:
+            y, x = _arrays(rows, [feature])
+            z = (x - x.mean()) / x.std()
+            fit = sm.Logit(y, sm.add_constant(z)).fit(disp=False)
+            r = screen[("AAA", feature)]
+            assert r.converged
+            assert (r.coef, r.se, r.p_value) == pytest.approx(
+                (fit.params[1], fit.bse[1], fit.pvalues[1]), rel=1e-6
+            )
+            assert (r.n, r.n_mutated) == (len(y), int(y.sum()))
+
+    def test_rows_missing_another_feature_count(self) -> None:
+        """
+        Test that each feature is fit on the rows where it is defined.
+
+        A row missing ``a`` still counts for ``b``, as each feature was screened on
+        its own rows in Gnocchi, so ``b``'s screen matches the fit on all the rows.
+        """
+        rows = _training_rows()
+        for r in rows[:100]:
+            r["a"] = None
+        screen = self._screen(_prepared(rows, {"AAA": ["a", "b"]}))
+        assert screen[("AAA", "a")].n == len(rows) - 100
+        assert screen[("AAA", "b")].n == len(rows)
+        all_rows = self._screen(_prepared(_training_rows(), {"AAA": ["b"]}))
+        assert screen[("AAA", "b")].p_value == pytest.approx(
+            all_rows[("AAA", "b")].p_value
+        )
+
+    def test_separating_feature_has_no_p_value(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """
+        Test that a fit that doesn't converge has no se or p-value, and is logged.
+
+        ``c`` separates the labels in part, so its log loss has no minimum. The
+        other features' fits are unaffected.
+        """
+        with caplog.at_level(logging.WARNING):
+            screen = self._screen(_prepared(_separated_rows(), {"AAA": ["a", "c"]}))
+        c = screen[("AAA", "c")]
+        assert not c.converged
+        assert (c.se, c.p_value) == (None, None)
+        assert screen[("AAA", "a")].converged
+        assert screen[("AAA", "a")].p_value < 1e-10
+        assert any(
+            "1 of 2 screen fits" in m and "AAA|c" in m for m in _warnings(caplog)
+        )
+
+    def test_contexts(self) -> None:
+        """
+        Test that each context is screened on its own features and rows.
+
+        CCC's rows all have label 0, so it has no rows. With one feature list,
+        every context the rows have is screened on it.
+        """
+        rows = (
+            _training_rows(context="AAA")
+            + _training_rows(seed=1, context="ACG")
+            + [{**r, "y": 0, "context": "CCC"} for r in _training_rows(n=50, seed=2)]
+        )
+        per_context = self._screen(
+            _prepared(rows, {"AAA": ["a"], "ACG": ["b"], "CCC": ["a"]})
+        )
+        assert sorted(per_context) == [("AAA", "a"), ("ACG", "b")]
+        aaa_only = self._screen(_prepared(rows[:2000], {"AAA": ["a"]}))
+        assert per_context[("AAA", "a")].p_value == pytest.approx(
+            aaa_only[("AAA", "a")].p_value
+        )
+        one_list = self._screen(_prepared(rows, ["a"]))
+        assert sorted(one_list) == [("AAA", "a"), ("ACG", "a")]
+
+    def test_bad_inputs_raise(self) -> None:
+        """Test that an unprepared Table, NaN features, and bad labels raise."""
+        with pytest.raises(ValueError, match="prepare_regional_mutation_rate"):
+            screen_regional_mutation_rate_features(_training_ht(_training_rows()))
+        rows = _training_rows()
+        rows[3]["a"] = float("nan")
+        with pytest.raises(ValueError, match="1 training rows have a NaN or infinite"):
+            screen_regional_mutation_rate_features(_prepared(rows, {"AAA": ["a"]}))
+        ht = _training_ht(_training_rows())
+        ht = prepare_regional_mutation_rate_training_ht(
+            ht, {"AAA": ["a"]}, label_expr=hl.if_else(ht.a > 2, 2.0, hl.float64(ht.y))
+        )
+        with pytest.raises(ValueError, match="have a label other than 0 or 1"):
+            screen_regional_mutation_rate_features(ht)
 
 
 class TestNewtonUpdate:

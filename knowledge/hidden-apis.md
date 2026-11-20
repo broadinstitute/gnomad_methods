@@ -1,0 +1,87 @@
+# Hidden and undocumented APIs we rely on
+
+Private (underscore) parameters are unsupported and can change between
+Hail versions — but several are load-bearing in gnomad_qc, so you'll
+meet them in code review. Re-check these on a Hail upgrade.
+
+## Underscore parameters in gnomad_qc
+
+**`[Hail]`**
+
+| API | what it does |
+|---|---|
+| `read_table` / `read_matrix_table(_n_partitions=n)` | set partitioning at read; no shuffle on Spark. On Query-on-Batch it isn't free: it adds a `table_calculate_new_partitions` stage with one Batch job per source partition, which took one run from 20 minutes and $5 to 49 minutes and $7.70 (*reported · PR review*) |
+| `read_*(_intervals=…, _filter_intervals=True)` | read only the given intervals, keeping the table's own partitions that overlap them |
+| `read_*(_intervals=…)` | read only the given intervals, using them as the partitions — one per interval, no shuffle; can't be combined with `_n_partitions` (see [Partitioning](partitioning-shuffles-oom.md#partitioning-shuffles-and-oom)) |
+| `checkpoint(_read_if_exists=not overwrite)` | skip already-written steps on a re-run |
+| `ht.aggregate(expr, _localize=False)` (also `mt.aggregate_rows` / `_cols` / `_entries`) | keep the result as an expression instead of pulling it to the driver. The Hail team has advised against relying on it; confirm with them before adding new uses |
+| `ht._force_count()` | force a real full pass (vs the metadata-only `count()`) |
+| `ht._filter_partitions(range(n))` | read just the first `n` partitions of a real table — cheap iteration on real data |
+
+---
+
+## Supported `hl.experimental` helpers the pipelines lean on
+
+**`[Hail]`**
+
+Supported but easy to miss: `sparse_split_multi`, `densify`,
+`filtering_allele_frequency`, `pc_project`, `import_gtf`,
+`get_gene_intervals`, `read_expression` / `write_expression`,
+`define_function`. Before using the numeric ones, see
+the input-validation caveat in [Hail idioms](hail-idioms.md#hail-idioms)
+(`hl.experimental` numeric kernels don't validate inputs).
+
+---
+
+## Backend feature flags: `hl._set_flags` / `hl._get_flags` / `hl._with_flags`
+
+**`[Hail]` · Verified on Hail 0.2.139**
+
+Hail carries backend feature flags that are not surfaced anywhere in the
+public API or the docs. They are set as **strings** and cleared with `None`:
+
+```python
+hl._set_flags(use_new_shuffle="1")   # on
+hl._set_flags(use_new_shuffle=None)  # off
+hl._get_flags("use_new_shuffle")     # {'use_new_shuffle': '1'}
+```
+
+**They are undiscoverable by inspection.** `hl._get_flags()` with no
+arguments returns `{}` — you only get back the flags you name. The way to
+see the list is to set an invalid one on purpose: `_set_flags` raises a
+`FatalError` whose message enumerates every valid flag (28 of them in
+0.2.139). `_get_flags` on an unknown name is less helpful — it throws a raw
+`Py4JJavaError: NoSuchElementException` instead.
+
+**Use the context manager, not a pair of calls.** `hl._with_flags(**flags)`
+reads the previous values and restores them in a `finally`:
+
+```python
+with hl._with_flags(use_new_shuffle="1"):
+    ht.write(path)
+```
+
+Hand-rolled `_set_flags(x="1")` … `_set_flags(x=None)` pairs are common in
+older code and have two problems: an exception between them leaks the flag
+into the rest of the session, and they reset to `None` rather than to
+whatever was set before. If you need to support a Hail older than the one
+you verified `_with_flags` on, use `try` / `finally` rather than a bare pair.
+
+**The shuffle-related names** are `use_new_shuffle`,
+`shuffle_cutoff_to_local_sort` and `shuffle_max_branch_factor`.
+
+**When `use_new_shuffle` earns its keep** — *`[gnomAD data]` · anecdotal,
+from a genome-wide v4 job*: it selects Hail's own shuffler over
+Spark's. On a mostly-preemptible fleet, Spark keeps shuffle blocks on
+executor-local disk, so a reclaimed worker takes its blocks with it and the
+stage dies with `FetchFailedException` — the failure that no partition
+tuning fixes (see
+[Partitioning, shuffles, and OOM](partitioning-shuffles-oom.md#partitioning-shuffles-and-oom)).
+The recipe that got that step through genome-wide was all three together:
+`use_new_shuffle` on the `group_by`, a materialisation before it, and fewer
+preemptible workers. Setting the flag alone did not carry it; neither did
+resizing alone.
+
+---
+
+[← back to the index](README.md)

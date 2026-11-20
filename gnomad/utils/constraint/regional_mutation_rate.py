@@ -674,7 +674,10 @@ def screen_regional_mutation_rate_features(
     labels, has a missing ``se`` and ``p_value``, so a cutoff on the p-value never
     selects it; these fits are counted in a warning. A feature with a single value in a
     context's rows, and a context whose rows all have one label, have no row. Feature
-    values must be finite and labels 0 or 1: anything else raises an error.
+    values must be finite and labels 0 or 1, and no feature may be listed twice for a
+    context, since its rows would be fit twice: anything else raises an error. The
+    features screened are recorded, so a selection from the screen can check it was
+    made from the features it expects.
 
     :param ht: Training Table from
         :func:`prepare_regional_mutation_rate_training_ht`.
@@ -685,7 +688,9 @@ def screen_regional_mutation_rate_features(
         coefficient per standard deviation (``coef``), its standard error (``se``) and
         two-sided Wald p-value (``p_value``), all float64, the number of rows fit
         (``n``) and of mutated rows among them (``n_mutated``), both int32, and whether
-        the fit converged (``converged``, bool).
+        the fit converged (``converged``, bool). Its ``features`` global is the
+        features screened, a dict of context to list; a single list in ``ht``'s
+        ``features`` global is recorded for each context the rows have.
     """
     missing = [f for f in ["label", "context", "x"] if f not in ht.row]
     if "features" not in ht.globals:
@@ -702,9 +707,19 @@ def screen_regional_mutation_rate_features(
         contexts = ht.aggregate(hl.agg.collect_as_set(ht.context))
         features = {c: features for c in sorted(contexts)}
     features = {c: list(f) for c, f in features.items()}
+    repeated = {
+        c: sorted({f for f in fs if fs.count(f) > 1}) for c, fs in features.items()
+    }
+    repeated = {c: fs for c, fs in repeated.items() if fs}
+    if repeated:
+        raise ValueError(
+            "These contexts list a feature more than once, which would fit its rows"
+            f" twice: {repeated}."
+        )
 
     # One row per row and feature, keeping the rows where that feature is defined.
-    names = hl.literal(features, hl.tdict(hl.tstr, hl.tarray(hl.tstr))).get(ht.context)
+    features_expr = hl.literal(features, hl.tdict(hl.tstr, hl.tarray(hl.tstr)))
+    names = features_expr.get(ht.context)
     ht = ht.annotate(
         _names=names,
         _i=hl.or_missing(
@@ -790,7 +805,7 @@ def screen_regional_mutation_rate_features(
             converged=hl.tbool,
         ),
         key=["context", "feature"],
-    )
+    ).annotate_globals(features=features_expr)
 
 
 def _rows_by_fit(ht: hl.Table, fits: List[hl.Struct], held_out: bool) -> hl.Table:

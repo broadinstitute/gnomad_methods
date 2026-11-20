@@ -682,27 +682,50 @@ class TestScreenRegionalMutationRateFeatures:
             for r in screen_regional_mutation_rate_features(ht).collect()
         }
 
+    @staticmethod
+    def _check_statsmodels(r: hl.Struct, rows: List[Dict], feature: str) -> None:
+        """
+        Check a screen row against statsmodels' fit of the label on the feature.
+
+        The fit is the univariate unpenalized logistic fit of the label on the
+        feature standardized with ddof=0, the screen Gnocchi ran with statsmodels.
+        Gnocchi used ``fit_regularized`` with no penalty, which gives the same fit
+        up to its tolerance. The p-value is compared on the log scale, since the
+        p-values of the real features are around 1e-40.
+        """
+        y, x = _arrays(rows, [feature])
+        z = (x - x.mean()) / x.std()
+        fit = sm.Logit(y, sm.add_constant(z)).fit(disp=False)
+        assert r.converged
+        assert r.coef == pytest.approx(fit.params[1], rel=1e-6)
+        assert r.se == pytest.approx(fit.bse[1], rel=1e-6)
+        assert r.coef / r.se == pytest.approx(fit.tvalues[1], rel=1e-6)
+        assert np.log(r.p_value) == pytest.approx(np.log(fit.pvalues[1]), rel=1e-6)
+        assert (r.n, r.n_mutated) == (len(y), int(y.sum()))
+
     def test_matches_statsmodels(self) -> None:
         """
         Test each feature's coefficient, standard error, and p-value against statsmodels.
 
-        Each is the univariate unpenalized logistic fit of the label on the feature
-        standardized with ddof=0, the screen Gnocchi ran with statsmodels. ``c`` is
-        constant, so it has no row.
+        ``c`` is constant, so it has no row.
         """
         rows = _training_rows()
         screen = self._screen(_prepared(rows, {"AAA": ["a", "b", "c"]}))
         assert sorted(screen) == [("AAA", "a"), ("AAA", "b")]
         for feature in ["a", "b"]:
-            y, x = _arrays(rows, [feature])
-            z = (x - x.mean()) / x.std()
-            fit = sm.Logit(y, sm.add_constant(z)).fit(disp=False)
-            r = screen[("AAA", feature)]
-            assert r.converged
-            assert (r.coef, r.se, r.p_value) == pytest.approx(
-                (fit.params[1], fit.bse[1], fit.pvalues[1]), rel=1e-6
-            )
-            assert (r.n, r.n_mutated) == (len(y), int(y.sum()))
+            self._check_statsmodels(screen[("AAA", feature)], rows, feature)
+
+    def test_noise_feature(self) -> None:
+        """
+        Test a feature with no association with the label against statsmodels.
+
+        Its p-value is far above any selection cutoff.
+        """
+        rng = np.random.default_rng(5)
+        rows = [{**r, "a": float(rng.normal())} for r in _training_rows()]
+        r = self._screen(_prepared(rows, {"AAA": ["a"]}))[("AAA", "a")]
+        self._check_statsmodels(r, rows, "a")
+        assert r.p_value > 0.05
 
     def test_rows_missing_another_feature_count(self) -> None:
         """
@@ -716,6 +739,7 @@ class TestScreenRegionalMutationRateFeatures:
             r["a"] = None
         screen = self._screen(_prepared(rows, {"AAA": ["a", "b"]}))
         assert screen[("AAA", "a")].n == len(rows) - 100
+        assert screen[("AAA", "a")].n_mutated == sum(r["y"] for r in rows[100:])
         assert screen[("AAA", "b")].n == len(rows)
         all_rows = self._screen(_prepared(_training_rows(), {"AAA": ["b"]}))
         assert screen[("AAA", "b")].p_value == pytest.approx(
@@ -741,6 +765,49 @@ class TestScreenRegionalMutationRateFeatures:
         assert any(
             "1 of 2 screen fits" in m and "AAA|c" in m for m in _warnings(caplog)
         )
+
+    def test_max_iter_and_tol(self, caplog: pytest.LogCaptureFixture) -> None:
+        """
+        Test that ``max_iter`` and ``tol`` reach the fits.
+
+        One Newton step from 0 doesn't converge at the default tolerance, so the fit
+        has no p-value, and is logged. With a tolerance larger than that step, the
+        same step converges, short of the full fit.
+        """
+        ht = _prepared(_training_rows(), {"AAA": ["a"]})
+        with caplog.at_level(logging.WARNING):
+            one_step = screen_regional_mutation_rate_features(ht, max_iter=1).collect()
+        assert not one_step[0].converged
+        assert (one_step[0].se, one_step[0].p_value) == (None, None)
+        assert any("1 of 1 screen fits" in m for m in _warnings(caplog))
+        loose = screen_regional_mutation_rate_features(ht, max_iter=1, tol=10.0)
+        full = screen_regional_mutation_rate_features(ht)
+        loose, full = loose.collect()[0], full.collect()[0]
+        assert loose.converged
+        assert loose.coef != pytest.approx(full.coef, rel=1e-3)
+
+    def test_pairs_with_no_fit(self, caplog: pytest.LogCaptureFixture) -> None:
+        """
+        Test that (context, feature) pairs with no fit have no row, and are logged.
+
+        ``a`` is missing in every row, ``c`` is constant, and GGG has no rows. With no
+        fit at all, the screen is an empty Table that still records its features.
+        """
+        rows = [{**r, "a": None} for r in _training_rows()]
+        with caplog.at_level(logging.WARNING):
+            screen = self._screen(
+                _prepared(rows, {"AAA": ["a", "b", "c"], "GGG": ["b"]})
+            )
+        assert sorted(screen) == [("AAA", "b")]
+        assert any(
+            "3 of 4 (context, feature) pairs" in m and "AAA|a, AAA|c, GGG|b" in m
+            for m in _warnings(caplog)
+        )
+        empty = screen_regional_mutation_rate_features(
+            _prepared(rows, {"AAA": ["a", "c"]})
+        )
+        assert empty.collect() == []
+        assert hl.eval(empty.features) == {"AAA": ["a", "c"]}
 
     def test_contexts(self) -> None:
         """
@@ -781,7 +848,8 @@ class TestScreenRegionalMutationRateFeatures:
         Test that an unprepared Table, repeated features, NaN, and bad labels raise.
 
         A feature listed twice for a context would have each of its rows fit twice,
-        shrinking its standard error by a factor of sqrt(2).
+        shrinking its standard error by a factor of sqrt(2). A bad row is counted
+        once, not once per feature.
         """
         with pytest.raises(ValueError, match="prepare_regional_mutation_rate"):
             screen_regional_mutation_rate_features(_training_ht(_training_rows()))
@@ -791,13 +859,19 @@ class TestScreenRegionalMutationRateFeatures:
             )
         rows = _training_rows()
         rows[3]["a"] = float("nan")
-        with pytest.raises(ValueError, match="1 training rows have a NaN or infinite"):
-            screen_regional_mutation_rate_features(_prepared(rows, {"AAA": ["a"]}))
+        rows[3]["b"] = float("inf")
+        with pytest.raises(ValueError, match="^1 training rows have a NaN or infinite"):
+            screen_regional_mutation_rate_features(_prepared(rows, {"AAA": ["a", "b"]}))
         ht = _training_ht(_training_rows())
         ht = prepare_regional_mutation_rate_training_ht(
-            ht, {"AAA": ["a"]}, label_expr=hl.if_else(ht.a > 2, 2.0, hl.float64(ht.y))
+            ht,
+            {"AAA": ["a", "b"]},
+            label_expr=hl.if_else(ht.a > 2, 2.0, hl.float64(ht.y)),
         )
-        with pytest.raises(ValueError, match="have a label other than 0 or 1"):
+        n_bad = sum(r["a"] > 2 for r in _training_rows())
+        with pytest.raises(
+            ValueError, match=f"^{n_bad} training rows have a label other than 0 or 1"
+        ):
             screen_regional_mutation_rate_features(ht)
 
 

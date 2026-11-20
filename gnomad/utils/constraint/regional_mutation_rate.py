@@ -221,21 +221,13 @@ def prepare_regional_mutation_rate_training_ht(
     return ht.select_globals(features=features_expr)
 
 
-def _complete_training_rows(
-    ht: hl.Table, fields: List[str]
-) -> Tuple[hl.Table, Dict[str, List[str]]]:
+def _check_training_fields(ht: hl.Table, fields: List[str]) -> None:
     """
-    Check a prepared training Table and drop the rows with a missing label or feature.
-
-    NaN counts as defined in Hail, and one NaN or infinite feature value would make
-    its context's model NaN, so the remaining rows' features must all be finite, and
-    their labels 0 or 1.
+    Check that a training Table has the fields and ``features`` global it needs.
 
     :param ht: Table from :func:`prepare_regional_mutation_rate_training_ht`.
     :param fields: Row fields ``ht`` must have.
-    :return: ``ht`` without incomplete rows, and the features of each context, from
-        its ``features`` global. With one list for every context, the contexts are
-        those of the remaining rows.
+    :return: None.
     """
     missing = [f for f in fields if f not in ht.row]
     if "features" not in ht.globals:
@@ -246,13 +238,27 @@ def _complete_training_rows(
             " prepare_regional_mutation_rate_training_ht"
             + (", with a fold_expr." if "fold" in missing else ".")
         )
-    ht = ht.filter(
-        hl.is_defined(ht.label) & hl.is_defined(ht.x) & hl.all(hl.is_defined, ht.x)
-    )
 
+
+def _check_training_rows(ht: hl.Table) -> Dict[str, List[str]]:
+    """
+    Check the rows' labels and defined features, and get each context's features.
+
+    NaN counts as defined in Hail, and one NaN or infinite feature value would make
+    its context's model NaN, so the rows' defined features must all be finite, and
+    their labels 0 or 1. Each row is counted once, however many of its features are
+    bad.
+
+    :param ht: Training rows with ``label``, ``context``, and ``x``, and a
+        ``features`` global (:func:`prepare_regional_mutation_rate_training_ht`).
+    :return: The features of each context, from the ``features`` global. With one
+        list for every context, the contexts are those of the rows.
+    """
     rows = ht.aggregate(
         hl.struct(
-            n_not_finite=hl.agg.count_where(~hl.all(hl.is_finite, ht.x)),
+            n_not_finite=hl.agg.count_where(
+                hl.any(lambda v: hl.is_defined(v) & ~hl.is_finite(v), ht.x)
+            ),
             # NaN, like any other label but 0 or 1, is counted here.
             n_bad_label=hl.agg.count_where((ht.label != 0) & (ht.label != 1)),
             contexts=hl.agg.collect_as_set(ht.context),
@@ -270,10 +276,33 @@ def _complete_training_rows(
 
     features = hl.eval(ht.features)
     if isinstance(features, list):
-        # With one list for every context, model each context the rows have.
+        # With one list for every context, use each context the rows have.
         features = {c: features for c in sorted(rows.contexts - {None})}
 
-    return ht, {c: list(f) for c, f in features.items()}
+    return {c: list(f) for c, f in features.items()}
+
+
+def _complete_training_rows(
+    ht: hl.Table, fields: List[str]
+) -> Tuple[hl.Table, Dict[str, List[str]]]:
+    """
+    Check a prepared training Table and drop the rows with a missing label or feature.
+
+    The remaining rows' features must all be finite, and their labels 0 or 1
+    (:func:`_check_training_rows`).
+
+    :param ht: Table from :func:`prepare_regional_mutation_rate_training_ht`.
+    :param fields: Row fields ``ht`` must have.
+    :return: ``ht`` without incomplete rows, and the features of each context, from
+        its ``features`` global. With one list for every context, the contexts are
+        those of the remaining rows.
+    """
+    _check_training_fields(ht, fields)
+    ht = ht.filter(
+        hl.is_defined(ht.label) & hl.is_defined(ht.x) & hl.all(hl.is_defined, ht.x)
+    )
+
+    return ht, _check_training_rows(ht)
 
 
 def _init_logistic_models(
@@ -673,7 +702,8 @@ def screen_regional_mutation_rate_features(
     A fit that doesn't converge, for instance because the feature separates the
     labels, has a missing ``se`` and ``p_value``, so a cutoff on the p-value never
     selects it; these fits are counted in a warning. A feature with a single value in a
-    context's rows, and a context whose rows all have one label, have no row. Feature
+    context's rows, or none, and a context with no rows or whose rows all have one
+    label, have no row, and these are counted in a warning too. Feature
     values must be finite and labels 0 or 1, and no feature may be listed twice for a
     context, since its rows would be fit twice: anything else raises an error. The
     features screened are recorded, so a selection from the screen can check it was
@@ -692,21 +722,13 @@ def screen_regional_mutation_rate_features(
         features screened, a dict of context to list; a single list in ``ht``'s
         ``features`` global is recorded for each context the rows have.
     """
-    missing = [f for f in ["label", "context", "x"] if f not in ht.row]
-    if "features" not in ht.globals:
-        missing.append("the features global")
-    if missing:
-        raise ValueError(
-            f"The training Table has no {', '.join(missing)}. Prepare it with"
-            " prepare_regional_mutation_rate_training_ht."
-        )
-    features = hl.eval(ht.features)
-    ht = ht.filter(hl.is_defined(ht.label) & hl.is_defined(ht.context))
-    if isinstance(features, list):
-        # With one list for every context, screen each context the rows have.
-        contexts = ht.aggregate(hl.agg.collect_as_set(ht.context))
-        features = {c: features for c in sorted(contexts)}
-    features = {c: list(f) for c, f in features.items()}
+    _check_training_fields(ht, ["label", "context", "x"])
+    # Rows missing some features are kept: each feature is fit on the rows where it
+    # is defined.
+    ht = ht.filter(
+        hl.is_defined(ht.label) & hl.is_defined(ht.context) & hl.is_defined(ht.x)
+    )
+    features = _check_training_rows(ht)
     repeated = {
         c: sorted({f for f in fs if fs.count(f) > 1}) for c, fs in features.items()
     }
@@ -733,21 +755,6 @@ def screen_regional_mutation_rate_features(
         group=ht.context + "|" + ht._names[ht._i],
         x=hl.array([ht.x[ht._i]]),
     )
-    rows = ht.aggregate(
-        hl.struct(
-            n_not_finite=hl.agg.count_where(~hl.is_finite(ht.x[0])),
-            n_bad_label=hl.agg.count_where((ht.label != 0) & (ht.label != 1)),
-        )
-    )
-    if rows.n_not_finite:
-        raise ValueError(
-            f"{rows.n_not_finite} training rows have a NaN or infinite feature value."
-            " Make those values missing, or remove the rows."
-        )
-    if rows.n_bad_label:
-        raise ValueError(
-            f"{rows.n_bad_label} training rows have a label other than 0 or 1."
-        )
 
     groups = {f"{c}|{f}": (c, f) for c, fs in features.items() for f in fs}
     models = _fit_logistic_models(
@@ -758,6 +765,16 @@ def screen_regional_mutation_rate_features(
         tol,
         log=False,
     )
+    no_fit = sorted(set(groups) - set(models))
+    if no_fit:
+        logger.warning(
+            "%d of %d (context, feature) pairs have no screen fit, so no row: the"
+            " feature has a single value or none in the context's rows, or those rows"
+            " all have one label: %s.",
+            len(no_fit),
+            len(groups),
+            ", ".join(no_fit),
+        )
     not_converged = sorted(g for g, m in models.items() if not m["converged"])
     if not_converged:
         logger.warning(
